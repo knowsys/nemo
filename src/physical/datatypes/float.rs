@@ -1,4 +1,4 @@
-use super::float_is_nan::FloatIsNaN;
+use super::FloatIsNaN;
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;

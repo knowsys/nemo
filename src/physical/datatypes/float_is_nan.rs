@@ -2,7 +2,7 @@ use std::fmt;
 use std::fmt::Formatter;
 
 /// Error for cases when [`f32::NAN`] or [`f64::NAN`], values that are not allowed,
-/// are being cast to [`super::float::Float`] or [`super::double::Double`], respectively.
+/// are being cast to [`super::Float`] or [`super::Double`], respectively.
 #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct FloatIsNaN;
 
