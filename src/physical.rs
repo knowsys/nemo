@@ -4,5 +4,5 @@
 //! not correspond to the view at a higher (logical) level.
 
 pub mod datatypes;
+pub mod columns;
 // pub mod tables;
-// pub mod columns;
