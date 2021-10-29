@@ -35,6 +35,7 @@ impl<T: Debug + Copy> ColumnBuilder<T> for AdaptiveColumnBuilder<T> {
 #[cfg(test)]
 mod test {
     use super::{AdaptiveColumnBuilder, ColumnBuilder};
+    use test_env_log::test;
 
     #[test]
     fn test_build_u64_column() {

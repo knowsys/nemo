@@ -35,6 +35,7 @@ impl<T: Debug + Copy> Index<usize> for VectorColumn<T> {
 #[cfg(test)]
 mod test {
     use super::{Column, VectorColumn};
+    use test_env_log::test;
 
     #[test]
     fn test_u64_column() {

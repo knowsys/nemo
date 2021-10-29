@@ -56,7 +56,8 @@ impl<T: Ord + Copy + Debug> MaterialColumnScan<T> for GenericColumnScan<T> {
 #[cfg(test)]
 mod test {
     use super::super::VectorColumn;
-    use super::{Column, ColumnScan, MaterialColumnScan, GenericColumnScan}; // < TODO: is this a nice way to write this use?
+    use super::{Column, ColumnScan, GenericColumnScan, MaterialColumnScan}; // < TODO: is this a nice way to write this use?
+    use test_env_log::test;
 
     fn get_test_column() -> Box<dyn Column<u64>> {
         let data: Vec<u64> = vec![1, 2, 5];
