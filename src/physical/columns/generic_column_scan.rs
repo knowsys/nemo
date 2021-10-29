@@ -5,18 +5,13 @@ use std::fmt::Debug;
 #[derive(Debug)]
 pub struct GenericColumnScan<T> {
     column: Box<dyn Column<T>>,
-    pos: usize,
-    started: bool,
+    pos: Option<usize>,
 }
 
 impl<T> GenericColumnScan<T> {
     /// Constructs a new VectorColumnScan for a Column.
     pub fn new(column: Box<dyn Column<T>>) -> GenericColumnScan<T> {
-        GenericColumnScan {
-            column,
-            pos: 0,
-            started: false,
-        }
+        GenericColumnScan { column, pos: None }
     }
 }
 
@@ -24,47 +19,35 @@ impl<T: Debug + Copy> Iterator for GenericColumnScan<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.started {
-            self.pos += 1;
-        } else {
-            self.started = true;
-        }
-
-        if self.pos < self.column.len() {
-            Some(*self.column.get(self.pos))
-        } else {
-            None
-        }
+        let pos = self.pos.map_or_else(Default::default, |pos| pos + 1);
+        self.pos = Some(pos);
+        (pos < self.column.len()).then(|| self.column[pos])
     }
 }
 
 impl<T: Ord + Copy + Debug> ColumnScan<T> for GenericColumnScan<T> {
     fn seek(&mut self, value: T) -> Option<T> {
         // Brute-force scan:
-        self.started = true;
-        while self.pos < self.column.len() {
-            if *self.column.get(self.pos) >= value {
-                return Some(*self.column.get(self.pos));
+        while self.pos.unwrap_or_default() < self.column.len() {
+            let pos = self.pos.get_or_insert(0);
+
+            if self.column[*pos] >= value {
+                return Some(self.column[*pos]);
             }
-            self.pos += 1;
+
+            *pos += 1;
         }
         None
     }
 
     fn current(&mut self) -> Option<T> {
-        if self.started && self.pos < self.column.len() {
-            Some(*self.column.get(self.pos))
-        } else {
-            None
-        }
+        self.pos
+            .and_then(|pos| (pos < self.column.len()).then(|| self.column[pos]))
     }
 
     fn pos(&mut self) -> Option<usize> {
-        if self.started && self.pos < self.column.len() {
-            Some(self.pos)
-        } else {
-            None
-        }
+        self.pos
+            .and_then(|pos| (pos < self.column.len()).then(|| pos))
     }
 }
 

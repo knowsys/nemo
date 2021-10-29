@@ -7,9 +7,8 @@ pub struct OrderedMergeJoin<T> {
     column_scans: Vec<Box<dyn ColumnScan<T>>>,
     active_scan: usize,
     active_max: Option<T>,
-    pos: usize,
+    pos: Option<usize>,
     current: Option<T>,
-    started: bool,
 }
 
 impl<T> OrderedMergeJoin<T> {
@@ -19,9 +18,8 @@ impl<T> OrderedMergeJoin<T> {
             column_scans,
             active_scan: 0,
             active_max: None,
-            pos: 0,
+            pos: None,
             current: None,
-            started: false,
         }
     }
 }
@@ -31,7 +29,7 @@ impl<T: Eq + Debug + Copy> Iterator for OrderedMergeJoin<T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.active_max = self.column_scans[self.active_scan].next();
-        if self.active_max == None {
+        if self.active_max.is_none() {
             return None;
         }
         let mut matched_scans: usize = 1;
@@ -43,17 +41,14 @@ impl<T: Eq + Debug + Copy> Iterator for OrderedMergeJoin<T> {
                 matched_scans += 1;
                 if matched_scans == self.column_scans.len() {
                     self.current = self.active_max;
-                    if self.started {
-                        self.pos += 1;
-                    } else {
-                        self.started = true;
-                    }
+                    let pos = self.pos.map_or_else(Default::default, |pos| pos + 1);
+                    self.pos = Some(pos);
                     return self.current;
                 }
             } else {
                 self.active_max = self.column_scans[self.active_scan].current();
                 matched_scans = 1;
-                if self.active_max == None {
+                if self.active_max.is_none() {
                     self.current = None;
                     return None;
                 }
@@ -68,19 +63,18 @@ impl<T: Ord + Copy + Debug> ColumnScan<T> for OrderedMergeJoin<T> {
     /// The ability to get a position should not be part of all iterators we consider.
     fn seek(&mut self, value: T) -> Option<T> {
         // Brute-force scan:
-        if !self.started {
-            self.next();
-            self.started = true;
-        }
+        self.pos.is_none().then(|| self.next());
+
         loop {
-            if self.current == None {
+            if self.current.is_none() {
                 return None;
             } else if self.current.unwrap() >= value {
                 return self.current;
             }
 
             self.next();
-            self.pos += 1;
+            let pos = self.pos.get_or_insert(0);
+            *pos += 1;
         }
     }
 
@@ -89,11 +83,7 @@ impl<T: Ord + Copy + Debug> ColumnScan<T> for OrderedMergeJoin<T> {
     }
 
     fn pos(&mut self) -> Option<usize> {
-        if self.started && self.current != None {
-            Some(self.pos)
-        } else {
-            None
-        }
+        self.pos
     }
 }
 
