@@ -1,5 +1,4 @@
 //! This module collects data structures and operations on individual columns.
- 
 
 /// Module for defining [`Column`]
 pub mod column;
