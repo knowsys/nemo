@@ -7,7 +7,6 @@ pub struct OrderedMergeJoin<T> {
     column_scans: Vec<Box<dyn ColumnScan<T>>>,
     active_scan: usize,
     active_max: Option<T>,
-    pos: Option<usize>,
     current: Option<T>,
 }
 
@@ -18,7 +17,6 @@ impl<T> OrderedMergeJoin<T> {
             column_scans,
             active_scan: 0,
             active_max: None,
-            pos: None,
             current: None,
         }
     }
@@ -39,8 +37,6 @@ impl<T: Eq + Debug + Copy> Iterator for OrderedMergeJoin<T> {
                 matched_scans += 1;
                 if matched_scans == self.column_scans.len() {
                     self.current = self.active_max;
-                    let pos = self.pos.map_or_else(Default::default, |pos| pos + 1);
-                    self.pos = Some(pos);
                     return self.current;
                 }
             } else {
@@ -61,7 +57,7 @@ impl<T: Ord + Copy + Debug> ColumnScan<T> for OrderedMergeJoin<T> {
     /// The ability to get a position should not be part of all iterators we consider.
     fn seek(&mut self, value: T) -> Option<T> {
         // Brute-force scan:
-        self.pos.is_none().then(|| self.next());
+        self.current.is_none().then(|| self.next());
 
         loop {
             if self.current.is_none() {
@@ -71,17 +67,11 @@ impl<T: Ord + Copy + Debug> ColumnScan<T> for OrderedMergeJoin<T> {
             }
 
             self.next();
-            let pos = self.pos.get_or_insert(0);
-            *pos += 1;
         }
     }
 
     fn current(&mut self) -> Option<T> {
         self.current
-    }
-
-    fn pos(&mut self) -> Option<usize> {
-        self.pos
     }
 }
 

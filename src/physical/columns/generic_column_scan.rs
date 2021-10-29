@@ -1,4 +1,4 @@
-use super::{Column, ColumnScan};
+use super::{Column, ColumnScan, MaterialColumnScan};
 use std::fmt::Debug;
 
 /// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
@@ -44,7 +44,9 @@ impl<T: Ord + Copy + Debug> ColumnScan<T> for GenericColumnScan<T> {
         self.pos
             .and_then(|pos| (pos < self.column.len()).then(|| self.column[pos]))
     }
+}
 
+impl<T: Ord + Copy + Debug> MaterialColumnScan<T> for GenericColumnScan<T> {
     fn pos(&mut self) -> Option<usize> {
         self.pos
             .and_then(|pos| (pos < self.column.len()).then(|| pos))
@@ -54,7 +56,7 @@ impl<T: Ord + Copy + Debug> ColumnScan<T> for GenericColumnScan<T> {
 #[cfg(test)]
 mod test {
     use super::super::VectorColumn;
-    use super::{Column, ColumnScan, GenericColumnScan}; // < TODO: is this a nice way to write this use?
+    use super::{Column, ColumnScan, MaterialColumnScan, GenericColumnScan}; // < TODO: is this a nice way to write this use?
 
     fn get_test_column() -> Box<dyn Column<u64>> {
         let data: Vec<u64> = vec![1, 2, 5];

@@ -9,7 +9,4 @@ pub trait ColumnScan<T>: Debug + Iterator<Item = T> {
     /// Return the value at the current position, if any.
     fn current(&mut self) -> Option<T>;
 
-    /// Return the current position of this iterator, or None if the iterator is
-    /// before the first or after the last element.
-    fn pos(&mut self) -> Option<usize>;
 }

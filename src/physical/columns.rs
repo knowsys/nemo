@@ -20,6 +20,10 @@ pub use adaptive_column_builder::AdaptiveColumnBuilder;
 pub mod column_scan;
 pub use column_scan::ColumnScan;
 
+/// Module for defining [`MaterialColumnScan`]
+pub mod material_column_scan;
+pub use material_column_scan::MaterialColumnScan;
+
 /// Module for defining [`GenericColumnScan`]
 pub mod generic_column_scan;
 pub use generic_column_scan::GenericColumnScan;
