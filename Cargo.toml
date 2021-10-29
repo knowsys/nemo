@@ -1,15 +1,16 @@
 [package]
 name = "stage2"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bimap = "0.6.0"
-csv = "1.1.5"
-serde = "1.0"
-itertools = "0.10.0"
+log = "0.4"
+
+[dev-dependencies]
+env_logger = "*"
+test-env-log = "0.2"
 
 [profile.dev]
 panic = "unwind"
