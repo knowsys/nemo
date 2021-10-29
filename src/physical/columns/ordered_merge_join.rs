@@ -29,9 +29,7 @@ impl<T: Eq + Debug + Copy> Iterator for OrderedMergeJoin<T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.active_max = self.column_scans[self.active_scan].next();
-        if self.active_max.is_none() {
-            return None;
-        }
+        self.active_max?;
         let mut matched_scans: usize = 1;
 
         loop {
