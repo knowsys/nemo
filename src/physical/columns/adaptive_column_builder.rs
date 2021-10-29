@@ -29,7 +29,6 @@ impl<T: Debug + Copy> ColumnBuilder<T> for AdaptiveColumnBuilder<T> {
 
     fn finalize<'a>(self) -> Box<dyn Column<T> +'a> where T: 'a {
             Box::new(VectorColumn::new(self.data))
-
     }
 }
 
