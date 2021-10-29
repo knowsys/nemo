@@ -4,7 +4,7 @@ use std::fmt::Debug;
 /// Implementation of [`ColumnScan`] for the result of joining a list of [`ColumnScan`] structs.
 #[derive(Debug)]
 pub struct OrderedMergeJoin<T> {
-    column_scans: Vec<Box<dyn ColumnScan<T>>>,
+    column_scans: Vec<Box<dyn ColumnScan<Item=T>>>,
     active_scan: usize,
     active_max: Option<T>,
     current: Option<T>,
@@ -12,7 +12,7 @@ pub struct OrderedMergeJoin<T> {
 
 impl<T> OrderedMergeJoin<T> {
     /// Constructs a new VectorColumnScan for a Column.
-    pub fn new(column_scans: Vec<Box<dyn ColumnScan<T>>>) -> OrderedMergeJoin<T> {
+    pub fn new(column_scans: Vec<Box<dyn ColumnScan<Item=T>>>) -> OrderedMergeJoin<T> {
         OrderedMergeJoin {
             column_scans,
             active_scan: 0,
@@ -51,7 +51,8 @@ impl<T: Eq + Debug + Copy> Iterator for OrderedMergeJoin<T> {
     }
 }
 
-impl<T: Ord + Copy + Debug> ColumnScan<T> for OrderedMergeJoin<T> {
+impl<T: Ord + Copy + Debug> ColumnScan for OrderedMergeJoin<T> {
+
     /// TODO: Seek could be more efficient by using seeks of underlying iterators.
     /// However, we will then not know the position any more (number of matches in between).
     /// The ability to get a position should not be part of all iterators we consider.

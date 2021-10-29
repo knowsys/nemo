@@ -25,7 +25,8 @@ impl<T: Debug + Copy> Iterator for GenericColumnScan<T> {
     }
 }
 
-impl<T: Ord + Copy + Debug> ColumnScan<T> for GenericColumnScan<T> {
+impl<T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<T> {
+
     fn seek(&mut self, value: T) -> Option<T> {
         // Brute-force scan:
         while self.pos.unwrap_or_default() < self.column.len() {
@@ -46,7 +47,7 @@ impl<T: Ord + Copy + Debug> ColumnScan<T> for GenericColumnScan<T> {
     }
 }
 
-impl<T: Ord + Copy + Debug> MaterialColumnScan<T> for GenericColumnScan<T> {
+impl<T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<T> {
     fn pos(&mut self) -> Option<usize> {
         self.pos
             .and_then(|pos| (pos < self.column.len()).then(|| pos))
