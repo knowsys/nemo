@@ -4,7 +4,6 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::ops::{Add, AddAssign};
 
-
 /// Wrapper for [`f64`] that does not allow [`f64::NAN`] values.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Double(f64);
@@ -82,4 +81,3 @@ impl From<Double> for f64 {
         value.0
     }
 }
-
