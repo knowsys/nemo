@@ -5,4 +5,5 @@
 
 pub mod columns;
 pub mod datatypes;
+pub mod dictionary;
 // pub mod tables;
