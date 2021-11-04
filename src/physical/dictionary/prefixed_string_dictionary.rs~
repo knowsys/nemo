@@ -1,0 +1,392 @@
+use std::{
+    borrow::Borrow,
+    cell::RefCell,
+    collections::{BTreeMap, HashMap},
+    fmt::Display,
+    hash::{Hash, Hasher},
+    ops::Deref,
+    rc::Rc,
+};
+
+use super::Dictionary;
+enum TrieNode {
+    Root {
+        prefix: String,
+        children: Vec<Rc<RefCell<TrieNode>>>,
+    },
+    Node {
+        prefix: String,
+        children: Vec<Rc<RefCell<TrieNode>>>,
+        parent: Rc<RefCell<TrieNode>>,
+    },
+}
+
+impl Default for TrieNode {
+    fn default() -> Self {
+        Self::Root {
+            prefix: "".to_string(),
+            children: Vec::new(),
+        }
+    }
+}
+
+impl Hash for TrieNode {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.prefix().hash(state);
+        match self {
+            TrieNode::Root { prefix, children } => {
+                "".hash(state);
+            }
+            TrieNode::Node {
+                prefix,
+                children,
+                parent,
+            } => {
+                parent.as_ref().borrow().hash(state);
+            }
+        }
+    }
+}
+
+impl PartialEq for TrieNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.prefix().eq(other.prefix())
+    }
+}
+
+impl Eq for TrieNode {}
+
+impl Display for TrieNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TrieNode::Root { prefix, children } => {}
+            TrieNode::Node {
+                prefix: _,
+                children: _,
+                parent,
+            } => {
+                write!(f, "{}", parent.as_ref().borrow())?;
+            }
+        }
+
+        write!(f, "{}", self.prefix())
+    }
+}
+
+impl TrieNode {
+    fn create_node(parent: Rc<RefCell<TrieNode>>, prefix: String) -> Self {
+        Self::Node {
+            prefix,
+            children: Vec::new(),
+            parent,
+        }
+    }
+
+    fn add_node(&mut self, child: Rc<RefCell<TrieNode>>) {
+        match self {
+            Self::Node {
+                children,
+                prefix: _,
+                parent: _,
+            } => children,
+            Self::Root {
+                children,
+                prefix: _,
+            } => children,
+        }
+        .push(Rc::clone(&child));
+    }
+
+    fn children(&self) -> Option<&Vec<Rc<RefCell<TrieNode>>>> {
+        match self {
+            Self::Node {
+                children,
+                prefix: _,
+                parent: _,
+            } => Some(&children),
+            Self::Root {
+                children,
+                prefix: _,
+            } => Some(&children),
+            _ => None,
+        }
+    }
+
+    fn prefix(&self) -> &str {
+        match self {
+            Self::Node {
+                children: _,
+                prefix,
+                parent: _,
+            } => prefix,
+            Self::Root {
+                children: _,
+                prefix,
+            } => prefix,
+        }
+    }
+
+    fn matching_child(&self, search_value: &str) -> Option<Rc<RefCell<TrieNode>>> {
+        if let Some(children) = self.children() {
+            for child in children {
+                if child.as_ref().borrow().prefix().eq(search_value) {
+                    return Some(Rc::clone(child));
+                }
+            }
+        }
+        None
+    }
+
+    fn find_last_match<'a>(
+        node: Rc<RefCell<TrieNode>>,
+        search_list: &'a [&'a str],
+    ) -> (Rc<RefCell<TrieNode>>, &'a [&'a str]) {
+        let mut cur_node = node;
+        for (pos, element) in search_list.iter().enumerate() {
+            let mut helper = Rc::clone(&cur_node);
+            if let Some(child) = cur_node.as_ref().borrow().matching_child(*element) {
+                helper = Rc::clone(&child);
+            } else {
+                return (helper, &search_list[pos..]);
+            }
+            cur_node = Rc::clone(&helper);
+        }
+        (cur_node, &[])
+    }
+}
+
+struct TrieNodeStringPair(Rc<RefCell<TrieNode>>, Rc<String>);
+
+impl Hash for TrieNodeStringPair {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.as_ref().borrow().hash(state);
+        self.1.hash(state);
+    }
+}
+
+impl PartialEq for TrieNodeStringPair {
+    fn eq(&self, other: &Self) -> bool {
+        self.1.eq(&other.1) && self.0.eq(&other.0)
+    }
+}
+
+impl Eq for TrieNodeStringPair {}
+
+struct PrefixedStringDictionary {
+    ordering: Vec<TrieNodeStringPair>,
+    mapping: HashMap<TrieNodeStringPair, usize>,
+    store: Rc<RefCell<TrieNode>>,
+}
+
+impl PrefixedStringDictionary {}
+
+impl Default for PrefixedStringDictionary {
+    fn default() -> Self {
+        Self {
+            ordering: Vec::new(),
+            mapping: HashMap::new(),
+            store: Rc::new(RefCell::new(TrieNode::default())),
+        }
+    }
+}
+
+impl super::Dictionary for PrefixedStringDictionary {
+    fn add(&mut self, entry: String) -> usize {
+        let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).into_iter().collect();
+        let (real_prefixes, real_entry) = prefixes.split_at(prefixes.len() - 1);
+        let (mut cur_node, remaining_prefixes) =
+            TrieNode::find_last_match(self.store.to_owned(), real_prefixes);
+        for element in remaining_prefixes {
+            let new_node = Rc::new(RefCell::new(TrieNode::create_node(
+                Rc::clone(&cur_node),
+                element.to_string(),
+            )));
+            cur_node
+                .as_ref()
+                .borrow_mut()
+                .add_node(Rc::clone(&new_node));
+            cur_node = Rc::clone(&new_node);
+        }
+        let entry_string = Rc::new(real_entry[0].to_string());
+        *self
+            .mapping
+            .entry(TrieNodeStringPair(
+                Rc::clone(&cur_node),
+                Rc::clone(&entry_string),
+            ))
+            .or_insert_with(|| {
+                let value = self.ordering.len();
+                self.ordering.push(TrieNodeStringPair(
+                    Rc::clone(&cur_node),
+                    Rc::clone(&entry_string),
+                ));
+                value
+            })
+    }
+
+    fn index_of(&self, entry: &str) -> Option<usize> {
+        let prefixes: Vec<&str> = Prefixer::new(entry).into_iter().collect();
+        let (real_prefixes, real_entry) = prefixes.split_at(prefixes.len() - 1);
+        let (node, remainder) = TrieNode::find_last_match(self.store.to_owned(), real_prefixes);
+        if !remainder.is_empty() {
+            return None;
+        }
+        self.mapping
+            .get(&TrieNodeStringPair(
+                Rc::clone(&node),
+                Rc::clone(&Rc::new(real_entry[0].to_string())),
+            ))
+            .and_then(|value| Some(*value))
+    }
+
+    fn entry(&self, index: usize) -> Option<String> {
+        if index < self.ordering.len() {
+            Some(format!(
+                "{}{}",
+                self.ordering[index].0.as_ref().borrow(),
+                self.ordering[index].1.as_ref(),
+            ))
+        } else {
+            None
+        }
+    }
+}
+
+struct Prefixer<'a> {
+    string: &'a str,
+}
+
+impl<'a> Prefixer<'a> {
+    fn new(string: &'a str) -> Self {
+        Self { string }
+    }
+}
+
+impl<'a> Iterator for Prefixer<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.string.is_empty() {
+            return None;
+        }
+        let mut splitpos: usize = self.string.len();
+        if let Some(pos) = self.string.find("//") {
+            splitpos = pos + 2;
+        }
+        if let Some(pos) = self.string.find(&['/', '#'][..]) {
+            splitpos = pos + 1;
+        }
+
+        let (head, tail) = self.string.split_at(splitpos);
+        self.string = tail;
+        Some(head)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::{borrow::Borrow, ops::Deref};
+
+    use crate::physical::dictionary::Dictionary;
+
+    use super::PrefixedStringDictionary;
+
+    fn create_dict() -> PrefixedStringDictionary {
+        let mut dict = PrefixedStringDictionary::default();
+        let vec: Vec<&str> = vec![
+            "a",
+            "b",
+            "c",
+            "a",
+            "b",
+            "c",
+            "Position 3",
+            "Position 4",
+            "Position 3",
+            "Position 5",
+        ];
+
+        for i in vec {
+            dict.add(i.to_string());
+        }
+        dict
+    }
+
+    #[test]
+    fn entry() {
+        let dict = create_dict();
+        assert_eq!(dict.entry(0), Some("a".to_string()));
+        assert_eq!(dict.entry(1), Some("b".to_string()));
+        assert_eq!(dict.entry(2), Some("c".to_string()));
+        assert_eq!(dict.entry(3), Some("Position 3".to_string()));
+        assert_eq!(dict.entry(4), Some("Position 4".to_string()));
+        assert_eq!(dict.entry(5), Some("Position 5".to_string()));
+        assert_eq!(dict.entry(6), None);
+        assert_eq!(dict.entry(3), Some("Position 3".to_string()));
+    }
+
+    #[test]
+    fn index_of() {
+        let dict = create_dict();
+        assert_eq!(dict.index_of("a".to_string().borrow()), Some(0));
+        assert_eq!(dict.index_of("b".to_string().borrow()), Some(1));
+        assert_eq!(dict.index_of("c".to_string().borrow()), Some(2));
+        assert_eq!(dict.index_of("Position 3".to_string().borrow()), Some(3));
+        assert_eq!(dict.index_of("Position 4".to_string().borrow()), Some(4));
+        assert_eq!(dict.index_of("Position 5".to_string().borrow()), Some(5));
+        assert_eq!(dict.index_of("d".to_string().borrow()), None);
+        assert_eq!(dict.index_of("Pos".to_string().borrow()), None);
+        assert_eq!(dict.index_of("Pos"), None);
+        assert_eq!(dict.index_of("b"), Some(1));
+    }
+
+    #[test]
+    fn properties() {
+        let mut dict = create_dict();
+        // no prefixes, so no children
+        assert!(dict.store.as_ref().borrow().children().unwrap().is_empty());
+        dict.add("https://wikidata.org/entity/Q42".to_string());
+        // now we need some children
+        assert!(!dict.store.as_ref().borrow().children().unwrap().is_empty());
+        assert_eq!(
+            dict.entry(6),
+            Some("https://wikidata.org/entity/Q42".to_string())
+        );
+    }
+
+    #[test]
+    fn iri() {
+        let mut dict = create_dict();
+        // no prefixes, so no children
+        assert!(dict.store.as_ref().borrow().children().unwrap().is_empty());
+        dict.add("https://wikidata.org/entity/Q42".to_string());
+        // now we need some children
+        assert!(!dict.store.as_ref().borrow().children().unwrap().is_empty());
+        assert_eq!(
+            dict.entry(6),
+            Some("https://wikidata.org/entity/Q42".to_string())
+        );
+        dict = PrefixedStringDictionary::default();
+        let mut vec: Vec<&str> = vec![
+            "https://wikidata.org/entity/Q42",
+            "https://wikidata.org/entity/Q43",
+            "https://wikidata.org/prop/direct/P31",
+            "https://wikidata.org/prop/indirect/P31",
+            "https://example.org/entity/Q42",
+            "https://wikidata.org/prop/direct/P8810",
+        ];
+
+        for (i, str) in vec.iter().enumerate() {
+            assert_eq!(dict.add(str.to_string()), i);
+        }
+        // duplicates
+        for (i, str) in vec.iter().enumerate() {
+            assert_eq!(dict.add(str.to_string()), i);
+        }
+
+        for (id, result) in vec.iter().enumerate() {
+            assert_eq!(dict.entry(id).unwrap(), result.to_string());
+            assert_eq!(dict.index_of(*result), Some(id));
+        }
+    }
+}
