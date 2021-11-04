@@ -11,3 +11,11 @@ Cargo.lock
 
 # Intellij project configuration
 .idea
+
+# emacs tmp files
+*~
+# Flycheck
+flycheck_*.el
+
+# projectiles files
+.projectile
