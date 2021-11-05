@@ -1,14 +1,11 @@
 use std::{
-    borrow::Borrow,
     cell::RefCell,
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     fmt::Display,
     hash::{Hash, Hasher},
-    ops::Deref,
     rc::Rc,
 };
 
-use super::Dictionary;
 enum TrieNode {
     Root {
         prefix: String,
@@ -34,12 +31,15 @@ impl Hash for TrieNode {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.prefix().hash(state);
         match self {
-            TrieNode::Root { prefix, children } => {
+            TrieNode::Root {
+                prefix: _,
+                children: _,
+            } => {
                 "".hash(state);
             }
             TrieNode::Node {
-                prefix,
-                children,
+                prefix: _,
+                children: _,
                 parent,
             } => {
                 parent.as_ref().borrow().hash(state);
@@ -59,7 +59,10 @@ impl Eq for TrieNode {}
 impl Display for TrieNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TrieNode::Root { prefix, children } => {}
+            TrieNode::Root {
+                prefix: _,
+                children: _,
+            } => {}
             TrieNode::Node {
                 prefix: _,
                 children: _,
@@ -103,12 +106,11 @@ impl TrieNode {
                 children,
                 prefix: _,
                 parent: _,
-            } => Some(&children),
+            } => Some(children),
             Self::Root {
                 children,
                 prefix: _,
-            } => Some(&children),
-            _ => None,
+            } => Some(children),
         }
     }
 
@@ -236,7 +238,7 @@ impl super::Dictionary for PrefixedStringDictionary {
                 Rc::clone(&node),
                 Rc::clone(&Rc::new(real_entry[0].to_string())),
             ))
-            .and_then(|value| Some(*value))
+            .cloned()
     }
 
     fn entry(&self, index: usize) -> Option<String> {
@@ -285,7 +287,7 @@ impl<'a> Iterator for Prefixer<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::{borrow::Borrow, ops::Deref};
+    use std::borrow::Borrow;
 
     use crate::physical::dictionary::Dictionary;
 
@@ -367,7 +369,7 @@ mod test {
             Some("https://wikidata.org/entity/Q42".to_string())
         );
         dict = PrefixedStringDictionary::default();
-        let mut vec: Vec<&str> = vec![
+        let vec: Vec<&str> = vec![
             "https://wikidata.org/entity/Q42",
             "https://wikidata.org/entity/Q43",
             "https://wikidata.org/prop/direct/P31",

@@ -1,6 +1,6 @@
 use super::Dictionary;
+use std::collections::HashMap;
 use std::rc::Rc;
-use std::{borrow::Borrow, collections::HashMap};
 
 struct StringDictionary {
     store: Vec<Rc<String>>,
@@ -36,7 +36,7 @@ impl Dictionary for StringDictionary {
     fn entry(&self, index: usize) -> Option<String> {
         self.store
             .get(index)
-            .map(|entry| -> String { Rc::clone(&entry).to_string() })
+            .map(|entry| -> String { Rc::clone(entry).to_string() })
     }
 }
 
