@@ -6,6 +6,9 @@ use std::{
     rc::Rc,
 };
 
+use super::Dictionary;
+
+/// Represents a node, which is either a [TrieNode::Root], or some non-special [TrieNode::Node]
 enum TrieNode {
     Root {
         prefix: String,
@@ -16,6 +19,28 @@ enum TrieNode {
         children: Vec<Rc<RefCell<TrieNode>>>,
         parent: Rc<RefCell<TrieNode>>,
     },
+}
+
+impl std::fmt::Debug for TrieNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TrieNode::Root { prefix, children } => f
+                .debug_struct("TrieNode::Root")
+                .field("prefix", prefix)
+                .field("children", children)
+                .finish(),
+            TrieNode::Node {
+                prefix,
+                children,
+                parent,
+            } => f
+                .debug_struct("TrieNode::Node")
+                .field("prefix", prefix)
+                .field("children", children)
+                .field("parent(prefix)", &parent.as_ref().borrow().prefix())
+                .finish(),
+        }
+    }
 }
 
 impl Default for TrieNode {
@@ -77,6 +102,7 @@ impl Display for TrieNode {
 }
 
 impl TrieNode {
+    /// create a [TrieNode] with a given `parent` as well as a `prefix` [String]
     fn create_node(parent: Rc<RefCell<TrieNode>>, prefix: String) -> Self {
         Self::Node {
             prefix,
@@ -85,6 +111,8 @@ impl TrieNode {
         }
     }
 
+    /// add another child to the list of children of this node
+    /// Note that it does not check whether some child already exists
     fn add_node(&mut self, child: Rc<RefCell<TrieNode>>) {
         match self {
             Self::Node {
@@ -100,6 +128,7 @@ impl TrieNode {
         .push(Rc::clone(&child));
     }
 
+    /// Returns the children of the given [TrieNode]
     fn children(&self) -> Option<&Vec<Rc<RefCell<TrieNode>>>> {
         match self {
             Self::Node {
@@ -114,6 +143,7 @@ impl TrieNode {
         }
     }
 
+    /// Provides the prefix of the given [TrieNode]
     fn prefix(&self) -> &str {
         match self {
             Self::Node {
@@ -128,6 +158,7 @@ impl TrieNode {
         }
     }
 
+    /// Given a prefix, checks whether the prefix occurs in the children. Returns that child if that is the case.
     fn matching_child(&self, search_value: &str) -> Option<Rc<RefCell<TrieNode>>> {
         if let Some(children) = self.children() {
             for child in children {
@@ -139,6 +170,8 @@ impl TrieNode {
         None
     }
 
+    /// Given a list of prefixes `search_list` and a `node`, searches for a matching path down the sub-tree with respect to the given list.
+    /// It will return the last matching node, together with the remainder of the (not-matched) prefixes
     fn find_last_match<'a>(
         node: Rc<RefCell<TrieNode>>,
         search_list: &'a [&'a str],
@@ -157,6 +190,8 @@ impl TrieNode {
     }
 }
 
+/// Newtype to represent a pair of a [TreeNode] (i.e. a path in the Tree) and a [String]
+#[derive(Debug)]
 struct TrieNodeStringPair(Rc<RefCell<TrieNode>>, Rc<String>);
 
 impl Hash for TrieNodeStringPair {
@@ -174,7 +209,10 @@ impl PartialEq for TrieNodeStringPair {
 
 impl Eq for TrieNodeStringPair {}
 
-struct PrefixedStringDictionary {
+/// The [PrefixedStringDictionary] allows to store (and own) a couple of prefixed [String]s.
+/// Prefixes will be stored in a Triestructure and each chain of prefixes is therefore only stored once.
+#[derive(Debug)]
+pub struct PrefixedStringDictionary {
     ordering: Vec<TrieNodeStringPair>,
     mapping: HashMap<TrieNodeStringPair, usize>,
     store: Rc<RefCell<TrieNode>>,
@@ -192,7 +230,7 @@ impl Default for PrefixedStringDictionary {
     }
 }
 
-impl super::Dictionary for PrefixedStringDictionary {
+impl Dictionary for PrefixedStringDictionary {
     fn add(&mut self, entry: String) -> usize {
         let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).into_iter().collect();
         let (real_prefixes, real_entry) = prefixes.split_at(prefixes.len() - 1);
@@ -254,6 +292,8 @@ impl super::Dictionary for PrefixedStringDictionary {
     }
 }
 
+/// The [Prefixer] allows to split a given [&str] into its prefixes.
+/// It is an [Iterator] an will iterate over the prefixes in the order they occur in the stringslice.
 struct Prefixer<'a> {
     string: &'a str,
 }
