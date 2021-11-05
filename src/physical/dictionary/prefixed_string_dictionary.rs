@@ -39,7 +39,12 @@ impl std::fmt::Debug for TrieNode {
                 .field("children", children)
                 .field(
                     "parent(prefix)",
-                    &parent.upgrade().unwrap().as_ref().borrow().prefix(),
+                    &parent
+                        .upgrade()
+                        .expect("should be valid")
+                        .as_ref()
+                        .borrow()
+                        .prefix(),
                 )
                 .finish(),
         }
