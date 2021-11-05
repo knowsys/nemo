@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     hash::{Hash, Hasher},
-    rc::Rc,
+    rc::{Rc, Weak},
 };
 
 use super::Dictionary;
@@ -17,7 +17,7 @@ enum TrieNode {
     Node {
         prefix: String,
         children: Vec<Rc<RefCell<TrieNode>>>,
-        parent: Rc<RefCell<TrieNode>>,
+        parent: Weak<RefCell<TrieNode>>,
     },
 }
 
@@ -37,7 +37,10 @@ impl std::fmt::Debug for TrieNode {
                 .debug_struct("TrieNode::Node")
                 .field("prefix", prefix)
                 .field("children", children)
-                .field("parent(prefix)", &parent.as_ref().borrow().prefix())
+                .field(
+                    "parent(prefix)",
+                    &parent.upgrade().unwrap().as_ref().borrow().prefix(),
+                )
                 .finish(),
         }
     }
@@ -67,7 +70,12 @@ impl Hash for TrieNode {
                 children: _,
                 parent,
             } => {
-                parent.as_ref().borrow().hash(state);
+                parent
+                    .upgrade()
+                    .expect("should be valid")
+                    .as_ref()
+                    .borrow()
+                    .hash(state);
             }
         }
     }
@@ -93,7 +101,11 @@ impl Display for TrieNode {
                 children: _,
                 parent,
             } => {
-                write!(f, "{}", parent.as_ref().borrow())?;
+                write!(
+                    f,
+                    "{}",
+                    parent.upgrade().expect("should be valid").as_ref().borrow()
+                )?;
             }
         }
 
@@ -107,7 +119,7 @@ impl TrieNode {
         Self::Node {
             prefix,
             children: Vec::new(),
-            parent,
+            parent: Rc::downgrade(&parent),
         }
     }
 
@@ -408,6 +420,7 @@ mod test {
             dict.entry(6),
             Some("https://wikidata.org/entity/Q42".to_string())
         );
+        drop(dict);
         dict = PrefixedStringDictionary::default();
         let vec: Vec<&str> = vec![
             "https://wikidata.org/entity/Q42",
