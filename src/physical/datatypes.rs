@@ -3,6 +3,9 @@
 /// Module for defining [`DataTypeName`]
 pub mod data_type_name;
 pub use data_type_name::DataTypeName;
+/// Module for defining [`DataValueT`]
+pub mod data_value;
+pub use data_value::DataValueT;
 /// Module for defining [`Double`]
 pub mod double;
 pub use double::Double;

@@ -1,4 +1,5 @@
 use std::{fmt::Debug, ops::Index};
+use crate::physical::datatypes::{Float,Double};
 
 /// Column of ordered values.
 pub trait Column<T>: Debug {
@@ -23,4 +24,15 @@ impl<T> Index<usize> for dyn Column<T> {
     fn index(&self, index: usize) -> &Self::Output {
         self.get(index)
     }
+}
+
+/// Enum for columns of all supported basic types.
+#[derive(Debug)]
+pub enum ColumnT {
+    /// Case Column<u64>
+    ColumnU64(Box<dyn Column<u64>>),
+    /// Case Column<Float>
+    ColumnFloat(Box<dyn Column<Float>>),
+    /// Case Column<Double>
+    ColumnDouble(Box<dyn Column<Double>>),
 }
