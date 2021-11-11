@@ -6,3 +6,4 @@
 pub mod columns;
 pub mod datatypes;
 pub mod tables;
+pub mod dictionary;
