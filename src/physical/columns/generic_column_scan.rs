@@ -3,19 +3,19 @@ use std::fmt::Debug;
 
 /// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
 #[derive(Debug)]
-pub struct GenericColumnScan<T> {
-    column: Box<dyn Column<T>>,
+pub struct GenericColumnScan<'a,T> {
+    column: &'a dyn Column<T>,
     pos: Option<usize>,
 }
 
-impl<T> GenericColumnScan<T> {
-    /// Constructs a new VectorColumnScan for a Column.
-    pub fn new(column: Box<dyn Column<T>>) -> GenericColumnScan<T> {
+impl<'a,T> GenericColumnScan<'a,T> {
+    /// Constructs a new [`GenericColumnScan`] for a Column.
+    pub fn new(column: &'a dyn Column<T>) -> GenericColumnScan<'a,T> {
         GenericColumnScan { column, pos: None }
     }
 }
 
-impl<T: Debug + Copy> Iterator for GenericColumnScan<T> {
+impl<'a,T: Debug + Copy> Iterator for GenericColumnScan<'a,T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -25,7 +25,7 @@ impl<T: Debug + Copy> Iterator for GenericColumnScan<T> {
     }
 }
 
-impl<T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<T> {
+impl<'a,T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a,T> {
 
     fn seek(&mut self, value: T) -> Option<T> {
         // Brute-force scan:
@@ -47,7 +47,7 @@ impl<T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<T> {
     }
 }
 
-impl<T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<T> {
+impl<'a,T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<'a,T> {
     fn pos(&mut self) -> Option<usize> {
         self.pos
             .and_then(|pos| (pos < self.column.len()).then(|| pos))
@@ -57,17 +57,18 @@ impl<T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<T> {
 #[cfg(test)]
 mod test {
     use super::super::VectorColumn;
-    use super::{Column, ColumnScan, GenericColumnScan, MaterialColumnScan}; // < TODO: is this a nice way to write this use?
+    use super::{ColumnScan, GenericColumnScan, MaterialColumnScan}; // < TODO: is this a nice way to write this use?
     use test_env_log::test;
 
-    fn get_test_column() -> Box<dyn Column<u64>> {
+    fn get_test_column() -> VectorColumn<u64> {
         let data: Vec<u64> = vec![1, 2, 5];
-        Box::new(VectorColumn::new(data))
+        VectorColumn::new(data)
     }
 
     #[test]
     fn test_u64_iterate_column() {
-        let mut gcs: GenericColumnScan<u64> = GenericColumnScan::new(get_test_column());
+        let test_column = get_test_column();
+        let mut gcs: GenericColumnScan<u64> = GenericColumnScan::new(&test_column);
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.current(), None);
         assert_eq!(gcs.next(), Some(1));
@@ -86,7 +87,8 @@ mod test {
 
     #[test]
     fn test_u64_seek_column() {
-        let mut gcs: GenericColumnScan<u64> = GenericColumnScan::new(get_test_column());
+        let test_column = get_test_column();
+        let mut gcs: GenericColumnScan<u64> = GenericColumnScan::new(&test_column);
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.seek(2), Some(2));
         assert_eq!(gcs.pos(), Some(1));

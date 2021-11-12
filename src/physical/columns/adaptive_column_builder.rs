@@ -19,7 +19,7 @@ impl<T> AdaptiveColumnBuilder<T> {
     }
 }
 
-impl<T: Debug + Copy> ColumnBuilder<T> for AdaptiveColumnBuilder<T> {
+impl<T: Debug + Copy + Ord> ColumnBuilder<T> for AdaptiveColumnBuilder<T> {
     fn add(&mut self, value: T) {
         self.data.push(value);
     }

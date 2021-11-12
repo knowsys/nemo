@@ -32,3 +32,12 @@ pub use generic_column_scan::GenericColumnScan;
 /// Module for defining [`OrderedMergeJoin`]
 pub mod ordered_merge_join;
 pub use ordered_merge_join::OrderedMergeJoin;
+
+/// Module for defining [`IntervalColumn`] and [`IntervalColumnT`]
+pub mod interval_column;
+pub use interval_column::IntervalColumn;
+pub use interval_column::IntervalColumnT;
+
+/// Module for defining [`GenericIntervalColumn`]
+pub mod generic_interval_column;
+pub use generic_interval_column::GenericIntervalColumn;

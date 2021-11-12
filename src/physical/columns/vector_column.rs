@@ -1,4 +1,4 @@
-use super::Column;
+use super::{Column,ColumnScan,GenericColumnScan};
 use std::{fmt::Debug, ops::Index};
 
 /// Simple implementation of [`Column`] that uses Vec to store data.
@@ -7,14 +7,15 @@ pub struct VectorColumn<T> {
     data: Vec<T>,
 }
 
-impl<T> VectorColumn<T> {
+impl<T: Debug + Copy + Ord> VectorColumn<T> {
     /// Constructs a new VectorColumn from a vector of the suitable type.
     pub fn new(data: Vec<T>) -> VectorColumn<T> {
         VectorColumn { data }
     }
+
 }
 
-impl<T: Debug + Copy> Column<T> for VectorColumn<T> {
+impl<T: Debug + Copy + Ord> Column<T> for VectorColumn<T> {
     fn len(&self) -> usize {
         self.data.len()
     }
@@ -22,9 +23,13 @@ impl<T: Debug + Copy> Column<T> for VectorColumn<T> {
     fn get(&self, index: usize) -> &T {
         &self.data[index]
     }
+
+    fn iter<'a>(&'a self) -> Box<dyn ColumnScan<Item = T> + 'a> {
+        Box::new( GenericColumnScan::new(self) )
+    }
 }
 
-impl<T: Debug + Copy> Index<usize> for VectorColumn<T> {
+impl<T: Debug + Copy + Ord> Index<usize> for VectorColumn<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -39,10 +44,7 @@ mod test {
 
     #[test]
     fn test_u64_column() {
-        let mut data: Vec<u64> = Vec::new();
-        data.push(1);
-        data.push(2);
-        data.push(3);
+        let data: Vec<u64> = vec!(1,2,3);
 
         let vc: VectorColumn<u64> = VectorColumn::new(data);
         assert_eq!(vc.len(), 3);
