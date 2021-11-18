@@ -27,12 +27,15 @@ impl<'a, T> GenericColumnScan<'a, T> {
         );
 
         self.interval = Some(interval);
+        self.pos = None;
+
         self
     }
 
     /// Lifts any restriction of the interval to some interval.
     pub fn widen(&mut self) -> &mut Self {
         self.interval = None;
+        self.pos = None;
         self
     }
 
@@ -177,5 +180,24 @@ mod test {
         let test_column = get_test_column();
         let mut gcs = GenericColumnScan::new(&test_column);
         gcs.narrow(1..23);
+    }
+
+    #[test]
+    fn u64_narrow_after_use() {
+        let test_column = get_test_column();
+        let mut gcs = GenericColumnScan::new(&test_column);
+        assert_eq!(gcs.next(), Some(1));
+        gcs.narrow(0..2);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
+    }
+
+    #[test]
+    fn u64_widen_after_use() {
+        let test_column = get_test_column();
+        let mut gcs = GenericColumnScan::new(&test_column);
+        gcs.narrow(1..2);
+        assert_eq!(gcs.next(), Some(2));
+        gcs.widen();
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
     }
 }
