@@ -26,6 +26,9 @@
       rec {
         devShell =
           pkgs.mkShell {
+            RUST_LOG = debug;
+            RUST_BACKTRACE = 1;
+
             buildInputs = [
               pkgs.rust-bin.stable.latest.default
               pkgs.rust-analyzer
