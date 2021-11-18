@@ -25,3 +25,27 @@ pub enum IntervalColumnT {
     /// Case Column<Double>
     IntervalColumnDouble(Box<dyn IntervalColumn<Double>>),
 }
+
+impl IntervalColumnT {
+    /// Returns the number of intervals in the interval column.
+    pub fn int_len(&self) -> usize {
+        match self {
+            IntervalColumnT::IntervalColumnU64(col) => col.int_len(),
+            IntervalColumnT::IntervalColumnFloat(col) => col.int_len(),
+            IntervalColumnT::IntervalColumnDouble(col) => col.int_len()
+        }
+    }
+
+    /// Returns the smallest and largest index of the interval with the given
+    /// index.
+    /// 
+    /// # Panics
+    /// Panics if `int_idx` is out of bounds.
+    pub fn int_bounds(&self, int_idx: usize) -> (usize,usize) {
+        match self {
+            IntervalColumnT::IntervalColumnU64(col) => col.int_bounds(int_idx),
+            IntervalColumnT::IntervalColumnFloat(col) => col.int_bounds(int_idx),
+            IntervalColumnT::IntervalColumnDouble(col) => col.int_bounds(int_idx)
+        }
+    }
+}
