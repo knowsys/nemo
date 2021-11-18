@@ -1,35 +1,72 @@
 use super::{Column, ColumnScan, MaterialColumnScan};
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
 #[derive(Debug)]
-pub struct GenericColumnScan<'a,T> {
+pub struct GenericColumnScan<'a, T> {
     column: &'a dyn Column<T>,
     pos: Option<usize>,
+    interval: Option<Range<usize>>,
 }
 
-impl<'a,T> GenericColumnScan<'a,T> {
+impl<'a, T> GenericColumnScan<'a, T> {
     /// Constructs a new [`GenericColumnScan`] for a Column.
-    pub fn new(column: &'a dyn Column<T>) -> GenericColumnScan<'a,T> {
-        GenericColumnScan { column, pos: None }
+    pub fn new(column: &'a dyn Column<T>) -> GenericColumnScan<'a, T> {
+        GenericColumnScan {
+            column,
+            pos: None,
+            interval: None,
+        }
+    }
+
+    /// Restricts the iterator to the given `interval`.
+    pub fn narrow(&mut self, interval: Range<usize>) -> &mut Self {
+        debug_assert!(
+            interval.end <= self.column.len(),
+            "Cannot narrow to an interval larger than the column."
+        );
+
+        self.interval = Some(interval);
+        self
+    }
+
+    /// Lifts any restriction of the interval to some interval.
+    pub fn widen(&mut self) -> &mut Self {
+        self.interval = None;
+        self
+    }
+
+    /// Returns the first column index of the iterator.
+    pub fn lower_bound(&self) -> usize {
+        match &self.interval {
+            Some(range) => range.start,
+            None => 0,
+        }
+    }
+
+    /// Returns the last column index of the iterator.    
+    pub fn upper_bound(&self) -> usize {
+        match &self.interval {
+            Some(range) => range.end,
+            None => self.column.len(),
+        }
     }
 }
 
-impl<'a,T: Debug + Copy> Iterator for GenericColumnScan<'a,T> {
+impl<'a, T: Debug + Copy> Iterator for GenericColumnScan<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let pos = self.pos.map_or_else(Default::default, |pos| pos + 1);
+        let pos = self.pos.map_or_else(|| self.lower_bound(), |pos| pos + 1);
         self.pos = Some(pos);
-        (pos < self.column.len()).then(|| self.column[pos])
+        (pos < self.upper_bound()).then(|| self.column[pos])
     }
 }
 
-impl<'a,T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a,T> {
-
+impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
     fn seek(&mut self, value: T) -> Option<T> {
         // Brute-force scan:
-        while self.pos.unwrap_or_default() < self.column.len() {
+        while self.pos.unwrap_or_default() < self.upper_bound() {
             let pos = self.pos.get_or_insert(0);
 
             if self.column[*pos] >= value {
@@ -47,7 +84,7 @@ impl<'a,T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a,T> {
     }
 }
 
-impl<'a,T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<'a,T> {
+impl<'a, T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<'a, T> {
     fn pos(&mut self) -> Option<usize> {
         self.pos
             .and_then(|pos| (pos < self.column.len()).then(|| pos))
