@@ -21,7 +21,7 @@ impl<'a, T> GenericColumnScan<'a, T> {
 
     /// Restricts the iterator to the given `interval`.
     pub fn narrow(&mut self, interval: Range<usize>) -> &mut Self {
-        debug_assert!(
+        assert!(
             interval.end <= self.column.len(),
             "Cannot narrow to an interval larger than the column."
         );
@@ -44,7 +44,8 @@ impl<'a, T> GenericColumnScan<'a, T> {
         }
     }
 
-    /// Returns the last column index of the iterator.    
+    /// Returns the smallest column index of that is not part of the
+    /// iterator). This need not be a valid column index.
     pub fn upper_bound(&self) -> usize {
         match &self.interval {
             Some(range) => range.end,
@@ -80,14 +81,14 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
 
     fn current(&mut self) -> Option<T> {
         self.pos
-            .and_then(|pos| (pos < self.column.len()).then(|| self.column[pos]))
+            .and_then(|pos| (pos < self.upper_bound()).then(|| self.column[pos]))
     }
 }
 
 impl<'a, T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<'a, T> {
     fn pos(&mut self) -> Option<usize> {
         self.pos
-            .and_then(|pos| (pos < self.column.len()).then(|| pos))
+            .and_then(|pos| (pos < self.upper_bound()).then(|| pos))
     }
 }
 
@@ -103,7 +104,7 @@ mod test {
     }
 
     #[test]
-    fn test_u64_iterate_column() {
+    fn u64_iterate_column() {
         let test_column = get_test_column();
         let mut gcs: GenericColumnScan<u64> = GenericColumnScan::new(&test_column);
         assert_eq!(gcs.pos(), None);
@@ -123,7 +124,7 @@ mod test {
     }
 
     #[test]
-    fn test_u64_seek_column() {
+    fn u64_seek_column() {
         let test_column = get_test_column();
         let mut gcs: GenericColumnScan<u64> = GenericColumnScan::new(&test_column);
         assert_eq!(gcs.pos(), None);
@@ -137,5 +138,44 @@ mod test {
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.seek(3), None);
         assert_eq!(gcs.pos(), None);
+    }
+
+    #[test]
+    fn u64_narrow() {
+        let test_column = get_test_column();
+        let mut gcs = GenericColumnScan::new(&test_column);
+        gcs.narrow(0..2);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
+        let mut gcs = GenericColumnScan::new(&test_column);
+        gcs.narrow(1..2);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
+        let mut gcs = GenericColumnScan::new(&test_column);
+        gcs.narrow(1..3);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
+        let mut gcs = GenericColumnScan::new(&test_column);
+        gcs.narrow(1..1);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![]);
+        let mut gcs = GenericColumnScan::new(&test_column);
+        gcs.narrow(0..3);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
+    }
+
+    #[test]
+    fn u64_narrow_and_widen() {
+        let test_column = get_test_column();
+        let mut gcs = GenericColumnScan::new(&test_column);
+        gcs.narrow(1..1).widen();
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
+        let mut gcs = GenericColumnScan::new(&test_column);
+        gcs.widen().narrow(1..2);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot narrow to an interval larger than the column.")]
+    fn u64_narrow_to_invalid() {
+        let test_column = get_test_column();
+        let mut gcs = GenericColumnScan::new(&test_column);
+        gcs.narrow(1..23);
     }
 }
