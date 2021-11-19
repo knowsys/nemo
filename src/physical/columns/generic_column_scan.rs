@@ -22,22 +22,28 @@ impl<'a, T> GenericColumnScan<'a, T> {
     /// Constructs a new [`GenericColumnScan`] for a Column, narrowed
     /// to the given interval.
     pub fn narrowed(column: &'a dyn Column<T>, interval: Range<usize>) -> Self {
-        let mut result = Self::new(column);
-        result.narrow(interval);
+        let result = Self {
+            column,
+            pos: None,
+            interval,
+        };
+        result.validate_interval();
         result
     }
 
     /// Restricts the iterator to the given `interval`.
     pub fn narrow(&mut self, interval: Range<usize>) -> &mut Self {
-        assert!(
-            interval.end <= self.column.len(),
-            "Cannot narrow to an interval larger than the column."
-        );
-
         self.interval = interval;
         self.pos = None;
-
+        self.validate_interval();
         self
+    }
+
+    fn validate_interval(&self) {
+        assert!(
+            self.interval.end <= self.column.len(),
+            "Cannot narrow to an interval larger than the column."
+        );
     }
 
     /// Lifts any restriction of the interval to some interval.
