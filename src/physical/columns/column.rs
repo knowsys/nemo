@@ -1,9 +1,10 @@
 use super::ColumnScan;
 use crate::physical::datatypes::{Double, Float};
-use std::{fmt::Debug, ops::Index};
+use std::fmt::Debug;
 
 /// Column of ordered values.
-pub trait Column<T>: Debug + Index<usize, Output = T> {
+//pub trait Column<T>: Debug + Index<usize, Output = T> {
+pub trait Column<T>: Debug {
     /// Returns the number of entries in the column.
     fn len(&self) -> usize;
 
@@ -16,7 +17,7 @@ pub trait Column<T>: Debug + Index<usize, Output = T> {
     ///
     /// # Panics
     /// Panics if `index` is out of bounds.
-    fn get(&self, index: usize) -> &T;
+    fn get(&self, index: usize) -> T;
 
     /// Returns an iterator for this column.
     fn iter<'a>(&'a self) -> Box<dyn ColumnScan<Item = T> + 'a>;

@@ -46,8 +46,8 @@ mod test {
 
         let vc = acb.finalize();
         assert_eq!(vc.len(), 3);
-        assert_eq!(vc[0], 1);
-        assert_eq!(vc[1], 2);
-        assert_eq!(vc[2], 3);
+        assert_eq!(vc.get(0), 1);
+        assert_eq!(vc.get(1), 2);
+        assert_eq!(vc.get(2), 3);
     }
 }

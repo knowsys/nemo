@@ -74,7 +74,7 @@ impl<'a, T: Debug + Copy> Iterator for GenericColumnScan<'a, T> {
     fn next(&mut self) -> Option<Self::Item> {
         let pos = self.pos.map_or_else(|| self.interval.start, |pos| pos + 1);
         self.pos = Some(pos);
-        (pos < self.interval.end).then(|| self.column[pos])
+        (pos < self.interval.end).then(|| self.column.get(pos))
     }
 }
 
@@ -122,7 +122,7 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
 
     fn current(&mut self) -> Option<T> {
         self.pos
-            .and_then(|pos| (pos < self.interval.end).then(|| self.column[pos]))
+            .and_then(|pos| (pos < self.interval.end).then(|| self.column.get(pos)))
     }
 }
 
