@@ -6,17 +6,25 @@ use std::{fmt::Debug, ops::Range};
 pub struct GenericColumnScan<'a, T> {
     column: &'a dyn Column<T>,
     pos: Option<usize>,
-    interval: Option<Range<usize>>,
+    interval: Range<usize>,
 }
 
 impl<'a, T> GenericColumnScan<'a, T> {
     /// Constructs a new [`GenericColumnScan`] for a Column.
-    pub fn new(column: &'a dyn Column<T>) -> GenericColumnScan<'a, T> {
-        GenericColumnScan {
+    pub fn new(column: &'a dyn Column<T>) -> Self {
+        Self {
             column,
             pos: None,
-            interval: None,
+            interval: 0..column.len(),
         }
+    }
+
+    /// Constructs a new [`GenericColumnScan`] for a Column, narrowed
+    /// to the given interval.
+    pub fn narrowed(column: &'a dyn Column<T>, interval: Range<usize>) -> Self {
+        let mut result = Self::new(column);
+        result.narrow(interval);
+        result
     }
 
     /// Restricts the iterator to the given `interval`.
@@ -26,7 +34,7 @@ impl<'a, T> GenericColumnScan<'a, T> {
             "Cannot narrow to an interval larger than the column."
         );
 
-        self.interval = Some(interval);
+        self.interval = interval;
         self.pos = None;
 
         self
@@ -34,26 +42,20 @@ impl<'a, T> GenericColumnScan<'a, T> {
 
     /// Lifts any restriction of the interval to some interval.
     pub fn widen(&mut self) -> &mut Self {
-        self.interval = None;
+        self.interval = 0..self.column.len();
         self.pos = None;
         self
     }
 
     /// Returns the first column index of the iterator.
     pub fn lower_bound(&self) -> usize {
-        match &self.interval {
-            Some(range) => range.start,
-            None => 0,
-        }
+        self.interval.start
     }
 
     /// Returns the smallest column index of that is not part of the
     /// iterator). This need not be a valid column index.
     pub fn upper_bound(&self) -> usize {
-        match &self.interval {
-            Some(range) => range.end,
-            None => self.column.len(),
-        }
+        self.interval.end
     }
 }
 
@@ -61,16 +63,16 @@ impl<'a, T: Debug + Copy> Iterator for GenericColumnScan<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let pos = self.pos.map_or_else(|| self.lower_bound(), |pos| pos + 1);
+        let pos = self.pos.map_or_else(|| self.interval.start, |pos| pos + 1);
         self.pos = Some(pos);
-        (pos < self.upper_bound()).then(|| self.column[pos])
+        (pos < self.interval.end).then(|| self.column[pos])
     }
 }
 
 impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
     fn seek(&mut self, value: T) -> Option<T> {
         // Brute-force scan:
-        while self.pos.unwrap_or_default() < self.upper_bound() {
+        while self.pos.unwrap_or_default() < self.interval.end {
             let pos = self.pos.get_or_insert(0);
 
             if self.column[*pos] >= value {
@@ -84,14 +86,14 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
 
     fn current(&mut self) -> Option<T> {
         self.pos
-            .and_then(|pos| (pos < self.upper_bound()).then(|| self.column[pos]))
+            .and_then(|pos| (pos < self.interval.end).then(|| self.column[pos]))
     }
 }
 
 impl<'a, T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<'a, T> {
     fn pos(&mut self) -> Option<usize> {
         self.pos
-            .and_then(|pos| (pos < self.upper_bound()).then(|| pos))
+            .and_then(|pos| (pos < self.interval.end).then(|| pos))
     }
 }
 
@@ -164,6 +166,21 @@ mod test {
     }
 
     #[test]
+    fn u64_narrowed() {
+        let test_column = get_test_column();
+        let gcs = GenericColumnScan::narrowed(&test_column, 0..2);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
+        let gcs = GenericColumnScan::narrowed(&test_column, 1..2);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
+        let gcs = GenericColumnScan::narrowed(&test_column, 1..3);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
+        let gcs = GenericColumnScan::narrowed(&test_column, 1..1);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![]);
+        let gcs = GenericColumnScan::narrowed(&test_column, 0..3);
+        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
+    }
+
+    #[test]
     fn u64_narrow_and_widen() {
         let test_column = get_test_column();
         let mut gcs = GenericColumnScan::new(&test_column);
@@ -180,6 +197,13 @@ mod test {
         let test_column = get_test_column();
         let mut gcs = GenericColumnScan::new(&test_column);
         gcs.narrow(1..23);
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot narrow to an interval larger than the column.")]
+    fn u64_narrowed_to_invalid() {
+        let test_column = get_test_column();
+        let _ = GenericColumnScan::narrowed(&test_column, 1..23);
     }
 
     #[test]
