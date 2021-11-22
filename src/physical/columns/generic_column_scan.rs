@@ -10,7 +10,7 @@ pub struct GenericColumnScan<'a, T> {
 
 impl<'a, T> GenericColumnScan<'a, T> {
     /// Defines the lower limit of elements in the interval where a binary search is used instead of a vector-scan
-    const SEEK_BINARY_SEARCH: usize = 2;
+    const SEEK_BINARY_SEARCH: usize = 10;
     /// Constructs a new [`GenericColumnScan`] for a Column.
     pub fn new(column: &'a dyn Column<T>) -> GenericColumnScan<'a, T> {
         GenericColumnScan { column, pos: None }
