@@ -12,18 +12,30 @@ pub fn benchmark_seek(c: &mut Criterion) {
     for i in 0..10000001 {
         data.push(rng.gen::<usize>());
     }
-    let randval = data[rng.gen_range(0..10000000)];
-    data.sort_unstable();
+    let values = (
+        data[rng.gen_range(0..10000000)],
+        data[rng.gen_range(0..10000000)],
+    );
+    let (randa, randb) = if values.0 < values.1 {
+        values
+    } else {
+        (values.1, values.0)
+    };
     let test_column = VectorColumn::new(data);
-    let mut gcs = GenericColumnScan::new(&test_column);
 
     let mut group = c.benchmark_group("seek");
     group.sample_size(10);
     group.bench_function("seek_dummy", |b| {
-        b.iter(|| {
-            gcs.seek(randval);
-            gcs.widen();
-        })
+        b.iter_with_setup(
+            || {
+                let mut gc = GenericColumnScan::new(&test_column);
+                gc.seek(randa);
+                gc
+            },
+            |mut gcs| {
+                gcs.seek(randb);
+            },
+        )
     });
 }
 
