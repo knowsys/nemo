@@ -3,19 +3,60 @@ use std::fmt::Debug;
 
 /// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
 #[derive(Debug)]
-pub struct GenericColumnScan<'a,T> {
+pub struct GenericColumnScan<'a, T> {
     column: &'a dyn Column<T>,
     pos: Option<usize>,
 }
 
-impl<'a,T> GenericColumnScan<'a,T> {
+impl<'a, T> GenericColumnScan<'a, T>
+where
+    T: Ord + Copy + Debug,
+{
+    /// Defines the upper limit of elements in the interval where the [self.seek]
+    const SEEK_BRUTE: usize = 10;
     /// Constructs a new [`GenericColumnScan`] for a Column.
-    pub fn new(column: &'a dyn Column<T>) -> GenericColumnScan<'a,T> {
+    pub fn new(column: &'a dyn Column<T>) -> GenericColumnScan<'a, T> {
         GenericColumnScan { column, pos: None }
+    }
+
+    /// Does a binary search seek
+    /// Assumes that the Iterator is currently at a valid position
+    /// Note: should be called by [`seek()`](self.seek())
+    fn binary_search_seek(&mut self, value: T) -> Option<T> {
+        let pos = self.pos.get_or_insert(0);
+        let mut lower = *pos;
+        let mut upper = self.column.len() - 1;
+
+        // check if value exceeds the greatest element in column
+        if self.column[upper] < value {
+            *pos = self.column.len();
+            return None;
+        }
+        // check if lower bound is already the target value
+        if self.column[lower] >= value {
+            *pos = lower;
+            return Some(self.column[*pos]);
+        }
+        while lower < upper {
+            let mid = (lower + upper) / 2;
+            if self.column[mid] < value {
+                lower = mid + 1;
+            } else {
+                upper = mid;
+            }
+        }
+
+        if self.column[lower] >= value {
+            *pos = lower;
+        } else {
+            *pos = lower + 1;
+        }
+
+        Some(self.column[*pos])
     }
 }
 
-impl<'a,T: Debug + Copy> Iterator for GenericColumnScan<'a,T> {
+impl<'a, T: Debug + Copy> Iterator for GenericColumnScan<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -25,9 +66,13 @@ impl<'a,T: Debug + Copy> Iterator for GenericColumnScan<'a,T> {
     }
 }
 
-impl<'a,T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a,T> {
-
+impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
     fn seek(&mut self, value: T) -> Option<T> {
+        // Check if binary search shall be used
+        let position = self.pos.unwrap_or_default();
+        if position < self.column.len() && self.column.len() - position >= Self::SEEK_BRUTE {
+            return self.binary_search_seek(value);
+        }
         // Brute-force scan:
         while self.pos.unwrap_or_default() < self.column.len() {
             let pos = self.pos.get_or_insert(0);
@@ -47,7 +92,7 @@ impl<'a,T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a,T> {
     }
 }
 
-impl<'a,T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<'a,T> {
+impl<'a, T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<'a, T> {
     fn pos(&mut self) -> Option<usize> {
         self.pos
             .and_then(|pos| (pos < self.column.len()).then(|| pos))
@@ -99,6 +144,41 @@ mod test {
         assert_eq!(gcs.seek(6), None);
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.seek(3), None);
+        assert_eq!(gcs.pos(), None);
+    }
+
+    #[test]
+    fn binary_search_seek_column() {
+        let test_column = get_test_column();
+        let mut gcs: GenericColumnScan<u64> = GenericColumnScan::new(&test_column);
+        assert_eq!(gcs.pos(), None);
+        assert_eq!(gcs.binary_search_seek(2), Some(2));
+        assert_eq!(gcs.pos(), Some(1));
+        assert_eq!(gcs.binary_search_seek(2), Some(2));
+        assert_eq!(gcs.pos(), Some(1));
+        assert_eq!(gcs.binary_search_seek(3), Some(5));
+        assert_eq!(gcs.pos(), Some(2));
+        assert_eq!(gcs.binary_search_seek(6), None);
+        assert_eq!(gcs.pos(), None);
+        //assert_eq!(gcs.binary_search_seek(3), None);
+        //assert_eq!(gcs.pos(), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds: the len is 3 but the index is 3")]
+    fn binary_search_seek_column_out_of_bounds() {
+        let test_column = get_test_column();
+        let mut gcs: GenericColumnScan<u64> = GenericColumnScan::new(&test_column);
+        assert_eq!(gcs.pos(), None);
+        assert_eq!(gcs.binary_search_seek(2), Some(2));
+        assert_eq!(gcs.pos(), Some(1));
+        assert_eq!(gcs.binary_search_seek(2), Some(2));
+        assert_eq!(gcs.pos(), Some(1));
+        assert_eq!(gcs.binary_search_seek(3), Some(5));
+        assert_eq!(gcs.pos(), Some(2));
+        assert_eq!(gcs.binary_search_seek(6), None);
+        assert_eq!(gcs.pos(), None);
+        assert_eq!(gcs.binary_search_seek(3), None);
         assert_eq!(gcs.pos(), None);
     }
 }
