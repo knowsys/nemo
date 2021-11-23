@@ -29,6 +29,6 @@ name = "seek"
 harness = false
 
 # iai - based benchmarks, only on unix
-[[target.'cfg(unix)'.bench]]
+[[bench]]
 name = "seek_iai"
 harness = false
