@@ -30,6 +30,7 @@
             RUST_BACKTRACE = 1;
 
             buildInputs = [
+              pkgs.rust-bin.nightly.latest.rustfmt
               pkgs.rust-bin.stable.latest.default
               pkgs.rust-analyzer
               pkgs.cargo-audit
