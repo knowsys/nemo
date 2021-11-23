@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
@@ -24,7 +22,7 @@ pub fn benchmark_seek(c: &mut Criterion) {
     let test_column = VectorColumn::new(data);
 
     let mut group = c.benchmark_group("seek");
-    group.sample_size(10);
+    group.sample_size(200);
     group.bench_function("seek_dummy", |b| {
         b.iter_with_setup(
             || {
@@ -37,6 +35,19 @@ pub fn benchmark_seek(c: &mut Criterion) {
             },
         )
     });
+    group.bench_function("seek_dummy2", |b| {
+        b.iter_with_setup(
+            || {
+                let mut gc = GenericColumnScan::new(&test_column);
+                gc.seek(randa);
+                gc
+            },
+            |mut gcs| {
+                gcs.seek(randb);
+            },
+        )
+    });
+    group.finish();
 }
 
 criterion_group!(benches, benchmark_seek);

@@ -11,9 +11,12 @@ log = "0.4"
 [dev-dependencies]
 env_logger = "*"
 test-env-log = "0.2"
-criterion = "0.3"
+criterion = {version = "0.3", features = [ "html_reports" ] }
 rand = "0.8"
 rand_pcg = "0.3"
+
+[target.'cfg(unix)'.dev-dependencies]
+iai = "0.1" # needs valgrind -> unix only
 
 [profile.dev]
 panic = "unwind"
@@ -23,4 +26,9 @@ panic = "abort"
 
 [[bench]]
 name = "seek"
+harness = false
+
+# iai - based benchmarks, only on unix
+[[target.'cfg(unix)'.bench]]
+name = "seek_iai"
 harness = false

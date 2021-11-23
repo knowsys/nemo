@@ -26,7 +26,7 @@
       rec {
         devShell =
           pkgs.mkShell {
-            RUST_LOG = debug;
+            RUST_LOG = "debug";
             RUST_BACKTRACE = 1;
 
             buildInputs = [
@@ -34,6 +34,8 @@
               pkgs.rust-analyzer
               pkgs.cargo-audit
               pkgs.cargo-license
+              pkgs.valgrind
+              pkgs.gnuplot
             ];
           };
       }
