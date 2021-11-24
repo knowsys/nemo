@@ -33,6 +33,8 @@ pub struct RleColumn<T, I = T> {
     elements: Vec<RleElement<T, I>>,
 }
 
+const MINIMUM_RLE_ELEMENT_LENGTH: usize = 4;
+
 impl<
         T: Add<I, Output = T> + Sub<T, Output = I> + Debug + Ord + Copy + Default,
         I: Mul<Output = I> + PartialEq + Default + Copy,
@@ -40,94 +42,72 @@ impl<
 {
     /// Constructs a new RleColumn from a vector of the suitable type.
     pub fn new(data: Vec<T>) -> RleColumn<T, I> {
-        let mut previous_increment: Option<I> = None;
-        let mut current_increment: Option<I> = None;
-        let mut previous_element: Option<T> = None;
+        let mut rle_element_candidate_start: usize = 0;
+        let mut rle_element_candidate_length: NonZeroUsize = NonZeroUsize::new(1).unwrap();
 
-        let mut rle_element_candidate: Vec<T> = vec![]; //TODO: could be vector slice probably
         let mut rle_elements: Vec<RleElement<T, I>> = vec![];
 
-        for current_element in data {
-            if let Some(prev) = previous_element {
-                // FIXME: this may overflow depending on T and I
-                current_increment = Some(current_element - prev);
-            }
+        let mut previous_increment_opt: Option<I> = None;
 
-            // FIXME: this structure of conditionals is prone to errors...
-            let push_current_element_to_candidate: bool = match current_increment {
-                None => false,
-                Some(cur_inc) => match previous_increment {
-                    None => true,
-                    Some(prev_inc) => cur_inc == prev_inc,
-                },
-            };
+        for index in 1..data.len() {
+            let current_element = data[index];
+            let previous_element = data[index - 1];
 
-            if push_current_element_to_candidate {
-                rle_element_candidate.push(current_element);
-                previous_increment = current_increment;
+            // FIXME: this may overflow depending on T and I
+            let current_increment = current_element - previous_element;
+            previous_increment_opt = (index >= 2).then(|| previous_element - data[index - 2]);
+
+            // we want to add the current item to the rle_element_candidate if the increment stays
+            // the same or if we just started a new candidate
+            // (previous_increment_opt is None in this case)
+            let should_add_to_current_candidate = previous_increment_opt
+                .map_or(true, |previous_increment| {
+                    current_increment == previous_increment
+                });
+
+            if should_add_to_current_candidate {
+                rle_element_candidate_length =
+                    NonZeroUsize::new(rle_element_candidate_length.get() + 1).unwrap();
             } else {
-                // TODO: all of this is done after loop again; unify!
-
-                // TODO: get rid of magic number
-                if rle_element_candidate.len() >= 4 {
+                // if the current candidate is finished, we transform it
+                // into one or multiple rle elements
+                if rle_element_candidate_length.get() >= MINIMUM_RLE_ELEMENT_LENGTH {
+                    // this is done again after the loop
                     rle_elements.push(RleElement {
-                        value: rle_element_candidate[0],
-                        length: NonZeroUsize::new(rle_element_candidate.len()).unwrap(), // we know that this is not 0
-                        increment: previous_increment.unwrap(), // we know here that this exists
+                        value: data[rle_element_candidate_start],
+                        length: rle_element_candidate_length,
+                        increment: previous_increment_opt.unwrap(), // we know here that this exists
                     });
-                    rle_element_candidate = vec![current_element];
-                } else if !rle_element_candidate.is_empty() {
-                    for candidate_element in &rle_element_candidate[..rle_element_candidate.len() - 1] {
+                    rle_element_candidate_start = index;
+                    rle_element_candidate_length = NonZeroUsize::new(1).unwrap();
+                } else if index > 0 {
+                    for value in data
+                        .iter()
+                        .skip(rle_element_candidate_start)
+                        .take(rle_element_candidate_length.get() - 1)
+                    {
                         rle_elements.push(RleElement {
-                            value: *candidate_element,
+                            value: *value,
                             length: NonZeroUsize::new(1).unwrap(),
                             increment: Default::default(),
                         })
                     }
-                    rle_element_candidate = vec![rle_element_candidate[rle_element_candidate.len() - 1], current_element];
-                } else {
-                    rle_element_candidate = vec![current_element];
+                    rle_element_candidate_start = index - 1;
+                    rle_element_candidate_length = NonZeroUsize::new(2).unwrap();
                 }
-                previous_increment = None;
-            }
-
-            previous_element = Some(current_element);
-        }
-
-        // TODO: all of this is done in loop as well; unify!
-
-        // TODO: get rid of magic number
-        if rle_element_candidate.len() >= 4 {
-            rle_elements.push(RleElement {
-                value: rle_element_candidate[0],
-                length: NonZeroUsize::new(rle_element_candidate.len()).unwrap(), // we know that this is not 0
-                increment: previous_increment.unwrap(), // we know here that this exists
-            })
-        } else {
-            for candidate_element in rle_element_candidate {
-                rle_elements.push(RleElement {
-                    value: candidate_element,
-                    length: NonZeroUsize::new(1).unwrap(),
-                    increment: Default::default(),
-                })
             }
         }
+
+        // add last candidate to elements
+        rle_elements.push(RleElement {
+            value: data[rle_element_candidate_start],
+            length: rle_element_candidate_length,
+            increment: previous_increment_opt.unwrap_or_default(), // will be None iff rle_element_candidate_length is 1
+        });
 
         RleColumn {
             elements: rle_elements,
         }
-
-        // TODO: actually use RLE
-        //RleColumn {
-        //elements: data
-        //.iter()
-        //.map(|e| RleElement {
-        //value: *e,
-        //length: NonZeroUsize::new(1).unwrap(),
-        //increment: Default::default(),
-        //})
-        //.collect(),
-        //}
     }
 }
 
