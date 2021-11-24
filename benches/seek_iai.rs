@@ -1,6 +1,3 @@
-use std::ops::Deref;
-
-use iai::main;
 use rand::prelude::*;
 use rand_pcg::Pcg64;
 use stage2::physical::columns::{ColumnScan, GenericColumnScan, VectorColumn};
@@ -8,8 +5,7 @@ use stage2::physical::columns::{ColumnScan, GenericColumnScan, VectorColumn};
 pub fn bench() {
     let mut rng = Pcg64::seed_from_u64(21564);
     let mut data: Vec<usize> = Vec::new();
-    let seek: Vec<usize>;
-    for i in 0..10000001 {
+    for _i in 0..10000001 {
         data.push(rng.gen::<usize>());
     }
     let values = (
@@ -26,4 +22,9 @@ pub fn bench() {
     gc.seek(randa);
     gc.seek(randb);
 }
-main!(bench);
+#[cfg(unix)]
+iai::main!(bench);
+#[cfg(not(unix))]
+pub fn main() {
+    println!("Plattform does not support iai/valgrind");
+}
