@@ -10,6 +10,9 @@ pub struct GenericColumnScan<'a, T> {
 }
 
 impl<'a, T> GenericColumnScan<'a, T> {
+    /// Defines the lower limit of elements in the interval where a binary search is used instead of a vector-scan
+    const SEEK_BINARY_SEARCH: usize = 10;
+
     /// Constructs a new [`GenericColumnScan`] for a Column.
     pub fn new(column: &'a dyn Column<T>) -> Self {
         Self {
@@ -77,17 +80,44 @@ impl<'a, T: Debug + Copy> Iterator for GenericColumnScan<'a, T> {
 
 impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
     fn seek(&mut self, value: T) -> Option<T> {
-        // Brute-force scan:
-        while self.pos.unwrap_or_default() < self.interval.end {
-            let pos = self.pos.get_or_insert(0);
-
-            if self.column[*pos] >= value {
-                return Some(self.column[*pos]);
+        let pos = self.pos.get_or_insert(0);
+        let mut lower = *pos;
+        let mut upper = self.column.len() - 1;
+        // check if position is out of bounds
+        if *pos > upper {
+            return None;
+        }
+        // check if value exceeds the greatest element in column
+        if self.column[upper] < value {
+            *pos = self.column.len();
+            return None;
+        }
+        // check if lower bound is already the target value
+        if self.column[lower] >= value {
+            *pos = lower;
+            return Some(self.column[*pos]);
+        }
+        // do binary search till interval is small enough to be scanned
+        while upper - lower >= Self::SEEK_BINARY_SEARCH {
+            let mid = (lower + upper) / 2;
+            if self.column[mid] < value {
+                lower = mid + 1;
+            } else {
+                upper = mid;
             }
+        }
 
+        *pos = lower;
+        // scan the interval
+        while *pos <= upper && self.column[*pos] < value {
             *pos += 1;
         }
-        None
+        // if it is out of bounds
+        if *pos > upper {
+            None
+        } else {
+            Some(self.column[*pos])
+        }
     }
 
     fn current(&mut self) -> Option<T> {
