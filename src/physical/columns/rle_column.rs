@@ -7,37 +7,60 @@ use std::{
 
 // TODO: is it useful to have I as extra type parameter? (guess it's hard to use...)
 #[derive(Debug, PartialEq)]
-struct RleElement<T, I = T> {
+struct RleElement<T, I = i64> {
     value: T,
     length: NonZeroUsize,
     increment: I,
 }
 
-impl<T: Add<I, Output = T> + Debug + Copy, I: TryFrom<usize> + Mul<Output = I> + Copy>
-    RleElement<T, I>
+impl<
+        T: Copy + TryFrom<I>,
+        I: Copy + TryFrom<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I>,
+    > RleElement<T, I>
 {
     fn get(&self, index: usize) -> T {
-        self.value
-            + self.increment
-                * I::try_from(index)
-                    .or(Err(
-                        "should not happen if construction of RleColumn works correctly",
-                    ))
-                    .unwrap()
+        // TODO: better error handling
+        let i_value = I::try_from(self.value)
+            .or(Err(
+                "should not happen if construction of RleColumn works correctly",
+            ))
+            .unwrap();
+        let i_index = I::try_from(index)
+            .or(Err(
+                "should not happen if construction of RleColumn works correctly",
+            ))
+            .unwrap();
+
+        let i_result = i_value + i_index * self.increment;
+
+        let t_result = T::try_from(i_result)
+            .or(Err(
+                "should not happen if construction of RleColumn works correctly",
+            ))
+            .unwrap();
+
+        t_result
     }
 }
 
 /// Implementation of [`Column`] that allows the use of incremental run length encoding.
 #[derive(Debug, PartialEq)]
-pub struct RleColumn<T, I = T> {
+pub struct RleColumn<T, I = i64> {
     elements: Vec<RleElement<T, I>>,
 }
 
 const MINIMUM_RLE_ELEMENT_LENGTH: usize = 4;
 
 impl<
-        T: Add<I, Output = T> + Sub<T, Output = I> + Debug + Ord + Copy + Default,
-        I: Mul<Output = I> + PartialEq + Default + Copy,
+        T: Copy + TryFrom<I>,
+        I: Copy
+            + TryFrom<T>
+            + TryFrom<usize>
+            + Add<Output = I>
+            + Sub<Output = I>
+            + Mul<Output = I>
+            + PartialEq
+            + Default,
     > RleColumn<T, I>
 {
     /// Constructs a new RleColumn from a vector of the suitable type.
@@ -53,9 +76,21 @@ impl<
             let current_element = data[index];
             let previous_element = data[index - 1];
 
-            // FIXME: this may overflow depending on T and I
-            let current_increment = current_element - previous_element;
-            previous_increment_opt = (index >= 2).then(|| previous_element - data[index - 2]);
+            // TODO: better error handling
+            let current_increment = I::try_from(current_element)
+                .or(Err("overflow when building RleColumn"))
+                .unwrap()
+                - I::try_from(previous_element)
+                    .or(Err("overflow when building RleColumn"))
+                    .unwrap();
+            previous_increment_opt = (index >= 2).then(|| {
+                I::try_from(previous_element)
+                    .or(Err("overflow when building RleColumn"))
+                    .unwrap()
+                    - I::try_from(data[index - 2])
+                        .or(Err("overflow when building RleColumn"))
+                        .unwrap()
+            });
 
             // we want to add the current item to the rle_element_candidate if the increment stays
             // the same or if we just started a new candidate
@@ -112,8 +147,8 @@ impl<
 }
 
 impl<
-        T: Add<I, Output = T> + Debug + Ord + Copy,
-        I: TryFrom<usize> + Mul<Output = I> + Debug + Copy,
+        T: Debug + Copy + PartialOrd + TryFrom<I>,
+        I: Debug + Copy + TryFrom<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I>,
     > Column<T> for RleColumn<T, I>
 {
     fn len(&self) -> usize {
@@ -147,7 +182,7 @@ struct RleColumnScan<'a, T, I> {
     current: Option<T>,
 }
 
-impl<'a, T: Add<I, Output = T> + Ord + Copy, I: Mul<Output = I>> RleColumnScan<'a, T, I> {
+impl<'a, T, I> RleColumnScan<'a, T, I> {
     pub fn new(column: &'a RleColumn<T, I>) -> RleColumnScan<'a, T, I> {
         RleColumnScan {
             column,
@@ -158,7 +193,7 @@ impl<'a, T: Add<I, Output = T> + Ord + Copy, I: Mul<Output = I>> RleColumnScan<'
     }
 }
 
-impl<'a, T: Add<I, Output = T> + Ord + Copy, I: Mul<Output = I> + Copy> Iterator
+impl<'a, T: Copy + TryFrom<I>, I: Copy + TryFrom<T> + Add<Output = I>> Iterator
     for RleColumnScan<'a, T, I>
 {
     type Item = T;
@@ -182,7 +217,12 @@ impl<'a, T: Add<I, Output = T> + Ord + Copy, I: Mul<Output = I> + Copy> Iterator
                 self.column.elements[element_index].value
             } else {
                 // self.current should always contain a value here
-                self.current.unwrap() + self.column.elements[element_index].increment
+                let i_current = I::try_from(self.current.unwrap())
+                    .or(Err("should work if construction works"))
+                    .unwrap();
+                T::try_from(i_current + self.column.elements[element_index].increment)
+                    .or(Err("should work if construction works"))
+                    .unwrap()
             }
         });
 
@@ -190,8 +230,11 @@ impl<'a, T: Add<I, Output = T> + Ord + Copy, I: Mul<Output = I> + Copy> Iterator
     }
 }
 
-impl<'a, T: Add<I, Output = T> + Debug + Ord + Copy, I: Mul<Output = I> + Debug + Copy> ColumnScan
-    for RleColumnScan<'a, T, I>
+impl<
+        'a,
+        T: Debug + Copy + PartialOrd + TryFrom<I>,
+        I: Debug + Copy + TryFrom<T> + Add<Output = I>,
+    > ColumnScan for RleColumnScan<'a, T, I>
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.
@@ -221,7 +264,34 @@ mod test {
         vec![2, 5, 6, 7, 8, 42, 4, 7, 10, 13, 16]
     }
 
-    fn get_test_column() -> RleColumn<i64> {
+    fn get_test_column_i64() -> RleColumn<i64> {
+        RleColumn {
+            elements: vec![
+                RleElement {
+                    value: 2,
+                    length: NonZeroUsize::new(1).unwrap(),
+                    increment: 0,
+                },
+                RleElement {
+                    value: 5,
+                    length: NonZeroUsize::new(4).unwrap(),
+                    increment: 1,
+                },
+                RleElement {
+                    value: 42,
+                    length: NonZeroUsize::new(1).unwrap(),
+                    increment: 0,
+                },
+                RleElement {
+                    value: 4,
+                    length: NonZeroUsize::new(5).unwrap(),
+                    increment: 3,
+                },
+            ],
+        }
+    }
+
+    fn get_test_column_u32_with_i64_inc() -> RleColumn<u32, i64> {
         RleColumn {
             elements: vec![
                 RleElement {
@@ -249,17 +319,26 @@ mod test {
     }
 
     #[test]
-    fn construction() {
+    fn i64_construction() {
         let raw_data = get_control_data();
-        let expected: RleColumn<i64> = get_test_column();
+        let expected: RleColumn<i64> = get_test_column_i64();
 
         let constructed: RleColumn<i64> = RleColumn::new(raw_data);
         assert_eq!(expected, constructed);
     }
 
     #[test]
+    fn u32_construction() {
+        let raw_data: Vec<u32> = get_control_data().iter().map(|x| *x as u32).collect();
+        let expected: RleColumn<u32> = get_test_column_u32_with_i64_inc();
+
+        let constructed: RleColumn<u32> = RleColumn::new(raw_data);
+        assert_eq!(expected, constructed);
+    }
+
+    #[test]
     fn is_empty() {
-        let c: RleColumn<i64> = get_test_column();
+        let c: RleColumn<i64> = get_test_column_i64();
         assert_eq!(c.is_empty(), false);
 
         let c_empty: RleColumn<i64> = RleColumn { elements: vec![] };
@@ -269,14 +348,14 @@ mod test {
     #[test]
     fn len() {
         let control_data = get_control_data();
-        let c: RleColumn<i64> = get_test_column();
+        let c: RleColumn<i64> = get_test_column_i64();
         assert_eq!(c.len(), control_data.len());
     }
 
     #[test]
     fn get() {
         let control_data = get_control_data();
-        let c: RleColumn<i64> = get_test_column();
+        let c: RleColumn<i64> = get_test_column_i64();
 
         for i in 0..control_data.len() {
             assert_eq!(c.get(i), control_data[i]);
@@ -286,11 +365,11 @@ mod test {
     #[test]
     fn iter() {
         let control_data: Vec<i64> = get_control_data();
-        let c: RleColumn<i64> = get_test_column();
+        let c: RleColumn<i64> = get_test_column_i64();
 
         let iterated_c: Vec<i64> = c.iter().collect();
         assert_eq!(iterated_c, control_data);
     }
 
-    // TODO: tests for column scan; we should split this file up anyway...
+    // TODO: extra tests for column scan?
 }
