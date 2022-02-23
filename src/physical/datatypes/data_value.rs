@@ -1,5 +1,5 @@
-use super::float::Float;
 use super::double::Double;
+use super::float::Float;
 
 /// Enum for values of all supported basic types.
 /// This should not be used to represent large numbers of values,

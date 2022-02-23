@@ -1,18 +1,18 @@
 use super::Column;
-use crate::physical::datatypes::{Float,Double};
+use crate::physical::datatypes::{Double, Float};
 use std::fmt::Debug;
 
 /// Column of values that are grouped into numbered intervals.
 pub trait IntervalColumn<T>: Debug + Column<T> {
-        /// Returns the number of intervals in the interval column.
-        fn int_len(&self) -> usize;
+    /// Returns the number of intervals in the interval column.
+    fn int_len(&self) -> usize;
 
-        /// Returns the smallest and largest index of the interval with the given
-        /// index.
-        /// 
-        /// # Panics
-        /// Panics if `int_idx` is out of bounds.
-        fn int_bounds(&self, int_idx: usize) -> (usize,usize);
+    /// Returns the smallest and largest index of the interval with the given
+    /// index.
+    ///
+    /// # Panics
+    /// Panics if `int_idx` is out of bounds.
+    fn int_bounds(&self, int_idx: usize) -> (usize, usize);
 }
 
 /// Enum for columns of all supported basic types.
@@ -32,20 +32,20 @@ impl IntervalColumnT {
         match self {
             IntervalColumnT::IntervalColumnU64(col) => col.int_len(),
             IntervalColumnT::IntervalColumnFloat(col) => col.int_len(),
-            IntervalColumnT::IntervalColumnDouble(col) => col.int_len()
+            IntervalColumnT::IntervalColumnDouble(col) => col.int_len(),
         }
     }
 
     /// Returns the smallest and largest index of the interval with the given
     /// index.
-    /// 
+    ///
     /// # Panics
     /// Panics if `int_idx` is out of bounds.
-    pub fn int_bounds(&self, int_idx: usize) -> (usize,usize) {
+    pub fn int_bounds(&self, int_idx: usize) -> (usize, usize) {
         match self {
             IntervalColumnT::IntervalColumnU64(col) => col.int_bounds(int_idx),
             IntervalColumnT::IntervalColumnFloat(col) => col.int_bounds(int_idx),
-            IntervalColumnT::IntervalColumnDouble(col) => col.int_bounds(int_idx)
+            IntervalColumnT::IntervalColumnDouble(col) => col.int_bounds(int_idx),
         }
     }
 }

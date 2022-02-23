@@ -1,4 +1,3 @@
-
 /// Descriptors to refer to the possible data types at runtime.
 #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub enum DataTypeName {

@@ -1,6 +1,6 @@
 use super::ColumnScan;
+use crate::physical::datatypes::{Double, Float};
 use std::{fmt::Debug, ops::Index};
-use crate::physical::datatypes::{Float,Double};
 
 /// Column of ordered values.
 pub trait Column<T>: Debug + Index<usize, Output = T> {

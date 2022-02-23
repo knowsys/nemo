@@ -1,4 +1,4 @@
-use super::{Column,ColumnScan,GenericColumnScan};
+use super::{Column, ColumnScan, GenericColumnScan};
 use std::{fmt::Debug, ops::Index};
 
 /// Simple implementation of [`Column`] that uses Vec to store data.
@@ -12,7 +12,6 @@ impl<T: Debug + Copy + Ord> VectorColumn<T> {
     pub fn new(data: Vec<T>) -> VectorColumn<T> {
         VectorColumn { data }
     }
-
 }
 
 impl<T: Debug + Copy + Ord> Column<T> for VectorColumn<T> {
@@ -25,7 +24,7 @@ impl<T: Debug + Copy + Ord> Column<T> for VectorColumn<T> {
     }
 
     fn iter<'a>(&'a self) -> Box<dyn ColumnScan<Item = T> + 'a> {
-        Box::new( GenericColumnScan::new(self) )
+        Box::new(GenericColumnScan::new(self))
     }
 }
 
@@ -44,7 +43,7 @@ mod test {
 
     #[test]
     fn test_u64_column() {
-        let data: Vec<u64> = vec!(1,2,3);
+        let data: Vec<u64> = vec![1, 2, 3];
 
         let vc: VectorColumn<u64> = VectorColumn::new(data);
         assert_eq!(vc.len(), 3);

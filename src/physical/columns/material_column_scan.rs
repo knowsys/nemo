@@ -1,6 +1,5 @@
 use super::ColumnScan;
 
-
 /// Iterator for a column of ordered values that is available in materialised
 /// form.
 pub trait MaterialColumnScan: ColumnScan {

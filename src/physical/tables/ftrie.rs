@@ -1,6 +1,6 @@
+use super::{FTableSchema, Table, TableSchema};
 use crate::physical::columns::IntervalColumnT;
 use std::fmt::Debug;
-use super::{FTableSchema,Table,TableSchema};
 
 /// Implementation of a factorized trie, which might be a subtrie of a larger strcuture.
 #[derive(Debug)]
@@ -19,25 +19,25 @@ impl Ftrie {
     /// as it would appear if we would serialise all child nodes recursively into
     /// a flat table. The column index ['usize::MAX'] can be used for starting with
     /// root columns.
-    /// 
+    ///
     /// # Panics
     /// Panics if `col_idx` or `int_idx` are out of bounds.
     fn count_rows(&self, col_idx: usize, int_idx: usize) -> usize {
         let mut children: Vec<usize> = Vec::new();
         for idx in 0..self.schema.arity() {
-            if self.schema.get_parent(idx).unwrap_or_else(|| usize::MAX)==col_idx {
+            if self.schema.get_parent(idx).unwrap_or_else(|| usize::MAX) == col_idx {
                 children.push(idx);
             }
         }
 
-        let bounds: (usize,usize);
-        if col_idx==usize::MAX {
-            bounds = (0,0);
+        let bounds: (usize, usize);
+        if col_idx == usize::MAX {
+            bounds = (0, 0);
         } else {
             bounds = self.columns[col_idx].int_bounds(int_idx);
         }
 
-        if children.len()==0 {
+        if children.len() == 0 {
             return bounds.1 - bounds.0 + 1;
         }
 
@@ -45,7 +45,7 @@ impl Ftrie {
         for i in bounds.0..=bounds.1 {
             let mut product = 1;
             for cidx in children.iter() {
-                product *= self.count_rows(*cidx,i);
+                product *= self.count_rows(*cidx, i);
             }
             sum += product;
         }
@@ -56,32 +56,34 @@ impl Ftrie {
 }
 
 impl Table for Ftrie {
-   /// Returns the number of rows in the table.
-   fn row_num(&self) -> usize {
-       self.count_rows(usize::MAX, 0)
-   }
+    /// Returns the number of rows in the table.
+    fn row_num(&self) -> usize {
+        self.count_rows(usize::MAX, 0)
+    }
 
-   /// Returns the schema of the table.
-   fn schema(&self) -> &dyn TableSchema {
-       &self.schema
-   }
-
+    /// Returns the schema of the table.
+    fn schema(&self) -> &dyn TableSchema {
+        &self.schema
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::physical::datatypes::DataTypeName;
-    use crate::physical::columns::{GenericIntervalColumn, VectorColumn, IntervalColumnT};
+    use super::super::{FTableSchema, Table};
     use super::Ftrie;
-    use super::super::{FTableSchema,Table} ;
+    use crate::physical::columns::{GenericIntervalColumn, IntervalColumnT, VectorColumn};
+    use crate::physical::datatypes::DataTypeName;
     use test_env_log::test;
 
     fn make_gic(values: &[u64], ints: &[usize]) -> GenericIntervalColumn<u64> {
-        GenericIntervalColumn::new(Box::new(VectorColumn::new(values.to_vec())),Box::new(VectorColumn::new(ints.to_vec())))
+        GenericIntervalColumn::new(
+            Box::new(VectorColumn::new(values.to_vec())),
+            Box::new(VectorColumn::new(ints.to_vec())),
+        )
     }
 
     fn make_gict(values: &[u64], ints: &[usize]) -> IntervalColumnT {
-        IntervalColumnT::IntervalColumnU64(Box::new(make_gic(values,ints)))
+        IntervalColumnT::IntervalColumnU64(Box::new(make_gic(values, ints)))
     }
 
     #[test]
@@ -91,11 +93,11 @@ mod test {
         fts.add_entry(11, DataTypeName::U64, 1);
         fts.add_entry(111, DataTypeName::U64, 11);
 
-        let gic1 = make_gict(&[1,2,3],&[0]);
-        let gic11 = make_gict(&[11,21,31],&[0,1,2]);
-        let gic111 = make_gict(&[11,21,31],&[0,1,2]);
+        let gic1 = make_gict(&[1, 2, 3], &[0]);
+        let gic11 = make_gict(&[11, 21, 31], &[0, 1, 2]);
+        let gic111 = make_gict(&[11, 21, 31], &[0, 1, 2]);
 
-        let columns = vec!(gic1,gic11,gic111);
+        let columns = vec![gic1, gic11, gic111];
 
         let ftrie = Ftrie::new(fts, columns);
 
@@ -110,12 +112,12 @@ mod test {
         fts.add_entry(12, DataTypeName::U64, 1);
         fts.add_entry(121, DataTypeName::U64, 12);
 
-        let gic1 = make_gict(&[1,2,3],&[0]);
-        let gic11 = make_gict(&[11,21,22,31],&[0,1,3]);
-        let gic12 = make_gict(&[11,21,31],&[0,1,2]);
-        let gic121 = make_gict(&[11,12,21,22,23,31],&[0,2,5]);
+        let gic1 = make_gict(&[1, 2, 3], &[0]);
+        let gic11 = make_gict(&[11, 21, 22, 31], &[0, 1, 3]);
+        let gic12 = make_gict(&[11, 21, 31], &[0, 1, 2]);
+        let gic121 = make_gict(&[11, 12, 21, 22, 23, 31], &[0, 2, 5]);
 
-        let columns = vec!(gic1,gic11,gic12,gic121);
+        let columns = vec![gic1, gic11, gic12, gic121];
 
         let ftrie = Ftrie::new(fts, columns);
 
@@ -130,12 +132,12 @@ mod test {
         fts.add_entry(11, DataTypeName::U64, 1);
         fts.add_entry(21, DataTypeName::U64, 2);
 
-        let gic1 = make_gict(&[1,2,3],&[0]);
-        let gic2 = make_gict(&[1,2],&[0]);
-        let gic11 = make_gict(&[11,21,31],&[0,1,2]);
-        let gic21 = make_gict(&[11,12,21,22],&[0,2]);
+        let gic1 = make_gict(&[1, 2, 3], &[0]);
+        let gic2 = make_gict(&[1, 2], &[0]);
+        let gic11 = make_gict(&[11, 21, 31], &[0, 1, 2]);
+        let gic21 = make_gict(&[11, 12, 21, 22], &[0, 2]);
 
-        let columns = vec!(gic1,gic2,gic11,gic21);
+        let columns = vec![gic1, gic2, gic11, gic21];
 
         let ftrie = Ftrie::new(fts, columns);
 
