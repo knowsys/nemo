@@ -11,5 +11,8 @@ pub enum Error {
     FloatIsNaN(#[from] FloatIsNaN),
     /// Error occurred during parsing
     #[error("Parsing failed")]
-    Parser(#[from] Box<dyn std::error::Error>),
+    Parser(Box<dyn std::error::Error>),
+    /// Error which implies a needed Rollback
+    #[error("Rollback due to csv-error")]
+    RollBack(usize),
 }

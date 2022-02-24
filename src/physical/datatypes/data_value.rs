@@ -14,3 +14,29 @@ pub enum DataValueT {
     /// Case Double
     DataValuDouble(Double),
 }
+
+impl DataValueT {
+    /// Returns either `Option<u64>` or `None`
+    pub fn as_u64(&self) -> Option<u64> {
+        match *self {
+            DataValueT::DataValueU64(val) => Some(val),
+            _ => None,
+        }
+    }
+
+    /// Returns either `Option<Float>` or `None`
+    pub fn as_float(&self) -> Option<Float> {
+        match *self {
+            DataValueT::DataValueFloat(val) => Some(val),
+            _ => None,
+        }
+    }
+
+    /// Returns either `Option<Double>` or `None`
+    pub fn as_double(&self) -> Option<Double> {
+        match *self {
+            DataValueT::DataValuDouble(val) => Some(val),
+            _ => None,
+        }
+    }
+}
