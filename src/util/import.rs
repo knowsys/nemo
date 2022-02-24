@@ -106,6 +106,11 @@ impl VecT {
             VecT::VecDouble(vec) => vec.len(),
         }
     }
+
+    /// Returns whether the vector is empty, or not
+    pub fn is_empty() -> bool {
+        self.len == 0
+    }
 }
 
 #[cfg(test)]
