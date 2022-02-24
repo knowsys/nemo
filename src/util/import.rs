@@ -108,8 +108,8 @@ impl VecT {
     }
 
     /// Returns whether the vector is empty, or not
-    pub fn is_empty() -> bool {
-        self.len == 0
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
