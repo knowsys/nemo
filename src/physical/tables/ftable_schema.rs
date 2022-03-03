@@ -126,9 +126,9 @@ mod test {
         assert_eq!(fts.get_parent_label(111), Some(11));
         assert_eq!(fts.get_parent_label(1), None);
 
-        assert_eq!(fts.is_below(1, 1), true);
-        assert_eq!(fts.is_below(2, 0), true);
-        assert_eq!(fts.is_below(2, 1), false);
-        assert_eq!(fts.is_below(5, 1), true);
+        assert!(fts.is_below(1, 1));
+        assert!(fts.is_below(2, 0));
+        assert!(!fts.is_below(2, 1));
+        assert!(fts.is_below(5, 1));
     }
 }

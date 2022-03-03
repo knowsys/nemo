@@ -1,13 +1,13 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
-use stage2::physical::columns::{generic_column_scan, ColumnScan, GenericColumnScan, VectorColumn};
+use stage2::physical::columns::{ColumnScan, GenericColumnScan, VectorColumn};
 
 pub fn benchmark_seek(c: &mut Criterion) {
     let mut rng = Pcg64::seed_from_u64(21564);
     let mut data: Vec<usize> = Vec::new();
-    let seek: Vec<usize>;
-    for i in 0..10000001 {
+    let _seek: Vec<usize>;
+    for _i in 0..10000001 {
         data.push(rng.gen::<usize>());
     }
     let values = (

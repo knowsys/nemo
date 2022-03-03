@@ -30,12 +30,11 @@ impl Ftrie {
             }
         }
 
-        let bounds: (usize, usize);
-        if col_idx == usize::MAX {
-            bounds = (0, 0);
+        let bounds = if col_idx == usize::MAX {
+            (0, 0)
         } else {
-            bounds = self.columns[col_idx].int_bounds(int_idx);
-        }
+            self.columns[col_idx].int_bounds(int_idx)
+        };
 
         if children.is_empty() {
             return bounds.1 - bounds.0 + 1;
