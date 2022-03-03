@@ -16,6 +16,8 @@ test-env-log = "0.2"
 criterion = {version = "0.3", features = [ "html_reports" ] }
 rand = "0.8"
 rand_pcg = "0.3"
+quickcheck = "1"
+quickcheck_macros = "1"
 
 [target.'cfg(unix)'.dev-dependencies]
 iai = "0.1" # needs valgrind -> unix only
