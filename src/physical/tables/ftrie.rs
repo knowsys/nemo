@@ -25,7 +25,7 @@ impl Ftrie {
     fn count_rows(&self, col_idx: usize, int_idx: usize) -> usize {
         let mut children: Vec<usize> = Vec::new();
         for idx in 0..self.schema.arity() {
-            if self.schema.get_parent(idx).unwrap_or_else(|| usize::MAX) == col_idx {
+            if self.schema.get_parent(idx).unwrap_or(usize::MAX) == col_idx {
                 children.push(idx);
             }
         }
@@ -37,7 +37,7 @@ impl Ftrie {
             bounds = self.columns[col_idx].int_bounds(int_idx);
         }
 
-        if children.len() == 0 {
+        if children.is_empty() {
             return bounds.1 - bounds.0 + 1;
         }
 

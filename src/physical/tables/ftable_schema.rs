@@ -17,6 +17,12 @@ pub struct FTableSchema {
     attributes: Vec<FTableSchemaEntry>,
 }
 
+impl Default for FTableSchema {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FTableSchema {
     /// Creates a new empty instance of this struct.
     pub fn new() -> FTableSchema {
@@ -29,11 +35,11 @@ impl FTableSchema {
     /// The parent will be set if a node with the given label exists; otherwise the new node becomes a root.
     pub fn add_entry(&mut self, label: usize, datatype: DataTypeName, parent_label: usize) {
         let pidx = self.find_index(parent_label);
-        if pidx.is_some() {
+        if let Some(idx) = pidx {
             self.attributes.push(FTableSchemaEntry {
                 label,
                 datatype,
-                parent: pidx.unwrap(),
+                parent: idx,
             });
         } else {
             self.attributes.push(FTableSchemaEntry {
