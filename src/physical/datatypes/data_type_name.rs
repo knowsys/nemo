@@ -16,19 +16,10 @@ pub enum DataTypeName {
 impl DataTypeName {
     /// Parses a string, based on the name of the Datatype
     pub fn parse(&self, string: &str) -> Result<DataValueT, Error> {
-        match self {
-            DataTypeName::U64 => match string.parse::<u64>() {
-                Ok(val) => Ok(DataValueT::U64(val)),
-                Err(err) => Err(Error::Parser(Box::new(err))),
-            },
-            DataTypeName::Float => match string.parse::<f32>() {
-                Ok(val) => Ok(DataValueT::Float(super::Float::new(val)?)),
-                Err(err) => Err(Error::Parser(Box::new(err))),
-            },
-            DataTypeName::Double => match string.parse::<f64>() {
-                Ok(val) => Ok(DataValueT::Double(super::Double::new(val)?)),
-                Err(err) => Err(Error::Parser(Box::new(err))),
-            },
-        }
+        Ok(match self {
+            DataTypeName::U64 => DataValueT::U64(string.parse::<u64>()?),
+            DataTypeName::Float => DataValueT::Float(super::Float::new(string.parse::<f32>()?)?),
+            DataTypeName::Double => DataValueT::Double(super::Double::new(string.parse::<f64>()?)?),
+        })
     }
 }

@@ -7,11 +7,14 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum Error {
     /// Float holds a NaN value
-    #[error("The floating point types used in this library do not support NaN!")]
+    #[error(transparent)]
     FloatIsNaN(#[from] FloatIsNaN),
-    /// Error occurred during parsing
-    #[error("Parsing failed")]
-    Parser(Box<dyn std::error::Error>),
+    /// Error occurred during parsing of Int values
+    #[error(transparent)]
+    ParseInt(#[from] std::num::ParseIntError),
+    /// Error occurred during parsing of Float values
+    #[error(transparent)]
+    ParseFloat(#[from] std::num::ParseFloatError),
     /// Error which implies a needed Rollback
     #[error("Rollback due to csv-error")]
     RollBack(usize),
