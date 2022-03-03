@@ -15,4 +15,6 @@
     variant_size_differences
 )]
 
+pub mod error;
+pub mod io;
 pub mod physical;

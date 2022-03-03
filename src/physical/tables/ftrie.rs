@@ -25,19 +25,18 @@ impl Ftrie {
     fn count_rows(&self, col_idx: usize, int_idx: usize) -> usize {
         let mut children: Vec<usize> = Vec::new();
         for idx in 0..self.schema.arity() {
-            if self.schema.get_parent(idx).unwrap_or_else(|| usize::MAX) == col_idx {
+            if self.schema.get_parent(idx).unwrap_or(usize::MAX) == col_idx {
                 children.push(idx);
             }
         }
 
-        let bounds: (usize, usize);
-        if col_idx == usize::MAX {
-            bounds = (0, 0);
+        let bounds = if col_idx == usize::MAX {
+            (0, 0)
         } else {
-            bounds = self.columns[col_idx].int_bounds(int_idx);
-        }
+            self.columns[col_idx].int_bounds(int_idx)
+        };
 
-        if children.len() == 0 {
+        if children.is_empty() {
             return bounds.1 - bounds.0 + 1;
         }
 
@@ -73,7 +72,7 @@ mod test {
     use super::Ftrie;
     use crate::physical::columns::{GenericIntervalColumn, IntervalColumnT, VectorColumn};
     use crate::physical::datatypes::DataTypeName;
-    use test_env_log::test;
+    use test_log::test;
 
     fn make_gic(values: &[u64], ints: &[usize]) -> GenericIntervalColumn<u64> {
         GenericIntervalColumn::new(

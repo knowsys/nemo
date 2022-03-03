@@ -1,4 +1,5 @@
 use super::FloatIsNaN;
+use crate::error::Error;
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
@@ -13,9 +14,9 @@ impl Double {
     ///
     /// # Errors
     /// The given `value` is [`f64::NAN`].
-    pub fn new(value: f64) -> Result<Double, FloatIsNaN> {
+    pub fn new(value: f64) -> Result<Double, Error> {
         if value.is_nan() {
-            return Err(FloatIsNaN);
+            return Err(FloatIsNaN.into());
         }
 
         Ok(Double(value))
@@ -69,7 +70,7 @@ impl fmt::Display for Double {
 }
 
 impl TryFrom<f64> for Double {
-    type Error = FloatIsNaN;
+    type Error = Error;
 
     fn try_from(value: f64) -> Result<Self, Self::Error> {
         Self::new(value)
