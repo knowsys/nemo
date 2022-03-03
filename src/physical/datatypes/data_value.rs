@@ -8,18 +8,18 @@ use super::float::Float;
 #[derive(Clone, Copy, Debug)]
 pub enum DataValueT {
     /// Case u64
-    DataValueU64(u64),
+    U64(u64),
     /// Case Float
-    DataValueFloat(Float),
+    Float(Float),
     /// Case Double
-    DataValuDouble(Double),
+    Double(Double),
 }
 
 impl DataValueT {
     /// Returns either `Option<u64>` or `None`
     pub fn as_u64(&self) -> Option<u64> {
         match *self {
-            DataValueT::DataValueU64(val) => Some(val),
+            DataValueT::U64(val) => Some(val),
             _ => None,
         }
     }
@@ -27,7 +27,7 @@ impl DataValueT {
     /// Returns either `Option<Float>` or `None`
     pub fn as_float(&self) -> Option<Float> {
         match *self {
-            DataValueT::DataValueFloat(val) => Some(val),
+            DataValueT::Float(val) => Some(val),
             _ => None,
         }
     }
@@ -35,7 +35,7 @@ impl DataValueT {
     /// Returns either `Option<Double>` or `None`
     pub fn as_double(&self) -> Option<Double> {
         match *self {
-            DataValueT::DataValuDouble(val) => Some(val),
+            DataValueT::Double(val) => Some(val),
             _ => None,
         }
     }

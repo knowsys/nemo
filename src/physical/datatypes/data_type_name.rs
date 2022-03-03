@@ -18,15 +18,15 @@ impl DataTypeName {
     pub fn parse(&self, string: &str) -> Result<DataValueT, Error> {
         match self {
             DataTypeName::U64 => match string.parse::<u64>() {
-                Ok(val) => Ok(DataValueT::DataValueU64(val)),
+                Ok(val) => Ok(DataValueT::U64(val)),
                 Err(err) => Err(Error::Parser(Box::new(err))),
             },
             DataTypeName::Float => match string.parse::<f32>() {
-                Ok(val) => Ok(DataValueT::DataValueFloat(super::Float::new(val)?)),
+                Ok(val) => Ok(DataValueT::Float(super::Float::new(val)?)),
                 Err(err) => Err(Error::Parser(Box::new(err))),
             },
             DataTypeName::Double => match string.parse::<f64>() {
-                Ok(val) => Ok(DataValueT::DataValuDouble(super::Double::new(val)?)),
+                Ok(val) => Ok(DataValueT::Double(super::Double::new(val)?)),
                 Err(err) => Err(Error::Parser(Box::new(err))),
             },
         }
