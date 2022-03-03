@@ -63,7 +63,7 @@ impl<T: Debug + Copy + Ord> IntervalColumn<T> for GenericIntervalColumn<T> {
 mod test {
     use super::super::VectorColumn;
     use super::{Column, GenericIntervalColumn, IntervalColumn};
-    use test_env_log::test;
+    use test_log::test;
 
     #[test]
     fn test_u64_column() {

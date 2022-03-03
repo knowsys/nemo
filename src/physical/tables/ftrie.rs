@@ -72,7 +72,7 @@ mod test {
     use super::Ftrie;
     use crate::physical::columns::{GenericIntervalColumn, IntervalColumnT, VectorColumn};
     use crate::physical::datatypes::DataTypeName;
-    use test_env_log::test;
+    use test_log::test;
 
     fn make_gic(values: &[u64], ints: &[usize]) -> GenericIntervalColumn<u64> {
         GenericIntervalColumn::new(

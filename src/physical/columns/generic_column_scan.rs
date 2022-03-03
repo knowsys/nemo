@@ -137,7 +137,7 @@ impl<'a, T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<'a, T> 
 mod test {
     use super::super::VectorColumn;
     use super::{ColumnScan, GenericColumnScan, MaterialColumnScan}; // < TODO: is this a nice way to write this use?
-    use test_env_log::test;
+    use test_log::test;
 
     fn get_test_column() -> VectorColumn<u64> {
         let data: Vec<u64> = vec![1, 2, 5];

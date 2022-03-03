@@ -64,7 +64,7 @@ mod test {
     use super::*;
     use csv::ReaderBuilder;
     use quickcheck_macros::quickcheck;
-    use test_env_log::test;
+    use test_log::test;
 
     #[test]
     fn csv_empty() {

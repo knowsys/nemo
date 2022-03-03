@@ -79,7 +79,7 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for OrderedMergeJoin<'a, T> {
 mod test {
     use super::super::{GenericColumnScan, VectorColumn};
     use super::{ColumnScan, OrderedMergeJoin}; // < TODO: is this a nice way to write this use?
-    use test_env_log::test;
+    use test_log::test;
 
     #[test]
     fn test_u64_simple_join<'a>() {
