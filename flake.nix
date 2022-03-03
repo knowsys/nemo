@@ -2,7 +2,7 @@
   description = "stage2, the next stage of Datalog reasoning";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-21.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-21.11";
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url = "github:numtide/flake-utils";
     flake-compat = {
