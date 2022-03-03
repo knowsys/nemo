@@ -4,6 +4,7 @@ use crate::physical::datatypes::float_is_nan::FloatIsNaN;
 use thiserror::Error;
 
 /// Error-Collection for all the possible Errors occurring in this crate
+#[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum Error {
     /// Float holds a NaN value
