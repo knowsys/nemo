@@ -1,11 +1,10 @@
-use super::{Column, ColumnScan};
+use super::{Column, ColumnBuilder, ColumnScan};
 use std::{
     fmt::Debug,
     num::NonZeroUsize,
     ops::{Add, Mul, Sub},
 };
 
-// TODO: is it useful to have I as extra type parameter? (guess it's hard to use...)
 #[derive(Debug, PartialEq)]
 struct RleElement<T, I = i64> {
     value: T,
@@ -19,7 +18,6 @@ impl<
     > RleElement<T, I>
 {
     fn get(&self, index: usize) -> T {
-        // TODO: better error handling
         let i_value = I::try_from(self.value)
             .or(Err(
                 "should not happen if construction of RleColumn works correctly",
@@ -33,13 +31,111 @@ impl<
 
         let i_result = i_value + i_index * self.increment;
 
-        let t_result = T::try_from(i_result)
+        T::try_from(i_result)
             .or(Err(
                 "should not happen if construction of RleColumn works correctly",
             ))
-            .unwrap();
+            .unwrap()
+    }
+}
 
-        t_result
+//const MINIMUM_RLE_ELEMENT_LENGTH: usize = 4;
+
+/// Implementation of [`ColumnBuilder`] that allows the use of incremental run length encoding.
+#[derive(Debug, Default, PartialEq)]
+pub struct RleColumnBuilder<T, I = i64> {
+    elements: Vec<RleElement<T, I>>,
+    previous_value_opt: Option<T>,
+}
+
+impl<
+        T: Debug + Copy + TryFrom<I> + PartialOrd,
+        I: Debug
+            + Copy
+            + TryFrom<T>
+            + TryFrom<usize>
+            + Add<Output = I>
+            + Sub<Output = I>
+            + Mul<Output = I>
+            + PartialEq
+            + Default,
+    > RleColumnBuilder<T, I>
+{
+    /// Constructor.
+    pub fn new() -> RleColumnBuilder<T, I> {
+        RleColumnBuilder {
+            elements: Vec::new(),
+            previous_value_opt: None,
+        }
+    }
+
+    /// Get the number of RleElements to get a feeling for how much memory the encoding will take.
+    pub fn number_of_rle_elements(&self) -> usize {
+        self.elements.len()
+    }
+
+    fn finalize_raw(self) -> RleColumn<T, I> {
+        RleColumn::from_rle_elements(self.elements)
+    }
+}
+
+impl<
+        'a,
+        T: 'a + Copy + Debug + TryFrom<I> + PartialOrd,
+        I: 'a
+            + Copy
+            + Debug
+            + TryFrom<T>
+            + TryFrom<usize>
+            + Add<Output = I>
+            + Sub<Output = I>
+            + Mul<Output = I>
+            + PartialEq
+            + Default,
+    > ColumnBuilder<'a, T> for RleColumnBuilder<T, I>
+{
+    fn add(&mut self, value: T) {
+        let current_value = value;
+
+        if self.elements.is_empty() {
+            self.elements.push(RleElement {
+                value: current_value,
+                length: NonZeroUsize::new(1).unwrap(),
+                increment: I::default(),
+            });
+
+            self.previous_value_opt = Some(current_value);
+
+            return;
+        }
+
+        let previous_value = self.previous_value_opt.unwrap();
+        let last_element = self.elements.last_mut().unwrap();
+        let current_increment = I::try_from(current_value)
+            .or(Err("overflow when building RleColumn"))
+            .unwrap()
+            - I::try_from(previous_value)
+                .or(Err("overflow when building RleColumn"))
+                .unwrap();
+
+        if last_element.length == NonZeroUsize::new(1).unwrap() {
+            last_element.length = NonZeroUsize::new(2).unwrap();
+            last_element.increment = current_increment;
+        } else if last_element.increment == current_increment {
+            last_element.length = NonZeroUsize::new(last_element.length.get() + 1).unwrap();
+        } else {
+            self.elements.push(RleElement {
+                value: current_value,
+                length: NonZeroUsize::new(1).unwrap(),
+                increment: I::default(),
+            });
+        }
+
+        self.previous_value_opt = Some(current_value);
+    }
+
+    fn finalize(self) -> Box<dyn Column<T> + 'a> {
+        Box::new(self.finalize_raw())
     }
 }
 
@@ -49,11 +145,10 @@ pub struct RleColumn<T, I = i64> {
     elements: Vec<RleElement<T, I>>,
 }
 
-const MINIMUM_RLE_ELEMENT_LENGTH: usize = 4;
-
 impl<
-        T: Copy + TryFrom<I>,
-        I: Copy
+        T: Debug + Copy + TryFrom<I> + PartialOrd,
+        I: Debug
+            + Copy
             + TryFrom<T>
             + TryFrom<usize>
             + Add<Output = I>
@@ -63,86 +158,19 @@ impl<
             + Default,
     > RleColumn<T, I>
 {
+    /// Constructs a new RleColumn from a vector of RleElements.
+    fn from_rle_elements(elements: Vec<RleElement<T, I>>) -> RleColumn<T, I> {
+        RleColumn { elements }
+    }
+
     /// Constructs a new RleColumn from a vector of the suitable type.
     pub fn new(data: Vec<T>) -> RleColumn<T, I> {
-        let mut rle_element_candidate_start: usize = 0;
-        let mut rle_element_candidate_length: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-
-        let mut rle_elements: Vec<RleElement<T, I>> = vec![];
-
-        let mut previous_increment_opt: Option<I> = None;
-
-        for index in 1..data.len() {
-            let current_element = data[index];
-            let previous_element = data[index - 1];
-
-            // TODO: better error handling
-            let current_increment = I::try_from(current_element)
-                .or(Err("overflow when building RleColumn"))
-                .unwrap()
-                - I::try_from(previous_element)
-                    .or(Err("overflow when building RleColumn"))
-                    .unwrap();
-            previous_increment_opt = (index >= 2).then(|| {
-                I::try_from(previous_element)
-                    .or(Err("overflow when building RleColumn"))
-                    .unwrap()
-                    - I::try_from(data[index - 2])
-                        .or(Err("overflow when building RleColumn"))
-                        .unwrap()
-            });
-
-            // we want to add the current item to the rle_element_candidate if the increment stays
-            // the same or if we just started a new candidate
-            // (previous_increment_opt is None in this case)
-            let should_add_to_current_candidate = previous_increment_opt
-                .map_or(true, |previous_increment| {
-                    current_increment == previous_increment
-                });
-
-            if should_add_to_current_candidate {
-                rle_element_candidate_length =
-                    NonZeroUsize::new(rle_element_candidate_length.get() + 1).unwrap();
-            } else {
-                // if the current candidate is finished, we transform it
-                // into one or multiple rle elements
-                if rle_element_candidate_length.get() >= MINIMUM_RLE_ELEMENT_LENGTH {
-                    // this is done again after the loop
-                    rle_elements.push(RleElement {
-                        value: data[rle_element_candidate_start],
-                        length: rle_element_candidate_length,
-                        increment: previous_increment_opt.unwrap(), // we know here that this exists
-                    });
-                    rle_element_candidate_start = index;
-                    rle_element_candidate_length = NonZeroUsize::new(1).unwrap();
-                } else if index > 0 {
-                    for value in data
-                        .iter()
-                        .skip(rle_element_candidate_start)
-                        .take(rle_element_candidate_length.get() - 1)
-                    {
-                        rle_elements.push(RleElement {
-                            value: *value,
-                            length: NonZeroUsize::new(1).unwrap(),
-                            increment: Default::default(),
-                        })
-                    }
-                    rle_element_candidate_start = index - 1;
-                    rle_element_candidate_length = NonZeroUsize::new(2).unwrap();
-                }
-            }
+        let mut builder = RleColumnBuilder::new();
+        for value in data {
+            builder.add(value);
         }
 
-        // add last candidate to elements
-        rle_elements.push(RleElement {
-            value: data[rle_element_candidate_start],
-            length: rle_element_candidate_length,
-            increment: previous_increment_opt.unwrap_or_default(), // will be None iff rle_element_candidate_length is 1
-        });
-
-        RleColumn {
-            elements: rle_elements,
-        }
+        builder.finalize_raw()
     }
 }
 
@@ -269,22 +297,22 @@ mod test {
             elements: vec![
                 RleElement {
                     value: 2,
-                    length: NonZeroUsize::new(1).unwrap(),
-                    increment: 0,
+                    length: NonZeroUsize::new(2).unwrap(),
+                    increment: 3,
                 },
                 RleElement {
-                    value: 5,
-                    length: NonZeroUsize::new(4).unwrap(),
+                    value: 6,
+                    length: NonZeroUsize::new(3).unwrap(),
                     increment: 1,
                 },
                 RleElement {
                     value: 42,
-                    length: NonZeroUsize::new(1).unwrap(),
-                    increment: 0,
+                    length: NonZeroUsize::new(2).unwrap(),
+                    increment: -38,
                 },
                 RleElement {
-                    value: 4,
-                    length: NonZeroUsize::new(5).unwrap(),
+                    value: 7,
+                    length: NonZeroUsize::new(4).unwrap(),
                     increment: 3,
                 },
             ],
@@ -296,22 +324,22 @@ mod test {
             elements: vec![
                 RleElement {
                     value: 2,
-                    length: NonZeroUsize::new(1).unwrap(),
-                    increment: 0,
+                    length: NonZeroUsize::new(2).unwrap(),
+                    increment: 3,
                 },
                 RleElement {
-                    value: 5,
-                    length: NonZeroUsize::new(4).unwrap(),
+                    value: 6,
+                    length: NonZeroUsize::new(3).unwrap(),
                     increment: 1,
                 },
                 RleElement {
                     value: 42,
-                    length: NonZeroUsize::new(1).unwrap(),
-                    increment: 0,
+                    length: NonZeroUsize::new(2).unwrap(),
+                    increment: -38,
                 },
                 RleElement {
-                    value: 4,
-                    length: NonZeroUsize::new(5).unwrap(),
+                    value: 7,
+                    length: NonZeroUsize::new(4).unwrap(),
                     increment: 3,
                 },
             ],
@@ -370,6 +398,4 @@ mod test {
         let iterated_c: Vec<i64> = c.iter().collect();
         assert_eq!(iterated_c, control_data);
     }
-
-    // TODO: extra tests for column scan?
 }

@@ -45,4 +45,4 @@ pub use generic_interval_column::GenericIntervalColumn;
 /// Module for defining [`RleColumn`]
 pub mod rle_column;
 pub use rle_column::RleColumn;
-
+pub use rle_column::RleColumnBuilder;

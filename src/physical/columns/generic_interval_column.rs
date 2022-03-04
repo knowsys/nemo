@@ -36,14 +36,6 @@ impl<T: Debug + Copy + Ord> Column<T> for GenericIntervalColumn<T> {
     }
 }
 
-//impl<T: Debug + Copy + Ord> Index<usize> for GenericIntervalColumn<T> {
-    //type Output = T;
-
-    //fn index(&self, index: usize) -> &Self::Output {
-        //&self.get(index)
-    //}
-//}
-
 impl<T: Debug + Copy + Ord> IntervalColumn<T> for GenericIntervalColumn<T> {
     fn int_len(&self) -> usize {
         self.int_starts.len()
