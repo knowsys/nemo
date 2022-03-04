@@ -258,7 +258,7 @@ impl<
 mod test {
     use super::{Column, RleColumn, RleElement};
     use std::num::NonZeroUsize;
-    use test_env_log::test;
+    use test_log::test;
 
     fn get_control_data() -> Vec<i64> {
         vec![2, 5, 6, 7, 8, 42, 4, 7, 10, 13, 16]

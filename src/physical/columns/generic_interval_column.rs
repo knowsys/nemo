@@ -50,7 +50,7 @@ impl<T: Debug + Copy + Ord> IntervalColumn<T> for GenericIntervalColumn<T> {
     }
 
     fn int_bounds(&self, int_idx: usize) -> (usize, usize) {
-        let start_idx = self.int_starts[int_idx];
+        let start_idx = self.int_starts.get(int_idx);
         if int_idx + 1 < self.int_starts.len() {
             (start_idx, self.int_starts.get(int_idx + 1) - 1)
         } else {

@@ -88,19 +88,19 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
             return None;
         }
         // check if value exceeds the greatest element in column
-        if self.column[upper] < value {
+        if self.column.get(upper) < value {
             *pos = self.column.len();
             return None;
         }
         // check if lower bound is already the target value
-        if self.column[lower] >= value {
+        if self.column.get(lower) >= value {
             *pos = lower;
-            return Some(self.column[*pos]);
+            return Some(self.column.get(*pos));
         }
         // do binary search till interval is small enough to be scanned
         while upper - lower >= Self::SEEK_BINARY_SEARCH {
             let mid = (lower + upper) / 2;
-            if self.column[mid] < value {
+            if self.column.get(mid) < value {
                 lower = mid + 1;
             } else {
                 upper = mid;
@@ -109,14 +109,14 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
 
         *pos = lower;
         // scan the interval
-        while *pos <= upper && self.column[*pos] < value {
+        while *pos <= upper && self.column.get(*pos) < value {
             *pos += 1;
         }
         // if it is out of bounds
         if *pos > upper {
             None
         } else {
-            Some(self.column[*pos])
+            Some(self.column.get(*pos))
         }
     }
 
