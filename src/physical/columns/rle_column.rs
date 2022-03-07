@@ -383,10 +383,10 @@ mod test {
         let control_data = get_control_data();
         let c: RleColumn<i64> = get_test_column_i64();
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..control_data.len() {
-            assert_eq!(c.get(i), control_data[i]);
-        }
+        control_data
+            .iter()
+            .enumerate()
+            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
     }
 
     #[test]
