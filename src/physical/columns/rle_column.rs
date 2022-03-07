@@ -39,8 +39,6 @@ impl<
     }
 }
 
-//const MINIMUM_RLE_ELEMENT_LENGTH: usize = 4;
-
 /// Implementation of [`ColumnBuilder`] that allows the use of incremental run length encoding.
 #[derive(Debug, Default, PartialEq)]
 pub struct RleColumnBuilder<T, I = i64> {
@@ -367,10 +365,10 @@ mod test {
     #[test]
     fn is_empty() {
         let c: RleColumn<i64> = get_test_column_i64();
-        assert_eq!(c.is_empty(), false);
+        assert!(!c.is_empty());
 
         let c_empty: RleColumn<i64> = RleColumn { elements: vec![] };
-        assert_eq!(c_empty.is_empty(), true);
+        assert!(c_empty.is_empty());
     }
 
     #[test]
@@ -385,6 +383,7 @@ mod test {
         let control_data = get_control_data();
         let c: RleColumn<i64> = get_test_column_i64();
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..control_data.len() {
             assert_eq!(c.get(i), control_data[i]);
         }
