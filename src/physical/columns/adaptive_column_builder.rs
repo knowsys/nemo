@@ -1,5 +1,3 @@
-// TODO: get rid of unwraps
-
 use super::Column;
 use super::ColumnBuilder;
 use super::RleColumnBuilder;
@@ -13,15 +11,15 @@ const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5;
 const TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS: usize = 3;
 
 #[derive(Debug, PartialEq)]
-enum ColumnType {
-    Undecided,
-    VectorColumn,
-    RleColumn,
+enum ColumnBuilderType<T> {
+    Undecided(Option<RleColumnBuilder<T>>), // by default we start building an rle column to evaluate memory consumption
+    VectorColumn(Vec<T>),
+    RleColumn(RleColumnBuilder<T>),
 }
 
-impl Default for ColumnType {
+impl<T> Default for ColumnBuilderType<T> {
     fn default() -> Self {
-        ColumnType::Undecided
+        Self::Undecided(Some(RleColumnBuilder::new()))
     }
 }
 
@@ -29,9 +27,7 @@ impl Default for ColumnType {
 /// best possible column implementation for the given data.
 #[derive(Debug, Default)]
 pub struct AdaptiveColumnBuilder<T> {
-    vector_column_data: Option<Vec<T>>,
-    rle_column_builder: Option<RleColumnBuilder<T>>,
-    column_type: ColumnType,
+    builder: ColumnBuilderType<T>,
 }
 
 impl<T: Debug + Copy + TryFrom<i64> + PartialOrd> AdaptiveColumnBuilder<T>
@@ -41,29 +37,20 @@ where
     /// Constructor.
     pub fn new() -> AdaptiveColumnBuilder<T> {
         AdaptiveColumnBuilder {
-            vector_column_data: None,
-            rle_column_builder: Some(RleColumnBuilder::new()),
-            column_type: ColumnType::Undecided,
+            builder: ColumnBuilderType::Undecided(Some(RleColumnBuilder::new())),
         }
     }
 
     fn decide_column_type(&mut self) {
-        if self.column_type != ColumnType::Undecided {
-            return;
-        }
+        if let ColumnBuilderType::Undecided(rle_builder_opt) = &mut self.builder {
+            let rle_builder = rle_builder_opt.take().unwrap();
 
-        if self
-            .rle_column_builder
-            .as_ref()
-            .unwrap()
-            .avg_length_of_rle_elements()
-            > TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS
-        {
-            self.column_type = ColumnType::RleColumn;
-        } else {
-            self.column_type = ColumnType::VectorColumn;
-            let rle_column = self.rle_column_builder.take().unwrap().finalize();
-            self.vector_column_data = Some(rle_column.iter().collect());
+            if rle_builder.avg_length_of_rle_elements() > TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS {
+                self.builder = ColumnBuilderType::RleColumn(rle_builder);
+            } else {
+                let rle_column = rle_builder.finalize();
+                self.builder = ColumnBuilderType::VectorColumn(rle_column.iter().collect());
+            }
         }
     }
 }
@@ -74,38 +61,39 @@ where
     i64: From<T>,
 {
     fn add(&mut self, value: T) {
-        if let Some(builder) = &self.rle_column_builder {
-            if builder.number_of_rle_elements() > COLUMN_IMPL_DECISION_THRESHOLD {
+        if let ColumnBuilderType::Undecided(Some(rle_builder)) = &self.builder {
+            if rle_builder.number_of_rle_elements() > COLUMN_IMPL_DECISION_THRESHOLD {
                 self.decide_column_type();
             }
         }
 
-        match self.column_type {
-            ColumnType::VectorColumn => self.vector_column_data.as_mut().unwrap().push(value),
-            ColumnType::RleColumn => self.rle_column_builder.as_mut().unwrap().add(value),
+        match &mut self.builder {
+            ColumnBuilderType::VectorColumn(vec) => vec.push(value),
+            ColumnBuilderType::RleColumn(rle_builder) => rle_builder.add(value),
 
             // we only build the rle if still undecided and then evaluate the compression ration by
             // the length of the rle elements
-            ColumnType::Undecided => self.rle_column_builder.as_mut().unwrap().add(value),
+            ColumnBuilderType::Undecided(Some(rle_builder)) => rle_builder.add(value),
+            ColumnBuilderType::Undecided(None) => {
+                panic!("In undecided case None should only briefly be used in decide_column_type.")
+            }
         }
     }
 
     fn finalize(mut self) -> Box<dyn Column<T> + 'a> {
         self.decide_column_type();
 
-        match self.column_type {
-            ColumnType::VectorColumn => {
-                Box::new(VectorColumn::new(self.vector_column_data.unwrap()))
-            }
-            ColumnType::RleColumn => self.rle_column_builder.unwrap().finalize(),
-            ColumnType::Undecided => panic!("column type should have been decided here"),
+        match self.builder {
+            ColumnBuilderType::VectorColumn(vec) => Box::new(VectorColumn::new(vec)),
+            ColumnBuilderType::RleColumn(rle_builder) => rle_builder.finalize(),
+            ColumnBuilderType::Undecided(_) => panic!("column type should have been decided here"),
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{AdaptiveColumnBuilder, ColumnBuilder, ColumnType};
+    use super::{AdaptiveColumnBuilder, ColumnBuilder, ColumnBuilderType};
     use test_log::test;
 
     fn construct_presumable_vector_column() -> AdaptiveColumnBuilder<u32> {
@@ -132,9 +120,9 @@ mod test {
         let mut acb: AdaptiveColumnBuilder<u32> = construct_presumable_vector_column();
 
         acb.decide_column_type();
-        let ct = acb.column_type;
+        let builder = acb.builder;
 
-        assert_eq!(ct, ColumnType::VectorColumn);
+        assert!(matches!(builder, ColumnBuilderType::VectorColumn(_)));
     }
 
     #[test]
@@ -142,9 +130,9 @@ mod test {
         let mut acb: AdaptiveColumnBuilder<u32> = construct_presumable_rle_column();
 
         acb.decide_column_type();
-        let ct = acb.column_type;
+        let builder = acb.builder;
 
-        assert_eq!(ct, ColumnType::RleColumn);
+        assert!(matches!(builder, ColumnBuilderType::RleColumn(_)));
     }
 
     #[test]
@@ -162,11 +150,11 @@ mod test {
     fn test_build_u32_rle_column() {
         let acb: AdaptiveColumnBuilder<u32> = construct_presumable_rle_column();
 
-        let vc = acb.finalize();
-        assert_eq!(vc.len(), 4);
-        assert_eq!(vc.get(0), 1);
-        assert_eq!(vc.get(1), 2);
-        assert_eq!(vc.get(2), 3);
-        assert_eq!(vc.get(3), 4);
+        let rlec = acb.finalize();
+        assert_eq!(rlec.len(), 4);
+        assert_eq!(rlec.get(0), 1);
+        assert_eq!(rlec.get(1), 2);
+        assert_eq!(rlec.get(2), 3);
+        assert_eq!(rlec.get(3), 4);
     }
 }

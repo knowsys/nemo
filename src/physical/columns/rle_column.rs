@@ -57,6 +57,16 @@ pub struct RleColumnBuilder<T, I = i64> {
     previous_value_opt: Option<T>,
 }
 
+impl<T, I> RleColumnBuilder<T, I> {
+    /// Constructor.
+    pub fn new() -> RleColumnBuilder<T, I> {
+        RleColumnBuilder {
+            elements: Vec::new(),
+            previous_value_opt: None,
+        }
+    }
+}
+
 impl<
         T: Debug + Copy + TryFrom<I> + PartialOrd,
         I: Debug
@@ -70,14 +80,6 @@ impl<
             + Default,
     > RleColumnBuilder<T, I>
 {
-    /// Constructor.
-    pub fn new() -> RleColumnBuilder<T, I> {
-        RleColumnBuilder {
-            elements: Vec::new(),
-            previous_value_opt: None,
-        }
-    }
-
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
         self.elements.iter().map(|e| e.length.get()).sum::<usize>() / self.elements.len()
@@ -115,7 +117,7 @@ impl<
             self.elements.push(RleElement {
                 value: current_value,
                 length: NonZeroUsize::new(1).unwrap(),
-                increment: I::default(),
+                increment: Default::default(),
             });
 
             self.previous_value_opt = Some(current_value);
@@ -136,7 +138,7 @@ impl<
             self.elements.push(RleElement {
                 value: current_value,
                 length: NonZeroUsize::new(1).unwrap(),
-                increment: I::default(),
+                increment: Default::default(),
             });
         }
 

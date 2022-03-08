@@ -3,7 +3,6 @@ use crate::physical::datatypes::{Double, Float};
 use std::fmt::Debug;
 
 /// Column of ordered values.
-//pub trait Column<T>: Debug + Index<usize, Output = T> {
 pub trait Column<T>: Debug {
     /// Returns the number of entries in the column.
     fn len(&self) -> usize;
