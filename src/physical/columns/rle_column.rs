@@ -28,6 +28,9 @@ impl<
         T: Copy + TryFrom<I>,
         I: Copy + From<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I>,
     > RleElement<T, I>
+where
+    <T as TryFrom<I>>::Error: Debug,
+    <I as TryFrom<usize>>::Error: Debug,
 {
     fn get(&self, index: usize) -> T {
         if index >= self.length.get() {
@@ -35,18 +38,11 @@ impl<
         }
 
         let i_value = I::from(self.value);
-
-        // if no IndexOutOfBoundsError is thrown above, then this does not produce an error if it was correctly constructed within a RleColumn
         let i_index = I::try_from(index)
-            .or(Err(RleError::ValueComputationOverflow))
-            .unwrap();
-
+            .unwrap_or_else(|e| panic!("{}: {:?}", RleError::ValueComputationOverflow, e));
         let i_result = i_value + i_index * self.increment;
-
-        // if no IndexOutOfBoundsError is thrown above, then this does not produce an error if it was correctly constructed within a RleColumn
         T::try_from(i_result)
-            .or(Err(RleError::ValueComputationOverflow))
-            .unwrap()
+            .unwrap_or_else(|e| panic!("{}: {:?}", RleError::ValueComputationOverflow, e))
     }
 }
 
@@ -79,6 +75,9 @@ impl<
             + PartialEq
             + Default,
     > RleColumnBuilder<T, I>
+where
+    <T as TryFrom<I>>::Error: Debug,
+    <I as TryFrom<usize>>::Error: Debug,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
@@ -109,6 +108,9 @@ impl<
             + PartialEq
             + Default,
     > ColumnBuilder<'a, T> for RleColumnBuilder<T, I>
+where
+    <T as TryFrom<I>>::Error: Debug,
+    <I as TryFrom<usize>>::Error: Debug,
 {
     fn add(&mut self, value: T) {
         let current_value = value;
@@ -168,6 +170,9 @@ impl<
             + PartialEq
             + Default,
     > RleColumn<T, I>
+where
+    <T as TryFrom<I>>::Error: Debug,
+    <I as TryFrom<usize>>::Error: Debug,
 {
     /// Constructs a new RleColumn from a vector of RleElements.
     fn from_rle_elements(elements: Vec<RleElement<T, I>>) -> RleColumn<T, I> {
@@ -189,6 +194,9 @@ impl<
         T: Debug + Copy + PartialOrd + TryFrom<I>,
         I: Debug + Copy + From<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I>,
     > Column<T> for RleColumn<T, I>
+where
+    <T as TryFrom<I>>::Error: Debug,
+    <I as TryFrom<usize>>::Error: Debug,
 {
     fn len(&self) -> usize {
         self.elements.iter().map(|e| e.length.get()).sum()
@@ -234,6 +242,8 @@ impl<'a, T, I> RleColumnScan<'a, T, I> {
 
 impl<'a, T: Copy + TryFrom<I>, I: Copy + From<T> + Add<Output = I>> Iterator
     for RleColumnScan<'a, T, I>
+where
+    <T as TryFrom<I>>::Error: Debug,
 {
     type Item = T;
 
@@ -260,8 +270,7 @@ impl<'a, T: Copy + TryFrom<I>, I: Copy + From<T> + Add<Output = I>> Iterator
 
                 // this does not produce an error if the RleColumn construction was done correctly
                 T::try_from(i_current + self.column.elements[element_index].increment)
-                    .or(Err(RleError::ValueComputationOverflow))
-                    .unwrap()
+                    .unwrap_or_else(|e| panic!("{}: {:?}", RleError::ValueComputationOverflow, e))
             }
         });
 
@@ -274,6 +283,8 @@ impl<
         T: Debug + Copy + PartialOrd + TryFrom<I>,
         I: Debug + Copy + From<T> + Add<Output = I>,
     > ColumnScan for RleColumnScan<'a, T, I>
+where
+    <T as TryFrom<I>>::Error: Debug,
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.

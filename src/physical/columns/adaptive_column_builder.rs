@@ -33,6 +33,7 @@ pub struct AdaptiveColumnBuilder<T> {
 impl<T: Debug + Copy + TryFrom<i64> + PartialOrd> AdaptiveColumnBuilder<T>
 where
     i64: From<T>,
+    <T as TryFrom<i64>>::Error: Debug,
 {
     /// Constructor.
     pub fn new() -> AdaptiveColumnBuilder<T> {
@@ -59,6 +60,7 @@ impl<'a, T: 'a + Debug + Copy + Ord + TryFrom<i64>> ColumnBuilder<'a, T>
     for AdaptiveColumnBuilder<T>
 where
     i64: From<T>,
+    <T as TryFrom<i64>>::Error: Debug,
 {
     fn add(&mut self, value: T) {
         if let ColumnBuilderType::Undecided(Some(rle_builder)) = &self.builder {
