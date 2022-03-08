@@ -1,15 +1,16 @@
+// TODO: get rid of unwraps
+
 use super::Column;
 use super::ColumnBuilder;
 use super::RleColumnBuilder;
 use super::VectorColumn;
 use std::fmt::Debug;
 
-// Number of elements added after which to decide which column to use.
-const COLUMN_IMPL_DECISION_THRESHOLD: usize = 20;
+// Number of rle elements in rle column builder after which to decide which column type to use.
+const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5;
 
-// Each rle elements needs to store three values
-// hence for essentially the same space requirement as a plain vector, the ratio would be 3
-const TARGET_RATIO_FOR_RLE: usize = 3;
+// The average minimum length of the elements in the incremental RLE
+const TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS: usize = 3;
 
 #[derive(Debug, PartialEq)]
 enum ColumnType {
@@ -28,20 +29,20 @@ impl Default for ColumnType {
 /// best possible column implementation for the given data.
 #[derive(Debug, Default)]
 pub struct AdaptiveColumnBuilder<T> {
-    data: Vec<T>,
-    rle_column_builder: RleColumnBuilder<T>,
+    vector_column_data: Option<Vec<T>>,
+    rle_column_builder: Option<RleColumnBuilder<T>>,
     column_type: ColumnType,
 }
 
 impl<T: Debug + Copy + TryFrom<i64> + PartialOrd> AdaptiveColumnBuilder<T>
 where
-    i64: TryFrom<T>,
+    i64: From<T>,
 {
     /// Constructor.
     pub fn new() -> AdaptiveColumnBuilder<T> {
         AdaptiveColumnBuilder {
-            data: Vec::new(),
-            rle_column_builder: RleColumnBuilder::new(),
+            vector_column_data: None,
+            rle_column_builder: Some(RleColumnBuilder::new()),
             column_type: ColumnType::Undecided,
         }
     }
@@ -51,13 +52,18 @@ where
             return;
         }
 
-        self.column_type = if self.rle_column_builder.number_of_rle_elements()
-            * TARGET_RATIO_FOR_RLE
-            < self.data.len()
+        if self
+            .rle_column_builder
+            .as_ref()
+            .unwrap()
+            .avg_length_of_rle_elements()
+            > TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS
         {
-            ColumnType::RleColumn
+            self.column_type = ColumnType::RleColumn;
         } else {
-            ColumnType::VectorColumn
+            self.column_type = ColumnType::VectorColumn;
+            let rle_column = self.rle_column_builder.take().unwrap().finalize();
+            self.vector_column_data = Some(rle_column.iter().collect());
         }
     }
 }
@@ -65,20 +71,22 @@ where
 impl<'a, T: 'a + Debug + Copy + Ord + TryFrom<i64>> ColumnBuilder<'a, T>
     for AdaptiveColumnBuilder<T>
 where
-    i64: TryFrom<T>,
+    i64: From<T>,
 {
     fn add(&mut self, value: T) {
-        if self.data.len() > COLUMN_IMPL_DECISION_THRESHOLD {
-            self.decide_column_type();
+        if let Some(builder) = &self.rle_column_builder {
+            if builder.number_of_rle_elements() > COLUMN_IMPL_DECISION_THRESHOLD {
+                self.decide_column_type();
+            }
         }
 
         match self.column_type {
-            ColumnType::VectorColumn => self.data.push(value),
-            ColumnType::RleColumn => self.rle_column_builder.add(value),
-            ColumnType::Undecided => {
-                self.data.push(value);
-                self.rle_column_builder.add(value);
-            }
+            ColumnType::VectorColumn => self.vector_column_data.as_mut().unwrap().push(value),
+            ColumnType::RleColumn => self.rle_column_builder.as_mut().unwrap().add(value),
+
+            // we only build the rle if still undecided and then evaluate the compression ration by
+            // the length of the rle elements
+            ColumnType::Undecided => self.rle_column_builder.as_mut().unwrap().add(value),
         }
     }
 
@@ -86,8 +94,10 @@ where
         self.decide_column_type();
 
         match self.column_type {
-            ColumnType::VectorColumn => Box::new(VectorColumn::new(self.data)),
-            ColumnType::RleColumn => self.rle_column_builder.finalize(),
+            ColumnType::VectorColumn => {
+                Box::new(VectorColumn::new(self.vector_column_data.unwrap()))
+            }
+            ColumnType::RleColumn => self.rle_column_builder.unwrap().finalize(),
             ColumnType::Undecided => panic!("column type should have been decided here"),
         }
     }
@@ -98,8 +108,8 @@ mod test {
     use super::{AdaptiveColumnBuilder, ColumnBuilder, ColumnType};
     use test_log::test;
 
-    fn construct_presumable_vector_column() -> AdaptiveColumnBuilder<u64> {
-        let mut acb: AdaptiveColumnBuilder<u64> = AdaptiveColumnBuilder::new();
+    fn construct_presumable_vector_column() -> AdaptiveColumnBuilder<u32> {
+        let mut acb: AdaptiveColumnBuilder<u32> = AdaptiveColumnBuilder::new();
         acb.add(1);
         acb.add(2);
         acb.add(3);
@@ -107,8 +117,8 @@ mod test {
         acb
     }
 
-    fn construct_presumable_rle_column() -> AdaptiveColumnBuilder<u64> {
-        let mut acb: AdaptiveColumnBuilder<u64> = AdaptiveColumnBuilder::new();
+    fn construct_presumable_rle_column() -> AdaptiveColumnBuilder<u32> {
+        let mut acb: AdaptiveColumnBuilder<u32> = AdaptiveColumnBuilder::new();
         acb.add(1);
         acb.add(2);
         acb.add(3);
@@ -119,7 +129,7 @@ mod test {
 
     #[test]
     fn test_column_type_decision_for_vector_column() {
-        let mut acb: AdaptiveColumnBuilder<u64> = construct_presumable_vector_column();
+        let mut acb: AdaptiveColumnBuilder<u32> = construct_presumable_vector_column();
 
         acb.decide_column_type();
         let ct = acb.column_type;
@@ -129,7 +139,7 @@ mod test {
 
     #[test]
     fn test_column_type_decision_for_rle_column() {
-        let mut acb: AdaptiveColumnBuilder<u64> = construct_presumable_rle_column();
+        let mut acb: AdaptiveColumnBuilder<u32> = construct_presumable_rle_column();
 
         acb.decide_column_type();
         let ct = acb.column_type;
@@ -138,8 +148,8 @@ mod test {
     }
 
     #[test]
-    fn test_build_u64_vector_column() {
-        let acb: AdaptiveColumnBuilder<u64> = construct_presumable_vector_column();
+    fn test_build_u32_vector_column() {
+        let acb: AdaptiveColumnBuilder<u32> = construct_presumable_vector_column();
 
         let vc = acb.finalize();
         assert_eq!(vc.len(), 3);
@@ -149,8 +159,8 @@ mod test {
     }
 
     #[test]
-    fn test_build_u64_rle_column() {
-        let acb: AdaptiveColumnBuilder<u64> = construct_presumable_rle_column();
+    fn test_build_u32_rle_column() {
+        let acb: AdaptiveColumnBuilder<u32> = construct_presumable_rle_column();
 
         let vc = acb.finalize();
         assert_eq!(vc.len(), 4);
