@@ -4,6 +4,18 @@ use std::{
     num::NonZeroUsize,
     ops::{Add, Mul, Sub},
 };
+use thiserror::Error;
+
+/// Error-Collection for all the possible RLE specific Errors
+#[derive(Error, Debug, Copy, Clone)]
+pub enum RleError {
+    /// The generic types in RLE are not appropriate for computing the actual values
+    #[error("Overflow in RLE value computation. THIS SHOULD NEVER HAPPEN IF THE RLE COLUMN HAS BEEN CONSTRUCTED CORRECTLY!")]
+    ValueComputationOverflow,
+    /// The index exceeds the length of the RLE element.
+    #[error("IndexOutOfBounds in RLE value computation.")]
+    IndexOutOfBounds,
+}
 
 #[derive(Debug, PartialEq)]
 struct RleElement<T, I = i64> {
@@ -14,27 +26,26 @@ struct RleElement<T, I = i64> {
 
 impl<
         T: Copy + TryFrom<I>,
-        I: Copy + TryFrom<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I>,
+        I: Copy + From<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I>,
     > RleElement<T, I>
 {
     fn get(&self, index: usize) -> T {
-        let i_value = I::try_from(self.value)
-            .or(Err(
-                "should not happen if construction of RleColumn works correctly",
-            ))
-            .unwrap();
+        if index >= self.length.get() {
+            panic!("{}", RleError::IndexOutOfBounds);
+        }
+
+        let i_value = I::from(self.value);
+
+        // if no IndexOutOfBoundsError is thrown above, then this does not produce an error if it was correctly constructed within a RleColumn
         let i_index = I::try_from(index)
-            .or(Err(
-                "should not happen if construction of RleColumn works correctly",
-            ))
+            .or(Err(RleError::ValueComputationOverflow))
             .unwrap();
 
         let i_result = i_value + i_index * self.increment;
 
+        // if no IndexOutOfBoundsError is thrown above, then this does not produce an error if it was correctly constructed within a RleColumn
         T::try_from(i_result)
-            .or(Err(
-                "should not happen if construction of RleColumn works correctly",
-            ))
+            .or(Err(RleError::ValueComputationOverflow))
             .unwrap()
     }
 }
@@ -50,7 +61,7 @@ impl<
         T: Debug + Copy + TryFrom<I> + PartialOrd,
         I: Debug
             + Copy
-            + TryFrom<T>
+            + From<T>
             + TryFrom<usize>
             + Add<Output = I>
             + Sub<Output = I>
@@ -67,7 +78,12 @@ impl<
         }
     }
 
-    /// Get the number of RleElements to get a feeling for how much memory the encoding will take.
+    /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
+    pub fn avg_length_of_rle_elements(&self) -> usize {
+        self.elements.iter().map(|e| e.length.get()).sum::<usize>() / self.elements.len()
+    }
+
+    /// Get number of RleElements in builder.
     pub fn number_of_rle_elements(&self) -> usize {
         self.elements.len()
     }
@@ -83,7 +99,7 @@ impl<
         I: 'a
             + Copy
             + Debug
-            + TryFrom<T>
+            + From<T>
             + TryFrom<usize>
             + Add<Output = I>
             + Sub<Output = I>
@@ -109,12 +125,7 @@ impl<
 
         let previous_value = self.previous_value_opt.unwrap();
         let last_element = self.elements.last_mut().unwrap();
-        let current_increment = I::try_from(current_value)
-            .or(Err("overflow when building RleColumn"))
-            .unwrap()
-            - I::try_from(previous_value)
-                .or(Err("overflow when building RleColumn"))
-                .unwrap();
+        let current_increment = I::from(current_value) - I::from(previous_value);
 
         if last_element.length == NonZeroUsize::new(1).unwrap() {
             last_element.length = NonZeroUsize::new(2).unwrap();
@@ -147,7 +158,7 @@ impl<
         T: Debug + Copy + TryFrom<I> + PartialOrd,
         I: Debug
             + Copy
-            + TryFrom<T>
+            + From<T>
             + TryFrom<usize>
             + Add<Output = I>
             + Sub<Output = I>
@@ -174,7 +185,7 @@ impl<
 
 impl<
         T: Debug + Copy + PartialOrd + TryFrom<I>,
-        I: Debug + Copy + TryFrom<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I>,
+        I: Debug + Copy + From<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I>,
     > Column<T> for RleColumn<T, I>
 {
     fn len(&self) -> usize {
@@ -219,7 +230,7 @@ impl<'a, T, I> RleColumnScan<'a, T, I> {
     }
 }
 
-impl<'a, T: Copy + TryFrom<I>, I: Copy + TryFrom<T> + Add<Output = I>> Iterator
+impl<'a, T: Copy + TryFrom<I>, I: Copy + From<T> + Add<Output = I>> Iterator
     for RleColumnScan<'a, T, I>
 {
     type Item = T;
@@ -243,11 +254,11 @@ impl<'a, T: Copy + TryFrom<I>, I: Copy + TryFrom<T> + Add<Output = I>> Iterator
                 self.column.elements[element_index].value
             } else {
                 // self.current should always contain a value here
-                let i_current = I::try_from(self.current.unwrap())
-                    .or(Err("should work if construction works"))
-                    .unwrap();
+                let i_current = I::from(self.current.unwrap());
+
+                // this does not produce an error if the RleColumn construction was done correctly
                 T::try_from(i_current + self.column.elements[element_index].increment)
-                    .or(Err("should work if construction works"))
+                    .or(Err(RleError::ValueComputationOverflow))
                     .unwrap()
             }
         });
@@ -259,7 +270,7 @@ impl<'a, T: Copy + TryFrom<I>, I: Copy + TryFrom<T> + Add<Output = I>> Iterator
 impl<
         'a,
         T: Debug + Copy + PartialOrd + TryFrom<I>,
-        I: Debug + Copy + TryFrom<T> + Add<Output = I>,
+        I: Debug + Copy + From<T> + Add<Output = I>,
     > ColumnScan for RleColumnScan<'a, T, I>
 {
     /// Find the next value that is at least as large as the given value,
