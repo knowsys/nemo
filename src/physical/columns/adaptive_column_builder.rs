@@ -75,10 +75,10 @@ where
 
             // we only build the rle if still undecided and then evaluate the compression ration by
             // the length of the rle elements
-            ColumnBuilderType::Undecided(Some(rle_builder)) => rle_builder.add(value),
-            ColumnBuilderType::Undecided(None) => {
-                panic!("In undecided case None should only briefly be used in decide_column_type.")
-            }
+            ColumnBuilderType::Undecided(builder) => builder
+                .as_mut()
+                .expect("In undecided case None should only briefly be used in decide_column_type.")
+                .add(value),
         }
     }
 

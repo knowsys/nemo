@@ -4,18 +4,6 @@ use std::{
     num::NonZeroUsize,
     ops::{Add, Mul, Sub},
 };
-use thiserror::Error;
-
-/// Error-Collection for all the possible RLE specific Errors
-#[derive(Error, Debug, Copy, Clone)]
-pub enum RleError {
-    /// The generic types in RLE are not appropriate for computing the actual values
-    #[error("Overflow in RLE value computation. THIS SHOULD NEVER HAPPEN IF THE RLE COLUMN HAS BEEN CONSTRUCTED CORRECTLY!")]
-    ValueComputationOverflow,
-    /// The index exceeds the length of the RLE element.
-    #[error("IndexOutOfBounds in RLE value computation.")]
-    IndexOutOfBounds,
-}
 
 #[derive(Debug, PartialEq)]
 struct RleElement<T, I = i64> {
@@ -34,15 +22,15 @@ where
 {
     fn get(&self, index: usize) -> T {
         if index >= self.length.get() {
-            panic!("{}", RleError::IndexOutOfBounds);
+            panic!("IndexOutOfBounds in rle value computation.");
         }
 
         let i_value = I::from(self.value);
         let i_index = I::try_from(index)
-            .unwrap_or_else(|e| panic!("{}: {:?}", RleError::ValueComputationOverflow, e));
+            .expect("This should never happen if the rle column has been constructed correctly.");
         let i_result = i_value + i_index * self.increment;
         T::try_from(i_result)
-            .unwrap_or_else(|e| panic!("{}: {:?}", RleError::ValueComputationOverflow, e))
+            .expect("This should never happen if the rle column has been constructed correctly.")
     }
 }
 
@@ -269,8 +257,9 @@ where
                 let i_current = I::from(self.current.unwrap());
 
                 // this does not produce an error if the RleColumn construction was done correctly
-                T::try_from(i_current + self.column.elements[element_index].increment)
-                    .unwrap_or_else(|e| panic!("{}: {:?}", RleError::ValueComputationOverflow, e))
+                T::try_from(i_current + self.column.elements[element_index].increment).expect(
+                    "This should never happen if the rle column has been constructed correctly.",
+                )
             }
         });
 
