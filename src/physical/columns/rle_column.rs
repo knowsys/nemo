@@ -1,6 +1,8 @@
 use super::{Column, ColumnBuilder, ColumnScan};
+use num::Zero;
 use std::{
     fmt::Debug,
+    iter::{repeat, Sum},
     num::NonZeroUsize,
     ops::{Add, Mul, Sub},
 };
@@ -14,23 +16,31 @@ struct RleElement<T, I = i64> {
 
 impl<
         T: Copy + TryFrom<I>,
-        I: Copy + From<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I>,
+        I: Copy + From<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I> + Sum + Zero,
     > RleElement<T, I>
 where
     <T as TryFrom<I>>::Error: Debug,
-    <I as TryFrom<usize>>::Error: Debug,
 {
     fn get(&self, index: usize) -> T {
         if index >= self.length.get() {
             panic!("IndexOutOfBounds in rle value computation.");
         }
 
+        if self.increment.is_zero() {
+            return self.value;
+        }
+
         let i_value = I::from(self.value);
-        let i_index = I::try_from(index)
-            .expect("This should never happen if the rle column has been constructed correctly.");
-        let i_result = i_value + i_index * self.increment;
+        let i_index_res = I::try_from(index);
+
+        let i_result = if let Ok(i_index) = i_index_res {
+            i_value + i_index * self.increment
+        } else {
+            i_value + repeat(self.increment).take(index).sum()
+        };
+
         T::try_from(i_result)
-            .expect("This should never happen if the rle column has been constructed correctly.")
+            .expect("This should never happen if the rle column has been constructed correctly since all values that are encoded in the RleElements are actually of type T.")
     }
 }
 
@@ -61,11 +71,12 @@ impl<
             + Sub<Output = I>
             + Mul<Output = I>
             + PartialEq
-            + Default,
+            + Default
+            + Sum
+            + Zero,
     > RleColumnBuilder<T, I>
 where
     <T as TryFrom<I>>::Error: Debug,
-    <I as TryFrom<usize>>::Error: Debug,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
@@ -94,11 +105,12 @@ impl<
             + Sub<Output = I>
             + Mul<Output = I>
             + PartialEq
-            + Default,
+            + Default
+            + Sum
+            + Zero,
     > ColumnBuilder<'a, T> for RleColumnBuilder<T, I>
 where
     <T as TryFrom<I>>::Error: Debug,
-    <I as TryFrom<usize>>::Error: Debug,
 {
     fn add(&mut self, value: T) {
         let current_value = value;
@@ -156,11 +168,12 @@ impl<
             + Sub<Output = I>
             + Mul<Output = I>
             + PartialEq
-            + Default,
+            + Default
+            + Sum
+            + Zero,
     > RleColumn<T, I>
 where
     <T as TryFrom<I>>::Error: Debug,
-    <I as TryFrom<usize>>::Error: Debug,
 {
     /// Constructs a new RleColumn from a vector of RleElements.
     fn from_rle_elements(elements: Vec<RleElement<T, I>>) -> RleColumn<T, I> {
@@ -180,11 +193,10 @@ where
 
 impl<
         T: Debug + Copy + PartialOrd + TryFrom<I>,
-        I: Debug + Copy + From<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I>,
+        I: Debug + Copy + From<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I> + Sum + Zero,
     > Column<T> for RleColumn<T, I>
 where
     <T as TryFrom<I>>::Error: Debug,
-    <I as TryFrom<usize>>::Error: Debug,
 {
     fn len(&self) -> usize {
         self.elements.iter().map(|e| e.length.get()).sum()
@@ -256,10 +268,8 @@ where
                 // self.current should always contain a value here
                 let i_current = I::from(self.current.unwrap());
 
-                // this does not produce an error if the RleColumn construction was done correctly
-                T::try_from(i_current + self.column.elements[element_index].increment).expect(
-                    "This should never happen if the rle column has been constructed correctly.",
-                )
+                T::try_from(i_current + self.column.elements[element_index].increment)
+                    .expect("This should never happen if the rle column has been constructed correctly since all values that are encoded in the RleElements are actually of type T.")
             }
         });
 
@@ -296,6 +306,7 @@ where
 #[cfg(test)]
 mod test {
     use super::{Column, RleColumn, RleElement};
+    use std::iter::repeat;
     use std::num::NonZeroUsize;
     use test_log::test;
 
@@ -357,6 +368,20 @@ mod test {
         }
     }
 
+    fn get_control_data_with_inc_zero() -> Vec<u8> {
+        repeat(1).take(1000000).collect()
+    }
+
+    fn get_test_column_with_inc_zero() -> RleColumn<u8, i16> {
+        RleColumn {
+            elements: vec![RleElement {
+                value: 1,
+                length: NonZeroUsize::new(1000000).unwrap(),
+                increment: 0,
+            }],
+        }
+    }
+
     #[test]
     fn i64_construction() {
         let raw_data = get_control_data();
@@ -372,6 +397,15 @@ mod test {
         let expected: RleColumn<u32> = get_test_column_u32_with_i64_inc();
 
         let constructed: RleColumn<u32> = RleColumn::new(raw_data);
+        assert_eq!(expected, constructed);
+    }
+
+    #[test]
+    fn col_with_zero_increment_construction() {
+        let raw_data: Vec<u8> = get_control_data_with_inc_zero();
+        let expected: RleColumn<u8, i16> = get_test_column_with_inc_zero();
+
+        let constructed: RleColumn<u8, i16> = RleColumn::new(raw_data);
         assert_eq!(expected, constructed);
     }
 
@@ -395,6 +429,17 @@ mod test {
     fn get() {
         let control_data = get_control_data();
         let c: RleColumn<i64> = get_test_column_i64();
+
+        control_data
+            .iter()
+            .enumerate()
+            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
+    }
+
+    #[test]
+    fn get_with_large_index_on_inc_zero() {
+        let control_data = get_control_data_with_inc_zero();
+        let c: RleColumn<u8, i16> = get_test_column_with_inc_zero();
 
         control_data
             .iter()
