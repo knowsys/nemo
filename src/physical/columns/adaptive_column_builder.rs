@@ -57,7 +57,7 @@ where
 
     fn decide_column_type(&mut self) {
         if let ColumnBuilderType::Undecided(rle_builder_opt) = &mut self.builder {
-            let rle_builder = rle_builder_opt.take().unwrap();
+            let rle_builder = rle_builder_opt.take().expect("this is only None from this take() call until the end of this method");
 
             if rle_builder.avg_length_of_rle_elements() > TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS {
                 self.builder = ColumnBuilderType::RleColumn(rle_builder);
