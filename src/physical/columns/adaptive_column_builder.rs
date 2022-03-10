@@ -88,7 +88,9 @@ where
         match self.builder {
             ColumnBuilderType::VectorColumn(vec) => Box::new(VectorColumn::new(vec)),
             ColumnBuilderType::RleColumn(rle_builder) => rle_builder.finalize(),
-            ColumnBuilderType::Undecided(_) => panic!("column type should have been decided here"),
+            ColumnBuilderType::Undecided(_) => {
+                unreachable!("column type should have been decided here")
+            }
         }
     }
 }
