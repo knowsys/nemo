@@ -1,5 +1,5 @@
 use super::{Column, ColumnScan, GenericColumnScan, IntervalColumn};
-use std::{fmt::Debug, ops::Index};
+use std::fmt::Debug;
 
 /// Simple implementation of [`IntervalColumn`] that uses a second column to manage interval bounds.
 #[derive(Debug)]
@@ -27,20 +27,12 @@ impl<T: Debug + Copy + Ord> Column<T> for GenericIntervalColumn<T> {
         self.data.is_empty()
     }
 
-    fn get(&self, index: usize) -> &T {
+    fn get(&self, index: usize) -> T {
         self.data.get(index)
     }
 
     fn iter<'a>(&'a self) -> Box<dyn ColumnScan<Item = T> + 'a> {
         Box::new(GenericColumnScan::new(self))
-    }
-}
-
-impl<T: Debug + Copy + Ord> Index<usize> for GenericIntervalColumn<T> {
-    type Output = T;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        self.get(index)
     }
 }
 
@@ -50,9 +42,9 @@ impl<T: Debug + Copy + Ord> IntervalColumn<T> for GenericIntervalColumn<T> {
     }
 
     fn int_bounds(&self, int_idx: usize) -> (usize, usize) {
-        let start_idx = self.int_starts[int_idx];
+        let start_idx = self.int_starts.get(int_idx);
         if int_idx + 1 < self.int_starts.len() {
-            (start_idx, self.int_starts[int_idx + 1] - 1)
+            (start_idx, self.int_starts.get(int_idx + 1) - 1)
         } else {
             (start_idx, self.data.len() - 1)
         }
@@ -75,10 +67,10 @@ mod test {
         let gic: GenericIntervalColumn<u64> =
             GenericIntervalColumn::new(Box::new(v_data), Box::new(v_int_starts));
         assert_eq!(gic.len(), 9);
-        assert_eq!(*gic.get(0), 1);
-        assert_eq!(*gic.get(1), 2);
-        assert_eq!(*gic.get(2), 3);
-        assert_eq!(*gic.get(3), 10);
+        assert_eq!(gic.get(0), 1);
+        assert_eq!(gic.get(1), 2);
+        assert_eq!(gic.get(2), 3);
+        assert_eq!(gic.get(3), 10);
 
         assert_eq!(gic.int_len(), 4);
         assert_eq!(gic.int_bounds(0), (0, 2));

@@ -19,8 +19,8 @@ impl<T: Debug + Copy + Ord> Column<T> for VectorColumn<T> {
         self.data.len()
     }
 
-    fn get(&self, index: usize) -> &T {
-        &self.data[index]
+    fn get(&self, index: usize) -> T {
+        self.data[index]
     }
 
     fn iter<'a>(&'a self) -> Box<dyn ColumnScan<Item = T> + 'a> {
@@ -32,7 +32,7 @@ impl<T: Debug + Copy + Ord> Index<usize> for VectorColumn<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
-        self.get(index)
+        &self.data[index]
     }
 }
 
