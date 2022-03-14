@@ -29,6 +29,19 @@ Before creating the pull request be sure to check if
 
 To create a work in progress request, please open the pull request as a draft. (Not applicable in private repository, therefore label the PR as being a `PR-draft`)
 
+### Commit messages
+
+To create uniform and easy to read commit messages, please stick to the following conventions:
+
+  * Capitalise the first word
+  * Do not end in punctuation in the message title
+  * Use imperative mood
+  * The message title shall not exceed 50 characters
+  * Be direct, do not use filler words (e.g. "I think", "maybe", "kind of", ...)
+  * Use [Github Issue/PR Keywords](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/using-keywords-in-issues-and-pull-requests) in the message description part where applicable
+  * Link to other related pull requests, issues, commits, comments, ... to have a concise representation of the context in the message description
+  * Sign your commit whenever possible
+
 ## Coding conventions
 
 Start reading our code and you'll get the hang of it.
