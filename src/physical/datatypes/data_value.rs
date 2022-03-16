@@ -99,14 +99,14 @@ impl VecT {
         match self {
             VecT::VecU64(vec) => vec
                 .get(idx_a)
-                .and_then(|&val_a| vec.get(idx_b).and_then(|val_b| Some(val_a.cmp(val_b)))),
+                .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
 
             VecT::VecFloat(vec) => vec
                 .get(idx_a)
-                .and_then(|&val_a| vec.get(idx_b).and_then(|val_b| Some(val_a.cmp(val_b)))),
+                .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
             VecT::VecDouble(vec) => vec
                 .get(idx_a)
-                .and_then(|&val_a| vec.get(idx_b).and_then(|val_b| Some(val_a.cmp(val_b)))),
+                .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
         }
     }
 }
