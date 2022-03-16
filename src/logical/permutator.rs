@@ -136,7 +136,7 @@ mod test {
     where
         T: PartialEq + PartialOrd + Ord + Eq + Clone + Copy + std::fmt::Debug,
     {
-        let mut vector = data.into_iter().copied().collect::<Vec<T>>();
+        let mut vector = data.to_vec();
 
         let permutator = Permutator::sort_from_vec(data);
         vector.sort_unstable();
