@@ -19,4 +19,7 @@ pub enum Error {
     /// Error which implies a needed Rollback
     #[error("Rollback due to csv-error")]
     RollBack(usize),
+    /// Error occurring during Permutation
+    #[error("Permutation failed: {0}")]
+    Permutation(String),
 }

@@ -17,4 +17,5 @@
 
 pub mod error;
 pub mod io;
+pub mod logical;
 pub mod physical;
