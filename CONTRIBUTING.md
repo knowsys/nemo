@@ -59,7 +59,7 @@ Start reading our code and you'll get the hang of it.
 	* errors exposed to the rest of the crate have a corresponding variant in `crate::error::Error`, which can be `#[from]` a module-level error `enum`,
 	* errors from the standard library have a `#[error(transparent)]` variant in `crate::error::Error`,
 	* `panic!` (and `expect()`, `assert!`, `unreachable!` etc.) is fine for situations that should not occur, e.g., if there is some invariant that makes the situation impossible, or where graceful recovery is impossible, but not otherwise, and
-	* `unwrap()` should (almost?) always be `expect()` instead.
+	* `unwrap()` should always be `expect("...")` instead.
   * Use `unsafe` code only if :
 	* It is checked that there is no safe way to achieve the functionality,
 	* it has been discussed with the core development team in detail,
