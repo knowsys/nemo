@@ -41,6 +41,15 @@ impl DataValueT {
             _ => None,
         }
     }
+
+    /// Compares its value with another given [`DataValueT`]
+    pub fn compare(&self, other: &Self) -> Option<Ordering> {
+        match self {
+            DataValueT::U64(val) => other.as_u64().map(|otherval| val.cmp(&otherval)),
+            DataValueT::Float(val) => other.as_float().map(|otherval| val.cmp(&otherval)),
+            DataValueT::Double(val) => other.as_double().map(|otherval| val.cmp(&otherval)),
+        }
+    }
 }
 
 /// Enum for vectors of different supported input types
