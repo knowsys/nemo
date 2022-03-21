@@ -2,7 +2,13 @@
 
 use std::cmp::Ordering;
 
-use crate::{error::Error, physical::datatypes::data_value::VecT};
+use crate::{
+    error::Error,
+    physical::{
+        columns::{column::Column, ColumnT},
+        datatypes::data_value::VecT,
+    },
+};
 
 /// Allows one to define a logical permutation of content of index-based data structures
 #[derive(Debug, Clone)]
@@ -31,6 +37,40 @@ impl Permutator {
             sort_vec: vec,
             interval_offset: offset,
         }
+    }
+
+    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
+    pub fn sort_from_column<T>(data: &dyn Column<T>) -> Permutator
+    where
+        T: Ord,
+    {
+        let mut vec: Vec<usize> = (0..data.len()).collect::<Vec<usize>>();
+        vec.sort_by_key(|&i| data.get(i));
+        Permutator {
+            sort_vec: vec,
+            interval_offset: 0,
+        }
+    }
+
+    /// Creates a [`Permutator`] based on a slice of [`ColumnT`][crate::physical::columns::column::ColumnT] elements.
+    pub fn sort_from_columns(data_vec: &[ColumnT]) -> Result<Permutator, Error> {
+        let len = if !data_vec.is_empty() {
+            let len = data_vec[0].len();
+            if data_vec.iter().any(|val| val.len() != len) {
+                return Err(Error::Permutation(
+                    "The different data-slices have not the same length".to_string(),
+                ));
+            }
+            len
+        } else {
+            0
+        };
+        let mut vec: Vec<usize> = (0..len).collect::<Vec<usize>>();
+        vec.sort_by(|a, b| Self::compare_multiple_column(*a, *b, data_vec));
+        Ok(Permutator {
+            sort_vec: vec,
+            interval_offset: 0,
+        })
     }
 
     /// Creates a [`Permutator`] based on one a list of [`VecT`][crate::physical::datatypes::data_value::VecT].
@@ -67,14 +107,14 @@ impl Permutator {
             0
         };
         let mut vec: Vec<usize> = (0..len).collect::<Vec<usize>>();
-        vec.sort_by(|a, b| Self::compare_multiple(*a, *b, data_vec));
+        vec.sort_by(|a, b| Self::compare_multiple_vec(*a, *b, data_vec));
         Ok(Permutator {
             sort_vec: vec,
             interval_offset: offset,
         })
     }
 
-    fn compare_multiple(a: usize, b: usize, data_vec: &[VecT]) -> Ordering {
+    fn compare_multiple_vec(a: usize, b: usize, data_vec: &[VecT]) -> Ordering {
         match data_vec.iter().try_for_each(|vec| {
             match vec
                 .compare_idx(a, b)
@@ -85,6 +125,19 @@ impl Permutator {
                 Ordering::Greater => Err(Ordering::Greater),
             }
         }) {
+            Ok(_) => Ordering::Equal,
+            Err(ord) => ord,
+        }
+    }
+
+    fn compare_multiple_column(a: usize, b: usize, data_vec: &[ColumnT]) -> Ordering {
+        match data_vec
+            .iter()
+            .try_for_each(|vec| match vec.get(a).compare(&vec.get(b)).expect("Both values are from the same ColumnT, therefore they need to have the same inner type") {
+                Ordering::Less => Err(Ordering::Less),
+                Ordering::Equal => Ok(()),
+                Ordering::Greater => Err(Ordering::Greater),
+            }) {
             Ok(_) => Ordering::Equal,
             Err(ord) => ord,
         }
@@ -128,8 +181,12 @@ impl Permutator {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::physical::datatypes::{Double, Float};
+    use crate::physical::{
+        columns::{AdaptiveColumnBuilder, ColumnBuilder, VectorColumn},
+        datatypes::{DataValueT, Double, Float},
+    };
     use quickcheck_macros::quickcheck;
+    use rand::prelude::SliceRandom;
     use test_log::test;
 
     fn apply_sort_permutator<T>(data: &[T])
@@ -154,6 +211,13 @@ mod test {
         vec_f64: Vec<f64>,
         vec_f32: Vec<f32>,
     ) -> bool {
+        log::debug!(
+            "used values:\nvec_u64: {:?}\nvec_i64: {:?}\nvec_f64: {:?}\n vec_f32: {:?}",
+            vec_u64,
+            vec_i64,
+            vec_f64,
+            vec_f32
+        );
         // Removing NaN values
         let vec_double = vec_f64
             .iter()
@@ -280,5 +344,61 @@ mod test {
                 .permutate(&checker)
                 .expect("Applying permutation should work in this test-case")
         );
+    }
+
+    #[quickcheck]
+    fn from_rnd_column(vec: Vec<u32>) -> bool {
+        log::debug!("used vector: {:?}", vec);
+        if vec.is_empty() {
+            // TODO: Remove if corresponding bug is fixed
+            return true;
+        }
+        let mut builder: AdaptiveColumnBuilder<u32> = AdaptiveColumnBuilder::new();
+        let mut vec_cpy = vec.clone();
+        vec_cpy.sort_unstable();
+        vec.iter().for_each(|&elem| builder.add(elem));
+        let column = builder.finalize();
+
+        let permutator = Permutator::sort_from_column(column.as_ref());
+        let sort_vec = permutator
+            .permutate(&vec)
+            .expect("Applying permutation should work in this test-case");
+        assert_eq!(sort_vec, vec_cpy);
+        true
+    }
+
+    #[quickcheck]
+    fn from_rnd_columns(vector1: Vec<f32>, vector2: Vec<f64>) -> bool {
+        // remove NaN
+        let mut vec1 = vector1
+            .iter()
+            .cloned()
+            .filter_map(|val| Float::new(val).ok())
+            .collect::<Vec<Float>>();
+        let mut vec2 = vector2
+            .iter()
+            .filter_map(|val| Double::new(*val).ok())
+            .collect::<Vec<Double>>();
+        let len = vec1.len().min(vec2.len());
+        vec1.resize(len, Float::new(1.0).expect("1.0 is not NaN"));
+        vec2.resize(len, Double::new(1.0).expect("1.0 is not NaN"));
+        let mut vec1_cpy = vec1.clone();
+        let vec1_to_sort = vec1.clone();
+        let column1: VectorColumn<Float> = VectorColumn::new(vec1);
+        let column2: VectorColumn<Double> = VectorColumn::new(vec2);
+        let columnset: Vec<ColumnT> = vec![
+            ColumnT::ColumnFloat(Box::new(column1)),
+            ColumnT::ColumnDouble(Box::new(column2)),
+        ];
+        let permutator = Permutator::sort_from_columns(&columnset)
+            .expect("Length has been adjusted when generating test-data");
+        vec1_cpy.sort_unstable();
+        assert_eq!(
+            vec1_cpy,
+            permutator
+                .permutate(&vec1_to_sort)
+                .expect("Test case should be sortable")
+        );
+        true
     }
 }
