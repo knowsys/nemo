@@ -183,10 +183,9 @@ mod test {
     use super::*;
     use crate::physical::{
         columns::{AdaptiveColumnBuilder, ColumnBuilder, VectorColumn},
-        datatypes::{DataValueT, Double, Float},
+        datatypes::{Double, Float},
     };
     use quickcheck_macros::quickcheck;
-    use rand::prelude::SliceRandom;
     use test_log::test;
 
     fn apply_sort_permutator<T>(data: &[T])
