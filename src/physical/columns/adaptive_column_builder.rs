@@ -2,7 +2,12 @@ use super::Column;
 use super::ColumnBuilder;
 use super::RleColumnBuilder;
 use super::VectorColumn;
-use std::fmt::Debug;
+use num::Zero;
+use std::{
+    fmt::Debug,
+    iter::Sum,
+    ops::{Add, Mul, Sub},
+};
 
 // Number of rle elements in rle column builder after which to decide which column type to use.
 const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5;
@@ -30,10 +35,19 @@ pub struct AdaptiveColumnBuilder<T> {
     builder: ColumnBuilderType<T>,
 }
 
-impl<T: Debug + Copy + TryFrom<i64> + PartialOrd> AdaptiveColumnBuilder<T>
-where
-    i64: From<T>,
-    <T as TryFrom<i64>>::Error: Debug,
+impl<
+        T: Debug
+            + Copy
+            + TryFrom<usize>
+            + Ord
+            + Add<Output = T>
+            + Sub<Output = T>
+            + Mul<Output = T>
+            + PartialEq
+            + Default
+            + Sum
+            + Zero,
+    > AdaptiveColumnBuilder<T>
 {
     /// Constructor.
     pub fn new() -> AdaptiveColumnBuilder<T> {
@@ -56,11 +70,21 @@ where
     }
 }
 
-impl<'a, T: 'a + Debug + Copy + Ord + TryFrom<i64>> ColumnBuilder<'a, T>
-    for AdaptiveColumnBuilder<T>
-where
-    i64: From<T>,
-    <T as TryFrom<i64>>::Error: Debug,
+impl<
+        'a,
+        T: 'a
+            + Debug
+            + Copy
+            + TryFrom<usize>
+            + Ord
+            + Add<Output = T>
+            + Sub<Output = T>
+            + Mul<Output = T>
+            + PartialEq
+            + Default
+            + Sum
+            + Zero,
+    > ColumnBuilder<'a, T> for AdaptiveColumnBuilder<T>
 {
     fn add(&mut self, value: T) {
         if let ColumnBuilderType::Undecided(Some(rle_builder)) = &self.builder {
@@ -98,6 +122,7 @@ where
 #[cfg(test)]
 mod test {
     use super::{AdaptiveColumnBuilder, ColumnBuilder, ColumnBuilderType};
+    use crate::physical::datatypes::{Double, Float};
     use test_log::test;
 
     fn construct_presumable_vector_column() -> AdaptiveColumnBuilder<u32> {
@@ -168,5 +193,53 @@ mod test {
 
         let c = acb.finalize();
         assert!(c.is_empty());
+    }
+
+    #[test]
+    fn test_build_u64_column() {
+        let mut acb: AdaptiveColumnBuilder<u64> = AdaptiveColumnBuilder::new();
+        acb.add(1);
+        acb.add(2);
+        acb.add(3);
+        acb.add(4);
+
+        let col = acb.finalize();
+        assert_eq!(col.len(), 4);
+        assert_eq!(col.get(0), 1);
+        assert_eq!(col.get(1), 2);
+        assert_eq!(col.get(2), 3);
+        assert_eq!(col.get(3), 4);
+    }
+
+    #[test]
+    fn test_build_float_column() {
+        let mut acb: AdaptiveColumnBuilder<Float> = AdaptiveColumnBuilder::new();
+        acb.add(Float::from_number(1.0));
+        acb.add(Float::from_number(2.0));
+        acb.add(Float::from_number(3.0));
+        acb.add(Float::from_number(4.0));
+
+        let col = acb.finalize();
+        assert_eq!(col.len(), 4);
+        assert_eq!(col.get(0), Float::from_number(1.0));
+        assert_eq!(col.get(1), Float::from_number(2.0));
+        assert_eq!(col.get(2), Float::from_number(3.0));
+        assert_eq!(col.get(3), Float::from_number(4.0));
+    }
+
+    #[test]
+    fn test_build_double_column() {
+        let mut acb: AdaptiveColumnBuilder<Double> = AdaptiveColumnBuilder::new();
+        acb.add(Double::from_number(1.0));
+        acb.add(Double::from_number(2.0));
+        acb.add(Double::from_number(3.0));
+        acb.add(Double::from_number(4.0));
+
+        let col = acb.finalize();
+        assert_eq!(col.len(), 4);
+        assert_eq!(col.get(0), Double::from_number(1.0));
+        assert_eq!(col.get(1), Double::from_number(2.0));
+        assert_eq!(col.get(2), Double::from_number(3.0));
+        assert_eq!(col.get(3), Double::from_number(4.0));
     }
 }

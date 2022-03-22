@@ -1,12 +1,15 @@
 use super::FloatIsNaN;
 use crate::error::Error;
+use num::FromPrimitive;
+use num::Zero;
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
-use std::ops::{Add, AddAssign};
+use std::iter::Sum;
+use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
 /// Wrapper for [`f64`] that does not allow [`f64::NAN`] values.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Double(f64);
 
 impl Double {
@@ -63,6 +66,34 @@ impl AddAssign for Double {
     }
 }
 
+impl Sub for Double {
+    type Output = Double;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Double(self.0.sub(rhs.0))
+    }
+}
+
+impl SubAssign for Double {
+    fn sub_assign(&mut self, rhs: Self) {
+        (&mut self.0).sub_assign(rhs.0)
+    }
+}
+
+impl Mul for Double {
+    type Output = Double;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Double(self.0.mul(rhs.0))
+    }
+}
+
+impl MulAssign for Double {
+    fn mul_assign(&mut self, rhs: Self) {
+        (&mut self.0).mul_assign(rhs.0)
+    }
+}
+
 impl fmt::Display for Double {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
@@ -80,5 +111,34 @@ impl TryFrom<f64> for Double {
 impl From<Double> for f64 {
     fn from(value: Double) -> Self {
         value.0
+    }
+}
+
+impl TryFrom<usize> for Double {
+    type Error = Error;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        f64::from_usize(value)
+            .ok_or(Error::IntegerToFloatingPointValue)
+            .and_then(Double::new)
+    }
+}
+
+impl Zero for Double {
+    fn zero() -> Self {
+        Double::from_number(f64::zero())
+    }
+
+    fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+}
+
+impl Sum for Double {
+    fn sum<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        Double::from_number(iter.map(|f| f.0).sum())
     }
 }
