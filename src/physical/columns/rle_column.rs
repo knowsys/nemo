@@ -80,6 +80,10 @@ where
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
+        if self.elements.is_empty() {
+            return 0;
+        }
+
         self.elements.iter().map(|e| e.length.get()).sum::<usize>() / self.elements.len()
     }
 
@@ -253,7 +257,9 @@ where
             .increment_index
             .map_or_else(Default::default, |i| i + 1);
 
-        if increment_index >= self.column.elements[element_index].length.get() {
+        if element_index < self.column.elements.len()
+            && increment_index >= self.column.elements[element_index].length.get()
+        {
             element_index += 1;
             increment_index = 0;
         }

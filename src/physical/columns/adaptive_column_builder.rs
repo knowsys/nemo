@@ -161,4 +161,12 @@ mod test {
         assert_eq!(rlec.get(2), 3);
         assert_eq!(rlec.get(3), 4);
     }
+
+    #[test]
+    fn test_build_empty_u32_column() {
+        let acb: AdaptiveColumnBuilder<u32> = AdaptiveColumnBuilder::new();
+
+        let c = acb.finalize();
+        assert!(c.is_empty());
+    }
 }
