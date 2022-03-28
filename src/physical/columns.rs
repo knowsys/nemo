@@ -17,9 +17,10 @@ pub use vector_column::VectorColumn;
 pub mod adaptive_column_builder;
 pub use adaptive_column_builder::AdaptiveColumnBuilder;
 
-/// Module for defining [`ColumnScan`]
+/// Module for defining [`ColumnScan`] and [`ColumnScanT`]
 pub mod column_scan;
 pub use column_scan::ColumnScan;
+pub use column_scan::ColumnScanT;
 
 /// Module for defining [`MaterialColumnScan`]
 pub mod material_column_scan;
@@ -41,3 +42,7 @@ pub use interval_column::IntervalColumnT;
 /// Module for defining [`GenericIntervalColumn`]
 pub mod generic_interval_column;
 pub use generic_interval_column::GenericIntervalColumn;
+
+/// Module for defining [`IntervalColumnIterator`]
+pub mod interval_column_iterator;
+pub use interval_column_iterator::IntervalColumnIterator;

@@ -12,6 +12,14 @@ pub use table_schema::TableSchema;
 pub mod ftable_schema;
 pub use ftable_schema::FTableSchema;
 
+/// Module for defining [`FTableIterator`]
+pub mod ftable_iterator;
+pub use ftable_iterator::FTableIterator;
+
 /// Module for defining [`Ftrie`]
 pub mod ftrie;
 pub use ftrie::Ftrie;
+
+/// Module for defining [`FtrieIterator`]
+pub mod ftrie_iterator;
+pub use ftrie_iterator::FtrieIterator;

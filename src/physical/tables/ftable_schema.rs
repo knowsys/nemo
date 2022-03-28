@@ -3,8 +3,8 @@ use super::TableSchema;
 use crate::physical::datatypes::DataTypeName;
 
 /// Representation of one attribute/tree node in an [`FTableSchema`]
-#[derive(Debug)]
-struct FTableSchemaEntry {
+#[derive(Debug,Copy,Clone)]
+pub struct FTableSchemaEntry {
     label: usize,
     datatype: DataTypeName,
     parent: usize,
@@ -36,15 +36,15 @@ impl FTableSchema {
     }
 
     /// Returns the index of the parent node of the given node, if it exists.
-    pub fn get_parent(&self, index: usize) -> Option<usize> {
+    pub fn parent(&self, index: usize) -> Option<usize> {
         let pidx = self.attributes[index].parent;
         (pidx != usize::MAX).then(|| pidx)
     }
 
     /// Returns the label of the parent node of the given node, or [`usize::MAX`] if the node is a root.
-    pub fn get_parent_label(&self, label: usize) -> Option<usize> {
+    pub fn parent_label(&self, label: usize) -> Option<usize> {
         let idx = self.find_index(label);
-        idx.and_then(|cidx| self.get_parent(cidx)).map(|pidx| self.attributes[pidx].label)
+        idx.and_then(|cidx| self.parent(cidx)).map(|pidx| self.attributes[pidx].label)
     }
 
     /// Returns true if the column with index `down_idx` is either equal to or a successor of the column
@@ -58,6 +58,30 @@ impl FTableSchema {
             cur_idx = self.attributes[cur_idx].parent;
         }
         false
+    }
+
+    /// Return the list of children indices of the node of the given index. If
+    /// 'usize::MAX' is used as index, the list of all root nodes is returned.
+    /// The list can be empty for leaf nodes.
+    /// 
+    /// # TODO
+    /// This result could later be cached, since the vectors might be used a lot.
+    /// Needs some mechanism of making the schema immutable after creation, so that
+    /// the cache can be built when no further changes happen (building the cache is
+    /// cheap enough).
+    pub fn children(&self, index: usize) -> Vec<usize> {
+        let mut children: Vec<usize> = Vec::new();
+        for idx in 0..self.arity() {
+            if self.parent(idx).unwrap_or_else(|| usize::MAX)==index {
+                children.push(idx);
+            }
+        }
+        children
+    }
+
+    /// Return the list of all root node indices.
+    pub fn get_roots(&self) -> Vec<usize> {
+        self.children(usize::MAX)
     }
 }
 
@@ -89,8 +113,17 @@ mod test {
     use super::{TableSchema,FTableSchema};
     use crate::physical::datatypes::DataTypeName;
 
+    use super::{Mutated,Host};
     #[test]
-    fn test() {
+    fn tmp_test() {
+        let mymut = Mutated::new();
+        let mut myhost = Host::new(mymut);
+        myhost.set();
+        assert_eq!(mymut.get(), 12);
+    }
+
+    #[test]
+    fn getters() {
         let mut fts = FTableSchema::new();
         fts.add_entry(1, DataTypeName::U64, 0);
         fts.add_entry(11, DataTypeName::U64, 1);
@@ -102,18 +135,33 @@ mod test {
         assert_eq!(fts.arity(), 6);
         assert_eq!(fts.get_type(0), DataTypeName::U64);
         assert_eq!(fts.get_label(0), 1);
-        assert_eq!(fts.get_parent(0), None);
+        assert_eq!(fts.parent(0), None);
         assert_eq!(fts.get_type(2), DataTypeName::Double);
         assert_eq!(fts.get_label(2), 12);
-        assert_eq!(fts.get_parent(2), Some(0));
+        assert_eq!(fts.parent(2), Some(0));
 
-        assert_eq!(fts.get_parent_label(111), Some(11));
-        assert_eq!(fts.get_parent_label(1), None);
+        assert_eq!(fts.parent_label(111), Some(11));
+        assert_eq!(fts.parent_label(1), None);
 
         assert_eq!(fts.is_below(1, 1),true);
         assert_eq!(fts.is_below(2, 0),true);
         assert_eq!(fts.is_below(2, 1),false);
         assert_eq!(fts.is_below(5, 1),true);
+    }
+
+    #[test]
+    fn children() {
+        let mut fts = FTableSchema::new();
+        fts.add_entry(1, DataTypeName::U64, 0);
+        fts.add_entry(11, DataTypeName::U64, 1);
+        fts.add_entry(12, DataTypeName::Double, 1);
+        fts.add_entry(111, DataTypeName::Float, 11);
+        fts.add_entry(1111, DataTypeName::U64, 111);
+        fts.add_entry(1112, DataTypeName::U64, 111);
+
+        assert_eq!(fts.children(0), vec!(1,2));
+        assert_eq!(fts.get_roots(), vec!(0));
+        assert_eq!(fts.children(4), vec!());
     }
 
 

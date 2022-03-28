@@ -5,7 +5,7 @@
     missing_copy_implementations,
     trivial_casts,
     trivial_numeric_casts,
-    unsafe_code
+    // unsafe_code
 )]
 #![warn(
     missing_docs,

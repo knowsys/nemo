@@ -1,5 +1,6 @@
 use crate::physical::columns::IntervalColumnT;
 use std::fmt::Debug;
+use std::slice::Iter;
 use super::{FTableSchema,Table,TableSchema};
 
 /// Implementation of a factorized trie, which might be a subtrie of a larger strcuture.
@@ -15,6 +16,11 @@ impl Ftrie {
         Ftrie { schema, columns }
     }
 
+    /// Returns the [`FTableSchema`] for this [`Ftrie`].
+    pub fn ftable_schema(&self) -> &FTableSchema {
+        &self.schema
+    }
+
     /// Counts the total number of rows in a given interval of a certain column,
     /// as it would appear if we would serialise all child nodes recursively into
     /// a flat table. The column index ['usize::MAX'] can be used for starting with
@@ -23,12 +29,7 @@ impl Ftrie {
     /// # Panics
     /// Panics if `col_idx` or `int_idx` are out of bounds.
     fn count_rows(&self, col_idx: usize, int_idx: usize) -> usize {
-        let mut children: Vec<usize> = Vec::new();
-        for idx in 0..self.schema.arity() {
-            if self.schema.get_parent(idx).unwrap_or_else(|| usize::MAX)==col_idx {
-                children.push(idx);
-            }
-        }
+        let children = self.schema.children(col_idx);
 
         let bounds: (usize,usize);
         if col_idx==usize::MAX {
@@ -50,6 +51,10 @@ impl Ftrie {
             sum += product;
         }
         sum
+    }
+
+    pub fn interval_columns(&self) -> Iter<IntervalColumnT> {
+        self.columns.iter()
     }
 
     // TODO: more funcionality needed
@@ -85,7 +90,7 @@ mod test {
     }
 
     #[test]
-    fn test_count_rows_linear() {
+    fn count_rows_linear() {
         let mut fts = FTableSchema::new();
         fts.add_entry(1, DataTypeName::U64, 0);
         fts.add_entry(11, DataTypeName::U64, 1);
@@ -103,7 +108,7 @@ mod test {
     }
 
     #[test]
-    fn test_count_rows() {
+    fn count_rows() {
         let mut fts = FTableSchema::new();
         fts.add_entry(1, DataTypeName::U64, 0);
         fts.add_entry(11, DataTypeName::U64, 1);
