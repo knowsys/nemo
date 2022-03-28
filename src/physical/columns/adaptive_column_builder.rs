@@ -35,19 +35,19 @@ pub struct AdaptiveColumnBuilder<T> {
     builder: ColumnBuilderType<T>,
 }
 
-impl<
-        T: Debug
-            + Copy
-            + TryFrom<usize>
-            + Ord
-            + Add<Output = T>
-            + Sub<Output = T>
-            + Mul<Output = T>
-            + PartialEq
-            + Default
-            + Sum
-            + Zero,
-    > AdaptiveColumnBuilder<T>
+impl<T> AdaptiveColumnBuilder<T>
+where
+    T: Debug
+        + Copy
+        + TryFrom<usize>
+        + Ord
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + PartialEq
+        + Default
+        + Sum
+        + Zero,
 {
     /// Constructor.
     pub fn new() -> AdaptiveColumnBuilder<T> {
@@ -70,21 +70,20 @@ impl<
     }
 }
 
-impl<
-        'a,
-        T: 'a
-            + Debug
-            + Copy
-            + TryFrom<usize>
-            + Ord
-            + Add<Output = T>
-            + Sub<Output = T>
-            + Mul<Output = T>
-            + PartialEq
-            + Default
-            + Sum
-            + Zero,
-    > ColumnBuilder<'a, T> for AdaptiveColumnBuilder<T>
+impl<'a, T> ColumnBuilder<'a, T> for AdaptiveColumnBuilder<T>
+where
+    T: 'a
+        + Debug
+        + Copy
+        + TryFrom<usize>
+        + Ord
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + PartialEq
+        + Default
+        + Sum
+        + Zero,
 {
     fn add(&mut self, value: T) {
         if let ColumnBuilderType::Undecided(Some(rle_builder)) = &self.builder {

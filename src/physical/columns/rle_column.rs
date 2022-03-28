@@ -15,9 +15,9 @@ struct RleElement<T> {
     is_negative_increment: bool,
 }
 
-impl<
-        T: Copy + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Sum + Zero,
-    > RleElement<T>
+impl<T> RleElement<T>
+where
+    T: Copy + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Sum + Zero,
 {
     fn get(&self, index: usize) -> T {
         if index >= self.length.get() {
@@ -59,19 +59,19 @@ impl<T> RleColumnBuilder<T> {
     }
 }
 
-impl<
-        T: Debug
-            + Copy
-            + TryFrom<usize>
-            + PartialOrd
-            + Add<Output = T>
-            + Sub<Output = T>
-            + Mul<Output = T>
-            + PartialEq
-            + Default
-            + Sum
-            + Zero,
-    > RleColumnBuilder<T>
+impl<T> RleColumnBuilder<T>
+where
+    T: Debug
+        + Copy
+        + TryFrom<usize>
+        + PartialOrd
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + PartialEq
+        + Default
+        + Sum
+        + Zero,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
@@ -92,21 +92,20 @@ impl<
     }
 }
 
-impl<
-        'a,
-        T: 'a
-            + Copy
-            + TryFrom<usize>
-            + Debug
-            + PartialOrd
-            + Add<Output = T>
-            + Sub<Output = T>
-            + Mul<Output = T>
-            + PartialEq
-            + Default
-            + Sum
-            + Zero,
-    > ColumnBuilder<'a, T> for RleColumnBuilder<T>
+impl<'a, T> ColumnBuilder<'a, T> for RleColumnBuilder<T>
+where
+    T: 'a
+        + Copy
+        + TryFrom<usize>
+        + Debug
+        + PartialOrd
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + PartialEq
+        + Default
+        + Sum
+        + Zero,
 {
     fn add(&mut self, value: T) {
         let current_value = value;
@@ -164,19 +163,19 @@ pub struct RleColumn<T> {
     elements: Vec<RleElement<T>>,
 }
 
-impl<
-        T: Debug
-            + Copy
-            + TryFrom<usize>
-            + PartialOrd
-            + Add<Output = T>
-            + Sub<Output = T>
-            + Mul<Output = T>
-            + PartialEq
-            + Default
-            + Sum
-            + Zero,
-    > RleColumn<T>
+impl<T> RleColumn<T>
+where
+    T: Debug
+        + Copy
+        + TryFrom<usize>
+        + PartialOrd
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + PartialEq
+        + Default
+        + Sum
+        + Zero,
 {
     /// Constructs a new RleColumn from a vector of RleElements.
     fn from_rle_elements(elements: Vec<RleElement<T>>) -> RleColumn<T> {
@@ -194,17 +193,17 @@ impl<
     }
 }
 
-impl<
-        T: Debug
-            + Copy
-            + TryFrom<usize>
-            + PartialOrd
-            + Add<Output = T>
-            + Sub<Output = T>
-            + Mul<Output = T>
-            + Sum
-            + Zero,
-    > Column<T> for RleColumn<T>
+impl<T> Column<T> for RleColumn<T>
+where
+    T: Debug
+        + Copy
+        + TryFrom<usize>
+        + PartialOrd
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Sum
+        + Zero,
 {
     fn len(&self) -> usize {
         self.elements.iter().map(|e| e.length.get()).sum()
@@ -248,8 +247,9 @@ impl<'a, T> RleColumnScan<'a, T> {
     }
 }
 
-impl<'a, T: Copy + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>> Iterator
-    for RleColumnScan<'a, T>
+impl<'a, T> Iterator for RleColumnScan<'a, T>
+where
+    T: Copy + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
 {
     type Item = T;
 
@@ -289,16 +289,15 @@ impl<'a, T: Copy + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Outp
     }
 }
 
-impl<
-        'a,
-        T: Debug
-            + Copy
-            + TryFrom<usize>
-            + PartialOrd
-            + Add<Output = T>
-            + Sub<Output = T>
-            + Mul<Output = T>,
-    > ColumnScan for RleColumnScan<'a, T>
+impl<'a, T> ColumnScan for RleColumnScan<'a, T>
+where
+    T: Debug
+        + Copy
+        + TryFrom<usize>
+        + PartialOrd
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>,
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.
