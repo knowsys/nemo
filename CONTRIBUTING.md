@@ -48,6 +48,7 @@ Start reading our code and you'll get the hang of it.
 
   * We use `rustfmt` as code-convention. (you can use whatever styles you like, just let `rustfmt` format the code before you commit)
   * We try to reduce redundancies in enumeration-variant names.
+  * We try to use the `where` clause over embedded clauses for better readability
   * We follow the code-conventions and naming-conventions of the current Rust version.
   * We write `clippy`-conform code, so follow `clippy` suggestions where applicable. If you write a compiler-exception (i.e. `#[allow(...)]`) describe your decision to do so in a meaningful comment. We advise to mark this code-segment in the pull-request as a code-comment too. 
   * `rustdoc` is obligatory for crate-exposed structures (e.g. `enum`, `struct`, `fn`, ...).
