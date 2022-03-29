@@ -30,7 +30,7 @@ impl<T> Default for ColumnBuilderType<T> {
 
 /// Implementation of [`ColumnBuilder`] that may adaptively decide for the
 /// best possible column implementation for the given data.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct AdaptiveColumnBuilder<T> {
     builder: ColumnBuilderType<T>,
 }
@@ -44,7 +44,6 @@ where
         + Add<Output = T>
         + Sub<Output = T>
         + Mul<Output = T>
-        + PartialEq
         + Default
         + Sum
         + Zero,
@@ -80,7 +79,6 @@ where
         + Add<Output = T>
         + Sub<Output = T>
         + Mul<Output = T>
-        + PartialEq
         + Default
         + Sum
         + Zero,

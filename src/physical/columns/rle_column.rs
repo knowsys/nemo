@@ -7,17 +7,133 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Step<T> {
+    Increment(T),
+    Decrement(T),
+}
+
+impl<T> Eq for Step<T> where T: PartialEq {}
+
+impl<T> Default for Step<T>
+where
+    T: Default,
+{
+    fn default() -> Self {
+        Self::Increment(Default::default())
+    }
+}
+
+impl<T> Step<T>
+where
+    T: Copy + Ord + Add<Output = T> + Sub<Output = T>,
+{
+    fn from_two_values(previous_value: T, next_value: T) -> Self {
+        if next_value < previous_value {
+            Self::Decrement(previous_value - next_value)
+        } else {
+            Self::Increment(next_value - previous_value)
+        }
+    }
+
+    fn apply_to(&self, value: T) -> T {
+        match self {
+            Self::Increment(inc) => value + *inc,
+            Self::Decrement(dec) => value - *dec,
+        }
+    }
+}
+
+impl<T> Add for Step<T>
+where
+    T: Ord + Add<Output = T> + Sub<Output = T>,
+{
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        match self {
+            Self::Increment(l_inc) => match rhs {
+                Self::Increment(r_inc) => Self::Increment(l_inc + r_inc),
+                Self::Decrement(r_dec) => {
+                    if l_inc < r_dec {
+                        Self::Decrement(r_dec - l_inc)
+                    } else {
+                        Self::Increment(l_inc - r_dec)
+                    }
+                }
+            },
+            Self::Decrement(l_dec) => match rhs {
+                Self::Decrement(r_dec) => Self::Decrement(l_dec + r_dec),
+                Self::Increment(r_inc) => {
+                    if r_inc < l_dec {
+                        Self::Decrement(l_dec - r_inc)
+                    } else {
+                        Self::Increment(r_inc - l_dec)
+                    }
+                }
+            },
+        }
+    }
+}
+
+impl<T> Mul<usize> for Step<T>
+where
+    T: Copy + TryFrom<usize> + Sum + Mul<Output = T>,
+{
+    type Output = Self;
+
+    fn mul(self, rhs: usize) -> Self {
+        let raw_increment = match self {
+            Self::Increment(inc) => inc,
+            Self::Decrement(dec) => dec,
+        };
+
+        let total_increment = if let Ok(t_rhs) = T::try_from(rhs) {
+            t_rhs * raw_increment
+        } else {
+            repeat(raw_increment).take(rhs).sum()
+        };
+
+        match self {
+            Self::Increment(_) => Self::Increment(total_increment),
+            Self::Decrement(_) => Self::Decrement(total_increment),
+        }
+    }
+}
+
+impl<T> Zero for Step<T>
+where
+    T: Zero + Ord + Sub<Output = T>,
+{
+    fn zero() -> Self {
+        Self::Increment(T::zero())
+    }
+
+    fn is_zero(&self) -> bool {
+        match self {
+            Self::Increment(inc) => inc.is_zero(),
+            Self::Decrement(dec) => dec.is_zero(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct RleElement<T> {
     value: T,
     length: NonZeroUsize,
-    increment: T,
-    is_negative_increment: bool,
+    increment: Step<T>,
 }
 
 impl<T> RleElement<T>
 where
-    T: Copy + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Sum + Zero,
+    T: Copy
+        + Ord
+        + TryFrom<usize>
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Sum
+        + Zero,
 {
     fn get(&self, index: usize) -> T {
         if index >= self.length.get() {
@@ -28,17 +144,9 @@ where
             return self.value;
         }
 
-        let total_increment = if let Ok(t_index) = T::try_from(index) {
-            t_index * self.increment
-        } else {
-            repeat(self.increment).take(index).sum()
-        };
+        let total_increment = self.increment * index;
 
-        if self.is_negative_increment {
-            self.value - total_increment
-        } else {
-            self.value + total_increment
-        }
+        total_increment.apply_to(self.value)
     }
 }
 
@@ -63,12 +171,11 @@ impl<T> RleColumnBuilder<T>
 where
     T: Debug
         + Copy
+        + Ord
         + TryFrom<usize>
-        + PartialOrd
         + Add<Output = T>
         + Sub<Output = T>
         + Mul<Output = T>
-        + PartialEq
         + Default
         + Sum
         + Zero,
@@ -96,13 +203,12 @@ impl<'a, T> ColumnBuilder<'a, T> for RleColumnBuilder<T>
 where
     T: 'a
         + Copy
+        + Ord
         + TryFrom<usize>
         + Debug
-        + PartialOrd
         + Add<Output = T>
         + Sub<Output = T>
         + Mul<Output = T>
-        + PartialEq
         + Default
         + Sum
         + Zero,
@@ -115,7 +221,6 @@ where
                 value: current_value,
                 length: NonZeroUsize::new(1).unwrap(),
                 increment: Default::default(),
-                is_negative_increment: Default::default(),
             });
 
             self.previous_value_opt = Some(current_value);
@@ -125,27 +230,18 @@ where
 
         let previous_value = self.previous_value_opt.unwrap();
         let last_element = self.elements.last_mut().unwrap();
-        let is_current_increment_negative = current_value < previous_value;
-        let current_increment = if is_current_increment_negative {
-            previous_value - current_value
-        } else {
-            current_value - previous_value
-        };
+        let current_increment = Step::from_two_values(previous_value, current_value);
 
         if last_element.length == NonZeroUsize::new(1).unwrap() {
             last_element.length = NonZeroUsize::new(2).unwrap();
             last_element.increment = current_increment;
-            last_element.is_negative_increment = is_current_increment_negative;
-        } else if last_element.increment == current_increment
-            && last_element.is_negative_increment == is_current_increment_negative
-        {
+        } else if last_element.increment == current_increment {
             last_element.length = NonZeroUsize::new(last_element.length.get() + 1).unwrap();
         } else {
             self.elements.push(RleElement {
                 value: current_value,
                 length: NonZeroUsize::new(1).unwrap(),
                 increment: Default::default(),
-                is_negative_increment: Default::default(),
             });
         }
 
@@ -167,12 +263,11 @@ impl<T> RleColumn<T>
 where
     T: Debug
         + Copy
+        + Ord
         + TryFrom<usize>
-        + PartialOrd
         + Add<Output = T>
         + Sub<Output = T>
         + Mul<Output = T>
-        + PartialEq
         + Default
         + Sum
         + Zero,
@@ -197,8 +292,8 @@ impl<T> Column<T> for RleColumn<T>
 where
     T: Debug
         + Copy
+        + Ord
         + TryFrom<usize>
-        + PartialOrd
         + Add<Output = T>
         + Sub<Output = T>
         + Mul<Output = T>
@@ -249,7 +344,7 @@ impl<'a, T> RleColumnScan<'a, T> {
 
 impl<'a, T> Iterator for RleColumnScan<'a, T>
 where
-    T: Copy + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    T: Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
 {
     type Item = T;
 
@@ -277,11 +372,9 @@ where
                     .current
                     .expect("after the first iteration the current value is always set");
 
-                if self.column.elements[element_index].is_negative_increment {
-                    current - self.column.elements[element_index].increment
-                } else {
-                    current + self.column.elements[element_index].increment
-                }
+                self.column.elements[element_index]
+                    .increment
+                    .apply_to(current)
             }
         });
 
@@ -291,13 +384,7 @@ where
 
 impl<'a, T> ColumnScan for RleColumnScan<'a, T>
 where
-    T: Debug
-        + Copy
-        + TryFrom<usize>
-        + PartialOrd
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>,
+    T: Debug + Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.
@@ -319,7 +406,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::{Column, RleColumn, RleElement};
+    use super::{Column, RleColumn, RleElement, Step};
     use std::iter::repeat;
     use std::num::NonZeroUsize;
     use test_log::test;
@@ -334,26 +421,22 @@ mod test {
                 RleElement {
                     value: 2,
                     length: NonZeroUsize::new(2).unwrap(),
-                    increment: 3,
-                    is_negative_increment: false,
+                    increment: Step::Increment(3),
                 },
                 RleElement {
                     value: 6,
                     length: NonZeroUsize::new(3).unwrap(),
-                    increment: 1,
-                    is_negative_increment: false,
+                    increment: Step::Increment(1),
                 },
                 RleElement {
                     value: 42,
                     length: NonZeroUsize::new(2).unwrap(),
-                    increment: 38,
-                    is_negative_increment: true,
+                    increment: Step::Decrement(38),
                 },
                 RleElement {
                     value: 7,
                     length: NonZeroUsize::new(4).unwrap(),
-                    increment: 3,
-                    is_negative_increment: false,
+                    increment: Step::Increment(3),
                 },
             ],
         }
@@ -365,26 +448,22 @@ mod test {
                 RleElement {
                     value: 2,
                     length: NonZeroUsize::new(2).unwrap(),
-                    increment: 3,
-                    is_negative_increment: false,
+                    increment: Step::Increment(3),
                 },
                 RleElement {
                     value: 6,
                     length: NonZeroUsize::new(3).unwrap(),
-                    increment: 1,
-                    is_negative_increment: false,
+                    increment: Step::Increment(1),
                 },
                 RleElement {
                     value: 42,
                     length: NonZeroUsize::new(2).unwrap(),
-                    increment: 38,
-                    is_negative_increment: true,
+                    increment: Step::Decrement(38),
                 },
                 RleElement {
                     value: 7,
                     length: NonZeroUsize::new(4).unwrap(),
-                    increment: 3,
-                    is_negative_increment: false,
+                    increment: Step::Increment(3),
                 },
             ],
         }
@@ -399,8 +478,7 @@ mod test {
             elements: vec![RleElement {
                 value: 1,
                 length: NonZeroUsize::new(1000000).unwrap(),
-                increment: 0,
-                is_negative_increment: false,
+                increment: Step::Increment(0),
             }],
         }
     }
