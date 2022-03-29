@@ -119,7 +119,7 @@ impl TryFrom<usize> for Float {
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
         f32::from_usize(value)
-            .ok_or(Error::IntegerToFloatingPointValue)
+            .ok_or(Error::UsizeToFloatingPointValue(value))
             .and_then(Float::new)
     }
 }

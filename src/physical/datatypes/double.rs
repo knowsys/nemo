@@ -119,7 +119,7 @@ impl TryFrom<usize> for Double {
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
         f64::from_usize(value)
-            .ok_or(Error::IntegerToFloatingPointValue)
+            .ok_or(Error::UsizeToFloatingPointValue(value))
             .and_then(Double::new)
     }
 }

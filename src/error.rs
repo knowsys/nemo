@@ -20,6 +20,6 @@ pub enum Error {
     #[error("Rollback due to csv-error")]
     RollBack(usize),
     /// Error when converting integer type to floating point value
-    #[error("Integer value could not be converted to floating point value")]
-    IntegerToFloatingPointValue,
+    #[error("Usize value `{0}` could not be converted to floating point value")]
+    UsizeToFloatingPointValue(usize),
 }
