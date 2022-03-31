@@ -35,11 +35,18 @@ where
             Self::Increment(next_value - previous_value)
         }
     }
+}
 
-    fn apply_to(&self, value: T) -> T {
+impl<T> Add<T> for Step<T>
+where
+    T: Add<Output = T> + Sub<Output = T>,
+{
+    type Output = T;
+
+    fn add(self, rhs: T) -> T {
         match self {
-            Self::Increment(inc) => value + *inc,
-            Self::Decrement(dec) => value - *dec,
+            Self::Increment(inc) => rhs + inc,
+            Self::Decrement(dec) => rhs - dec,
         }
     }
 }
@@ -146,7 +153,7 @@ where
 
         let total_increment = self.increment * index;
 
-        total_increment.apply_to(self.value)
+        total_increment + self.value
     }
 }
 
@@ -372,9 +379,7 @@ where
                     .current
                     .expect("after the first iteration the current value is always set");
 
-                self.column.elements[element_index]
-                    .increment
-                    .apply_to(current)
+                self.column.elements[element_index].increment + current
             }
         });
 
