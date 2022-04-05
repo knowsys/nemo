@@ -1,11 +1,12 @@
 //! Holds the [Permutator] struct, which allows one to define a logical permutation of the content of index-based data structures
 
 use std::cmp::Ordering;
+use std::fmt::Debug;
 
 use crate::{
     error::Error,
     physical::{
-        columns::{column::Column, ColumnT},
+        columns::{column::Column, ColumnBuilder, ColumnT},
         datatypes::data_value::VecT,
     },
 };
@@ -176,6 +177,37 @@ impl Permutator {
             Ok(x.map(|idx| data[idx].clone()).collect::<Vec<_>>())
         }
     }
+
+    /// Applies the permutator to a given column by using a provided [`ColumnBuilder`].
+    ///
+    /// *Returns* either a ['Column'] or an [Error][Error::Permutation]
+    pub fn apply_column<'a, T, U>(
+        &self,
+        column: &dyn Column<T>,
+        mut cb: U,
+    ) -> Result<Box<dyn Column<T> + 'a>, Error>
+    where
+        T: 'a,
+        U: ColumnBuilder<'a, T>,
+    {
+        if column.len() < (self.sort_vec.len() + self.interval_offset) {
+            Err(Error::Permutation(format!(
+                "Permutation data length ({0}) is smaller than the sort_vec length ({1}) + the offset of {2}",
+                column.len(),
+                self.sort_vec.len(),
+		self.interval_offset,
+            )))
+        } else {
+            let iter = (0..self.interval_offset)
+                .chain(self.sort_vec.iter().map(|&idx| idx + self.interval_offset))
+                .chain((self.interval_offset + self.sort_vec.len())..column.len());
+            iter.for_each(|idx| {
+                cb.add(column.get(idx));
+            });
+            todo!("untested operation");
+            Ok(cb.finalize())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -190,7 +222,7 @@ mod test {
 
     fn apply_sort_permutator<T>(data: &[T])
     where
-        T: PartialEq + PartialOrd + Ord + Eq + Clone + Copy + std::fmt::Debug,
+        T: PartialEq + PartialOrd + Ord + Eq + Clone + Copy + Debug,
     {
         let mut vector = data.to_vec();
 
@@ -398,6 +430,9 @@ mod test {
                 .permutate(&vec1_to_sort)
                 .expect("Test case should be sortable")
         );
+        // TODO: testing the permutator!
+        //let column_sort = permutator.apply_column(&column2, AdaptiveColumnBuilder::new());
+        //assert!(column_sort.is_ok());
         true
     }
 }
