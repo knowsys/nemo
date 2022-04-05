@@ -7,19 +7,140 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
-#[derive(Debug, PartialEq)]
-struct RleElement<T, I = i64> {
-    value: T,
-    length: NonZeroUsize,
-    increment: I,
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Step<T> {
+    Increment(T),
+    Decrement(T),
 }
 
-impl<
-        T: Copy + TryFrom<I>,
-        I: Copy + From<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I> + Sum + Zero,
-    > RleElement<T, I>
+impl<T> Eq for Step<T> where T: PartialEq {}
+
+impl<T> Default for Step<T>
 where
-    <T as TryFrom<I>>::Error: Debug,
+    T: Default,
+{
+    fn default() -> Self {
+        Self::Increment(Default::default())
+    }
+}
+
+impl<T> Step<T>
+where
+    T: Copy + Ord + Add<Output = T> + Sub<Output = T>,
+{
+    fn from_two_values(previous_value: T, next_value: T) -> Self {
+        if next_value < previous_value {
+            Self::Decrement(previous_value - next_value)
+        } else {
+            Self::Increment(next_value - previous_value)
+        }
+    }
+}
+
+impl<T> Add<T> for Step<T>
+where
+    T: Add<Output = T> + Sub<Output = T>,
+{
+    type Output = T;
+
+    fn add(self, rhs: T) -> T {
+        match self {
+            Self::Increment(inc) => rhs + inc,
+            Self::Decrement(dec) => rhs - dec,
+        }
+    }
+}
+
+impl<T> Add for Step<T>
+where
+    T: Ord + Add<Output = T> + Sub<Output = T>,
+{
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        match self {
+            Self::Increment(l_inc) => match rhs {
+                Self::Increment(r_inc) => Self::Increment(l_inc + r_inc),
+                Self::Decrement(r_dec) => {
+                    if l_inc < r_dec {
+                        Self::Decrement(r_dec - l_inc)
+                    } else {
+                        Self::Increment(l_inc - r_dec)
+                    }
+                }
+            },
+            Self::Decrement(l_dec) => match rhs {
+                Self::Decrement(r_dec) => Self::Decrement(l_dec + r_dec),
+                Self::Increment(r_inc) => {
+                    if r_inc < l_dec {
+                        Self::Decrement(l_dec - r_inc)
+                    } else {
+                        Self::Increment(r_inc - l_dec)
+                    }
+                }
+            },
+        }
+    }
+}
+
+impl<T> Mul<usize> for Step<T>
+where
+    T: Copy + TryFrom<usize> + Sum + Mul<Output = T>,
+{
+    type Output = Self;
+
+    fn mul(self, rhs: usize) -> Self {
+        let raw_increment = match self {
+            Self::Increment(inc) => inc,
+            Self::Decrement(dec) => dec,
+        };
+
+        let total_increment = if let Ok(t_rhs) = T::try_from(rhs) {
+            t_rhs * raw_increment
+        } else {
+            repeat(raw_increment).take(rhs).sum()
+        };
+
+        match self {
+            Self::Increment(_) => Self::Increment(total_increment),
+            Self::Decrement(_) => Self::Decrement(total_increment),
+        }
+    }
+}
+
+impl<T> Zero for Step<T>
+where
+    T: Zero + Ord + Sub<Output = T>,
+{
+    fn zero() -> Self {
+        Self::Increment(T::zero())
+    }
+
+    fn is_zero(&self) -> bool {
+        match self {
+            Self::Increment(inc) => inc.is_zero(),
+            Self::Decrement(dec) => dec.is_zero(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct RleElement<T> {
+    value: T,
+    length: NonZeroUsize,
+    increment: Step<T>,
+}
+
+impl<T> RleElement<T>
+where
+    T: Copy
+        + Ord
+        + TryFrom<usize>
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Sum
+        + Zero,
 {
     fn get(&self, index: usize) -> T {
         if index >= self.length.get() {
@@ -30,30 +151,22 @@ where
             return self.value;
         }
 
-        let i_value = I::from(self.value);
-        let i_index_res = I::try_from(index);
+        let total_increment = self.increment * index;
 
-        let i_result = if let Ok(i_index) = i_index_res {
-            i_value + i_index * self.increment
-        } else {
-            i_value + repeat(self.increment).take(index).sum()
-        };
-
-        T::try_from(i_result)
-            .expect("This should never happen if the rle column has been constructed correctly since all values that are encoded in the RleElements are actually of type T.")
+        total_increment + self.value
     }
 }
 
 /// Implementation of [`ColumnBuilder`] that allows the use of incremental run length encoding.
 #[derive(Debug, Default, PartialEq)]
-pub struct RleColumnBuilder<T, I = i64> {
-    elements: Vec<RleElement<T, I>>,
+pub struct RleColumnBuilder<T> {
+    elements: Vec<RleElement<T>>,
     previous_value_opt: Option<T>,
 }
 
-impl<T, I> RleColumnBuilder<T, I> {
+impl<T> RleColumnBuilder<T> {
     /// Constructor.
-    pub fn new() -> RleColumnBuilder<T, I> {
+    pub fn new() -> RleColumnBuilder<T> {
         RleColumnBuilder {
             elements: Vec::new(),
             previous_value_opt: None,
@@ -61,25 +174,25 @@ impl<T, I> RleColumnBuilder<T, I> {
     }
 }
 
-impl<
-        T: Debug + Copy + TryFrom<I> + PartialOrd,
-        I: Debug
-            + Copy
-            + From<T>
-            + TryFrom<usize>
-            + Add<Output = I>
-            + Sub<Output = I>
-            + Mul<Output = I>
-            + PartialEq
-            + Default
-            + Sum
-            + Zero,
-    > RleColumnBuilder<T, I>
+impl<T> RleColumnBuilder<T>
 where
-    <T as TryFrom<I>>::Error: Debug,
+    T: Debug
+        + Copy
+        + Ord
+        + TryFrom<usize>
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Default
+        + Sum
+        + Zero,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
+        if self.elements.is_empty() {
+            return 0;
+        }
+
         self.elements.iter().map(|e| e.length.get()).sum::<usize>() / self.elements.len()
     }
 
@@ -88,29 +201,24 @@ where
         self.elements.len()
     }
 
-    fn finalize_raw(self) -> RleColumn<T, I> {
+    fn finalize_raw(self) -> RleColumn<T> {
         RleColumn::from_rle_elements(self.elements)
     }
 }
 
-impl<
-        'a,
-        T: 'a + Copy + Debug + TryFrom<I> + PartialOrd,
-        I: 'a
-            + Copy
-            + Debug
-            + From<T>
-            + TryFrom<usize>
-            + Add<Output = I>
-            + Sub<Output = I>
-            + Mul<Output = I>
-            + PartialEq
-            + Default
-            + Sum
-            + Zero,
-    > ColumnBuilder<'a, T> for RleColumnBuilder<T, I>
+impl<'a, T> ColumnBuilder<'a, T> for RleColumnBuilder<T>
 where
-    <T as TryFrom<I>>::Error: Debug,
+    T: 'a
+        + Copy
+        + Ord
+        + TryFrom<usize>
+        + Debug
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Default
+        + Sum
+        + Zero,
 {
     fn add(&mut self, value: T) {
         let current_value = value;
@@ -129,7 +237,7 @@ where
 
         let previous_value = self.previous_value_opt.unwrap();
         let last_element = self.elements.last_mut().unwrap();
-        let current_increment = I::from(current_value) - I::from(previous_value);
+        let current_increment = Step::from_two_values(previous_value, current_value);
 
         if last_element.length == NonZeroUsize::new(1).unwrap() {
             last_element.length = NonZeroUsize::new(2).unwrap();
@@ -154,34 +262,30 @@ where
 
 /// Implementation of [`Column`] that allows the use of incremental run length encoding.
 #[derive(Debug, PartialEq)]
-pub struct RleColumn<T, I = i64> {
-    elements: Vec<RleElement<T, I>>,
+pub struct RleColumn<T> {
+    elements: Vec<RleElement<T>>,
 }
 
-impl<
-        T: Debug + Copy + TryFrom<I> + PartialOrd,
-        I: Debug
-            + Copy
-            + From<T>
-            + TryFrom<usize>
-            + Add<Output = I>
-            + Sub<Output = I>
-            + Mul<Output = I>
-            + PartialEq
-            + Default
-            + Sum
-            + Zero,
-    > RleColumn<T, I>
+impl<T> RleColumn<T>
 where
-    <T as TryFrom<I>>::Error: Debug,
+    T: Debug
+        + Copy
+        + Ord
+        + TryFrom<usize>
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Default
+        + Sum
+        + Zero,
 {
     /// Constructs a new RleColumn from a vector of RleElements.
-    fn from_rle_elements(elements: Vec<RleElement<T, I>>) -> RleColumn<T, I> {
+    fn from_rle_elements(elements: Vec<RleElement<T>>) -> RleColumn<T> {
         RleColumn { elements }
     }
 
     /// Constructs a new RleColumn from a vector of the suitable type.
-    pub fn new(data: Vec<T>) -> RleColumn<T, I> {
+    pub fn new(data: Vec<T>) -> RleColumn<T> {
         let mut builder = RleColumnBuilder::new();
         for value in data {
             builder.add(value);
@@ -191,12 +295,17 @@ where
     }
 }
 
-impl<
-        T: Debug + Copy + PartialOrd + TryFrom<I>,
-        I: Debug + Copy + From<T> + TryFrom<usize> + Add<Output = I> + Mul<Output = I> + Sum + Zero,
-    > Column<T> for RleColumn<T, I>
+impl<T> Column<T> for RleColumn<T>
 where
-    <T as TryFrom<I>>::Error: Debug,
+    T: Debug
+        + Copy
+        + Ord
+        + TryFrom<usize>
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Sum
+        + Zero,
 {
     fn len(&self) -> usize {
         self.elements.iter().map(|e| e.length.get()).sum()
@@ -222,15 +331,15 @@ where
 }
 
 #[derive(Debug)]
-struct RleColumnScan<'a, T, I> {
-    column: &'a RleColumn<T, I>,
+struct RleColumnScan<'a, T> {
+    column: &'a RleColumn<T>,
     element_index: Option<usize>,
     increment_index: Option<usize>,
     current: Option<T>,
 }
 
-impl<'a, T, I> RleColumnScan<'a, T, I> {
-    pub fn new(column: &'a RleColumn<T, I>) -> RleColumnScan<'a, T, I> {
+impl<'a, T> RleColumnScan<'a, T> {
+    pub fn new(column: &'a RleColumn<T>) -> RleColumnScan<'a, T> {
         RleColumnScan {
             column,
             element_index: None,
@@ -240,10 +349,9 @@ impl<'a, T, I> RleColumnScan<'a, T, I> {
     }
 }
 
-impl<'a, T: Copy + TryFrom<I>, I: Copy + From<T> + Add<Output = I>> Iterator
-    for RleColumnScan<'a, T, I>
+impl<'a, T> Iterator for RleColumnScan<'a, T>
 where
-    <T as TryFrom<I>>::Error: Debug,
+    T: Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
 {
     type Item = T;
 
@@ -253,7 +361,9 @@ where
             .increment_index
             .map_or_else(Default::default, |i| i + 1);
 
-        if increment_index >= self.column.elements[element_index].length.get() {
+        if element_index < self.column.elements.len()
+            && increment_index >= self.column.elements[element_index].length.get()
+        {
             element_index += 1;
             increment_index = 0;
         }
@@ -265,11 +375,11 @@ where
             if increment_index == 0 {
                 self.column.elements[element_index].value
             } else {
-                // self.current should always contain a value here
-                let i_current = I::from(self.current.unwrap());
+                let current = self
+                    .current
+                    .expect("after the first iteration the current value is always set");
 
-                T::try_from(i_current + self.column.elements[element_index].increment)
-                    .expect("This should never happen if the rle column has been constructed correctly since all values that are encoded in the RleElements are actually of type T.")
+                self.column.elements[element_index].increment + current
             }
         });
 
@@ -277,13 +387,9 @@ where
     }
 }
 
-impl<
-        'a,
-        T: Debug + Copy + PartialOrd + TryFrom<I>,
-        I: Debug + Copy + From<T> + Add<Output = I>,
-    > ColumnScan for RleColumnScan<'a, T, I>
+impl<'a, T> ColumnScan for RleColumnScan<'a, T>
 where
-    <T as TryFrom<I>>::Error: Debug,
+    T: Debug + Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.
@@ -305,7 +411,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::{Column, RleColumn, RleElement};
+    use super::{Column, RleColumn, RleElement, Step};
     use std::iter::repeat;
     use std::num::NonZeroUsize;
     use test_log::test;
@@ -320,49 +426,49 @@ mod test {
                 RleElement {
                     value: 2,
                     length: NonZeroUsize::new(2).unwrap(),
-                    increment: 3,
+                    increment: Step::Increment(3),
                 },
                 RleElement {
                     value: 6,
                     length: NonZeroUsize::new(3).unwrap(),
-                    increment: 1,
+                    increment: Step::Increment(1),
                 },
                 RleElement {
                     value: 42,
                     length: NonZeroUsize::new(2).unwrap(),
-                    increment: -38,
+                    increment: Step::Decrement(38),
                 },
                 RleElement {
                     value: 7,
                     length: NonZeroUsize::new(4).unwrap(),
-                    increment: 3,
+                    increment: Step::Increment(3),
                 },
             ],
         }
     }
 
-    fn get_test_column_u32_with_i64_inc() -> RleColumn<u32, i64> {
+    fn get_test_column_u32() -> RleColumn<u32> {
         RleColumn {
             elements: vec![
                 RleElement {
                     value: 2,
                     length: NonZeroUsize::new(2).unwrap(),
-                    increment: 3,
+                    increment: Step::Increment(3),
                 },
                 RleElement {
                     value: 6,
                     length: NonZeroUsize::new(3).unwrap(),
-                    increment: 1,
+                    increment: Step::Increment(1),
                 },
                 RleElement {
                     value: 42,
                     length: NonZeroUsize::new(2).unwrap(),
-                    increment: -38,
+                    increment: Step::Decrement(38),
                 },
                 RleElement {
                     value: 7,
                     length: NonZeroUsize::new(4).unwrap(),
-                    increment: 3,
+                    increment: Step::Increment(3),
                 },
             ],
         }
@@ -372,12 +478,12 @@ mod test {
         repeat(1).take(1000000).collect()
     }
 
-    fn get_test_column_with_inc_zero() -> RleColumn<u8, i16> {
+    fn get_test_column_with_inc_zero() -> RleColumn<u8> {
         RleColumn {
             elements: vec![RleElement {
                 value: 1,
                 length: NonZeroUsize::new(1000000).unwrap(),
-                increment: 0,
+                increment: Step::Increment(0),
             }],
         }
     }
@@ -394,7 +500,7 @@ mod test {
     #[test]
     fn u32_construction() {
         let raw_data: Vec<u32> = get_control_data().iter().map(|x| *x as u32).collect();
-        let expected: RleColumn<u32> = get_test_column_u32_with_i64_inc();
+        let expected: RleColumn<u32> = get_test_column_u32();
 
         let constructed: RleColumn<u32> = RleColumn::new(raw_data);
         assert_eq!(expected, constructed);
@@ -403,9 +509,9 @@ mod test {
     #[test]
     fn col_with_zero_increment_construction() {
         let raw_data: Vec<u8> = get_control_data_with_inc_zero();
-        let expected: RleColumn<u8, i16> = get_test_column_with_inc_zero();
+        let expected: RleColumn<u8> = get_test_column_with_inc_zero();
 
-        let constructed: RleColumn<u8, i16> = RleColumn::new(raw_data);
+        let constructed: RleColumn<u8> = RleColumn::new(raw_data);
         assert_eq!(expected, constructed);
     }
 
@@ -439,7 +545,7 @@ mod test {
     #[test]
     fn get_with_large_index_on_inc_zero() {
         let control_data = get_control_data_with_inc_zero();
-        let c: RleColumn<u8, i16> = get_test_column_with_inc_zero();
+        let c: RleColumn<u8> = get_test_column_with_inc_zero();
 
         control_data
             .iter()

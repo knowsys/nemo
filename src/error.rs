@@ -22,4 +22,7 @@ pub enum Error {
     /// Error occurring during Permutation
     #[error("Permutation failed: {0}")]
     Permutation(String),
+    /// Error when converting integer type to floating point value
+    #[error("Usize value `{0}` could not be converted to floating point value")]
+    UsizeToFloatingPointValue(usize),
 }
