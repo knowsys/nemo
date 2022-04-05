@@ -1,10 +1,11 @@
 use super::{Column, ColumnBuilder, ColumnScan};
+use crate::physical::datatypes::Ring;
 use num::Zero;
 use std::{
     fmt::Debug,
-    iter::{repeat, Sum},
+    iter::repeat,
     num::NonZeroUsize,
-    ops::{Add, Mul, Sub},
+    ops::{Add, Mul},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -26,7 +27,7 @@ where
 
 impl<T> Step<T>
 where
-    T: Copy + Ord + Add<Output = T> + Sub<Output = T>,
+    T: Copy + Ord + Ring,
 {
     fn from_two_values(previous_value: T, next_value: T) -> Self {
         if next_value < previous_value {
@@ -39,7 +40,7 @@ where
 
 impl<T> Add<T> for Step<T>
 where
-    T: Add<Output = T> + Sub<Output = T>,
+    T: Ring,
 {
     type Output = T;
 
@@ -53,7 +54,7 @@ where
 
 impl<T> Add for Step<T>
 where
-    T: Ord + Add<Output = T> + Sub<Output = T>,
+    T: Ord + Ring,
 {
     type Output = Self;
 
@@ -85,7 +86,7 @@ where
 
 impl<T> Mul<usize> for Step<T>
 where
-    T: Copy + TryFrom<usize> + Sum + Mul<Output = T>,
+    T: Copy + TryFrom<usize> + Ring,
 {
     type Output = Self;
 
@@ -110,7 +111,7 @@ where
 
 impl<T> Zero for Step<T>
 where
-    T: Zero + Ord + Sub<Output = T>,
+    T: Zero + Ord + Ring,
 {
     fn zero() -> Self {
         Self::Increment(T::zero())
@@ -150,16 +151,7 @@ impl<T> RleColumnBuilder<T> {
 
 impl<T> RleColumnBuilder<T>
 where
-    T: Debug
-        + Copy
-        + Ord
-        + TryFrom<usize>
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Default
-        + Sum
-        + Zero,
+    T: Debug + Copy + Ord + TryFrom<usize> + Default + Ring,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
@@ -182,17 +174,7 @@ where
 
 impl<'a, T> ColumnBuilder<'a, T> for RleColumnBuilder<T>
 where
-    T: 'a
-        + Copy
-        + Ord
-        + TryFrom<usize>
-        + Debug
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Default
-        + Sum
-        + Zero,
+    T: 'a + Copy + Ord + TryFrom<usize> + Debug + Default + Ring,
 {
     fn add(&mut self, value: T) {
         let current_value = value;
@@ -250,16 +232,7 @@ pub struct RleColumn<T> {
 
 impl<T> RleColumn<T>
 where
-    T: Debug
-        + Copy
-        + Ord
-        + TryFrom<usize>
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Default
-        + Sum
-        + Zero,
+    T: Debug + Copy + Ord + TryFrom<usize> + Default + Ring,
 {
     /// Constructs a new RleColumn from a vector of RleElements.
     fn from_rle_elements(elements: Vec<RleElement<T>>) -> RleColumn<T> {
@@ -298,15 +271,7 @@ where
 
 impl<T> Column<T> for RleColumn<T>
 where
-    T: Debug
-        + Copy
-        + Ord
-        + TryFrom<usize>
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Sum
-        + Zero,
+    T: Debug + Copy + Ord + TryFrom<usize> + Ring,
 {
     fn len(&self) -> usize {
         self.end_indices
@@ -375,7 +340,7 @@ impl<'a, T> RleColumnScan<'a, T> {
 
 impl<'a, T> Iterator for RleColumnScan<'a, T>
 where
-    T: Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    T: Copy + Ord + TryFrom<usize> + Ring,
 {
     type Item = T;
 
@@ -418,7 +383,7 @@ where
 
 impl<'a, T> ColumnScan for RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    T: Debug + Copy + Ord + TryFrom<usize> + Ring,
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.

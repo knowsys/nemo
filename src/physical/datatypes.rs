@@ -15,3 +15,6 @@ pub use float::Float;
 /// Module for defining [`FloatIsNaN`]
 pub mod float_is_nan;
 pub use float_is_nan::FloatIsNaN;
+/// Module for defining [`Ring`]
+pub mod ring;
+pub use ring::Ring;
