@@ -204,7 +204,6 @@ impl Permutator {
             iter.for_each(|idx| {
                 cb.add(column.get(idx));
             });
-            todo!("untested operation");
             Ok(cb.finalize())
         }
     }
@@ -416,7 +415,7 @@ mod test {
         let mut vec1_cpy = vec1.clone();
         let vec1_to_sort = vec1.clone();
         let column1: VectorColumn<Float> = VectorColumn::new(vec1);
-        let column2: VectorColumn<Double> = VectorColumn::new(vec2);
+        let column2: VectorColumn<Double> = VectorColumn::new(vec2.clone());
         let columnset: Vec<ColumnT> = vec![
             ColumnT::ColumnFloat(Box::new(column1)),
             ColumnT::ColumnDouble(Box::new(column2)),
@@ -430,9 +429,41 @@ mod test {
                 .permutate(&vec1_to_sort)
                 .expect("Test case should be sortable")
         );
-        // TODO: testing the permutator!
-        //let column_sort = permutator.apply_column(&column2, AdaptiveColumnBuilder::new());
-        //assert!(column_sort.is_ok());
+
+        let column2: VectorColumn<Double> = VectorColumn::new(vec2);
+        let column_sort = permutator.apply_column(&column2, AdaptiveColumnBuilder::new());
+        assert!(column_sort.is_ok());
         true
+    }
+
+    #[test]
+    fn multi_column_sort() {
+        let vec1: Vec<u64> = vec![0, 0, 2, 2, 1, 1, 4, 4, 3, 3];
+        let vec2: Vec<f32> = vec![1.0, 0.0, 0.4, 0.5, 0.8, 0.077, 4.0, 3.0, 1.0, 2.0];
+        let vec3: Vec<u64> = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+        let vec2 = vec2
+            .iter()
+            .map(|elem| Float::new(*elem).expect("value needs to be valid"))
+            .collect::<Vec<Float>>();
+
+        let mut acb = AdaptiveColumnBuilder::new();
+        vec1.iter().for_each(|elem| acb.add(*elem));
+        let column1 = acb.finalize();
+        let mut acb = AdaptiveColumnBuilder::new();
+        vec2.iter().for_each(|elem| acb.add(*elem));
+        let column2 = acb.finalize();
+        let mut acb = AdaptiveColumnBuilder::new();
+        vec3.iter().for_each(|elem| acb.add(*elem));
+        let column3 = acb.finalize();
+
+        let columnset: Vec<ColumnT> =
+            vec![ColumnT::ColumnU64(column1), ColumnT::ColumnFloat(column2)];
+        let permutator = Permutator::sort_from_columns(&columnset).expect("Sorting should work");
+        let column_sort = permutator
+            .apply_column(column3.as_ref(), AdaptiveColumnBuilder::new())
+            .expect("application of sorting should work");
+        let column_sort_vec: Vec<u64> = column_sort.iter().collect();
+        assert_eq!(column_sort_vec, vec![1, 0, 5, 4, 2, 3, 8, 9, 7, 6]);
     }
 }
