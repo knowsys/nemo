@@ -81,8 +81,8 @@ impl Permutator {
     /// If all [`VecT`][crate::physical::datatypes::data_value::VecT] comparisons result in equality, the original order of the two values is preserved.
     ///
     /// Returns an Error, if the length of the given [`VecT`][crate::physical::datatypes::data_value::VecT] are different.
-    pub fn sort_from_multipe_vec(data_vec: &[VecT]) -> Result<Permutator, Error> {
-        Self::sort_from_multipe_vec_interval(data_vec, 0)
+    pub fn sort_from_multiple_vec(data_vec: &[VecT]) -> Result<Permutator, Error> {
+        Self::sort_from_multiple_vec_interval(data_vec, 0)
     }
 
     /// Creates a [`Permutator`] based on one a list of [`VecT`][crate::physical::datatypes::data_value::VecT], with a given offset.
@@ -92,7 +92,7 @@ impl Permutator {
     /// If all [`VecT`][crate::physical::datatypes::data_value::VecT] comparisons result in equality, the original order of the two values is preserved.
     ///
     /// Returns an Error, if the length of the given [`VecT`][crate::physical::datatypes::data_value::VecT] are different.
-    pub fn sort_from_multipe_vec_interval(
+    pub fn sort_from_multiple_vec_interval(
         data_vec: &[VecT],
         offset: usize,
     ) -> Result<Permutator, Error> {
@@ -359,7 +359,7 @@ mod test {
         let vec3 = vec![1u64, 2, 3, 4, 5, 6, 7, 8, 9, 11, 11, 11];
         let checker = vec![10, 5, 1, 9, 2, 3, 5, 4, 7, 8, 6, 0];
 
-        let permutator = Permutator::sort_from_multipe_vec_interval(
+        let permutator = Permutator::sort_from_multiple_vec_interval(
             &[
                 VecT::VecU64(vec1),
                 VecT::VecDouble(vec2),
