@@ -1,12 +1,15 @@
 use super::FloatIsNaN;
 use crate::error::Error;
+use num::FromPrimitive;
+use num::Zero;
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
-use std::ops::{Add, AddAssign};
+use std::iter::Sum;
+use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
 /// Wrapper for [`f32`] that does not allow [`f32::NAN`] values.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Float(f32);
 
 impl Float {
@@ -63,6 +66,34 @@ impl AddAssign for Float {
     }
 }
 
+impl Sub for Float {
+    type Output = Float;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Float(self.0.sub(rhs.0))
+    }
+}
+
+impl SubAssign for Float {
+    fn sub_assign(&mut self, rhs: Self) {
+        (&mut self.0).sub_assign(rhs.0)
+    }
+}
+
+impl Mul for Float {
+    type Output = Float;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Float(self.0.mul(rhs.0))
+    }
+}
+
+impl MulAssign for Float {
+    fn mul_assign(&mut self, rhs: Self) {
+        (&mut self.0).mul_assign(rhs.0)
+    }
+}
+
 impl fmt::Display for Float {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
@@ -80,5 +111,34 @@ impl TryFrom<f32> for Float {
 impl From<Float> for f32 {
     fn from(value: Float) -> Self {
         value.0
+    }
+}
+
+impl TryFrom<usize> for Float {
+    type Error = Error;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        f32::from_usize(value)
+            .ok_or(Error::UsizeToFloatingPointValue(value))
+            .and_then(Float::new)
+    }
+}
+
+impl Zero for Float {
+    fn zero() -> Self {
+        Float::from_number(f32::zero())
+    }
+
+    fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+}
+
+impl Sum for Float {
+    fn sum<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        Float::from_number(iter.map(|f| f.0).sum())
     }
 }
