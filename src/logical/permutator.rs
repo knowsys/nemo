@@ -15,7 +15,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Permutator {
     sort_vec: Vec<usize>,
-    interval_offset: usize,
+    offset: usize,
 }
 
 impl Permutator {
@@ -24,11 +24,11 @@ impl Permutator {
     where
         T: PartialEq + PartialOrd + Ord + Eq,
     {
-        Self::sort_from_interval(data, 0)
+        Self::sort_from_vec_with_offset(data, 0)
     }
 
     /// Creates a [`Permutator`] based on a slice, with a given offset.
-    pub fn sort_from_interval<T>(data: &[T], offset: usize) -> Permutator
+    pub fn sort_from_vec_with_offset<T>(data: &[T], offset: usize) -> Permutator
     where
         T: PartialEq + PartialOrd + Ord + Eq,
     {
@@ -36,7 +36,7 @@ impl Permutator {
         vec.sort_by_key(|&i| &data[i]);
         Permutator {
             sort_vec: vec,
-            interval_offset: offset,
+            offset,
         }
     }
 
@@ -49,7 +49,7 @@ impl Permutator {
         vec.sort_by_key(|&i| data.get(i));
         Permutator {
             sort_vec: vec,
-            interval_offset: 0,
+            offset: 0,
         }
     }
 
@@ -70,7 +70,7 @@ impl Permutator {
         vec.sort_by(|a, b| Self::compare_multiple_column(*a, *b, data_vec));
         Ok(Permutator {
             sort_vec: vec,
-            interval_offset: 0,
+            offset: 0,
         })
     }
 
@@ -82,7 +82,7 @@ impl Permutator {
     ///
     /// Returns an Error, if the length of the given [`VecT`][crate::physical::datatypes::data_value::VecT] are different.
     pub fn sort_from_multiple_vec(data_vec: &[VecT]) -> Result<Permutator, Error> {
-        Self::sort_from_multiple_vec_interval(data_vec, 0)
+        Self::sort_from_multiple_vec_with_offset(data_vec, 0)
     }
 
     /// Creates a [`Permutator`] based on one a list of [`VecT`][crate::physical::datatypes::data_value::VecT], with a given offset.
@@ -92,7 +92,7 @@ impl Permutator {
     /// If all [`VecT`][crate::physical::datatypes::data_value::VecT] comparisons result in equality, the original order of the two values is preserved.
     ///
     /// Returns an Error, if the length of the given [`VecT`][crate::physical::datatypes::data_value::VecT] are different.
-    pub fn sort_from_multiple_vec_interval(
+    pub fn sort_from_multiple_vec_with_offset(
         data_vec: &[VecT],
         offset: usize,
     ) -> Result<Permutator, Error> {
@@ -111,7 +111,7 @@ impl Permutator {
         vec.sort_by(|a, b| Self::compare_multiple_vec(*a, *b, data_vec));
         Ok(Permutator {
             sort_vec: vec,
-            interval_offset: offset,
+            offset,
         })
     }
 
@@ -146,11 +146,7 @@ impl Permutator {
 
     /// Returns the value at a given index or [`None`] if not applicable
     pub fn value_at(&self, idx: usize) -> Option<usize> {
-        let idx = match idx.checked_sub(self.interval_offset) {
-            Some(val) => val,
-            None => return None,
-        };
-        self.sort_vec.get(idx).copied()
+        self.sort_vec.get(idx.checked_sub(self.offset)?).copied()
     }
 
     /// Returns the value at a given index or the identity otherwise
@@ -163,17 +159,17 @@ impl Permutator {
     where
         T: Clone,
     {
-        if data.len() < (self.sort_vec.len() + self.interval_offset) {
+        if data.len() < (self.sort_vec.len() + self.offset) {
             Err(Error::Permutation(format!(
                 "Permutation data length ({0}) is smaller than the sort_vec length ({1}) + the offset of {2}",
                 data.len(),
                 self.sort_vec.len(),
-		self.interval_offset,
+		self.offset,
             )))
         } else {
-            let x = (0..self.interval_offset)
-                .chain(self.sort_vec.iter().map(|&idx| idx + self.interval_offset))
-                .chain((self.interval_offset + self.sort_vec.len())..data.len());
+            let x = (0..self.offset)
+                .chain(self.sort_vec.iter().map(|&idx| idx + self.offset))
+                .chain((self.offset + self.sort_vec.len())..data.len());
             Ok(x.map(|idx| data[idx].clone()).collect::<Vec<_>>())
         }
     }
@@ -190,17 +186,17 @@ impl Permutator {
         T: 'a,
         U: ColumnBuilder<'a, T>,
     {
-        if column.len() < (self.sort_vec.len() + self.interval_offset) {
+        if column.len() < (self.sort_vec.len() + self.offset) {
             Err(Error::Permutation(format!(
                 "Permutation data length ({0}) is smaller than the sort_vec length ({1}) + the offset of {2}",
                 column.len(),
                 self.sort_vec.len(),
-		self.interval_offset,
+		self.offset,
             )))
         } else {
-            let iter = (0..self.interval_offset)
-                .chain(self.sort_vec.iter().map(|&idx| idx + self.interval_offset))
-                .chain((self.interval_offset + self.sort_vec.len())..column.len());
+            let iter = (0..self.offset)
+                .chain(self.sort_vec.iter().map(|&idx| idx + self.offset))
+                .chain((self.offset + self.sort_vec.len())..column.len());
             iter.for_each(|idx| {
                 cb.add(column.get(idx));
             });
@@ -300,7 +296,7 @@ mod test {
         let vec = vec![10, 5, 1, 9, 2, 3, 5, 4, 7, 8, 6, 0];
         let vec2 = vec![0usize, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 2];
 
-        let permutator = Permutator::sort_from_interval(&vec[3..5], 3);
+        let permutator = Permutator::sort_from_vec_with_offset(&vec[3..5], 3);
         assert_eq!(
             vec![0, 1, 2, 4, 3, 5, 6, 7, 8, 9, 10, 11, 2],
             permutator
@@ -308,7 +304,7 @@ mod test {
                 .expect("Expect that sorting works in this test-case")
         );
 
-        let permutator = Permutator::sort_from_interval(&vec[3..8], 3);
+        let permutator = Permutator::sort_from_vec_with_offset(&vec[3..8], 3);
         assert_eq!(
             vec![0, 1, 2, 4, 5, 7, 6, 3, 8, 9, 10, 11, 2],
             permutator
@@ -316,7 +312,7 @@ mod test {
                 .expect("Expect that sorting works in this test-case")
         );
 
-        let permutator = Permutator::sort_from_interval(&vec[4..11], 3);
+        let permutator = Permutator::sort_from_vec_with_offset(&vec[4..11], 3);
         assert_eq!(
             vec![0, 1, 2, 3, 4, 6, 5, 9, 7, 8, 10, 11, 2],
             permutator
@@ -359,7 +355,7 @@ mod test {
         let vec3 = vec![1u64, 2, 3, 4, 5, 6, 7, 8, 9, 11, 11, 11];
         let checker = vec![10, 5, 1, 9, 2, 3, 5, 4, 7, 8, 6, 0];
 
-        let permutator = Permutator::sort_from_multiple_vec_interval(
+        let permutator = Permutator::sort_from_multiple_vec_with_offset(
             &[
                 VecT::VecU64(vec1),
                 VecT::VecDouble(vec2),

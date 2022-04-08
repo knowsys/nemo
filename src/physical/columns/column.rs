@@ -57,6 +57,10 @@ impl ColumnT {
 
     /// Returns [`true`] iff the column is empty
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        match self {
+            ColumnT::ColumnU64(col) => col.is_empty(),
+            ColumnT::ColumnFloat(col) => col.is_empty(),
+            ColumnT::ColumnDouble(col) => col.is_empty(),
+        }
     }
 }
