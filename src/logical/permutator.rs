@@ -32,7 +32,7 @@ impl Permutator {
     where
         T: PartialEq + PartialOrd + Ord + Eq,
     {
-        let mut vec: Vec<usize> = (0..data.len()).collect::<Vec<usize>>();
+        let mut vec = (0..data.len()).collect::<Vec<usize>>();
         vec.sort_by_key(|&i| &data[i]);
         Permutator {
             sort_vec: vec,
@@ -45,7 +45,7 @@ impl Permutator {
     where
         T: Ord,
     {
-        let mut vec: Vec<usize> = (0..data.len()).collect::<Vec<usize>>();
+        let mut vec = (0..data.len()).collect::<Vec<usize>>();
         vec.sort_by_key(|&i| data.get(i));
         Permutator {
             sort_vec: vec,
@@ -58,8 +58,8 @@ impl Permutator {
         let len = if !data_vec.is_empty() {
             let len = data_vec[0].len();
             if data_vec.iter().any(|val| val.len() != len) {
-                return Err(Error::Permutation(
-                    "The different data-slices have not the same length".to_string(),
+                return Err(Error::PermutationSortLen(
+                    data_vec.iter().map(|val| val.len()).collect::<Vec<usize>>(),
                 ));
             }
             len
@@ -99,8 +99,8 @@ impl Permutator {
         let len = if !data_vec.is_empty() {
             let len = data_vec[0].len();
             if data_vec.iter().any(|val| val.len() != len) {
-                return Err(Error::Permutation(
-                    "The different data-slices have not the same length".to_string(),
+                return Err(Error::PermutationSortLen(
+                    data_vec.iter().map(|val| val.len()).collect::<Vec<usize>>(),
                 ));
             }
             len
@@ -160,12 +160,11 @@ impl Permutator {
         T: Clone,
     {
         if data.len() < (self.sort_vec.len() + self.offset) {
-            Err(Error::Permutation(format!(
-                "Permutation data length ({0}) is smaller than the sort_vec length ({1}) + the offset of {2}",
+            Err(Error::PermutationApplyWrongLen(
                 data.len(),
                 self.sort_vec.len(),
-		self.offset,
-            )))
+                self.offset,
+            ))
         } else {
             let x = (0..self.offset)
                 .chain(self.sort_vec.iter().map(|&idx| idx + self.offset))
@@ -187,12 +186,11 @@ impl Permutator {
         U: ColumnBuilder<'a, T>,
     {
         if column.len() < (self.sort_vec.len() + self.offset) {
-            Err(Error::Permutation(format!(
-                "Permutation data length ({0}) is smaller than the sort_vec length ({1}) + the offset of {2}",
+            Err(Error::PermutationApplyWrongLen(
                 column.len(),
                 self.sort_vec.len(),
-		self.offset,
-            )))
+                self.offset,
+            ))
         } else {
             let iter = (0..self.offset)
                 .chain(self.sort_vec.iter().map(|&idx| idx + self.offset))
@@ -330,7 +328,7 @@ mod test {
         assert!(result.is_err());
         let err = result.expect_err("Just checked that this is an error");
         match err {
-            Error::Permutation(_) => (),
+            Error::PermutationApplyWrongLen(_, _, _) => (),
             _ => panic!("wrong error returned"),
         }
     }
