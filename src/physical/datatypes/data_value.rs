@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use super::double::Double;
 use super::float::Float;
 
@@ -37,6 +39,15 @@ impl DataValueT {
         match *self {
             DataValueT::Double(val) => Some(val),
             _ => None,
+        }
+    }
+
+    /// Compares its value with another given [`DataValueT`]
+    pub fn compare(&self, other: &Self) -> Option<Ordering> {
+        match self {
+            DataValueT::U64(val) => other.as_u64().map(|otherval| val.cmp(&otherval)),
+            DataValueT::Float(val) => other.as_float().map(|otherval| val.cmp(&otherval)),
+            DataValueT::Double(val) => other.as_double().map(|otherval| val.cmp(&otherval)),
         }
     }
 }
@@ -90,5 +101,21 @@ impl VecT {
     /// Returns whether the vector is empty, or not
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Compares two values at the given index-points with each other
+    pub fn compare_idx(&self, idx_a: usize, idx_b: usize) -> Option<Ordering> {
+        match self {
+            VecT::VecU64(vec) => vec
+                .get(idx_a)
+                .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
+
+            VecT::VecFloat(vec) => vec
+                .get(idx_a)
+                .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
+            VecT::VecDouble(vec) => vec
+                .get(idx_a)
+                .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
+        }
     }
 }

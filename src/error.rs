@@ -19,6 +19,12 @@ pub enum Error {
     /// Error which implies a needed Rollback
     #[error("Rollback due to csv-error")]
     RollBack(usize),
+    /// Permutation shall be sorted, but the input data is of different length
+    #[error("The provided data-structures do not have the same length: {0:?}")]
+    PermutationSortLen(Vec<usize>),
+    /// Permutation shall be applied to a too small amount of data
+    #[error("Permutation data length ({0}) is smaller than the sort_vec length ({1}) + the offset of {2}")]
+    PermutationApplyWrongLen(usize, usize, usize),
     /// Error when converting integer type to floating point value
     #[error("Usize value `{0}` could not be converted to floating point value")]
     UsizeToFloatingPointValue(usize),
