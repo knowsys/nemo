@@ -46,6 +46,15 @@ impl IntervalColumnT {
         }
     }
 
+    /// Return whether the column is empty
+    pub fn is_empty(&self) -> bool {
+        match self {
+            IntervalColumnT::IntervalColumnU64(col) => col.is_empty(),
+            IntervalColumnT::IntervalColumnFloat(col) => col.is_empty(),
+            IntervalColumnT::IntervalColumnDouble(col) => col.is_empty(),
+        }
+    }
+
     /// Returns the smallest and largest index of the interval with the given
     /// index.
     ///
