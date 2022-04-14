@@ -123,12 +123,9 @@ mod test {
     }
 
     fn seek_scan(scan: &mut MaterialColumnScanT, value: u64) {
-        match scan {
-            MaterialColumnScanT::MaterialColumnScanU64(column) => {
-                column.seek(value);
-            }
-            _ => {}
-        };
+        if let MaterialColumnScanT::MaterialColumnScanU64(column) = scan {
+            column.seek(value);
+        }
     }
 
     #[test]
@@ -156,15 +153,14 @@ mod test {
 
         let trie = Trie::new(schema, column_vec);
         let mut trie_iter = IntervalTrieScan::new(&trie);
-        let mut scan: &mut MaterialColumnScanT;
-
-        assert_eq!(trie_iter.current_scan().is_none(), true);
+    
+        assert!(trie_iter.current_scan().is_none());
 
         trie_iter.up();
-        assert_eq!(trie_iter.current_scan().is_none(), true);
+        assert!(trie_iter.current_scan().is_none());
 
         trie_iter.down();
-        scan = trie_iter.current_scan().unwrap();
+        let mut scan = trie_iter.current_scan().unwrap();
         seek_scan(scan, 1);
         assert_eq!(scan.pos(), Some(0));
 
