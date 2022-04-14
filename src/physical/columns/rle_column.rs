@@ -1,10 +1,10 @@
-use super::{Column, ColumnBuilder, ColumnScan};
+use super::{Column, ColumnBuilder, ColumnScan, MaterialColumnScan};
 use num::Zero;
 use std::{
     fmt::Debug,
     iter::{repeat, Sum},
     num::NonZeroUsize,
-    ops::{Add, Mul, Sub},
+    ops::{Add, Mul, Range, Sub},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -325,7 +325,7 @@ where
         self.elements[element_index].get(target_index)
     }
 
-    fn iter<'a>(&'a self) -> Box<dyn ColumnScan<Item = T> + 'a> {
+    fn iter<'a>(&'a self) -> Box<dyn MaterialColumnScan<Item = T> + 'a> {
         Box::new(RleColumnScan::new(self))
     }
 }
@@ -406,6 +406,19 @@ where
 
     fn current(&mut self) -> Option<Self::Item> {
         self.current
+    }
+}
+
+impl<'a, T> MaterialColumnScan for RleColumnScan<'a, T>
+where
+    T: Debug + Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+{
+    fn pos(&self) -> Option<usize> {
+        self.element_index
+    }
+
+    fn narrow(&mut self, _interval: Range<usize>) {
+        unimplemented!("RleColumnScan does not support intervals for now");
     }
 }
 
