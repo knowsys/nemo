@@ -2,8 +2,9 @@ use super::Column;
 use super::ColumnBuilder;
 use super::RleColumnBuilder;
 use super::VectorColumn;
-use crate::physical::datatypes::Ring;
+use crate::physical::datatypes::{FloorToUsize, Ring};
 use std::fmt::Debug;
+use std::ops::Div;
 
 // Number of rle elements in rle column builder after which to decide which column type to use.
 const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5;
@@ -33,7 +34,7 @@ pub struct AdaptiveColumnBuilder<T> {
 
 impl<T> AdaptiveColumnBuilder<T>
 where
-    T: Debug + Copy + TryFrom<usize> + Ord + Default + Ring,
+    T: Debug + Copy + TryFrom<usize> + Ord + Default + Ring + Div<Output = T> + FloorToUsize,
 {
     /// Constructor.
     pub fn new() -> AdaptiveColumnBuilder<T> {
@@ -60,7 +61,7 @@ where
 
 impl<'a, T> ColumnBuilder<'a, T> for AdaptiveColumnBuilder<T>
 where
-    T: 'a + Debug + Copy + TryFrom<usize> + Ord + Default + Ring,
+    T: 'a + Debug + Copy + TryFrom<usize> + Ord + Default + Ring + Div<Output = T> + FloorToUsize,
 {
     fn add(&mut self, value: T) {
         if let ColumnBuilderType::Undecided(Some(rle_builder)) = &self.builder {

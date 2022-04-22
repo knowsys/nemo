@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
-use stage2::physical::columns::{ColumnScan, GenericColumnScan, VectorColumn};
+use stage2::physical::columns::{Column, ColumnScan, GenericColumnScan, RleColumn, VectorColumn};
 
 pub fn benchmark_seek(c: &mut Criterion) {
     let mut rng = Pcg64::seed_from_u64(21564);
@@ -10,44 +10,65 @@ pub fn benchmark_seek(c: &mut Criterion) {
     for _i in 0..10000001 {
         data.push(rng.gen::<usize>());
     }
-    let values = (
-        data[rng.gen_range(0..10000000)],
-        data[rng.gen_range(0..10000000)],
-    );
-    let (randa, randb) = if values.0 < values.1 {
-        values
-    } else {
-        (values.1, values.0)
-    };
-    let test_column = VectorColumn::new(data);
+    data.sort_unstable();
+    let randa = data[rng.gen_range(0..10000000)];
+
+    let test_column = VectorColumn::new(data.clone());
+    let rle_test_column = RleColumn::new(data.clone());
 
     let mut group = c.benchmark_group("seek");
     group.sample_size(200);
-    group.bench_function("seek_dummy", |b| {
+    group.bench_function("seek_generic_column_scan", |b| {
         b.iter_with_setup(
-            || {
-                let mut gc = GenericColumnScan::new(&test_column);
-                gc.seek(randa);
-                gc
-            },
+            || GenericColumnScan::new(&test_column),
             |mut gcs| {
-                gcs.seek(randb);
-            },
-        )
-    });
-    group.bench_function("seek_dummy2", |b| {
-        b.iter_with_setup(
-            || {
-                let mut gc = GenericColumnScan::new(&test_column);
-                gc.seek(randa);
-                gc
-            },
-            |mut gcs| {
-                gcs.seek(randb);
+                gcs.seek(randa);
             },
         )
     });
     group.finish();
+
+    let mut group_rle = c.benchmark_group("seek_rle");
+    group_rle.bench_function("seek_rle_randomized", |b| {
+        b.iter_with_setup(
+            || rle_test_column.iter(),
+            |mut rcs| {
+                rcs.seek(randa);
+            },
+        )
+    });
+
+    let vec_col_handcrafted = VectorColumn::new(
+        (1..100000)
+            .chain(200000..400000)
+            .chain(600000..800000)
+            .collect(),
+    );
+    let rle_col_handcrafted = RleColumn::new(
+        (1..100000)
+            .chain(200000..400000)
+            .chain(600000..800000)
+            .collect(),
+    );
+
+    group_rle.bench_function("seek_vec_handcrafted", |b| {
+        b.iter_with_setup(
+            || vec_col_handcrafted.iter(),
+            |mut rcs| {
+                rcs.seek(650000);
+            },
+        )
+    });
+
+    group_rle.bench_function("seek_rle_handcrafted", |b| {
+        b.iter_with_setup(
+            || rle_col_handcrafted.iter(),
+            |mut rcs| {
+                rcs.seek(650000);
+            },
+        )
+    });
+    group_rle.finish();
 }
 
 criterion_group!(benches, benchmark_seek);

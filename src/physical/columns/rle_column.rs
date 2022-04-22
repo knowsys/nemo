@@ -1,11 +1,11 @@
 use super::{Column, ColumnBuilder, ColumnScan};
-use crate::physical::datatypes::Ring;
+use crate::physical::datatypes::{FloorToUsize, Ring};
 use num::Zero;
 use std::{
     fmt::Debug,
     iter::repeat,
     num::NonZeroUsize,
-    ops::{Add, Mul},
+    ops::{Add, Div, Mul},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -151,7 +151,7 @@ impl<T> RleColumnBuilder<T> {
 
 impl<T> RleColumnBuilder<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Default + Ring,
+    T: Debug + Copy + Ord + TryFrom<usize> + Default + Ring + Div<Output = T> + FloorToUsize,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
@@ -174,7 +174,7 @@ where
 
 impl<'a, T> ColumnBuilder<'a, T> for RleColumnBuilder<T>
 where
-    T: 'a + Copy + Ord + TryFrom<usize> + Debug + Default + Ring,
+    T: 'a + Copy + Ord + TryFrom<usize> + Debug + Default + Ring + Div<Output = T> + FloorToUsize,
 {
     fn add(&mut self, value: T) {
         let current_value = value;
@@ -232,7 +232,7 @@ pub struct RleColumn<T> {
 
 impl<T> RleColumn<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Default + Ring,
+    T: Debug + Copy + Ord + TryFrom<usize> + Default + Ring + Div<Output = T> + FloorToUsize,
 {
     /// Constructs a new RleColumn from a vector of RleElements.
     fn from_rle_elements(elements: Vec<RleElement<T>>) -> RleColumn<T> {
@@ -271,7 +271,7 @@ where
 
 impl<T> Column<T> for RleColumn<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Ring,
+    T: Debug + Copy + Ord + TryFrom<usize> + Ring + Div<Output = T> + FloorToUsize,
 {
     fn len(&self) -> usize {
         self.end_indices
@@ -383,13 +383,98 @@ where
 
 impl<'a, T> ColumnScan for RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Ring,
+    T: Debug + Copy + Ord + TryFrom<usize> + Ring + Div<Output = T> + FloorToUsize,
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.
+    /// If multiple candidates exist, the iterator should be advanced to the first such value.
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
-        // could we assume a sorted column here?
-        // for now we don't
+        let current_element_index = self.element_index.unwrap_or_default();
+        let current_increment_index = self.increment_index.unwrap_or_default();
+
+        let mut seek_element_index: usize;
+        let mut seek_increment_index: usize;
+
+        // it is possible that the last element of the matching_element_index - 1 -th element
+        // holds the same value as the matching element; in this case, we want to position the
+        // iterator on that element;
+        // hence we subtract 1 in any case
+        let bin_search_element_index = self.column.values[current_element_index..]
+            .binary_search(&value)
+            .unwrap_or_else(|err| err)
+            .saturating_sub(1)
+            + current_element_index;
+
+        seek_element_index = bin_search_element_index;
+
+        let start_value = self.column.values[bin_search_element_index];
+        let inc = self.column.increments[bin_search_element_index];
+
+        if let Step::Increment(inc) = inc {
+            if inc.is_zero() {
+                seek_element_index = bin_search_element_index + 1;
+                seek_increment_index = 0;
+            } else {
+                // TODO: unwrap_or_default may not be a good choice here
+                seek_increment_index = ((value - start_value) / inc)
+                    .floor_to_usize()
+                    .unwrap_or_default();
+
+                if bin_search_element_index
+                    .checked_sub(1)
+                    .and_then(|el_idx| self.column.end_indices.get(el_idx))
+                    .map(|nzu| nzu.get())
+                    .unwrap_or(0)
+                    + seek_increment_index
+                    >= self.column.end_indices[bin_search_element_index].get()
+                {
+                    seek_element_index = bin_search_element_index + 1;
+                    seek_increment_index = 0;
+                }
+            }
+        } else {
+            panic!("if the column is sorted all increments are positive")
+        };
+
+        if seek_element_index > current_element_index
+            || (seek_element_index == current_increment_index
+                && seek_increment_index > current_increment_index)
+        {
+            self.element_index = Some(seek_element_index);
+            self.increment_index = Some(seek_increment_index);
+        } else {
+            self.element_index = Some(current_element_index);
+            self.increment_index = Some(current_increment_index);
+        }
+
+        self.current = if self
+            .element_index
+            .expect("This is just set a few lines above.")
+            >= self.column.values.len()
+        {
+            None
+        } else {
+            Some(
+                self.column.get(
+                    self.element_index
+                        .expect("This is just set a few lines above.")
+                        .checked_sub(1)
+                        .and_then(|el_idx| self.column.end_indices.get(el_idx))
+                        .map(|nzu| nzu.get())
+                        .unwrap_or(0)
+                        + self
+                            .increment_index
+                            .expect("This is just set a few lines above."),
+                ),
+            )
+        };
+
+        if let Some(cur) = self.current {
+            if cur >= value {
+                return Some(cur);
+            }
+        }
+
         for next in self {
             if next >= value {
                 return Some(next);
@@ -539,5 +624,29 @@ mod test {
 
         let iterated_c: Vec<i64> = c.iter().collect();
         assert_eq!(iterated_c, control_data);
+    }
+
+    #[test]
+    fn seek() {
+        let seek_test_col = RleColumn {
+            values: vec![2, 22],
+            end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
+            increments: vec![Step::Increment(5), Step::Increment(1)],
+        };
+
+        let mut iter = seek_test_col.iter();
+        iter.seek(10);
+
+        assert_eq!(iter.current().unwrap(), 12);
+
+        let mut iter = seek_test_col.iter();
+        iter.seek(22);
+
+        assert_eq!(iter.current().unwrap(), 22);
+
+        let mut iter = seek_test_col.iter();
+        iter.seek(28);
+
+        assert_eq!(iter.current(), None);
     }
 }
