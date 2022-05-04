@@ -55,7 +55,9 @@ impl<'a> IntervalTrieScan<'a> {
 
 impl<'a> TrieScan for IntervalTrieScan<'a> {
     fn up(&mut self) {
-        self.current_layer = self.current_layer.and_then(|index| (index > 0).then(|| index - 1));
+        self.current_layer = self
+            .current_layer
+            .and_then(|index| (index > 0).then(|| index - 1));
     }
 
     fn down(&mut self) {
@@ -144,7 +146,7 @@ mod test {
 
         let trie = Trie::new(schema, column_vec);
         let mut trie_iter = IntervalTrieScan::new(&trie);
-    
+
         assert!(trie_iter.current_scan().is_none());
 
         trie_iter.up();
