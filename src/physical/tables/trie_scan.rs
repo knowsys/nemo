@@ -55,16 +55,7 @@ impl<'a> IntervalTrieScan<'a> {
 
 impl<'a> TrieScan for IntervalTrieScan<'a> {
     fn up(&mut self) {
-        match self.current_layer {
-            None => self.current_layer = None,
-            Some(index) => {
-                if index == 0 {
-                    self.current_layer = None;
-                } else {
-                    self.current_layer = Some(index - 1);
-                }
-            }
-        };
+        self.current_layer = self.current_layer.and_then(|index| (index > 0).then(|| index - 1));
     }
 
     fn down(&mut self) {
