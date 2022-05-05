@@ -206,24 +206,29 @@ where
             .expect("if the elements are not empty, then there is a last one");
         let current_increment = Step::from_two_values(previous_value, current_value);
 
-        if current_increment.is_some()
-            && last_element.length == NonZeroUsize::new(1).expect("1 is non-zero")
-        {
-            last_element.length = NonZeroUsize::new(2).expect("2 is non-zero");
-            last_element.increment =
-                current_increment.expect("is_some() is checked in the 'if' condition");
-        } else if current_increment.is_some()
-            && last_element.increment
-                == current_increment.expect("is_some() is checked in the 'if' condition")
-        {
-            last_element.length =
-                NonZeroUsize::new(last_element.length.get() + 1).expect("usize + 1 is non-zero");
-        } else {
-            self.elements.push(RleElement {
-                value: current_value,
-                length: NonZeroUsize::new(1).expect("1 is non-zero"),
-                increment: Default::default(),
-            });
+        match current_increment {
+            Some(cur_inc) => {
+                if last_element.length == NonZeroUsize::new(1).expect("1 is non-zero") {
+                    last_element.length = NonZeroUsize::new(2).expect("2 is non-zero");
+                    last_element.increment = cur_inc;
+                } else if last_element.increment == cur_inc {
+                    last_element.length = NonZeroUsize::new(last_element.length.get() + 1)
+                        .expect("usize + 1 is non-zero");
+                } else {
+                    self.elements.push(RleElement {
+                        value: current_value,
+                        length: NonZeroUsize::new(1).expect("1 is non-zero"),
+                        increment: Default::default(),
+                    });
+                }
+            }
+            None => {
+                self.elements.push(RleElement {
+                    value: current_value,
+                    length: NonZeroUsize::new(1).expect("1 is non-zero"),
+                    increment: Default::default(),
+                });
+            }
         }
 
         self.previous_value_opt = Some(current_value);
@@ -425,9 +430,6 @@ where
         let current_element_index = self.element_index.unwrap_or_default();
         let current_increment_index = self.increment_index.unwrap_or_default();
 
-        let mut seek_element_index: usize;
-        let mut seek_increment_index: usize;
-
         // it is possible that the last element of the matching_element_index - 1 -th element
         // holds the same value as the matching element; in this case, we want to position the
         // iterator on that element;
@@ -438,7 +440,8 @@ where
             .saturating_sub(1)
             + current_element_index;
 
-        seek_element_index = bin_search_element_index;
+        let mut seek_element_index: usize = bin_search_element_index;
+        let mut seek_increment_index: usize;
 
         let start_value = self.column.values[bin_search_element_index];
         let inc = self.column.increments[bin_search_element_index];
