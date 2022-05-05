@@ -8,6 +8,9 @@ use std::fmt;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
+#[cfg(test)]
+use quickcheck::{Arbitrary, Gen};
+
 /// Wrapper for [`f32`] that does not allow [`f32::NAN`] values.
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Float(f32);
@@ -160,5 +163,17 @@ impl Sum for Float {
 impl FloorToUsize for Float {
     fn floor_to_usize(self) -> Option<usize> {
         usize::from_f32(self.0.floor())
+    }
+}
+
+#[cfg(test)]
+impl Arbitrary for Float {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let mut value = f32::arbitrary(g);
+        while value.is_nan() {
+            value = f32::arbitrary(g);
+        }
+
+        Self::from_number(value)
     }
 }

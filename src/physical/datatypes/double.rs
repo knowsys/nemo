@@ -8,6 +8,9 @@ use std::fmt;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
+#[cfg(test)]
+use quickcheck::{Arbitrary, Gen};
+
 /// Wrapper for [`f64`] that does not allow [`f64::NAN`] values.
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Double(f64);
@@ -160,5 +163,17 @@ impl Sum for Double {
 impl FloorToUsize for Double {
     fn floor_to_usize(self) -> Option<usize> {
         usize::from_f64(self.0.floor())
+    }
+}
+
+#[cfg(test)]
+impl Arbitrary for Double {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let mut value = f64::arbitrary(g);
+        while value.is_nan() {
+            value = f64::arbitrary(g);
+        }
+
+        Self::from_number(value)
     }
 }

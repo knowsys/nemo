@@ -29,11 +29,17 @@ impl<T> Step<T>
 where
     T: Copy + Ord + Ring,
 {
-    fn from_two_values(previous_value: T, next_value: T) -> Self {
+    // returns None if the computed diff does not allow the computation of the original value 
+    // (may happen for floating point numbers)
+    fn from_two_values(previous_value: T, next_value: T) -> Option<Self> {
         if next_value < previous_value {
-            Self::Decrement(previous_value - next_value)
+            let diff = previous_value - next_value;
+
+            (next_value == previous_value - diff).then(|| Self::Decrement(diff))
         } else {
-            Self::Increment(next_value - previous_value)
+            let diff = next_value - previous_value;
+
+            (next_value == previous_value + diff).then(|| Self::Increment(diff))
         }
     }
 }
@@ -200,10 +206,16 @@ where
             .expect("if the elements are not empty, then there is a last one");
         let current_increment = Step::from_two_values(previous_value, current_value);
 
-        if last_element.length == NonZeroUsize::new(1).expect("1 is non-zero") {
+        if current_increment.is_some()
+            && last_element.length == NonZeroUsize::new(1).expect("1 is non-zero")
+        {
             last_element.length = NonZeroUsize::new(2).expect("2 is non-zero");
-            last_element.increment = current_increment;
-        } else if last_element.increment == current_increment {
+            last_element.increment =
+                current_increment.expect("is_some() is checked in the 'if' condition");
+        } else if current_increment.is_some()
+            && last_element.increment
+                == current_increment.expect("is_some() is checked in the 'if' condition")
+        {
             last_element.length =
                 NonZeroUsize::new(last_element.length.get() + 1).expect("usize + 1 is non-zero");
         } else {
@@ -311,7 +323,13 @@ where
             return value;
         }
 
-        increment * remainder + value
+        // explicit check for zero since increment may be Infinity for floating point types
+        // (and Infinity * 0 produces NaN)
+        if remainder == 0 {
+            value
+        } else {
+            increment * remainder + value
+        }
     }
 
     fn iter<'a>(&'a self) -> Box<dyn ColumnScan<Item = T> + 'a> {
@@ -389,6 +407,10 @@ where
     /// advance the iterator to this position, and return the value.
     /// If multiple candidates exist, the iterator should be advanced to the first such value.
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
+        if self.column.values.is_empty() {
+            return None;
+        }
+
         let current_element_index = self.element_index.unwrap_or_default();
         let current_increment_index = self.increment_index.unwrap_or_default();
 
@@ -411,7 +433,10 @@ where
         let inc = self.column.increments[bin_search_element_index];
 
         if let Step::Increment(inc) = inc {
-            if inc.is_zero() {
+            if value <= start_value {
+                seek_element_index = bin_search_element_index;
+                seek_increment_index = 0;
+            } else if inc.is_zero() {
                 seek_element_index = bin_search_element_index + 1;
                 seek_increment_index = 0;
             } else {
@@ -491,7 +516,9 @@ where
 #[cfg(test)]
 mod test {
     use super::{Column, RleColumn, Step};
+    use crate::physical::datatypes::{Double, Float};
     use num::Zero;
+    use quickcheck_macros::quickcheck;
     use std::iter::repeat;
     use std::num::NonZeroUsize;
     use test_log::test;
@@ -617,6 +644,36 @@ mod test {
             .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
     }
 
+    #[quickcheck]
+    fn get_quickcheck_u64(raw_data: Vec<u64>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        raw_data
+            .iter()
+            .enumerate()
+            .all(|(i, control_item)| col.get(i) == *control_item)
+    }
+
+    #[quickcheck]
+    fn get_quickcheck_float(raw_data: Vec<Float>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        raw_data
+            .iter()
+            .enumerate()
+            .all(|(i, control_item)| col.get(i) == *control_item)
+    }
+
+    #[quickcheck]
+    fn get_quickcheck_double(raw_data: Vec<Double>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        raw_data
+            .iter()
+            .enumerate()
+            .all(|(i, control_item)| col.get(i) == *control_item)
+    }
+
     #[test]
     fn iter() {
         let control_data: Vec<i64> = get_control_data();
@@ -624,6 +681,30 @@ mod test {
 
         let iterated_c: Vec<i64> = c.iter().collect();
         assert_eq!(iterated_c, control_data);
+    }
+
+    #[quickcheck]
+    fn iter_quickcheck_u64(raw_data: Vec<u64>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        let iterated_col: Vec<u64> = col.iter().collect();
+        iterated_col == raw_data
+    }
+
+    #[quickcheck]
+    fn iter_quickcheck_float(raw_data: Vec<Float>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        let iterated_col: Vec<Float> = col.iter().collect();
+        iterated_col == raw_data
+    }
+
+    #[quickcheck]
+    fn iter_quickcheck_double(raw_data: Vec<Double>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        let iterated_col: Vec<Double> = col.iter().collect();
+        iterated_col == raw_data
     }
 
     #[test]
@@ -648,5 +729,47 @@ mod test {
         iter.seek(28);
 
         assert_eq!(iter.current(), None);
+    }
+
+    #[quickcheck]
+    fn seek_quickcheck_u64(mut raw_data: Vec<u64>, target: u64) -> bool {
+        raw_data.sort_unstable();
+
+        let expected_output = raw_data
+            .get(raw_data.binary_search(&target).unwrap_or_else(|err| err))
+            .copied();
+
+        let col = RleColumn::new(raw_data);
+        let seek_result = col.iter().seek(target);
+
+        seek_result == expected_output
+    }
+
+    #[quickcheck]
+    fn seek_quickcheck_float(mut raw_data: Vec<Float>, target: Float) -> bool {
+        raw_data.sort();
+
+        let expected_output = raw_data
+            .get(raw_data.binary_search(&target).unwrap_or_else(|err| err))
+            .copied();
+
+        let col = RleColumn::new(raw_data);
+        let seek_result = col.iter().seek(target);
+
+        seek_result == expected_output
+    }
+
+    #[quickcheck]
+    fn seek_quickcheck_double(mut raw_data: Vec<Double>, target: Double) -> bool {
+        raw_data.sort();
+
+        let expected_output = raw_data
+            .get(raw_data.binary_search(&target).unwrap_or_else(|err| err))
+            .copied();
+
+        let col = RleColumn::new(raw_data);
+        let seek_result = col.iter().seek(target);
+
+        seek_result == expected_output
     }
 }
