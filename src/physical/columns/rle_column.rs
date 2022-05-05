@@ -1,11 +1,11 @@
 use super::{Column, ColumnBuilder, ColumnScan};
-use crate::physical::datatypes::{FloorToUsize, Ring};
+use crate::physical::datatypes::{Field, FloorToUsize, Ring};
 use num::Zero;
 use std::{
     fmt::Debug,
     iter::repeat,
     num::NonZeroUsize,
-    ops::{Add, Div, Mul},
+    ops::{Add, Mul},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -29,7 +29,7 @@ impl<T> Step<T>
 where
     T: Copy + Ord + Ring,
 {
-    // returns None if the computed diff does not allow the computation of the original value 
+    // returns None if the computed diff does not allow the computation of the original value
     // (may happen for floating point numbers)
     fn from_two_values(previous_value: T, next_value: T) -> Option<Self> {
         if next_value < previous_value {
@@ -157,7 +157,7 @@ impl<T> RleColumnBuilder<T> {
 
 impl<T> RleColumnBuilder<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Default + Ring + Div<Output = T> + FloorToUsize,
+    T: Debug + Copy + Ord + TryFrom<usize> + Default + Field + FloorToUsize,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
@@ -180,7 +180,7 @@ where
 
 impl<'a, T> ColumnBuilder<'a, T> for RleColumnBuilder<T>
 where
-    T: 'a + Copy + Ord + TryFrom<usize> + Debug + Default + Ring + Div<Output = T> + FloorToUsize,
+    T: 'a + Copy + Ord + TryFrom<usize> + Debug + Default + Field + FloorToUsize,
 {
     fn add(&mut self, value: T) {
         let current_value = value;
@@ -244,7 +244,7 @@ pub struct RleColumn<T> {
 
 impl<T> RleColumn<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Default + Ring + Div<Output = T> + FloorToUsize,
+    T: Debug + Copy + Ord + TryFrom<usize> + Default + Field + FloorToUsize,
 {
     /// Constructs a new RleColumn from a vector of RleElements.
     fn from_rle_elements(elements: Vec<RleElement<T>>) -> RleColumn<T> {
@@ -283,7 +283,7 @@ where
 
 impl<T> Column<T> for RleColumn<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Ring + Div<Output = T> + FloorToUsize,
+    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
 {
     fn len(&self) -> usize {
         self.end_indices
@@ -401,7 +401,7 @@ where
 
 impl<'a, T> ColumnScan for RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Ring + Div<Output = T> + FloorToUsize,
+    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.

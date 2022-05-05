@@ -18,6 +18,9 @@ pub use float_is_nan::FloatIsNaN;
 /// Module for defining [`Ring`]
 pub mod ring;
 pub use ring::Ring;
+/// Module for defining [`Field`]
+pub mod field;
+pub use field::Field;
 /// Module for defining [`FloorToUsize`]
 pub mod floor_to_usize;
 pub use floor_to_usize::FloorToUsize;
