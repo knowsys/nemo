@@ -407,6 +407,17 @@ where
     /// advance the iterator to this position, and return the value.
     /// If multiple candidates exist, the iterator should be advanced to the first such value.
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
+        // seek only works correctly if column is sorted; we are just checking this here
+        debug_assert!(
+            self.column.is_empty()
+                || self
+                    .column
+                    .iter()
+                    .take(self.column.len() - 1)
+                    .zip(self.column.iter().skip(1))
+                    .all(|pair| pair.0 <= pair.1)
+        );
+
         if self.column.values.is_empty() {
             return None;
         }
@@ -440,7 +451,6 @@ where
                 seek_element_index = bin_search_element_index + 1;
                 seek_increment_index = 0;
             } else {
-                // TODO: unwrap_or_default may not be a good choice here
                 seek_increment_index = ((value - start_value) / inc)
                     .floor_to_usize()
                     .unwrap_or_default();
