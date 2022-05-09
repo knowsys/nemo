@@ -98,22 +98,10 @@ impl<'a> TrieScan for IntervalTrieScan<'a> {
 mod test {
     use super::super::trie::{Trie, TrieSchema, TrieSchemaEntry};
     use super::{IntervalTrieScan, TrieScan};
-    use crate::physical::columns::{
-        GenericIntervalColumn, IntervalColumnT, RangedColumnScanT, VectorColumn,
-    };
+    use crate::physical::columns::RangedColumnScanT;
     use crate::physical::datatypes::DataTypeName;
+    use crate::physical::util::test_util::make_gict;
     use test_log::test;
-
-    fn make_gic(values: &[u64], ints: &[usize]) -> GenericIntervalColumn<u64> {
-        GenericIntervalColumn::new(
-            Box::new(VectorColumn::new(values.to_vec())),
-            Box::new(VectorColumn::new(ints.to_vec())),
-        )
-    }
-
-    fn make_gict(values: &[u64], ints: &[usize]) -> IntervalColumnT {
-        IntervalColumnT::IntervalColumnU64(Box::new(make_gic(values, ints)))
-    }
 
     fn seek_scan(scan: &mut RangedColumnScanT, value: u64) {
         if let RangedColumnScanT::RangedColumnScanU64(column) = scan {
