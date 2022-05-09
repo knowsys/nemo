@@ -1,4 +1,4 @@
-use super::{Column, ColumnScan, MaterialColumnScan};
+use super::{Column, ColumnScan, RangedColumnScan};
 use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
@@ -120,7 +120,7 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<'a, T> {
+impl<'a, T: Ord + Copy + Debug> RangedColumnScan for GenericColumnScan<'a, T> {
     fn pos(&self) -> Option<usize> {
         self.pos
             .and_then(|pos| (pos < self.interval.end).then(|| pos))
@@ -136,7 +136,7 @@ impl<'a, T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<'a, T> 
 #[cfg(test)]
 mod test {
     use super::super::VectorColumn;
-    use super::{ColumnScan, GenericColumnScan, MaterialColumnScan}; // < TODO: is this a nice way to write this use?
+    use super::{ColumnScan, GenericColumnScan, RangedColumnScan}; // < TODO: is this a nice way to write this use?
     use test_log::test;
 
     fn get_test_column() -> VectorColumn<u64> {

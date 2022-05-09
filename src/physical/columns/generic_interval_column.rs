@@ -1,4 +1,4 @@
-use super::{Column, GenericColumnScan, IntervalColumn, MaterialColumnScan};
+use super::{Column, GenericColumnScan, IntervalColumn, RangedColumnScan};
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -32,7 +32,7 @@ impl<T: Debug + Copy + Ord> Column<T> for GenericIntervalColumn<T> {
         self.data.get(index)
     }
 
-    fn iter<'a>(&'a self) -> Box<dyn MaterialColumnScan<Item = T> + 'a> {
+    fn iter<'a>(&'a self) -> Box<dyn RangedColumnScan<Item = T> + 'a> {
         Box::new(GenericColumnScan::new(self))
     }
 }

@@ -1,4 +1,4 @@
-use super::{Column, ColumnBuilder, ColumnScan, MaterialColumnScan};
+use super::{Column, ColumnBuilder, ColumnScan, RangedColumnScan};
 use num::Zero;
 use std::{
     fmt::Debug,
@@ -325,7 +325,7 @@ where
         self.elements[element_index].get(target_index)
     }
 
-    fn iter<'a>(&'a self) -> Box<dyn MaterialColumnScan<Item = T> + 'a> {
+    fn iter<'a>(&'a self) -> Box<dyn RangedColumnScan<Item = T> + 'a> {
         Box::new(RleColumnScan::new(self))
     }
 }
@@ -409,7 +409,7 @@ where
     }
 }
 
-impl<'a, T> MaterialColumnScan for RleColumnScan<'a, T>
+impl<'a, T> RangedColumnScan for RleColumnScan<'a, T>
 where
     T: Debug + Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
 {

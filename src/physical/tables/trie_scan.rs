@@ -1,10 +1,10 @@
 use super::Trie;
-use crate::physical::columns::{IntervalColumnT, MaterialColumnScanT};
+use crate::physical::columns::{IntervalColumnT, RangedColumnScanT};
 use std::fmt::Debug;
 
 /// Iterator for the a Trie datastructure.
 /// Allows for vertical traversal through the tree and can return
-/// its current position as a MaterialColumnScanT object.
+/// its current position as a RangedColumnScanT object.
 pub trait TrieScan: Debug {
     /// Return to the upper layer.
     fn up(&mut self);
@@ -13,32 +13,32 @@ pub trait TrieScan: Debug {
     fn down(&mut self);
 
     /// Return the current position of the scan as a ranged [`ColumnScan`].
-    fn current_scan(&mut self) -> Option<&mut MaterialColumnScanT>;
+    fn current_scan(&mut self) -> Option<&mut RangedColumnScanT>;
 }
 
 /// Implementation of TrieScan for Trie with IntervalColumns
 #[derive(Debug)]
 pub struct IntervalTrieScan<'a> {
     trie: &'a Trie,
-    layers: Vec<MaterialColumnScanT<'a>>,
+    layers: Vec<RangedColumnScanT<'a>>,
     current_layer: Option<usize>,
 }
 
 impl<'a> IntervalTrieScan<'a> {
     /// Construct Trie iterator.
     pub fn new(trie: &'a Trie) -> Self {
-        let mut layers = Vec::<MaterialColumnScanT<'a>>::new();
+        let mut layers = Vec::<RangedColumnScanT<'a>>::new();
 
         for column_t in trie.columns() {
             let new_scan = match column_t {
                 IntervalColumnT::IntervalColumnU64(column) => {
-                    MaterialColumnScanT::MaterialColumnScanU64(column.iter())
+                    RangedColumnScanT::RangedColumnScanU64(column.iter())
                 }
                 IntervalColumnT::IntervalColumnFloat(column) => {
-                    MaterialColumnScanT::MaterialColumnScanFloat(column.iter())
+                    RangedColumnScanT::RangedColumnScanFloat(column.iter())
                 }
                 IntervalColumnT::IntervalColumnDouble(column) => {
-                    MaterialColumnScanT::MaterialColumnScanDouble(column.iter())
+                    RangedColumnScanT::RangedColumnScanDouble(column.iter())
                 }
             };
 
@@ -89,7 +89,7 @@ impl<'a> TrieScan for IntervalTrieScan<'a> {
         }
     }
 
-    fn current_scan(&mut self) -> Option<&'a mut MaterialColumnScanT> {
+    fn current_scan(&mut self) -> Option<&'a mut RangedColumnScanT> {
         Some(&mut self.layers[self.current_layer?])
     }
 }
@@ -99,7 +99,7 @@ mod test {
     use super::super::trie::{Trie, TrieSchema, TrieSchemaEntry};
     use super::{IntervalTrieScan, TrieScan};
     use crate::physical::columns::{
-        GenericIntervalColumn, IntervalColumnT, MaterialColumnScanT, VectorColumn,
+        GenericIntervalColumn, IntervalColumnT, RangedColumnScanT, VectorColumn,
     };
     use crate::physical::datatypes::DataTypeName;
     use test_log::test;
@@ -115,8 +115,8 @@ mod test {
         IntervalColumnT::IntervalColumnU64(Box::new(make_gic(values, ints)))
     }
 
-    fn seek_scan(scan: &mut MaterialColumnScanT, value: u64) {
-        if let MaterialColumnScanT::MaterialColumnScanU64(column) = scan {
+    fn seek_scan(scan: &mut RangedColumnScanT, value: u64) {
+        if let RangedColumnScanT::RangedColumnScanU64(column) = scan {
             column.seek(value);
         }
     }
