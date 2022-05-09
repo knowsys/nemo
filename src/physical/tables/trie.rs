@@ -91,24 +91,16 @@ impl Table for Trie {
 #[cfg(test)]
 mod test {
     use super::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::columns::{GenericIntervalColumn, IntervalColumnT, VectorColumn};
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::table::Table;
+    use crate::physical::util::make_gict;
     use test_log::test;
 
-    fn make_gic(values: &[u64], ints: &[usize]) -> GenericIntervalColumn<u64> {
-        GenericIntervalColumn::new(
-            Box::new(VectorColumn::new(values.to_vec())),
-            Box::new(VectorColumn::new(ints.to_vec())),
-        )
-    }
-
-    fn make_gict(values: &[u64], ints: &[usize]) -> IntervalColumnT {
-        IntervalColumnT::IntervalColumnU64(Box::new(make_gic(values, ints)))
-    }
-
     #[test]
-    fn test_row_num() {
+    /// Tests general functionality of trie, including:
+    ///     * Construction
+    ///     * Getting row number
+    fn test_trie() {
         let column_fst = make_gict(&[1, 2, 3], &[0]);
         let column_snd = make_gict(&[2, 3, 4, 1, 2], &[0, 2, 3]);
         let column_trd = make_gict(&[3, 4, 5, 7, 2, 1], &[0, 2, 3, 4, 5]);
