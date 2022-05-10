@@ -1,10 +1,10 @@
-use super::ColumnScan;
+use super::{ColumnScan, RangedColumnScan};
 use std::fmt::Debug;
 
 /// Implementation of [`ColumnScan`] for the result of joining a list of [`ColumnScan`] structs.
 #[derive(Debug)]
 pub struct OrderedMergeJoin<'a, T> {
-    column_scans: Vec<&'a mut dyn ColumnScan<Item = T>>,
+    column_scans: Vec<&'a mut dyn RangedColumnScan<Item = T>>,
     active_scan: usize,
     active_max: Option<T>,
     current: Option<T>,
@@ -12,7 +12,9 @@ pub struct OrderedMergeJoin<'a, T> {
 
 impl<'a, T> OrderedMergeJoin<'a, T> {
     /// Constructs a new VectorColumnScan for a Column.
-    pub fn new(column_scans: Vec<&'a mut dyn ColumnScan<Item = T>>) -> OrderedMergeJoin<'a, T> {
+    pub fn new(
+        column_scans: Vec<&'a mut dyn RangedColumnScan<Item = T>>,
+    ) -> OrderedMergeJoin<'a, T> {
         OrderedMergeJoin {
             column_scans,
             active_scan: 0,

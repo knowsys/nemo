@@ -1,5 +1,7 @@
+#![allow(incomplete_features)]
+
 use super::ColumnScan;
-use crate::physical::datatypes::{Double, Float};
+use crate::physical::datatypes::{DataValueT, Double, Float};
 use std::ops::Range;
 
 /// Iterator for a sorted interval of values that also stores the current position
@@ -40,6 +42,61 @@ impl<'a> RangedColumnScanT<'a> {
             RangedColumnScanT::RangedColumnScanU64(column) => column.narrow(interval),
             RangedColumnScanT::RangedColumnScanFloat(column) => column.narrow(interval),
             RangedColumnScanT::RangedColumnScanDouble(column) => column.narrow(interval),
+        }
+    }
+
+    /// Find the next value that is at least as large as the given value,
+    /// advance the iterator to this position, and return the value.
+    pub fn seek(&mut self, value: DataValueT) -> Option<DataValueT> {
+        match self {
+            RangedColumnScanT::RangedColumnScanU64(column) => column
+                .seek(value.as_u64().unwrap())
+                .map(|v| DataValueT::U64(v)),
+            RangedColumnScanT::RangedColumnScanFloat(column) => column
+                .seek(value.as_float().unwrap())
+                .map(|v| DataValueT::Float(v)),
+            RangedColumnScanT::RangedColumnScanDouble(column) => column
+                .seek(value.as_double().unwrap())
+                .map(|v| DataValueT::Double(v)),
+        }
+    }
+
+    /// Return the value at the current position, if any.
+    pub fn current(&mut self) -> Option<DataValueT> {
+        match self {
+            RangedColumnScanT::RangedColumnScanU64(column) => {
+                column.current().map(|v| DataValueT::U64(v))
+            }
+            RangedColumnScanT::RangedColumnScanFloat(column) => {
+                column.current().map(|v| DataValueT::Float(v))
+            }
+            RangedColumnScanT::RangedColumnScanDouble(column) => {
+                column.current().map(|v| DataValueT::Double(v))
+            }
+        }
+    }
+
+    /// Cast to RangedColumnScan with type u64
+    pub fn to_colum_scan_u64(&mut self) -> Option<&mut dyn RangedColumnScan<Item = u64>> {
+        match self {
+            RangedColumnScanT::RangedColumnScanU64(column) => Some(&mut **column),
+            _ => None,
+        }
+    }
+
+    /// Cast to RangedColumnScan with type Float
+    pub fn to_colum_scan_float(&mut self) -> Option<&mut dyn RangedColumnScan<Item = Float>> {
+        match self {
+            RangedColumnScanT::RangedColumnScanFloat(column) => Some(&mut **column),
+            _ => None,
+        }
+    }
+
+    /// Cast to RangedColumnScan with type Double
+    pub fn to_colum_scan_double(&mut self) -> Option<&mut dyn RangedColumnScan<Item = Double>> {
+        match self {
+            RangedColumnScanT::RangedColumnScanDouble(column) => Some(&mut **column),
+            _ => None,
         }
     }
 }
