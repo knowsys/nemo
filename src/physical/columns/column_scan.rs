@@ -1,3 +1,4 @@
+use crate::physical::datatypes::{Double, Float};
 use std::fmt::Debug;
 
 /// Iterator for a column of ordered values.
@@ -9,4 +10,15 @@ pub trait ColumnScan: Debug + Iterator {
 
     /// Return the value at the current position, if any.
     fn current(&mut self) -> Option<Self::Item>;
+}
+
+/// Enum for column scans for all the supported types
+#[derive(Debug)]
+pub enum ColumnScanT<'a> {
+    /// Case Column<u64>
+    ColumnScanU64(Box<dyn ColumnScan<Item = u64> + 'a>),
+    /// Case Column<Float>
+    ColumnScanFloat(Box<dyn ColumnScan<Item = Float> + 'a>),
+    /// Case Column<Double>
+    ColumnScanDouble(Box<dyn ColumnScan<Item = Double> + 'a>),
 }

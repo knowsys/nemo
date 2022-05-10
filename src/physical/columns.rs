@@ -20,6 +20,7 @@ pub use adaptive_column_builder::AdaptiveColumnBuilder;
 /// Module for defining [`ColumnScan`]
 pub mod column_scan;
 pub use column_scan::ColumnScan;
+pub use column_scan::ColumnScanT;
 
 /// Module for defining [`RangedColumnScan`]
 pub mod ranged_column_scan;
