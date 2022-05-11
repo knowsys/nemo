@@ -1,5 +1,6 @@
 use super::{ColumnScan, RangedColumnScan};
 use std::fmt::Debug;
+use std::ops::Range;
 
 /// Implementation of [`ColumnScan`] for the result of joining a list of [`ColumnScan`] structs.
 #[derive(Debug)]
@@ -74,6 +75,19 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for OrderedMergeJoin<'a, T> {
 
     fn current(&mut self) -> Option<T> {
         self.current
+    }
+}
+
+impl<'a, T: Ord + Copy + Debug> RangedColumnScan for OrderedMergeJoin<'a, T> {
+    fn pos(&self) -> Option<usize> {
+        unimplemented!(
+            "These function only exists because RangedColumnScans cannnot be ColumnScans"
+        );
+    }
+    fn narrow(&mut self, _interval: Range<usize>) {
+        unimplemented!(
+            "These function only exists because RangedColumnScans cannnot be ColumnScans"
+        );
     }
 }
 
