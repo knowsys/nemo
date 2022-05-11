@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
 use stage2::physical::columns::{Column, ColumnScan, GenericColumnScan, RleColumn, VectorColumn};
@@ -55,7 +55,7 @@ pub fn benchmark_seek(c: &mut Criterion) {
         b.iter_with_setup(
             || vec_col_handcrafted.iter(),
             |mut rcs| {
-                rcs.seek(650000);
+                rcs.seek(black_box(650000));
             },
         )
     });
@@ -64,7 +64,7 @@ pub fn benchmark_seek(c: &mut Criterion) {
         b.iter_with_setup(
             || rle_col_handcrafted.iter(),
             |mut rcs| {
-                rcs.seek(650000);
+                rcs.seek(black_box(650000));
             },
         )
     });
