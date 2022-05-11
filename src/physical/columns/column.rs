@@ -1,4 +1,4 @@
-use super::ColumnScan;
+use super::RangedColumnScan;
 use crate::physical::datatypes::{DataValueT, Double, Float};
 use std::fmt::Debug;
 
@@ -19,7 +19,7 @@ pub trait Column<T>: Debug {
     fn get(&self, index: usize) -> T;
 
     /// Returns an iterator for this column.
-    fn iter<'a>(&'a self) -> Box<dyn ColumnScan<Item = T> + 'a>;
+    fn iter<'a>(&'a self) -> Box<dyn RangedColumnScan<Item = T> + 'a>;
 }
 
 /// Enum for columns of all supported basic types.

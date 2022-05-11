@@ -1,11 +1,11 @@
-use super::{Column, ColumnBuilder, ColumnScan};
+use super::{Column, ColumnBuilder, ColumnScan, RangedColumnScan};
 use crate::physical::datatypes::{Field, FloorToUsize, Ring};
 use num::Zero;
 use std::{
     fmt::Debug,
     iter::repeat,
     num::NonZeroUsize,
-    ops::{Add, Mul},
+    ops::{Add, Mul, Range},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -335,7 +335,7 @@ where
         }
     }
 
-    fn iter<'a>(&'a self) -> Box<dyn ColumnScan<Item = T> + 'a> {
+    fn iter<'a>(&'a self) -> Box<dyn RangedColumnScan<Item = T> + 'a> {
         Box::new(RleColumnScan::new(self))
     }
 }
@@ -521,6 +521,19 @@ where
 
     fn current(&mut self) -> Option<Self::Item> {
         self.current
+    }
+}
+
+impl<'a, T> RangedColumnScan for RleColumnScan<'a, T>
+where
+    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+{
+    fn pos(&self) -> Option<usize> {
+        unimplemented!("RleColumnScan does not support intervals for now");
+    }
+
+    fn narrow(&mut self, _interval: Range<usize>) {
+        unimplemented!("RleColumnScan does not support intervals for now");
     }
 }
 

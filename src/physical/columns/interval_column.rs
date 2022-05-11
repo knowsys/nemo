@@ -1,6 +1,7 @@
 use super::Column;
 use crate::physical::datatypes::{Double, Float};
 use std::fmt::Debug;
+use std::ops::Range;
 
 /// Column of values that are grouped into numbered intervals.
 pub trait IntervalColumn<T>: Debug + Column<T> {
@@ -12,7 +13,7 @@ pub trait IntervalColumn<T>: Debug + Column<T> {
     ///
     /// # Panics
     /// Panics if `int_idx` is out of bounds.
-    fn int_bounds(&self, int_idx: usize) -> (usize, usize);
+    fn int_bounds(&self, int_idx: usize) -> Range<usize>;
 }
 
 /// Enum for columns of all supported basic types.
@@ -36,12 +37,30 @@ impl IntervalColumnT {
         }
     }
 
+    /// Return the number of elements in the column.
+    pub fn len(&self) -> usize {
+        match self {
+            IntervalColumnT::IntervalColumnU64(col) => col.len(),
+            IntervalColumnT::IntervalColumnFloat(col) => col.len(),
+            IntervalColumnT::IntervalColumnDouble(col) => col.len(),
+        }
+    }
+
+    /// Return whether the column is empty
+    pub fn is_empty(&self) -> bool {
+        match self {
+            IntervalColumnT::IntervalColumnU64(col) => col.is_empty(),
+            IntervalColumnT::IntervalColumnFloat(col) => col.is_empty(),
+            IntervalColumnT::IntervalColumnDouble(col) => col.is_empty(),
+        }
+    }
+
     /// Returns the smallest and largest index of the interval with the given
     /// index.
     ///
     /// # Panics
     /// Panics if `int_idx` is out of bounds.
-    pub fn int_bounds(&self, int_idx: usize) -> (usize, usize) {
+    pub fn int_bounds(&self, int_idx: usize) -> Range<usize> {
         match self {
             IntervalColumnT::IntervalColumnU64(col) => col.int_bounds(int_idx),
             IntervalColumnT::IntervalColumnFloat(col) => col.int_bounds(int_idx),

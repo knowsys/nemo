@@ -31,17 +31,17 @@ impl Ftrie {
         }
 
         let bounds = if col_idx == usize::MAX {
-            (0, 0)
+            0..1
         } else {
             self.columns[col_idx].int_bounds(int_idx)
         };
 
         if children.is_empty() {
-            return bounds.1 - bounds.0 + 1;
+            return bounds.end - bounds.start;
         }
 
         let mut sum = 0;
-        for i in bounds.0..=bounds.1 {
+        for i in bounds {
             let mut product = 1;
             for cidx in children.iter() {
                 product *= self.count_rows(*cidx, i);
@@ -70,20 +70,9 @@ impl Table for Ftrie {
 mod test {
     use super::super::{FTableSchema, Table};
     use super::Ftrie;
-    use crate::physical::columns::{GenericIntervalColumn, IntervalColumnT, VectorColumn};
     use crate::physical::datatypes::DataTypeName;
+    use crate::physical::util::test_util::make_gict;
     use test_log::test;
-
-    fn make_gic(values: &[u64], ints: &[usize]) -> GenericIntervalColumn<u64> {
-        GenericIntervalColumn::new(
-            Box::new(VectorColumn::new(values.to_vec())),
-            Box::new(VectorColumn::new(ints.to_vec())),
-        )
-    }
-
-    fn make_gict(values: &[u64], ints: &[usize]) -> IntervalColumnT {
-        IntervalColumnT::IntervalColumnU64(Box::new(make_gic(values, ints)))
-    }
 
     #[test]
     fn test_count_rows_linear() {

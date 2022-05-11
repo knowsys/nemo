@@ -1,4 +1,4 @@
-use super::{Column, ColumnScan, MaterialColumnScan};
+use super::{Column, ColumnScan, RangedColumnScan};
 use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
@@ -32,14 +32,6 @@ impl<'a, T> GenericColumnScan<'a, T> {
         };
         result.validate_interval();
         result
-    }
-
-    /// Restricts the iterator to the given `interval`.
-    pub fn narrow(&mut self, interval: Range<usize>) -> &mut Self {
-        self.interval = interval;
-        self.pos = None;
-        self.validate_interval();
-        self
     }
 
     fn validate_interval(&self) {
@@ -83,6 +75,7 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
         let pos = self.pos.get_or_insert(0);
         let mut lower = *pos;
         let mut upper = self.column.len() - 1;
+
         // check if position is out of bounds
         if *pos > upper {
             return None;
@@ -97,6 +90,7 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
             *pos = lower;
             return Some(self.column.get(*pos));
         }
+
         // do binary search till interval is small enough to be scanned
         while upper - lower >= Self::SEEK_BINARY_SEARCH {
             let mid = (lower + upper) / 2;
@@ -126,17 +120,23 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> MaterialColumnScan for GenericColumnScan<'a, T> {
-    fn pos(&mut self) -> Option<usize> {
+impl<'a, T: Ord + Copy + Debug> RangedColumnScan for GenericColumnScan<'a, T> {
+    fn pos(&self) -> Option<usize> {
         self.pos
             .and_then(|pos| (pos < self.interval.end).then(|| pos))
+    }
+
+    fn narrow(&mut self, interval: Range<usize>) {
+        self.interval = interval;
+        self.pos = None;
+        self.validate_interval();
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::super::VectorColumn;
-    use super::{ColumnScan, GenericColumnScan, MaterialColumnScan}; // < TODO: is this a nice way to write this use?
+    use super::{ColumnScan, GenericColumnScan, RangedColumnScan}; // < TODO: is this a nice way to write this use?
     use test_log::test;
 
     fn get_test_column() -> VectorColumn<u64> {
@@ -220,7 +220,8 @@ mod test {
     fn u64_narrow_and_widen() {
         let test_column = get_test_column();
         let mut gcs = GenericColumnScan::new(&test_column);
-        gcs.narrow(1..1).widen();
+        gcs.narrow(1..1);
+        gcs.widen();
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
         let mut gcs = GenericColumnScan::new(&test_column);
         gcs.widen().narrow(1..2);
