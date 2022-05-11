@@ -2,12 +2,8 @@ use super::Column;
 use super::ColumnBuilder;
 use super::RleColumnBuilder;
 use super::VectorColumn;
-use num::Zero;
-use std::{
-    fmt::Debug,
-    iter::Sum,
-    ops::{Add, Mul, Sub},
-};
+use crate::physical::datatypes::{Field, FloorToUsize};
+use std::fmt::Debug;
 
 // Number of rle elements in rle column builder after which to decide which column type to use.
 const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5;
@@ -37,16 +33,7 @@ pub struct AdaptiveColumnBuilder<T> {
 
 impl<T> AdaptiveColumnBuilder<T>
 where
-    T: Debug
-        + Copy
-        + TryFrom<usize>
-        + Ord
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Default
-        + Sum
-        + Zero,
+    T: Debug + Copy + TryFrom<usize> + Ord + Default + Field + FloorToUsize,
 {
     /// Constructor.
     pub fn new() -> AdaptiveColumnBuilder<T> {
@@ -57,7 +44,9 @@ where
 
     fn decide_column_type(&mut self) {
         if let ColumnBuilderType::Undecided(rle_builder_opt) = &mut self.builder {
-            let rle_builder = rle_builder_opt.take().unwrap();
+            let rle_builder = rle_builder_opt
+                .take()
+                .expect("this is only None from this take() call until the end of this method");
 
             if rle_builder.avg_length_of_rle_elements() > TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS {
                 self.builder = ColumnBuilderType::RleColumn(rle_builder);
@@ -71,17 +60,7 @@ where
 
 impl<'a, T> ColumnBuilder<'a, T> for AdaptiveColumnBuilder<T>
 where
-    T: 'a
-        + Debug
-        + Copy
-        + TryFrom<usize>
-        + Ord
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Default
-        + Sum
-        + Zero,
+    T: 'a + Debug + Copy + TryFrom<usize> + Ord + Default + Field + FloorToUsize,
 {
     fn add(&mut self, value: T) {
         if let ColumnBuilderType::Undecided(Some(rle_builder)) = &self.builder {

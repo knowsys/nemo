@@ -1,10 +1,11 @@
 use super::{Column, ColumnBuilder, ColumnScan, RangedColumnScan};
+use crate::physical::datatypes::{Field, FloorToUsize, Ring};
 use num::Zero;
 use std::{
     fmt::Debug,
-    iter::{repeat, Sum},
+    iter::repeat,
     num::NonZeroUsize,
-    ops::{Add, Mul, Range, Sub},
+    ops::{Add, Mul, Range},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -26,20 +27,26 @@ where
 
 impl<T> Step<T>
 where
-    T: Copy + Ord + Add<Output = T> + Sub<Output = T>,
+    T: Copy + Ord + Ring,
 {
-    fn from_two_values(previous_value: T, next_value: T) -> Self {
+    // returns None if the computed diff does not allow the computation of the original value
+    // (may happen for floating point numbers)
+    fn from_two_values(previous_value: T, next_value: T) -> Option<Self> {
         if next_value < previous_value {
-            Self::Decrement(previous_value - next_value)
+            let diff = previous_value - next_value;
+
+            (next_value == previous_value - diff).then(|| Self::Decrement(diff))
         } else {
-            Self::Increment(next_value - previous_value)
+            let diff = next_value - previous_value;
+
+            (next_value == previous_value + diff).then(|| Self::Increment(diff))
         }
     }
 }
 
 impl<T> Add<T> for Step<T>
 where
-    T: Add<Output = T> + Sub<Output = T>,
+    T: Ring,
 {
     type Output = T;
 
@@ -53,7 +60,7 @@ where
 
 impl<T> Add for Step<T>
 where
-    T: Ord + Add<Output = T> + Sub<Output = T>,
+    T: Ord + Ring,
 {
     type Output = Self;
 
@@ -85,7 +92,7 @@ where
 
 impl<T> Mul<usize> for Step<T>
 where
-    T: Copy + TryFrom<usize> + Sum + Mul<Output = T>,
+    T: Copy + TryFrom<usize> + Ring,
 {
     type Output = Self;
 
@@ -110,7 +117,7 @@ where
 
 impl<T> Zero for Step<T>
 where
-    T: Zero + Ord + Sub<Output = T>,
+    T: Zero + Ord + Ring,
 {
     fn zero() -> Self {
         Self::Increment(T::zero())
@@ -129,32 +136,6 @@ struct RleElement<T> {
     value: T,
     length: NonZeroUsize,
     increment: Step<T>,
-}
-
-impl<T> RleElement<T>
-where
-    T: Copy
-        + Ord
-        + TryFrom<usize>
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Sum
-        + Zero,
-{
-    fn get(&self, index: usize) -> T {
-        if index >= self.length.get() {
-            panic!("IndexOutOfBounds in rle value computation.");
-        }
-
-        if self.increment.is_zero() {
-            return self.value;
-        }
-
-        let total_increment = self.increment * index;
-
-        total_increment + self.value
-    }
 }
 
 /// Implementation of [`ColumnBuilder`] that allows the use of incremental run length encoding.
@@ -176,16 +157,7 @@ impl<T> RleColumnBuilder<T> {
 
 impl<T> RleColumnBuilder<T>
 where
-    T: Debug
-        + Copy
-        + Ord
-        + TryFrom<usize>
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Default
-        + Sum
-        + Zero,
+    T: Debug + Copy + Ord + TryFrom<usize> + Default + Field + FloorToUsize,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
@@ -208,17 +180,7 @@ where
 
 impl<'a, T> ColumnBuilder<'a, T> for RleColumnBuilder<T>
 where
-    T: 'a
-        + Copy
-        + Ord
-        + TryFrom<usize>
-        + Debug
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Default
-        + Sum
-        + Zero,
+    T: 'a + Copy + Ord + TryFrom<usize> + Debug + Default + Field + FloorToUsize,
 {
     fn add(&mut self, value: T) {
         let current_value = value;
@@ -226,7 +188,7 @@ where
         if self.elements.is_empty() {
             self.elements.push(RleElement {
                 value: current_value,
-                length: NonZeroUsize::new(1).unwrap(),
+                length: NonZeroUsize::new(1).expect("1 is non-zero"),
                 increment: Default::default(),
             });
 
@@ -235,21 +197,38 @@ where
             return;
         }
 
-        let previous_value = self.previous_value_opt.unwrap();
-        let last_element = self.elements.last_mut().unwrap();
+        let previous_value = self
+            .previous_value_opt
+            .expect("if the elements are not empty, then there is also a previous value");
+        let last_element = self
+            .elements
+            .last_mut()
+            .expect("if the elements are not empty, then there is a last one");
         let current_increment = Step::from_two_values(previous_value, current_value);
 
-        if last_element.length == NonZeroUsize::new(1).unwrap() {
-            last_element.length = NonZeroUsize::new(2).unwrap();
-            last_element.increment = current_increment;
-        } else if last_element.increment == current_increment {
-            last_element.length = NonZeroUsize::new(last_element.length.get() + 1).unwrap();
-        } else {
-            self.elements.push(RleElement {
-                value: current_value,
-                length: NonZeroUsize::new(1).unwrap(),
-                increment: Default::default(),
-            });
+        match current_increment {
+            Some(cur_inc) => {
+                if last_element.length == NonZeroUsize::new(1).expect("1 is non-zero") {
+                    last_element.length = NonZeroUsize::new(2).expect("2 is non-zero");
+                    last_element.increment = cur_inc;
+                } else if last_element.increment == cur_inc {
+                    last_element.length = NonZeroUsize::new(last_element.length.get() + 1)
+                        .expect("usize + 1 is non-zero");
+                } else {
+                    self.elements.push(RleElement {
+                        value: current_value,
+                        length: NonZeroUsize::new(1).expect("1 is non-zero"),
+                        increment: Default::default(),
+                    });
+                }
+            }
+            None => {
+                self.elements.push(RleElement {
+                    value: current_value,
+                    length: NonZeroUsize::new(1).expect("1 is non-zero"),
+                    increment: Default::default(),
+                });
+            }
         }
 
         self.previous_value_opt = Some(current_value);
@@ -263,25 +242,37 @@ where
 /// Implementation of [`Column`] that allows the use of incremental run length encoding.
 #[derive(Debug, PartialEq)]
 pub struct RleColumn<T> {
-    elements: Vec<RleElement<T>>,
+    values: Vec<T>,
+    end_indices: Vec<NonZeroUsize>,
+    increments: Vec<Step<T>>,
 }
 
 impl<T> RleColumn<T>
 where
-    T: Debug
-        + Copy
-        + Ord
-        + TryFrom<usize>
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Default
-        + Sum
-        + Zero,
+    T: Debug + Copy + Ord + TryFrom<usize> + Default + Field + FloorToUsize,
 {
     /// Constructs a new RleColumn from a vector of RleElements.
     fn from_rle_elements(elements: Vec<RleElement<T>>) -> RleColumn<T> {
-        RleColumn { elements }
+        let mut values: Vec<T> = vec![];
+        let mut end_indices: Vec<NonZeroUsize> = vec![];
+        let mut increments: Vec<Step<T>> = vec![];
+
+        elements.iter().for_each(|e| {
+            values.push(e.value);
+            end_indices.push(
+                NonZeroUsize::new(
+                    end_indices.last().map(|nzusize| nzusize.get()).unwrap_or(0) + e.length.get(),
+                )
+                .expect("usize is >= 0 and e.length is always > 0"),
+            );
+            increments.push(e.increment);
+        });
+
+        RleColumn {
+            values,
+            end_indices,
+            increments,
+        }
     }
 
     /// Constructs a new RleColumn from a vector of the suitable type.
@@ -297,32 +288,51 @@ where
 
 impl<T> Column<T> for RleColumn<T>
 where
-    T: Debug
-        + Copy
-        + Ord
-        + TryFrom<usize>
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Sum
-        + Zero,
+    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
 {
     fn len(&self) -> usize {
-        self.elements.iter().map(|e| e.length.get()).sum()
+        self.end_indices
+            .last()
+            .map(|nzusize| nzusize.get())
+            .unwrap_or(0)
     }
 
     fn is_empty(&self) -> bool {
-        self.elements.is_empty()
+        self.values.is_empty()
     }
 
     fn get(&self, index: usize) -> T {
-        let mut target_index = index;
-        let mut element_index = 0;
-        while target_index >= self.elements[element_index].length.get() {
-            target_index -= self.elements[element_index].length.get();
-            element_index += 1;
+        let target_index_in_datastructure = if index == 0 {
+            0
+        } else {
+            self.end_indices
+                .binary_search(
+                    &NonZeroUsize::new(index)
+                        .expect("index is > 0 in this branch of the condition"),
+                )
+                .map(|i| i + 1)
+                .unwrap_or_else(|i| i)
+        };
+
+        let remainder = index
+            - target_index_in_datastructure
+                .checked_sub(1)
+                .map(|i| self.end_indices[i].get())
+                .unwrap_or(0);
+        let value = self.values[target_index_in_datastructure];
+        let increment = self.increments[target_index_in_datastructure];
+
+        if increment.is_zero() {
+            return value;
         }
-        self.elements[element_index].get(target_index)
+
+        // explicit check for zero since increment may be Infinity for floating point types
+        // (and Infinity * 0 produces NaN)
+        if remainder == 0 {
+            value
+        } else {
+            increment * remainder + value
+        }
     }
 
     fn iter<'a>(&'a self) -> Box<dyn RangedColumnScan<Item = T> + 'a> {
@@ -351,7 +361,7 @@ impl<'a, T> RleColumnScan<'a, T> {
 
 impl<'a, T> Iterator for RleColumnScan<'a, T>
 where
-    T: Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    T: Copy + Ord + TryFrom<usize> + Ring,
 {
     type Item = T;
 
@@ -361,8 +371,13 @@ where
             .increment_index
             .map_or_else(Default::default, |i| i + 1);
 
-        if element_index < self.column.elements.len()
-            && increment_index >= self.column.elements[element_index].length.get()
+        if element_index < self.column.values.len()
+            && increment_index
+                >= self.column.end_indices[element_index].get()
+                    - element_index
+                        .checked_sub(1)
+                        .map(|i| self.column.end_indices[i].get())
+                        .unwrap_or(0)
         {
             element_index += 1;
             increment_index = 0;
@@ -371,15 +386,15 @@ where
         self.element_index = Some(element_index);
         self.increment_index = Some(increment_index);
 
-        self.current = (element_index < self.column.elements.len()).then(|| {
+        self.current = (element_index < self.column.values.len()).then(|| {
             if increment_index == 0 {
-                self.column.elements[element_index].value
+                self.column.values[element_index]
             } else {
                 let current = self
                     .current
                     .expect("after the first iteration the current value is always set");
 
-                self.column.elements[element_index].increment + current
+                self.column.increments[element_index] + current
             }
         });
 
@@ -389,13 +404,113 @@ where
 
 impl<'a, T> ColumnScan for RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.
+    /// If multiple candidates exist, the iterator should be advanced to the first such value.
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
-        // could we assume a sorted column here?
-        // for now we don't
+        // seek only works correctly if column is sorted; we are just checking this here
+        debug_assert!(
+            self.column.is_empty()
+                || self
+                    .column
+                    .iter()
+                    .take(self.column.len() - 1)
+                    .zip(self.column.iter().skip(1))
+                    .all(|pair| pair.0 <= pair.1)
+        );
+
+        if self.column.values.is_empty() {
+            return None;
+        }
+
+        let current_element_index = self.element_index.unwrap_or_default();
+        let current_increment_index = self.increment_index.unwrap_or_default();
+
+        // it is possible that the last element of the matching_element_index - 1 -th element
+        // holds the same value as the matching element; in this case, we want to position the
+        // iterator on that element;
+        // hence we subtract 1 in any case
+        let bin_search_element_index = self.column.values[current_element_index..]
+            .binary_search(&value)
+            .unwrap_or_else(|err| err)
+            .saturating_sub(1)
+            + current_element_index;
+
+        let mut seek_element_index: usize = bin_search_element_index;
+        let mut seek_increment_index: usize;
+
+        let start_value = self.column.values[bin_search_element_index];
+        let inc = self.column.increments[bin_search_element_index];
+
+        if let Step::Increment(inc) = inc {
+            if value <= start_value {
+                seek_element_index = bin_search_element_index;
+                seek_increment_index = 0;
+            } else if inc.is_zero() {
+                seek_element_index = bin_search_element_index + 1;
+                seek_increment_index = 0;
+            } else {
+                seek_increment_index = ((value - start_value) / inc)
+                    .floor_to_usize()
+                    .unwrap_or_default();
+
+                if bin_search_element_index
+                    .checked_sub(1)
+                    .and_then(|el_idx| self.column.end_indices.get(el_idx))
+                    .map(|nzu| nzu.get())
+                    .unwrap_or(0)
+                    + seek_increment_index
+                    >= self.column.end_indices[bin_search_element_index].get()
+                {
+                    seek_element_index = bin_search_element_index + 1;
+                    seek_increment_index = 0;
+                }
+            }
+        } else {
+            panic!("if the column is sorted all increments are positive")
+        };
+
+        if seek_element_index > current_element_index
+            || (seek_element_index == current_increment_index
+                && seek_increment_index > current_increment_index)
+        {
+            self.element_index = Some(seek_element_index);
+            self.increment_index = Some(seek_increment_index);
+        } else {
+            self.element_index = Some(current_element_index);
+            self.increment_index = Some(current_increment_index);
+        }
+
+        self.current = if self
+            .element_index
+            .expect("This is just set a few lines above.")
+            >= self.column.values.len()
+        {
+            None
+        } else {
+            Some(
+                self.column.get(
+                    self.element_index
+                        .expect("This is just set a few lines above.")
+                        .checked_sub(1)
+                        .and_then(|el_idx| self.column.end_indices.get(el_idx))
+                        .map(|nzu| nzu.get())
+                        .unwrap_or(0)
+                        + self
+                            .increment_index
+                            .expect("This is just set a few lines above."),
+                ),
+            )
+        };
+
+        if let Some(cur) = self.current {
+            if cur >= value {
+                return Some(cur);
+            }
+        }
+
         for next in self {
             if next >= value {
                 return Some(next);
@@ -411,7 +526,7 @@ where
 
 impl<'a, T> RangedColumnScan for RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
 {
     fn pos(&self) -> Option<usize> {
         unimplemented!("RleColumnScan does not support intervals for now");
@@ -424,7 +539,10 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::{Column, RleColumn, RleElement, Step};
+    use super::{Column, RleColumn, Step};
+    use crate::physical::datatypes::{Double, Float};
+    use num::Zero;
+    use quickcheck_macros::quickcheck;
     use std::iter::repeat;
     use std::num::NonZeroUsize;
     use test_log::test;
@@ -435,54 +553,36 @@ mod test {
 
     fn get_test_column_i64() -> RleColumn<i64> {
         RleColumn {
-            elements: vec![
-                RleElement {
-                    value: 2,
-                    length: NonZeroUsize::new(2).unwrap(),
-                    increment: Step::Increment(3),
-                },
-                RleElement {
-                    value: 6,
-                    length: NonZeroUsize::new(3).unwrap(),
-                    increment: Step::Increment(1),
-                },
-                RleElement {
-                    value: 42,
-                    length: NonZeroUsize::new(2).unwrap(),
-                    increment: Step::Decrement(38),
-                },
-                RleElement {
-                    value: 7,
-                    length: NonZeroUsize::new(4).unwrap(),
-                    increment: Step::Increment(3),
-                },
+            values: vec![2, 6, 42, 7],
+            end_indices: vec![
+                NonZeroUsize::new(2).unwrap(),
+                NonZeroUsize::new(5).unwrap(),
+                NonZeroUsize::new(7).unwrap(),
+                NonZeroUsize::new(11).unwrap(),
+            ],
+            increments: vec![
+                Step::Increment(3),
+                Step::Increment(1),
+                Step::Decrement(38),
+                Step::Increment(3),
             ],
         }
     }
 
     fn get_test_column_u32() -> RleColumn<u32> {
         RleColumn {
-            elements: vec![
-                RleElement {
-                    value: 2,
-                    length: NonZeroUsize::new(2).unwrap(),
-                    increment: Step::Increment(3),
-                },
-                RleElement {
-                    value: 6,
-                    length: NonZeroUsize::new(3).unwrap(),
-                    increment: Step::Increment(1),
-                },
-                RleElement {
-                    value: 42,
-                    length: NonZeroUsize::new(2).unwrap(),
-                    increment: Step::Decrement(38),
-                },
-                RleElement {
-                    value: 7,
-                    length: NonZeroUsize::new(4).unwrap(),
-                    increment: Step::Increment(3),
-                },
+            values: vec![2, 6, 42, 7],
+            end_indices: vec![
+                NonZeroUsize::new(2).unwrap(),
+                NonZeroUsize::new(5).unwrap(),
+                NonZeroUsize::new(7).unwrap(),
+                NonZeroUsize::new(11).unwrap(),
+            ],
+            increments: vec![
+                Step::Increment(3),
+                Step::Increment(1),
+                Step::Decrement(38),
+                Step::Increment(3),
             ],
         }
     }
@@ -493,11 +593,9 @@ mod test {
 
     fn get_test_column_with_inc_zero() -> RleColumn<u8> {
         RleColumn {
-            elements: vec![RleElement {
-                value: 1,
-                length: NonZeroUsize::new(1000000).unwrap(),
-                increment: Step::Increment(0),
-            }],
+            values: vec![1],
+            end_indices: vec![NonZeroUsize::new(1000000).unwrap()],
+            increments: vec![Step::zero()],
         }
     }
 
@@ -533,7 +631,11 @@ mod test {
         let c: RleColumn<i64> = get_test_column_i64();
         assert!(!c.is_empty());
 
-        let c_empty: RleColumn<i64> = RleColumn { elements: vec![] };
+        let c_empty: RleColumn<i64> = RleColumn {
+            values: vec![],
+            end_indices: vec![],
+            increments: vec![],
+        };
         assert!(c_empty.is_empty());
     }
 
@@ -566,6 +668,36 @@ mod test {
             .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
     }
 
+    #[quickcheck]
+    fn get_quickcheck_u64(raw_data: Vec<u64>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        raw_data
+            .iter()
+            .enumerate()
+            .all(|(i, control_item)| col.get(i) == *control_item)
+    }
+
+    #[quickcheck]
+    fn get_quickcheck_float(raw_data: Vec<Float>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        raw_data
+            .iter()
+            .enumerate()
+            .all(|(i, control_item)| col.get(i) == *control_item)
+    }
+
+    #[quickcheck]
+    fn get_quickcheck_double(raw_data: Vec<Double>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        raw_data
+            .iter()
+            .enumerate()
+            .all(|(i, control_item)| col.get(i) == *control_item)
+    }
+
     #[test]
     fn iter() {
         let control_data: Vec<i64> = get_control_data();
@@ -573,5 +705,95 @@ mod test {
 
         let iterated_c: Vec<i64> = c.iter().collect();
         assert_eq!(iterated_c, control_data);
+    }
+
+    #[quickcheck]
+    fn iter_quickcheck_u64(raw_data: Vec<u64>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        let iterated_col: Vec<u64> = col.iter().collect();
+        iterated_col == raw_data
+    }
+
+    #[quickcheck]
+    fn iter_quickcheck_float(raw_data: Vec<Float>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        let iterated_col: Vec<Float> = col.iter().collect();
+        iterated_col == raw_data
+    }
+
+    #[quickcheck]
+    fn iter_quickcheck_double(raw_data: Vec<Double>) -> bool {
+        let col = RleColumn::new(raw_data.clone());
+
+        let iterated_col: Vec<Double> = col.iter().collect();
+        iterated_col == raw_data
+    }
+
+    #[test]
+    fn seek() {
+        let seek_test_col = RleColumn {
+            values: vec![2, 22],
+            end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
+            increments: vec![Step::Increment(5), Step::Increment(1)],
+        };
+
+        let mut iter = seek_test_col.iter();
+        iter.seek(10);
+
+        assert_eq!(iter.current().unwrap(), 12);
+
+        let mut iter = seek_test_col.iter();
+        iter.seek(22);
+
+        assert_eq!(iter.current().unwrap(), 22);
+
+        let mut iter = seek_test_col.iter();
+        iter.seek(28);
+
+        assert_eq!(iter.current(), None);
+    }
+
+    #[quickcheck]
+    fn seek_quickcheck_u64(mut raw_data: Vec<u64>, target: u64) -> bool {
+        raw_data.sort_unstable();
+
+        let expected_output = raw_data
+            .get(raw_data.binary_search(&target).unwrap_or_else(|err| err))
+            .copied();
+
+        let col = RleColumn::new(raw_data);
+        let seek_result = col.iter().seek(target);
+
+        seek_result == expected_output
+    }
+
+    #[quickcheck]
+    fn seek_quickcheck_float(mut raw_data: Vec<Float>, target: Float) -> bool {
+        raw_data.sort();
+
+        let expected_output = raw_data
+            .get(raw_data.binary_search(&target).unwrap_or_else(|err| err))
+            .copied();
+
+        let col = RleColumn::new(raw_data);
+        let seek_result = col.iter().seek(target);
+
+        seek_result == expected_output
+    }
+
+    #[quickcheck]
+    fn seek_quickcheck_double(mut raw_data: Vec<Double>, target: Double) -> bool {
+        raw_data.sort();
+
+        let expected_output = raw_data
+            .get(raw_data.binary_search(&target).unwrap_or_else(|err| err))
+            .copied();
+
+        let col = RleColumn::new(raw_data);
+        let seek_result = col.iter().seek(target);
+
+        seek_result == expected_output
     }
 }
