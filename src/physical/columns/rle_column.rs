@@ -310,10 +310,8 @@ where
                     &NonZeroUsize::new(index)
                         .expect("index is > 0 in this branch of the condition"),
                 )
-                .map(Some) // match return type of checked_sub in next line
-                .unwrap_or_else(|i| i.checked_sub(1))
                 .map(|i| i + 1)
-                .unwrap_or(0)
+                .unwrap_or_else(|i| i)
         };
 
         let remainder = index
