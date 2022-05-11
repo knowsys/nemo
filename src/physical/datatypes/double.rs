@@ -1,11 +1,11 @@
 use super::{FloatIsNaN, FloorToUsize};
 use crate::error::Error;
 use num::FromPrimitive;
-use num::Zero;
+use num::{One, Zero};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
-use std::iter::Sum;
+use std::iter::{Product, Sum};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 #[cfg(test)]
@@ -151,12 +151,31 @@ impl Zero for Double {
     }
 }
 
+impl One for Double {
+    fn one() -> Self {
+        Double::from_number(f64::one())
+    }
+
+    fn is_one(&self) -> bool {
+        self.0.is_one()
+    }
+}
+
 impl Sum for Double {
     fn sum<I>(iter: I) -> Self
     where
         I: Iterator<Item = Self>,
     {
         Double::from_number(iter.map(|f| f.0).sum())
+    }
+}
+
+impl Product for Double {
+    fn product<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        Double::from_number(iter.map(|f| f.0).product())
     }
 }
 

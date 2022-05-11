@@ -1,11 +1,16 @@
-use num::Zero;
+use num::{One, Zero};
 use std::{
-    iter::Sum,
+    iter::{Product, Sum},
     ops::{Add, Mul, Sub},
 };
 
-/// Trait representing commutative rings (summarizes various arithmetic traits for brevity)
-pub trait Ring: Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + Sum + Zero {}
+/// Trait representing rings (summarizes various arithmetic traits for brevity)
+pub trait Ring:
+    Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + Sum + Product + Zero + One
+{
+}
 
-impl<T> Ring for T where T: Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + Sum + Zero
-{}
+impl<T> Ring for T where
+    T: Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + Sum + Product + Zero + One
+{
+}
