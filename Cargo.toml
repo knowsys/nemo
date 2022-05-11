@@ -19,6 +19,7 @@ rand = "0.8"
 rand_pcg = "0.3"
 quickcheck = "1"
 quickcheck_macros = "1"
+arbitrary = { version = "1", features = ["derive"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 iai = "0.1" # needs valgrind -> unix only
