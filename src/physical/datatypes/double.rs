@@ -1,12 +1,15 @@
-use super::FloatIsNaN;
+use super::{FloatIsNaN, FloorToUsize};
 use crate::error::Error;
 use num::FromPrimitive;
-use num::Zero;
+use num::{One, Zero};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
-use std::iter::Sum;
-use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
+use std::iter::{Product, Sum};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+
+#[cfg(test)]
+use quickcheck::{Arbitrary, Gen};
 
 /// Wrapper for [`f64`] that does not allow [`f64::NAN`] values.
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
@@ -94,6 +97,20 @@ impl MulAssign for Double {
     }
 }
 
+impl Div for Double {
+    type Output = Double;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        Double(self.0.div(rhs.0))
+    }
+}
+
+impl DivAssign for Double {
+    fn div_assign(&mut self, rhs: Self) {
+        (&mut self.0).div_assign(rhs.0)
+    }
+}
+
 impl fmt::Display for Double {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
@@ -134,11 +151,48 @@ impl Zero for Double {
     }
 }
 
+impl One for Double {
+    fn one() -> Self {
+        Double::from_number(f64::one())
+    }
+
+    fn is_one(&self) -> bool {
+        self.0.is_one()
+    }
+}
+
 impl Sum for Double {
     fn sum<I>(iter: I) -> Self
     where
         I: Iterator<Item = Self>,
     {
         Double::from_number(iter.map(|f| f.0).sum())
+    }
+}
+
+impl Product for Double {
+    fn product<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        Double::from_number(iter.map(|f| f.0).product())
+    }
+}
+
+impl FloorToUsize for Double {
+    fn floor_to_usize(self) -> Option<usize> {
+        usize::from_f64(self.0.floor())
+    }
+}
+
+#[cfg(test)]
+impl Arbitrary for Double {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let mut value = f64::arbitrary(g);
+        while value.is_nan() {
+            value = f64::arbitrary(g);
+        }
+
+        Self::from_number(value)
     }
 }
