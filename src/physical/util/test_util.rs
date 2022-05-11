@@ -61,7 +61,7 @@ where
         intervals.push(usize::arbitrary(u)? % max_index);
     }
 
-    intervals.sort();
+    intervals.sort_unstable();
     make_distinct(&mut intervals);
 
     let mut values = Vec::<T>::new();

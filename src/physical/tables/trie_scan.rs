@@ -77,11 +77,6 @@ impl<'a> TrieScan for IntervalTrieScan<'a> {
                     .get_column(next_index)
                     .int_bounds(current_position);
 
-                println!(
-                    "Next_layer_range: {}, {}",
-                    next_layer_range.start, next_layer_range.end
-                );
-
                 self.layers[next_index].narrow(next_layer_range);
 
                 self.current_layer = Some(next_index);

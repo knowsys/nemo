@@ -414,7 +414,7 @@ where
     T: Debug + Copy + Ord + TryFrom<usize> + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
 {
     fn pos(&self) -> Option<usize> {
-        self.element_index
+        unimplemented!("RleColumnScan does not support intervals for now");
     }
 
     fn narrow(&mut self, _interval: Range<usize>) {
