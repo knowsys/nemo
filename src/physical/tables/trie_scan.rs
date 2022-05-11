@@ -1,5 +1,7 @@
 use super::{Table, TableSchema, Trie, TrieSchema};
-use crate::physical::columns::{ColumnScan, IntervalColumnT, RangedColumnScan, RangedColumnScanT};
+use crate::physical::columns::{
+    IntervalColumnT, OrderedMergeJoin, RangedColumnScan, RangedColumnScanT,
+};
 use crate::physical::datatypes::DataTypeName;
 use std::fmt::Debug;
 
@@ -98,6 +100,8 @@ impl<'a> TrieScan for IntervalTrieScan<'a> {
 }
 
 /// Function computing trie join on concrete tries
+/// Probably useless
+/*
 pub fn material_join(
     scans: &mut Vec<&mut IntervalTrieScan>,
     target_schema: &TrieSchema,
@@ -138,13 +142,14 @@ pub fn material_join(
 
     material_join(scans, target_schema, Some(current_variable_index));
 }
+*/
 
 /// Structure resulting from joining a set of tries (given as TrieJoins),
 /// which itself is a TrieJoin that can be used in such a join
 #[derive(Debug)]
 pub struct TrieScanJoin {
     trie_scans: Vec<Box<dyn TrieScan>>,
-    schema: TrieSchema,
+    target_schema: TrieSchema,
 
     current_variable: Option<usize>,
 
@@ -153,9 +158,9 @@ pub struct TrieScanJoin {
 
 impl TrieScanJoin {
     /// Construct new TrieScanJoin object.
-    pub fn new(trie_scans: Vec<Box<dyn TrieScan>>, schema: TrieSchema) -> Self {
+    pub fn new(trie_scans: Vec<Box<dyn TrieScan>>, target_schema: TrieSchema) -> Self {
         let mut variable_to_scan: Vec<Vec<usize>> = vec![];
-        variable_to_scan.resize(schema.arity(), vec![]);
+        variable_to_scan.resize(target_schema.arity(), vec![]);
         for scan_index in 0..trie_scans.len() {
             let current_schema = trie_scans[scan_index].get_schema();
             for entry_index in 0..current_schema.arity() {
@@ -165,7 +170,7 @@ impl TrieScanJoin {
 
         Self {
             trie_scans,
-            schema,
+            target_schema,
             current_variable: None,
             variable_to_scan,
         }
@@ -193,7 +198,7 @@ impl TrieScan for TrieScanJoin {
         let current_variable = self.current_variable.map_or(0, |v| v + 1);
         self.current_variable = Some(current_variable);
 
-        debug_assert!(current_variable < self.schema.arity());
+        debug_assert!(current_variable < self.target_schema.arity());
 
         let current_scans = &self.variable_to_scan[current_variable];
 
@@ -203,11 +208,36 @@ impl TrieScan for TrieScanJoin {
     }
 
     fn current_scan(&mut self) -> Option<&mut RangedColumnScanT> {
-        None
+        debug_assert!(self.current_variable.is_some());
+
+        match self.target_schema.get_type(self.current_variable?) {
+            DataTypeName::U64 => {
+                let mut _column_scans = Vec::<&mut dyn RangedColumnScan<Item = u64>>::new();
+
+                //TODO: Need to decice on the interface of TrieScan
+                //      Should current_scan() return mutable reference?
+                // for scan_index in &self.variable_to_scan[self.current_variable.unwrap()] {
+                //     column_scans.push(
+                //         self.trie_scans.get(*scan_index).unwrap()
+                //             .current_scan()?
+                //             .to_colum_scan_u64()
+                //             .unwrap(),
+                //     );
+                // }
+
+                // TODO: Decide where this lives
+                // Some(&mut RangedColumnScanT::RangedColumnScanU64(Box::new(
+                //     OrderedMergeJoin::new(column_scans),
+                // )))
+                None
+            }
+            DataTypeName::Float => None,
+            DataTypeName::Double => None,
+        }
     }
 
     fn get_schema(&self) -> &dyn TableSchema {
-        &self.schema
+        &self.target_schema
     }
 }
 
@@ -216,12 +246,12 @@ mod test {
     use super::super::trie::{Trie, TrieSchema, TrieSchemaEntry};
     use super::{IntervalTrieScan, TrieScan};
     use crate::physical::columns::RangedColumnScanT;
-    use crate::physical::datatypes::{DataTypeName, DataValueT};
+    use crate::physical::datatypes::DataTypeName;
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
     fn seek_scan(scan: &mut RangedColumnScanT, value: u64) {
-        scan.seek(DataValueT::U64(value));
+        scan.to_colum_scan_u64().unwrap().seek(value);
     }
 
     #[test]
