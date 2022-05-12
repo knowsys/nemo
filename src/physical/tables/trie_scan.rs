@@ -8,7 +8,7 @@ use std::fmt::Debug;
 /// Iterator for the a Trie datastructure.to_colum_scan_u64
 /// Allows for vertical traversal through the tree and can return
 /// its current position as a RangedColumnScanT object.
-pub trait TrieScan: Debug {
+pub trait TrieScan<'a>: Debug {
     /// Return to the upper layer.
     fn up(&mut self);
 
@@ -16,7 +16,7 @@ pub trait TrieScan: Debug {
     fn down(&mut self);
 
     /// Return the current position of the scan as a ranged [`ColumnScan`].
-    fn current_scan(&mut self) -> Option<&mut RangedColumnScanT>;
+    fn current_scan(&'a mut self) -> Option<&'a mut RangedColumnScanT<'a>>;
 
     /// Return the underlying [`TrieSchema`].
     fn get_schema(&self) -> &dyn TableSchema;
@@ -59,7 +59,7 @@ impl<'a> IntervalTrieScan<'a> {
     }
 }
 
-impl<'a> TrieScan for IntervalTrieScan<'a> {
+impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
     fn up(&mut self) {
         self.current_layer = self
             .current_layer
@@ -90,7 +90,7 @@ impl<'a> TrieScan for IntervalTrieScan<'a> {
         }
     }
 
-    fn current_scan(&mut self) -> Option<&'a mut RangedColumnScanT> {
+    fn current_scan(&'a mut self) -> Option<&'a mut RangedColumnScanT<'a>> {
         Some(&mut self.layers[self.current_layer?])
     }
 
@@ -147,18 +147,20 @@ pub fn material_join(
 /// Structure resulting from joining a set of tries (given as TrieJoins),
 /// which itself is a TrieJoin that can be used in such a join
 #[derive(Debug)]
-pub struct TrieScanJoin {
-    trie_scans: Vec<Box<dyn TrieScan>>,
+pub struct TrieScanJoin<'a> {
+    trie_scans: Vec<Box<dyn TrieScan<'a>>>,
     target_schema: TrieSchema,
 
     current_variable: Option<usize>,
 
     variable_to_scan: Vec<Vec<usize>>,
+
+    column_scan_cache: Option<RangedColumnScanT<'a>>,
 }
 
-impl TrieScanJoin {
+impl<'a> TrieScanJoin<'a> {
     /// Construct new TrieScanJoin object.
-    pub fn new(trie_scans: Vec<Box<dyn TrieScan>>, target_schema: TrieSchema) -> Self {
+    pub fn new(trie_scans: Vec<Box<dyn TrieScan<'a>>>, target_schema: TrieSchema) -> Self {
         let mut variable_to_scan: Vec<Vec<usize>> = vec![];
         variable_to_scan.resize(target_schema.arity(), vec![]);
         for scan_index in 0..trie_scans.len() {
@@ -173,11 +175,12 @@ impl TrieScanJoin {
             target_schema,
             current_variable: None,
             variable_to_scan,
+            column_scan_cache: None,
         }
     }
 }
 
-impl TrieScan for TrieScanJoin {
+impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
     fn up(&mut self) {
         debug_assert!(self.current_variable.is_some());
         let current_variable = self.current_variable.unwrap();
@@ -207,29 +210,57 @@ impl TrieScan for TrieScanJoin {
         }
     }
 
-    fn current_scan(&mut self) -> Option<&mut RangedColumnScanT> {
+    fn current_scan(&'a mut self) -> Option<&'a mut RangedColumnScanT<'a>> {
         debug_assert!(self.current_variable.is_some());
 
         match self.target_schema.get_type(self.current_variable?) {
             DataTypeName::U64 => {
-                let mut _column_scans = Vec::<&mut dyn RangedColumnScan<Item = u64>>::new();
+                let mut rest = self.trie_scans.as_mut_slice();
 
-                //TODO: Need to decice on the interface of TrieScan
-                //      Should current_scan() return mutable reference?
-                // for scan_index in &self.variable_to_scan[self.current_variable.unwrap()] {
-                //     column_scans.push(
-                //         self.trie_scans.get(*scan_index).unwrap()
-                //             .current_scan()?
-                //             .to_colum_scan_u64()
-                //             .unwrap(),
-                //     );
-                // }
+                let mut trie_scans: Vec<&mut Box<dyn TrieScan>> = vec![];
 
-                // TODO: Decide where this lives
-                // Some(&mut RangedColumnScanT::RangedColumnScanU64(Box::new(
-                //     OrderedMergeJoin::new(column_scans),
-                // )))
-                None
+                // TODO: make sure that scan indices are sorted; debug_assert probably
+                for scan_index in &self.variable_to_scan[self.current_variable.unwrap()] {
+                    let (_left, middle) = rest.split_at_mut(*scan_index);
+                    let (target, right) = middle.split_at_mut(1);
+
+                    rest = right;
+                    trie_scans.push(target.get_mut(0).unwrap());
+                }
+
+                let mut column_scans = Vec::<&mut dyn RangedColumnScan<Item = u64>>::new();
+
+                for ts in trie_scans {
+                    column_scans.push(ts.current_scan()?.to_colum_scan_u64().unwrap());
+                }
+
+                let omj = OrderedMergeJoin::new(column_scans);
+
+                let rcst = RangedColumnScanT::RangedColumnScanU64(Box::new(omj));
+
+                self.column_scan_cache = Some(rcst);
+
+                //let mut column_scans = Vec::<&mut dyn RangedColumnScan<Item = u64>>::new();
+
+                ////TODO: Need to decice on the interface of TrieScan
+                ////      Should current_scan() return mutable reference?
+                //for scan_index in &self.variable_to_scan[self.current_variable.unwrap()] {
+                //column_scans.push(
+                //self.trie_scans
+                //.get_mut(*scan_index)
+                //.unwrap()
+                //.current_scan()?
+                //.to_colum_scan_u64()
+                //.unwrap(),
+                //);
+                //}
+
+                //// TODO: Decide where this lives
+                //Some(&mut RangedColumnScanT::RangedColumnScanU64(Box::new(
+                //OrderedMergeJoin::new(column_scans),
+                //)))
+
+                self.column_scan_cache.as_mut()
             }
             DataTypeName::Float => None,
             DataTypeName::Double => None,
