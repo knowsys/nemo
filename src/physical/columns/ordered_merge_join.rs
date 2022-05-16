@@ -25,12 +25,8 @@ impl<'a, T> OrderedMergeJoin<'a, T> {
     }
 }
 
-impl<'a, T: Eq + Debug + Copy> Iterator for OrderedMergeJoin<'a, T> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.active_max = self.column_scans[self.active_scan].next();
-        self.active_max?;
+impl<'a, T: Eq + Debug + Copy> OrderedMergeJoin<'a, T> {
+    fn next_loop(&mut self) -> Option<T> {
         let mut matched_scans: usize = 1;
 
         loop {
@@ -54,23 +50,29 @@ impl<'a, T: Eq + Debug + Copy> Iterator for OrderedMergeJoin<'a, T> {
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> ColumnScan for OrderedMergeJoin<'a, T> {
-    /// TODO: Seek could be more efficient by using seeks of underlying iterators.
-    /// However, we will then not know the position any more (number of matches in between).
-    /// The ability to get a position should not be part of all iterators we consider.
-    fn seek(&mut self, value: T) -> Option<T> {
-        // Brute-force scan:
-        self.current.is_none().then(|| self.next());
+impl<'a, T: Eq + Debug + Copy> Iterator for OrderedMergeJoin<'a, T> {
+    type Item = T;
 
-        loop {
-            if self.current.is_none() {
-                return None;
-            } else if self.current.unwrap() >= value {
-                return self.current;
-            }
-
-            self.next();
+    fn next(&mut self) -> Option<Self::Item> {
+        self.active_max = self.column_scans[self.active_scan].next();
+        if self.active_max.is_none() {
+            self.current = None;
+            return None;
         }
+        self.next_loop()
+    }
+}
+
+impl<'a, T: Ord + Copy + Debug> ColumnScan for OrderedMergeJoin<'a, T> {
+    fn seek(&mut self, value: T) -> Option<T> {
+        let seek_result = self.column_scans[self.active_scan].seek(value);
+
+        if seek_result.is_none() {
+            self.current = None;
+        }
+
+        self.active_max = Some(seek_result?);
+        self.next_loop()
     }
 
     fn current(&mut self) -> Option<T> {
@@ -81,12 +83,12 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for OrderedMergeJoin<'a, T> {
 impl<'a, T: Ord + Copy + Debug> RangedColumnScan for OrderedMergeJoin<'a, T> {
     fn pos(&self) -> Option<usize> {
         unimplemented!(
-            "These function only exists because RangedColumnScans cannnot be ColumnScans"
+            "This function only exists because RangedColumnScans cannnot be ColumnScans"
         );
     }
     fn narrow(&mut self, _interval: Range<usize>) {
         unimplemented!(
-            "These function only exists because RangedColumnScans cannnot be ColumnScans"
+            "This function only exists because RangedColumnScans cannnot be ColumnScans"
         );
     }
 }
@@ -102,10 +104,10 @@ mod test {
         let data1: Vec<u64> = vec![1, 3, 5, 7, 9];
         let vc1: VectorColumn<u64> = VectorColumn::new(data1);
         let mut gcs1: GenericColumnScan<u64> = GenericColumnScan::new(&vc1);
-        let data2: Vec<u64> = vec![1, 5, 6, 7];
+        let data2: Vec<u64> = vec![1, 5, 6, 7, 9, 10];
         let vc2: VectorColumn<u64> = VectorColumn::new(data2);
         let mut gcs2: GenericColumnScan<u64> = GenericColumnScan::new(&vc2);
-        let data3: Vec<u64> = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let data3: Vec<u64> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
         let vc3: VectorColumn<u64> = VectorColumn::new(data3);
         let mut gcs3: GenericColumnScan<u64> = GenericColumnScan::new(&vc3);
 
@@ -118,8 +120,25 @@ mod test {
         assert_eq!(omj.current(), Some(5));
         assert_eq!(omj.next(), Some(7));
         assert_eq!(omj.current(), Some(7));
+        assert_eq!(omj.next(), Some(9));
+        assert_eq!(omj.current(), Some(9));
         assert_eq!(omj.next(), None);
         assert_eq!(omj.current(), None);
         assert_eq!(omj.next(), None);
+
+        let mut gcs1: GenericColumnScan<u64> = GenericColumnScan::new(&vc1);
+        let mut gcs2: GenericColumnScan<u64> = GenericColumnScan::new(&vc2);
+        let mut gcs3: GenericColumnScan<u64> = GenericColumnScan::new(&vc3);
+        let mut omj: OrderedMergeJoin<u64> =
+            OrderedMergeJoin::new(vec![&mut gcs1, &mut gcs2, &mut gcs3]);
+
+        assert_eq!(omj.seek(5), Some(5));
+        assert_eq!(omj.current(), Some(5));
+        assert_eq!(omj.seek(7), Some(7));
+        assert_eq!(omj.current(), Some(7));
+        assert_eq!(omj.seek(8), Some(9));
+        assert_eq!(omj.current(), Some(9));
+        assert_eq!(omj.seek(10), None);
+        assert_eq!(omj.current(), None);
     }
 }
