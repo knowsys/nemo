@@ -270,12 +270,13 @@ mod test {
     }
 
     #[test]
-    fn u64_seek() {
+    fn u64_seek_interval() {
         let test_column = get_test_column_large();
         let mut gcs = GenericColumnScan::new(&test_column);
 
         gcs.narrow(4..16);
         assert_eq!(gcs.seek(2), Some(12));
+        assert_eq!(gcs.current(), Some(12));
         assert_eq!(gcs.seek(17), Some(18));
         assert_eq!(gcs.current(), Some(18));
         assert_eq!(gcs.seek(25), Some(25));
