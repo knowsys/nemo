@@ -16,7 +16,7 @@ pub trait TrieScan<'a>: Debug {
     fn down(&mut self);
 
     /// Return the current position of the scan as a ranged [`ColumnScan`].
-    fn current_scan(&'a mut self) -> Option<&'a mut RangedColumnScanT<'a>>;
+    fn current_scan(&mut self) -> Option<*mut RangedColumnScanT<'a>>;
 
     /// Return the underlying [`TrieSchema`].
     fn get_schema(&self) -> &dyn TableSchema;
@@ -90,7 +90,7 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
         }
     }
 
-    fn current_scan(&'a mut self) -> Option<&'a mut RangedColumnScanT<'a>> {
+    fn current_scan(&mut self) -> Option<*mut RangedColumnScanT<'a>> {
         Some(&mut self.layers[self.current_layer?])
     }
 
@@ -210,7 +210,7 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
         }
     }
 
-    fn current_scan(&'a mut self) -> Option<&'a mut RangedColumnScanT<'a>> {
+    fn current_scan(&mut self) -> Option<*mut RangedColumnScanT<'a>> {
         debug_assert!(self.current_variable.is_some());
 
         match self.target_schema.get_type(self.current_variable?) {
@@ -230,37 +230,18 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
 
                 let mut column_scans = Vec::<&mut dyn RangedColumnScan<Item = u64>>::new();
 
-                for ts in trie_scans {
-                    column_scans.push(ts.current_scan()?.to_colum_scan_u64().unwrap());
+                unsafe {
+                    for ts in trie_scans {
+                        column_scans.push((*ts.current_scan()?).to_colum_scan_u64().unwrap());
+                    }
                 }
-
                 let omj = OrderedMergeJoin::new(column_scans);
 
                 let rcst = RangedColumnScanT::RangedColumnScanU64(Box::new(omj));
 
                 self.column_scan_cache = Some(rcst);
 
-                //let mut column_scans = Vec::<&mut dyn RangedColumnScan<Item = u64>>::new();
-
-                ////TODO: Need to decide on the interface of TrieScan
-                ////      Should current_scan() return mutable reference?
-                //for scan_index in &self.variable_to_scan[self.current_variable.unwrap()] {
-                //column_scans.push(
-                //self.trie_scans
-                //.get_mut(*scan_index)
-                //.unwrap()
-                //.current_scan()?
-                //.to_colum_scan_u64()
-                //.unwrap(),
-                //);
-                //}
-
-                //// TODO: Decide where this lives
-                //Some(&mut RangedColumnScanT::RangedColumnScanU64(Box::new(
-                //OrderedMergeJoin::new(column_scans),
-                //)))
-
-                self.column_scan_cache.as_mut()
+                Some(self.column_scan_cache.as_mut().unwrap())
             }
             DataTypeName::Float => None,
             DataTypeName::Double => None,
@@ -311,20 +292,26 @@ mod test {
         let trie = Trie::new(schema, column_vec);
         let mut trie_iter = IntervalTrieScan::new(&trie);
 
-        // assert!(trie_iter.current_scan().is_none());
+        assert!(trie_iter.current_scan().is_none());
 
-        // trie_iter.up();
-        // assert!(trie_iter.current_scan().is_none());
+        trie_iter.up();
+        assert!(trie_iter.current_scan().is_none());
 
-        // trie_iter.down();
-        // let mut scan = trie_iter.current_scan().unwrap();
-        // seek_scan(scan, 1);
-        // assert_eq!(scan.pos(), Some(0));
+        trie_iter.down();
+        let mut scan;
 
-        // trie_iter.down();
-        // scan = trie_iter.current_scan().unwrap();
-        // seek_scan(scan, 2);
-        // assert_eq!(scan.pos(), Some(0));
+        unsafe {
+            scan = &mut (*trie_iter.current_scan().unwrap());
+            seek_scan(scan, 1);
+            assert_eq!(scan.pos(), Some(0));
+        }
+
+        trie_iter.down();
+        unsafe {
+            scan = &mut (*trie_iter.current_scan().unwrap());
+            seek_scan(scan, 2);
+            assert_eq!(scan.pos(), Some(0));
+        }
 
         //TODO: Further tests this once GenericColumnScan is fixed
     }
