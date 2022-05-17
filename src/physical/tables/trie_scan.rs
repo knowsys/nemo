@@ -148,21 +148,26 @@ pub fn material_join(
 /// which itself is a TrieJoin that can be used in such a join
 #[derive(Debug)]
 pub struct TrieScanJoin<'a> {
-    trie_scans: Vec<Box<dyn TrieScan<'a>>>,
+    trie_scans: Vec<Box<dyn TrieScan<'a> + 'a>>,
     target_schema: TrieSchema,
 
     current_variable: Option<usize>,
 
     variable_to_scan: Vec<Vec<usize>>,
 
+    //Will replace variable_to_scan
+    merge_joins: Vec<RangedColumnScanT<'a>>,
+
     column_scan_cache: Option<RangedColumnScanT<'a>>,
 }
 
 impl<'a> TrieScanJoin<'a> {
     /// Construct new TrieScanJoin object.
-    pub fn new(trie_scans: Vec<Box<dyn TrieScan<'a>>>, target_schema: TrieSchema) -> Self {
+    pub fn new(trie_scans: Vec<Box<dyn TrieScan<'a> + 'a>>, target_schema: TrieSchema) -> Self {
         let mut variable_to_scan: Vec<Vec<usize>> = vec![];
         variable_to_scan.resize(target_schema.arity(), vec![]);
+        let mut merge_joins: Vec<RangedColumnScanT<'a>>;
+
         for scan_index in 0..trie_scans.len() {
             let current_schema = trie_scans[scan_index].get_schema();
             for entry_index in 0..current_schema.arity() {
@@ -175,6 +180,7 @@ impl<'a> TrieScanJoin<'a> {
             target_schema,
             current_variable: None,
             variable_to_scan,
+            merge_joins: vec![],
             column_scan_cache: None,
         }
     }
@@ -215,13 +221,23 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
 
         match self.target_schema.get_type(self.current_variable?) {
             DataTypeName::U64 => {
+                if self.variable_to_scan[self.current_variable.unwrap()].len() == 1 {
+                    let scan_index = self.variable_to_scan[self.current_variable.unwrap()][0];
+
+                    return self.trie_scans[scan_index].current_scan();
+                }
+
                 let mut rest = self.trie_scans.as_mut_slice();
 
                 let mut trie_scans: Vec<&mut Box<dyn TrieScan>> = vec![];
 
                 // TODO: make sure that scan indices are sorted; debug_assert probably
-                for scan_index in &self.variable_to_scan[self.current_variable.unwrap()] {
-                    let (_left, middle) = rest.split_at_mut(*scan_index);
+                for _ in &self.variable_to_scan[self.current_variable.unwrap()] {
+                    // let (_left, middle) = rest.split_at_mut(*scan_index);
+                    // let (target, right) = middle.split_at_mut(1);
+
+                    // rest = right;
+                    let (_left, middle) = rest.split_at_mut(0);
                     let (target, right) = middle.split_at_mut(1);
 
                     rest = right;
@@ -256,7 +272,7 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
 #[cfg(test)]
 mod test {
     use super::super::trie::{Trie, TrieSchema, TrieSchemaEntry};
-    use super::{IntervalTrieScan, TrieScan};
+    use super::{IntervalTrieScan, TrieScan, TrieScanJoin};
     use crate::physical::columns::RangedColumnScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::util::test_util::make_gict;
@@ -314,5 +330,160 @@ mod test {
         }
 
         //TODO: Further tests this once GenericColumnScan is fixed
+    }
+
+    fn join_next(join_scan: &mut TrieScanJoin) -> Option<u64> {
+        unsafe {
+            (*join_scan.current_scan()?)
+                .to_colum_scan_u64()
+                .unwrap()
+                .next()
+        }
+    }
+
+    fn join_current(join_scan: &mut TrieScanJoin) -> Option<u64> {
+        unsafe {
+            (*join_scan.current_scan()?)
+                .to_colum_scan_u64()
+                .unwrap()
+                .current()
+        }
+    }
+
+    #[test]
+    fn test_trie_join() {
+        let column_a_x = make_gict(&[1, 2, 3], &[0]);
+        let column_a_y = make_gict(&[2, 3, 4, 5, 6, 7], &[0, 3, 4]);
+        let column_b_y = make_gict(&[1, 2, 3, 6], &[0]);
+        let column_b_z = make_gict(&[1, 8, 9, 10, 11, 12], &[0, 1, 3, 4]);
+
+        let schema_a = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+        let schema_a_clone = schema_a.clone();
+
+        let schema_b = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+        let schema_b_clone = schema_b.clone();
+
+        let schema_target = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+        //TODO: Maybe schema schould just be copyable
+        let schema_target_clone = schema_target.clone();
+        let schema_target_clone_2 = schema_target.clone();
+
+        let trie_a = Trie::new(schema_a, vec![column_a_x, column_a_y]);
+        let trie_b = Trie::new(schema_b, vec![column_b_y, column_b_z]);
+
+        let mut join_iter = TrieScanJoin::new(
+            vec![
+                Box::new(IntervalTrieScan::new(&trie_a)),
+                Box::new(IntervalTrieScan::new(&trie_b)),
+            ],
+            schema_target,
+        );
+
+        join_iter.down();
+        assert_eq!(join_next(&mut join_iter), Some(1));
+        join_iter.down();
+        assert_eq!(join_next(&mut join_iter), Some(2));
+        join_iter.down();
+        assert_eq!(join_next(&mut join_iter), Some(8));
+        assert_eq!(join_next(&mut join_iter), Some(9));
+        assert_eq!(join_next(&mut join_iter), None);
+        join_iter.up();
+        assert_eq!(join_next(&mut join_iter), Some(3));
+        assert_eq!(join_next(&mut join_iter), None);
+        join_iter.up();
+        assert_eq!(join_next(&mut join_iter), Some(2));
+        join_iter.down();
+        assert_eq!(join_next(&mut join_iter), None);
+        join_iter.up();
+        assert_eq!(join_next(&mut join_iter), Some(3));
+        join_iter.down();
+        assert_eq!(join_next(&mut join_iter), Some(6));
+        join_iter.down();
+        assert_eq!(join_next(&mut join_iter), Some(11));
+        assert_eq!(join_next(&mut join_iter), Some(12));
+        assert_eq!(join_next(&mut join_iter), None);
+        join_iter.up();
+        assert_eq!(join_next(&mut join_iter), None);
+        join_iter.up();
+        assert_eq!(join_next(&mut join_iter), None);
+
+        let column_c_x = make_gict(&[1, 2], &[0]);
+        let column_c_y = make_gict(&[2, 8], &[0, 1]);
+
+        let schema_c = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie_c = Trie::new(schema_c, vec![column_c_x, column_c_y]);
+        let join_iter_ab = TrieScanJoin::new(
+            vec![
+                Box::new(IntervalTrieScan::new(&trie_a)),
+                Box::new(IntervalTrieScan::new(&trie_b)),
+            ],
+            schema_target_clone,
+        );
+
+        let mut join_iter_abc = TrieScanJoin::new(
+            vec![
+                Box::new(join_iter_ab),
+                Box::new(IntervalTrieScan::new(&trie_c)),
+            ],
+            schema_target_clone_2,
+        );
+
+        join_iter_abc.down();
+        assert_eq!(join_next(&mut join_iter_abc), Some(1));
+        join_iter_abc.down();
+        assert_eq!(join_next(&mut join_iter_abc), Some(2));
+        join_iter_abc.down();
+        assert_eq!(join_next(&mut join_iter_abc), Some(8));
+        assert_eq!(join_next(&mut join_iter_abc), Some(9));
+        assert_eq!(join_next(&mut join_iter_abc), None);
+        join_iter_abc.up();
+        assert_eq!(join_next(&mut join_iter_abc), None);
+        join_iter_abc.up();
+        assert_eq!(join_next(&mut join_iter_abc), Some(2));
+        join_iter_abc.down();
+        assert_eq!(join_next(&mut join_iter_abc), None);
+        join_iter_abc.up();
+        assert_eq!(join_next(&mut join_iter_abc), None);
     }
 }
