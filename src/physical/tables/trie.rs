@@ -14,7 +14,7 @@ pub struct TrieSchemaEntry {
 }
 
 /// Schema for [`Trie`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TrieSchema {
     attributes: Vec<TrieSchemaEntry>,
 }
