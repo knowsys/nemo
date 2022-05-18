@@ -72,9 +72,9 @@ impl<'a, T: Debug + Copy> Iterator for GenericColumnScan<'a, T> {
 
 impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
     fn seek(&mut self, value: T) -> Option<T> {
-        let pos = self.pos.get_or_insert(0);
+        let pos = self.pos.get_or_insert(self.interval.start);
         let mut lower = *pos;
-        let mut upper = self.column.len() - 1;
+        let mut upper = self.interval.end - 1;
 
         // check if position is out of bounds
         if *pos > upper {
@@ -141,6 +141,13 @@ mod test {
 
     fn get_test_column() -> VectorColumn<u64> {
         let data: Vec<u64> = vec![1, 2, 5];
+        VectorColumn::new(data)
+    }
+
+    fn get_test_column_large() -> VectorColumn<u64> {
+        let data: Vec<u64> = vec![
+            1, 2, 5, 9, 12, 14, 16, 18, 21, 25, 28, 29, 30, 35, 37, 39, 40, 45, 47, 49,
+        ];
         VectorColumn::new(data)
     }
 
@@ -260,5 +267,22 @@ mod test {
         assert_eq!(gcs.next(), Some(2));
         gcs.widen();
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
+    }
+
+    #[test]
+    fn u64_seek_interval() {
+        let test_column = get_test_column_large();
+        let mut gcs = GenericColumnScan::new(&test_column);
+
+        gcs.narrow(4..16);
+        assert_eq!(gcs.seek(2), Some(12));
+        assert_eq!(gcs.current(), Some(12));
+        assert_eq!(gcs.seek(17), Some(18));
+        assert_eq!(gcs.current(), Some(18));
+        assert_eq!(gcs.seek(25), Some(25));
+        assert_eq!(gcs.current(), Some(25));
+        assert_eq!(gcs.seek(39), Some(39));
+        assert_eq!(gcs.seek(40), None);
+        assert_eq!(gcs.current(), None);
     }
 }
