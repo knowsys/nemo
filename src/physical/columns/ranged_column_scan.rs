@@ -1,8 +1,8 @@
 #![allow(incomplete_features)]
 
-use super::ColumnScan;
-use crate::physical::datatypes::{Double, Float};
-use std::ops::Range;
+use super::{ColumnScan, GenericColumnScanEnum, OrderedMergeJoin, RleColumnScan};
+use crate::physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize};
+use std::{fmt::Debug, ops::Range};
 
 /// Iterator for a sorted interval of values that also stores the current position
 pub trait RangedColumnScan: ColumnScan {
@@ -16,65 +16,158 @@ pub trait RangedColumnScan: ColumnScan {
 
 /// Enum for ranged column scans for all the supported types
 #[derive(Debug)]
-pub enum RangedColumnScanT<'a> {
-    /// Case Column<u64>
-    RangedColumnScanU64(Box<dyn RangedColumnScan<Item = u64> + 'a>),
-    /// Case Column<Float>
-    RangedColumnScanFloat(Box<dyn RangedColumnScan<Item = Float> + 'a>),
-    /// Case Column<Double>
-    RangedColumnScanDouble(Box<dyn RangedColumnScan<Item = Double> + 'a>),
+pub enum RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    /// Case GenericColumnScan
+    GenericColumnScan(GenericColumnScanEnum<'a, T>),
+    /// Case RleColumnScan
+    RleColumnScan(RleColumnScan<'a, T>),
+    /// Case OrderedMergeJoin
+    OrderedMergeJoin(OrderedMergeJoin<'a, T, RangedColumnScanEnum<'a, T>>),
 }
 
-impl<'a> RangedColumnScanT<'a> {
-    /// Return the current position of this iterator, or None if the iterator is
-    /// before the first or after the last element.
-    pub fn pos(&self) -> Option<usize> {
+impl<'a, T> Iterator for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
         match self {
-            RangedColumnScanT::RangedColumnScanU64(column) => column.pos(),
-            RangedColumnScanT::RangedColumnScanFloat(column) => column.pos(),
-            RangedColumnScanT::RangedColumnScanDouble(column) => column.pos(),
+            Self::GenericColumnScan(cs) => cs.next(),
+            Self::RleColumnScan(cs) => cs.next(),
+            Self::OrderedMergeJoin(cs) => cs.next(),
+        }
+    }
+}
+
+impl<'a, T> ColumnScan for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
+        match self {
+            Self::GenericColumnScan(cs) => cs.seek(value),
+            Self::RleColumnScan(cs) => cs.seek(value),
+            Self::OrderedMergeJoin(cs) => cs.seek(value),
         }
     }
 
-    /// Restricts the iterator to the given `interval`.
-    pub fn narrow(&mut self, interval: Range<usize>) {
+    fn current(&mut self) -> Option<Self::Item> {
         match self {
-            RangedColumnScanT::RangedColumnScanU64(column) => column.narrow(interval),
-            RangedColumnScanT::RangedColumnScanFloat(column) => column.narrow(interval),
-            RangedColumnScanT::RangedColumnScanDouble(column) => column.narrow(interval),
+            Self::GenericColumnScan(cs) => cs.current(),
+            Self::RleColumnScan(cs) => cs.current(),
+            Self::OrderedMergeJoin(cs) => cs.current(),
         }
     }
 
-    /// Cast to RangedColumnScan with type u64
-    pub fn to_colum_scan_u64(&mut self) -> Option<&mut dyn RangedColumnScan<Item = u64>> {
+    fn reset(&mut self) {
         match self {
-            RangedColumnScanT::RangedColumnScanU64(column) => Some(&mut **column),
-            _ => None,
+            Self::GenericColumnScan(cs) => cs.reset(),
+            Self::RleColumnScan(cs) => cs.reset(),
+            Self::OrderedMergeJoin(cs) => cs.reset(),
+        }
+    }
+}
+
+impl<'a, T> RangedColumnScan for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn pos(&self) -> Option<usize> {
+        match self {
+            Self::GenericColumnScan(cs) => cs.pos(),
+            Self::RleColumnScan(cs) => cs.pos(),
+            Self::OrderedMergeJoin(cs) => cs.pos(),
         }
     }
 
-    /// Cast to RangedColumnScan with type Float
-    pub fn to_colum_scan_float(&mut self) -> Option<&mut dyn RangedColumnScan<Item = Float>> {
+    fn narrow(&mut self, interval: Range<usize>) {
         match self {
-            RangedColumnScanT::RangedColumnScanFloat(column) => Some(&mut **column),
-            _ => None,
+            Self::GenericColumnScan(cs) => cs.narrow(interval),
+            Self::RleColumnScan(cs) => cs.narrow(interval),
+            Self::OrderedMergeJoin(cs) => cs.narrow(interval),
+        }
+    }
+}
+
+/// enum for RangedColumnScan for underlying data type
+#[derive(Debug)]
+pub enum RangedColumnScanT<'a> {
+    /// Case u64
+    U64(RangedColumnScanEnum<'a, u64>),
+    /// Case Float
+    Float(RangedColumnScanEnum<'a, Float>),
+    /// Case Double
+    Double(RangedColumnScanEnum<'a, Double>),
+}
+
+impl<'a> Iterator for RangedColumnScanT<'a> {
+    type Item = DataValueT;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::U64(cs) => cs.next().map(DataValueT::U64),
+            Self::Float(cs) => cs.next().map(DataValueT::Float),
+            Self::Double(cs) => cs.next().map(DataValueT::Double),
+        }
+    }
+}
+
+impl<'a> ColumnScan for RangedColumnScanT<'a> {
+    fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
+        match self {
+            Self::U64(cs) => match value {
+                Self::Item::U64(val) => cs.seek(val).map(DataValueT::U64),
+                Self::Item::Float(_val) => None,
+                Self::Item::Double(_val) => None,
+            },
+            Self::Float(cs) => match value {
+                Self::Item::U64(_val) => None,
+                Self::Item::Float(val) => cs.seek(val).map(DataValueT::Float),
+                Self::Item::Double(_val) => None,
+            },
+            Self::Double(cs) => match value {
+                Self::Item::U64(_val) => None,
+                Self::Item::Float(_val) => None,
+                Self::Item::Double(val) => cs.seek(val).map(DataValueT::Double),
+            },
         }
     }
 
-    /// Cast to RangedColumnScan with type Double
-    pub fn to_colum_scan_double(&mut self) -> Option<&mut dyn RangedColumnScan<Item = Double>> {
+    fn current(&mut self) -> Option<Self::Item> {
         match self {
-            RangedColumnScanT::RangedColumnScanDouble(column) => Some(&mut **column),
-            _ => None,
+            Self::U64(cs) => cs.current().map(DataValueT::U64),
+            Self::Float(cs) => cs.current().map(DataValueT::Float),
+            Self::Double(cs) => cs.current().map(DataValueT::Double),
         }
     }
 
-    /// Resets the iterator
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         match self {
-            RangedColumnScanT::RangedColumnScanU64(column) => column.reset(),
-            RangedColumnScanT::RangedColumnScanFloat(column) => column.reset(),
-            RangedColumnScanT::RangedColumnScanDouble(column) => column.reset(),
+            Self::U64(cs) => cs.reset(),
+            Self::Float(cs) => cs.reset(),
+            Self::Double(cs) => cs.reset(),
+        }
+    }
+}
+
+impl<'a> RangedColumnScan for RangedColumnScanT<'a> {
+    fn pos(&self) -> Option<usize> {
+        match self {
+            Self::U64(cs) => cs.pos(),
+            Self::Float(cs) => cs.pos(),
+            Self::Double(cs) => cs.pos(),
+        }
+    }
+
+    fn narrow(&mut self, interval: Range<usize>) {
+        match self {
+            Self::U64(cs) => cs.narrow(interval),
+            Self::Float(cs) => cs.narrow(interval),
+            Self::Double(cs) => cs.narrow(interval),
         }
     }
 }
