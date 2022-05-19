@@ -1,6 +1,7 @@
 use super::{Table, TableSchema, Trie, TrieSchema};
 use crate::physical::columns::{
-    IntervalColumnT, OrderedMergeJoin, RangedColumnScan, RangedColumnScanT,
+    Column, ColumnScan, IntervalColumn, OrderedMergeJoin, RangedColumnScan, RangedColumnScanEnum,
+    RangedColumnScanT,
 };
 use crate::physical::datatypes::DataTypeName;
 use std::cell::UnsafeCell;
@@ -8,7 +9,7 @@ use std::fmt::Debug;
 
 /// Iterator for a Trie datastructure.
 /// Allows for vertical traversal through the tree and can return
-/// its current position as a RangedColumnScanT object.
+/// its current position as a RangedColumnScanEnum object.
 pub trait TrieScan<'a>: Debug {
     /// Return to the upper layer.
     fn up(&mut self);
@@ -29,7 +30,7 @@ pub trait TrieScan<'a>: Debug {
 /// Implementation of TrieScan for Trie with IntervalColumns
 #[derive(Debug)]
 pub struct IntervalTrieScan<'a> {
-    trie: &'a Trie,
+    trie: &'a Trie<'a>,
     layers: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
     current_layer: Option<usize>,
 }
@@ -40,18 +41,7 @@ impl<'a> IntervalTrieScan<'a> {
         let mut layers = Vec::<UnsafeCell<RangedColumnScanT<'a>>>::new();
 
         for column_t in trie.columns() {
-            let new_scan = match column_t {
-                IntervalColumnT::IntervalColumnU64(column) => {
-                    RangedColumnScanT::RangedColumnScanU64(column.iter())
-                }
-                IntervalColumnT::IntervalColumnFloat(column) => {
-                    RangedColumnScanT::RangedColumnScanFloat(column.iter())
-                }
-                IntervalColumnT::IntervalColumnDouble(column) => {
-                    RangedColumnScanT::RangedColumnScanDouble(column.iter())
-                }
-            };
-
+            let new_scan = column_t.iter();
             layers.push(UnsafeCell::new(new_scan));
         }
 
@@ -157,7 +147,7 @@ pub fn material_join(
 /// which itself is a TrieJoin that can be used in such a join
 #[derive(Debug)]
 pub struct TrieScanJoin<'a> {
-    trie_scans: Vec<Box<dyn TrieScan<'a> + 'a>>,
+    trie_scans: Vec<TrieScanEnum<'a>>,
     target_schema: TrieSchema,
 
     current_variable: Option<usize>,
@@ -169,7 +159,7 @@ pub struct TrieScanJoin<'a> {
 
 impl<'a> TrieScanJoin<'a> {
     /// Construct new TrieScanJoin object.
-    pub fn new(trie_scans: Vec<Box<dyn TrieScan<'a> + 'a>>, target_schema: TrieSchema) -> Self {
+    pub fn new(trie_scans: Vec<TrieScanEnum<'a>>, target_schema: TrieSchema) -> Self {
         let mut variable_to_scan: Vec<Vec<usize>> = vec![];
         variable_to_scan.resize(target_schema.arity(), vec![]);
         let mut merge_join_indeces: Vec<Vec<Option<usize>>> = vec![];
@@ -177,17 +167,17 @@ impl<'a> TrieScanJoin<'a> {
 
         let mut merge_joins: Vec<UnsafeCell<RangedColumnScanT<'a>>> = vec![];
 
-        for scan_index in 0..trie_scans.len() {
-            let current_schema = trie_scans[scan_index].get_schema();
+        for (scan_index, scan) in trie_scans.iter().enumerate() {
+            let current_schema = scan.get_schema();
             for entry_index in 0..current_schema.arity() {
                 variable_to_scan[current_schema.get_label(entry_index)].push(scan_index);
             }
         }
 
         for target_label_index in 0..target_schema.arity() {
-            for scan_index in 0..trie_scans.len() {
+            for scan in &trie_scans {
                 merge_join_indeces[target_label_index].push(
-                    trie_scans[scan_index]
+                    scan
                         .get_schema()
                         .find_index(target_schema.get_label(target_label_index)),
                 );
@@ -197,22 +187,24 @@ impl<'a> TrieScanJoin<'a> {
         for variable_index in 0..target_schema.arity() {
             match target_schema.get_type(variable_index) {
                 DataTypeName::U64 => {
-                    let mut scans: Vec<&'a mut dyn RangedColumnScan<Item = u64>> = vec![];
+                    let mut scans: Vec<&'a mut RangedColumnScanEnum<u64>> = vec![];
                     for scan_index in 0..merge_join_indeces[variable_index].len() {
                         match merge_join_indeces[variable_index][scan_index] {
-                            Some(label_index) => scans.push(
-                                trie_scans[scan_index]
-                                    .get_scan(label_index)
-                                    .unwrap()
-                                    .to_colum_scan_u64()
-                                    .unwrap(),
-                            ),
+                            Some(label_index) => {
+                                let scan = trie_scans[scan_index].get_scan(label_index).unwrap();
+
+                                if let RangedColumnScanT::U64(cs) = scan {
+                                    scans.push(cs);
+                                } else {
+                                    panic!("type should match here")
+                                }
+                            }
                             None => {}
                         }
                     }
 
-                    merge_joins.push(UnsafeCell::new(RangedColumnScanT::RangedColumnScanU64(
-                        Box::new(OrderedMergeJoin::new(scans)),
+                    merge_joins.push(UnsafeCell::new(RangedColumnScanT::U64(
+                        RangedColumnScanEnum::OrderedMergeJoin(OrderedMergeJoin::new(scans)),
                     )))
                 }
                 DataTypeName::Float => {}
@@ -283,17 +275,70 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
     }
 }
 
+/// Enum for TrieScan Variants
+#[derive(Debug)]
+pub enum TrieScanEnum<'a> {
+    /// Case IntervalTrieScan
+    IntervalTrieScan(IntervalTrieScan<'a>),
+    /// Case TrieScanJoin
+    TrieScanJoin(TrieScanJoin<'a>),
+}
+
+impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
+    fn up(&mut self) {
+        match self {
+            Self::IntervalTrieScan(ts) => ts.up(),
+            Self::TrieScanJoin(ts) => ts.up(),
+        }
+    }
+
+    fn down(&mut self) {
+        match self {
+            Self::IntervalTrieScan(ts) => ts.down(),
+            Self::TrieScanJoin(ts) => ts.down(),
+        }
+    }
+
+    fn current_scan(&self) -> Option<&mut RangedColumnScanT<'a>> {
+        match self {
+            Self::IntervalTrieScan(ts) => ts.current_scan(),
+            Self::TrieScanJoin(ts) => ts.current_scan(),
+        }
+    }
+
+    fn get_scan(&self, index: usize) -> Option<&'a mut RangedColumnScanT<'a>> {
+        match self {
+            Self::IntervalTrieScan(ts) => ts.get_scan(index),
+            Self::TrieScanJoin(ts) => ts.get_scan(index),
+        }
+    }
+
+    fn get_schema(&self) -> &dyn TableSchema {
+        match self {
+            Self::IntervalTrieScan(ts) => ts.get_schema(),
+            Self::TrieScanJoin(ts) => ts.get_schema(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::super::trie::{Trie, TrieSchema, TrieSchemaEntry};
-    use super::{IntervalTrieScan, TrieScan, TrieScanJoin};
-    use crate::physical::columns::RangedColumnScanT;
+    use super::{IntervalTrieScan, TrieScan, TrieScanEnum, TrieScanJoin};
+    use crate::physical::columns::{
+        ColumnEnum, ColumnScan, GenericIntervalColumnEnum, IntervalColumnEnum, RangedColumnScan,
+        RangedColumnScanT,
+    };
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
-    fn seek_scan(scan: &mut RangedColumnScanT, value: u64) {
-        scan.to_colum_scan_u64().unwrap().seek(value);
+    fn seek_scan(scan: &mut RangedColumnScanT, value: u64) -> Option<u64> {
+        if let RangedColumnScanT::U64(rcs) = scan {
+            rcs.seek(value)
+        } else {
+            panic!("type should be u64");
+        }
     }
 
     #[test]
@@ -341,17 +386,19 @@ mod test {
     }
 
     fn join_next(join_scan: &mut TrieScanJoin) -> Option<u64> {
-        (join_scan.current_scan()?)
-            .to_colum_scan_u64()
-            .unwrap()
-            .next()
+        if let RangedColumnScanT::U64(rcs) = join_scan.current_scan()? {
+            rcs.next()
+        } else {
+            panic!("type should be u64");
+        }
     }
 
     fn _join_current(join_scan: &mut TrieScanJoin) -> Option<u64> {
-        (join_scan.current_scan()?)
-            .to_colum_scan_u64()
-            .unwrap()
-            .current()
+        if let RangedColumnScanT::U64(rcs) = join_scan.current_scan()? {
+            rcs.current()
+        } else {
+            panic!("type should be u64");
+        }
     }
 
     #[test]
@@ -405,8 +452,8 @@ mod test {
 
         let mut join_iter = TrieScanJoin::new(
             vec![
-                Box::new(IntervalTrieScan::new(&trie_a)),
-                Box::new(IntervalTrieScan::new(&trie_b)),
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
             ],
             schema_target,
         );
@@ -456,16 +503,16 @@ mod test {
         let trie_c = Trie::new(schema_c, vec![column_c_x, column_c_y]);
         let join_iter_ab = TrieScanJoin::new(
             vec![
-                Box::new(IntervalTrieScan::new(&trie_a)),
-                Box::new(IntervalTrieScan::new(&trie_b)),
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
             ],
             schema_target_clone,
         );
 
         let mut join_iter_abc = TrieScanJoin::new(
             vec![
-                Box::new(join_iter_ab),
-                Box::new(IntervalTrieScan::new(&trie_c)),
+                TrieScanEnum::TrieScanJoin(join_iter_ab),
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_c)),
             ],
             schema_target_clone_2,
         );
@@ -509,20 +556,25 @@ mod test {
             datatype: DataTypeName::U64,
         }]);
 
-        let built_interval_col = GenericIntervalColumn::<u64>::new(
-            builder.finalize(),
-            Box::new(VectorColumn::new(vec![0])),
-        );
+        let built_interval_col =
+            GenericIntervalColumn::<u64, ColumnEnum<u64>, VectorColumn<usize>>::new(
+                builder.finalize(),
+                VectorColumn::new(vec![0]),
+            );
 
         let my_trie = Trie::new(
             schema,
-            vec![IntervalColumnT::IntervalColumnU64(Box::new(
-                built_interval_col,
-            ))],
+            vec![IntervalColumnT::U64(
+                IntervalColumnEnum::GenericIntervalColumn(
+                    GenericIntervalColumnEnum::ColumnEnumWithVecStarts(built_interval_col),
+                ),
+            )],
         );
 
         let mut my_join_iter = TrieScanJoin::new(
-            vec![Box::new(IntervalTrieScan::new(&my_trie))],
+            vec![TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(
+                &my_trie,
+            ))],
             schema_target,
         );
 

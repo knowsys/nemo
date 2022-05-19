@@ -1,21 +1,41 @@
-use super::{Column, ColumnScan, RangedColumnScan};
+use super::{Column, ColumnScan, GenericIntervalColumnEnum, RangedColumnScan, VectorColumn};
+use crate::physical::datatypes::{Field, FloorToUsize};
+use std::marker::PhantomData;
 use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
 #[derive(Debug)]
-pub struct GenericColumnScan<'a, T> {
-    column: &'a dyn Column<T>,
+pub struct GenericColumnScan<'a, T, Col: Column<'a, T>> {
+    _t: PhantomData<T>,
+    column: &'a Col,
     pos: Option<usize>,
     interval: Range<usize>,
 }
 
-impl<'a, T> GenericColumnScan<'a, T> {
+/// Enum encapsulating implementations of GenericColumnScans
+#[derive(Debug)]
+pub enum GenericColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    /// Case Scan with VectorColumn
+    VectorColumn(GenericColumnScan<'a, T, VectorColumn<T>>),
+    /// Case Scan with GenericIntervalColumn
+    GenericIntervalColumn(GenericColumnScan<'a, T, GenericIntervalColumnEnum<'a, T>>),
+}
+
+impl<'a, T, Col> GenericColumnScan<'a, T, Col>
+where
+    T: 'a + Debug + Copy + Ord,
+    Col: Column<'a, T>,
+{
     /// Defines the lower limit of elements in the interval where a binary search is used instead of a vector-scan
     const SEEK_BINARY_SEARCH: usize = 10;
 
     /// Constructs a new [`GenericColumnScan`] for a Column.
-    pub fn new(column: &'a dyn Column<T>) -> Self {
+    pub fn new(column: &'a Col) -> Self {
         Self {
+            _t: PhantomData,
             column,
             pos: None,
             interval: 0..column.len(),
@@ -24,8 +44,9 @@ impl<'a, T> GenericColumnScan<'a, T> {
 
     /// Constructs a new [`GenericColumnScan`] for a Column, narrowed
     /// to the given interval.
-    pub fn narrowed(column: &'a dyn Column<T>, interval: Range<usize>) -> Self {
+    pub fn narrowed(column: &'a Col, interval: Range<usize>) -> Self {
         let result = Self {
+            _t: PhantomData,
             column,
             pos: None,
             interval,
@@ -60,7 +81,11 @@ impl<'a, T> GenericColumnScan<'a, T> {
     }
 }
 
-impl<'a, T: Debug + Copy> Iterator for GenericColumnScan<'a, T> {
+impl<'a, T, Col> Iterator for GenericColumnScan<'a, T, Col>
+where
+    T: 'a + Debug + Copy + Ord,
+    Col: Column<'a, T>,
+{
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -70,7 +95,11 @@ impl<'a, T: Debug + Copy> Iterator for GenericColumnScan<'a, T> {
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
+impl<'a, T, Col> ColumnScan for GenericColumnScan<'a, T, Col>
+where
+    T: 'a + Debug + Copy + Ord,
+    Col: Column<'a, T>,
+{
     fn seek(&mut self, value: T) -> Option<T> {
         let pos = self.pos.get_or_insert(self.interval.start);
         let mut lower = *pos;
@@ -124,7 +153,11 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> RangedColumnScan for GenericColumnScan<'a, T> {
+impl<'a, T, Col> RangedColumnScan for GenericColumnScan<'a, T, Col>
+where
+    T: 'a + Debug + Copy + Ord,
+    Col: Column<'a, T>,
+{
     fn pos(&self) -> Option<usize> {
         self.pos
             .and_then(|pos| (pos < self.interval.end).then(|| pos))
@@ -134,6 +167,65 @@ impl<'a, T: Ord + Copy + Debug> RangedColumnScan for GenericColumnScan<'a, T> {
         self.interval = interval;
         self.pos = None;
         self.validate_interval();
+    }
+}
+
+impl<'a, T> Iterator for GenericColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::VectorColumn(col) => col.next(),
+            Self::GenericIntervalColumn(col) => col.next(),
+        }
+    }
+}
+
+impl<'a, T> ColumnScan for GenericColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn seek(&mut self, value: T) -> Option<T> {
+        match self {
+            Self::VectorColumn(col) => col.seek(value),
+            Self::GenericIntervalColumn(col) => col.seek(value),
+        }
+    }
+
+    fn current(&mut self) -> Option<T> {
+        match self {
+            Self::VectorColumn(col) => col.current(),
+            Self::GenericIntervalColumn(col) => col.current(),
+        }
+    }
+
+    fn reset(&mut self) {
+        match self {
+            Self::VectorColumn(col) => col.reset(),
+            Self::GenericIntervalColumn(col) => col.reset(),
+        }
+    }
+}
+
+impl<'a, T> RangedColumnScan for GenericColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn pos(&self) -> Option<usize> {
+        match self {
+            Self::VectorColumn(col) => col.pos,
+            Self::GenericIntervalColumn(col) => col.pos,
+        }
+    }
+
+    fn narrow(&mut self, interval: Range<usize>) {
+        match self {
+            Self::VectorColumn(col) => col.narrow(interval),
+            Self::GenericIntervalColumn(col) => col.narrow(interval),
+        }
     }
 }
 
@@ -158,7 +250,8 @@ mod test {
     #[test]
     fn u64_iterate_column() {
         let test_column = get_test_column();
-        let mut gcs: GenericColumnScan<u64> = GenericColumnScan::new(&test_column);
+        let mut gcs: GenericColumnScan<u64, VectorColumn<u64>> =
+            GenericColumnScan::new(&test_column);
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.current(), None);
         assert_eq!(gcs.next(), Some(1));
@@ -178,7 +271,8 @@ mod test {
     #[test]
     fn u64_seek_column() {
         let test_column = get_test_column();
-        let mut gcs: GenericColumnScan<u64> = GenericColumnScan::new(&test_column);
+        let mut gcs: GenericColumnScan<u64, VectorColumn<u64>> =
+            GenericColumnScan::new(&test_column);
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.seek(2), Some(2));
         assert_eq!(gcs.pos(), Some(1));

@@ -1,4 +1,7 @@
-use crate::physical::columns::{GenericIntervalColumn, IntervalColumnT, VectorColumn};
+use crate::physical::columns::{
+    Column, GenericIntervalColumn, GenericIntervalColumnEnum, IntervalColumnEnum, IntervalColumnT,
+    VectorColumn,
+};
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::tables::{Trie, TrieSchema, TrieSchemaEntry};
 use arbitrary::{Arbitrary, Result, Unstructured};
@@ -8,19 +11,24 @@ use std::fmt::Debug;
 use std::ops::{Add, Sub};
 
 /// Constructs GenericIntervalColumn of U64 type from Slice
-pub fn make_gic<T>(values: &[T], ints: &[usize]) -> GenericIntervalColumn<T>
+pub fn make_gic<'a, 'b, T>(
+    values: &'a [T],
+    ints: &'a [usize],
+) -> GenericIntervalColumn<'b, T, VectorColumn<T>, VectorColumn<usize>>
 where
     T: Copy + Ord + Debug + 'static,
 {
     GenericIntervalColumn::new(
-        Box::new(VectorColumn::new(values.to_vec())),
-        Box::new(VectorColumn::new(ints.to_vec())),
+        VectorColumn::new(values.to_vec()),
+        VectorColumn::new(ints.to_vec()),
     )
 }
 
 /// Constructs IntervalColumnT (of U64 type) from Slice
-pub fn make_gict(values: &[u64], ints: &[usize]) -> IntervalColumnT {
-    IntervalColumnT::IntervalColumnU64(Box::new(make_gic(values, ints)))
+pub fn make_gict<'a, 'b>(values: &'a [u64], ints: &'a [usize]) -> IntervalColumnT<'b> {
+    IntervalColumnT::U64(IntervalColumnEnum::GenericIntervalColumn(
+        GenericIntervalColumnEnum::VectorColumnWithVecStarts(make_gic(values, ints)),
+    ))
 }
 
 /// Helper function which, given a slice of sorted values,
@@ -50,7 +58,7 @@ fn arbitrary_gic<'a, T>(
     u: &mut Unstructured<'a>,
     sections: usize,
     avg_per_section: usize,
-) -> Result<GenericIntervalColumn<T>>
+) -> Result<GenericIntervalColumn<'a, T, VectorColumn<T>, VectorColumn<usize>>>
 where
     T: Arbitrary<'a> + Debug + Copy + Ord + Add<T, Output = T> + One + Zero + 'static,
 {
@@ -91,7 +99,7 @@ where
     Ok(make_gic(&values, &intervals))
 }
 
-impl<'a, T> Arbitrary<'a> for GenericIntervalColumn<T>
+impl<'a, T> Arbitrary<'a> for GenericIntervalColumn<'a, T, VectorColumn<T>, VectorColumn<usize>>
 where
     T: Arbitrary<'a> + Debug + Copy + Ord + Add<T, Output = T> + One + Zero + 'static,
 {
@@ -102,7 +110,7 @@ where
     }
 }
 
-impl<'a> Arbitrary<'a> for Trie {
+impl<'a> Arbitrary<'a> for Trie<'a> {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
         const MAX_DEPTH: usize = 4;
         const AVG_BRANCHING: usize = 2;
@@ -127,11 +135,15 @@ impl<'a> Arbitrary<'a> for Trie {
                 columns[depth_index - 1].len()
             };
 
-            columns.push(IntervalColumnT::IntervalColumnU64(Box::new(arbitrary_gic(
-                u,
-                section_count,
-                AVG_BRANCHING,
-            )?)));
+            columns.push(IntervalColumnT::U64(
+                IntervalColumnEnum::GenericIntervalColumn(
+                    GenericIntervalColumnEnum::VectorColumnWithVecStarts(arbitrary_gic(
+                        u,
+                        section_count,
+                        AVG_BRANCHING,
+                    )?),
+                ),
+            ));
         }
 
         Ok(Trie::new(schema, columns))

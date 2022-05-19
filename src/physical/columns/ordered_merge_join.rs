@@ -4,18 +4,16 @@ use std::ops::Range;
 
 /// Implementation of [`ColumnScan`] for the result of joining a list of [`ColumnScan`] structs.
 #[derive(Debug)]
-pub struct OrderedMergeJoin<'a, T> {
-    column_scans: Vec<&'a mut dyn RangedColumnScan<Item = T>>,
+pub struct OrderedMergeJoin<'a, T, Scan: RangedColumnScan<Item = T>> {
+    column_scans: Vec<&'a mut Scan>,
     active_scan: usize,
     active_max: Option<T>,
     current: Option<T>,
 }
 
-impl<'a, T> OrderedMergeJoin<'a, T> {
+impl<'a, T, Scan: RangedColumnScan<Item = T>> OrderedMergeJoin<'a, T, Scan> {
     /// Constructs a new VectorColumnScan for a Column.
-    pub fn new(
-        column_scans: Vec<&'a mut dyn RangedColumnScan<Item = T>>,
-    ) -> OrderedMergeJoin<'a, T> {
+    pub fn new(column_scans: Vec<&'a mut Scan>) -> OrderedMergeJoin<'a, T, Scan> {
         OrderedMergeJoin {
             column_scans,
             active_scan: 0,
@@ -25,7 +23,7 @@ impl<'a, T> OrderedMergeJoin<'a, T> {
     }
 }
 
-impl<'a, T: Eq + Debug + Copy> OrderedMergeJoin<'a, T> {
+impl<'a, T: Eq + Debug + Copy, Scan: RangedColumnScan<Item = T>> OrderedMergeJoin<'a, T, Scan> {
     fn next_loop(&mut self) -> Option<T> {
         let mut matched_scans: usize = 1;
 
@@ -50,7 +48,9 @@ impl<'a, T: Eq + Debug + Copy> OrderedMergeJoin<'a, T> {
     }
 }
 
-impl<'a, T: Eq + Debug + Copy> Iterator for OrderedMergeJoin<'a, T> {
+impl<'a, T: Eq + Debug + Copy, Scan: RangedColumnScan<Item = T>> Iterator
+    for OrderedMergeJoin<'a, T, Scan>
+{
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -67,7 +67,9 @@ impl<'a, T: Eq + Debug + Copy> Iterator for OrderedMergeJoin<'a, T> {
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> ColumnScan for OrderedMergeJoin<'a, T> {
+impl<'a, T: Ord + Copy + Debug, Scan: RangedColumnScan<Item = T>> ColumnScan
+    for OrderedMergeJoin<'a, T, Scan>
+{
     fn seek(&mut self, value: T) -> Option<T> {
         let seek_result = self.column_scans[self.active_scan].seek(value);
 
@@ -95,7 +97,9 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for OrderedMergeJoin<'a, T> {
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> RangedColumnScan for OrderedMergeJoin<'a, T> {
+impl<'a, T: Ord + Copy + Debug, Scan: RangedColumnScan<Item = T>> RangedColumnScan
+    for OrderedMergeJoin<'a, T, Scan>
+{
     fn pos(&self) -> Option<usize> {
         unimplemented!(
             "This function only exists because RangedColumnScans cannnot be ColumnScans"
@@ -118,16 +122,15 @@ mod test {
     fn test_u64_simple_join<'a>() {
         let data1: Vec<u64> = vec![1, 3, 5, 7, 9];
         let vc1: VectorColumn<u64> = VectorColumn::new(data1);
-        let mut gcs1: GenericColumnScan<u64> = GenericColumnScan::new(&vc1);
+        let mut gcs1 = GenericColumnScan::new(&vc1);
         let data2: Vec<u64> = vec![1, 5, 6, 7, 9, 10];
         let vc2: VectorColumn<u64> = VectorColumn::new(data2);
-        let mut gcs2: GenericColumnScan<u64> = GenericColumnScan::new(&vc2);
+        let mut gcs2 = GenericColumnScan::new(&vc2);
         let data3: Vec<u64> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
         let vc3: VectorColumn<u64> = VectorColumn::new(data3);
-        let mut gcs3: GenericColumnScan<u64> = GenericColumnScan::new(&vc3);
+        let mut gcs3 = GenericColumnScan::new(&vc3);
 
-        let mut omj: OrderedMergeJoin<u64> =
-            OrderedMergeJoin::new(vec![&mut gcs1, &mut gcs2, &mut gcs3]);
+        let mut omj = OrderedMergeJoin::new(vec![&mut gcs1, &mut gcs2, &mut gcs3]);
 
         assert_eq!(omj.next(), Some(1));
         assert_eq!(omj.current(), Some(1));
@@ -141,11 +144,10 @@ mod test {
         assert_eq!(omj.current(), None);
         assert_eq!(omj.next(), None);
 
-        let mut gcs1: GenericColumnScan<u64> = GenericColumnScan::new(&vc1);
-        let mut gcs2: GenericColumnScan<u64> = GenericColumnScan::new(&vc2);
-        let mut gcs3: GenericColumnScan<u64> = GenericColumnScan::new(&vc3);
-        let mut omj: OrderedMergeJoin<u64> =
-            OrderedMergeJoin::new(vec![&mut gcs1, &mut gcs2, &mut gcs3]);
+        let mut gcs1 = GenericColumnScan::new(&vc1);
+        let mut gcs2 = GenericColumnScan::new(&vc2);
+        let mut gcs3 = GenericColumnScan::new(&vc3);
+        let mut omj = OrderedMergeJoin::new(vec![&mut gcs1, &mut gcs2, &mut gcs3]);
 
         assert_eq!(omj.seek(5), Some(5));
         assert_eq!(omj.current(), Some(5));

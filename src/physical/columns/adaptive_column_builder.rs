@@ -1,7 +1,4 @@
-use super::Column;
-use super::ColumnBuilder;
-use super::RleColumnBuilder;
-use super::VectorColumn;
+use super::{Column, ColumnBuilder, ColumnEnum, RleColumnBuilder, VectorColumn};
 use crate::physical::datatypes::{Field, FloorToUsize};
 use std::fmt::Debug;
 
@@ -62,6 +59,8 @@ impl<'a, T> ColumnBuilder<'a, T> for AdaptiveColumnBuilder<T>
 where
     T: 'a + Debug + Copy + TryFrom<usize> + Ord + Default + Field + FloorToUsize,
 {
+    type Col = ColumnEnum<T>;
+
     fn add(&mut self, value: T) {
         if let ColumnBuilderType::Undecided(Some(rle_builder)) = &self.builder {
             if rle_builder.number_of_rle_elements() > COLUMN_IMPL_DECISION_THRESHOLD {
@@ -82,12 +81,14 @@ where
         }
     }
 
-    fn finalize(mut self) -> Box<dyn Column<T> + 'a> {
+    fn finalize(mut self) -> Self::Col {
         self.decide_column_type();
 
         match self.builder {
-            ColumnBuilderType::VectorColumn(vec) => Box::new(VectorColumn::new(vec)),
-            ColumnBuilderType::RleColumn(rle_builder) => rle_builder.finalize(),
+            ColumnBuilderType::VectorColumn(vec) => Self::Col::VectorColumn(VectorColumn::new(vec)),
+            ColumnBuilderType::RleColumn(rle_builder) => {
+                Self::Col::RleColumn(rle_builder.finalize())
+            }
             ColumnBuilderType::Undecided(_) => {
                 unreachable!("column type should have been decided here")
             }
@@ -97,7 +98,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::{AdaptiveColumnBuilder, ColumnBuilder, ColumnBuilderType};
+    use super::{AdaptiveColumnBuilder, Column, ColumnBuilder, ColumnBuilderType};
     use crate::physical::datatypes::{Double, Float};
     use test_log::test;
 
