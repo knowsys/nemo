@@ -486,4 +486,49 @@ mod test {
         join_iter_abc.up();
         assert_eq!(join_next(&mut join_iter_abc), None);
     }
+
+    use crate::physical::columns::{
+        AdaptiveColumnBuilder, ColumnBuilder, GenericIntervalColumn, IntervalColumnT, VectorColumn,
+    };
+
+    #[test]
+    fn test_dynamic() {
+        let mut builder = AdaptiveColumnBuilder::<u64>::new();
+        builder.add(2);
+        builder.add(3);
+        builder.add(4);
+
+        let schema = TrieSchema::new(vec![TrieSchemaEntry {
+            label: 0,
+            datatype: DataTypeName::U64,
+        }]);
+
+        let schema_target = TrieSchema::new(vec![TrieSchemaEntry {
+            label: 0,
+            datatype: DataTypeName::U64,
+        }]);
+
+        let built_interval_col = GenericIntervalColumn::<u64>::new(
+            builder.finalize(),
+            Box::new(VectorColumn::new(vec![0])),
+        );
+
+        let my_trie = Trie::new(
+            schema,
+            vec![IntervalColumnT::IntervalColumnU64(Box::new(
+                built_interval_col,
+            ))],
+        );
+
+        let mut my_join_iter = TrieScanJoin::new(
+            vec![Box::new(IntervalTrieScan::new(&my_trie))],
+            schema_target,
+        );
+
+        my_join_iter.down();
+        assert_eq!(join_next(&mut my_join_iter), Some(2));
+        assert_eq!(join_next(&mut my_join_iter), Some(3));
+        assert_eq!(join_next(&mut my_join_iter), Some(4));
+        assert_eq!(join_next(&mut my_join_iter), None);
+    }
 }
