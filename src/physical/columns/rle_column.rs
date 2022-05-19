@@ -182,6 +182,8 @@ impl<'a, T> ColumnBuilder<'a, T> for RleColumnBuilder<T>
 where
     T: 'a + Copy + Ord + TryFrom<usize> + Debug + Default + Field + FloorToUsize,
 {
+    type Col = RleColumn<T>;
+
     fn add(&mut self, value: T) {
         let current_value = value;
 
@@ -234,8 +236,8 @@ where
         self.previous_value_opt = Some(current_value);
     }
 
-    fn finalize(self) -> Box<dyn Column<T> + 'a> {
-        Box::new(self.finalize_raw())
+    fn finalize(self) -> Self::Col {
+        self.finalize_raw()
     }
 }
 
@@ -286,10 +288,12 @@ where
     }
 }
 
-impl<T> Column<T> for RleColumn<T>
+impl<'a, T> Column<'a, T> for RleColumn<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
 {
+    type ColScan = RleColumnScan<'a, T>;
+
     fn len(&self) -> usize {
         self.end_indices
             .last()
@@ -335,13 +339,14 @@ where
         }
     }
 
-    fn iter<'a>(&'a self) -> Box<dyn RangedColumnScan<Item = T> + 'a> {
-        Box::new(RleColumnScan::new(self))
+    fn iter(&'a self) -> Self::ColScan {
+        RleColumnScan::new(self)
     }
 }
 
+/// Column Scan tailored towards RleColumns
 #[derive(Debug)]
-struct RleColumnScan<'a, T> {
+pub struct RleColumnScan<'a, T> {
     column: &'a RleColumn<T>,
     element_index: Option<usize>,
     increment_index: Option<usize>,
@@ -349,6 +354,7 @@ struct RleColumnScan<'a, T> {
 }
 
 impl<'a, T> RleColumnScan<'a, T> {
+    /// Constructor for RleColumnScan
     pub fn new(column: &'a RleColumn<T>) -> RleColumnScan<'a, T> {
         RleColumnScan {
             column,
@@ -545,7 +551,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::{Column, RleColumn, Step};
+    use super::{Column, ColumnScan, RleColumn, Step};
     use crate::physical::datatypes::{Double, Float};
     use num::Zero;
     use quickcheck_macros::quickcheck;

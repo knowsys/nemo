@@ -1,5 +1,5 @@
 use super::{Table, TableSchema};
-use crate::physical::columns::IntervalColumnT;
+use crate::physical::columns::{Column, IntervalColumnT};
 use crate::physical::datatypes::DataTypeName;
 use std::fmt::Debug;
 
@@ -53,19 +53,20 @@ impl TableSchema for TrieSchema {
 /// Implementation of a trie data structure.
 /// The underlying data is oragnized in IntervalColumns.
 #[derive(Debug)]
-pub struct Trie {
+pub struct Trie<'a> {
+    // TODO: could be generic in column type (one of accepted types still is IntervalColumnT)
     schema: TrieSchema,
-    columns: Vec<IntervalColumnT>,
+    columns: Vec<IntervalColumnT<'a>>,
 }
 
-impl Trie {
+impl<'a> Trie<'a> {
     /// Construct a new Trie from a given schema and a vector of IntervalColumns.
-    pub fn new(schema: TrieSchema, columns: Vec<IntervalColumnT>) -> Self {
+    pub fn new(schema: TrieSchema, columns: Vec<IntervalColumnT<'a>>) -> Self {
         Self { schema, columns }
     }
 
     /// Return reference to all columns.
-    pub fn columns(&self) -> &Vec<IntervalColumnT> {
+    pub fn columns(&self) -> &Vec<IntervalColumnT<'a>> {
         &self.columns
     }
 
@@ -73,17 +74,19 @@ impl Trie {
     ///
     /// # Panics
     /// Panics if index is out of range
-    pub fn get_column(&self, index: usize) -> &IntervalColumnT {
+    pub fn get_column(&self, index: usize) -> &IntervalColumnT<'a> {
         &self.columns[index]
     }
 }
 
-impl Table for Trie {
+impl<'a> Table for Trie<'a> {
+    type Schema = TrieSchema;
+
     fn row_num(&self) -> usize {
         self.columns.last().map_or(0, |c| c.len())
     }
 
-    fn schema(&self) -> &dyn TableSchema {
+    fn schema(&self) -> &Self::Schema {
         &self.schema
     }
 }

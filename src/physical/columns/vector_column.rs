@@ -1,4 +1,4 @@
-use super::{Column, GenericColumnScan, RangedColumnScan};
+use super::{Column, GenericColumnScan};
 use std::{fmt::Debug, ops::Index};
 
 /// Simple implementation of [`Column`] that uses Vec to store data.
@@ -14,7 +14,9 @@ impl<T: Debug + Copy + Ord> VectorColumn<T> {
     }
 }
 
-impl<T: Debug + Copy + Ord> Column<T> for VectorColumn<T> {
+impl<'a, T: 'a + Debug + Copy + Ord> Column<'a, T> for VectorColumn<T> {
+    type ColScan = GenericColumnScan<'a, T, VectorColumn<T>>;
+
     fn len(&self) -> usize {
         self.data.len()
     }
@@ -23,8 +25,8 @@ impl<T: Debug + Copy + Ord> Column<T> for VectorColumn<T> {
         self.data[index]
     }
 
-    fn iter<'a>(&'a self) -> Box<dyn RangedColumnScan<Item = T> + 'a> {
-        Box::new(GenericColumnScan::new(self))
+    fn iter(&'a self) -> Self::ColScan {
+        GenericColumnScan::new(self)
     }
 }
 
