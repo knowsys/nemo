@@ -522,6 +522,12 @@ where
     fn current(&mut self) -> Option<Self::Item> {
         self.current
     }
+
+    fn reset(&mut self) {
+        self.element_index = None;
+        self.increment_index = None;
+        self.current = None;
+    }
 }
 
 impl<'a, T> RangedColumnScan for RleColumnScan<'a, T>

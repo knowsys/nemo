@@ -118,6 +118,10 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for GenericColumnScan<'a, T> {
         self.pos
             .and_then(|pos| (pos < self.interval.end).then(|| self.column.get(pos)))
     }
+
+    fn reset(&mut self) {
+        self.pos = None;
+    }
 }
 
 impl<'a, T: Ord + Copy + Debug> RangedColumnScan for GenericColumnScan<'a, T> {
