@@ -3,7 +3,7 @@ use crate::physical::columns::{
     IntervalColumnT, OrderedMergeJoin, RangedColumnScan, RangedColumnScanT,
 };
 use crate::physical::datatypes::DataTypeName;
-use std::cell::{RefCell, RefMut};
+use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
 /// Iterator for a Trie datastructure.
@@ -17,8 +17,10 @@ pub trait TrieScan<'a>: Debug {
     fn down(&mut self);
 
     /// Return the current position of the scan as a ranged [`ColumnScan`].
-    // fn current_scan<'b: 'a>(&'b mut self) -> Option<&'b mut RangedColumnScanT<'a>>;
-    fn current_scan(&self) -> Option<RefMut<RangedColumnScanT<'a>>>;
+    fn current_scan(&self) -> Option<&mut RangedColumnScanT<'a>>;
+
+    /// Return the underlying [`RangedColumnScan`] object given an index.
+    fn get_scan(&self, index: usize) -> Option<&'a mut RangedColumnScanT<'a>>;
 
     /// Return the underlying [`TrieSchema`].
     fn get_schema(&self) -> &dyn TableSchema;
@@ -28,14 +30,14 @@ pub trait TrieScan<'a>: Debug {
 #[derive(Debug)]
 pub struct IntervalTrieScan<'a> {
     trie: &'a Trie,
-    layers: Vec<RefCell<RangedColumnScanT<'a>>>,
+    layers: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
     current_layer: Option<usize>,
 }
 
 impl<'a> IntervalTrieScan<'a> {
     /// Construct Trie iterator.
     pub fn new(trie: &'a Trie) -> Self {
-        let mut layers = Vec::<RefCell<RangedColumnScanT<'a>>>::new();
+        let mut layers = Vec::<UnsafeCell<RangedColumnScanT<'a>>>::new();
 
         for column_t in trie.columns() {
             let new_scan = match column_t {
@@ -50,7 +52,7 @@ impl<'a> IntervalTrieScan<'a> {
                 }
             };
 
-            layers.push(RefCell::new(new_scan));
+            layers.push(UnsafeCell::new(new_scan));
         }
 
         Self {
@@ -77,7 +79,7 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
                     "Called down while on the last layer"
                 );
 
-                let current_position = self.layers[index].borrow().pos().unwrap();
+                let current_position = self.layers[index].get_mut().pos().unwrap();
 
                 let next_index = index + 1;
                 let next_layer_range = self
@@ -92,8 +94,13 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
         }
     }
 
-    fn current_scan(&self) -> Option<RefMut<RangedColumnScanT<'a>>> {
-        Some(self.layers[self.current_layer?].borrow_mut())
+    fn current_scan(&self) -> Option<&mut RangedColumnScanT<'a>> {
+        unsafe { Some(&mut *self.layers[self.current_layer?].get()) }
+    }
+
+    fn get_scan(&self, index: usize) -> Option<&'a mut RangedColumnScanT<'a>> {
+        // Some(self.layers[self.current_layer?].get_mut())
+        unsafe { Some(&mut *self.layers[index].get()) }
     }
 
     fn get_schema(&self) -> &dyn TableSchema {
@@ -157,10 +164,7 @@ pub struct TrieScanJoin<'a> {
 
     variable_to_scan: Vec<Vec<usize>>,
 
-    //Will replace variable_to_scan
-    merge_joins: Vec<RangedColumnScanT<'a>>,
-
-    column_scan_cache: Option<RefCell<RangedColumnScanT<'a>>>,
+    merge_joins: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
 }
 
 impl<'a> TrieScanJoin<'a> {
@@ -168,7 +172,10 @@ impl<'a> TrieScanJoin<'a> {
     pub fn new(trie_scans: Vec<Box<dyn TrieScan<'a> + 'a>>, target_schema: TrieSchema) -> Self {
         let mut variable_to_scan: Vec<Vec<usize>> = vec![];
         variable_to_scan.resize(target_schema.arity(), vec![]);
-        let mut merge_joins: Vec<RangedColumnScanT<'a>>;
+        let mut merge_join_indeces: Vec<Vec<Option<usize>>> = vec![];
+        merge_join_indeces.resize(target_schema.arity(), vec![]);
+
+        let mut merge_joins: Vec<UnsafeCell<RangedColumnScanT<'a>>> = vec![];
 
         for scan_index in 0..trie_scans.len() {
             let current_schema = trie_scans[scan_index].get_schema();
@@ -177,13 +184,48 @@ impl<'a> TrieScanJoin<'a> {
             }
         }
 
+        for target_label_index in 0..target_schema.arity() {
+            for scan_index in 0..trie_scans.len() {
+                merge_join_indeces[target_label_index].push(
+                    trie_scans[scan_index]
+                        .get_schema()
+                        .find_index(target_schema.get_label(target_label_index)),
+                );
+            }
+        }
+
+        for variable_index in 0..target_schema.arity() {
+            match target_schema.get_type(variable_index) {
+                DataTypeName::U64 => {
+                    let mut scans: Vec<&'a mut dyn RangedColumnScan<Item = u64>> = vec![];
+                    for scan_index in 0..merge_join_indeces[variable_index].len() {
+                        match merge_join_indeces[variable_index][scan_index] {
+                            Some(label_index) => scans.push(
+                                trie_scans[scan_index]
+                                    .get_scan(label_index)
+                                    .unwrap()
+                                    .to_colum_scan_u64()
+                                    .unwrap(),
+                            ),
+                            None => {}
+                        }
+                    }
+
+                    merge_joins.push(UnsafeCell::new(RangedColumnScanT::RangedColumnScanU64(
+                        Box::new(OrderedMergeJoin::new(scans)),
+                    )))
+                }
+                DataTypeName::Float => {}
+                DataTypeName::Double => {}
+            }
+        }
+
         Self {
             trie_scans,
             target_schema,
             current_variable: None,
             variable_to_scan,
-            merge_joins: vec![],
-            column_scan_cache: None,
+            merge_joins,
         }
     }
 }
@@ -216,55 +258,24 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
         for &scan_index in current_scans {
             self.trie_scans[scan_index].down();
         }
+
+        self.merge_joins[current_variable].get_mut().reset();
     }
 
-    fn current_scan(&self) -> Option<RefMut<RangedColumnScanT<'a>>> {
+    fn current_scan(&self) -> Option<&mut RangedColumnScanT<'a>> {
         debug_assert!(self.current_variable.is_some());
 
         match self.target_schema.get_type(self.current_variable?) {
-            DataTypeName::U64 => {
-                if self.variable_to_scan[self.current_variable.unwrap()].len() == 1 {
-                    let scan_index = self.variable_to_scan[self.current_variable.unwrap()][0];
-
-                    return self.trie_scans[scan_index].current_scan();
-                }
-
-                // let mut rest = self.trie_scans.as_mut_slice();
-
-                // let mut trie_scans: Vec<&mut Box<dyn TrieScan>> = vec![];
-
-                // // TODO: make sure that scan indices are sorted; debug_assert probably
-                // for _ in &self.variable_to_scan[self.current_variable.unwrap()] {
-                //     // let (_left, middle) = rest.split_at_mut(*scan_index);
-                //     // let (target, right) = middle.split_at_mut(1);
-
-                //     // rest = right;
-                //     let (_left, middle) = rest.split_at_mut(0);
-                //     let (target, right) = middle.split_at_mut(1);
-
-                //     rest = right;
-                //     trie_scans.push(target.get_mut(0).unwrap());
-                // }
-
-                // let mut column_scans = Vec::<&mut dyn RangedColumnScan<Item = u64>>::new();
-
-                // unsafe {
-                //     for ts in trie_scans {
-                //         column_scans.push((*ts.current_scan()?).to_colum_scan_u64().unwrap());
-                //     }
-                // }
-                // let omj = OrderedMergeJoin::new(column_scans);
-
-                // let rcst = RangedColumnScanT::RangedColumnScanU64(Box::new(omj));
-
-                // self.column_scan_cache = Some(rcst);
-
-                // Some(self.column_scan_cache.as_mut().unwrap())
-                None
-            }
+            DataTypeName::U64 => unsafe {
+                Some(&mut *self.merge_joins[self.current_variable?].get())
+            },
             DataTypeName::Float => None,
             DataTypeName::Double => None,
         }
+    }
+
+    fn get_scan(&self, index: usize) -> Option<&'a mut RangedColumnScanT<'a>> {
+        unsafe { Some(&mut *self.merge_joins[index].get()) }
     }
 
     fn get_schema(&self) -> &dyn TableSchema {
@@ -317,52 +328,30 @@ mod test {
         assert!(trie_iter.current_scan().is_none());
 
         trie_iter.down();
-        // let mut scan;
 
-        // unsafe {
-        {
-            let scan = &mut (trie_iter.current_scan().unwrap());
-            seek_scan(scan, 1);
-            assert_eq!(scan.pos(), Some(0));
-        }
-        // }
-
+        let scan = &mut (trie_iter.current_scan().unwrap());
+        seek_scan(scan, 1);
+        assert_eq!(scan.pos(), Some(0));
         trie_iter.down();
-        // unsafe {
-        {
-            let scan = &mut (trie_iter.current_scan().unwrap());
-            seek_scan(scan, 2);
-            assert_eq!(scan.pos(), Some(0));
-        }
-        // }
+        let scan = &mut (trie_iter.current_scan().unwrap());
+        seek_scan(scan, 2);
+        assert_eq!(scan.pos(), Some(0));
 
         //TODO: Further tests this once GenericColumnScan is fixed
     }
 
     fn join_next(join_scan: &mut TrieScanJoin) -> Option<u64> {
-        // unsafe {
-
-        // (join_scan.current_scan()?)
-        //     .to_colum_scan_u64()
-        //     .unwrap()
-        //     .next()
-        // }
-
-        let mut a = join_scan.current_scan()?;
-        let b = a.to_colum_scan_u64();
-        let c = b.unwrap();
-        let d = c.next();
-
-        d
+        (join_scan.current_scan()?)
+            .to_colum_scan_u64()
+            .unwrap()
+            .next()
     }
 
-    fn join_current(join_scan: &mut TrieScanJoin) -> Option<u64> {
-        unsafe {
-            (join_scan.current_scan()?)
-                .to_colum_scan_u64()
-                .unwrap()
-                .current()
-        }
+    fn _join_current(join_scan: &mut TrieScanJoin) -> Option<u64> {
+        (join_scan.current_scan()?)
+            .to_colum_scan_u64()
+            .unwrap()
+            .current()
     }
 
     #[test]
@@ -382,8 +371,6 @@ mod test {
                 datatype: DataTypeName::U64,
             },
         ]);
-        let schema_a_clone = schema_a.clone();
-
         let schema_b = TrieSchema::new(vec![
             TrieSchemaEntry {
                 label: 1,
@@ -394,7 +381,6 @@ mod test {
                 datatype: DataTypeName::U64,
             },
         ]);
-        let schema_b_clone = schema_b.clone();
 
         let schema_target = TrieSchema::new(vec![
             TrieSchemaEntry {
