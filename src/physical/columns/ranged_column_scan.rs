@@ -68,4 +68,13 @@ impl<'a> RangedColumnScanT<'a> {
             _ => None,
         }
     }
+
+    /// Resets the iterator
+    pub fn reset(&mut self) {
+        match self {
+            RangedColumnScanT::RangedColumnScanU64(column) => column.reset(),
+            RangedColumnScanT::RangedColumnScanFloat(column) => column.reset(),
+            RangedColumnScanT::RangedColumnScanDouble(column) => column.reset(),
+        }
+    }
 }

@@ -10,6 +10,9 @@ pub trait ColumnScan: Debug + Iterator {
 
     /// Return the value at the current position, if any.
     fn current(&mut self) -> Option<Self::Item>;
+
+    /// Return to the initial state
+    fn reset(&mut self);
 }
 
 /// Enum for column scans for all the supported types

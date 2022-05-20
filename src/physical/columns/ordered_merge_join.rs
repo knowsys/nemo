@@ -59,7 +59,11 @@ impl<'a, T: Eq + Debug + Copy> Iterator for OrderedMergeJoin<'a, T> {
             self.current = None;
             return None;
         }
-        self.next_loop()
+        if self.column_scans.len() > 1 {
+            self.next_loop()
+        } else {
+            self.active_max
+        }
     }
 }
 
@@ -72,11 +76,22 @@ impl<'a, T: Ord + Copy + Debug> ColumnScan for OrderedMergeJoin<'a, T> {
         }
 
         self.active_max = Some(seek_result?);
-        self.next_loop()
+
+        if self.column_scans.len() > 1 {
+            self.next_loop()
+        } else {
+            self.active_max
+        }
     }
 
     fn current(&mut self) -> Option<T> {
         self.current
+    }
+
+    fn reset(&mut self) {
+        self.active_scan = 0;
+        self.active_max = None;
+        self.current = None;
     }
 }
 
