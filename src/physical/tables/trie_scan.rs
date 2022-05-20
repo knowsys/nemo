@@ -87,7 +87,7 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
                     .get_column(next_index)
                     .int_bounds(current_position);
 
-                self.layers[next_index].narrow(next_layer_range);
+                self.layers[next_index].get_mut().narrow(next_layer_range);
 
                 self.current_layer = Some(next_index);
             }

@@ -20,10 +20,7 @@ pub use ftrie::Ftrie;
 pub mod trie;
 pub use trie::Trie;
 pub use trie::TrieSchema;
-<<<<<<< HEAD
 pub use trie::TrieSchemaEntry;
-=======
->>>>>>> 2bd49f3... Trying different stuff (WIP)
 
 /// MOdule for defining [`TrieScan`]
 pub mod trie_scan;
