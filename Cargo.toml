@@ -34,6 +34,10 @@ panic = "abort"
 name = "seek"
 harness = false
 
+[[bench]]
+name = "dynamic_dispatch"
+harness = false
+
 # iai - based benchmarks, only on unix
 [[bench]]
 name = "seek_iai"
