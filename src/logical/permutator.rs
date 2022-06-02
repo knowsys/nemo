@@ -1,12 +1,13 @@
 //! Holds the [Permutator] struct, which allows one to define a logical permutation of the content of index-based data structures
 
+use crate::physical::datatypes::{Field, FloorToUsize};
 use std::cmp::Ordering;
 use std::fmt::Debug;
 
 use crate::{
     error::Error,
     physical::{
-        columns::{column::Column, ColumnBuilder, ColumnT},
+        columns::{Column, ColumnBuilder, ColumnEnum, ColumnT},
         datatypes::data_value::VecT,
     },
 };
@@ -41,9 +42,9 @@ impl Permutator {
     }
 
     /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
-    pub fn sort_from_column<T>(data: &dyn Column<T>) -> Permutator
+    pub fn sort_from_column<T>(data: &ColumnEnum<T>) -> Permutator
     where
-        T: Ord,
+        T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
     {
         let mut vec = (0..data.len()).collect::<Vec<usize>>();
         vec.sort_by_key(|&i| data.get(i));
@@ -178,12 +179,12 @@ impl Permutator {
     /// *Returns* either a ['Column'] or an [Error][Error::Permutation]
     pub fn apply_column<'a, T, U>(
         &self,
-        column: &dyn Column<T>,
+        column: &ColumnEnum<T>,
         mut cb: U,
-    ) -> Result<Box<dyn Column<T> + 'a>, Error>
+    ) -> Result<ColumnEnum<T>, Error>
     where
-        T: 'a,
-        U: ColumnBuilder<'a, T>,
+        T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+        U: ColumnBuilder<'a, T, Col = ColumnEnum<T>>,
     {
         if column.len() < (self.sort_vec.len() + self.offset) {
             Err(Error::PermutationApplyWrongLen(
@@ -383,7 +384,7 @@ mod test {
         vec.iter().for_each(|&elem| builder.add(elem));
         let column = builder.finalize();
 
-        let permutator = Permutator::sort_from_column(column.as_ref());
+        let permutator = Permutator::sort_from_column(&column);
         let sort_vec = permutator
             .permutate(&vec)
             .expect("Applying permutation should work in this test-case");
@@ -411,8 +412,8 @@ mod test {
         let column1: VectorColumn<Float> = VectorColumn::new(vec1);
         let column2: VectorColumn<Double> = VectorColumn::new(vec2.clone());
         let columnset: Vec<ColumnT> = vec![
-            ColumnT::ColumnFloat(Box::new(column1)),
-            ColumnT::ColumnDouble(Box::new(column2)),
+            ColumnT::ColumnFloat(ColumnEnum::VectorColumn(column1)),
+            ColumnT::ColumnDouble(ColumnEnum::VectorColumn(column2)),
         ];
         let permutator = Permutator::sort_from_columns(&columnset)
             .expect("Length has been adjusted when generating test-data");
@@ -425,7 +426,10 @@ mod test {
         );
 
         let column2: VectorColumn<Double> = VectorColumn::new(vec2);
-        let column_sort = permutator.apply_column(&column2, AdaptiveColumnBuilder::new());
+        let column_sort = permutator.apply_column(
+            &ColumnEnum::VectorColumn(column2),
+            AdaptiveColumnBuilder::new(),
+        );
         assert!(column_sort.is_ok());
         true
     }
@@ -455,7 +459,7 @@ mod test {
             vec![ColumnT::ColumnU64(column1), ColumnT::ColumnFloat(column2)];
         let permutator = Permutator::sort_from_columns(&columnset).expect("Sorting should work");
         let column_sort = permutator
-            .apply_column(column3.as_ref(), AdaptiveColumnBuilder::new())
+            .apply_column(&column3, AdaptiveColumnBuilder::new())
             .expect("application of sorting should work");
         let column_sort_vec: Vec<u64> = column_sort.iter().collect();
         assert_eq!(column_sort_vec, vec![1, 0, 5, 4, 2, 3, 8, 9, 7, 6]);
