@@ -47,7 +47,6 @@ pub use interval_column::IntervalColumnT;
 /// Module for defining [`GenericIntervalColumn`]
 pub mod generic_interval_column;
 pub use generic_interval_column::GenericIntervalColumn;
-pub use generic_interval_column::GenericIntervalColumnEnum;
 
 /// Module for defining [`RleColumn`]
 pub mod rle_column;

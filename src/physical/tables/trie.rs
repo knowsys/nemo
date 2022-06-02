@@ -53,20 +53,20 @@ impl TableSchema for TrieSchema {
 /// Implementation of a trie data structure.
 /// The underlying data is oragnized in IntervalColumns.
 #[derive(Debug)]
-pub struct Trie<'a> {
+pub struct Trie {
     // TODO: could be generic in column type (one of accepted types still is IntervalColumnT)
     schema: TrieSchema,
-    columns: Vec<IntervalColumnT<'a>>,
+    columns: Vec<IntervalColumnT>,
 }
 
-impl<'a> Trie<'a> {
+impl Trie {
     /// Construct a new Trie from a given schema and a vector of IntervalColumns.
-    pub fn new(schema: TrieSchema, columns: Vec<IntervalColumnT<'a>>) -> Self {
+    pub fn new(schema: TrieSchema, columns: Vec<IntervalColumnT>) -> Self {
         Self { schema, columns }
     }
 
     /// Return reference to all columns.
-    pub fn columns(&self) -> &Vec<IntervalColumnT<'a>> {
+    pub fn columns(&self) -> &Vec<IntervalColumnT> {
         &self.columns
     }
 
@@ -74,12 +74,12 @@ impl<'a> Trie<'a> {
     ///
     /// # Panics
     /// Panics if index is out of range
-    pub fn get_column(&self, index: usize) -> &IntervalColumnT<'a> {
+    pub fn get_column(&self, index: usize) -> &IntervalColumnT {
         &self.columns[index]
     }
 }
 
-impl<'a> Table for Trie<'a> {
+impl Table for Trie {
     type Schema = TrieSchema;
 
     fn row_num(&self) -> usize {

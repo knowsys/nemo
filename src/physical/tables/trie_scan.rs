@@ -32,7 +32,7 @@ pub trait TrieScan<'a>: Debug {
 /// Implementation of TrieScan for Trie with IntervalColumns
 #[derive(Debug)]
 pub struct IntervalTrieScan<'a> {
-    trie: &'a Trie<'a>,
+    trie: &'a Trie,
     layers: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
     current_layer: Option<usize>,
 }
@@ -284,8 +284,7 @@ mod test {
     use super::super::trie::{Trie, TrieSchema, TrieSchemaEntry};
     use super::{IntervalTrieScan, TrieScan, TrieScanEnum, TrieScanJoin};
     use crate::physical::columns::{
-        ColumnEnum, GenericIntervalColumnEnum, IntervalColumnEnum, RangedColumnScan,
-        RangedColumnScanT,
+        ColumnEnum, GenericIntervalColumn, IntervalColumnEnum, RangedColumnScan, RangedColumnScanT,
     };
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::util::test_util::make_gict;
@@ -500,7 +499,7 @@ mod test {
     }
 
     use crate::physical::columns::{
-        AdaptiveColumnBuilder, ColumnBuilder, GenericIntervalColumn, IntervalColumnT, VectorColumn,
+        AdaptiveColumnBuilder, ColumnBuilder, IntervalColumnT, VectorColumn,
     };
 
     #[test]
@@ -520,18 +519,15 @@ mod test {
             datatype: DataTypeName::U64,
         }]);
 
-        let built_interval_col =
-            GenericIntervalColumn::<u64, ColumnEnum<u64>, VectorColumn<usize>>::new(
-                builder.finalize(),
-                VectorColumn::new(vec![0]),
-            );
+        let built_interval_col = GenericIntervalColumn::<u64>::new(
+            builder.finalize(),
+            ColumnEnum::VectorColumn(VectorColumn::new(vec![0])),
+        );
 
         let my_trie = Trie::new(
             schema,
             vec![IntervalColumnT::U64(
-                IntervalColumnEnum::GenericIntervalColumn(
-                    GenericIntervalColumnEnum::ColumnEnumWithVecStarts(built_interval_col),
-                ),
+                IntervalColumnEnum::GenericIntervalColumn(built_interval_col),
             )],
         );
 

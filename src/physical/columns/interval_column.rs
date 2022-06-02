@@ -1,5 +1,5 @@
 use super::{
-    Column, GenericColumnScanEnum, GenericIntervalColumnEnum, RangedColumnScanCell,
+    Column, GenericColumnScanEnum, GenericIntervalColumn, RangedColumnScanCell,
     RangedColumnScanEnum, RangedColumnScanT,
 };
 use crate::{
@@ -23,18 +23,18 @@ pub trait IntervalColumn<'a, T>: Debug + Column<'a, T> {
 
 /// Enum for columns of all supported basic types.
 #[derive(Debug)]
-pub enum IntervalColumnEnum<'a, T>
+pub enum IntervalColumnEnum<T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     /// Case GenericIntervalColumn
-    GenericIntervalColumn(GenericIntervalColumnEnum<'a, T>),
+    GenericIntervalColumn(GenericIntervalColumn<T>),
 }
 
 generate_forwarder!(forward_to_interval_column;
                     GenericIntervalColumn);
 
-impl<'a, T> Column<'a, T> for IntervalColumnEnum<'a, T>
+impl<'a, T> Column<'a, T> for IntervalColumnEnum<T>
 where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
@@ -61,7 +61,7 @@ where
     }
 }
 
-impl<'a, T> IntervalColumn<'a, T> for IntervalColumnEnum<'a, T>
+impl<'a, T> IntervalColumn<'a, T> for IntervalColumnEnum<T>
 where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
@@ -76,18 +76,18 @@ where
 
 /// Enum for Interval Column with different underlying datatypes
 #[derive(Debug)]
-pub enum IntervalColumnT<'a> {
+pub enum IntervalColumnT {
     /// Case u64
-    U64(IntervalColumnEnum<'a, u64>),
+    U64(IntervalColumnEnum<u64>),
     /// Case Float
-    Float(IntervalColumnEnum<'a, Float>),
+    Float(IntervalColumnEnum<Float>),
     /// Case Double
-    Double(IntervalColumnEnum<'a, Double>),
+    Double(IntervalColumnEnum<Double>),
 }
 
 generate_datatype_forwarder!(forward_to_interval_column_enum);
 
-impl<'a> Column<'a, DataValueT> for IntervalColumnT<'a> {
+impl<'a> Column<'a, DataValueT> for IntervalColumnT {
     type ColScan = RangedColumnScanT<'a>;
 
     fn len(&self) -> usize {
@@ -111,7 +111,7 @@ impl<'a> Column<'a, DataValueT> for IntervalColumnT<'a> {
     }
 }
 
-impl<'a> IntervalColumn<'a, DataValueT> for IntervalColumnT<'a> {
+impl<'a> IntervalColumn<'a, DataValueT> for IntervalColumnT {
     fn int_len(&self) -> usize {
         forward_to_interval_column_enum!(self, int_len)
     }
