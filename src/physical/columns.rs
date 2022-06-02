@@ -4,6 +4,7 @@
 pub mod column;
 pub use column::Column;
 pub use column::ColumnEnum;
+pub use column::ColumnT;
 
 /// Module for defining [`ColumnBuilder`]
 pub mod column_builder;
