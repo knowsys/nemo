@@ -1,6 +1,5 @@
 use super::{
-    Column, GenericColumnScanEnum, GenericIntervalColumnEnum, RangedColumnScanEnum,
-    RangedColumnScanT,
+    Column, GenericColumnScanEnum, GenericIntervalColumn, RangedColumnScanEnum, RangedColumnScanT,
 };
 use crate::physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize};
 use std::{fmt::Debug, ops::Range};
@@ -20,15 +19,15 @@ pub trait IntervalColumn<'a, T>: Debug + Column<'a, T> {
 
 /// Enum for columns of all supported basic types.
 #[derive(Debug)]
-pub enum IntervalColumnEnum<'a, T>
+pub enum IntervalColumnEnum<T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     /// Case GenericIntervalColumn
-    GenericIntervalColumn(GenericIntervalColumnEnum<'a, T>),
+    GenericIntervalColumn(GenericIntervalColumn<T>),
 }
 
-impl<'a, T> Column<'a, T> for IntervalColumnEnum<'a, T>
+impl<'a, T> Column<'a, T> for IntervalColumnEnum<T>
 where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
@@ -61,7 +60,7 @@ where
     }
 }
 
-impl<'a, T> IntervalColumn<'a, T> for IntervalColumnEnum<'a, T>
+impl<'a, T> IntervalColumn<'a, T> for IntervalColumnEnum<T>
 where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
@@ -80,16 +79,16 @@ where
 
 /// Enum for Interval Column with different underlying datatypes
 #[derive(Debug)]
-pub enum IntervalColumnT<'a> {
+pub enum IntervalColumnT {
     /// Case u64
-    U64(IntervalColumnEnum<'a, u64>),
+    U64(IntervalColumnEnum<u64>),
     /// Case Float
-    Float(IntervalColumnEnum<'a, Float>),
+    Float(IntervalColumnEnum<Float>),
     /// Case Double
-    Double(IntervalColumnEnum<'a, Double>),
+    Double(IntervalColumnEnum<Double>),
 }
 
-impl<'a> Column<'a, DataValueT> for IntervalColumnT<'a> {
+impl<'a> Column<'a, DataValueT> for IntervalColumnT {
     type ColScan = RangedColumnScanT<'a>;
 
     fn len(&self) -> usize {
@@ -125,7 +124,7 @@ impl<'a> Column<'a, DataValueT> for IntervalColumnT<'a> {
     }
 }
 
-impl<'a> IntervalColumn<'a, DataValueT> for IntervalColumnT<'a> {
+impl<'a> IntervalColumn<'a, DataValueT> for IntervalColumnT {
     fn int_len(&self) -> usize {
         match self {
             Self::U64(col) => col.int_len(),

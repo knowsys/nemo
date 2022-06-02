@@ -1,53 +1,26 @@
-use super::{Column, ColumnEnum, GenericColumnScan, IntervalColumn, RleColumn, VectorColumn};
+use super::{Column, ColumnEnum, GenericColumnScan, IntervalColumn};
 use crate::physical::datatypes::{Field, FloorToUsize};
-use std::marker::PhantomData;
 use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`IntervalColumn`] that uses a second column to manage interval bounds.
 #[derive(Debug)]
-pub struct GenericIntervalColumn<'a, T, Col: Column<'a, T>, Starts: Column<'a, usize>> {
-    _at: &'a PhantomData<T>,
-    data: Col,
-    int_starts: Starts,
+pub struct GenericIntervalColumn<T> {
+    data: ColumnEnum<T>,
+    int_starts: ColumnEnum<usize>,
 }
 
-/// Enum encapsulating implementations of GenericIntervalColumns
-#[derive(Debug)]
-pub enum GenericIntervalColumnEnum<'a, T>
-where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
-{
-    /// Case VectorColumn with VectorColumn representing start indices
-    VectorColumnWithVecStarts(GenericIntervalColumn<'a, T, VectorColumn<T>, VectorColumn<usize>>),
-    /// Case VectorColumn with RleColumn representing start indices
-    VectorColumnWithRleStarts(GenericIntervalColumn<'a, T, VectorColumn<T>, RleColumn<usize>>),
-    /// Case VectorColumn with VectorColumn representing start indices
-    RleColumnWithVecStarts(GenericIntervalColumn<'a, T, RleColumn<T>, VectorColumn<usize>>),
-    /// Case RleColumn with RleColumn representing start indices
-    RleColumnWithRleStarts(GenericIntervalColumn<'a, T, RleColumn<T>, RleColumn<usize>>),
-    /// Case ColumnEnum with VectorColumn representing start indices
-    ColumnEnumWithVecStarts(GenericIntervalColumn<'a, T, ColumnEnum<T>, VectorColumn<usize>>),
-    /// Case ColumnEnum with RleColumn representing start indices
-    ColumnEnumWithRleStarts(GenericIntervalColumn<'a, T, ColumnEnum<T>, RleColumn<usize>>),
-}
-
-impl<'a, T, Col: Column<'a, T>, Starts: Column<'a, usize>>
-    GenericIntervalColumn<'a, T, Col, Starts>
-{
+impl<T> GenericIntervalColumn<T> {
     /// Constructs a new VectorColumn from a vector of the suitable type.
-    pub fn new(data: Col, int_starts: Starts) -> GenericIntervalColumn<'a, T, Col, Starts> {
-        GenericIntervalColumn {
-            _at: &PhantomData,
-            data,
-            int_starts,
-        }
+    pub fn new(data: ColumnEnum<T>, int_starts: ColumnEnum<usize>) -> GenericIntervalColumn<T> {
+        GenericIntervalColumn { data, int_starts }
     }
 }
 
-impl<'a, T: 'a + Debug + Copy + Ord, Col: 'a + Column<'a, T>, Starts: 'a + Column<'a, usize>>
-    Column<'a, T> for GenericIntervalColumn<'a, T, Col, Starts>
+impl<'a, T> Column<'a, T> for GenericIntervalColumn<T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
-    type ColScan = GenericColumnScan<'a, T, GenericIntervalColumn<'a, T, Col, Starts>>;
+    type ColScan = GenericColumnScan<'a, T, GenericIntervalColumn<T>>;
 
     fn len(&self) -> usize {
         self.data.len()
@@ -66,8 +39,9 @@ impl<'a, T: 'a + Debug + Copy + Ord, Col: 'a + Column<'a, T>, Starts: 'a + Colum
     }
 }
 
-impl<'a, T: 'a + Debug + Copy + Ord, Col: 'a + Column<'a, T>, Starts: 'a + Column<'a, usize>>
-    IntervalColumn<'a, T> for GenericIntervalColumn<'a, T, Col, Starts>
+impl<'a, T> IntervalColumn<'a, T> for GenericIntervalColumn<T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     fn int_len(&self) -> usize {
         self.int_starts.len()
@@ -83,81 +57,10 @@ impl<'a, T: 'a + Debug + Copy + Ord, Col: 'a + Column<'a, T>, Starts: 'a + Colum
     }
 }
 
-impl<'a, T> Column<'a, T> for GenericIntervalColumnEnum<'a, T>
-where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
-{
-    type ColScan = GenericColumnScan<'a, T, GenericIntervalColumnEnum<'a, T>>;
-
-    fn len(&self) -> usize {
-        match self {
-            Self::VectorColumnWithVecStarts(col) => col.len(),
-            Self::VectorColumnWithRleStarts(col) => col.len(),
-            Self::RleColumnWithVecStarts(col) => col.len(),
-            Self::RleColumnWithRleStarts(col) => col.len(),
-            Self::ColumnEnumWithVecStarts(col) => col.len(),
-            Self::ColumnEnumWithRleStarts(col) => col.len(),
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        match self {
-            Self::VectorColumnWithVecStarts(col) => col.is_empty(),
-            Self::VectorColumnWithRleStarts(col) => col.is_empty(),
-            Self::RleColumnWithVecStarts(col) => col.is_empty(),
-            Self::RleColumnWithRleStarts(col) => col.is_empty(),
-            Self::ColumnEnumWithVecStarts(col) => col.is_empty(),
-            Self::ColumnEnumWithRleStarts(col) => col.is_empty(),
-        }
-    }
-
-    fn get(&self, index: usize) -> T {
-        match self {
-            Self::VectorColumnWithVecStarts(col) => col.get(index),
-            Self::VectorColumnWithRleStarts(col) => col.get(index),
-            Self::RleColumnWithVecStarts(col) => col.get(index),
-            Self::RleColumnWithRleStarts(col) => col.get(index),
-            Self::ColumnEnumWithVecStarts(col) => col.get(index),
-            Self::ColumnEnumWithRleStarts(col) => col.get(index),
-        }
-    }
-
-    fn iter(&'a self) -> Self::ColScan {
-        GenericColumnScan::new(self)
-    }
-}
-
-impl<'a, T> IntervalColumn<'a, T> for GenericIntervalColumnEnum<'a, T>
-where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
-{
-    fn int_len(&self) -> usize {
-        match self {
-            Self::VectorColumnWithVecStarts(col) => col.int_len(),
-            Self::VectorColumnWithRleStarts(col) => col.int_len(),
-            Self::RleColumnWithVecStarts(col) => col.int_len(),
-            Self::RleColumnWithRleStarts(col) => col.int_len(),
-            Self::ColumnEnumWithVecStarts(col) => col.int_len(),
-            Self::ColumnEnumWithRleStarts(col) => col.int_len(),
-        }
-    }
-
-    fn int_bounds(&self, int_idx: usize) -> Range<usize> {
-        match self {
-            Self::VectorColumnWithVecStarts(col) => col.int_bounds(int_idx),
-            Self::VectorColumnWithRleStarts(col) => col.int_bounds(int_idx),
-            Self::RleColumnWithVecStarts(col) => col.int_bounds(int_idx),
-            Self::RleColumnWithRleStarts(col) => col.int_bounds(int_idx),
-            Self::ColumnEnumWithVecStarts(col) => col.int_bounds(int_idx),
-            Self::ColumnEnumWithRleStarts(col) => col.int_bounds(int_idx),
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use super::super::VectorColumn;
-    use super::{Column, GenericIntervalColumn, IntervalColumn};
+    use super::super::{Column, ColumnEnum, VectorColumn};
+    use super::{GenericIntervalColumn, IntervalColumn};
     use test_log::test;
 
     #[test]
@@ -165,8 +68,8 @@ mod test {
         let data: Vec<u64> = vec![1, 2, 3, 10, 11, 12, 20, 30, 31];
         let int_starts: Vec<usize> = vec![0, 3, 6, 7];
 
-        let v_data: VectorColumn<u64> = VectorColumn::new(data);
-        let v_int_starts: VectorColumn<usize> = VectorColumn::new(int_starts);
+        let v_data = ColumnEnum::VectorColumn(VectorColumn::new(data));
+        let v_int_starts = ColumnEnum::VectorColumn(VectorColumn::new(int_starts));
         let gic = GenericIntervalColumn::new(v_data, v_int_starts);
         assert_eq!(gic.len(), 9);
         assert_eq!(gic.get(0), 1);

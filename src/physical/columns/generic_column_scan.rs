@@ -1,4 +1,4 @@
-use super::{Column, ColumnScan, GenericIntervalColumnEnum, RangedColumnScan, VectorColumn};
+use super::{Column, ColumnScan, GenericIntervalColumn, RangedColumnScan, VectorColumn};
 use crate::physical::datatypes::{Field, FloorToUsize};
 use std::marker::PhantomData;
 use std::{fmt::Debug, ops::Range};
@@ -21,7 +21,7 @@ where
     /// Case Scan with VectorColumn
     VectorColumn(GenericColumnScan<'a, T, VectorColumn<T>>),
     /// Case Scan with GenericIntervalColumn
-    GenericIntervalColumn(GenericColumnScan<'a, T, GenericIntervalColumnEnum<'a, T>>),
+    GenericIntervalColumn(GenericColumnScan<'a, T, GenericIntervalColumn<T>>),
 }
 
 impl<'a, T, Col> GenericColumnScan<'a, T, Col>
