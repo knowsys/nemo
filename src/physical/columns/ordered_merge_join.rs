@@ -110,6 +110,12 @@ impl<'a, T: Ord + Copy + Debug, Scan: RangedColumnScan<Item = T>> RangedColumnSc
             "This function only exists because RangedColumnScans cannnot be ColumnScans"
         );
     }
+
+    fn narrow_unsafe(&self, _interval: Range<usize>) {
+        unimplemented!(
+            "This function only exists because RangedColumnScans cannnot be ColumnScans"
+        );
+    }
 }
 
 #[cfg(test)]

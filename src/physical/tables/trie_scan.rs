@@ -69,7 +69,10 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
                     "Called down while on the last layer"
                 );
 
-                let current_position = self.layers[index].get_mut().pos().unwrap();
+                let current_position = unsafe {
+                    let layer = &*self.layers[index].get();
+                    layer.pos().unwrap()
+                };
 
                 let next_index = index + 1;
                 let next_layer_range = self
@@ -77,7 +80,10 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
                     .get_column(next_index)
                     .int_bounds(current_position);
 
-                self.layers[next_index].get_mut().narrow(next_layer_range);
+                unsafe {
+                    let layer = &*self.layers[next_index].get();
+                    layer.narrow_unsafe(next_layer_range);
+                }
 
                 self.current_layer = Some(next_index);
             }
@@ -177,8 +183,7 @@ impl<'a> TrieScanJoin<'a> {
         for target_label_index in 0..target_schema.arity() {
             for scan in &trie_scans {
                 merge_join_indeces[target_label_index].push(
-                    scan
-                        .get_schema()
+                    scan.get_schema()
                         .find_index(target_schema.get_label(target_label_index)),
                 );
             }

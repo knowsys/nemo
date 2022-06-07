@@ -12,6 +12,8 @@ pub trait RangedColumnScan: ColumnScan {
 
     /// Restricts the iterator to the given `interval`.
     fn narrow(&mut self, interval: Range<usize>);
+
+    fn narrow_unsafe(&self, interval: Range<usize>);
 }
 
 /// Enum for ranged column scans for all the supported types
@@ -91,6 +93,14 @@ where
             Self::OrderedMergeJoin(cs) => cs.narrow(interval),
         }
     }
+
+    fn narrow_unsafe(&self, interval: Range<usize>) {
+        match self {
+            Self::GenericColumnScan(cs) => cs.narrow_unsafe(interval),
+            Self::RleColumnScan(cs) => cs.narrow_unsafe(interval),
+            Self::OrderedMergeJoin(cs) => cs.narrow_unsafe(interval),
+        }
+    }
 }
 
 /// enum for RangedColumnScan for underlying data type
@@ -168,6 +178,14 @@ impl<'a> RangedColumnScan for RangedColumnScanT<'a> {
             Self::U64(cs) => cs.narrow(interval),
             Self::Float(cs) => cs.narrow(interval),
             Self::Double(cs) => cs.narrow(interval),
+        }
+    }
+
+    fn narrow_unsafe(&self, interval: Range<usize>) {
+        match self {
+            Self::U64(cs) => cs.narrow_unsafe(interval),
+            Self::Float(cs) => cs.narrow_unsafe(interval),
+            Self::Double(cs) => cs.narrow_unsafe(interval),
         }
     }
 }
