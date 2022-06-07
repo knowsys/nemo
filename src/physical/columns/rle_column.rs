@@ -630,6 +630,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn col_with_zero_increment_construction() {
         let raw_data: Vec<u8> = get_control_data_with_inc_zero();
         let expected: RleColumn<u8> = get_test_column_with_inc_zero();
@@ -670,6 +671,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn get_with_large_index_on_inc_zero() {
         let control_data = get_control_data_with_inc_zero();
         let c: RleColumn<u8> = get_test_column_with_inc_zero();
@@ -681,6 +683,7 @@ mod test {
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn get_quickcheck_u64(raw_data: Vec<u64>) -> bool {
         let col = RleColumn::new(raw_data.clone());
 
@@ -691,6 +694,7 @@ mod test {
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn get_quickcheck_float(raw_data: Vec<Float>) -> bool {
         let col = RleColumn::new(raw_data.clone());
 
@@ -701,6 +705,7 @@ mod test {
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn get_quickcheck_double(raw_data: Vec<Double>) -> bool {
         let col = RleColumn::new(raw_data.clone());
 
@@ -720,6 +725,7 @@ mod test {
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn iter_quickcheck_u64(raw_data: Vec<u64>) -> bool {
         let col = RleColumn::new(raw_data.clone());
 
@@ -728,6 +734,7 @@ mod test {
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn iter_quickcheck_float(raw_data: Vec<Float>) -> bool {
         let col = RleColumn::new(raw_data.clone());
 
@@ -736,6 +743,7 @@ mod test {
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn iter_quickcheck_double(raw_data: Vec<Double>) -> bool {
         let col = RleColumn::new(raw_data.clone());
 
@@ -768,6 +776,7 @@ mod test {
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn seek_quickcheck_u64(mut raw_data: Vec<u64>, target: u64) -> bool {
         raw_data.sort_unstable();
 
@@ -782,6 +791,7 @@ mod test {
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn seek_quickcheck_float(mut raw_data: Vec<Float>, target: Float) -> bool {
         raw_data.sort();
 
@@ -796,6 +806,7 @@ mod test {
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn seek_quickcheck_double(mut raw_data: Vec<Double>, target: Double) -> bool {
         raw_data.sort();
 

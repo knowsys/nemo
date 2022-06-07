@@ -82,6 +82,7 @@ Boston;United States;4628910
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn csv_with_ignored_and_faulty() {
         let data = "\
 10;20;30;40;20;valid
@@ -113,6 +114,7 @@ node03;123;123;13;55;123;invalid
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn csv_quickchecked(u64_vec: Vec<u64>, double_vec: Vec<f64>, float_vec: Vec<f32>) -> bool {
         let mut double_vec = double_vec
             .iter()

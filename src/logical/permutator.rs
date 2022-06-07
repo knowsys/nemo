@@ -230,6 +230,7 @@ mod test {
         );
     }
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn sort_from_vec(
         vec_u64: Vec<u64>,
         vec_i64: Vec<i64>,
@@ -372,6 +373,7 @@ mod test {
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn from_rnd_column(vec: Vec<u32>) -> bool {
         log::debug!("used vector: {:?}", vec);
         if vec.is_empty() {
@@ -393,6 +395,7 @@ mod test {
     }
 
     #[quickcheck]
+    #[cfg_attr(miri, ignore)]
     fn from_rnd_columns(vector1: Vec<f32>, vector2: Vec<f64>) -> bool {
         // remove NaN
         let mut vec1 = vector1
