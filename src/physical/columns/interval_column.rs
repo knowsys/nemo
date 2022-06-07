@@ -3,7 +3,7 @@ use super::{
     RangedColumnScanT,
 };
 use crate::physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize};
-use std::{fmt::Debug, ops::Range};
+use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 /// Column of values that are grouped into numbered intervals.
 pub trait IntervalColumn<'a, T>: Debug + Column<'a, T> {
@@ -118,7 +118,7 @@ impl<'a> Column<'a, DataValueT> for IntervalColumnT<'a> {
 
     fn iter(&'a self) -> Self::ColScan {
         match self {
-            Self::U64(col) => RangedColumnScanT::U64(col.iter()),
+            Self::U64(col) => RangedColumnScanT::U64(UnsafeCell::new(col.iter())),
             Self::Float(col) => RangedColumnScanT::Float(col.iter()),
             Self::Double(col) => RangedColumnScanT::Double(col.iter()),
         }
