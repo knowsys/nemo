@@ -2,14 +2,15 @@
   description = "stage2, the next stage of Datalog reasoning";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-21.11";
-    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
-    rust-overlay.url = "github:oxalica/rust-overlay";
-    flake-utils.url = "github:numtide/flake-utils";
-    flake-compat = {
-      url = "github:edolstra/flake-compat";
-      flake = false;
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.05";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        flake-utils.follows = "flake-utils";
+      };
     };
+    flake-utils.url = "github:numtide/flake-utils";
     gitignoresrc = {
       url = "github:hercules-ci/gitignore.nix";
       flake = false;
@@ -21,33 +22,25 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [
-            (import rust-overlay)
-            (final: prev: {
-              cargo = final.pkgs.rust-bin.stable.latest.default;
-              rustc = final.pkgs.rust-bin.stable.latest.default;
-              inherit (import inputs.nixpkgs-unstable { inherit system; }) rust-analyzer-unwrapped rust-analyzer;
-            })
+          overlays = [ (import rust-overlay) ];
+        };
+      in rec {
+        devShell = pkgs.mkShell {
+          RUST_LOG = "debug";
+          RUST_BACKTRACE = 1;
+
+          buildInputs = [
+            (pkgs.rust-bin.selectLatestNightlyWith (toolchain:
+              toolchain.default.override {
+                extensions = [ "rust-src" "miri" ];
+              }))
+            pkgs.rust-analyzer
+            pkgs.cargo-audit
+            pkgs.cargo-license
+            pkgs.cargo-tarpaulin
+            pkgs.valgrind
+            pkgs.gnuplot
           ];
         };
-      in
-      rec {
-        devShell =
-          pkgs.mkShell {
-            RUST_LOG = "debug";
-            RUST_BACKTRACE = 1;
-
-            buildInputs = [
-              pkgs.rust-bin.nightly.latest.rustfmt
-              pkgs.rust-bin.stable.latest.default
-              pkgs.rust-analyzer
-              pkgs.cargo-audit
-              pkgs.cargo-license
-              pkgs.cargo-tarpaulin
-              pkgs.valgrind
-              pkgs.gnuplot
-            ];
-          };
-      }
-    ));
+      }));
 }
