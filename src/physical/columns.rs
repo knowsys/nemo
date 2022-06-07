@@ -70,3 +70,7 @@ pub use equal_value_scan::EqualValueScan;
 /// Module for defining [`PassScan`]
 pub mod pass_scan;
 pub use pass_scan::PassScan;
+
+/// Module for defining [`DifferenceScan`]
+pub mod difference_scan;
+pub use difference_scan::DifferenceScan;
