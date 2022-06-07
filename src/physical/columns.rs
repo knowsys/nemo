@@ -75,3 +75,7 @@ pub use pass_scan::PassScan;
 pub mod difference_scan;
 pub use difference_scan::DifferenceScan;
 pub use difference_scan::MinusScan;
+
+/// Module for defining [`UnionScan`]
+pub mod union_scan;
+pub use union_scan::UnionScan;
