@@ -112,35 +112,45 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
         self.layer_left = Some(next_layer);
 
         if next_layer == self.get_schema().arity() - 1 {
-            match self.get_schema().get_type(next_layer) {
-                DataTypeName::U64 => {
-                    if let RangedColumnScanT::U64(left_scan_enum) =
-                        self.trie_left.get_scan(next_layer).unwrap()
-                    {
-                        if let RangedColumnScanT::U64(right_scan_enum) =
-                            self.trie_right.get_scan(next_layer).unwrap()
+            unsafe {
+                match self.get_schema().get_type(next_layer) {
+                    DataTypeName::U64 => {
+                        if let RangedColumnScanT::U64(left_scan_enum) =
+                            &*self.trie_left.get_scan(next_layer).unwrap().get()
                         {
-                            if self.layer_left == self.layer_right {
-                                self.difference_scans[next_layer] = UnsafeCell::new(
-                                    RangedColumnScanT::U64(RangedColumnScanEnum::MinusScan(
-                                        MinusScan::new(left_scan_enum, right_scan_enum),
-                                    )),
-                                );
-                            } else {
-                                // TODO: Difference Scan is not needed
-                                // Instead this should essentially be just lest_scan
-                                self.difference_scans[next_layer] = UnsafeCell::new(
-                                    RangedColumnScanT::U64(RangedColumnScanEnum::DifferenceScan(
-                                        DifferenceScan::new(left_scan_enum, right_scan_enum),
-                                    )),
-                                );
+                            if let RangedColumnScanT::U64(right_scan_enum) =
+                                &*self.trie_right.get_scan(next_layer).unwrap().get()
+                            {
+                                if self.layer_left == self.layer_right {
+                                    self.difference_scans[next_layer] = UnsafeCell::new(
+                                        RangedColumnScanT::U64(RangedColumnScanCell::new(
+                                            RangedColumnScanEnum::MinusScan(MinusScan::new(
+                                                left_scan_enum,
+                                                right_scan_enum,
+                                            )),
+                                        )),
+                                    );
+                                } else {
+                                    // TODO: Difference Scan is not needed
+                                    // Instead this should essentially be just lest_scan
+                                    self.difference_scans[next_layer] = UnsafeCell::new(
+                                        RangedColumnScanT::U64(RangedColumnScanCell::new(
+                                            RangedColumnScanEnum::DifferenceScan(
+                                                DifferenceScan::new(
+                                                    left_scan_enum,
+                                                    right_scan_enum,
+                                                ),
+                                            ),
+                                        )),
+                                    );
+                                }
                             }
                         }
                     }
+                    // TODO: Other types
+                    DataTypeName::Float => {}
+                    DataTypeName::Double => {}
                 }
-                // TODO: Other types
-                DataTypeName::Float => {}
-                DataTypeName::Double => {}
             }
         } else {
             self.difference_scans[next_layer].get_mut().reset();
@@ -148,8 +158,6 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
     }
 
     fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
-        debug_assert!(self.layer_left.is_some());
-
         self.get_scan(self.layer_left?)
     }
 
@@ -165,7 +173,7 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieDifference;
-    use crate::physical::columns::{ColumnScan, RangedColumnScanT};
+    use crate::physical::columns::RangedColumnScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::{
         IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
@@ -174,7 +182,7 @@ mod test {
     use test_log::test;
 
     fn diff_next(diff_scan: &mut TrieDifference) -> Option<u64> {
-        if let RangedColumnScanT::U64(rcs) = diff_scan.current_scan()? {
+        if let RangedColumnScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -182,7 +190,7 @@ mod test {
     }
 
     fn diff_current(diff_scan: &mut TrieDifference) -> Option<u64> {
-        if let RangedColumnScanT::U64(rcs) = diff_scan.current_scan()? {
+        if let RangedColumnScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
             rcs.current()
         } else {
             panic!("type should be u64");
