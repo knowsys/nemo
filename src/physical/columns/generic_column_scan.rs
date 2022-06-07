@@ -1,30 +1,15 @@
 use super::{Column, ColumnScan, GenericIntervalColumnEnum, RangedColumnScan, VectorColumn};
 use crate::physical::datatypes::{Field, FloorToUsize};
-use std::cell::Cell;
 use std::marker::PhantomData;
 use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
+#[derive(Debug)]
 pub struct GenericColumnScan<'a, T, Col: Column<'a, T>> {
     _t: PhantomData<T>,
     column: &'a Col,
-    pos: Cell<Option<usize>>,
-    interval: Cell<Range<usize>>,
-}
-
-impl<'a, T, Col> Debug for GenericColumnScan<'a, T, Col>
-where
-    T: 'a + Debug + Copy + Ord,
-    Col: Column<'a, T>,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let interval = self.lower_bound()..self.upper_bound();
-        f.debug_struct("GenericColumnScan")
-            .field("column", &self.column)
-            .field("pos", &self.pos)
-            .field("interval", &interval)
-            .finish()
-    }
+    pos: Option<usize>,
+    interval: Range<usize>,
 }
 
 /// Enum encapsulating implementations of GenericColumnScans
@@ -52,8 +37,8 @@ where
         Self {
             _t: PhantomData,
             column,
-            pos: Cell::new(None),
-            interval: Cell::new(0..column.len()),
+            pos: None,
+            interval: 0..column.len(),
         }
     }
 
@@ -63,38 +48,36 @@ where
         let result = Self {
             _t: PhantomData,
             column,
-            pos: Cell::new(None),
-            interval: Cell::new(interval),
+            pos: None,
+            interval,
         };
         result.validate_interval();
         result
     }
 
     fn validate_interval(&self) {
-        let interval = self.interval.take();
         assert!(
-            interval.end <= self.column.len(),
+            self.interval.end <= self.column.len(),
             "Cannot narrow to an interval larger than the column."
         );
-        self.interval.set(interval);
     }
 
     /// Lifts any restriction of the interval to some interval.
     pub fn widen(&mut self) -> &mut Self {
-        self.interval.set(0..self.column.len());
-        self.pos.set(None);
+        self.interval = 0..self.column.len();
+        self.pos = None;
         self
     }
 
     /// Returns the first column index of the iterator.
     pub fn lower_bound(&self) -> usize {
-        unsafe { (*self.interval.as_ptr()).start }
+        self.interval.start
     }
 
     /// Returns the smallest column index of that is not part of the
     /// iterator). This need not be a valid column index.
     pub fn upper_bound(&self) -> usize {
-        unsafe { (*self.interval.as_ptr()).end }
+        self.interval.end
     }
 }
 
@@ -106,10 +89,9 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let position = self.pos.get_mut();
-        let pos = position.map_or_else(|| self.lower_bound(), |pos| pos + 1);
-        self.pos.set(Some(pos));
-        (pos < self.upper_bound()).then(|| self.column.get(pos))
+        let pos = self.pos.map_or_else(|| self.interval.start, |pos| pos + 1);
+        self.pos = Some(pos);
+        (pos < self.interval.end).then(|| self.column.get(pos))
     }
 }
 
@@ -119,11 +101,9 @@ where
     Col: Column<'a, T>,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        let lower_bound = self.lower_bound();
-        let mut upper = self.upper_bound() - 1;
-        let position = self.pos.get_mut();
-        let pos = position.get_or_insert(lower_bound);
+        let pos = self.pos.get_or_insert(self.interval.start);
         let mut lower = *pos;
+        let mut upper = self.interval.end - 1;
 
         // check if position is out of bounds
         if *pos > upper {
@@ -164,12 +144,12 @@ where
     }
 
     fn current(&mut self) -> Option<T> {
-        let position = self.pos.get_mut();
-        position.and_then(|pos| (pos < self.upper_bound()).then(|| self.column.get(pos)))
+        self.pos
+            .and_then(|pos| (pos < self.interval.end).then(|| self.column.get(pos)))
     }
 
     fn reset(&mut self) {
-        self.pos.set(None);
+        self.pos = None;
     }
 }
 
@@ -179,19 +159,14 @@ where
     Col: Column<'a, T>,
 {
     fn pos(&self) -> Option<usize> {
-        unsafe { (*self.pos.as_ptr()).and_then(|pos| (pos < self.upper_bound()).then(|| pos)) }
+        self.pos
+            .and_then(|pos| (pos < self.interval.end).then(|| pos))
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        self.interval.replace(interval);
-        self.pos.set(None);
+        self.interval = interval;
+        self.pos = None;
         self.validate_interval();
-    }
-
-    fn narrow_unsafe(&self, interval: Range<usize>) {
-        self.interval.replace(interval);
-        self.pos.set(None);
-        self.validate_interval()
     }
 }
 
@@ -241,8 +216,8 @@ where
 {
     fn pos(&self) -> Option<usize> {
         match self {
-            Self::VectorColumn(col) => col.pos.get(),
-            Self::GenericIntervalColumn(col) => col.pos.get(),
+            Self::VectorColumn(col) => col.pos,
+            Self::GenericIntervalColumn(col) => col.pos,
         }
     }
 
@@ -250,13 +225,6 @@ where
         match self {
             Self::VectorColumn(col) => col.narrow(interval),
             Self::GenericIntervalColumn(col) => col.narrow(interval),
-        }
-    }
-
-    fn narrow_unsafe(&self, interval: Range<usize>) {
-        match self {
-            Self::VectorColumn(col) => col.narrow_unsafe(interval),
-            Self::GenericIntervalColumn(col) => col.narrow_unsafe(interval),
         }
     }
 }
@@ -339,26 +307,6 @@ mod test {
     }
 
     #[test]
-    fn u64_narrow_unsafe() {
-        let test_column = get_test_column();
-        let gcs = GenericColumnScan::new(&test_column);
-        gcs.narrow_unsafe(0..2);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
-        let gcs = GenericColumnScan::new(&test_column);
-        gcs.narrow_unsafe(1..2);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
-        let gcs = GenericColumnScan::new(&test_column);
-        gcs.narrow_unsafe(1..3);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
-        let gcs = GenericColumnScan::new(&test_column);
-        gcs.narrow_unsafe(1..1);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![]);
-        let gcs = GenericColumnScan::new(&test_column);
-        gcs.narrow_unsafe(0..3);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
-    }
-
-    #[test]
     fn u64_narrowed() {
         let test_column = get_test_column();
         let gcs = GenericColumnScan::narrowed(&test_column, 0..2);
@@ -382,18 +330,6 @@ mod test {
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
         let mut gcs = GenericColumnScan::new(&test_column);
         gcs.widen().narrow(1..2);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
-    }
-
-    #[test]
-    fn u64_narrow_and_widen_unsafe() {
-        let test_column = get_test_column();
-        let mut gcs = GenericColumnScan::new(&test_column);
-        gcs.narrow_unsafe(1..1);
-        gcs.widen();
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
-        let mut gcs = GenericColumnScan::new(&test_column);
-        gcs.widen().narrow_unsafe(1..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
     }
 
@@ -422,29 +358,10 @@ mod test {
     }
 
     #[test]
-    fn u64_narrow_after_use_unsafe() {
-        let test_column = get_test_column();
-        let mut gcs = GenericColumnScan::new(&test_column);
-        assert_eq!(gcs.next(), Some(1));
-        gcs.narrow_unsafe(0..2);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
-    }
-
-    #[test]
     fn u64_widen_after_use() {
         let test_column = get_test_column();
         let mut gcs = GenericColumnScan::new(&test_column);
         gcs.narrow(1..2);
-        assert_eq!(gcs.next(), Some(2));
-        gcs.widen();
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
-    }
-
-    #[test]
-    fn u64_widen_after_use_unsafe() {
-        let test_column = get_test_column();
-        let mut gcs = GenericColumnScan::new(&test_column);
-        gcs.narrow_unsafe(1..2);
         assert_eq!(gcs.next(), Some(2));
         gcs.widen();
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);

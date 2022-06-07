@@ -547,10 +547,6 @@ where
     fn narrow(&mut self, _interval: Range<usize>) {
         unimplemented!("RleColumnScan does not support intervals for now");
     }
-
-    fn narrow_unsafe(&self, _interval: Range<usize>) {
-        unimplemented!("RleColumnScan does not support intervals for now");
-    }
 }
 
 #[cfg(test)]
