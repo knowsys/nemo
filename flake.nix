@@ -28,6 +28,11 @@
         devShell = pkgs.mkShell {
           RUST_LOG = "debug";
           RUST_BACKTRACE = 1;
+          MIRIFLAGS = "-Zmiri-tag-raw-pointers";
+
+          shellHook = ''
+            export PATH=''${HOME}/.cargo/bin''${PATH+:''${PATH}}
+          '';
 
           buildInputs = [
             (pkgs.rust-bin.selectLatestNightlyWith (toolchain:
