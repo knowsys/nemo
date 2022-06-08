@@ -22,7 +22,7 @@ pub use trie::Trie;
 pub use trie::TrieSchema;
 pub use trie::TrieSchemaEntry;
 
-/// MOdule for defining [`TrieScan`]
+/// Module for defining [`TrieScan`]
 pub mod trie_scan;
 pub use trie_scan::IntervalTrieScan;
 pub use trie_scan::TrieScan;
@@ -46,3 +46,7 @@ pub use trie_select::ValueAssignment;
 /// Module for defining [`TrieDifference`]
 pub mod trie_difference;
 pub use trie_difference::TrieDifference;
+
+/// Module for defining [`TrieUnion`]
+pub mod trie_union;
+pub use trie_union::TrieUnion;
