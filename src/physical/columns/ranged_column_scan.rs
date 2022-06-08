@@ -126,6 +126,17 @@ where
             _ => unimplemented!("is_equal is only available for DifferenceScan"),
         }
     }
+
+    /// Assumes that column scan is a union scan
+    /// and returns a vector containing the positions of the scans with the smallest values
+    pub fn get_smallest_scans(&self) -> &Vec<usize> {
+        match self {
+            Self::UnionScan(cs) => cs.get_smallest_scans(),
+            _ => {
+                panic!("get_smallest_scans is only available for union_scans")
+            }
+        }
+    }
 }
 
 impl<'a, T> Iterator for RangedColumnScanEnum<'a, T>
@@ -247,6 +258,11 @@ where
     pub fn is_equal(&self) -> bool {
         unsafe { &mut *self.0.get() }.is_equal()
     }
+
+    /// Forward `is_equal` to the underlying [`RangedColumnScanEnum`].
+    pub fn get_smallest_scans(&self) -> &Vec<usize> {
+        unsafe { &mut *self.0.get() }.get_smallest_scans()
+    }
 }
 
 impl<'a, S, T> From<S> for RangedColumnScanCell<'a, T>
@@ -286,9 +302,13 @@ impl<'a> RangedColumnScanT<'a> {
     pub fn is_equal(&self) -> bool {
         forward_to_ranged_column_scan_cell!(self, is_equal)
     }
-}
 
-impl<'a> RangedColumnScanT<'a> {}
+    /// Assumes that column scan is a union scan
+    /// and returns a vector containing the positions of the scans with the smallest values
+    pub fn get_smallest_scans(&self) -> &Vec<usize> {
+        forward_to_ranged_column_scan_cell!(self, get_smallest_scans)
+    }
+}
 
 impl<'a> Iterator for RangedColumnScanT<'a> {
     type Item = DataValueT;

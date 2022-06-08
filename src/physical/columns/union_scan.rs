@@ -26,6 +26,11 @@ where
             smallest_value: None,
         }
     }
+
+    /// Returns vector contianing the indices of those scans which point to the currently smallest values
+    pub fn get_smallest_scans(&self) -> &Vec<usize> {
+        &self.smallest_scans
+    }
 }
 
 impl<'a, T> Iterator for UnionScan<'a, T>

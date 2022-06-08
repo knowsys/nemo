@@ -16,7 +16,8 @@ pub struct TrieUnion<'a> {
 }
 
 impl<'a> TrieUnion<'a> {
-    fn new(trie_scans: Vec<TrieScanEnum<'a>>) -> TrieUnion<'a> {
+    /// Construct new TrieUnion object.
+    pub fn new(trie_scans: Vec<TrieScanEnum<'a>>) -> TrieUnion<'a> {
         debug_assert!(trie_scans.len() > 0);
         let layers = vec![0usize; trie_scans.len()];
 
@@ -72,6 +73,7 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
         for scan_index in 0..self.layers.len() {
             if self.layers[scan_index] == current_layer {
                 self.trie_scans[scan_index].up();
+                self.layers[scan_index] -= 1;
             }
         }
         self.current_layer = if current_layer == 0 {
@@ -83,17 +85,27 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
 
     fn down(&mut self) {
         let current_layer = self.current_layer.map_or(0, |v| v + 1);
+        let previous_layer = current_layer - 1;
         self.current_layer = Some(current_layer);
 
         debug_assert!(current_layer < self.trie_scans[0].get_schema().arity());
 
         for scan_index in 0..self.layers.len() {
-            // if self.union_scans[current_layer].contains() {
-            //     self.trie_scans[scan_index].down();
-            // }
+            if self.layers[scan_index] != previous_layer {
+                continue;
+            }
+
+            //TODO: Don't use contains here
+            if self.union_scans[current_layer]
+                .get_mut()
+                .get_smallest_scans()
+                .contains(&scan_index)
+            {
+                self.trie_scans[scan_index].down();
+                self.layers[scan_index] += 1;
+            }
         }
 
-        //TODO: Make sure this makes sense
         self.union_scans[current_layer].get_mut().reset();
     }
 
