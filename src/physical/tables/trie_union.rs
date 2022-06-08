@@ -20,7 +20,7 @@ impl<'a> TrieUnion<'a> {
     pub fn new(trie_scans: Vec<TrieScanEnum<'a>>) -> TrieUnion<'a> {
         debug_assert!(trie_scans.len() > 0);
 
-        // This assumes that very schema is the same
+        // This assumes that every schema is the same
         // TODO: Perhaps debug_assert! this
         let target_schema = trie_scans[0].get_schema();
         let mut union_scans =
