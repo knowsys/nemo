@@ -42,3 +42,7 @@ pub mod trie_select;
 pub use trie_select::TrieSelectEqual;
 pub use trie_select::TrieSelectValue;
 pub use trie_select::ValueAssignment;
+
+/// Module for defining [`TrieDifference`]
+pub mod trie_difference;
+pub use trie_difference::TrieDifference;

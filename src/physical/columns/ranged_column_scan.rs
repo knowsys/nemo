@@ -1,12 +1,12 @@
 use super::{
-    column_scan::ColumnScan, EqualColumnScan, EqualValueScan, GenericColumnScanEnum,
-    OrderedMergeJoin, PassScan, ReorderScan, RleColumnScan,
+    column_scan::ColumnScan, DifferenceScan, EqualColumnScan, EqualValueScan,
+    GenericColumnScanEnum, OrderedMergeJoin, PassScan, ReorderScan, RleColumnScan,
 };
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize},
 };
-use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
+use std::{cell::UnsafeCell, collections::btree_set::Difference, fmt::Debug, ops::Range};
 
 /// Iterator for a sorted interval of values that also stores the current position
 pub trait RangedColumnScan: ColumnScan {
@@ -38,6 +38,8 @@ where
     EqualValueScan(EqualValueScan<'a, T>),
     /// Case OrderedMergeJoin
     PassScan(PassScan<'a, T>),
+    /// Case DifferenceScan
+    DifferenceScan(Difference<'a, T>),
 }
 
 impl<'a, T> From<GenericColumnScanEnum<'a, T>> for RangedColumnScanEnum<'a, T>
@@ -83,7 +85,8 @@ generate_forwarder!(forward_to_column_scan;
                     ReorderScan, 
                     EqualColumnScan, 
                     EqualValueScan,
-                    PassScan);
+                    PassScan,
+                    DifferenceScan);
 
 impl<'a, T> RangedColumnScanEnum<'a, T>
 where
