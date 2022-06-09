@@ -18,10 +18,10 @@ pub trait TrieScan<'a>: Debug {
     fn down(&mut self);
 
     /// Return the current position of the scan as a ranged [`ColumnScan`].
-    fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>>;
+    fn current_scan(&self) -> Option<&RangedColumnScanT<'a>>;
 
     /// Return the underlying [`RangedColumnScan`] object given an index.
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>>;
+    fn get_scan(&self, index: usize) -> Option<&RangedColumnScanT<'a>>;
 
     /// Return the underlying [`TrieSchema`].
     fn get_schema(&self) -> &dyn TableSchema;
@@ -31,18 +31,18 @@ pub trait TrieScan<'a>: Debug {
 #[derive(Debug)]
 pub struct IntervalTrieScan<'a> {
     trie: &'a Trie<'a>,
-    layers: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
+    layers: Vec<RangedColumnScanT<'a>>,
     current_layer: Option<usize>,
 }
 
 impl<'a> IntervalTrieScan<'a> {
     /// Construct Trie iterator.
     pub fn new(trie: &'a Trie) -> Self {
-        let mut layers = Vec::<UnsafeCell<RangedColumnScanT<'a>>>::new();
+        let mut layers = Vec::<RangedColumnScanT<'a>>::new();
 
         for column_t in trie.columns() {
             let new_scan = column_t.iter();
-            layers.push(UnsafeCell::new(new_scan));
+            layers.push(new_scan);
         }
 
         Self {
@@ -69,7 +69,7 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
                     "Called down while on the last layer"
                 );
 
-                let current_position = self.layers[index].get_mut().pos().unwrap();
+                let current_position = self.layers[index].pos().unwrap();
 
                 let next_index = index + 1;
                 let next_layer_range = self
@@ -77,18 +77,18 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
                     .get_column(next_index)
                     .int_bounds(current_position);
 
-                self.layers[next_index].get_mut().narrow(next_layer_range);
+                self.layers[next_index].narrow(next_layer_range);
 
                 self.current_layer = Some(next_index);
             }
         }
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn current_scan(&self) -> Option<&RangedColumnScanT<'a>> {
         Some(&self.layers[self.current_layer?])
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn get_scan(&self, index: usize) -> Option<&RangedColumnScanT<'a>> {
         Some(&self.layers[index])
     }
 
@@ -153,7 +153,7 @@ pub struct TrieScanJoin<'a> {
 
     variable_to_scan: Vec<Vec<usize>>,
 
-    merge_joins: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
+    merge_joins: Vec<RangedColumnScanT<'a>>,
 }
 
 impl<'a> TrieScanJoin<'a> {
@@ -164,7 +164,7 @@ impl<'a> TrieScanJoin<'a> {
         let mut merge_join_indeces: Vec<Vec<Option<usize>>> = vec![];
         merge_join_indeces.resize(target_schema.arity(), vec![]);
 
-        let mut merge_joins: Vec<UnsafeCell<RangedColumnScanT<'a>>> = vec![];
+        let mut merge_joins: Vec<RangedColumnScanT<'a>> = vec![];
 
         for (scan_index, scan) in trie_scans.iter().enumerate() {
             let current_schema = scan.get_schema();
@@ -176,8 +176,7 @@ impl<'a> TrieScanJoin<'a> {
         for target_label_index in 0..target_schema.arity() {
             for scan in &trie_scans {
                 merge_join_indeces[target_label_index].push(
-                    scan
-                        .get_schema()
+                    scan.get_schema()
                         .find_index(target_schema.get_label(target_label_index)),
                 );
             }
@@ -189,23 +188,22 @@ impl<'a> TrieScanJoin<'a> {
                     let mut scans: Vec<&UnsafeCell<RangedColumnScanEnum<u64>>> = vec![];
                     for scan_index in 0..merge_join_indeces[variable_index].len() {
                         match merge_join_indeces[variable_index][scan_index] {
-                            Some(label_index) => unsafe {
-                                let scan =
-                                    &*trie_scans[scan_index].get_scan(label_index).unwrap().get();
+                            Some(label_index) => {
+                                let scan = trie_scans[scan_index].get_scan(label_index).unwrap();
 
                                 if let RangedColumnScanT::U64(cs) = scan {
                                     scans.push(cs);
                                 } else {
                                     panic!("type should match here")
                                 }
-                            },
+                            }
                             None => {}
                         }
                     }
 
-                    merge_joins.push(UnsafeCell::new(RangedColumnScanT::U64(UnsafeCell::new(
+                    merge_joins.push(RangedColumnScanT::U64(UnsafeCell::new(
                         RangedColumnScanEnum::OrderedMergeJoin(OrderedMergeJoin::new(scans)),
-                    ))))
+                    )))
                 }
                 DataTypeName::Float => {}
                 DataTypeName::Double => {}
@@ -251,10 +249,10 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
             self.trie_scans[scan_index].down();
         }
 
-        self.merge_joins[current_variable].get_mut().reset();
+        self.merge_joins[current_variable].reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn current_scan(&self) -> Option<&RangedColumnScanT<'a>> {
         debug_assert!(self.current_variable.is_some());
 
         match self.target_schema.get_type(self.current_variable?) {
@@ -264,7 +262,7 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
         }
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn get_scan(&self, index: usize) -> Option<&RangedColumnScanT<'a>> {
         Some(&self.merge_joins[index])
     }
 
@@ -297,14 +295,14 @@ impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
         }
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn current_scan(&self) -> Option<&RangedColumnScanT<'a>> {
         match self {
             Self::IntervalTrieScan(ts) => ts.current_scan(),
             Self::TrieScanJoin(ts) => ts.current_scan(),
         }
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn get_scan(&self, index: usize) -> Option<&RangedColumnScanT<'a>> {
         match self {
             Self::IntervalTrieScan(ts) => ts.get_scan(index),
             Self::TrieScanJoin(ts) => ts.get_scan(index),
