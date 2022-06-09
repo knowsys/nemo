@@ -31,6 +31,11 @@ where
             current: None,
         }
     }
+
+    /// Returns a bool indicating whether scan_left and scan_right point to the same value
+    pub fn is_equal(&self) -> bool {
+        self.equal
+    }
 }
 
 impl<'a, T> Iterator for DifferenceScan<'a, T>

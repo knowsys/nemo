@@ -6,7 +6,7 @@ use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize},
 };
-use std::{cell::UnsafeCell, collections::btree_set::Difference, fmt::Debug, ops::Range};
+use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 /// Iterator for a sorted interval of values that also stores the current position
 pub trait RangedColumnScan: ColumnScan {
@@ -39,7 +39,7 @@ where
     /// Case OrderedMergeJoin
     PassScan(PassScan<'a, T>),
     /// Case DifferenceScan
-    DifferenceScan(Difference<'a, T>),
+    DifferenceScan(DifferenceScan<'a, T>),
 }
 
 impl<'a, T> From<GenericColumnScanEnum<'a, T>> for RangedColumnScanEnum<'a, T>
@@ -109,6 +109,14 @@ where
             _ => {
                 unimplemented!("narrow_ranges is only available for ReorderScan")
             }
+        }
+    }
+
+    /// For DifferenceScan, returns whether its scans point to the same value
+    pub fn is_equal(&self) -> bool {
+        match self {
+            Self::DifferenceScan(cs) => cs.is_equal(),
+            _ => unimplemented!("is_equal is only available for DifferenceScan"),
         }
     }
 }
@@ -227,6 +235,11 @@ where
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
         unsafe { &mut *self.0.get() }.narrow_ranges(intervals)
     }
+
+    /// Forward `is_equal` to the underlying [`RangedColumnScanEnum`].
+    pub fn is_equal(&self) -> bool {
+        unsafe { &mut *self.0.get() }.is_equal()
+    }
 }
 
 impl<'a, S, T> From<S> for RangedColumnScanCell<'a, T>
@@ -261,7 +274,14 @@ impl<'a> RangedColumnScanT<'a> {
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
         forward_to_ranged_column_scan_cell!(self, narrow_ranges(intervals))
     }
+
+    /// For DifferenceScan, returns whether its scans point to the same value
+    pub fn is_equal(&self) -> bool {
+        forward_to_ranged_column_scan_cell!(self, is_equal)
+    }
 }
+
+impl<'a> RangedColumnScanT<'a> {}
 
 impl<'a> Iterator for RangedColumnScanT<'a> {
     type Item = DataValueT;
