@@ -10,7 +10,7 @@ use std::fmt::Debug;
 #[derive(Debug)]
 pub struct TrieUnion<'a> {
     trie_scans: Vec<TrieScanEnum<'a>>,
-    layers: Vec<usize>,
+    layers: Vec<Option<usize>>,
     union_scans: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
     current_layer: Option<usize>,
 }
@@ -19,7 +19,6 @@ impl<'a> TrieUnion<'a> {
     /// Construct new TrieUnion object.
     pub fn new(trie_scans: Vec<TrieScanEnum<'a>>) -> TrieUnion<'a> {
         debug_assert!(trie_scans.len() > 0);
-        let layers = vec![0usize; trie_scans.len()];
 
         // This assumes that very schema is the same
         // TODO: Perhaps debug_assert! this
@@ -57,6 +56,8 @@ impl<'a> TrieUnion<'a> {
             };
         }
 
+        let layers = vec![None; trie_scans.len()];
+
         TrieUnion {
             trie_scans,
             layers,
@@ -69,26 +70,27 @@ impl<'a> TrieUnion<'a> {
 impl<'a> TrieScan<'a> for TrieUnion<'a> {
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
-        let current_layer = self.current_layer.unwrap();
-        for scan_index in 0..self.layers.len() {
-            if self.layers[scan_index] == current_layer {
-                self.trie_scans[scan_index].up();
-                self.layers[scan_index] -= 1;
-            }
-        }
-        self.current_layer = if current_layer == 0 {
+        let up_layer = if self.current_layer.unwrap() == 0 {
             None
         } else {
-            Some(current_layer - 1)
+            Some(self.current_layer.unwrap() - 1)
         };
+
+        for scan_index in 0..self.layers.len() {
+            if self.layers[scan_index] == self.current_layer {
+                self.trie_scans[scan_index].up();
+                self.layers[scan_index] = up_layer;
+            }
+        }
+        self.current_layer = up_layer;
     }
 
     fn down(&mut self) {
+        let previous_layer = self.current_layer;
         let current_layer = self.current_layer.map_or(0, |v| v + 1);
-        let previous_layer = current_layer - 1;
         self.current_layer = Some(current_layer);
 
-        debug_assert!(current_layer < self.trie_scans[0].get_schema().arity());
+        debug_assert!(self.current_layer.unwrap() < self.trie_scans[0].get_schema().arity());
 
         for scan_index in 0..self.layers.len() {
             if self.layers[scan_index] != previous_layer {
@@ -102,7 +104,7 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
                 .contains(&scan_index)
             {
                 self.trie_scans[scan_index].down();
-                self.layers[scan_index] += 1;
+                self.layers[scan_index] = self.current_layer;
             }
         }
 
