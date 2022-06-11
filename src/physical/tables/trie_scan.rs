@@ -1,7 +1,7 @@
 use super::{Table, TableSchema, Trie, TrieSchema};
 use crate::physical::columns::{
-    Column, ColumnScan, IntervalColumn, OrderedMergeJoin, RangedColumnScan, RangedColumnScanEnum,
-    RangedColumnScanT,
+    Column, ColumnScan, IntervalColumn, OrderedMergeJoin, RangedColumnScan, RangedColumnScanCell,
+    RangedColumnScanEnum, RangedColumnScanT,
 };
 use crate::physical::datatypes::DataTypeName;
 use std::cell::UnsafeCell;
@@ -176,8 +176,7 @@ impl<'a> TrieScanJoin<'a> {
         for target_label_index in 0..target_schema.arity() {
             for scan in &trie_scans {
                 merge_join_indeces[target_label_index].push(
-                    scan
-                        .get_schema()
+                    scan.get_schema()
                         .find_index(target_schema.get_label(target_label_index)),
                 );
             }
@@ -186,7 +185,7 @@ impl<'a> TrieScanJoin<'a> {
         for variable_index in 0..target_schema.arity() {
             match target_schema.get_type(variable_index) {
                 DataTypeName::U64 => {
-                    let mut scans: Vec<&UnsafeCell<RangedColumnScanEnum<u64>>> = vec![];
+                    let mut scans: Vec<&RangedColumnScanCell<u64>> = vec![];
                     for scan_index in 0..merge_join_indeces[variable_index].len() {
                         match merge_join_indeces[variable_index][scan_index] {
                             Some(label_index) => unsafe {
@@ -203,9 +202,11 @@ impl<'a> TrieScanJoin<'a> {
                         }
                     }
 
-                    merge_joins.push(UnsafeCell::new(RangedColumnScanT::U64(UnsafeCell::new(
-                        RangedColumnScanEnum::OrderedMergeJoin(OrderedMergeJoin::new(scans)),
-                    ))))
+                    merge_joins.push(UnsafeCell::new(RangedColumnScanT::U64(
+                        RangedColumnScanCell::new(RangedColumnScanEnum::OrderedMergeJoin(
+                            OrderedMergeJoin::new(scans),
+                        )),
+                    )))
                 }
                 DataTypeName::Float => {}
                 DataTypeName::Double => {}
@@ -336,7 +337,7 @@ mod test {
     fn seek_scan(scan: &UnsafeCell<RangedColumnScanT>, value: u64) -> Option<u64> {
         unsafe {
             if let RangedColumnScanT::U64(rcs) = &(*scan.get()) {
-                (*rcs.get()).seek(value)
+                rcs.seek(value)
             } else {
                 panic!("type should be u64");
             }
@@ -390,7 +391,7 @@ mod test {
     fn join_next(join_scan: &mut TrieScanJoin) -> Option<u64> {
         unsafe {
             if let RangedColumnScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
-                (*rcs.get()).next()
+                rcs.next()
             } else {
                 panic!("type should be u64");
             }
@@ -400,7 +401,7 @@ mod test {
     fn _join_current(join_scan: &mut TrieScanJoin) -> Option<u64> {
         unsafe {
             if let RangedColumnScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
-                (*rcs.get()).current()
+                rcs.current()
             } else {
                 panic!("type should be u64");
             }
