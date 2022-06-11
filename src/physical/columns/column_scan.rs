@@ -13,3 +13,12 @@ pub trait ColumnScan: Debug + Iterator {
     /// Return to the initial state
     fn reset(&mut self);
 }
+
+/// Convert this Scan into a Cell type that offers interior mutability
+pub trait ScanToCell {
+    /// The Cell type wrapping this Scan.
+    type Cell: Debug;
+
+    /// Convert `self` into a Cell containing it.
+    fn into_cell(self) -> Self::Cell;
+}

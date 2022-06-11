@@ -24,6 +24,25 @@ where
     GenericIntervalColumn(GenericColumnScan<'a, T, GenericIntervalColumnEnum<'a, T>>),
 }
 
+impl<'a, T> From<GenericColumnScan<'a, T, VectorColumn<T>>> for GenericColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: GenericColumnScan<'a, T, VectorColumn<T>>) -> Self {
+        Self::VectorColumn(cs)
+    }
+}
+
+impl<'a, T> From<GenericColumnScan<'a, T, GenericIntervalColumnEnum<'a, T>>>
+    for GenericColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: GenericColumnScan<'a, T, GenericIntervalColumnEnum<'a, T>>) -> Self {
+        Self::GenericIntervalColumn(cs)
+    }
+}
+
 impl<'a, T, Col> GenericColumnScan<'a, T, Col>
 where
     T: 'a + Debug + Copy + Ord,
