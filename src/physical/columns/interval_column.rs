@@ -1,5 +1,5 @@
 use super::{
-    Column, GenericColumnScanEnum, GenericIntervalColumn, RangedColumnScanCell,
+    Column, ColumnEnum, GenericColumnScanEnum, GenericIntervalColumn, RangedColumnScanCell,
     RangedColumnScanEnum, RangedColumnScanT,
 };
 use crate::{
@@ -22,7 +22,7 @@ pub trait IntervalColumn<'a, T>: Debug + Column<'a, T> {
 }
 
 /// Enum for columns of all supported basic types.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum IntervalColumnEnum<T>
 where
     T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
@@ -33,6 +33,21 @@ where
 
 generate_forwarder!(forward_to_interval_column;
                     GenericIntervalColumn);
+
+impl<T> IntervalColumnEnum<T>
+where
+    T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    /// Return data column
+    pub fn get_data_column(&self) -> &ColumnEnum<T> {
+        forward_to_interval_column!(self, get_data_column)
+    }
+
+    /// Return column containing the intervals
+    pub fn get_int_column(&self) -> &ColumnEnum<usize> {
+        forward_to_interval_column!(self, get_int_column)
+    }
+}
 
 impl<'a, T> Column<'a, T> for IntervalColumnEnum<T>
 where
@@ -75,7 +90,7 @@ where
 }
 
 /// Enum for Interval Column with different underlying datatypes
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum IntervalColumnT {
     /// Case u64
     U64(IntervalColumnEnum<u64>),

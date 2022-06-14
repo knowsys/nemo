@@ -11,4 +11,7 @@ pub trait ColumnBuilder<'a, T>: Debug {
 
     /// Returns column that was built.
     fn finalize(self) -> Self::Col;
+
+    /// Return the number of elements that were already added.
+    fn count(&self) -> usize;
 }

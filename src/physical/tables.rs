@@ -25,3 +25,6 @@ pub use trie::TrieSchemaEntry;
 /// MOdule for defining [`TrieScan`]
 pub mod trie_scan;
 pub use trie_scan::TrieScan;
+
+/// Module for defining [`TrieProject`]
+pub mod trie_project;

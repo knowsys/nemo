@@ -1,5 +1,5 @@
 use super::{Column, ColumnBuilder, ColumnEnum, RleColumnBuilder, VectorColumn};
-use crate::physical::datatypes::{Field, FloorToUsize};
+use crate::physical::datatypes::{Double, Field, Float, FloorToUsize};
 use std::fmt::Debug;
 
 // Number of rle elements in rle column builder after which to decide which column type to use.
@@ -94,6 +94,28 @@ where
             }
         }
     }
+
+    // TODO: Implement undecided case
+    fn count(&self) -> usize {
+        match &self.builder {
+            ColumnBuilderType::VectorColumn(vec) => vec.len(),
+            ColumnBuilderType::RleColumn(rle_builder) => rle_builder.count(),
+            ColumnBuilderType::Undecided(_builder) => {
+                unimplemented!("Dont know what this should be")
+            }
+        }
+    }
+}
+
+/// Enum for AdaptiveColumnBuilder with different underlying datatypes
+#[derive(Debug)]
+pub enum AdaptiveColumnBuilderT {
+    /// Case u64
+    U64(AdaptiveColumnBuilder<u64>),
+    /// Case Float
+    Float(AdaptiveColumnBuilder<Float>),
+    /// Case Double
+    Double(AdaptiveColumnBuilder<Double>),
 }
 
 #[cfg(test)]

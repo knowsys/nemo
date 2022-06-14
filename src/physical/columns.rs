@@ -17,6 +17,7 @@ pub use vector_column::VectorColumn;
 /// Module for defining [`AdaptiveColumnBuilder`]
 pub mod adaptive_column_builder;
 pub use adaptive_column_builder::AdaptiveColumnBuilder;
+pub use adaptive_column_builder::AdaptiveColumnBuilderT;
 
 /// Module for defining [`ColumnScan`]
 pub mod column_scan;

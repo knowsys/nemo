@@ -8,7 +8,7 @@ use crate::{
 use std::fmt::Debug;
 
 /// Column of ordered values.
-pub trait Column<'a, T>: Debug {
+pub trait Column<'a, T>: Debug + Clone {
     /// ColumnScan associated with the Column
     type ColScan: 'a + RangedColumnScan<Item = T>;
 
@@ -31,7 +31,7 @@ pub trait Column<'a, T>: Debug {
 }
 
 /// Enum for column implementations
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ColumnEnum<T> {
     /// Case VectorColumn
     VectorColumn(VectorColumn<T>),
@@ -72,7 +72,7 @@ where
 }
 
 /// Enum for column implementations
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ColumnT {
     /// Case ColumnEnum<u64>
     U64(ColumnEnum<u64>),

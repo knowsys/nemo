@@ -3,6 +3,7 @@
 use crate::physical::datatypes::{Field, FloorToUsize};
 use std::cmp::Ordering;
 use std::fmt::Debug;
+use std::ops::Range;
 
 use crate::{
     error::Error,
@@ -41,17 +42,26 @@ impl Permutator {
         }
     }
 
+    /// TODO: Test if this works
     /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
-    pub fn sort_from_column<T>(data: &ColumnEnum<T>) -> Permutator
+    pub fn sort_from_column_range<T>(data: &ColumnEnum<T>, range: &Range<usize>) -> Permutator
     where
         T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
     {
-        let mut vec = (0..data.len()).collect::<Vec<usize>>();
+        let mut vec = range.clone().collect::<Vec<usize>>();
         vec.sort_by_key(|&i| data.get(i));
         Permutator {
             sort_vec: vec,
             offset: 0,
         }
+    }
+
+    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
+    pub fn sort_from_column<T>(data: &ColumnEnum<T>) -> Permutator
+    where
+        T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
+    {
+        Permutator::sort_from_column_range(data, &(0..data.len()))
     }
 
     /// Creates a [`Permutator`] based on a slice of [`ColumnT`][crate::physical::columns::column::ColumnT] elements.
@@ -145,6 +155,11 @@ impl Permutator {
         }
     }
 
+    /// Returns the vector which contains the sorted indices
+    pub fn get_sort_vec(&self) -> &Vec<usize> {
+        &self.sort_vec
+    }
+
     /// Returns the value at a given index or [`None`] if not applicable
     pub fn value_at(&self, idx: usize) -> Option<usize> {
         self.sort_vec.get(idx.checked_sub(self.offset)?).copied()
@@ -202,6 +217,34 @@ impl Permutator {
             Ok(cb.finalize())
         }
     }
+
+    // Applies the permutator to a given column by using a provided [`ColumnBuilder`].
+    //
+    // *Returns* either a ['Column'] or an [Error][Error::Permutation]
+    // pub fn apply_column_2<'a, T>(
+    //     &self,
+    //     column: &ColumnEnum<T>,
+    //     cb: &mut AdaptiveColumnBuilder<T>,
+    // ) -> Result<(), Error>
+    // where
+    //     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Default,
+    // {
+    //     if column.len() < (self.sort_vec.len() + self.offset) {
+    //         Err(Error::PermutationApplyWrongLen(
+    //             column.len(),
+    //             self.sort_vec.len(),
+    //             self.offset,
+    //         ))
+    //     } else {
+    //         let iter = (0..self.offset)
+    //             .chain(self.sort_vec.iter().map(|&idx| idx + self.offset))
+    //             .chain((self.offset + self.sort_vec.len())..column.len());
+    //         iter.for_each(|idx| {
+    //             cb.add(column.get(idx));
+    //         });
+    //         Ok(())
+    //     }
+    // }
 }
 
 #[cfg(test)]

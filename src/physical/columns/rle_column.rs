@@ -239,10 +239,15 @@ where
     fn finalize(self) -> Self::Col {
         self.finalize_raw()
     }
+
+    // TODO: Implement this
+    fn count(&self) -> usize {
+        unimplemented!("Should return number of elements already present");
+    }
 }
 
 /// Implementation of [`Column`] that allows the use of incremental run length encoding.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct RleColumn<T> {
     values: Vec<T>,
     end_indices: Vec<NonZeroUsize>,
