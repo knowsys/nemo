@@ -143,6 +143,7 @@ struct RleElement<T> {
 pub struct RleColumnBuilder<T> {
     elements: Vec<RleElement<T>>,
     previous_value_opt: Option<T>,
+    count: usize,
 }
 
 impl<T> RleColumnBuilder<T> {
@@ -151,6 +152,7 @@ impl<T> RleColumnBuilder<T> {
         RleColumnBuilder {
             elements: Vec::new(),
             previous_value_opt: None,
+            count: 0,
         }
     }
 }
@@ -185,6 +187,7 @@ where
     type Col = RleColumn<T>;
 
     fn add(&mut self, value: T) {
+        self.count += 1;
         let current_value = value;
 
         if self.elements.is_empty() {
@@ -242,7 +245,7 @@ where
 
     // TODO: Implement this
     fn count(&self) -> usize {
-        unimplemented!("Should return number of elements already present");
+        self.count
     }
 }
 

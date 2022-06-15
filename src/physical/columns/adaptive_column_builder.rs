@@ -100,9 +100,10 @@ where
         match &self.builder {
             ColumnBuilderType::VectorColumn(vec) => vec.len(),
             ColumnBuilderType::RleColumn(rle_builder) => rle_builder.count(),
-            ColumnBuilderType::Undecided(_builder) => {
-                unimplemented!("Dont know what this should be")
-            }
+            ColumnBuilderType::Undecided(builder) => builder
+                .as_ref()
+                .expect("Should never be None on the outside")
+                .count(),
         }
     }
 }

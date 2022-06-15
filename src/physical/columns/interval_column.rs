@@ -47,6 +47,13 @@ where
     pub fn get_int_column(&self) -> &ColumnEnum<usize> {
         forward_to_interval_column!(self, get_int_column)
     }
+
+    /// Return column containing the intervals
+    pub fn get_int_column(&self) -> &ColumnEnum<usize> {
+        match self {
+            Self::GenericIntervalColumn(col) => col.get_int_column(),
+        }
+    }
 }
 
 impl<'a, T> Column<'a, T> for IntervalColumnEnum<T>
