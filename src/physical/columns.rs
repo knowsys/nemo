@@ -54,3 +54,7 @@ pub mod rle_column;
 pub use rle_column::RleColumn;
 pub use rle_column::RleColumnBuilder;
 pub use rle_column::RleColumnScan;
+
+/// Module for defining [`ReorderScan`]
+pub mod reorder_scan;
+pub use reorder_scan::ReorderScan;

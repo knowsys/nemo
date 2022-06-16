@@ -1,10 +1,14 @@
-use super::{Table, TableSchema, Trie, TrieSchema, TrieSchemaEntry};
+use super::{Table, TableSchema, Trie, TrieScan, TrieSchema, TrieSchemaEntry};
 use crate::logical::Permutator;
 use crate::physical::columns::{
-    AdaptiveColumnBuilder, AdaptiveColumnBuilderT, Column, ColumnBuilder, GenericIntervalColumn,
-    IntervalColumn, IntervalColumnEnum, IntervalColumnT,
+    AdaptiveColumnBuilder, AdaptiveColumnBuilderT, Column, ColumnBuilder, ColumnScan,
+    GenericIntervalColumn, IntervalColumn, IntervalColumnEnum, IntervalColumnT, RangedColumnScan,
+    RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT, ReorderScan,
 };
 use crate::physical::datatypes::DataTypeName;
+use crate::physical::datatypes::{Field, FloorToUsize};
+use std::cell::UnsafeCell;
+use std::fmt::Debug;
 use std::ops::Range;
 
 fn expand_range(column: &IntervalColumnT, range: Range<usize>) -> Range<usize> {
@@ -16,6 +20,15 @@ fn expand_range(column: &IntervalColumnT, range: Range<usize>) -> Range<usize> {
     };
 
     start..end
+}
+
+fn shrink_position<T>(column: &IntervalColumnEnum<T>, pos: usize) -> usize
+where
+    T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    let block_position = column.get_int_column().iter().seek(pos + 1);
+
+    block_position.map_or(column.get_int_column().len() - 1, |i| i - 1)
 }
 
 /// Given an input trie and an ordered list of variables to keep
@@ -228,6 +241,132 @@ pub fn trie_project<'a>(input_trie: &Trie, projected_vars: Vec<usize>) -> Trie {
     }
 
     Trie::new(target_schema, result_columns)
+}
+
+/// ...
+#[derive(Debug)]
+struct TrieProject<'a> {
+    trie: &'a Trie,
+    current_layer: Option<usize>,
+    target_schema: TrieSchema,
+    picked_columns: Vec<usize>,
+    reorder_scans: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
+}
+
+impl<'a> TrieProject<'a> {
+    /// Create new TrieProject object
+    pub fn new(trie: &'a Trie, picked_columns: Vec<usize>) -> Self {
+        let input_schema = trie.schema();
+
+        let mut target_attributes = Vec::<TrieSchemaEntry>::with_capacity(picked_columns.len());
+        for &col_index in &picked_columns {
+            target_attributes.push(TrieSchemaEntry {
+                label: input_schema.get_label(col_index),
+                datatype: input_schema.get_type(col_index),
+            });
+        }
+        let target_schema = TrieSchema::new(target_attributes);
+
+        let reorder_scans =
+            Vec::<UnsafeCell<RangedColumnScanT>>::with_capacity(picked_columns.len());
+
+        Self {
+            trie,
+            current_layer: None,
+            target_schema,
+            picked_columns,
+            reorder_scans,
+        }
+    }
+}
+
+impl<'a> TrieScan<'a> for TrieProject<'a> {
+    fn up(&mut self) {
+        debug_assert!(self.current_layer.is_some());
+        let current_layer = self.current_layer.unwrap();
+
+        self.current_layer = if current_layer == 0 {
+            None
+        } else {
+            Some(current_layer - 1)
+        };
+    }
+
+    fn down(&mut self) {
+        let next_layer = self.current_layer.map_or(0, |v| v + 1);
+
+        debug_assert!(next_layer < self.target_schema.arity());
+
+        // TODO: Update for other types
+        let next_column = if let IntervalColumnT::U64(col) =
+            self.trie.get_column(self.picked_columns[next_layer])
+        {
+            col
+        } else {
+            panic!("Do other cases later")
+        };
+
+        let next_range = if self.current_layer.is_none() {
+            0..next_column.len()
+        } else {
+            let current_cursor = self.reorder_scans[self.current_layer.unwrap()]
+                .get_mut()
+                .pos()
+                .expect("Should not call down when not on an element");
+
+            if self.picked_columns[self.current_layer.unwrap()] < next_layer {
+                let mut range = current_cursor..(current_cursor + 1);
+
+                for expand_index in (self.picked_columns[self.current_layer.unwrap()] + 1)
+                    ..=self.picked_columns[next_layer]
+                {
+                    range = expand_range(self.trie.get_column(expand_index), range);
+                }
+
+                range
+            } else {
+                let mut value = current_cursor;
+                for shrink_index in (self.picked_columns[next_layer]
+                    ..=(self.picked_columns[self.current_layer.unwrap()] + 1))
+                    .rev()
+                {
+                    let shrink_column =
+                        if let IntervalColumnT::U64(col) = self.trie.get_column(shrink_index) {
+                            col
+                        } else {
+                            panic!("Do other cases later")
+                        };
+
+                    value = shrink_position(shrink_column, value);
+                }
+
+                value..(value + 1)
+            }
+        };
+
+        self.reorder_scans[next_layer] = UnsafeCell::new(RangedColumnScanT::U64(
+            RangedColumnScanCell::new(RangedColumnScanEnum::ReorderScan(ReorderScan::narrowed(
+                next_column.get_data_column(),
+                next_range,
+            ))),
+        ));
+
+        self.current_layer = Some(next_layer);
+    }
+
+    fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+        debug_assert!(self.current_layer.is_some());
+
+        Some(&self.reorder_scans[self.current_layer?])
+    }
+
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+        Some(&self.reorder_scans[index])
+    }
+
+    fn get_schema(&self) -> &dyn TableSchema {
+        &self.target_schema
+    }
 }
 
 #[cfg(test)]
