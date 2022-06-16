@@ -1,5 +1,5 @@
 use super::{Column, ColumnBuilder, ColumnEnum, RleColumnBuilder, VectorColumn};
-use crate::physical::datatypes::{Double, Field, Float, FloorToUsize};
+use crate::physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize};
 use std::fmt::Debug;
 
 // Number of rle elements in rle column builder after which to decide which column type to use.
@@ -95,7 +95,6 @@ where
         }
     }
 
-    // TODO: Implement undecided case
     fn count(&self) -> usize {
         match &self.builder {
             ColumnBuilderType::VectorColumn(vec) => vec.len(),
@@ -117,6 +116,44 @@ pub enum AdaptiveColumnBuilderT {
     Float(AdaptiveColumnBuilder<Float>),
     /// Case Double
     Double(AdaptiveColumnBuilder<Double>),
+}
+
+impl AdaptiveColumnBuilderT {
+    /// Adds value of arbitrary type to the column builder
+    pub fn add(&mut self, value: DataValueT) {
+        match self {
+            Self::U64(cb) => {
+                if let DataValueT::U64(v) = value {
+                    cb.add(v);
+                } else {
+                    panic!("value does not match AdaptiveColumn type");
+                }
+            }
+            Self::Float(cb) => {
+                if let DataValueT::Float(v) = value {
+                    cb.add(v);
+                } else {
+                    panic!("value does not match AdaptiveColumn type");
+                }
+            }
+            Self::Double(cb) => {
+                if let DataValueT::Double(v) = value {
+                    cb.add(v);
+                } else {
+                    panic!("value does not match AdaptiveColumn type");
+                }
+            }
+        }
+    }
+
+    /// Return the number of elements that were already added.
+    pub fn count(&self) -> usize {
+        match self {
+            Self::U64(cb) => cb.count(),
+            Self::Float(cb) => cb.count(),
+            Self::Double(cb) => cb.count(),
+        }
+    }
 }
 
 #[cfg(test)]

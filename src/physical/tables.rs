@@ -25,6 +25,11 @@ pub use trie::TrieSchemaEntry;
 /// MOdule for defining [`TrieScan`]
 pub mod trie_scan;
 pub use trie_scan::TrieScan;
+pub use trie_scan::TrieScanEnum;
 
 /// Module for defining [`TrieProject`]
 pub mod trie_project;
+
+/// Module for materializing tries
+pub mod materialize;
+pub use materialize::materialize;
