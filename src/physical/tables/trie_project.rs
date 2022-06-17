@@ -245,7 +245,7 @@ pub fn trie_project<'a>(input_trie: &Trie, projected_vars: Vec<usize>) -> Trie {
 
 /// ...
 #[derive(Debug)]
-struct TrieProject<'a> {
+pub struct TrieProject<'a> {
     trie: &'a Trie,
     current_layer: Option<usize>,
     target_schema: TrieSchema,

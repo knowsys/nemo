@@ -31,6 +31,7 @@ pub use trie_scan::TrieScanJoin;
 
 /// Module for defining [`TrieProject`]
 pub mod trie_project;
+pub use trie_project::TrieProject;
 
 /// Module for materializing tries
 pub mod materialize;
