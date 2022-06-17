@@ -345,7 +345,7 @@ mod test {
     }
 
     #[test]
-    fn single_big_hole() {
+    fn multiple_big_holes() {
         let column_fst = make_gict(&[1, 2], &[0]);
         let column_snd = make_gict(&[3, 5, 2, 4], &[0, 2]);
         let column_trd = make_gict(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
