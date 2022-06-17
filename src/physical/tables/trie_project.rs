@@ -341,4 +341,133 @@ mod test {
             vec![0, 2]
         );
     }
+
+    #[test]
+    fn single_big_hole() {
+        let column_fst = make_gict(&[1, 2], &[0]);
+        let column_snd = make_gict(&[3, 5, 2, 4], &[0, 2]);
+        let column_trd = make_gict(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
+        let column_fth = make_gict(
+            &[5, 10, 15, 2, 4, 6, 1, 3, 7, 9, 11, 13, 17],
+            &[0, 3, 5, 6, 7, 8, 10, 11],
+        );
+        let column_vth = make_gict(
+            &[
+                1, 2, 20, 3, 4, 21, 5, 6, 22, 7, 8, 23, 9, 10, 24, 11, 12, 25, 13, 14,
+            ],
+            &[0, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18],
+        );
+        let column_sth = make_gict(
+            &[
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+            ],
+            &[
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+            ],
+        );
+
+        let column_vec = vec![
+            column_fst, column_snd, column_trd, column_fth, column_vth, column_sth,
+        ];
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 3,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 4,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 5,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie = Trie::new(schema, column_vec);
+
+        let trie_projected = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+            &trie,
+            vec![0, 3, 5],
+        )));
+
+        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_projected.get_column(0) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let proj_column_middle = if let IntervalColumnT::U64(col) = trie_projected.get_column(1) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_projected.get_column(2) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        assert_eq!(
+            proj_column_upper
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![1, 2]
+        );
+
+        assert_eq!(
+            proj_column_upper
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0]
+        );
+
+        assert_eq!(
+            proj_column_middle
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![1, 2, 4, 5, 6, 10, 15, 3, 7, 9, 11, 13, 17]
+        );
+
+        assert_eq!(
+            proj_column_middle
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 7]
+        );
+
+        assert_eq!(
+            proj_column_lower
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![9, 10, 5, 6, 7, 0, 1, 8, 2, 3, 4, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        );
+
+        assert_eq!(
+            proj_column_lower
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 2, 3, 5, 7, 8, 9, 11, 12, 14, 15, 17, 18]
+        );
+    }
 }
