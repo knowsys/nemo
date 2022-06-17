@@ -116,7 +116,7 @@ mod test {
     use crate::physical::columns::{AdaptiveColumnBuilder, Column, ColumnBuilder, IntervalColumnT};
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::{
-        IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
+        IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieScanJoin, TrieSchema, TrieSchemaEntry,
     };
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
@@ -213,6 +213,123 @@ mod test {
                 .iter()
                 .collect::<Vec<usize>>(),
             column_trd_int
+        );
+    }
+
+    #[test]
+    fn partial() {
+        // Same setup as in test_trie_join
+        let column_a_x = make_gict(&[1, 2, 3], &[0]);
+        let column_a_y = make_gict(&[2, 3, 4, 5, 6, 7], &[0, 3, 4]);
+        let column_b_y = make_gict(&[1, 2, 3, 6], &[0]);
+        let column_b_z = make_gict(&[1, 8, 9, 10, 11, 12], &[0, 1, 3, 4]);
+
+        let schema_a = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+        let schema_b = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let schema_target = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie_a = Trie::new(schema_a, vec![column_a_x, column_a_y]);
+        let trie_b = Trie::new(schema_b, vec![column_b_y, column_b_z]);
+
+        let mut join_iter = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
+            vec![
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
+            ],
+            schema_target,
+        ));
+
+        let materialized_join = materialize(&mut join_iter);
+
+        let mat_in_col_fst = if let IntervalColumnT::U64(col) = materialized_join.get_column(0) {
+            col
+        } else {
+            panic!("Should be U64");
+        };
+        let mat_in_col_snd = if let IntervalColumnT::U64(col) = materialized_join.get_column(1) {
+            col
+        } else {
+            panic!("Should be U64");
+        };
+        let mat_in_col_trd = if let IntervalColumnT::U64(col) = materialized_join.get_column(2) {
+            col
+        } else {
+            panic!("Should be U64");
+        };
+
+        assert_eq!(
+            mat_in_col_fst
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![1, 3]
+        );
+        assert_eq!(
+            mat_in_col_fst
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0]
+        );
+        assert_eq!(
+            mat_in_col_snd
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![2, 3, 6]
+        );
+        assert_eq!(
+            mat_in_col_snd
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 2]
+        );
+        assert_eq!(
+            mat_in_col_trd
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![8, 9, 10, 11, 12]
+        );
+        assert_eq!(
+            mat_in_col_trd
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 3, 4]
         );
     }
 }
