@@ -23,7 +23,9 @@ fn shrink_position<T>(column: &IntervalColumnEnum<T>, pos: usize) -> usize
 where
     T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
-    let block_position = column.get_int_column().iter().seek(pos + 1);
+    let mut column_iter = column.get_int_column().iter();
+    column_iter.seek(pos + 1);
+    let block_position = column_iter.pos();
 
     block_position.map_or(column.get_int_column().len() - 1, |i| i - 1)
 }
@@ -124,8 +126,8 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
                 range
             } else {
                 let mut value = current_cursor;
-                for shrink_index in (self.picked_columns[next_layer]
-                    ..=(self.picked_columns[self.current_layer.unwrap()] + 1))
+                for shrink_index in (self.picked_columns[next_layer] + 1
+                    ..=(self.picked_columns[self.current_layer.unwrap()]))
                     .rev()
                 {
                     let shrink_column =
@@ -468,6 +470,103 @@ mod test {
                 .iter()
                 .collect::<Vec<usize>>(),
             vec![0, 2, 3, 5, 7, 8, 9, 11, 12, 14, 15, 17, 18]
+        );
+    }
+
+    #[test]
+    fn reorder() {
+        let column_fst = make_gict(&[1, 2], &[0]);
+        let column_snd = make_gict(&[3, 5, 2, 4], &[0, 2]);
+        let column_trd = make_gict(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
+
+        let column_vec = vec![column_fst, column_snd, column_trd];
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie = Trie::new(schema, column_vec);
+
+        let trie_reordered = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+            &trie,
+            vec![2, 0, 1],
+        )));
+
+        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_reordered.get_column(0) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let proj_column_middle = if let IntervalColumnT::U64(col) = trie_reordered.get_column(1) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_reordered.get_column(2) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        assert_eq!(
+            proj_column_upper
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![2, 3, 4, 5, 6, 7, 8, 9]
+        );
+
+        assert_eq!(
+            proj_column_upper
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0]
+        );
+
+        assert_eq!(
+            proj_column_middle
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![2, 2, 2, 1, 2, 1, 1, 1]
+        );
+
+        assert_eq!(
+            proj_column_middle
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 1, 2, 3, 4, 5, 6, 7]
+        );
+
+        assert_eq!(
+            proj_column_lower
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![2, 4, 2, 4, 2, 4, 3, 5, 2, 4, 3, 5, 3, 5, 3, 5]
+        );
+
+        assert_eq!(
+            proj_column_lower
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 2, 4, 6, 8, 10, 12, 14]
         );
     }
 }
