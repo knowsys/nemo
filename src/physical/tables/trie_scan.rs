@@ -1,4 +1,4 @@
-use super::{Table, TableSchema, Trie, TrieSchema};
+use super::{Table, TableSchema, Trie, TrieProject, TrieSchema};
 use crate::generate_forwarder;
 use crate::physical::columns::{
     Column, ColumnScan, IntervalColumn, OrderedMergeJoin, RangedColumnScan, RangedColumnScanCell,
@@ -251,9 +251,11 @@ pub enum TrieScanEnum<'a> {
     IntervalTrieScan(IntervalTrieScan<'a>),
     /// Case TrieScanJoin
     TrieScanJoin(TrieScanJoin<'a>),
+    /// Case TrieProject
+    TrieProject(TrieProject<'a>),
 }
 
-generate_forwarder!(forward_to_scan; IntervalTrieScan, TrieScanJoin);
+generate_forwarder!(forward_to_scan; IntervalTrieScan, TrieScanJoin, TrieProject);
 
 impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
     fn up(&mut self) {

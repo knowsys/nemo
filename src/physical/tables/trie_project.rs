@@ -258,17 +258,30 @@ impl<'a> TrieProject<'a> {
     pub fn new(trie: &'a Trie, picked_columns: Vec<usize>) -> Self {
         let input_schema = trie.schema();
 
+        let mut reorder_scans =
+            Vec::<UnsafeCell<RangedColumnScanT>>::with_capacity(picked_columns.len());
+
         let mut target_attributes = Vec::<TrieSchemaEntry>::with_capacity(picked_columns.len());
         for &col_index in &picked_columns {
             target_attributes.push(TrieSchemaEntry {
                 label: input_schema.get_label(col_index),
                 datatype: input_schema.get_type(col_index),
             });
+
+            // TODO: Handle other types
+            let current_column = if let IntervalColumnT::U64(col) = trie.get_column(col_index) {
+                col
+            } else {
+                panic!("Do other cases later")
+            };
+
+            reorder_scans.push(UnsafeCell::new(RangedColumnScanT::U64(
+                RangedColumnScanCell::new(RangedColumnScanEnum::ReorderScan(ReorderScan::new(
+                    current_column.get_data_column(),
+                ))),
+            )));
         }
         let target_schema = TrieSchema::new(target_attributes);
-
-        let reorder_scans =
-            Vec::<UnsafeCell<RangedColumnScanT>>::with_capacity(picked_columns.len());
 
         Self {
             trie,
@@ -314,7 +327,7 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
                 .pos()
                 .expect("Should not call down when not on an element");
 
-            if self.picked_columns[self.current_layer.unwrap()] < next_layer {
+            if self.picked_columns[self.current_layer.unwrap()] < self.picked_columns[next_layer] {
                 let mut range = current_cursor..(current_cursor + 1);
 
                 for expand_index in (self.picked_columns[self.current_layer.unwrap()] + 1)
@@ -344,12 +357,7 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
             }
         };
 
-        self.reorder_scans[next_layer] = UnsafeCell::new(RangedColumnScanT::U64(
-            RangedColumnScanCell::new(RangedColumnScanEnum::ReorderScan(ReorderScan::narrowed(
-                next_column.get_data_column(),
-                next_range,
-            ))),
-        ));
+        self.reorder_scans[next_layer].get_mut().narrow(next_range);
 
         self.current_layer = Some(next_layer);
     }
@@ -371,15 +379,186 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::super::trie::{Trie, TrieSchema, TrieSchemaEntry};
-    use super::trie_project;
+    use super::{trie_project, TrieProject};
     use crate::physical::columns::{Column, IntervalColumnT};
     use crate::physical::datatypes::DataTypeName;
+    use crate::physical::tables::{materialize, Trie, TrieScanEnum, TrieSchema, TrieSchemaEntry};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
     #[test]
     fn single_small_hole() {
+        let column_fst = make_gict(&[1, 2], &[0]);
+        let column_snd = make_gict(&[3, 5, 2, 4], &[0, 2]);
+        let column_trd = make_gict(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
+
+        let column_vec = vec![column_fst, column_snd, column_trd];
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie = Trie::new(schema, column_vec);
+
+        let trie_no_first = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+            &trie,
+            vec![1, 2],
+        )));
+        let trie_no_middle = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+            &trie,
+            vec![0, 2],
+        )));
+        let trie_no_last = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+            &trie,
+            vec![0, 1],
+        )));
+
+        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_no_first.get_column(0) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_no_first.get_column(1) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        assert_eq!(
+            proj_column_upper
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![2, 3, 4, 5]
+        );
+
+        assert_eq!(
+            proj_column_upper
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0]
+        );
+
+        assert_eq!(
+            proj_column_lower
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![4, 6, 7, 9, 2, 3, 5, 8]
+        );
+
+        assert_eq!(
+            proj_column_lower
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 2, 4, 6]
+        );
+
+        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_no_middle.get_column(0) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_no_middle.get_column(1) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        assert_eq!(
+            proj_column_upper
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![1, 2]
+        );
+
+        assert_eq!(
+            proj_column_upper
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0]
+        );
+
+        assert_eq!(
+            proj_column_lower
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![5, 7, 8, 9, 2, 3, 4, 6]
+        );
+
+        assert_eq!(
+            proj_column_lower
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 4]
+        );
+
+        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_no_last.get_column(0) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_no_last.get_column(1) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        assert_eq!(
+            proj_column_upper
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![1, 2]
+        );
+
+        assert_eq!(
+            proj_column_upper
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0]
+        );
+
+        assert_eq!(
+            proj_column_lower
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![3, 5, 2, 4]
+        );
+
+        assert_eq!(
+            proj_column_lower
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 2]
+        );
+    }
+
+    #[test]
+    fn single_small_hole_old() {
         let column_fst = make_gict(&[1, 2], &[0]);
         let column_snd = make_gict(&[3, 5, 2, 4], &[0, 2]);
         let column_trd = make_gict(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);

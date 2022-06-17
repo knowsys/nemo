@@ -44,8 +44,8 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let next_index = self.current_index.map_or(self.range.start, |i| i + 1);
-        if next_index >= self.range.end {
+        let next_index = self.current_index.map_or(0, |i| i + 1);
+        if next_index >= self.range.end - self.range.start {
             self.current_value = None;
             return None;
         }
@@ -85,12 +85,12 @@ where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     fn pos(&self) -> Option<usize> {
-        // self.current_index
         Some(self.permutator.get_sort_vec()[self.current_index?])
     }
     fn narrow(&mut self, interval: Range<usize>) {
         self.range = interval;
         self.permutator = Permutator::sort_from_column_range(self.column, &self.range);
+        self.reset();
     }
 }
 

@@ -44,8 +44,8 @@ pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
     trie_scan.down();
     loop {
         let is_last_layer = current_layer >= target_schema.arity() - 1;
-        let current_value = trie_scan.current_scan().unwrap().current();
-        let next_value = trie_scan.current_scan().unwrap().next();
+        let current_value = unsafe { (*trie_scan.current_scan().unwrap().get()).current() };
+        let next_value = unsafe { (*trie_scan.current_scan().unwrap().get()).next() };
 
         if !current_row.last().unwrap() && is_last_layer {
             current_row = vec![true; target_schema.arity()];
