@@ -3,7 +3,7 @@ use crate::physical::columns::{
     AdaptiveColumnBuilder, AdaptiveColumnBuilderT, ColumnBuilder, ColumnScan,
     GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT,
 };
-use crate::physical::datatypes::{DataTypeName, DataValueT};
+use crate::physical::datatypes::DataTypeName;
 
 /// Given a TrieScan iterator, materialize its content into a trie
 pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
@@ -113,10 +113,10 @@ pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
 #[cfg(test)]
 mod test {
     use super::materialize;
-    use crate::physical::columns::{AdaptiveColumnBuilder, Column, ColumnBuilder, IntervalColumnT};
+    use crate::physical::columns::{Column, IntervalColumnT};
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::{
-        IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieScanJoin, TrieSchema, TrieSchemaEntry,
+        IntervalTrieScan, Trie, TrieScanEnum, TrieScanJoin, TrieSchema, TrieSchemaEntry,
     };
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
