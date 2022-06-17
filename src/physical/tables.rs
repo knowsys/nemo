@@ -24,6 +24,7 @@ pub use trie::TrieSchemaEntry;
 
 /// MOdule for defining [`TrieScan`]
 pub mod trie_scan;
+pub use trie_scan::IntervalTrieScan;
 pub use trie_scan::TrieScan;
 pub use trie_scan::TrieScanEnum;
 

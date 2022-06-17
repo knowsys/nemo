@@ -38,41 +38,41 @@ pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
     }
 
     // Iterate through the trie_scan in a dfs manner
-    let mut current_row = Vec::<DataValueT>::with_capacity(target_schema.arity());
+    let mut current_row: Vec<bool> = vec![false; target_schema.arity()];
     let mut current_int_starts: Vec<usize> = vec![0usize; target_schema.arity()];
     let mut current_layer: usize = 0;
     trie_scan.down();
     loop {
-        let is_last_layer = current_layer < target_schema.arity() - 1;
-        let is_first_value = trie_scan.current_scan().unwrap().current().is_none();
+        let is_last_layer = current_layer >= target_schema.arity() - 1;
+        let current_value = trie_scan.current_scan().unwrap().current();
         let next_value = trie_scan.current_scan().unwrap().next();
 
-        if next_value.is_some() {
-            if is_last_layer {
-                if is_first_value {
-                    for var in 0..(target_schema.arity() - 1) {
-                        data_column_builders[var].add(current_row[var]);
-                    }
-                }
+        if !current_row.last().unwrap() && is_last_layer {
+            current_row = vec![true; target_schema.arity()];
+        }
 
-                data_column_builders
-                    .last_mut()
-                    .unwrap()
-                    .add(next_value.unwrap());
-            } else {
-                current_row[current_layer] = next_value.unwrap();
-            }
-        } else {
-            if current_layer == 0 {
-                break;
-            }
+        if current_value.is_some() && current_row[current_layer] {
+            data_column_builders[current_layer].add(current_value.unwrap());
 
+            if !is_last_layer {
+                current_row[current_layer] = false;
+            }
+        }
+        if next_value.is_none() {
             let current_data_len = data_column_builders[current_layer].count();
             let prev_data_len = &mut current_int_starts[current_layer];
 
             if current_data_len > *prev_data_len {
                 intervals_column_builders[current_layer].add(*prev_data_len);
                 *prev_data_len = current_data_len;
+            }
+
+            if is_last_layer {
+                current_row[current_layer] = false;
+            }
+
+            if current_layer == 0 {
+                break;
             }
 
             trie_scan.up();
@@ -108,4 +108,111 @@ pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
 
     // Finally, return finished trie
     Trie::new(target_schema, result_columns)
+}
+
+#[cfg(test)]
+mod test {
+    use super::materialize;
+    use crate::physical::columns::{AdaptiveColumnBuilder, Column, ColumnBuilder, IntervalColumnT};
+    use crate::physical::datatypes::DataTypeName;
+    use crate::physical::tables::{
+        IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
+    };
+    use crate::physical::util::test_util::make_gict;
+    use test_log::test;
+
+    #[test]
+    fn complete() {
+        let column_fst_data = [1, 2, 3];
+        let column_fst_int = [0];
+        let column_snd_data = [2, 3, 4, 1, 2];
+        let column_snd_int = [0, 2, 3];
+        let column_trd_data = [3, 4, 5, 7, 2, 1];
+        let column_trd_int = [0, 2, 3, 4, 5];
+
+        let column_fst = make_gict(&column_fst_data, &column_fst_int);
+        let column_snd = make_gict(&column_snd_data, &column_snd_int);
+        let column_trd = make_gict(&column_trd_data, &column_trd_int);
+
+        let column_vec = vec![column_fst, column_snd, column_trd];
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie = Trie::new(schema, column_vec);
+        let mut trie_iter = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie));
+
+        let materialized_trie = materialize(&mut trie_iter);
+
+        let mat_in_col_fst = if let IntervalColumnT::U64(col) = materialized_trie.get_column(0) {
+            col
+        } else {
+            panic!("Should be U64");
+        };
+        let mat_in_col_snd = if let IntervalColumnT::U64(col) = materialized_trie.get_column(1) {
+            col
+        } else {
+            panic!("Should be U64");
+        };
+        let mat_in_col_trd = if let IntervalColumnT::U64(col) = materialized_trie.get_column(2) {
+            col
+        } else {
+            panic!("Should be U64");
+        };
+
+        assert_eq!(
+            mat_in_col_fst
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            column_fst_data
+        );
+        assert_eq!(
+            mat_in_col_fst
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            column_fst_int
+        );
+        assert_eq!(
+            mat_in_col_snd
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            column_snd_data
+        );
+        assert_eq!(
+            mat_in_col_snd
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            column_snd_int
+        );
+        assert_eq!(
+            mat_in_col_trd
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            column_trd_data
+        );
+        assert_eq!(
+            mat_in_col_trd
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            column_trd_int
+        );
+    }
 }
