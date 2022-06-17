@@ -94,13 +94,29 @@ where
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use super::super::{GenericColumnScan, VectorColumn};
-//     use super::{ColumnScan, ReorderScan}; // < TODO: is this a nice way to write this use?
-//     use test_log::test;
+#[cfg(test)]
+mod test {
+    use super::ReorderScan;
+    use crate::physical::columns::{ColumnEnum, ColumnScan, VectorColumn};
+    use test_log::test;
 
-//     #[test]
-//     fn test_u64_simple_join<'a>() {
-//     }
-// }
+    #[test]
+    fn test_u64() {
+        let values: Vec<u64> = vec![0, 2, 1, 7, 4, 9, 12, 8, 4, 7, 4, 14];
+        let column = ColumnEnum::VectorColumn(VectorColumn::new(values));
+
+        let mut scan = ReorderScan::narrowed(&column, 3..9);
+
+        assert_eq!(scan.current(), None);
+        assert_eq!(scan.next(), Some(4));
+        assert_eq!(scan.current(), Some(4));
+        assert_eq!(scan.next(), Some(4));
+        assert_eq!(scan.current(), Some(4));
+        assert_eq!(scan.next(), Some(7));
+        assert_eq!(scan.current(), Some(7));
+        assert_eq!(scan.seek(11), Some(12));
+        assert_eq!(scan.current(), Some(12));
+        assert_eq!(scan.next(), None);
+        assert_eq!(scan.current(), None);
+    }
+}
