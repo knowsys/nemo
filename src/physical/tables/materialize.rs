@@ -329,7 +329,7 @@ mod test {
                 .get_int_column()
                 .iter()
                 .collect::<Vec<usize>>(),
-            vec![0, 3, 4]
+            vec![0, 2, 3]
         );
     }
 }
