@@ -27,7 +27,7 @@ where
         DifferenceScan {
             scan_left,
             scan_right,
-            equal: false,
+            equal: true,
             current: None,
         }
     }
@@ -62,10 +62,7 @@ where
 {
     fn seek(&mut self, value: T) -> Option<T> {
         self.current = self.scan_left.seek(value);
-
-        if self.equal {
-            self.scan_right.seek(value);
-        }
+        self.scan_right.seek(value);
 
         self.equal = self.current.is_some() && self.current == self.scan_right.current();
         self.current
@@ -94,5 +91,50 @@ where
         unimplemented!(
             "This function only exists because RangedColumnScans cannnot be ColumnScans"
         );
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::DifferenceScan;
+    use crate::physical::columns::{Column, ColumnScan, VectorColumn};
+    use test_log::test;
+
+    #[test]
+    fn test_u64() {
+        let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
+        let right_column = VectorColumn::new(vec![0u64, 3, 7, 11]);
+
+        let mut left_iter = left_column.iter();
+        let mut right_iter = right_column.iter();
+
+        let mut diff_scan = DifferenceScan::new(&mut left_iter, &mut right_iter);
+
+        assert_eq!(diff_scan.current(), None);
+        assert_eq!(diff_scan.is_equal(), true);
+        assert_eq!(diff_scan.next(), Some(0));
+        assert_eq!(diff_scan.current(), Some(0));
+        assert_eq!(diff_scan.is_equal(), true);
+        assert_eq!(diff_scan.next(), Some(2));
+        assert_eq!(diff_scan.current(), Some(2));
+        assert_eq!(diff_scan.is_equal(), false);
+        assert_eq!(diff_scan.next(), Some(3));
+        assert_eq!(diff_scan.current(), Some(3));
+        assert_eq!(diff_scan.is_equal(), true);
+        assert_eq!(diff_scan.next(), Some(5));
+        assert_eq!(diff_scan.current(), Some(5));
+        assert_eq!(diff_scan.is_equal(), false);
+        assert_eq!(diff_scan.seek(8), Some(8));
+        assert_eq!(diff_scan.current(), Some(8));
+        assert_eq!(diff_scan.is_equal(), false);
+        assert_eq!(diff_scan.seek(11), Some(11));
+        assert_eq!(diff_scan.current(), Some(11));
+        assert_eq!(diff_scan.is_equal(), true);
+        assert_eq!(diff_scan.next(), Some(12));
+        assert_eq!(diff_scan.current(), Some(12));
+        assert_eq!(diff_scan.is_equal(), false);
+        assert_eq!(diff_scan.next(), None);
+        assert_eq!(diff_scan.current(), None);
+        assert_eq!(diff_scan.is_equal(), false);
     }
 }
