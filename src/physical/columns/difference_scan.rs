@@ -96,15 +96,24 @@ where
 
 /// Iterator which computes the set difference between two scans
 #[derive(Debug)]
-pub struct MinusScan<'a, T, Scan: RangedColumnScan<Item = T>> {
-    scan_left: &'a mut Scan,
-    scan_right: &'a mut Scan,
+pub struct MinusScan<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    scan_left: &'a RangedColumnScanCell<'a, T>,
+    scan_right: &'a RangedColumnScanCell<'a, T>,
     current: Option<T>,
 }
 
-impl<'a, T, Scan: RangedColumnScan<Item = T>> MinusScan<'a, T, Scan> {
+impl<'a, T> MinusScan<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
     /// Constructs a new VectorColumnScan for a Column.
-    pub fn new(scan_left: &'a mut Scan, scan_right: &'a mut Scan) -> Self {
+    pub fn new(
+        scan_left: &'a RangedColumnScanCell<'a, T>,
+        scan_right: &'a RangedColumnScanCell<'a, T>,
+    ) -> Self {
         Self {
             scan_left,
             scan_right,
@@ -113,8 +122,9 @@ impl<'a, T, Scan: RangedColumnScan<Item = T>> MinusScan<'a, T, Scan> {
     }
 }
 
-impl<'a, T: Eq + Debug + Copy, Scan: RangedColumnScan<Item = T>> Iterator
-    for MinusScan<'a, T, Scan>
+impl<'a, T: Eq + Debug + Copy> Iterator for MinusScan<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     type Item = T;
 
@@ -139,8 +149,9 @@ impl<'a, T: Eq + Debug + Copy, Scan: RangedColumnScan<Item = T>> Iterator
     }
 }
 
-impl<'a, T: Ord + Copy + Debug, Scan: RangedColumnScan<Item = T>> ColumnScan
-    for MinusScan<'a, T, Scan>
+impl<'a, T: Ord + Copy + Debug> ColumnScan for MinusScan<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         self.current = self.scan_left.seek(value);
@@ -165,8 +176,9 @@ impl<'a, T: Ord + Copy + Debug, Scan: RangedColumnScan<Item = T>> ColumnScan
     }
 }
 
-impl<'a, T: Ord + Copy + Debug, Scan: RangedColumnScan<Item = T>> RangedColumnScan
-    for MinusScan<'a, T, Scan>
+impl<'a, T: Ord + Copy + Debug> RangedColumnScan for MinusScan<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     fn pos(&self) -> Option<usize> {
         unimplemented!(
@@ -183,7 +195,10 @@ impl<'a, T: Ord + Copy + Debug, Scan: RangedColumnScan<Item = T>> RangedColumnSc
 #[cfg(test)]
 mod test {
     use super::{DifferenceScan, MinusScan};
-    use crate::physical::columns::{Column, ColumnScan, VectorColumn};
+    use crate::physical::columns::{
+        Column, ColumnScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum,
+        VectorColumn,
+    };
     use test_log::test;
 
     #[test]
@@ -191,8 +206,12 @@ mod test {
         let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = VectorColumn::new(vec![0u64, 3, 7, 11]);
 
-        let mut left_iter = left_column.iter();
-        let mut right_iter = right_column.iter();
+        let mut left_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+            GenericColumnScanEnum::VectorColumn(left_column.iter()),
+        ));
+        let mut right_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+            GenericColumnScanEnum::VectorColumn(right_column.iter()),
+        ));
 
         let mut diff_scan = DifferenceScan::new(&mut left_iter, &mut right_iter);
 
@@ -229,8 +248,12 @@ mod test {
         let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = VectorColumn::new(vec![0u64, 3, 7, 11]);
 
-        let mut left_iter = left_column.iter();
-        let mut right_iter = right_column.iter();
+        let mut left_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+            GenericColumnScanEnum::VectorColumn(left_column.iter()),
+        ));
+        let mut right_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+            GenericColumnScanEnum::VectorColumn(right_column.iter()),
+        ));
 
         let mut diff_scan = MinusScan::new(&mut left_iter, &mut right_iter);
 

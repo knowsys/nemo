@@ -1,6 +1,6 @@
 use super::{
     column_scan::ColumnScan, DifferenceScan, EqualColumnScan, EqualValueScan,
-    GenericColumnScanEnum, OrderedMergeJoin, PassScan, ReorderScan, RleColumnScan,
+    GenericColumnScanEnum, MinusScan, OrderedMergeJoin, PassScan, ReorderScan, RleColumnScan,
 };
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
@@ -40,6 +40,8 @@ where
     PassScan(PassScan<'a, T>),
     /// Case DifferenceScan
     DifferenceScan(DifferenceScan<'a, T>),
+    /// Case MinusScan
+    MinusScan(MinusScan<'a, T>),
 }
 
 impl<'a, T> From<GenericColumnScanEnum<'a, T>> for RangedColumnScanEnum<'a, T>
@@ -86,7 +88,8 @@ generate_forwarder!(forward_to_column_scan;
                     EqualColumnScan, 
                     EqualValueScan,
                     PassScan,
-                    DifferenceScan);
+                    DifferenceScan,
+                    MinusScan);
 
 impl<'a, T> RangedColumnScanEnum<'a, T>
 where

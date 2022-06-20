@@ -74,3 +74,4 @@ pub use pass_scan::PassScan;
 /// Module for defining [`DifferenceScan`]
 pub mod difference_scan;
 pub use difference_scan::DifferenceScan;
+pub use difference_scan::MinusScan;

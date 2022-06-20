@@ -1,6 +1,7 @@
 use super::{TableSchema, TrieScan, TrieScanEnum};
 use crate::physical::columns::{
-    ColumnScan, DifferenceScan, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT,
+    ColumnScan, DifferenceScan, MinusScan, RangedColumnScanCell, RangedColumnScanEnum,
+    RangedColumnScanT,
 };
 use crate::physical::datatypes::DataTypeName;
 use std::cell::UnsafeCell;
@@ -34,13 +35,21 @@ impl<'a> TrieDifference<'a> {
                         if let RangedColumnScanT::U64(right_scan_enum) =
                             &*trie_right.get_scan(layer_index).unwrap().get()
                         {
-                            let new_difference_scan =
-                                RangedColumnScanCell::new(RangedColumnScanEnum::DifferenceScan(
-                                    DifferenceScan::new(left_scan_enum, right_scan_enum),
-                                ));
+                            let new_scan = if layer_index == target_schema.arity() - 1 {
+                                RangedColumnScanEnum::MinusScan(MinusScan::new(
+                                    left_scan_enum,
+                                    right_scan_enum,
+                                ))
+                            } else {
+                                RangedColumnScanEnum::DifferenceScan(DifferenceScan::new(
+                                    left_scan_enum,
+                                    right_scan_enum,
+                                ))
+                            };
 
-                            difference_scans
-                                .push(UnsafeCell::new(RangedColumnScanT::U64(new_difference_scan)));
+                            difference_scans.push(UnsafeCell::new(RangedColumnScanT::U64(
+                                RangedColumnScanCell::new(new_scan),
+                            )));
                         } else {
                             panic!("type should match here")
                         }
