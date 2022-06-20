@@ -3,7 +3,7 @@ use crate::physical::datatypes::{Field, FloorToUsize};
 use std::fmt::Debug;
 use std::ops::Range;
 
-/// Iterator for the set difference of two iterators
+/// Iterator used in the upper levels of the trie difference operator
 #[derive(Debug)]
 pub struct DifferenceScan<'a, T>
 where
@@ -94,14 +94,100 @@ where
     }
 }
 
+/// Iterator which computes the set difference between two scans
+#[derive(Debug)]
+pub struct MinusScan<'a, T, Scan: RangedColumnScan<Item = T>> {
+    scan_left: &'a mut Scan,
+    scan_right: &'a mut Scan,
+    current: Option<T>,
+}
+
+impl<'a, T, Scan: RangedColumnScan<Item = T>> MinusScan<'a, T, Scan> {
+    /// Constructs a new VectorColumnScan for a Column.
+    pub fn new(scan_left: &'a mut Scan, scan_right: &'a mut Scan) -> Self {
+        Self {
+            scan_left,
+            scan_right,
+            current: None,
+        }
+    }
+}
+
+impl<'a, T: Eq + Debug + Copy, Scan: RangedColumnScan<Item = T>> Iterator
+    for MinusScan<'a, T, Scan>
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            self.current = self.scan_left.next();
+
+            if let Some(current_left) = self.current {
+                if let Some(current_right) = self.scan_right.seek(current_left) {
+                    if current_left != current_right {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        self.current
+    }
+}
+
+impl<'a, T: Ord + Copy + Debug, Scan: RangedColumnScan<Item = T>> ColumnScan
+    for MinusScan<'a, T, Scan>
+{
+    fn seek(&mut self, value: T) -> Option<T> {
+        self.current = self.scan_left.seek(value);
+
+        if let Some(current_left) = self.current {
+            if let Some(current_right) = self.scan_right.seek(current_left) {
+                if current_left == current_right {
+                    self.next();
+                }
+            }
+        }
+
+        self.current
+    }
+
+    fn current(&mut self) -> Option<T> {
+        self.current
+    }
+
+    fn reset(&mut self) {
+        self.current = None;
+    }
+}
+
+impl<'a, T: Ord + Copy + Debug, Scan: RangedColumnScan<Item = T>> RangedColumnScan
+    for MinusScan<'a, T, Scan>
+{
+    fn pos(&self) -> Option<usize> {
+        unimplemented!(
+            "This function only exists because RangedColumnScans cannnot be ColumnScans"
+        );
+    }
+    fn narrow(&mut self, _interval: Range<usize>) {
+        unimplemented!(
+            "This function only exists because RangedColumnScans cannnot be ColumnScans"
+        );
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::DifferenceScan;
+    use super::{DifferenceScan, MinusScan};
     use crate::physical::columns::{Column, ColumnScan, VectorColumn};
     use test_log::test;
 
     #[test]
-    fn test_u64() {
+    fn test_difference_scan() {
         let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = VectorColumn::new(vec![0u64, 3, 7, 11]);
 
@@ -136,5 +222,28 @@ mod test {
         assert_eq!(diff_scan.next(), None);
         assert_eq!(diff_scan.current(), None);
         assert_eq!(diff_scan.is_equal(), false);
+    }
+
+    #[test]
+    fn test_minus() {
+        let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
+        let right_column = VectorColumn::new(vec![0u64, 3, 7, 11]);
+
+        let mut left_iter = left_column.iter();
+        let mut right_iter = right_column.iter();
+
+        let mut diff_scan = MinusScan::new(&mut left_iter, &mut right_iter);
+
+        assert_eq!(diff_scan.current(), None);
+        assert_eq!(diff_scan.next(), Some(2));
+        assert_eq!(diff_scan.current(), Some(2));
+        assert_eq!(diff_scan.next(), Some(5));
+        assert_eq!(diff_scan.current(), Some(5));
+        assert_eq!(diff_scan.seek(8), Some(8));
+        assert_eq!(diff_scan.current(), Some(8));
+        assert_eq!(diff_scan.seek(11), Some(12));
+        assert_eq!(diff_scan.current(), Some(12));
+        assert_eq!(diff_scan.next(), None);
+        assert_eq!(diff_scan.current(), None);
     }
 }
