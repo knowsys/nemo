@@ -44,29 +44,54 @@ where
         let mut next_smallest: Option<T> = None;
         let mut smallest_scans_pointer = 0;
 
-        for (index, scan) in self.column_scans.iter_mut().enumerate() {
-            let current_smallest = self.smallest_scans[smallest_scans_pointer];
+        if self.smallest_value.is_none() {
+            for (index, scan) in self.column_scans.iter_mut().enumerate() {
+                let current_element = scan.next();
 
-            let current_element = if index == current_smallest {
-                smallest_scans_pointer += 1;
-
-                scan.next()
-            } else {
-                scan.current()
-            };
-
-            if next_smallest.is_none() {
-                next_smallest = current_element;
-            } else {
-                if current_element.is_some() && current_element.unwrap() < next_smallest.unwrap() {
+                if next_smallest.is_none() {
                     next_smallest = current_element;
-
-                    next_smallest_scans.clear();
+                } else {
+                    if current_element.is_some()
+                        && current_element.unwrap() < next_smallest.unwrap()
+                    {
+                        next_smallest = current_element;
+                        next_smallest_scans.clear();
+                    }
+                }
+                if next_smallest == current_element {
+                    next_smallest_scans.push(index);
                 }
             }
+        } else {
+            for (index, scan) in self.column_scans.iter_mut().enumerate() {
+                let current_smallest = if smallest_scans_pointer < self.smallest_scans.len() {
+                    Some(self.smallest_scans[smallest_scans_pointer])
+                } else {
+                    None
+                };
 
-            if next_smallest == current_element {
-                next_smallest_scans.push(index);
+                let current_element =
+                    if current_smallest.is_some() && index == current_smallest.unwrap() {
+                        smallest_scans_pointer += 1;
+                        scan.next()
+                    } else {
+                        scan.current()
+                    };
+
+                if next_smallest.is_none() {
+                    next_smallest = current_element;
+                } else {
+                    if current_element.is_some()
+                        && current_element.unwrap() < next_smallest.unwrap()
+                    {
+                        next_smallest = current_element;
+                        next_smallest_scans.clear();
+                        smallest_scans_pointer = 0;
+                    }
+                }
+                if next_smallest == current_element {
+                    next_smallest_scans.push(index);
+                }
             }
         }
 
@@ -131,5 +156,40 @@ where
         unimplemented!(
             "This function only exists because RangedColumnScans cannnot be ColumnScans"
         );
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::UnionScan;
+    use crate::physical::columns::{Column, ColumnScan, VectorColumn};
+    use test_log::test;
+
+    #[test]
+    fn test_u64() {
+        let column_fst = VectorColumn::new(vec![0u64, 1, 3, 5, 15]);
+        let column_snd = VectorColumn::new(vec![0u64, 1, 2, 7, 9]);
+        let column_trd = VectorColumn::new(vec![0u64, 2, 4, 11]);
+        let mut iter_fst = column_fst.iter();
+        let mut iter_snd = column_snd.iter();
+        let mut iter_trd = column_trd.iter();
+        let mut union_iter = UnionScan::new(vec![&mut iter_fst, &mut iter_snd, &mut iter_trd]);
+        assert_eq!(union_iter.current(), None);
+        assert_eq!(union_iter.next(), Some(0));
+        assert_eq!(union_iter.current(), Some(0));
+        assert_eq!(union_iter.next(), Some(1));
+        assert_eq!(union_iter.current(), Some(1));
+        assert_eq!(union_iter.next(), Some(2));
+        assert_eq!(union_iter.current(), Some(2));
+        assert_eq!(union_iter.next(), Some(3));
+        assert_eq!(union_iter.current(), Some(3));
+        assert_eq!(union_iter.next(), Some(4));
+        assert_eq!(union_iter.current(), Some(4));
+        assert_eq!(union_iter.seek(7), Some(7));
+        assert_eq!(union_iter.current(), Some(7));
+        assert_eq!(union_iter.seek(12), Some(15));
+        assert_eq!(union_iter.current(), Some(15));
+        assert_eq!(union_iter.next(), None);
+        assert_eq!(union_iter.current(), None);
     }
 }
