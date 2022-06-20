@@ -73,7 +73,7 @@ where
     }
 
     fn reset(&mut self) {
-        self.equal = false;
+        self.equal = true;
         self.current = None;
     }
 }
