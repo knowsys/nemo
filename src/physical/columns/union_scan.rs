@@ -89,7 +89,7 @@ where
                         smallest_scans_pointer = 0;
                     }
                 }
-                if next_smallest == current_element {
+                if next_smallest.is_some() && next_smallest == current_element {
                     next_smallest_scans.push(index);
                 }
             }
