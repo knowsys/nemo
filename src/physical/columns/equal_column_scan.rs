@@ -1,19 +1,26 @@
-use super::{ColumnScan, RangedColumnScan};
+use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell};
+use crate::physical::datatypes::{Field, FloorToUsize};
 use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
 #[derive(Debug)]
-pub struct EqualColumnScan<'a, T, Scan: RangedColumnScan<Item = T>> {
-    reference_scan: &'a mut Scan,
-    value_scan: &'a mut Scan,
+pub struct EqualColumnScan<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    reference_scan: &'a RangedColumnScanCell<'a, T>,
+    value_scan: &'a RangedColumnScanCell<'a, T>,
     current_value: Option<T>,
 }
-impl<'a, T, Scan: RangedColumnScan<Item = T>> EqualColumnScan<'a, T, Scan> {
+impl<'a, T> EqualColumnScan<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
     /// Constructs a new EqualColumnScan for a Column.
     pub fn new(
-        reference_scan: &'a mut Scan,
-        value_scan: &'a mut Scan,
-    ) -> EqualColumnScan<'a, T, Scan> {
+        reference_scan: &'a RangedColumnScanCell<'a, T>,
+        value_scan: &'a RangedColumnScanCell<'a, T>,
+    ) -> EqualColumnScan<'a, T> {
         EqualColumnScan {
             reference_scan,
             value_scan,
@@ -22,8 +29,9 @@ impl<'a, T, Scan: RangedColumnScan<Item = T>> EqualColumnScan<'a, T, Scan> {
     }
 }
 
-impl<'a, T: Eq + Debug + Copy + PartialOrd, Scan: RangedColumnScan<Item = T>> Iterator
-    for EqualColumnScan<'a, T, Scan>
+impl<'a, T> Iterator for EqualColumnScan<'a, T>
+where
+    T: 'a + Debug + Copy + Eq + PartialOrd + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     type Item = T;
 
@@ -48,8 +56,9 @@ impl<'a, T: Eq + Debug + Copy + PartialOrd, Scan: RangedColumnScan<Item = T>> It
     }
 }
 
-impl<'a, T: Ord + Copy + Debug + PartialOrd, Scan: RangedColumnScan<Item = T>> ColumnScan
-    for EqualColumnScan<'a, T, Scan>
+impl<'a, T> ColumnScan for EqualColumnScan<'a, T>
+where
+    T: 'a + Debug + Copy + Eq + PartialOrd + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         let reference_value = self.reference_scan.current()?;
@@ -70,8 +79,9 @@ impl<'a, T: Ord + Copy + Debug + PartialOrd, Scan: RangedColumnScan<Item = T>> C
     }
 }
 
-impl<'a, T: Ord + Copy + Debug, Scan: RangedColumnScan<Item = T>> RangedColumnScan
-    for EqualColumnScan<'a, T, Scan>
+impl<'a, T> RangedColumnScan for EqualColumnScan<'a, T>
+where
+    T: 'a + Debug + Copy + Eq + PartialOrd + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     fn pos(&self) -> Option<usize> {
         unimplemented!(
@@ -88,16 +98,23 @@ impl<'a, T: Ord + Copy + Debug, Scan: RangedColumnScan<Item = T>> RangedColumnSc
 #[cfg(test)]
 mod test {
     use super::EqualColumnScan;
-    use crate::physical::columns::{Column, ColumnScan, VectorColumn};
+    use crate::physical::columns::{
+        Column, ColumnScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum,
+        VectorColumn,
+    };
     use test_log::test;
 
     #[test]
     fn test_u64() {
-        let ref_col = VectorColumn::new(vec![0, 4, 7]);
-        let val_col = VectorColumn::new(vec![1, 4, 8]);
+        let ref_col = VectorColumn::new(vec![0u64, 4, 7]);
+        let val_col = VectorColumn::new(vec![1u64, 4, 8]);
 
-        let mut ref_iter = ref_col.iter();
-        let mut val_iter = val_col.iter();
+        let mut ref_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+            GenericColumnScanEnum::VectorColumn(ref_col.iter()),
+        ));
+        let mut val_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+            GenericColumnScanEnum::VectorColumn(val_col.iter()),
+        ));
 
         ref_iter.seek(4);
 
@@ -108,7 +125,13 @@ mod test {
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);
 
-        let mut ref_iter = ref_col.iter();
+        let mut ref_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+            GenericColumnScanEnum::VectorColumn(ref_col.iter()),
+        ));
+        let mut val_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+            GenericColumnScanEnum::VectorColumn(val_col.iter()),
+        ));
+
         ref_iter.seek(7);
 
         let mut equal_scan = EqualColumnScan::new(&mut ref_iter, &mut val_iter);

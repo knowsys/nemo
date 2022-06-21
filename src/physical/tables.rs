@@ -36,3 +36,7 @@ pub use trie_project::TrieProject;
 /// Module for materializing tries
 pub mod materialize;
 pub use materialize::materialize;
+
+/// Module for defining [`TrieSelect`]
+pub mod trie_select;
+pub use trie_select::TrieSelectEqual;
