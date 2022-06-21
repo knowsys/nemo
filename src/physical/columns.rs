@@ -58,3 +58,7 @@ pub use rle_column::RleColumnScan;
 /// Module for defining [`ReorderScan`]
 pub mod reorder_scan;
 pub use reorder_scan::ReorderScan;
+
+/// Module for defining [`EqualColumnScan`]
+pub mod equal_column_scan;
+pub use equal_column_scan::EqualColumnScan;
