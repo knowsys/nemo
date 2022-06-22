@@ -31,7 +31,7 @@ impl<'a> TrieSelectEqual<'a> {
                     {
                         base_scan
                     } else {
-                        panic!("");
+                        panic!("Type should be u64");
                     };
                     let next_scan = RangedColumnScanCell::new(RangedColumnScanEnum::PassScan(
                         PassScan::new(base_scan_cell),
