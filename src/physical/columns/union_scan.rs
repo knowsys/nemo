@@ -12,6 +12,8 @@ where
     column_scans: Vec<&'a RangedColumnScanCell<'a, T>>,
     smallest_scans: Vec<usize>,
     smallest_value: Option<T>,
+
+    active_scans: Vec<usize>,
 }
 
 impl<'a, T> UnionScan<'a, T>
@@ -20,16 +22,23 @@ where
 {
     /// Constructs a new VectorColumnScan for a Column.
     pub fn new(column_scans: Vec<&'a RangedColumnScanCell<'a, T>>) -> UnionScan<'a, T> {
+        let scans_len = column_scans.len();
         UnionScan {
             column_scans,
             smallest_scans: vec![],
             smallest_value: None,
+            active_scans: (0..scans_len).collect(),
         }
     }
 
     /// Returns vector contianing the indices of those scans which point to the currently smallest values
     pub fn get_smallest_scans(&self) -> &Vec<usize> {
         &self.smallest_scans
+    }
+
+    /// Set a vector that indicates which scans are currently active and should be considered
+    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
+        self.active_scans = active_scans;
     }
 }
 
@@ -45,7 +54,8 @@ where
         let mut smallest_scans_pointer = 0;
 
         if self.smallest_value.is_none() {
-            for (index, scan) in self.column_scans.iter_mut().enumerate() {
+            for &index in &self.active_scans {
+                let scan = &mut self.column_scans[index];
                 let current_element = scan.next();
 
                 if next_smallest.is_none() {
@@ -63,7 +73,8 @@ where
                 }
             }
         } else {
-            for (index, scan) in self.column_scans.iter_mut().enumerate() {
+            for &index in &self.active_scans {
+                let scan = &mut self.column_scans[index];
                 let current_smallest = if smallest_scans_pointer < self.smallest_scans.len() {
                     Some(self.smallest_scans[smallest_scans_pointer])
                 } else {
@@ -109,7 +120,8 @@ where
     fn seek(&mut self, value: T) -> Option<T> {
         let mut next_smallest_scans = Vec::<usize>::with_capacity(self.column_scans.len());
         let mut next_smallest: Option<T> = None;
-        for (index, scan) in self.column_scans.iter_mut().enumerate() {
+        for &index in &self.active_scans {
+            let scan = &mut self.column_scans[index];
             let current_element = scan.seek(value);
 
             if next_smallest.is_none() {
@@ -162,7 +174,10 @@ where
 #[cfg(test)]
 mod test {
     use super::UnionScan;
-    use crate::physical::columns::{Column, ColumnScan, VectorColumn};
+    use crate::physical::columns::{
+        Column, ColumnScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum,
+        VectorColumn,
+    };
     use test_log::test;
 
     #[test]
@@ -170,9 +185,17 @@ mod test {
         let column_fst = VectorColumn::new(vec![0u64, 1, 3, 5, 15]);
         let column_snd = VectorColumn::new(vec![0u64, 1, 2, 7, 9]);
         let column_trd = VectorColumn::new(vec![0u64, 2, 4, 11]);
-        let mut iter_fst = column_fst.iter();
-        let mut iter_snd = column_snd.iter();
-        let mut iter_trd = column_trd.iter();
+
+        let mut iter_fst = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+            GenericColumnScanEnum::VectorColumn(column_fst.iter()),
+        ));
+        let mut iter_snd = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+            GenericColumnScanEnum::VectorColumn(column_snd.iter()),
+        ));
+        let mut iter_trd = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+            GenericColumnScanEnum::VectorColumn(column_trd.iter()),
+        ));
+
         let mut union_iter = UnionScan::new(vec![&mut iter_fst, &mut iter_snd, &mut iter_trd]);
         assert_eq!(union_iter.current(), None);
         assert_eq!(union_iter.next(), Some(0));

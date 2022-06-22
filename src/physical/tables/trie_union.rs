@@ -29,10 +29,10 @@ impl<'a> TrieUnion<'a> {
         for layer_index in 0..target_schema.arity() {
             match target_schema.get_type(layer_index) {
                 DataTypeName::U64 => {
-                    let column_scans =
+                    let mut column_scans =
                         Vec::<&'a RangedColumnScanCell<u64>>::with_capacity(target_schema.arity());
 
-                    for scan in trie_scans {
+                    for scan in &trie_scans {
                         unsafe {
                             if let RangedColumnScanT::U64(scan_enum) =
                                 &*scan.get_scan(layer_index).unwrap().get()
@@ -92,6 +92,8 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
 
         debug_assert!(self.current_layer.unwrap() < self.trie_scans[0].get_schema().arity());
 
+        let mut active_scans = Vec::<usize>::new();
+
         for scan_index in 0..self.layers.len() {
             if self.layers[scan_index] != previous_layer {
                 continue;
@@ -104,11 +106,16 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
                     .get_smallest_scans()
                     .contains(&scan_index)
             {
+                active_scans.push(scan_index);
+
                 self.trie_scans[scan_index].down();
                 self.layers[scan_index] = self.current_layer;
             }
         }
 
+        self.union_scans[next_layer]
+            .get_mut()
+            .set_active_scans(active_scans);
         self.union_scans[next_layer].get_mut().reset();
     }
 
@@ -128,7 +135,7 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieUnion;
-    use crate::physical::columns::{ColumnScan, RangedColumnScanT};
+    use crate::physical::columns::RangedColumnScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::{
         IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
@@ -137,7 +144,7 @@ mod test {
     use test_log::test;
 
     fn union_next(union_scan: &mut TrieUnion) -> Option<u64> {
-        if let RangedColumnScanT::U64(rcs) = union_scan.current_scan()? {
+        if let RangedColumnScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -145,7 +152,7 @@ mod test {
     }
 
     fn union_current(union_scan: &mut TrieUnion) -> Option<u64> {
-        if let RangedColumnScanT::U64(rcs) = union_scan.current_scan()? {
+        if let RangedColumnScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
             rcs.current()
         } else {
             panic!("type should be u64");
@@ -240,6 +247,59 @@ mod test {
         assert_eq!(union_current(&mut union_iter), Some(8));
         assert_eq!(union_next(&mut union_iter), Some(9));
         assert_eq!(union_current(&mut union_iter), Some(9));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+    }
+
+    #[test]
+    fn test_union_close() {
+        let column_fst_x = make_gict(&[1, 2], &[0]);
+        let column_fst_y = make_gict(&[3, 4, 5], &[0, 2]);
+        let column_snd_x = make_gict(&[2], &[0]);
+        let column_snd_y = make_gict(&[5, 6], &[0]);
+        let schema_fst = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let schema_snd = schema_fst.clone();
+
+        let trie_fst = Trie::new(schema_fst, vec![column_fst_x, column_fst_y]);
+        let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y]);
+        let trie_iter_fst = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_fst));
+        let trie_iter_snd = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_snd));
+        let mut union_iter = TrieUnion::new(vec![trie_iter_fst, trie_iter_snd]);
+        assert_eq!(union_current(&mut union_iter), None);
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(3));
+        assert_eq!(union_current(&mut union_iter), Some(3));
+        assert_eq!(union_next(&mut union_iter), Some(4));
+        assert_eq!(union_current(&mut union_iter), Some(4));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(2));
+        assert_eq!(union_current(&mut union_iter), Some(2));
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(5));
+        assert_eq!(union_current(&mut union_iter), Some(5));
+        assert_eq!(union_next(&mut union_iter), Some(6));
+        assert_eq!(union_current(&mut union_iter), Some(6));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+        union_iter.up();
         assert_eq!(union_next(&mut union_iter), None);
         assert_eq!(union_current(&mut union_iter), None);
     }

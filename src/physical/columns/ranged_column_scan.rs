@@ -137,6 +137,17 @@ where
             }
         }
     }
+
+    /// Assumes that column scan is a union scan
+    /// Set a vector that indicates which scans are currently active and should be considered
+    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
+        match self {
+            Self::UnionScan(cs) => cs.set_active_scans(active_scans),
+            _ => {
+                panic!("set_active_scans is only available for union_scans")
+            }
+        }
+    }
 }
 
 impl<'a, T> Iterator for RangedColumnScanEnum<'a, T>
@@ -259,9 +270,14 @@ where
         unsafe { &mut *self.0.get() }.is_equal()
     }
 
-    /// Forward `is_equal` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `get_smallest_scans` to the underlying [`RangedColumnScanEnum`].
     pub fn get_smallest_scans(&self) -> &Vec<usize> {
         unsafe { &mut *self.0.get() }.get_smallest_scans()
+    }
+
+    /// Forward `get_smallest_scans` to the underlying [`RangedColumnScanEnum`].
+    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
+        unsafe { &mut *self.0.get() }.set_active_scans(active_scans);
     }
 }
 
@@ -307,6 +323,12 @@ impl<'a> RangedColumnScanT<'a> {
     /// and returns a vector containing the positions of the scans with the smallest values
     pub fn get_smallest_scans(&self) -> &Vec<usize> {
         forward_to_ranged_column_scan_cell!(self, get_smallest_scans)
+    }
+
+    /// Assumes that column scan is a union scan
+    /// Set a vector that indicates which scans are currently active and should be considered
+    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
+        forward_to_ranged_column_scan_cell!(self, set_active_scans(active_scans))
     }
 }
 
