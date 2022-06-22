@@ -40,3 +40,5 @@ pub use materialize::materialize;
 /// Module for defining [`TrieSelect`]
 pub mod trie_select;
 pub use trie_select::TrieSelectEqual;
+pub use trie_select::TrieSelectValue;
+pub use trie_select::ValueAssignment;

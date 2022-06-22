@@ -1,12 +1,13 @@
 use super::{TableSchema, TrieScan, TrieScanEnum};
 use crate::physical::columns::{
-    EqualColumnScan, PassScan, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT,
+    EqualColumnScan, EqualValueScan, PassScan, RangedColumnScanCell, RangedColumnScanEnum,
+    RangedColumnScanT,
 };
-use crate::physical::datatypes::DataTypeName;
+use crate::physical::datatypes::{DataTypeName, DataValueT};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
-/// Trie iterator representing a union between other trie iterators
+/// Trie iterator enforcing conditions which state that some columns should have the same value
 #[derive(Debug)]
 pub struct TrieSelectEqual<'a> {
     base_trie: TrieScanEnum<'a>,
@@ -16,8 +17,6 @@ pub struct TrieSelectEqual<'a> {
 
 impl<'a> TrieSelectEqual<'a> {
     /// Construct new TrieSelectEqual object.
-    /// Assumes that each vector in eq_classes is sorted.
-    /// Also the outer vector should be sorted my the minimum values of the inner vectors.
     pub fn new(base_trie: TrieScanEnum<'a>, eq_classes: Vec<Vec<usize>>) -> Self {
         let target_schema = base_trie.get_schema();
         let arity = target_schema.arity();
@@ -26,24 +25,20 @@ impl<'a> TrieSelectEqual<'a> {
         for col_index in 0..arity {
             // TODO: Other types
             match target_schema.get_type(col_index) {
-                DataTypeName::U64 => {
-                    unsafe {
-                        // base_trie.get_scan(col_index).unwrap().get_mut()
+                DataTypeName::U64 => unsafe {
+                    let base_scan_cell = if let RangedColumnScanT::U64(base_scan) =
+                        &*base_trie.get_scan(col_index).unwrap().get()
+                    {
+                        base_scan
+                    } else {
+                        panic!("");
+                    };
+                    let next_scan = RangedColumnScanCell::new(RangedColumnScanEnum::PassScan(
+                        PassScan::new(base_scan_cell),
+                    ));
 
-                        let base_scan_cell = if let RangedColumnScanT::U64(base_scan) =
-                            &*base_trie.get_scan(col_index).unwrap().get()
-                        {
-                            base_scan
-                        } else {
-                            panic!("");
-                        };
-                        let next_scan = RangedColumnScanCell::new(RangedColumnScanEnum::PassScan(
-                            PassScan::new(base_scan_cell),
-                        ));
-
-                        select_scans.push(UnsafeCell::new(RangedColumnScanT::U64(next_scan)));
-                    }
-                }
+                    select_scans.push(UnsafeCell::new(RangedColumnScanT::U64(next_scan)));
+                },
                 DataTypeName::Float => {}
                 DataTypeName::Double => {}
             }
@@ -62,14 +57,14 @@ impl<'a> TrieSelectEqual<'a> {
                         {
                             ref_scan
                         } else {
-                            panic!("");
+                            panic!("Type should be u64");
                         };
                         let value_scan_enum = if let RangedColumnScanT::U64(value_scan) =
                             &*base_trie.get_scan(current_member_idx).unwrap().get()
                         {
                             value_scan
                         } else {
-                            panic!("");
+                            panic!("Type should be u64");
                         };
 
                         let next_scan =
@@ -125,13 +120,128 @@ impl<'a> TrieScan<'a> for TrieSelectEqual<'a> {
     }
 }
 
+/// Trie iterator enforcing conditions which state that some columns should have the same value
+#[derive(Debug)]
+pub struct TrieSelectValue<'a> {
+    base_trie: TrieScanEnum<'a>,
+    select_scans: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
+    current_layer: Option<usize>,
+}
+
+/// Struct representing the restriction of a column to a certain value
+#[derive(Debug, Copy, Clone)]
+pub struct ValueAssignment {
+    /// Index of the column to which the value is assigned
+    pub column_idx: usize,
+    /// The value assigned to the column
+    pub value: DataValueT,
+}
+
+impl<'a> TrieSelectValue<'a> {
+    /// Construct new TrieSelectValue object.
+    pub fn new(base_trie: TrieScanEnum<'a>, assignemnts: Vec<ValueAssignment>) -> Self {
+        let target_schema = base_trie.get_schema();
+        let arity = target_schema.arity();
+        let mut select_scans = Vec::<UnsafeCell<RangedColumnScanT<'a>>>::with_capacity(arity);
+
+        for col_index in 0..arity {
+            // TODO: Other types
+            match target_schema.get_type(col_index) {
+                DataTypeName::U64 => unsafe {
+                    let base_scan_enum = if let RangedColumnScanT::U64(base_scan) =
+                        &*base_trie.get_scan(col_index).unwrap().get()
+                    {
+                        base_scan
+                    } else {
+                        panic!("Type should be u64");
+                    };
+                    let next_scan = RangedColumnScanCell::new(RangedColumnScanEnum::PassScan(
+                        PassScan::new(base_scan_enum),
+                    ));
+
+                    select_scans.push(UnsafeCell::new(RangedColumnScanT::U64(next_scan)));
+                },
+                DataTypeName::Float => {}
+                DataTypeName::Double => {}
+            }
+        }
+
+        for assignemnt in assignemnts {
+            match target_schema.get_type(assignemnt.column_idx) {
+                DataTypeName::U64 => unsafe {
+                    let value = if let DataValueT::U64(value) = assignemnt.value {
+                        value
+                    } else {
+                        panic!("Type should be u64");
+                    };
+
+                    let scan_enum = if let RangedColumnScanT::U64(scan) =
+                        &*base_trie.get_scan(assignemnt.column_idx).unwrap().get()
+                    {
+                        scan
+                    } else {
+                        panic!("Type should be u64");
+                    };
+
+                    let next_scan = RangedColumnScanCell::new(
+                        RangedColumnScanEnum::EqualValueScan(EqualValueScan::new(scan_enum, value)),
+                    );
+
+                    select_scans[assignemnt.column_idx] =
+                        UnsafeCell::new(RangedColumnScanT::U64(next_scan));
+                },
+                DataTypeName::Float => {}
+                DataTypeName::Double => {}
+            }
+        }
+
+        Self {
+            base_trie,
+            select_scans,
+            current_layer: None,
+        }
+    }
+}
+
+impl<'a> TrieScan<'a> for TrieSelectValue<'a> {
+    fn up(&mut self) {
+        debug_assert!(self.current_layer.is_some());
+
+        self.current_layer = self
+            .current_layer
+            .and_then(|index| (index > 0).then(|| index - 1));
+
+        self.base_trie.up();
+    }
+
+    fn down(&mut self) {
+        self.current_layer = Some(self.current_layer.map_or(0, |v| v + 1));
+        debug_assert!(self.current_layer.unwrap() < self.get_schema().arity());
+
+        self.base_trie.down();
+    }
+
+    fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+        self.get_scan(self.current_layer?)
+    }
+
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+        Some(&self.select_scans[index])
+    }
+
+    fn get_schema(&self) -> &dyn TableSchema {
+        self.base_trie.get_schema()
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::TrieSelectEqual;
+    use super::{TrieSelectEqual, ValueAssignment};
     use crate::physical::columns::RangedColumnScanT;
-    use crate::physical::datatypes::DataTypeName;
+    use crate::physical::datatypes::{DataTypeName, DataValueT};
     use crate::physical::tables::{
         IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
+        TrieSelectValue,
     };
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
@@ -145,6 +255,22 @@ mod test {
     }
 
     fn select_eq_current(scan: &mut TrieSelectEqual) -> Option<u64> {
+        if let RangedColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
+            rcs.current()
+        } else {
+            panic!("type should be u64");
+        }
+    }
+
+    fn select_val_next(scan: &mut TrieSelectValue) -> Option<u64> {
+        if let RangedColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
+            rcs.next()
+        } else {
+            panic!("type should be u64");
+        }
+    }
+
+    fn select_val_current(scan: &mut TrieSelectValue) -> Option<u64> {
         if let RangedColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
             rcs.current()
         } else {
@@ -223,5 +349,92 @@ mod test {
         select_iter.up();
         assert_eq!(select_eq_next(&mut select_iter), None);
         assert_eq!(select_eq_current(&mut select_iter), None);
+    }
+
+    #[test]
+    fn test_select_value() {
+        let column_fst = make_gict(&[1], &[0]);
+        let column_snd = make_gict(&[4, 5], &[0]);
+        let column_trd = make_gict(&[0, 1, 2, 1], &[0, 3]);
+        let column_fth = make_gict(&[7, 5, 7, 3, 4, 6], &[0, 1, 3, 5]);
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 3,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie = Trie::new(schema, vec![column_fst, column_snd, column_trd, column_fth]);
+        let trie_iter = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie));
+
+        let mut select_iter = TrieSelectValue::new(
+            trie_iter,
+            vec![
+                ValueAssignment {
+                    column_idx: 1,
+                    value: DataValueT::U64(4),
+                },
+                ValueAssignment {
+                    column_idx: 3,
+                    value: DataValueT::U64(7),
+                },
+            ],
+        );
+        assert_eq!(select_val_current(&mut select_iter), None);
+        select_iter.down();
+        assert_eq!(select_val_current(&mut select_iter), None);
+        assert_eq!(select_val_next(&mut select_iter), Some(1));
+        assert_eq!(select_val_current(&mut select_iter), Some(1));
+        select_iter.down();
+        assert_eq!(select_val_current(&mut select_iter), None);
+        assert_eq!(select_val_next(&mut select_iter), Some(4));
+        assert_eq!(select_val_current(&mut select_iter), Some(4));
+        select_iter.down();
+        assert_eq!(select_val_current(&mut select_iter), None);
+        assert_eq!(select_val_next(&mut select_iter), Some(0));
+        assert_eq!(select_val_current(&mut select_iter), Some(0));
+        select_iter.down();
+        assert_eq!(select_val_current(&mut select_iter), None);
+        assert_eq!(select_val_next(&mut select_iter), Some(7));
+        assert_eq!(select_val_current(&mut select_iter), Some(7));
+        assert_eq!(select_val_next(&mut select_iter), None);
+        assert_eq!(select_val_current(&mut select_iter), None);
+        select_iter.up();
+        assert_eq!(select_val_next(&mut select_iter), Some(1));
+        assert_eq!(select_val_current(&mut select_iter), Some(1));
+        select_iter.down();
+        assert_eq!(select_val_current(&mut select_iter), None);
+        assert_eq!(select_val_next(&mut select_iter), Some(7));
+        assert_eq!(select_val_current(&mut select_iter), Some(7));
+        assert_eq!(select_val_next(&mut select_iter), None);
+        assert_eq!(select_val_current(&mut select_iter), None);
+        select_iter.up();
+        assert_eq!(select_val_next(&mut select_iter), Some(2));
+        assert_eq!(select_val_current(&mut select_iter), Some(2));
+        select_iter.down();
+        assert_eq!(select_val_current(&mut select_iter), None);
+        assert_eq!(select_val_next(&mut select_iter), None);
+        assert_eq!(select_val_current(&mut select_iter), None);
+        select_iter.up();
+        assert_eq!(select_val_next(&mut select_iter), None);
+        assert_eq!(select_val_current(&mut select_iter), None);
+        select_iter.up();
+        assert_eq!(select_val_next(&mut select_iter), None);
+        assert_eq!(select_val_current(&mut select_iter), None);
+        select_iter.up();
+        assert_eq!(select_val_next(&mut select_iter), None);
+        assert_eq!(select_val_current(&mut select_iter), None);
     }
 }

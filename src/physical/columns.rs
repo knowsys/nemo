@@ -63,6 +63,10 @@ pub use reorder_scan::ReorderScan;
 pub mod equal_column_scan;
 pub use equal_column_scan::EqualColumnScan;
 
+/// Module for defining [`EqualValueScan`]
+pub mod equal_value_scan;
+pub use equal_value_scan::EqualValueScan;
+
 /// Module for defining [`PassScan`]
 pub mod pass_scan;
 pub use pass_scan::PassScan;
