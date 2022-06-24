@@ -75,6 +75,31 @@ generate_forwarder!(forward_to_column_scan;
                     OrderedMergeJoin,
                     ReorderScan);
 
+impl<'a, T> RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    /// Return all positions in the underlying column the cursor is currently at
+    pub fn pos_multiple(&self) -> Option<Vec<usize>> {
+        match self {
+            Self::ReorderScan(cs) => cs.pos_multiple(),
+            _ => {
+                unimplemented!("pos_multiple is only available for ReorderScan")
+            }
+        }
+    }
+
+    /// Set iterator to a set of possibly disjoint ranged
+    pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
+        match self {
+            Self::ReorderScan(cs) => cs.narrow_ranges(intervals),
+            _ => {
+                unimplemented!("narrow_ranges is only available for ReorderScan")
+            }
+        }
+    }
+}
+
 impl<'a, T> Iterator for RangedColumnScanEnum<'a, T>
 where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
@@ -179,6 +204,16 @@ where
     pub fn narrow(&self, interval: Range<usize>) {
         unsafe { &mut *self.0.get() }.narrow(interval)
     }
+
+    /// Forward `pos_multiple` to the underlying [`RangedColumnScanEnum`].
+    pub fn pos_multiple(&self) -> Option<Vec<usize>> {
+        unsafe { &mut *self.0.get() }.pos_multiple()
+    }
+
+    /// Forward `narrow_ranges` to the underlying [`RangedColumnScanEnum`].
+    pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
+        unsafe { &mut *self.0.get() }.narrow_ranges(intervals)
+    }
 }
 
 impl<'a, S, T> From<S> for RangedColumnScanCell<'a, T>
@@ -203,6 +238,17 @@ pub enum RangedColumnScanT<'a> {
 }
 
 generate_datatype_forwarder!(forward_to_ranged_column_scan_cell);
+impl<'a> RangedColumnScanT<'a> {
+    /// Return all positions in the underlying column the cursor is currently at
+    pub fn pos_multiple(&self) -> Option<Vec<usize>> {
+        forward_to_ranged_column_scan_cell!(self, pos_multiple)
+    }
+
+    /// Set iterator to a set of possibly disjoint ranged
+    pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
+        forward_to_ranged_column_scan_cell!(self, narrow_ranges(intervals))
+    }
+}
 
 impl<'a> Iterator for RangedColumnScanT<'a> {
     type Item = DataValueT;

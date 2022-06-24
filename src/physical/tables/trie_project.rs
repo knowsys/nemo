@@ -106,45 +106,65 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
             panic!("Do other cases later")
         };
 
-        let next_range = if self.current_layer.is_none() {
-            0..next_column.len()
+        let next_ranges = if self.current_layer.is_none() {
+            vec![0..next_column.len()]
         } else {
-            let current_cursor = self.reorder_scans[self.current_layer.unwrap()]
+            let current_cursors = self.reorder_scans[self.current_layer.unwrap()]
                 .get_mut()
-                .pos()
+                .pos_multiple()
                 .expect("Should not call down when not on an element");
 
             if self.picked_columns[self.current_layer.unwrap()] < self.picked_columns[next_layer] {
-                let mut range = current_cursor..(current_cursor + 1);
+                let mut ranges = Vec::<Range<usize>>::new();
+                for current_cursor in current_cursors {
+                    let mut range = current_cursor..(current_cursor + 1);
 
-                for expand_index in (self.picked_columns[self.current_layer.unwrap()] + 1)
-                    ..=self.picked_columns[next_layer]
-                {
-                    range = expand_range(self.trie.get_column(expand_index), range);
+                    for expand_index in (self.picked_columns[self.current_layer.unwrap()] + 1)
+                        ..=self.picked_columns[next_layer]
+                    {
+                        range = expand_range(self.trie.get_column(expand_index), range);
+                    }
+
+                    ranges.push(range);
                 }
 
-                range
+                ranges
             } else {
-                let mut value = current_cursor;
-                for shrink_index in (self.picked_columns[next_layer] + 1
-                    ..=(self.picked_columns[self.current_layer.unwrap()]))
-                    .rev()
-                {
-                    let shrink_column =
-                        if let IntervalColumnT::U64(col) = self.trie.get_column(shrink_index) {
-                            col
-                        } else {
-                            panic!("Do other cases later")
-                        };
+                let mut ranges = Vec::<Range<usize>>::new();
+                for current_cursor in current_cursors {
+                    let mut value = current_cursor;
+                    for shrink_index in (self.picked_columns[next_layer] + 1
+                        ..=(self.picked_columns[self.current_layer.unwrap()]))
+                        .rev()
+                    {
+                        let shrink_column =
+                            if let IntervalColumnT::U64(col) = self.trie.get_column(shrink_index) {
+                                col
+                            } else {
+                                panic!("Do other cases later")
+                            };
 
-                    value = shrink_position(shrink_column, value);
+                        value = shrink_position(shrink_column, value);
+                    }
+
+                    // This assumes that current_cursors is sorted
+                    // which should be the case since the sort method used in permutator is stable
+                    if let Some(last_range) = ranges.last() {
+                        if value != last_range.start {
+                            ranges.push(value..(value + 1));
+                        }
+                    } else {
+                        ranges.push(value..(value + 1));
+                    }
                 }
 
-                value..(value + 1)
+                ranges
             }
         };
 
-        self.reorder_scans[next_layer].get_mut().narrow(next_range);
+        self.reorder_scans[next_layer]
+            .get_mut()
+            .narrow_ranges(next_ranges);
 
         self.current_layer = Some(next_layer);
     }
@@ -642,6 +662,140 @@ mod test {
                 .iter()
                 .collect::<Vec<usize>>(),
             vec![0, 1, 2, 3, 4, 5, 6, 7]
+        );
+    }
+
+    #[test]
+    fn test_duplicates() {
+        let column_fst = make_gict(&[1, 2], &[0]);
+        let column_snd = make_gict(&[3, 4, 4, 5], &[0, 2]);
+        let column_trd = make_gict(&[4, 6, 6, 7, 3, 4, 3, 4], &[0, 2, 4, 6]);
+        let column_fth = make_gict(&[0, 0, 0, 0, 0, 0, 0, 0], &[0, 1, 2, 3, 4, 5, 6, 7]);
+        let column_vth = make_gict(
+            &[1, 2, 3, 4, 3, 4, 1, 2, 3, 4, 3, 4, 1, 2, 3, 4],
+            &[
+                0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32,
+            ],
+        );
+
+        let column_vec = vec![column_fst, column_snd, column_trd, column_fth, column_vth];
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 3,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 4,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie = Trie::new(schema, column_vec);
+
+        let trie_projected = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+            &trie,
+            vec![0, 2, 4, 1],
+        )));
+
+        let proj_column_fst = if let IntervalColumnT::U64(col) = trie_projected.get_column(0) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let proj_column_snd = if let IntervalColumnT::U64(col) = trie_projected.get_column(1) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let proj_column_trd = if let IntervalColumnT::U64(col) = trie_projected.get_column(2) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let proj_column_fth = if let IntervalColumnT::U64(col) = trie_projected.get_column(3) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        assert_eq!(
+            proj_column_fst
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![1, 2]
+        );
+
+        assert_eq!(
+            proj_column_fst
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0]
+        );
+
+        assert_eq!(
+            proj_column_snd
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![4, 6, 7, 3, 4]
+        );
+
+        assert_eq!(
+            proj_column_snd
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 3]
+        );
+
+        assert_eq!(
+            proj_column_trd
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![1, 2, 3, 4, 1, 2, 1, 2, 3, 4, 3, 4]
+        );
+
+        assert_eq!(
+            proj_column_trd
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 2, 4, 6, 10]
+        );
+
+        assert_eq!(
+            proj_column_fth
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![3, 3, 3, 4, 3, 4, 4, 4, 5, 5, 4, 4, 4, 5, 4, 5]
+        );
+
+        assert_eq!(
+            proj_column_fth
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 14]
         );
     }
 }

@@ -44,11 +44,14 @@ impl Permutator {
 
     /// TODO: Test if this works
     /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
-    pub fn sort_from_column_range<T>(data: &ColumnEnum<T>, range: &Range<usize>) -> Permutator
+    pub fn sort_from_column_range<T>(data: &ColumnEnum<T>, ranges: &Vec<Range<usize>>) -> Permutator
     where
         T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
     {
-        let mut vec = range.clone().collect::<Vec<usize>>();
+        let mut vec = Vec::<usize>::new();
+        for range in ranges {
+            vec.append(&mut range.clone().collect::<Vec<usize>>());
+        }
         vec.sort_by_key(|&i| data.get(i));
         Permutator {
             sort_vec: vec,
@@ -61,7 +64,7 @@ impl Permutator {
     where
         T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
     {
-        Permutator::sort_from_column_range(data, &(0..data.len()))
+        Permutator::sort_from_column_range(data, &vec![(0..data.len())])
     }
 
     /// Creates a [`Permutator`] based on a slice of [`ColumnT`][crate::physical::columns::column::ColumnT] elements.
