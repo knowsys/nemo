@@ -53,6 +53,24 @@ where
     }
 }
 
+macro_rules! forward_to_column_scan {
+    ($self:ident, $func:ident) => {
+        match $self {
+            Self::GenericColumnScan(cs) => cs.$func(),
+            Self::RleColumnScan(cs) => cs.$func(),
+            Self::OrderedMergeJoin(cs) => cs.$func(),
+        }
+    };
+
+    ($self:ident, $func:ident($($arg:tt),*)) => {
+        match $self {
+            Self::GenericColumnScan(cs) => cs.$func($($arg),*),
+            Self::RleColumnScan(cs) => cs.$func($($arg),*),
+            Self::OrderedMergeJoin(cs) => cs.$func($($arg),*),
+        }
+    };
+}
+
 impl<'a, T> Iterator for RangedColumnScanEnum<'a, T>
 where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
@@ -60,11 +78,7 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::GenericColumnScan(cs) => cs.next(),
-            Self::RleColumnScan(cs) => cs.next(),
-            Self::OrderedMergeJoin(cs) => cs.next(),
-        }
+        forward_to_column_scan!(self, next())
     }
 }
 
@@ -73,27 +87,15 @@ where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
-        match self {
-            RangedColumnScanEnum::GenericColumnScan(cs) => cs.seek(value),
-            RangedColumnScanEnum::RleColumnScan(cs) => cs.seek(value),
-            RangedColumnScanEnum::OrderedMergeJoin(cs) => cs.seek(value),
-        }
+        forward_to_column_scan!(self, seek(value))
     }
 
     fn current(&mut self) -> Option<Self::Item> {
-        match self {
-            RangedColumnScanEnum::GenericColumnScan(cs) => cs.current(),
-            RangedColumnScanEnum::RleColumnScan(cs) => cs.current(),
-            RangedColumnScanEnum::OrderedMergeJoin(cs) => cs.current(),
-        }
+        forward_to_column_scan!(self, current)
     }
 
     fn reset(&mut self) {
-        match self {
-            RangedColumnScanEnum::GenericColumnScan(cs) => cs.reset(),
-            RangedColumnScanEnum::RleColumnScan(cs) => cs.reset(),
-            RangedColumnScanEnum::OrderedMergeJoin(cs) => cs.reset(),
-        }
+        forward_to_column_scan!(self, reset)
     }
 }
 
@@ -102,19 +104,11 @@ where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     fn pos(&self) -> Option<usize> {
-        match self {
-            RangedColumnScanEnum::GenericColumnScan(cs) => cs.pos(),
-            RangedColumnScanEnum::RleColumnScan(cs) => cs.pos(),
-            RangedColumnScanEnum::OrderedMergeJoin(cs) => cs.pos(),
-        }
+        forward_to_column_scan!(self, pos)
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        match self {
-            RangedColumnScanEnum::GenericColumnScan(cs) => cs.narrow(interval),
-            RangedColumnScanEnum::RleColumnScan(cs) => cs.narrow(interval),
-            RangedColumnScanEnum::OrderedMergeJoin(cs) => cs.narrow(interval),
-        }
+        forward_to_column_scan!(self, narrow(interval))
     }
 }
 
