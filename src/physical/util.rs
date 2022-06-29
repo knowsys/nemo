@@ -34,6 +34,12 @@ pub use test_util::make_gict;
 /// fn returns(&mut self) -> DataValueT {
 ///     forward_to_scan!(self, returns.map_to(DataValueT))
 /// }
+///
+/// /// The return value can be suppressed by adding a semicolon, this
+/// /// is useful if the return type would differ between match arms:
+/// fn doesnt_return(&mut self) {
+///     forward_to_scan!(self, returns;)
+/// }
 /// ```
 #[macro_export]
 macro_rules! generate_forwarder {
@@ -44,11 +50,36 @@ macro_rules! generate_forwarder {
                     $( Self::$variant(value) => value.$$func($$($$($$arg),*)?) ),*
                 }
             };
+            ($$self:ident, $$func:ident$$( ($$( $$arg:tt ),*) )?;) => {
+                match $$self {
+                    $( Self::$variant(value) => { value.$$func($$($$($$arg),*)?); } ),*
+                }
+            };
             ($$self:ident, $$func:ident$$( ($$( $$arg:tt ),*) )?.map_to($$enum:ident) ) => {
                 match $$self {
                     $( Self::$variant(value) => value.$$func($$($$($$arg),*)?).map($$enum::$variant) ),*
                 }
-            }
+            };
+            ($$self:ident, $$func:ident$$( ($$( $$arg:tt ),*) )?.wrap_with($$wrap:path) ) => {
+                match $$self {
+                    $( Self::$variant(value) => $$wrap(value.$$func($$($$($$arg),*)?)) ),*
+                }
+            };
+            ($$self:ident, $$func:ident$$( ($$( $$arg:tt ),*) )?.as_variant_of($$enum:ident) ) => {
+                match $$self {
+                    $( Self::$variant(value) => $$enum::$variant(value.$$func($$($$($$arg),*)?)) ),*
+                }
+            };
+            ($$self:ident, $$func:ident$$( ($$( $$arg:tt ),*) )?.wrap_with($$wrap:path).as_variant_of($$enum:ident) ) => {
+                match $$self {
+                    $( Self::$variant(value) => $$enum::$variant($$wrap(value.$$func($$($$($$arg),*)?))) ),*
+                }
+            };
+            ($$self:ident, $$func:ident$$( ($$( $$arg:tt ),*) )?.as_variant_of($$enum:ident).wrap_with($$wrap:path) ) => {
+                match $$self {
+                    $( Self::$variant(value) => $$wrap($$enum::$variant(value.$$func($$($$($$arg),*)?))) ),*
+                }
+            };
         }
     }
 }
@@ -58,9 +89,9 @@ macro_rules! generate_forwarder {
 #[macro_export]
 macro_rules! generate_datatype_forwarder {
     ($name:ident) => {
-        generate_forwarder!($name;
-                            U64,
-                            Float,
-                            Double);
+        $crate::generate_forwarder!($name;
+                                    U64,
+                                    Float,
+                                    Double);
     }
 }

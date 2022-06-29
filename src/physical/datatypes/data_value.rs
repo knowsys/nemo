@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 
+use crate::generate_datatype_forwarder;
+
 use super::double::Double;
 use super::float::Float;
 
@@ -56,46 +58,34 @@ impl DataValueT {
 #[derive(Debug)]
 pub enum VecT {
     /// Case Vec<u64>
-    VecU64(Vec<u64>),
+    U64(Vec<u64>),
     /// Case Vec<Float>
-    VecFloat(Vec<Float>),
+    Float(Vec<Float>),
     /// Case Vec<Double>
-    VecDouble(Vec<Double>),
+    Double(Vec<Double>),
 }
+
+generate_datatype_forwarder!(forward_to_vec);
 
 impl VecT {
     /// Removes the last element in the corresponding vector
     pub fn pop(&mut self) {
-        match self {
-            VecT::VecU64(v) => {
-                v.pop();
-            }
-            VecT::VecFloat(v) => {
-                v.pop();
-            }
-            VecT::VecDouble(v) => {
-                v.pop();
-            }
-        }
+        forward_to_vec!(self, pop;)
     }
 
     /// Inserts the Value to the corresponding Vector if the datatypes are compatible
     /// Note that it is not checked if the [DataValueT] has the right enum-variant
     pub(crate) fn push(&mut self, value: &DataValueT) {
         match self {
-            VecT::VecU64(vec) => vec.push(value.as_u64().unwrap()),
-            VecT::VecFloat(vec) => vec.push(value.as_float().unwrap()),
-            VecT::VecDouble(vec) => vec.push(value.as_double().unwrap()),
+            VecT::U64(vec) => vec.push(value.as_u64().unwrap()),
+            VecT::Float(vec) => vec.push(value.as_float().unwrap()),
+            VecT::Double(vec) => vec.push(value.as_double().unwrap()),
         };
     }
 
     /// Returns the lengths of the contained Vector
     pub fn len(&self) -> usize {
-        match self {
-            VecT::VecU64(vec) => vec.len(),
-            VecT::VecFloat(vec) => vec.len(),
-            VecT::VecDouble(vec) => vec.len(),
-        }
+        forward_to_vec!(self, len)
     }
 
     /// Returns whether the vector is empty, or not
@@ -106,14 +96,14 @@ impl VecT {
     /// Compares two values at the given index-points with each other
     pub fn compare_idx(&self, idx_a: usize, idx_b: usize) -> Option<Ordering> {
         match self {
-            VecT::VecU64(vec) => vec
+            VecT::U64(vec) => vec
                 .get(idx_a)
                 .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
 
-            VecT::VecFloat(vec) => vec
+            VecT::Float(vec) => vec
                 .get(idx_a)
                 .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
-            VecT::VecDouble(vec) => vec
+            VecT::Double(vec) => vec
                 .get(idx_a)
                 .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
         }
