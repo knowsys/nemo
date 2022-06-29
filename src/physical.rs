@@ -7,4 +7,5 @@ pub mod columns;
 pub mod datatypes;
 pub mod dictionary;
 pub mod tables;
+#[macro_use]
 pub mod util;
