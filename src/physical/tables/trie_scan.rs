@@ -118,7 +118,7 @@ impl<'a> TrieScanJoin<'a> {
         let mut variable_to_scan = repeat(Vec::new())
             .take(target_schema.arity())
             .collect::<Vec<_>>();
-        let mut merge_join_indeces: Vec<Vec<_>> = repeat(Vec::new())
+        let mut merge_join_indices: Vec<Vec<_>> = repeat(Vec::new())
             .take(target_schema.arity())
             .collect::<Vec<_>>();
 
@@ -131,24 +131,24 @@ impl<'a> TrieScanJoin<'a> {
             }
         }
 
-        for target_label_index in 0..target_schema.arity() {
+        for (target_label_index, merge_join_index) in merge_join_indices.iter_mut().enumerate() {
             for scan in &trie_scans {
-                merge_join_indeces[target_label_index].push(
+                merge_join_index.push(
                     scan.get_schema()
                         .find_index(target_schema.get_label(target_label_index)),
                 );
             }
         }
 
-        for variable_index in 0..target_schema.arity() {
+        for (variable_index, merge_join_index) in merge_join_indices.iter_mut().enumerate() {
             match target_schema.get_type(variable_index) {
                 DataTypeName::U64 => {
                     let mut scans: Vec<&RangedColumnScanCell<u64>> = vec![];
-                    for scan_index in 0..merge_join_indeces[variable_index].len() {
-                        match merge_join_indeces[variable_index][scan_index] {
+                    for (scan_index, the_scan) in merge_join_index.iter().enumerate() {
+                        match the_scan {
                             Some(label_index) => unsafe {
                                 let scan =
-                                    &*trie_scans[scan_index].get_scan(label_index).unwrap().get();
+                                    &*trie_scans[scan_index].get_scan(*label_index).unwrap().get();
 
                                 if let RangedColumnScanT::U64(cs) = scan {
                                     scans.push(cs);
@@ -285,7 +285,7 @@ mod test {
     use super::super::trie::{Trie, TrieSchema, TrieSchemaEntry};
     use super::{IntervalTrieScan, TrieScan, TrieScanEnum, TrieScanJoin};
     use crate::physical::columns::{
-        ColumnEnum, ColumnScan, GenericIntervalColumnEnum, IntervalColumnEnum, RangedColumnScan,
+        ColumnEnum, GenericIntervalColumnEnum, IntervalColumnEnum, RangedColumnScan,
         RangedColumnScanT,
     };
     use crate::physical::datatypes::DataTypeName;
