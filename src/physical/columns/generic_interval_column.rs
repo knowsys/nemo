@@ -1,4 +1,5 @@
 use super::{Column, ColumnEnum, GenericColumnScan, IntervalColumn, RleColumn, VectorColumn};
+use crate::generate_forwarder;
 use crate::physical::datatypes::{Field, FloorToUsize};
 use std::marker::PhantomData;
 use std::{fmt::Debug, ops::Range};
@@ -30,6 +31,14 @@ where
     /// Case ColumnEnum with RleColumn representing start indices
     ColumnEnumWithRleStarts(GenericIntervalColumn<'a, T, ColumnEnum<T>, RleColumn<usize>>),
 }
+
+generate_forwarder!(forward_to_interval_column;
+                    VectorColumnWithVecStarts,
+                    VectorColumnWithRleStarts,
+                    RleColumnWithVecStarts,
+                    RleColumnWithRleStarts,
+                    ColumnEnumWithVecStarts,
+                    ColumnEnumWithRleStarts);
 
 impl<'a, T, Col: Column<'a, T>, Starts: Column<'a, usize>>
     GenericIntervalColumn<'a, T, Col, Starts>
@@ -90,36 +99,15 @@ where
     type ColScan = GenericColumnScan<'a, T, GenericIntervalColumnEnum<'a, T>>;
 
     fn len(&self) -> usize {
-        match self {
-            Self::VectorColumnWithVecStarts(col) => col.len(),
-            Self::VectorColumnWithRleStarts(col) => col.len(),
-            Self::RleColumnWithVecStarts(col) => col.len(),
-            Self::RleColumnWithRleStarts(col) => col.len(),
-            Self::ColumnEnumWithVecStarts(col) => col.len(),
-            Self::ColumnEnumWithRleStarts(col) => col.len(),
-        }
+        forward_to_interval_column!(self, len)
     }
 
     fn is_empty(&self) -> bool {
-        match self {
-            Self::VectorColumnWithVecStarts(col) => col.is_empty(),
-            Self::VectorColumnWithRleStarts(col) => col.is_empty(),
-            Self::RleColumnWithVecStarts(col) => col.is_empty(),
-            Self::RleColumnWithRleStarts(col) => col.is_empty(),
-            Self::ColumnEnumWithVecStarts(col) => col.is_empty(),
-            Self::ColumnEnumWithRleStarts(col) => col.is_empty(),
-        }
+        forward_to_interval_column!(self, is_empty)
     }
 
     fn get(&self, index: usize) -> T {
-        match self {
-            Self::VectorColumnWithVecStarts(col) => col.get(index),
-            Self::VectorColumnWithRleStarts(col) => col.get(index),
-            Self::RleColumnWithVecStarts(col) => col.get(index),
-            Self::RleColumnWithRleStarts(col) => col.get(index),
-            Self::ColumnEnumWithVecStarts(col) => col.get(index),
-            Self::ColumnEnumWithRleStarts(col) => col.get(index),
-        }
+        forward_to_interval_column!(self, get(index))
     }
 
     fn iter(&'a self) -> Self::ColScan {
@@ -132,25 +120,11 @@ where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     fn int_len(&self) -> usize {
-        match self {
-            Self::VectorColumnWithVecStarts(col) => col.int_len(),
-            Self::VectorColumnWithRleStarts(col) => col.int_len(),
-            Self::RleColumnWithVecStarts(col) => col.int_len(),
-            Self::RleColumnWithRleStarts(col) => col.int_len(),
-            Self::ColumnEnumWithVecStarts(col) => col.int_len(),
-            Self::ColumnEnumWithRleStarts(col) => col.int_len(),
-        }
+        forward_to_interval_column!(self, int_len)
     }
 
     fn int_bounds(&self, int_idx: usize) -> Range<usize> {
-        match self {
-            Self::VectorColumnWithVecStarts(col) => col.int_bounds(int_idx),
-            Self::VectorColumnWithRleStarts(col) => col.int_bounds(int_idx),
-            Self::RleColumnWithVecStarts(col) => col.int_bounds(int_idx),
-            Self::RleColumnWithRleStarts(col) => col.int_bounds(int_idx),
-            Self::ColumnEnumWithVecStarts(col) => col.int_bounds(int_idx),
-            Self::ColumnEnumWithRleStarts(col) => col.int_bounds(int_idx),
-        }
+        forward_to_interval_column!(self, int_bounds(int_idx))
     }
 }
 
