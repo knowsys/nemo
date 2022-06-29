@@ -229,9 +229,9 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
         debug_assert!(self.current_variable.is_some());
 
         match self.target_schema.get_type(self.current_variable?) {
-            DataTypeName::U64 => Some(&self.merge_joins[self.current_variable?]),
-            DataTypeName::Float => Some(&self.merge_joins[self.current_variable?]),
-            DataTypeName::Double => Some(&self.merge_joins[self.current_variable?]),
+            DataTypeName::U64 | DataTypeName::Float | DataTypeName::Double => {
+                Some(&self.merge_joins[self.current_variable?])
+            }
         }
     }
 
