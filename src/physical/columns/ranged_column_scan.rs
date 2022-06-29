@@ -1,5 +1,5 @@
 use super::{column_scan::ColumnScan, GenericColumnScanEnum, OrderedMergeJoin, RleColumnScan};
-use crate::physical::datatypes::{DataTypeName, DataValueT, Double, Field, Float, FloorToUsize};
+use crate::physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize};
 use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 /// Iterator for a sorted interval of values that also stores the current position
@@ -118,6 +118,7 @@ where
     }
 }
 
+/// A wrapper around a cell type holding a `RangedColumnScanEnum`.
 #[repr(transparent)]
 pub struct RangedColumnScanCell<'a, T>(UnsafeCell<RangedColumnScanEnum<'a, T>>)
 where
@@ -137,15 +138,18 @@ impl<'a, T> RangedColumnScanCell<'a, T>
 where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
+    /// Construct a new `RangedColumnScanCell` from the given [`RangedColumnScanEnum`].
     pub fn new(cs: RangedColumnScanEnum<'a, T>) -> Self {
         Self(UnsafeCell::new(cs))
     }
 
+    /// Forward `next` to the underlying [`RangedColumnScanEnum`].
     #[inline]
     pub fn next(&self) -> Option<<RangedColumnScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.next()
     }
 
+    /// Forward `seek` to the underlying [`RangedColumnScanEnum`].
     #[inline]
     pub fn seek(
         &self,
@@ -154,21 +158,25 @@ where
         unsafe { &mut *self.0.get() }.seek(value)
     }
 
+    /// Forward `current` to the underlying [`RangedColumnScanEnum`].
     #[inline]
     pub fn current(&self) -> Option<<RangedColumnScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.current()
     }
 
+    /// Forward `reset` to the underlying [`RangedColumnScanEnum`].
     #[inline]
     pub fn reset(&self) {
         unsafe { &mut *self.0.get() }.reset()
     }
 
+    /// Forward `pos` to the underlying [`RangedColumnScanEnum`].
     #[inline]
     pub fn pos(&self) -> Option<usize> {
         unsafe { &(*self.0.get()) }.pos()
     }
 
+    /// Forward `narrow` to the underlying [`RangedColumnScanEnum`].
     #[inline]
     pub fn narrow(&self, interval: Range<usize>) {
         unsafe { &mut *self.0.get() }.narrow(interval)
