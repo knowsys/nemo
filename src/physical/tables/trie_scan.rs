@@ -3,7 +3,7 @@ use crate::physical::columns::{
     Column, ColumnScan, IntervalColumn, OrderedMergeJoin, RangedColumnScan, RangedColumnScanCell,
     RangedColumnScanEnum, RangedColumnScanT,
 };
-use crate::physical::datatypes::DataTypeName;
+use crate::physical::datatypes::{DataTypeName, Double, Float};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::iter::repeat;
@@ -141,33 +141,37 @@ impl<'a> TrieScanJoin<'a> {
         }
 
         for (variable_index, merge_join_index) in merge_join_indices.iter_mut().enumerate() {
-            match target_schema.get_type(variable_index) {
-                DataTypeName::U64 => {
-                    let mut scans: Vec<&RangedColumnScanCell<u64>> = vec![];
-                    for (scan_index, the_scan) in merge_join_index.iter().enumerate() {
-                        match the_scan {
+            macro_rules! merge_join_for_datatype {
+                ($variant:ident, $type:ty) => {{
+                    let mut scans = Vec::<&RangedColumnScanCell<$type>>::new();
+                    for (scan_index, scan) in merge_join_index.iter().enumerate() {
+                        match scan {
                             Some(label_index) => unsafe {
-                                let scan =
+                                let column_scan =
                                     &*trie_scans[scan_index].get_scan(*label_index).unwrap().get();
 
-                                if let RangedColumnScanT::U64(cs) = scan {
+                                if let RangedColumnScanT::$variant(cs) = column_scan {
                                     scans.push(cs);
                                 } else {
-                                    panic!("type should match here")
+                                    panic!("expected a column scan of type {}", stringify!($type));
                                 }
                             },
                             None => {}
                         }
                     }
 
-                    merge_joins.push(UnsafeCell::new(RangedColumnScanT::U64(
+                    merge_joins.push(UnsafeCell::new(RangedColumnScanT::$variant(
                         RangedColumnScanCell::new(RangedColumnScanEnum::OrderedMergeJoin(
                             OrderedMergeJoin::new(scans),
                         )),
                     )))
-                }
-                DataTypeName::Float => {}
-                DataTypeName::Double => {}
+                }};
+            }
+
+            match target_schema.get_type(variable_index) {
+                DataTypeName::U64 => merge_join_for_datatype!(U64, u64),
+                DataTypeName::Float => merge_join_for_datatype!(Float, Float),
+                DataTypeName::Double => merge_join_for_datatype!(Double, Double),
             }
         }
 
