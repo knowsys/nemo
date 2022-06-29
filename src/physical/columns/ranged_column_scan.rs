@@ -1,5 +1,8 @@
 use super::{column_scan::ColumnScan, GenericColumnScanEnum, OrderedMergeJoin, RleColumnScan};
-use crate::physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize};
+use crate::{
+    generate_datatype_forwarder, generate_forwarder,
+    physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize},
+};
 use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 /// Iterator for a sorted interval of values that also stores the current position
@@ -53,23 +56,10 @@ where
     }
 }
 
-macro_rules! forward_to_column_scan {
-    ($self:ident, $func:ident) => {
-        match $self {
-            Self::GenericColumnScan(cs) => cs.$func(),
-            Self::RleColumnScan(cs) => cs.$func(),
-            Self::OrderedMergeJoin(cs) => cs.$func(),
-        }
-    };
-
-    ($self:ident, $func:ident($($arg:tt),*)) => {
-        match $self {
-            Self::GenericColumnScan(cs) => cs.$func($($arg),*),
-            Self::RleColumnScan(cs) => cs.$func($($arg),*),
-            Self::OrderedMergeJoin(cs) => cs.$func($($arg),*),
-        }
-    };
-}
+generate_forwarder!(forward_to_column_scan;
+                    GenericColumnScan,
+                    RleColumnScan,
+                    OrderedMergeJoin);
 
 impl<'a, T> Iterator for RangedColumnScanEnum<'a, T>
 where
@@ -78,7 +68,7 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        forward_to_column_scan!(self, next())
+        forward_to_column_scan!(self, next)
     }
 }
 
@@ -198,15 +188,13 @@ pub enum RangedColumnScanT<'a> {
     Double(RangedColumnScanCell<'a, Double>),
 }
 
+generate_datatype_forwarder!(forward_to_ranged_column_scan_cell);
+
 impl<'a> Iterator for RangedColumnScanT<'a> {
     type Item = DataValueT;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::U64(cs) => cs.next().map(DataValueT::U64),
-            Self::Float(cs) => cs.next().map(DataValueT::Float),
-            Self::Double(cs) => cs.next().map(DataValueT::Double),
-        }
+        forward_to_ranged_column_scan_cell!(self, next.map_to(DataValueT))
     }
 }
 
@@ -232,36 +220,20 @@ impl<'a> ColumnScan for RangedColumnScanT<'a> {
     }
 
     fn current(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::U64(cs) => cs.current().map(DataValueT::U64),
-            Self::Float(cs) => cs.current().map(DataValueT::Float),
-            Self::Double(cs) => cs.current().map(DataValueT::Double),
-        }
+        forward_to_ranged_column_scan_cell!(self, current.map_to(DataValueT))
     }
 
     fn reset(&mut self) {
-        match self {
-            Self::U64(cs) => cs.reset(),
-            Self::Float(cs) => cs.reset(),
-            Self::Double(cs) => cs.reset(),
-        }
+        forward_to_ranged_column_scan_cell!(self, reset)
     }
 }
 
 impl<'a> RangedColumnScan for RangedColumnScanT<'a> {
     fn pos(&self) -> Option<usize> {
-        match self {
-            Self::U64(cs) => cs.pos(),
-            Self::Float(cs) => cs.pos(),
-            Self::Double(cs) => cs.pos(),
-        }
+        forward_to_ranged_column_scan_cell!(self, pos)
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        match self {
-            Self::U64(cs) => cs.narrow(interval),
-            Self::Float(cs) => cs.narrow(interval),
-            Self::Double(cs) => cs.narrow(interval),
-        }
+        forward_to_ranged_column_scan_cell!(self, narrow(interval))
     }
 }
