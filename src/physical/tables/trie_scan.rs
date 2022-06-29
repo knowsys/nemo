@@ -109,6 +109,13 @@ pub struct TrieScanJoin<'a> {
 
     variable_to_scan: Vec<Vec<usize>>,
 
+    /// We're keeping an [`UnsafeCell`] here since the
+    /// [`RangedColumnScanT`] are actually borrowed from within
+    /// `trie_scans`. We're not actually modifying through these
+    /// references (since there's another layer of Cells hidden in
+    /// [`RangedColumnScanT`], we're just using this satisfy the
+    /// borrow checker.  TODO: find a nicer solution for this that
+    /// doesn't expose [`UnsafeCell`] as part of the API.
     merge_joins: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
 }
 
