@@ -128,9 +128,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::physical::columns::{
-        GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum,
-    };
+    use crate::physical::columns::{GenericColumnScanEnum, RangedColumnScanEnum};
 
     use super::super::{GenericColumnScan, VectorColumn};
     use super::{ColumnScan, OrderedMergeJoin}; // < TODO: is this a nice way to write this use?
