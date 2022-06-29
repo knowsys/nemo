@@ -1,8 +1,5 @@
-use super::{
-    column_scan::{ColumnScan, ScanToCell},
-    GenericColumnScanEnum, OrderedMergeJoin, RleColumnScan,
-};
-use crate::physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize};
+use super::{column_scan::ColumnScan, GenericColumnScanEnum, OrderedMergeJoin, RleColumnScan};
+use crate::physical::datatypes::{DataTypeName, DataValueT, Double, Field, Float, FloorToUsize};
 use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 /// Iterator for a sorted interval of values that also stores the current position
@@ -53,17 +50,6 @@ where
 {
     fn from(cs: OrderedMergeJoin<'a, T>) -> Self {
         Self::OrderedMergeJoin(cs)
-    }
-}
-
-impl<'a, T> ScanToCell for RangedColumnScanEnum<'a, T>
-where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
-{
-    type Cell = RangedColumnScanCell<'a, T>;
-
-    fn into_cell(self) -> Self::Cell {
-        Self::Cell::new(self)
     }
 }
 
