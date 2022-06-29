@@ -13,8 +13,10 @@
     unused_extern_crates,
     variant_size_differences
 )]
+#![feature(macro_metavar_expr)]
 
 pub mod error;
 pub mod io;
 pub mod logical;
+#[macro_use]
 pub mod physical;

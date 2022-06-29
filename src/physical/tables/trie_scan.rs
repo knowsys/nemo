@@ -1,4 +1,5 @@
 use super::{Table, TableSchema, Trie, TrieSchema};
+use crate::generate_forwarder;
 use crate::physical::columns::{
     Column, ColumnScan, IntervalColumn, OrderedMergeJoin, RangedColumnScan, RangedColumnScanCell,
     RangedColumnScanEnum, RangedColumnScanT,
@@ -252,40 +253,27 @@ pub enum TrieScanEnum<'a> {
     TrieScanJoin(TrieScanJoin<'a>),
 }
 
+generate_forwarder!(forward_to_scan; IntervalTrieScan, TrieScanJoin);
+
 impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
     fn up(&mut self) {
-        match self {
-            Self::IntervalTrieScan(ts) => ts.up(),
-            Self::TrieScanJoin(ts) => ts.up(),
-        }
+        forward_to_scan!(self, up)
     }
 
     fn down(&mut self) {
-        match self {
-            Self::IntervalTrieScan(ts) => ts.down(),
-            Self::TrieScanJoin(ts) => ts.down(),
-        }
+        forward_to_scan!(self, down)
     }
 
     fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
-        match self {
-            Self::IntervalTrieScan(ts) => ts.current_scan(),
-            Self::TrieScanJoin(ts) => ts.current_scan(),
-        }
+        forward_to_scan!(self, current_scan)
     }
 
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
-        match self {
-            Self::IntervalTrieScan(ts) => ts.get_scan(index),
-            Self::TrieScanJoin(ts) => ts.get_scan(index),
-        }
+        forward_to_scan!(self, get_scan(index))
     }
 
     fn get_schema(&self) -> &dyn TableSchema {
-        match self {
-            Self::IntervalTrieScan(ts) => ts.get_schema(),
-            Self::TrieScanJoin(ts) => ts.get_schema(),
-        }
+        forward_to_scan!(self, get_schema)
     }
 }
 
