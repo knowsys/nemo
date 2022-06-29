@@ -230,8 +230,8 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
 
         match self.target_schema.get_type(self.current_variable?) {
             DataTypeName::U64 => Some(&self.merge_joins[self.current_variable?]),
-            DataTypeName::Float => None,
-            DataTypeName::Double => None,
+            DataTypeName::Float => Some(&self.merge_joins[self.current_variable?]),
+            DataTypeName::Double => Some(&self.merge_joins[self.current_variable?]),
         }
     }
 
