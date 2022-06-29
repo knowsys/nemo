@@ -411,8 +411,8 @@ mod test {
         let column1: VectorColumn<Float> = VectorColumn::new(vec1);
         let column2: VectorColumn<Double> = VectorColumn::new(vec2.clone());
         let columnset: Vec<ColumnT> = vec![
-            ColumnT::ColumnFloat(ColumnEnum::VectorColumn(column1)),
-            ColumnT::ColumnDouble(ColumnEnum::VectorColumn(column2)),
+            ColumnT::Float(ColumnEnum::VectorColumn(column1)),
+            ColumnT::Double(ColumnEnum::VectorColumn(column2)),
         ];
         let permutator = Permutator::sort_from_columns(&columnset)
             .expect("Length has been adjusted when generating test-data");
@@ -454,8 +454,7 @@ mod test {
         vec3.iter().for_each(|elem| acb.add(*elem));
         let column3 = acb.finalize();
 
-        let columnset: Vec<ColumnT> =
-            vec![ColumnT::ColumnU64(column1), ColumnT::ColumnFloat(column2)];
+        let columnset: Vec<ColumnT> = vec![ColumnT::U64(column1), ColumnT::Float(column2)];
         let permutator = Permutator::sort_from_columns(&columnset).expect("Sorting should work");
         let column_sort = permutator
             .apply_column(&column3, AdaptiveColumnBuilder::new())

@@ -1,4 +1,5 @@
 use super::{Column, ColumnScan, GenericIntervalColumnEnum, RangedColumnScan, VectorColumn};
+use crate::generate_forwarder;
 use crate::physical::datatypes::{Field, FloorToUsize};
 use std::marker::PhantomData;
 use std::{fmt::Debug, ops::Range};
@@ -23,6 +24,10 @@ where
     /// Case Scan with GenericIntervalColumn
     GenericIntervalColumn(GenericColumnScan<'a, T, GenericIntervalColumnEnum<'a, T>>),
 }
+
+generate_forwarder!(forward_to_column_scan;
+                    VectorColumn,
+                    GenericIntervalColumn);
 
 impl<'a, T> From<GenericColumnScan<'a, T, VectorColumn<T>>> for GenericColumnScanEnum<'a, T>
 where
@@ -196,10 +201,7 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::VectorColumn(col) => col.next(),
-            Self::GenericIntervalColumn(col) => col.next(),
-        }
+        forward_to_column_scan!(self, next)
     }
 }
 
@@ -208,24 +210,15 @@ where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        match self {
-            Self::VectorColumn(col) => col.seek(value),
-            Self::GenericIntervalColumn(col) => col.seek(value),
-        }
+        forward_to_column_scan!(self, seek(value))
     }
 
     fn current(&mut self) -> Option<T> {
-        match self {
-            Self::VectorColumn(col) => col.current(),
-            Self::GenericIntervalColumn(col) => col.current(),
-        }
+        forward_to_column_scan!(self, current)
     }
 
     fn reset(&mut self) {
-        match self {
-            Self::VectorColumn(col) => col.reset(),
-            Self::GenericIntervalColumn(col) => col.reset(),
-        }
+        forward_to_column_scan!(self, reset)
     }
 }
 
@@ -234,17 +227,11 @@ where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
     fn pos(&self) -> Option<usize> {
-        match self {
-            Self::VectorColumn(col) => col.pos,
-            Self::GenericIntervalColumn(col) => col.pos,
-        }
+        forward_to_column_scan!(self, pos)
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        match self {
-            Self::VectorColumn(col) => col.narrow(interval),
-            Self::GenericIntervalColumn(col) => col.narrow(interval),
-        }
+        forward_to_column_scan!(self, narrow(interval))
     }
 }
 
