@@ -18,9 +18,9 @@ where
     datatypes.iter().for_each(|dtype| {
         result.push(dtype.and_then(|dt| {
             Some(match dt {
-                DataTypeName::U64 => VecT::VecU64(Vec::new()),
-                DataTypeName::Float => VecT::VecFloat(Vec::new()),
-                DataTypeName::Double => VecT::VecDouble(Vec::new()),
+                DataTypeName::U64 => VecT::U64(Vec::new()),
+                DataTypeName::Float => VecT::Float(Vec::new()),
+                DataTypeName::Double => VecT::Double(Vec::new()),
             })
         }));
     });
