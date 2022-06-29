@@ -6,6 +6,7 @@ use crate::physical::columns::{
 use crate::physical::datatypes::DataTypeName;
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
+use std::iter::repeat;
 
 /// Iterator for a Trie datastructure.
 /// Allows for vertical traversal through the tree and can return
@@ -97,51 +98,6 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
     }
 }
 
-/// Function computing trie join on concrete tries
-/// Probably useless
-/*
-pub fn material_join(
-    scans: &mut Vec<&mut IntervalTrieScan>,
-    target_schema: &TrieSchema,
-    current_variable_index: Option<usize>,
-) {
-    let current_variable_index = current_variable_index.map_or(0, |v| v + 1);
-    let current_label = target_schema.get_label(current_variable_index);
-
-    let mut current_trie_scans: Vec<usize> = vec![];
-
-    for index in 0..scans.len() {
-        if scans[index]
-            .get_schema()
-            .find_index(current_label)
-            .is_some()
-        {
-            current_trie_scans.push(index);
-            scans[index].down();
-        }
-    }
-
-    match target_schema.get_type(current_variable_index) {
-        DataTypeName::U64 => {
-            let mut current_column_scans: Vec<&mut dyn RangedColumnScan<Item = u64>> = vec![];
-            for index in current_trie_scans {
-                current_column_scans.push(
-                    scans[index]
-                        .current_scan()
-                        .unwrap()
-                        .to_colum_scan_u64()
-                        .unwrap(),
-                );
-            }
-        }
-        DataTypeName::Float => {}
-        DataTypeName::Double => {}
-    }
-
-    material_join(scans, target_schema, Some(current_variable_index));
-}
-*/
-
 /// Structure resulting from joining a set of tries (given as TrieJoins),
 /// which itself is a TrieJoin that can be used in such a join
 #[derive(Debug)]
@@ -159,12 +115,14 @@ pub struct TrieScanJoin<'a> {
 impl<'a> TrieScanJoin<'a> {
     /// Construct new TrieScanJoin object.
     pub fn new(trie_scans: Vec<TrieScanEnum<'a>>, target_schema: TrieSchema) -> Self {
-        let mut variable_to_scan: Vec<Vec<usize>> = vec![];
-        variable_to_scan.resize(target_schema.arity(), vec![]);
-        let mut merge_join_indeces: Vec<Vec<Option<usize>>> = vec![];
-        merge_join_indeces.resize(target_schema.arity(), vec![]);
+        let mut variable_to_scan = repeat(Vec::new())
+            .take(target_schema.arity())
+            .collect::<Vec<_>>();
+        let mut merge_join_indeces: Vec<Vec<_>> = repeat(Vec::new())
+            .take(target_schema.arity())
+            .collect::<Vec<_>>();
 
-        let mut merge_joins: Vec<UnsafeCell<RangedColumnScanT<'a>>> = vec![];
+        let mut merge_joins: Vec<UnsafeCell<RangedColumnScanT<'a>>> = Vec::new();
 
         for (scan_index, scan) in trie_scans.iter().enumerate() {
             let current_schema = scan.get_schema();
