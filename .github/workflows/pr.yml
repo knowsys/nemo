@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { rust: stable,           os: ubuntu-latest }
+          - { rust: nightly, os: ubuntu-latest }
     steps:
       - uses: actions/checkout@v2
       - uses: hecrj/setup-rust-action@v1
@@ -36,6 +36,7 @@ jobs:
       - uses: hecrj/setup-rust-action@v1
         with:
           components: clippy
+          rust-version: nightly
       - run: cargo clippy --all-targets --verbose
       # - run: cargo clippy --workspace --all-targets --verbose --no-default-features
       # - run: cargo clippy --workspace --all-targets --verbose --all-features
