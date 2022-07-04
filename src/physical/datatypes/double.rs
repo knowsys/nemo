@@ -65,7 +65,7 @@ impl Add for Double {
 
 impl AddAssign for Double {
     fn add_assign(&mut self, rhs: Self) {
-        (&mut self.0).add_assign(rhs.0)
+        self.0.add_assign(rhs.0)
     }
 }
 
@@ -79,7 +79,7 @@ impl Sub for Double {
 
 impl SubAssign for Double {
     fn sub_assign(&mut self, rhs: Self) {
-        (&mut self.0).sub_assign(rhs.0)
+        self.0.sub_assign(rhs.0)
     }
 }
 
@@ -93,7 +93,7 @@ impl Mul for Double {
 
 impl MulAssign for Double {
     fn mul_assign(&mut self, rhs: Self) {
-        (&mut self.0).mul_assign(rhs.0)
+        self.0.mul_assign(rhs.0)
     }
 }
 
@@ -107,7 +107,7 @@ impl Div for Double {
 
 impl DivAssign for Double {
     fn div_assign(&mut self, rhs: Self) {
-        (&mut self.0).div_assign(rhs.0)
+        self.0.div_assign(rhs.0)
     }
 }
 

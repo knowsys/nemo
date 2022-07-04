@@ -196,7 +196,7 @@ impl TrieNode {
         let mut cur_node = node;
         for (pos, element) in search_list.iter().enumerate() {
             let mut helper = Rc::clone(&cur_node);
-            if let Some(child) = cur_node.as_ref().borrow().matching_child(*element) {
+            if let Some(child) = cur_node.as_ref().borrow().matching_child(element) {
                 helper = Rc::clone(&child);
             } else {
                 return (helper, &search_list[pos..]);
@@ -446,7 +446,7 @@ mod test {
 
         for (id, result) in vec.iter().enumerate() {
             assert_eq!(dict.entry(id).unwrap(), result.to_string());
-            assert_eq!(dict.index_of(*result), Some(id));
+            assert_eq!(dict.index_of(result), Some(id));
         }
     }
 }

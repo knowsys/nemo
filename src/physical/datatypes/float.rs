@@ -65,7 +65,7 @@ impl Add for Float {
 
 impl AddAssign for Float {
     fn add_assign(&mut self, rhs: Self) {
-        (&mut self.0).add_assign(rhs.0)
+        self.0.add_assign(rhs.0)
     }
 }
 
@@ -79,7 +79,7 @@ impl Sub for Float {
 
 impl SubAssign for Float {
     fn sub_assign(&mut self, rhs: Self) {
-        (&mut self.0).sub_assign(rhs.0)
+        self.0.sub_assign(rhs.0)
     }
 }
 
@@ -93,7 +93,7 @@ impl Mul for Float {
 
 impl MulAssign for Float {
     fn mul_assign(&mut self, rhs: Self) {
-        (&mut self.0).mul_assign(rhs.0)
+        self.0.mul_assign(rhs.0)
     }
 }
 
@@ -107,7 +107,7 @@ impl Div for Float {
 
 impl DivAssign for Float {
     fn div_assign(&mut self, rhs: Self) {
-        (&mut self.0).div_assign(rhs.0)
+        self.0.div_assign(rhs.0)
     }
 }
 
