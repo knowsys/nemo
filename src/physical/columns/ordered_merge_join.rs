@@ -110,6 +110,11 @@ where
     }
 }
 
+// We “implement” `RangedColumnScan` since we want to do
+// `OrderedMergeJoin`s over `OrderedMergeJoin`s, mut implementing
+// `pos` and `narrow` would require materialisation, which we want to
+// avoid. These panics could likely be avoided by restructuring the
+// trait hierarchy.
 impl<'a, T> RangedColumnScan for OrderedMergeJoin<'a, T>
 where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
