@@ -18,5 +18,4 @@
 pub mod error;
 pub mod io;
 pub mod logical;
-#[macro_use]
 pub mod physical;
