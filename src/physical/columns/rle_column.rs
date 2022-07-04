@@ -517,12 +517,7 @@ where
             }
         }
 
-        for next in self {
-            if next >= value {
-                return Some(next);
-            }
-        }
-        None
+        self.find(|&next| next >= value)
     }
 
     fn current(&mut self) -> Option<Self::Item> {
