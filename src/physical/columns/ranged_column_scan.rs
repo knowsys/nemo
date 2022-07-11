@@ -83,6 +83,60 @@ where
     }
 }
 
+impl<'a, T> From<EqualColumnScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: EqualColumnScan<'a, T>) -> Self {
+        Self::EqualColumnScan(cs)
+    }
+}
+
+impl<'a, T> From<EqualValueScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: EqualValueScan<'a, T>) -> Self {
+        Self::EqualValueScan(cs)
+    }
+}
+
+impl<'a, T> From<PassScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: PassScan<'a, T>) -> Self {
+        Self::PassScan(cs)
+    }
+}
+
+impl<'a, T> From<MinusScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: MinusScan<'a, T>) -> Self {
+        Self::MinusScan(cs)
+    }
+}
+
+impl<'a, T> From<DifferenceScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: DifferenceScan<'a, T>) -> Self {
+        Self::DifferenceScan(cs)
+    }
+}
+
+impl<'a, T> From<UnionScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: UnionScan<'a, T>) -> Self {
+        Self::UnionScan(cs)
+    }
+}
+
 generate_forwarder!(forward_to_column_scan;
                     GenericColumnScan,
                     RleColumnScan,
