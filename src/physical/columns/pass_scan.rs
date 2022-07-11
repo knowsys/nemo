@@ -72,11 +72,11 @@ mod test {
     #[test]
     fn test_u64() {
         let ref_col = VectorColumn::new(vec![0, 4, 7]);
-        let mut ref_col_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let ref_col_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(ref_col.iter()),
         ));
 
-        let mut pass_scan = PassScan::new(&mut ref_col_iter);
+        let mut pass_scan = PassScan::new(&ref_col_iter);
 
         assert_eq!(pass_scan.current(), None);
         assert_eq!(pass_scan.next(), Some(0));

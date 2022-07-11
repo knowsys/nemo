@@ -206,41 +206,50 @@ mod test {
         let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = VectorColumn::new(vec![0u64, 3, 7, 11]);
 
-        let mut left_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let left_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(left_column.iter()),
         ));
-        let mut right_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let right_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(right_column.iter()),
         ));
 
-        let mut diff_scan = DifferenceScan::new(&mut left_iter, &mut right_iter);
+        let mut diff_scan = DifferenceScan::new(&left_iter, &right_iter);
 
         assert_eq!(diff_scan.current(), None);
-        assert_eq!(diff_scan.is_equal(), true);
+
+        assert!(diff_scan.is_equal());
         assert_eq!(diff_scan.next(), Some(0));
         assert_eq!(diff_scan.current(), Some(0));
-        assert_eq!(diff_scan.is_equal(), true);
+
+        assert!(diff_scan.is_equal());
         assert_eq!(diff_scan.next(), Some(2));
         assert_eq!(diff_scan.current(), Some(2));
-        assert_eq!(diff_scan.is_equal(), false);
+
+        assert!(!diff_scan.is_equal());
         assert_eq!(diff_scan.next(), Some(3));
         assert_eq!(diff_scan.current(), Some(3));
-        assert_eq!(diff_scan.is_equal(), true);
+
+        assert!(diff_scan.is_equal());
         assert_eq!(diff_scan.next(), Some(5));
         assert_eq!(diff_scan.current(), Some(5));
-        assert_eq!(diff_scan.is_equal(), false);
+
+        assert!(!diff_scan.is_equal());
         assert_eq!(diff_scan.seek(8), Some(8));
         assert_eq!(diff_scan.current(), Some(8));
-        assert_eq!(diff_scan.is_equal(), false);
+
+        assert!(!diff_scan.is_equal());
         assert_eq!(diff_scan.seek(11), Some(11));
         assert_eq!(diff_scan.current(), Some(11));
-        assert_eq!(diff_scan.is_equal(), true);
+
+        assert!(diff_scan.is_equal());
         assert_eq!(diff_scan.next(), Some(12));
         assert_eq!(diff_scan.current(), Some(12));
-        assert_eq!(diff_scan.is_equal(), false);
+
+        assert!(!diff_scan.is_equal());
         assert_eq!(diff_scan.next(), None);
         assert_eq!(diff_scan.current(), None);
-        assert_eq!(diff_scan.is_equal(), false);
+
+        assert!(!diff_scan.is_equal());
     }
 
     #[test]
@@ -248,14 +257,14 @@ mod test {
         let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = VectorColumn::new(vec![0u64, 3, 7, 11]);
 
-        let mut left_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let left_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(left_column.iter()),
         ));
-        let mut right_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let right_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(right_column.iter()),
         ));
 
-        let mut diff_scan = MinusScan::new(&mut left_iter, &mut right_iter);
+        let mut diff_scan = MinusScan::new(&left_iter, &right_iter);
 
         assert_eq!(diff_scan.current(), None);
         assert_eq!(diff_scan.next(), Some(2));

@@ -18,7 +18,7 @@ pub struct TrieUnion<'a> {
 impl<'a> TrieUnion<'a> {
     /// Construct new TrieUnion object.
     pub fn new(trie_scans: Vec<TrieScanEnum<'a>>) -> TrieUnion<'a> {
-        debug_assert!(trie_scans.len() > 0);
+        debug_assert!(!trie_scans.is_empty());
 
         // This assumes that every schema is the same
         // TODO: Perhaps debug_assert! this

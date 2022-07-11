@@ -51,13 +51,16 @@ pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
             current_row = vec![true; target_schema.arity()];
         }
 
-        if current_value.is_some() && current_row[current_layer] {
-            data_column_builders[current_layer].add(current_value.unwrap());
+        if let Some(val) = current_value {
+            if current_row[current_layer] {
+                data_column_builders[current_layer].add(val);
 
-            if !is_last_layer {
-                current_row[current_layer] = false;
+                if !is_last_layer {
+                    current_row[current_layer] = false;
+                }
             }
         }
+
         if next_value.is_none() {
             let current_data_len = data_column_builders[current_layer].count();
             let prev_data_len = &mut current_int_starts[current_layer];

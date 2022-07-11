@@ -105,11 +105,11 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
 
         if next_layer > 0 {
             let current_layer = next_layer - 1;
-            if self.layer_left == self.layer_right {
-                if self.difference_scans[current_layer].get_mut().is_equal() {
-                    self.trie_right.down();
-                    self.layer_right = Some(next_layer);
-                }
+            if self.layer_left == self.layer_right
+                && self.difference_scans[current_layer].get_mut().is_equal()
+            {
+                self.trie_right.down();
+                self.layer_right = Some(next_layer);
             }
         } else {
             self.layer_right = Some(next_layer);

@@ -41,9 +41,8 @@ where
     /// Return all positions in the underlying column the cursor is currently at
     /// (The cursor can be at mutliple positions since there may be duplicates)
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
-        if self.current_value.is_none() {
-            return None;
-        }
+        self.current_value?;
+
         let mut result = Vec::<usize>::with_capacity(self.same_value_count);
         for same_index in 0..self.same_value_count {
             let sort_index = self.current_index? + same_index;

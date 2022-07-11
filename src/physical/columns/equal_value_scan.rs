@@ -104,21 +104,21 @@ mod test {
     #[test]
     fn test_u64() {
         let col = VectorColumn::new(vec![1u64, 4, 8]);
-        let mut col_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let col_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(col.iter()),
         ));
 
-        let mut equal_scan = EqualValueScan::new(&mut col_iter, 4);
+        let mut equal_scan = EqualValueScan::new(&col_iter, 4);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), Some(4));
         assert_eq!(equal_scan.current(), Some(4));
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);
 
-        let mut col_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let col_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(col.iter()),
         ));
-        let mut equal_scan = EqualValueScan::new(&mut col_iter, 7);
+        let mut equal_scan = EqualValueScan::new(&col_iter, 7);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);

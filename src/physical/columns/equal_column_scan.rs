@@ -109,32 +109,32 @@ mod test {
         let ref_col = VectorColumn::new(vec![0u64, 4, 7]);
         let val_col = VectorColumn::new(vec![1u64, 4, 8]);
 
-        let mut ref_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let ref_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(ref_col.iter()),
         ));
-        let mut val_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let val_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(val_col.iter()),
         ));
 
         ref_iter.seek(4);
 
-        let mut equal_scan = EqualColumnScan::new(&mut ref_iter, &mut val_iter);
+        let mut equal_scan = EqualColumnScan::new(&ref_iter, &val_iter);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), Some(4));
         assert_eq!(equal_scan.current(), Some(4));
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);
 
-        let mut ref_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let ref_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(ref_col.iter()),
         ));
-        let mut val_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let val_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(val_col.iter()),
         ));
 
         ref_iter.seek(7);
 
-        let mut equal_scan = EqualColumnScan::new(&mut ref_iter, &mut val_iter);
+        let mut equal_scan = EqualColumnScan::new(&ref_iter, &val_iter);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);

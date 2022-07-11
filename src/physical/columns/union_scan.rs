@@ -60,14 +60,13 @@ where
 
                 if next_smallest.is_none() {
                     next_smallest = current_element;
-                } else {
-                    if current_element.is_some()
-                        && current_element.unwrap() < next_smallest.unwrap()
-                    {
-                        next_smallest = current_element;
-                        next_smallest_scans.clear();
-                    }
+                } else if current_element.is_some()
+                    && current_element.unwrap() < next_smallest.unwrap()
+                {
+                    next_smallest = current_element;
+                    next_smallest_scans.clear();
                 }
+
                 if next_smallest == current_element {
                     next_smallest_scans.push(index);
                 }
@@ -91,15 +90,14 @@ where
 
                 if next_smallest.is_none() {
                     next_smallest = current_element;
-                } else {
-                    if current_element.is_some()
-                        && current_element.unwrap() < next_smallest.unwrap()
-                    {
-                        next_smallest = current_element;
-                        next_smallest_scans.clear();
-                        smallest_scans_pointer = 0;
-                    }
+                } else if current_element.is_some()
+                    && current_element.unwrap() < next_smallest.unwrap()
+                {
+                    next_smallest = current_element;
+                    next_smallest_scans.clear();
+                    smallest_scans_pointer = 0;
                 }
+
                 if next_smallest.is_some() && next_smallest == current_element {
                     next_smallest_scans.push(index);
                 }
@@ -126,12 +124,11 @@ where
 
             if next_smallest.is_none() {
                 next_smallest = current_element;
-            } else {
-                if current_element.is_some() && current_element.unwrap() < next_smallest.unwrap() {
-                    next_smallest = current_element;
+            } else if current_element.is_some() && current_element.unwrap() < next_smallest.unwrap()
+            {
+                next_smallest = current_element;
 
-                    next_smallest_scans.clear();
-                }
+                next_smallest_scans.clear();
             }
 
             if next_smallest == current_element {
