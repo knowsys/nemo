@@ -27,7 +27,6 @@ pub mod trie_scan;
 pub use trie_scan::IntervalTrieScan;
 pub use trie_scan::TrieScan;
 pub use trie_scan::TrieScanEnum;
-pub use trie_scan::TrieScanJoin;
 
 /// Module for defining [`TrieProject`]
 pub mod trie_project;
@@ -50,3 +49,7 @@ pub use trie_difference::TrieDifference;
 /// Module for defining [`TrieUnion`]
 pub mod trie_union;
 pub use trie_union::TrieUnion;
+
+/// Module for defining [`TrieJoin`]
+pub mod trie_join;
+pub use trie_join::TrieJoin;

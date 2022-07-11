@@ -116,7 +116,7 @@ mod test {
     use crate::physical::columns::{Column, IntervalColumnT};
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::{
-        IntervalTrieScan, Trie, TrieScanEnum, TrieScanJoin, TrieSchema, TrieSchemaEntry,
+        IntervalTrieScan, Trie, TrieJoin, TrieScanEnum, TrieSchema, TrieSchemaEntry,
     };
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
@@ -263,7 +263,7 @@ mod test {
         let trie_a = Trie::new(schema_a, vec![column_a_x, column_a_y]);
         let trie_b = Trie::new(schema_b, vec![column_b_y, column_b_z]);
 
-        let mut join_iter = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
+        let mut join_iter = TrieScanEnum::TrieJoin(TrieJoin::new(
             vec![
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
