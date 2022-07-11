@@ -9,7 +9,7 @@ use std::fmt::Debug;
 
 /// Iterator for a Trie datastructure.
 /// Allows for vertical traversal through the tree and can return
-/// its current position as a RangedColumnScanEnum object.
+/// its current position as a [`RangedColumnScanT`] object.
 pub trait TrieScan<'a>: Debug {
     /// Return to the upper layer.
     fn up(&mut self);
@@ -17,10 +17,10 @@ pub trait TrieScan<'a>: Debug {
     /// Enter the next layer based on the position of the iterator in the current layer.
     fn down(&mut self);
 
-    /// Return the current position of the scan as a ranged [`ColumnScan`].
+    /// Return the current position of the scan as a [`RangedColumnScanT`].
     fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>>;
 
-    /// Return the underlying [`RangedColumnScan`] object given an index.
+    /// Return the underlying [`RangedColumnScanT`] object given an index.
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>>;
 
     /// Return the underlying [`TrieSchema`].
