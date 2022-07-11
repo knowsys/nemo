@@ -10,7 +10,7 @@ use std::fmt::Debug;
 /// Trie iterator enforcing conditions which state that some columns should have the same value
 #[derive(Debug)]
 pub struct TrieSelectEqual<'a> {
-    base_trie: TrieScanEnum<'a>,
+    base_trie: Box<TrieScanEnum<'a>>,
     select_scans: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
     current_layer: Option<usize>,
 }
@@ -82,7 +82,7 @@ impl<'a> TrieSelectEqual<'a> {
         }
 
         Self {
-            base_trie,
+            base_trie: Box::new(base_trie),
             select_scans,
             current_layer: None,
         }
@@ -123,7 +123,7 @@ impl<'a> TrieScan<'a> for TrieSelectEqual<'a> {
 /// Trie iterator enforcing conditions which state that some columns should have the same value
 #[derive(Debug)]
 pub struct TrieSelectValue<'a> {
-    base_trie: TrieScanEnum<'a>,
+    base_trie: Box<TrieScanEnum<'a>>,
     select_scans: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
     current_layer: Option<usize>,
 }
@@ -196,7 +196,7 @@ impl<'a> TrieSelectValue<'a> {
         }
 
         Self {
-            base_trie,
+            base_trie: Box::new(base_trie),
             select_scans,
             current_layer: None,
         }

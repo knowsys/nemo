@@ -10,8 +10,8 @@ use std::fmt::Debug;
 /// Trie iterator representing a union between other trie iterators
 #[derive(Debug)]
 pub struct TrieDifference<'a> {
-    trie_left: TrieScanEnum<'a>,
-    trie_right: TrieScanEnum<'a>,
+    trie_left: Box<TrieScanEnum<'a>>,
+    trie_right: Box<TrieScanEnum<'a>>,
     layer_left: Option<usize>,
     layer_right: Option<usize>,
     difference_scans: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
@@ -63,8 +63,8 @@ impl<'a> TrieDifference<'a> {
         }
 
         TrieDifference {
-            trie_left,
-            trie_right,
+            trie_left: Box::new(trie_left),
+            trie_right: Box::new(trie_right),
             layer_left: None,
             layer_right: None,
             difference_scans,

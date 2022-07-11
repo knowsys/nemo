@@ -1,4 +1,7 @@
-use super::{Table, TableSchema, Trie, TrieJoin, TrieProject};
+use super::{
+    Table, TableSchema, Trie, TrieDifference, TrieJoin, TrieProject, TrieSelectEqual,
+    TrieSelectValue, TrieUnion,
+};
 use crate::generate_forwarder;
 use crate::physical::columns::{Column, IntervalColumn, RangedColumnScan, RangedColumnScanT};
 use std::cell::UnsafeCell;
@@ -103,9 +106,17 @@ pub enum TrieScanEnum<'a> {
     TrieJoin(TrieJoin<'a>),
     /// Case TrieProject
     TrieProject(TrieProject<'a>),
+    /// Case TrieDifference
+    TrieDifference(TrieDifference<'a>),
+    /// Case TrieUnion
+    TrieUnion(TrieUnion<'a>),
+    /// Case TrieSelectEqual
+    TrieSelectEqual(TrieSelectEqual<'a>),
+    /// Case TrieSelectValue
+    TrieSelectValue(TrieSelectValue<'a>),
 }
 
-generate_forwarder!(forward_to_scan; IntervalTrieScan, TrieJoin, TrieProject);
+generate_forwarder!(forward_to_scan; IntervalTrieScan, TrieJoin, TrieProject, TrieDifference, TrieSelectEqual, TrieSelectValue, TrieUnion);
 
 impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
     fn up(&mut self) {
