@@ -175,7 +175,7 @@ mod test {
         }
     }
 
-    fn _join_current(join_scan: &mut TrieJoin) -> Option<u64> {
+    fn join_current(join_scan: &mut TrieJoin) -> Option<u64> {
         unsafe {
             if let RangedColumnScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
                 rcs.current()
@@ -243,32 +243,64 @@ mod test {
         );
 
         join_iter.down();
+        assert_eq!(join_current(&mut join_iter), None);
         assert_eq!(join_next(&mut join_iter), Some(1));
+        assert_eq!(join_current(&mut join_iter), Some(1));
+
         join_iter.down();
+        assert_eq!(join_current(&mut join_iter), None);
         assert_eq!(join_next(&mut join_iter), Some(2));
+        assert_eq!(join_current(&mut join_iter), Some(2));
+
         join_iter.down();
+        assert_eq!(join_current(&mut join_iter), None);
         assert_eq!(join_next(&mut join_iter), Some(8));
+        assert_eq!(join_current(&mut join_iter), Some(8));
         assert_eq!(join_next(&mut join_iter), Some(9));
+        assert_eq!(join_current(&mut join_iter), Some(9));
         assert_eq!(join_next(&mut join_iter), None);
+        assert_eq!(join_current(&mut join_iter), None);
+
         join_iter.up();
         assert_eq!(join_next(&mut join_iter), Some(3));
+        assert_eq!(join_current(&mut join_iter), Some(3));
         assert_eq!(join_next(&mut join_iter), None);
+        assert_eq!(join_current(&mut join_iter), None);
+
         join_iter.up();
         assert_eq!(join_next(&mut join_iter), Some(2));
+        assert_eq!(join_current(&mut join_iter), Some(2));
+
         join_iter.down();
+        assert_eq!(join_current(&mut join_iter), None);
         assert_eq!(join_next(&mut join_iter), None);
+        assert_eq!(join_current(&mut join_iter), None);
+
         join_iter.up();
         assert_eq!(join_next(&mut join_iter), Some(3));
+        assert_eq!(join_current(&mut join_iter), Some(3));
+
         join_iter.down();
+        assert_eq!(join_current(&mut join_iter), None);
         assert_eq!(join_next(&mut join_iter), Some(6));
+        assert_eq!(join_current(&mut join_iter), Some(6));
+
         join_iter.down();
+        assert_eq!(join_current(&mut join_iter), None);
         assert_eq!(join_next(&mut join_iter), Some(11));
+        assert_eq!(join_current(&mut join_iter), Some(11));
         assert_eq!(join_next(&mut join_iter), Some(12));
+        assert_eq!(join_current(&mut join_iter), Some(12));
         assert_eq!(join_next(&mut join_iter), None);
+        assert_eq!(join_current(&mut join_iter), None);
+
         join_iter.up();
         assert_eq!(join_next(&mut join_iter), None);
+        assert_eq!(join_current(&mut join_iter), None);
+
         join_iter.up();
         assert_eq!(join_next(&mut join_iter), None);
+        assert_eq!(join_current(&mut join_iter), None);
 
         let column_c_x = make_gict(&[1, 2], &[0]);
         let column_c_y = make_gict(&[2, 8], &[0, 1]);
@@ -302,21 +334,40 @@ mod test {
         );
 
         join_iter_abc.down();
+        assert_eq!(join_current(&mut join_iter_abc), None);
         assert_eq!(join_next(&mut join_iter_abc), Some(1));
+        assert_eq!(join_current(&mut join_iter_abc), Some(1));
+
         join_iter_abc.down();
+        assert_eq!(join_current(&mut join_iter_abc), None);
         assert_eq!(join_next(&mut join_iter_abc), Some(2));
+        assert_eq!(join_current(&mut join_iter_abc), Some(2));
+
         join_iter_abc.down();
+        assert_eq!(join_current(&mut join_iter_abc), None);
         assert_eq!(join_next(&mut join_iter_abc), Some(8));
+        assert_eq!(join_current(&mut join_iter_abc), Some(8));
         assert_eq!(join_next(&mut join_iter_abc), Some(9));
+        assert_eq!(join_current(&mut join_iter_abc), Some(9));
         assert_eq!(join_next(&mut join_iter_abc), None);
+        assert_eq!(join_current(&mut join_iter_abc), None);
+
         join_iter_abc.up();
         assert_eq!(join_next(&mut join_iter_abc), None);
+        assert_eq!(join_current(&mut join_iter_abc), None);
+
         join_iter_abc.up();
         assert_eq!(join_next(&mut join_iter_abc), Some(2));
+        assert_eq!(join_current(&mut join_iter_abc), Some(2));
+
         join_iter_abc.down();
+        assert_eq!(join_current(&mut join_iter_abc), None);
         assert_eq!(join_next(&mut join_iter_abc), None);
+        assert_eq!(join_current(&mut join_iter_abc), None);
+
         join_iter_abc.up();
         assert_eq!(join_next(&mut join_iter_abc), None);
+        assert_eq!(join_current(&mut join_iter_abc), None);
     }
 
     use crate::physical::columns::{

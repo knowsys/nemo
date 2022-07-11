@@ -142,19 +142,37 @@ impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::cell::UnsafeCell;
-
     use super::super::trie::{Trie, TrieSchema, TrieSchemaEntry};
     use super::{IntervalTrieScan, TrieScan};
-    use crate::physical::columns::{RangedColumnScan, RangedColumnScanT};
+    use crate::physical::columns::RangedColumnScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
-    fn seek_scan(scan: &UnsafeCell<RangedColumnScanT>, value: u64) -> Option<u64> {
+    fn scan_seek(int_scan: &mut IntervalTrieScan, value: u64) -> Option<u64> {
         unsafe {
-            if let RangedColumnScanT::U64(rcs) = &(*scan.get()) {
+            if let RangedColumnScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
                 rcs.seek(value)
+            } else {
+                panic!("type should be u64");
+            }
+        }
+    }
+
+    fn scan_next(int_scan: &mut IntervalTrieScan) -> Option<u64> {
+        unsafe {
+            if let RangedColumnScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
+                rcs.next()
+            } else {
+                panic!("type should be u64");
+            }
+        }
+    }
+
+    fn scan_current(int_scan: &mut IntervalTrieScan) -> Option<u64> {
+        unsafe {
+            if let RangedColumnScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
+                rcs.current()
             } else {
                 panic!("type should be u64");
             }
@@ -165,7 +183,7 @@ mod test {
     fn test_trie_iter() {
         let column_fst = make_gict(&[1, 2, 3], &[0]);
         let column_snd = make_gict(&[2, 3, 4, 1, 2], &[0, 2, 3]);
-        let column_trd = make_gict(&[3, 4, 5, 7, 2, 1], &[0, 2, 3, 4, 5]);
+        let column_trd = make_gict(&[3, 4, 5, 7, 8, 7, 2, 1], &[0, 2, 5, 6, 7]);
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
@@ -187,21 +205,72 @@ mod test {
         let trie = Trie::new(schema, column_vec);
         let mut trie_iter = IntervalTrieScan::new(&trie);
 
-        assert!(trie_iter.current_scan().is_none());
+        assert!(scan_current(&mut trie_iter).is_none());
 
         trie_iter.up();
-        assert!(trie_iter.current_scan().is_none());
+        assert!(scan_current(&mut trie_iter).is_none());
 
         trie_iter.down();
 
-        let scan = trie_iter.current_scan().unwrap();
-        seek_scan(scan, 1);
-        assert_eq!(unsafe { (*scan.get()).pos() }, Some(0));
-        trie_iter.down();
-        let scan = trie_iter.current_scan().unwrap();
-        seek_scan(scan, 2);
-        assert_eq!(unsafe { (*scan.get()).pos() }, Some(0));
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(1));
+        assert_eq!(scan_current(&mut trie_iter), Some(1));
 
-        //TODO: Further tests this once GenericColumnScan is fixed
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_seek(&mut trie_iter, 3), Some(3));
+        assert_eq!(scan_current(&mut trie_iter), Some(3));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_seek(&mut trie_iter, 6), Some(7));
+        assert_eq!(scan_current(&mut trie_iter), Some(7));
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), Some(2));
+        assert_eq!(scan_current(&mut trie_iter), Some(2));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(4));
+        assert_eq!(scan_current(&mut trie_iter), Some(4));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(7));
+        assert_eq!(scan_current(&mut trie_iter), Some(7));
+        assert!(scan_next(&mut trie_iter).is_none());
+
+        trie_iter.up();
+        assert!(scan_next(&mut trie_iter).is_none());
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), Some(3));
+        assert_eq!(scan_current(&mut trie_iter), Some(3));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_seek(&mut trie_iter, 2), Some(2));
+        assert_eq!(scan_current(&mut trie_iter), Some(2));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(1));
+        assert_eq!(scan_current(&mut trie_iter), Some(1));
+        assert!(scan_next(&mut trie_iter).is_none());
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.up();
+        assert!(scan_next(&mut trie_iter).is_none());
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.up();
+        assert!(scan_next(&mut trie_iter).is_none());
+        assert!(scan_current(&mut trie_iter).is_none());
     }
 }
