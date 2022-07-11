@@ -23,25 +23,30 @@ impl<'a> TrieSelectEqual<'a> {
         let mut select_scans = Vec::<UnsafeCell<RangedColumnScanT<'a>>>::with_capacity(arity);
 
         for col_index in 0..arity {
-            // TODO: Other types
-            match target_schema.get_type(col_index) {
-                DataTypeName::U64 => unsafe {
-                    let base_scan_cell = if let RangedColumnScanT::U64(base_scan) =
-                        &*base_trie.get_scan(col_index).unwrap().get()
-                    {
-                        base_scan
-                    } else {
-                        panic!("Type should be u64");
-                    };
-                    let next_scan = RangedColumnScanCell::new(RangedColumnScanEnum::PassScan(
-                        PassScan::new(base_scan_cell),
-                    ));
+            macro_rules! init_scans_for_datatype {
+                ($variant:ident) => {
+                    unsafe {
+                        let base_scan_cell = if let RangedColumnScanT::$variant(base_scan) =
+                            &*base_trie.get_scan(col_index).unwrap().get()
+                        {
+                            base_scan
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        };
+                        let next_scan = RangedColumnScanCell::new(RangedColumnScanEnum::PassScan(
+                            PassScan::new(base_scan_cell),
+                        ));
 
-                    select_scans.push(UnsafeCell::new(RangedColumnScanT::U64(next_scan)));
-                },
-                DataTypeName::Float => {}
-                DataTypeName::Double => {}
+                        select_scans.push(UnsafeCell::new(RangedColumnScanT::$variant(next_scan)));
+                    }
+                };
             }
+
+            match target_schema.get_type(col_index) {
+                DataTypeName::U64 => init_scans_for_datatype!(U64),
+                DataTypeName::Float => init_scans_for_datatype!(Float),
+                DataTypeName::Double => init_scans_for_datatype!(Double),
+            };
         }
 
         for class in eq_classes {
@@ -49,34 +54,39 @@ impl<'a> TrieSelectEqual<'a> {
                 let prev_member_idx = class[member_index - 1];
                 let current_member_idx = class[member_index];
 
-                // TODO: Other types
+                macro_rules! init_scans_for_datatype {
+                    ($variant:ident) => {
+                        unsafe {
+                            let reference_scan_enum = if let RangedColumnScanT::$variant(ref_scan) =
+                                &*base_trie.get_scan(prev_member_idx).unwrap().get()
+                            {
+                                ref_scan
+                            } else {
+                                panic!("Expected a column scan of type {}", stringify!($variant));
+                            };
+                            let value_scan_enum = if let RangedColumnScanT::$variant(value_scan) =
+                                &*base_trie.get_scan(current_member_idx).unwrap().get()
+                            {
+                                value_scan
+                            } else {
+                                panic!("Expected a column scan of type {}", stringify!($variant));
+                            };
+
+                            let next_scan =
+                                RangedColumnScanCell::new(RangedColumnScanEnum::EqualColumnScan(
+                                    EqualColumnScan::new(reference_scan_enum, value_scan_enum),
+                                ));
+
+                            select_scans[current_member_idx] =
+                                UnsafeCell::new(RangedColumnScanT::$variant(next_scan));
+                        }
+                    };
+                }
+
                 match target_schema.get_type(current_member_idx) {
-                    DataTypeName::U64 => unsafe {
-                        let reference_scan_enum = if let RangedColumnScanT::U64(ref_scan) =
-                            &*base_trie.get_scan(prev_member_idx).unwrap().get()
-                        {
-                            ref_scan
-                        } else {
-                            panic!("Type should be u64");
-                        };
-                        let value_scan_enum = if let RangedColumnScanT::U64(value_scan) =
-                            &*base_trie.get_scan(current_member_idx).unwrap().get()
-                        {
-                            value_scan
-                        } else {
-                            panic!("Type should be u64");
-                        };
-
-                        let next_scan =
-                            RangedColumnScanCell::new(RangedColumnScanEnum::EqualColumnScan(
-                                EqualColumnScan::new(reference_scan_enum, value_scan_enum),
-                            ));
-
-                        select_scans[current_member_idx] =
-                            UnsafeCell::new(RangedColumnScanT::U64(next_scan));
-                    },
-                    DataTypeName::Float => {}
-                    DataTypeName::Double => {}
+                    DataTypeName::U64 => init_scans_for_datatype!(U64),
+                    DataTypeName::Float => init_scans_for_datatype!(Float),
+                    DataTypeName::Double => init_scans_for_datatype!(Double),
                 }
             }
         }
@@ -145,53 +155,64 @@ impl<'a> TrieSelectValue<'a> {
         let mut select_scans = Vec::<UnsafeCell<RangedColumnScanT<'a>>>::with_capacity(arity);
 
         for col_index in 0..arity {
-            // TODO: Other types
-            match target_schema.get_type(col_index) {
-                DataTypeName::U64 => unsafe {
-                    let base_scan_enum = if let RangedColumnScanT::U64(base_scan) =
-                        &*base_trie.get_scan(col_index).unwrap().get()
-                    {
-                        base_scan
-                    } else {
-                        panic!("Type should be u64");
-                    };
-                    let next_scan = RangedColumnScanCell::new(RangedColumnScanEnum::PassScan(
-                        PassScan::new(base_scan_enum),
-                    ));
+            macro_rules! init_scans_for_datatype {
+                ($variant:ident) => {
+                    unsafe {
+                        let base_scan_enum = if let RangedColumnScanT::$variant(base_scan) =
+                            &*base_trie.get_scan(col_index).unwrap().get()
+                        {
+                            base_scan
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        };
+                        let next_scan = RangedColumnScanCell::new(RangedColumnScanEnum::PassScan(
+                            PassScan::new(base_scan_enum),
+                        ));
 
-                    select_scans.push(UnsafeCell::new(RangedColumnScanT::U64(next_scan)));
-                },
-                DataTypeName::Float => {}
-                DataTypeName::Double => {}
+                        select_scans.push(UnsafeCell::new(RangedColumnScanT::$variant(next_scan)));
+                    }
+                };
+            }
+
+            match target_schema.get_type(col_index) {
+                DataTypeName::U64 => init_scans_for_datatype!(U64),
+                DataTypeName::Float => init_scans_for_datatype!(Float),
+                DataTypeName::Double => init_scans_for_datatype!(Double),
             }
         }
 
         for assignemnt in assignemnts {
+            macro_rules! init_scans_for_datatype {
+                ($variant:ident) => {
+                    unsafe {
+                        let value = if let DataValueT::$variant(value) = assignemnt.value {
+                            value
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        };
+
+                        let scan_enum = if let RangedColumnScanT::$variant(scan) =
+                            &*base_trie.get_scan(assignemnt.column_idx).unwrap().get()
+                        {
+                            scan
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        };
+
+                        let next_scan =
+                            RangedColumnScanCell::new(RangedColumnScanEnum::EqualValueScan(
+                                EqualValueScan::new(scan_enum, value),
+                            ));
+
+                        select_scans[assignemnt.column_idx] =
+                            UnsafeCell::new(RangedColumnScanT::$variant(next_scan));
+                    }
+                };
+            }
             match target_schema.get_type(assignemnt.column_idx) {
-                DataTypeName::U64 => unsafe {
-                    let value = if let DataValueT::U64(value) = assignemnt.value {
-                        value
-                    } else {
-                        panic!("Type should be u64");
-                    };
-
-                    let scan_enum = if let RangedColumnScanT::U64(scan) =
-                        &*base_trie.get_scan(assignemnt.column_idx).unwrap().get()
-                    {
-                        scan
-                    } else {
-                        panic!("Type should be u64");
-                    };
-
-                    let next_scan = RangedColumnScanCell::new(
-                        RangedColumnScanEnum::EqualValueScan(EqualValueScan::new(scan_enum, value)),
-                    );
-
-                    select_scans[assignemnt.column_idx] =
-                        UnsafeCell::new(RangedColumnScanT::U64(next_scan));
-                },
-                DataTypeName::Float => {}
-                DataTypeName::Double => {}
+                DataTypeName::U64 => init_scans_for_datatype!(U64),
+                DataTypeName::Float => init_scans_for_datatype!(Float),
+                DataTypeName::Double => init_scans_for_datatype!(Double),
             }
         }
 
@@ -250,7 +271,7 @@ mod test {
         if let RangedColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
             rcs.next()
         } else {
-            panic!("type should be u64");
+            panic!("Type should be u64");
         }
     }
 
@@ -258,7 +279,7 @@ mod test {
         if let RangedColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
             rcs.current()
         } else {
-            panic!("type should be u64");
+            panic!("Type should be u64");
         }
     }
 
@@ -266,7 +287,7 @@ mod test {
         if let RangedColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
             rcs.next()
         } else {
-            panic!("type should be u64");
+            panic!("Type should be u64");
         }
     }
 
@@ -274,7 +295,7 @@ mod test {
         if let RangedColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
             rcs.current()
         } else {
-            panic!("type should be u64");
+            panic!("Type should be u64");
         }
     }
 

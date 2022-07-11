@@ -1,6 +1,6 @@
 use super::{TableSchema, TrieScan, TrieScanEnum};
 use crate::physical::columns::{
-    ColumnScan, DifferenceScan, MinusScan, RangedColumnScanCell, RangedColumnScanEnum,
+    ColumnScan, DifferenceScan, MinusScan, PassScan, RangedColumnScanCell, RangedColumnScanEnum,
     RangedColumnScanT,
 };
 use crate::physical::datatypes::DataTypeName;
@@ -27,38 +27,46 @@ impl<'a> TrieDifference<'a> {
             Vec::<UnsafeCell<RangedColumnScanT<'a>>>::with_capacity(layer_count);
 
         for layer_index in 0..target_schema.arity() {
-            match target_schema.get_type(layer_index) {
-                DataTypeName::U64 => unsafe {
-                    if let RangedColumnScanT::U64(left_scan_enum) =
-                        &*trie_left.get_scan(layer_index).unwrap().get()
-                    {
-                        if let RangedColumnScanT::U64(right_scan_enum) =
-                            &*trie_right.get_scan(layer_index).unwrap().get()
+            macro_rules! init_scans_for_datatype {
+                ($variant:ident) => {
+                    unsafe {
+                        if let RangedColumnScanT::$variant(left_scan_enum) =
+                            &*trie_left.get_scan(layer_index).unwrap().get()
                         {
-                            let new_scan = if layer_index == target_schema.arity() - 1 {
-                                RangedColumnScanEnum::MinusScan(MinusScan::new(
-                                    left_scan_enum,
-                                    right_scan_enum,
-                                ))
-                            } else {
-                                RangedColumnScanEnum::DifferenceScan(DifferenceScan::new(
-                                    left_scan_enum,
-                                    right_scan_enum,
-                                ))
-                            };
+                            if let RangedColumnScanT::$variant(right_scan_enum) =
+                                &*trie_right.get_scan(layer_index).unwrap().get()
+                            {
+                                let new_scan = if layer_index == target_schema.arity() - 1 {
+                                    RangedColumnScanEnum::MinusScan(MinusScan::new(
+                                        left_scan_enum,
+                                        right_scan_enum,
+                                    ))
+                                } else {
+                                    RangedColumnScanEnum::DifferenceScan(DifferenceScan::new(
+                                        left_scan_enum,
+                                        right_scan_enum,
+                                    ))
+                                };
 
-                            difference_scans.push(UnsafeCell::new(RangedColumnScanT::U64(
-                                RangedColumnScanCell::new(new_scan),
-                            )));
+                                difference_scans.push(UnsafeCell::new(
+                                    RangedColumnScanT::$variant(RangedColumnScanCell::new(
+                                        new_scan,
+                                    )),
+                                ));
+                            } else {
+                                panic!("Expected a column scan of type {}", stringify!($variant));
+                            }
                         } else {
-                            panic!("type should match here")
+                            panic!("Expected a column scan of type {}", stringify!($variant));
                         }
-                    } else {
-                        panic!("type should match here")
                     }
-                },
-                DataTypeName::Float => {}
-                DataTypeName::Double => {}
+                };
+            }
+
+            match target_schema.get_type(layer_index) {
+                DataTypeName::U64 => init_scans_for_datatype!(U64),
+                DataTypeName::Float => init_scans_for_datatype!(Float),
+                DataTypeName::Double => init_scans_for_datatype!(Double),
             };
         }
 
@@ -112,18 +120,18 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
         self.layer_left = Some(next_layer);
 
         if next_layer == self.get_schema().arity() - 1 {
-            unsafe {
-                match self.get_schema().get_type(next_layer) {
-                    DataTypeName::U64 => {
-                        if let RangedColumnScanT::U64(left_scan_enum) =
+            macro_rules! down_for_datatype {
+                ($variant:ident) => {
+                    unsafe {
+                        if let RangedColumnScanT::$variant(left_scan_enum) =
                             &*self.trie_left.get_scan(next_layer).unwrap().get()
                         {
-                            if let RangedColumnScanT::U64(right_scan_enum) =
+                            if let RangedColumnScanT::$variant(right_scan_enum) =
                                 &*self.trie_right.get_scan(next_layer).unwrap().get()
                             {
                                 if self.layer_left == self.layer_right {
                                     self.difference_scans[next_layer] = UnsafeCell::new(
-                                        RangedColumnScanT::U64(RangedColumnScanCell::new(
+                                        RangedColumnScanT::$variant(RangedColumnScanCell::new(
                                             RangedColumnScanEnum::MinusScan(MinusScan::new(
                                                 left_scan_enum,
                                                 right_scan_enum,
@@ -131,26 +139,24 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
                                         )),
                                     );
                                 } else {
-                                    // TODO: Difference Scan is not needed
-                                    // Instead this should essentially be just lest_scan
                                     self.difference_scans[next_layer] = UnsafeCell::new(
-                                        RangedColumnScanT::U64(RangedColumnScanCell::new(
-                                            RangedColumnScanEnum::DifferenceScan(
-                                                DifferenceScan::new(
-                                                    left_scan_enum,
-                                                    right_scan_enum,
-                                                ),
-                                            ),
+                                        RangedColumnScanT::$variant(RangedColumnScanCell::new(
+                                            RangedColumnScanEnum::PassScan(PassScan::new(
+                                                left_scan_enum,
+                                            )),
                                         )),
                                     );
                                 }
                             }
                         }
                     }
-                    // TODO: Other types
-                    DataTypeName::Float => {}
-                    DataTypeName::Double => {}
-                }
+                };
+            }
+
+            match self.get_schema().get_type(next_layer) {
+                DataTypeName::U64 => down_for_datatype!(U64),
+                DataTypeName::Float => down_for_datatype!(Float),
+                DataTypeName::Double => down_for_datatype!(Double),
             }
         } else {
             self.difference_scans[next_layer].get_mut().reset();

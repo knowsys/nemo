@@ -2,7 +2,7 @@ use super::{TableSchema, TrieScan, TrieScanEnum};
 use crate::physical::columns::{
     ColumnScan, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT, UnionScan,
 };
-use crate::physical::datatypes::DataTypeName;
+use crate::physical::datatypes::{DataTypeName, Double, Float};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
@@ -27,19 +27,20 @@ impl<'a> TrieUnion<'a> {
             Vec::<UnsafeCell<RangedColumnScanT<'a>>>::with_capacity(target_schema.arity());
 
         for layer_index in 0..target_schema.arity() {
-            match target_schema.get_type(layer_index) {
-                DataTypeName::U64 => {
-                    let mut column_scans =
-                        Vec::<&'a RangedColumnScanCell<u64>>::with_capacity(target_schema.arity());
+            macro_rules! init_scans_for_datatype {
+                ($variant:ident, $type:ty) => {{
+                    let mut column_scans = Vec::<&'a RangedColumnScanCell<$type>>::with_capacity(
+                        target_schema.arity(),
+                    );
 
                     for scan in &trie_scans {
                         unsafe {
-                            if let RangedColumnScanT::U64(scan_enum) =
+                            if let RangedColumnScanT::$variant(scan_enum) =
                                 &*scan.get_scan(layer_index).unwrap().get()
                             {
                                 column_scans.push(scan_enum);
                             } else {
-                                panic!("type should match here")
+                                panic!("Expected a column scan of type {}", stringify!($type));
                             }
                         }
                     }
@@ -47,12 +48,16 @@ impl<'a> TrieUnion<'a> {
                     let new_union_scan =
                         RangedColumnScanEnum::UnionScan(UnionScan::new(column_scans));
 
-                    union_scans.push(UnsafeCell::new(RangedColumnScanT::U64(
+                    union_scans.push(UnsafeCell::new(RangedColumnScanT::$variant(
                         RangedColumnScanCell::new(new_union_scan),
                     )));
-                }
-                DataTypeName::Float => {}
-                DataTypeName::Double => {}
+                }};
+            }
+
+            match target_schema.get_type(layer_index) {
+                DataTypeName::U64 => init_scans_for_datatype!(U64, u64),
+                DataTypeName::Float => init_scans_for_datatype!(Float, Float),
+                DataTypeName::Double => init_scans_for_datatype!(Double, Double),
             };
         }
 

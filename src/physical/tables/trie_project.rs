@@ -3,7 +3,7 @@ use crate::physical::columns::{
     Column, ColumnScan, IntervalColumn, IntervalColumnEnum, IntervalColumnT, RangedColumnScan,
     RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT, ReorderScan,
 };
-use crate::physical::datatypes::{Field, FloorToUsize};
+use crate::physical::datatypes::{DataTypeName, Field, FloorToUsize};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
@@ -19,15 +19,23 @@ fn expand_range(column: &IntervalColumnT, range: Range<usize>) -> Range<usize> {
     start..end
 }
 
-fn shrink_position<T>(column: &IntervalColumnEnum<T>, pos: usize) -> usize
-where
-    T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
-{
-    let mut column_iter = column.get_int_column().iter();
-    column_iter.seek(pos + 1);
-    let block_position = column_iter.pos();
+fn shrink_position(column: &IntervalColumnT, pos: usize) -> usize {
+    fn shrink_position_t<T>(column: &IntervalColumnEnum<T>, pos: usize) -> usize
+    where
+        T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    {
+        let mut column_iter = column.get_int_column().iter();
+        column_iter.seek(pos + 1);
+        let block_position = column_iter.pos();
 
-    block_position.map_or(column.get_int_column().len() - 1, |i| i - 1)
+        block_position.map_or(column.get_int_column().len() - 1, |i| i - 1)
+    }
+
+    match column {
+        IntervalColumnT::U64(col) => shrink_position_t(col, pos),
+        IntervalColumnT::Float(col) => shrink_position_t(col, pos),
+        IntervalColumnT::Double(col) => shrink_position_t(col, pos),
+    }
 }
 
 /// Iterator which can reorder and project away colums of a trie
@@ -50,23 +58,36 @@ impl<'a> TrieProject<'a> {
 
         let mut target_attributes = Vec::<TrieSchemaEntry>::with_capacity(picked_columns.len());
         for &col_index in &picked_columns {
+            let current_label = input_schema.get_label(col_index);
+            let current_datatype = input_schema.get_type(col_index);
+
             target_attributes.push(TrieSchemaEntry {
-                label: input_schema.get_label(col_index),
-                datatype: input_schema.get_type(col_index),
+                label: current_label,
+                datatype: current_datatype,
             });
 
-            // TODO: Handle other types
-            let current_column = if let IntervalColumnT::U64(col) = trie.get_column(col_index) {
-                col
-            } else {
-                panic!("Do other cases later")
-            };
+            macro_rules! init_scans_for_datatype {
+                ($variant:ident) => {{
+                    let current_column =
+                        if let IntervalColumnT::$variant(col) = trie.get_column(col_index) {
+                            col
+                        } else {
+                            panic!("Do other cases later")
+                        };
 
-            reorder_scans.push(UnsafeCell::new(RangedColumnScanT::U64(
-                RangedColumnScanCell::new(RangedColumnScanEnum::ReorderScan(ReorderScan::new(
-                    current_column.get_data_column(),
-                ))),
-            )));
+                    reorder_scans.push(UnsafeCell::new(RangedColumnScanT::$variant(
+                        RangedColumnScanCell::new(RangedColumnScanEnum::ReorderScan(
+                            ReorderScan::new(current_column.get_data_column()),
+                        )),
+                    )));
+                }};
+            }
+
+            match current_datatype {
+                DataTypeName::U64 => init_scans_for_datatype!(U64),
+                DataTypeName::Float => init_scans_for_datatype!(Float),
+                DataTypeName::Double => init_scans_for_datatype!(Double),
+            }
         }
         let target_schema = TrieSchema::new(target_attributes);
 
@@ -97,74 +118,77 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
 
         debug_assert!(next_layer < self.target_schema.arity());
 
-        // TODO: Update for other types
-        let next_column = if let IntervalColumnT::U64(col) =
-            self.trie.get_column(self.picked_columns[next_layer])
-        {
-            col
-        } else {
-            panic!("Do other cases later")
-        };
+        let next_column = self.trie.get_column(self.picked_columns[next_layer]);
 
-        let next_ranges = if self.current_layer.is_none() {
-            vec![0..next_column.len()]
-        } else {
-            let current_cursors = self.reorder_scans[self.current_layer.unwrap()]
-                .get_mut()
-                .pos_multiple()
-                .expect("Should not call down when not on an element");
+        macro_rules! down_for_datatype {
+            ($variant:ident) => {{
+                let next_column = if let IntervalColumnT::U64(col) = next_column
+                {
+                    col
+                } else {
+                    panic!("Do other cases later")
+                };
 
-            if self.picked_columns[self.current_layer.unwrap()] < self.picked_columns[next_layer] {
-                let mut ranges = Vec::<Range<usize>>::new();
-                for current_cursor in current_cursors {
-                    let mut range = current_cursor..(current_cursor + 1);
+                let next_ranges = if self.current_layer.is_none() {
+                    vec![0..next_column.len()]
+                } else {
+                    let current_cursors = self.reorder_scans[self.current_layer.unwrap()]
+                        .get_mut()
+                        .pos_multiple()
+                        .expect("Should not call down when not on an element");
 
-                    for expand_index in (self.picked_columns[self.current_layer.unwrap()] + 1)
-                        ..=self.picked_columns[next_layer]
-                    {
-                        range = expand_range(self.trie.get_column(expand_index), range);
-                    }
+                    if self.picked_columns[self.current_layer.unwrap()] < self.picked_columns[next_layer] {
+                        let mut ranges = Vec::<Range<usize>>::new();
+                        for current_cursor in current_cursors {
+                            let mut range = current_cursor..(current_cursor + 1);
 
-                    ranges.push(range);
-                }
+                            for expand_index in (self.picked_columns[self.current_layer.unwrap()] + 1)
+                                ..=self.picked_columns[next_layer]
+                            {
+                                range = expand_range(self.trie.get_column(expand_index), range);
+                            }
 
-                ranges
-            } else {
-                let mut ranges = Vec::<Range<usize>>::new();
-                for current_cursor in current_cursors {
-                    let mut value = current_cursor;
-                    for shrink_index in (self.picked_columns[next_layer] + 1
-                        ..=(self.picked_columns[self.current_layer.unwrap()]))
-                        .rev()
-                    {
-                        let shrink_column =
-                            if let IntervalColumnT::U64(col) = self.trie.get_column(shrink_index) {
-                                col
-                            } else {
-                                panic!("Do other cases later")
-                            };
-
-                        value = shrink_position(shrink_column, value);
-                    }
-
-                    // This assumes that current_cursors is sorted
-                    // which should be the case since the sort method used in permutator is stable
-                    if let Some(last_range) = ranges.last() {
-                        if value != last_range.start {
-                            ranges.push(value..(value + 1));
+                            ranges.push(range);
                         }
+
+                        ranges
                     } else {
-                        ranges.push(value..(value + 1));
+                        let mut ranges = Vec::<Range<usize>>::new();
+                        for current_cursor in current_cursors {
+                            let mut value = current_cursor;
+                            for shrink_index in (self.picked_columns[next_layer] + 1
+                                ..=(self.picked_columns[self.current_layer.unwrap()]))
+                                .rev()
+                            {
+                                value = shrink_position(self.trie.get_column(shrink_index), value);
+                            }
+
+                            // This assumes that current_cursors is sorted
+                            // which should be the case since the sort method used in permutator is stable
+                            if let Some(last_range) = ranges.last() {
+                                if value != last_range.start {
+                                    ranges.push(value..(value + 1));
+                                }
+                            } else {
+                                ranges.push(value..(value + 1));
+                            }
+                        }
+
+                        ranges
                     }
-                }
+                };
 
-                ranges
-            }
-        };
+                self.reorder_scans[next_layer]
+                    .get_mut()
+                    .narrow_ranges(next_ranges);
+            }};
+        }
 
-        self.reorder_scans[next_layer]
-            .get_mut()
-            .narrow_ranges(next_ranges);
+        match next_column {
+            IntervalColumnT::U64(_) => down_for_datatype!(U64),
+            IntervalColumnT::Float(_) => down_for_datatype!(Float),
+            IntervalColumnT::Double(_) => down_for_datatype!(Double),
+        }
 
         self.current_layer = Some(next_layer);
     }
