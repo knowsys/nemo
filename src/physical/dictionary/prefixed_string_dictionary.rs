@@ -249,22 +249,41 @@ impl Default for PrefixedStringDictionary {
 
 impl Dictionary for PrefixedStringDictionary {
     fn add(&mut self, entry: String) -> usize {
+        log::trace!("add {entry:?} to {self:?}");
         let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).into_iter().collect();
+        log::trace!("prefixes: {prefixes:?}");
         let (real_prefixes, real_entry) = prefixes.split_at(prefixes.len() - 1);
+        log::trace!("reals: {real_prefixes:?}, {real_entry:?}");
         let (mut cur_node, remaining_prefixes) =
             TrieNode::find_last_match(self.store.to_owned(), real_prefixes);
+        log::trace!("cur_node: {cur_node:?}, remaining: {remaining_prefixes:?}");
         for element in remaining_prefixes {
             let new_node = Rc::new(RefCell::new(TrieNode::create_node(
                 Rc::clone(&cur_node),
                 element.to_string(),
             )));
+            log::trace!("{element:?} ({remaining_prefixes:?}): new_node: {new_node:?}");
             cur_node
                 .as_ref()
                 .borrow_mut()
                 .add_node(Rc::clone(&new_node));
             cur_node = Rc::clone(&new_node);
+            log::trace!("{element:?} ({remaining_prefixes:?}): cur_node: {cur_node:?}");
         }
         let entry_string = Rc::new(real_entry[0].to_string());
+        log::trace!("entry_string: {entry_string:?}");
+        log::trace!("mapping: {:?}", self.mapping);
+        log::trace!(
+            "pair: {:?}",
+            TrieNodeStringPair(Rc::clone(&cur_node), Rc::clone(&entry_string))
+        );
+        log::trace!(
+            "entry: {:?}",
+            self.mapping.entry(TrieNodeStringPair(
+                Rc::clone(&cur_node),
+                Rc::clone(&entry_string),
+            )),
+        );
         *self
             .mapping
             .entry(TrieNodeStringPair(
@@ -277,6 +296,7 @@ impl Dictionary for PrefixedStringDictionary {
                     Rc::clone(&cur_node),
                     Rc::clone(&entry_string),
                 ));
+                log::trace!("ordering: {:?}, value: {value:?}", self.ordering);
                 value
             })
     }
@@ -349,6 +369,8 @@ mod test {
     use crate::physical::dictionary::Dictionary;
 
     use super::PrefixedStringDictionary;
+
+    use test_log::test;
 
     fn create_dict() -> PrefixedStringDictionary {
         let mut dict = PrefixedStringDictionary::default();
