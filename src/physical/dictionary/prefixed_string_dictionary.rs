@@ -88,7 +88,49 @@ impl Hash for TrieNode {
 
 impl PartialEq for TrieNode {
     fn eq(&self, other: &Self) -> bool {
-        self.prefix().eq(other.prefix())
+        match self {
+            TrieNode::Root {
+                prefix: left,
+                children: _,
+            } => match other {
+                TrieNode::Root {
+                    prefix: right,
+                    children: _,
+                } => left.eq(right),
+                TrieNode::Node {
+                    prefix: _,
+                    children: _,
+                    parent: _,
+                } => false,
+            },
+            TrieNode::Node {
+                prefix: left,
+                children: _,
+                parent: parent_left,
+            } => match other {
+                TrieNode::Root {
+                    prefix: _,
+                    children: _,
+                } => false,
+                TrieNode::Node {
+                    prefix: right,
+                    children: _,
+                    parent: parent_right,
+                } => {
+                    left.eq(right)
+                        && parent_left
+                            .upgrade()
+                            .expect("should be valid")
+                            .as_ref()
+                            .borrow()
+                            .eq(&*parent_right
+                                .upgrade()
+                                .expect("should be valid")
+                                .as_ref()
+                                .borrow())
+                }
+            },
+        }
     }
 }
 
