@@ -2,3 +2,5 @@
 
 pub mod permutator;
 pub use permutator::Permutator;
+
+pub mod model;
