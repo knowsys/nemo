@@ -3,6 +3,7 @@
 use crate::physical::datatypes::{Field, FloorToUsize};
 use std::cmp::Ordering;
 use std::fmt::Debug;
+use std::ops::Range;
 
 use crate::{
     error::Error,
@@ -41,17 +42,27 @@ impl Permutator {
         }
     }
 
+    /// TODO: Test if this works
     /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
-    pub fn sort_from_column<T>(data: &ColumnEnum<T>) -> Permutator
+    pub fn sort_from_column_range<T>(data: &ColumnEnum<T>, ranges: &[Range<usize>]) -> Permutator
     where
         T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
     {
-        let mut vec = (0..data.len()).collect::<Vec<usize>>();
+        let mut vec = ranges.iter().flat_map(|r| r.clone()).collect::<Vec<_>>();
+
         vec.sort_by_key(|&i| data.get(i));
         Permutator {
             sort_vec: vec,
             offset: 0,
         }
+    }
+
+    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
+    pub fn sort_from_column<T>(data: &ColumnEnum<T>) -> Permutator
+    where
+        T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
+    {
+        Permutator::sort_from_column_range(data, &[(0..data.len())])
     }
 
     /// Creates a [`Permutator`] based on a slice of [`ColumnT`][crate::physical::columns::column::ColumnT] elements.
@@ -143,6 +154,11 @@ impl Permutator {
             Ok(_) => Ordering::Equal,
             Err(ord) => ord,
         }
+    }
+
+    /// Returns the vector which contains the sorted indices
+    pub fn get_sort_vec(&self) -> &Vec<usize> {
+        &self.sort_vec
     }
 
     /// Returns the value at a given index or [`None`] if not applicable

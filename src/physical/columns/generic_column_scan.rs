@@ -1,4 +1,4 @@
-use super::{Column, ColumnScan, GenericIntervalColumnEnum, RangedColumnScan, VectorColumn};
+use super::{Column, ColumnScan, GenericIntervalColumn, RangedColumnScan, VectorColumn};
 use crate::generate_forwarder;
 use crate::physical::datatypes::{Field, FloorToUsize};
 use std::marker::PhantomData;
@@ -22,7 +22,7 @@ where
     /// Case Scan with VectorColumn
     VectorColumn(GenericColumnScan<'a, T, VectorColumn<T>>),
     /// Case Scan with GenericIntervalColumn
-    GenericIntervalColumn(GenericColumnScan<'a, T, GenericIntervalColumnEnum<'a, T>>),
+    GenericIntervalColumn(GenericColumnScan<'a, T, GenericIntervalColumn<T>>),
 }
 
 generate_forwarder!(forward_to_column_scan;
@@ -38,12 +38,12 @@ where
     }
 }
 
-impl<'a, T> From<GenericColumnScan<'a, T, GenericIntervalColumnEnum<'a, T>>>
+impl<'a, T> From<GenericColumnScan<'a, T, GenericIntervalColumn<T>>>
     for GenericColumnScanEnum<'a, T>
 where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
 {
-    fn from(cs: GenericColumnScan<'a, T, GenericIntervalColumnEnum<'a, T>>) -> Self {
+    fn from(cs: GenericColumnScan<'a, T, GenericIntervalColumn<T>>) -> Self {
         Self::GenericIntervalColumn(cs)
     }
 }

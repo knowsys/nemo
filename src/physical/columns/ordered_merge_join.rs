@@ -74,6 +74,7 @@ where
         if self.column_scans.len() > 1 {
             self.next_loop()
         } else {
+            self.current = self.active_max;
             self.active_max
         }
     }
@@ -95,6 +96,7 @@ where
         if self.column_scans.len() > 1 {
             self.next_loop()
         } else {
+            self.current = self.active_max;
             self.active_max
         }
     }

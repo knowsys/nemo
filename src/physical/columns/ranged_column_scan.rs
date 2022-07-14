@@ -1,4 +1,8 @@
-use super::{column_scan::ColumnScan, GenericColumnScanEnum, OrderedMergeJoin, RleColumnScan};
+use super::{
+    column_scan::ColumnScan, DifferenceScan, EqualColumnScan, EqualValueScan,
+    GenericColumnScanEnum, MinusScan, OrderedMergeJoin, PassScan, ReorderScan, RleColumnScan,
+    UnionScan,
+};
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize},
@@ -27,6 +31,20 @@ where
     RleColumnScan(RleColumnScan<'a, T>),
     /// Case OrderedMergeJoin
     OrderedMergeJoin(OrderedMergeJoin<'a, T>),
+    /// Case ReorderScan
+    ReorderScan(ReorderScan<'a, T>),
+    /// Case EqualColumnScan
+    EqualColumnScan(EqualColumnScan<'a, T>),
+    /// Case EqualValueScan
+    EqualValueScan(EqualValueScan<'a, T>),
+    /// Case OrderedMergeJoin
+    PassScan(PassScan<'a, T>),
+    /// Case DifferenceScan
+    DifferenceScan(DifferenceScan<'a, T>),
+    /// Case MinusScan
+    MinusScan(MinusScan<'a, T>),
+    /// Case UnionScan
+    UnionScan(UnionScan<'a, T>),
 }
 
 impl<'a, T> From<GenericColumnScanEnum<'a, T>> for RangedColumnScanEnum<'a, T>
@@ -56,10 +74,135 @@ where
     }
 }
 
+impl<'a, T> From<ReorderScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: ReorderScan<'a, T>) -> Self {
+        Self::ReorderScan(cs)
+    }
+}
+
+impl<'a, T> From<EqualColumnScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: EqualColumnScan<'a, T>) -> Self {
+        Self::EqualColumnScan(cs)
+    }
+}
+
+impl<'a, T> From<EqualValueScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: EqualValueScan<'a, T>) -> Self {
+        Self::EqualValueScan(cs)
+    }
+}
+
+impl<'a, T> From<PassScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: PassScan<'a, T>) -> Self {
+        Self::PassScan(cs)
+    }
+}
+
+impl<'a, T> From<MinusScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: MinusScan<'a, T>) -> Self {
+        Self::MinusScan(cs)
+    }
+}
+
+impl<'a, T> From<DifferenceScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: DifferenceScan<'a, T>) -> Self {
+        Self::DifferenceScan(cs)
+    }
+}
+
+impl<'a, T> From<UnionScan<'a, T>> for RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    fn from(cs: UnionScan<'a, T>) -> Self {
+        Self::UnionScan(cs)
+    }
+}
+
 generate_forwarder!(forward_to_column_scan;
                     GenericColumnScan,
                     RleColumnScan,
-                    OrderedMergeJoin);
+                    OrderedMergeJoin,
+                    ReorderScan, 
+                    EqualColumnScan, 
+                    EqualValueScan,
+                    PassScan,
+                    DifferenceScan,
+                    MinusScan,
+                    UnionScan);
+
+impl<'a, T> RangedColumnScanEnum<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+{
+    /// Return all positions in the underlying column the cursor is currently at
+    pub fn pos_multiple(&self) -> Option<Vec<usize>> {
+        match self {
+            Self::ReorderScan(cs) => cs.pos_multiple(),
+            _ => {
+                unimplemented!("pos_multiple is only available for ReorderScan")
+            }
+        }
+    }
+
+    /// Set iterator to a set of possibly disjoint ranged
+    pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
+        match self {
+            Self::ReorderScan(cs) => cs.narrow_ranges(intervals),
+            _ => {
+                unimplemented!("narrow_ranges is only available for ReorderScan")
+            }
+        }
+    }
+
+    /// For DifferenceScan, returns whether its scans point to the same value
+    pub fn is_equal(&self) -> bool {
+        match self {
+            Self::DifferenceScan(cs) => cs.is_equal(),
+            _ => unimplemented!("is_equal is only available for DifferenceScan"),
+        }
+    }
+
+    /// Assumes that column scan is a union scan
+    /// and returns a vector containing the positions of the scans with the smallest values
+    pub fn get_smallest_scans(&self) -> &Vec<usize> {
+        match self {
+            Self::UnionScan(cs) => cs.get_smallest_scans(),
+            _ => {
+                unimplemented!("get_smallest_scans is only available for union_scans")
+            }
+        }
+    }
+
+    /// Assumes that column scan is a union scan
+    /// Set a vector that indicates which scans are currently active and should be considered
+    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
+        match self {
+            Self::UnionScan(cs) => cs.set_active_scans(active_scans),
+            _ => {
+                unimplemented!("set_active_scans is only available for union_scans")
+            }
+        }
+    }
+}
 
 impl<'a, T> Iterator for RangedColumnScanEnum<'a, T>
 where
@@ -165,6 +308,31 @@ where
     pub fn narrow(&self, interval: Range<usize>) {
         unsafe { &mut *self.0.get() }.narrow(interval)
     }
+
+    /// Forward `pos_multiple` to the underlying [`RangedColumnScanEnum`].
+    pub fn pos_multiple(&self) -> Option<Vec<usize>> {
+        unsafe { &mut *self.0.get() }.pos_multiple()
+    }
+
+    /// Forward `narrow_ranges` to the underlying [`RangedColumnScanEnum`].
+    pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
+        unsafe { &mut *self.0.get() }.narrow_ranges(intervals)
+    }
+
+    /// Forward `is_equal` to the underlying [`RangedColumnScanEnum`].
+    pub fn is_equal(&self) -> bool {
+        unsafe { &mut *self.0.get() }.is_equal()
+    }
+
+    /// Forward `get_smallest_scans` to the underlying [`RangedColumnScanEnum`].
+    pub fn get_smallest_scans(&self) -> &Vec<usize> {
+        unsafe { &mut *self.0.get() }.get_smallest_scans()
+    }
+
+    /// Forward `get_smallest_scans` to the underlying [`RangedColumnScanEnum`].
+    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
+        unsafe { &mut *self.0.get() }.set_active_scans(active_scans);
+    }
 }
 
 impl<'a, S, T> From<S> for RangedColumnScanCell<'a, T>
@@ -189,6 +357,34 @@ pub enum RangedColumnScanT<'a> {
 }
 
 generate_datatype_forwarder!(forward_to_ranged_column_scan_cell);
+impl<'a> RangedColumnScanT<'a> {
+    /// Return all positions in the underlying column the cursor is currently at
+    pub fn pos_multiple(&self) -> Option<Vec<usize>> {
+        forward_to_ranged_column_scan_cell!(self, pos_multiple)
+    }
+
+    /// Set iterator to a set of possibly disjoint ranged
+    pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
+        forward_to_ranged_column_scan_cell!(self, narrow_ranges(intervals))
+    }
+
+    /// For DifferenceScan, returns whether its scans point to the same value
+    pub fn is_equal(&self) -> bool {
+        forward_to_ranged_column_scan_cell!(self, is_equal)
+    }
+
+    /// Assumes that column scan is a union scan
+    /// and returns a vector containing the positions of the scans with the smallest values
+    pub fn get_smallest_scans(&self) -> &Vec<usize> {
+        forward_to_ranged_column_scan_cell!(self, get_smallest_scans)
+    }
+
+    /// Assumes that column scan is a union scan
+    /// Set a vector that indicates which scans are currently active and should be considered
+    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
+        forward_to_ranged_column_scan_cell!(self, set_active_scans(active_scans))
+    }
+}
 
 impl<'a> Iterator for RangedColumnScanT<'a> {
     type Item = DataValueT;

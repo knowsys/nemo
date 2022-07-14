@@ -22,6 +22,34 @@ pub use trie::Trie;
 pub use trie::TrieSchema;
 pub use trie::TrieSchemaEntry;
 
-/// MOdule for defining [`TrieScan`]
+/// Module for defining [`TrieScan`]
 pub mod trie_scan;
+pub use trie_scan::IntervalTrieScan;
 pub use trie_scan::TrieScan;
+pub use trie_scan::TrieScanEnum;
+
+/// Module for defining [`TrieProject`]
+pub mod trie_project;
+pub use trie_project::TrieProject;
+
+/// Module for materializing tries
+pub mod materialize;
+pub use materialize::materialize;
+
+/// Module for defining [`TrieSelect`]
+pub mod trie_select;
+pub use trie_select::TrieSelectEqual;
+pub use trie_select::TrieSelectValue;
+pub use trie_select::ValueAssignment;
+
+/// Module for defining [`TrieDifference`]
+pub mod trie_difference;
+pub use trie_difference::TrieDifference;
+
+/// Module for defining [`TrieUnion`]
+pub mod trie_union;
+pub use trie_union::TrieUnion;
+
+/// Module for defining [`TrieJoin`]
+pub mod trie_join;
+pub use trie_join::TrieJoin;
