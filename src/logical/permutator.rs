@@ -48,10 +48,11 @@ impl Permutator {
     where
         T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
     {
-        let mut vec = Vec::<usize>::new();
-        for range in ranges {
-            vec.append(&mut range.clone().collect::<Vec<usize>>());
-        }
+        let mut vec = ranges
+            .iter()
+            .flat_map(|r| r.clone().into_iter())
+            .collect::<Vec<_>>();
+
         vec.sort_by_key(|&i| data.get(i));
         Permutator {
             sort_vec: vec,
