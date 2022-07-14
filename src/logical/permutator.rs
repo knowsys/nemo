@@ -44,7 +44,7 @@ impl Permutator {
 
     /// TODO: Test if this works
     /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
-    pub fn sort_from_column_range<T>(data: &ColumnEnum<T>, ranges: &Vec<Range<usize>>) -> Permutator
+    pub fn sort_from_column_range<T>(data: &ColumnEnum<T>, ranges: &[Range<usize>]) -> Permutator
     where
         T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
     {
