@@ -243,7 +243,6 @@ where
         self.finalize_raw()
     }
 
-    // TODO: Implement this
     fn count(&self) -> usize {
         self.count
     }
