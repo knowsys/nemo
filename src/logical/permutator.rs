@@ -48,10 +48,7 @@ impl Permutator {
     where
         T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
     {
-        let mut vec = ranges
-            .iter()
-            .flat_map(|r| r.clone().into_iter())
-            .collect::<Vec<_>>();
+        let mut vec = ranges.iter().flat_map(|r| r.clone()).collect::<Vec<_>>();
 
         vec.sort_by_key(|&i| data.get(i));
         Permutator {
@@ -65,7 +62,7 @@ impl Permutator {
     where
         T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
     {
-        Permutator::sort_from_column_range(data, &vec![(0..data.len())])
+        Permutator::sort_from_column_range(data, &[(0..data.len())])
     }
 
     /// Creates a [`Permutator`] based on a slice of [`ColumnT`][crate::physical::columns::column::ColumnT] elements.
