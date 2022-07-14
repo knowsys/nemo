@@ -6,7 +6,7 @@ use std::ops::Range;
 
 // TODO: Maybe this should only have Optional<Permutator>
 //       for cases where data happens to be sorted already
-/// Scan which reorders its underlying Column according to a permutator
+/// Scan which reorders its underlying [`ColumnEnum`] according to a permutator
 #[derive(Debug)]
 pub struct ReorderScan<'a, T> {
     column: &'a ColumnEnum<T>,

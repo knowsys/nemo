@@ -2,7 +2,7 @@ use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell};
 use crate::physical::datatypes::{Field, FloorToUsize};
 use std::{fmt::Debug, ops::Range};
 
-/// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
+/// Iterator which allows its sub iterator to only jump to the value pointed to by a reference iterator
 #[derive(Debug)]
 pub struct EqualColumnScan<'a, T>
 where
