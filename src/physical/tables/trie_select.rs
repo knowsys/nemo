@@ -1,7 +1,7 @@
 use super::{TableSchema, TrieScan, TrieScanEnum};
 use crate::physical::columns::{
-    EqualColumnScan, EqualValueScan, PassScan, RangedColumnScanCell, RangedColumnScanEnum,
-    RangedColumnScanT,
+    ColumnScan, EqualColumnScan, EqualValueScan, PassScan, RangedColumnScanCell,
+    RangedColumnScanEnum, RangedColumnScanT,
 };
 use crate::physical::datatypes::{DataTypeName, DataValueT};
 use std::cell::UnsafeCell;
@@ -115,6 +115,10 @@ impl<'a> TrieScan<'a> for TrieSelectEqual<'a> {
         debug_assert!(self.current_layer.unwrap() < self.get_schema().arity());
 
         self.base_trie.down();
+
+        self.select_scans[self.current_layer.unwrap()]
+            .get_mut()
+            .reset();
     }
 
     fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
@@ -240,6 +244,10 @@ impl<'a> TrieScan<'a> for TrieSelectValue<'a> {
         debug_assert!(self.current_layer.unwrap() < self.get_schema().arity());
 
         self.base_trie.down();
+
+        self.select_scans[self.current_layer.unwrap()]
+            .get_mut()
+            .reset();
     }
 
     fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
