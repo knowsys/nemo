@@ -40,15 +40,14 @@ where
         let reference_value = self.value;
         let next_value_opt = self.scan.seek(reference_value);
 
-        if let Some(next_value) = next_value_opt {
+        self.current_value = next_value_opt.and_then(|next_value| {
             if next_value == reference_value {
-                self.current_value = next_value_opt;
+                next_value_opt
             } else {
-                self.current_value = None;
+                None
             }
-        } else {
-            self.current_value = None;
-        }
+        });
+
         self.current_value
     }
 }
