@@ -220,34 +220,6 @@ impl Permutator {
             Ok(cb.finalize())
         }
     }
-
-    // Applies the permutator to a given column by using a provided [`ColumnBuilder`].
-    //
-    // *Returns* either a ['Column'] or an [Error][Error::Permutation]
-    // pub fn apply_column_2<'a, T>(
-    //     &self,
-    //     column: &ColumnEnum<T>,
-    //     cb: &mut AdaptiveColumnBuilder<T>,
-    // ) -> Result<(), Error>
-    // where
-    //     T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Default,
-    // {
-    //     if column.len() < (self.sort_vec.len() + self.offset) {
-    //         Err(Error::PermutationApplyWrongLen(
-    //             column.len(),
-    //             self.sort_vec.len(),
-    //             self.offset,
-    //         ))
-    //     } else {
-    //         let iter = (0..self.offset)
-    //             .chain(self.sort_vec.iter().map(|&idx| idx + self.offset))
-    //             .chain((self.offset + self.sort_vec.len())..column.len());
-    //         iter.for_each(|idx| {
-    //             cb.add(column.get(idx));
-    //         });
-    //         Ok(())
-    //     }
-    // }
 }
 
 #[cfg(test)]
