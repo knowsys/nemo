@@ -187,7 +187,7 @@ where
         match self {
             Self::UnionScan(cs) => cs.get_smallest_scans(),
             _ => {
-                panic!("get_smallest_scans is only available for union_scans")
+                unimplemented!("get_smallest_scans is only available for union_scans")
             }
         }
     }
@@ -198,7 +198,7 @@ where
         match self {
             Self::UnionScan(cs) => cs.set_active_scans(active_scans),
             _ => {
-                panic!("set_active_scans is only available for union_scans")
+                unimplemented!("set_active_scans is only available for union_scans")
             }
         }
     }
