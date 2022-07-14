@@ -150,12 +150,10 @@ mod test {
     use test_log::test;
 
     fn scan_seek(int_scan: &mut IntervalTrieScan, value: u64) -> Option<u64> {
-        unsafe {
-            if let RangedColumnScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
-                rcs.seek(value)
-            } else {
-                panic!("type should be u64");
-            }
+        if let RangedColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
+            rcs.seek(value)
+        } else {
+            panic!("type should be u64");
         }
     }
 
