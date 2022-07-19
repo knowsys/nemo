@@ -15,6 +15,14 @@ use super::{
 
 use macros::traced;
 
+pub fn is_absolute(the_iri: &str) -> bool {
+    iri(the_iri).is_ok()
+}
+
+pub fn is_relative(iri: &str) -> bool {
+    irelative_ref(iri).is_ok()
+}
+
 #[traced("parser::iri")]
 pub fn iri(input: &str) -> IntermediateResult<&str> {
     recognize(tuple((
