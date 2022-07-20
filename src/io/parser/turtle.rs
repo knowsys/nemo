@@ -1,4 +1,4 @@
-//! Parsers for productions from the SPARQL 1.1 grammar.
+//! Parsers for productions from the RDF 1.1 Turtle grammar.
 use std::num::ParseIntError;
 
 use macros::traced;
