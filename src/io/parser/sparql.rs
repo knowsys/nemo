@@ -1,4 +1,4 @@
-/// Parsers for productions from the SPARQL 1.1 grammar.
+//! Parsers for productions from the SPARQL 1.1 grammar.
 use macros::traced;
 use nom::{
     branch::alt,
@@ -6,7 +6,7 @@ use nom::{
     character::complete::satisfy,
     combinator::{opt, recognize},
     multi::{many0, many1, separated_list0},
-    sequence::{delimited, terminated, tuple},
+    sequence::{delimited, pair, terminated, tuple},
 };
 
 use super::{iri, rfc5234::digit, types::IntermediateResult};
@@ -20,6 +20,11 @@ use super::{iri, rfc5234::digit, types::IntermediateResult};
 #[traced("parser::sparql")]
 pub fn iriref(input: &str) -> IntermediateResult<&str> {
     delimited(tag("<"), iri::iri_reference, tag(">"))(input)
+}
+
+#[traced("parser::sparql")]
+pub fn iri(input: &str) -> IntermediateResult<&str> {
+    alt((iriref, prefixed_name))(input)
 }
 
 #[traced("parser::sparql")]
@@ -79,4 +84,19 @@ pub fn pn_prefix(input: &str) -> IntermediateResult<&str> {
         pn_chars_base,
         separated_list0(many1(tag(".")), many0(pn_chars)),
     )))(input)
+}
+
+#[traced("parser::sparql")]
+pub fn pname_local(input: &str) -> IntermediateResult<&str> {
+    todo!()
+}
+
+#[traced("parser::sparql")]
+pub fn pname_ln(input: &str) -> IntermediateResult<&str> {
+    recognize(pair(pname_ns, pname_ln))(input)
+}
+
+#[traced("parser::sparql")]
+pub fn prefixed_name(input: &str) -> IntermediateResult<&str> {
+    alt((pname_ln, pname_ns))(input)
 }
