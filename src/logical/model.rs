@@ -106,9 +106,10 @@ pub enum Statement {
 
 #[derive(Debug)]
 pub struct Program {
-    base: Option<usize>,
-    prefixes: HashMap<String, usize>,
-    rules: Vec<Rule>,
+    pub(crate) base: Option<usize>,
+    pub(crate) prefixes: HashMap<String, usize>,
+    pub(crate) rules: Vec<Rule>,
+    pub(crate) facts: Vec<Fact>,
 }
 
 #[derive(Debug)]
