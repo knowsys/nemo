@@ -71,10 +71,8 @@ pub fn irelative_ref(input: &str) -> IntermediateResult<&str> {
 
 #[traced("parser::iri")]
 fn irelative_part(input: &str) -> IntermediateResult<&str> {
-    recognize(tuple((
-        tag("//"),
-        iauthority,
-        ipath_abempty,
+    recognize(alt((
+        recognize(tuple((tag("//"), iauthority, ipath_abempty))),
         ipath_absolute,
         ipath_noscheme,
         ipath_empty,

@@ -3,18 +3,25 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
 use nom::{
+    branch::alt,
     bytes::complete::tag,
-    character::complete::{multispace0, multispace1},
-    sequence::{delimited, terminated, tuple},
+    character::complete::{alpha1, alphanumeric0, multispace0, multispace1},
+    combinator::{map, recognize},
+    multi::separated_list1,
+    sequence::{delimited, pair, preceded, terminated, tuple},
 };
 
-use crate::{logical::model::*, physical::dictionary::PrefixedStringDictionary};
+use crate::{
+    logical::model::*,
+    physical::dictionary::{Dictionary, PrefixedStringDictionary},
+};
 
 mod types;
 use types::IntermediateResult;
 mod iri;
 mod rfc5234;
 mod sparql;
+mod turtle;
 pub use types::ParseResult;
 
 /// A combinator to add tracing to the parser.
@@ -41,7 +48,7 @@ where
 #[derive(Debug, Default)]
 pub struct RuleParser<'a> {
     /// The [`PrefixedStringDictionary`] mapping term names to their internal handles.
-    terms: RefCell<PrefixedStringDictionary>,
+    names: RefCell<PrefixedStringDictionary>,
     /// The base IRI, if set.
     base: RefCell<Option<&'a str>>,
     /// A map from Prefixes to IRIs.
@@ -98,6 +105,74 @@ impl<'a> RuleParser<'a> {
         })
     }
 
+    /// Parses a data source declaration.
+    pub fn parse_source(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<DataSource> {
+        |_| todo!()
+    }
+
+    /// Parses a statement.
+    pub fn parse_statement(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Statement> {
+        alt((
+            map(self.parse_fact(), Statement::Fact),
+            map(self.parse_rule(), Statement::Rule),
+        ))
+    }
+
+    /// Parse a fact.
+    pub fn parse_fact(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Fact> {
+        move |input| {
+            let (remainder, (predicate_name, terms)) = terminated(
+                pair(
+                    self.parse_predicate_name(),
+                    delimited(
+                        tag("("),
+                        separated_list1(tag(","), self.parse_ground_term()),
+                        tag(")"),
+                    ),
+                ),
+                self.parse_dot(),
+            )(input)?;
+
+            log::trace!(target: "parser", "found fact {predicate_name}({terms:?})");
+            let predicate = Identifier(self.intern_term(predicate_name.to_owned()));
+
+            Ok((remainder, Fact(Atom { predicate, terms })))
+        }
+    }
+
+    /// Parse an IRI.
+    pub fn parse_iri(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
+        alt((sparql::iriref, sparql::prefixed_name))
+    }
+
+    /// Parse a predicate name.
+    pub fn parse_predicate_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
+        alt((self.parse_iri(), self.parse_pred_name()))
+    }
+
+    /// Parse a PREDNAME, i.e., a predicate name that is not an IRI.
+    pub fn parse_pred_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
+        recognize(pair(alpha1, alphanumeric0))
+    }
+
+    /// Parse a ground term.
+    pub fn parse_ground_term(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
+        alt((
+            map(self.parse_iri(), |iri| {
+                Term::Constant(Identifier(self.intern_term(iri.to_owned())))
+            }),
+            map(turtle::numeric_literal, Term::NumericLiteral),
+            map(turtle::rdf_literal, move |literal| {
+                Term::RdfLiteral(self.intern_rdf_literal(literal))
+            }),
+        ))
+    }
+
+    /// Parse a rule.
+    pub fn parse_rule(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Rule> {
+        |_| todo!()
+    }
+
     /// Parses a program in the rules language.
     pub fn parse_program(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Program> {
         |_| todo!()
@@ -137,6 +212,36 @@ impl<'a> RuleParser<'a> {
     #[must_use]
     pub fn unresolve_absolute_iri(iri: &str) -> &str {
         todo!()
+    }
+
+    /// Intern a term.
+    #[must_use]
+    pub fn intern_term(&self, term: String) -> usize {
+        log::trace!(target: "parser", r#"interning term "{term}""#);
+        let result = self.names.borrow_mut().add(term);
+        log::trace!(target: "parser", "interned as {result}");
+        result
+    }
+
+    /// Resolve an interned term.
+    #[must_use]
+    pub fn resolve_term(&self, term: usize) -> Option<String> {
+        self.names.borrow().entry(term)
+    }
+
+    /// Intern an [`RdfLiteral`].
+    #[must_use]
+    fn intern_rdf_literal(&self, literal: turtle::RdfLiteral) -> RdfLiteral {
+        match literal {
+            turtle::RdfLiteral::LanguageString { value, tag } => RdfLiteral::LanguageString {
+                value: self.intern_term(value.to_owned()),
+                tag: self.intern_term(tag.to_owned()),
+            },
+            turtle::RdfLiteral::DatatypeValue { value, datatype } => RdfLiteral::DatatypeValue {
+                value: self.intern_term(value.to_owned()),
+                datatype: self.intern_term(datatype.to_owned()),
+            },
+        }
     }
 }
 
@@ -182,5 +287,29 @@ mod test {
         assert!(parser.resolve_prefix(prefix).is_none());
         assert_parse!(parser.parse_prefix(), input.as_str(), prefix);
         assert_eq!(parser.resolve_prefix(prefix), Some(iri));
+    }
+
+    #[test]
+    fn fact() {
+        let parser = RuleParser::new();
+        let predicate = "p";
+        let value = "foo";
+        let datatype = "bar";
+        let p = Identifier(parser.intern_term(predicate.to_owned()));
+        let v = parser.intern_term(value.to_owned());
+        let t = parser.intern_term(datatype.to_owned());
+        let fact = format!(r#"{predicate}("{value}"^^<{datatype}>) ."#);
+
+        assert_parse!(
+            parser.parse_fact(),
+            &fact,
+            Fact(Atom {
+                predicate: p,
+                terms: vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                    value: v,
+                    datatype: t
+                })]
+            })
+        );
     }
 }

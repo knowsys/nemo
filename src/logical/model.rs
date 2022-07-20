@@ -2,7 +2,10 @@
 
 use std::{collections::HashMap, fmt::Display, path::Path};
 
-use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
+use crate::physical::{
+    datatypes::Double,
+    dictionary::{Dictionary, PrefixedStringDictionary},
+};
 
 /// An identifier for, e.g., a Term or a Predicate.
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
@@ -43,29 +46,62 @@ impl Display for PrintableIdentifier<'_> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
 pub enum Term {
     Constant(Identifier),
     Variable(Identifier),
     ExistentialVariable(Identifier),
+    NumericLiteral(NumericLiteral),
+    RdfLiteral(RdfLiteral),
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
+impl Term {
+    pub fn is_ground(&self) -> bool {
+        matches!(
+            self,
+            Self::Constant(_) | Self::NumericLiteral(_) | Self::RdfLiteral(_)
+        )
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
+pub enum NumericLiteral {
+    Integer(i64),
+    Decimal(i64, u64),
+    Double(Double),
+}
+
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
+pub enum RdfLiteral {
+    LanguageString { value: usize, tag: usize },
+    DatatypeValue { value: usize, datatype: usize },
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct Atom {
-    predicate: Identifier,
-    terms: Vec<Term>,
+    pub(crate) predicate: Identifier,
+    pub(crate) terms: Vec<Term>,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum Literal {
     Positive(Atom),
     Negative(Atom),
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct Rule {
-    head: Vec<Atom>,
-    body: Vec<Literal>,
+    pub(crate) head: Vec<Atom>,
+    pub(crate) body: Vec<Literal>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+pub struct Fact(pub(crate) Atom);
+
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+pub enum Statement {
+    Fact(Fact),
+    Rule(Rule),
 }
 
 #[derive(Debug)]
