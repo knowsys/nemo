@@ -6,8 +6,8 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric0, multispace0, multispace1},
-    combinator::{map, recognize},
-    multi::separated_list1,
+    combinator::{map, opt, recognize},
+    multi::{many0, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
 
@@ -66,6 +66,24 @@ impl<'a> RuleParser<'a> {
         traced("parse_dot", delimited(multispace0, tag("."), multispace0))
     }
 
+    /// Parse a comma, optionally surrounded by spaces.
+    fn parse_comma(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
+        traced("parse_comma", delimited(multispace0, tag(","), multispace0))
+    }
+
+    /// Parse a negation sign (`~`), optionally surrounded by spaces.
+    fn parse_not(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
+        traced("parse_not", delimited(multispace0, tag("~"), multispace0))
+    }
+
+    /// Parse an arrow (`:-`), optionally surrounded by spaces.
+    fn parse_arrow(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
+        traced(
+            "parse_arrow",
+            delimited(multispace0, tag(":-"), multispace0),
+        )
+    }
+
     /// Parse a base declaration.
     fn parse_base(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
         traced("parse_base", move |input| {
@@ -112,15 +130,18 @@ impl<'a> RuleParser<'a> {
 
     /// Parses a statement.
     pub fn parse_statement(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Statement> {
-        alt((
-            map(self.parse_fact(), Statement::Fact),
-            map(self.parse_rule(), Statement::Rule),
-        ))
+        traced(
+            "parse_statement",
+            alt((
+                map(self.parse_fact(), Statement::Fact),
+                map(self.parse_rule(), Statement::Rule),
+            )),
+        )
     }
 
     /// Parse a fact.
     pub fn parse_fact(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Fact> {
-        move |input| {
+        traced("parse_fact", move |input| {
             let (remainder, (predicate_name, terms)) = terminated(
                 pair(
                     self.parse_predicate_name(),
@@ -137,45 +158,170 @@ impl<'a> RuleParser<'a> {
             let predicate = Identifier(self.intern_term(predicate_name.to_owned()));
 
             Ok((remainder, Fact(Atom { predicate, terms })))
-        }
+        })
     }
 
     /// Parse an IRI.
     pub fn parse_iri(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
-        alt((sparql::iriref, sparql::prefixed_name))
+        traced("parse_iri", alt((sparql::iriref, sparql::prefixed_name)))
     }
 
     /// Parse a predicate name.
     pub fn parse_predicate_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
-        alt((self.parse_iri(), self.parse_pred_name()))
+        traced(
+            "parse_predicate_name",
+            alt((self.parse_iri(), self.parse_pred_name())),
+        )
     }
 
     /// Parse a PREDNAME, i.e., a predicate name that is not an IRI.
     pub fn parse_pred_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
-        recognize(pair(alpha1, alphanumeric0))
+        traced("parse_pred_name", recognize(pair(alpha1, alphanumeric0)))
     }
 
     /// Parse a ground term.
     pub fn parse_ground_term(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
-        alt((
-            map(self.parse_iri(), |iri| {
-                Term::Constant(Identifier(self.intern_term(iri.to_owned())))
-            }),
-            map(turtle::numeric_literal, Term::NumericLiteral),
-            map(turtle::rdf_literal, move |literal| {
-                Term::RdfLiteral(self.intern_rdf_literal(literal))
-            }),
-        ))
+        traced(
+            "parse_ground_term",
+            alt((
+                map(self.parse_iri(), |iri| {
+                    Term::Constant(Identifier(self.intern_term(iri.to_owned())))
+                }),
+                map(turtle::numeric_literal, Term::NumericLiteral),
+                map(turtle::rdf_literal, move |literal| {
+                    Term::RdfLiteral(self.intern_rdf_literal(literal))
+                }),
+            )),
+        )
     }
 
     /// Parse a rule.
     pub fn parse_rule(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Rule> {
-        |_| todo!()
+        traced("parse_rule", move |input| {
+            let (remainder, (head, body)) = pair(
+                terminated(
+                    separated_list1(self.parse_comma(), self.parse_atom()),
+                    self.parse_arrow(),
+                ),
+                terminated(
+                    separated_list1(self.parse_comma(), self.parse_literal()),
+                    self.parse_dot(),
+                ),
+            )(input)?;
+
+            // TODO: check constraints on variable usage.
+            log::trace!(target: "parser", r#"found rule "{head:?}" :- "{body:?}""#);
+
+            Ok((remainder, Rule { head, body }))
+        })
+    }
+
+    pub fn parse_atom(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Atom> {
+        traced("parse_atom", move |input| todo!())
+    }
+
+    pub fn parse_term(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
+        traced(
+            "parse_term",
+            alt((self.parse_ground_term(), self.parse_variable())),
+        )
+    }
+
+    pub fn parse_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
+        traced(
+            "parse_variable",
+            alt((
+                self.parse_universal_variable(),
+                self.parse_existential_variable(),
+            )),
+        )
+    }
+
+    pub fn parse_universal_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
+        traced(
+            "parse_universal_variable",
+            map(
+                preceded(tag("?"), self.parse_variable_name()),
+                Term::Variable,
+            ),
+        )
+    }
+
+    pub fn parse_existential_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
+        traced(
+            "parse_existential_variable",
+            map(
+                preceded(tag("!"), self.parse_variable_name()),
+                Term::ExistentialVariable,
+            ),
+        )
+    }
+
+    pub fn parse_variable_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
+        traced("parse_variable", move |input| {
+            let (remainder, name) = recognize(pair(alpha1, alphanumeric0))(input)?;
+
+            Ok((remainder, Identifier(self.intern_term(name.to_owned()))))
+        })
+    }
+
+    pub fn parse_literal(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Literal> {
+        traced(
+            "parse_literal",
+            alt((self.parse_positive_literal(), self.parse_negative_literal())),
+        )
+    }
+
+    pub fn parse_positive_literal(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Literal> {
+        traced(
+            "parse_positive_literal",
+            map(self.parse_atom(), Literal::Positive),
+        )
+    }
+
+    pub fn parse_negative_literal(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Literal> {
+        traced(
+            "parse_negative_literal",
+            map(
+                preceded(self.parse_not(), self.parse_atom()),
+                Literal::Negative,
+            ),
+        )
     }
 
     /// Parses a program in the rules language.
     pub fn parse_program(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Program> {
-        |_| todo!()
+        traced("parse_program", move |input| {
+            let (remainder, _) = opt(self.parse_base())(input)?;
+            let (remainder, _) = many0(self.parse_prefix())(remainder)?;
+            let (remainder, _) = many0(self.parse_source())(remainder)?;
+            let (remainder, statements) = many0(self.parse_statement())(remainder)?;
+
+            let base = self.base().map(|base| self.intern_term(base.to_owned()));
+            let prefixes = self
+                .prefixes
+                .borrow()
+                .iter()
+                .map(|(&prefix, &iri)| (prefix.to_owned(), self.intern_term(iri.to_owned())))
+                .collect();
+            let mut rules = Vec::new();
+            let mut facts = Vec::new();
+
+            statements.iter().for_each(|statement| match statement {
+                Statement::Fact(value) => facts.push(value.clone()),
+                Statement::Rule(value) => rules.push(value.clone()),
+            });
+
+            Ok((
+                remainder,
+                Program {
+                    base,
+                    prefixes,
+                    rules,
+                    facts,
+                },
+            ))
+        })
     }
 
     /// Return the declared base, if set, or None.
@@ -229,7 +375,7 @@ impl<'a> RuleParser<'a> {
         self.names.borrow().entry(term)
     }
 
-    /// Intern an [`RdfLiteral`].
+    /// Intern a [`turtle::RdfLiteral`].
     #[must_use]
     fn intern_rdf_literal(&self, literal: turtle::RdfLiteral) -> RdfLiteral {
         match literal {
