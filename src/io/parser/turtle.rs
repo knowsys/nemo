@@ -1,5 +1,5 @@
 //! Parsers for productions from the SPARQL 1.1 grammar.
-use std::num::{ParseFloatError, ParseIntError};
+use std::num::ParseIntError;
 
 use macros::traced;
 use nom::{
@@ -11,10 +11,7 @@ use nom::{
     sequence::{delimited, pair, preceded, tuple},
 };
 
-use crate::{
-    logical::model::{NumericLiteral, Term},
-    physical::datatypes::Double,
-};
+use crate::{logical::model::NumericLiteral, physical::datatypes::Double};
 
 use super::{sparql::iri, types::IntermediateResult};
 
