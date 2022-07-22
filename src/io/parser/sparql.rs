@@ -9,7 +9,7 @@ use nom::{
     sequence::{delimited, pair, terminated, tuple},
 };
 
-use super::{iri, rfc5234::digit, types::IntermediateResult};
+use super::{iri, rfc5234::digit, turtle::hex, types::IntermediateResult};
 
 /// Parse an IRI reference, i.e., an IRI (relative or absolute)
 /// wrapped in angle brackets. Roughly equivalent to the
@@ -87,13 +87,34 @@ pub fn pn_prefix(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::sparql")]
-pub fn pname_local(input: &str) -> IntermediateResult<&str> {
+pub fn percent(input: &str) -> IntermediateResult<&str> {
+    recognize(tuple((tag("%"), hex, hex)))(input)
+}
+
+#[traced("parser::sparql")]
+pub fn pn_local_esc(input: &str) -> IntermediateResult<&str> {
     todo!()
 }
 
 #[traced("parser::sparql")]
+pub fn plx(input: &str) -> IntermediateResult<&str> {
+    alt((percent, pn_local_esc))(input)
+}
+
+#[traced("parser::sparql")]
+pub fn pname_local(input: &str) -> IntermediateResult<&str> {
+    recognize(pair(
+        alt((pn_chars_u, tag(":"), digit, plx)),
+        opt(separated_list0(
+            many0(tag(".")),
+            many0(alt((pn_chars, tag(":"), plx))),
+        )),
+    ))(input)
+}
+
+#[traced("parser::sparql")]
 pub fn pname_ln(input: &str) -> IntermediateResult<&str> {
-    recognize(pair(pname_ns, pname_ln))(input)
+    recognize(pair(pname_ns, pname_local))(input)
 }
 
 #[traced("parser::sparql")]
