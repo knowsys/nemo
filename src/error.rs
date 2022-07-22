@@ -1,6 +1,6 @@
 //! Error-handling module for the crate
 
-use crate::physical::datatypes::float_is_nan::FloatIsNaN;
+use crate::{io::parser::ParseError, physical::datatypes::float_is_nan::FloatIsNaN};
 use thiserror::Error;
 
 /// Error-Collection for all the possible Errors occurring in this crate
@@ -28,4 +28,7 @@ pub enum Error {
     /// Error when converting integer type to floating point value
     #[error("Usize value `{0}` could not be converted to floating point value")]
     UsizeToFloatingPointValue(usize),
+    /// Parse errors
+    #[error(transparent)]
+    ParseError(#[from] ParseError),
 }
