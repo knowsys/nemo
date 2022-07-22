@@ -22,7 +22,7 @@ mod iri;
 mod rfc5234;
 mod sparql;
 mod turtle;
-pub use types::ParseResult;
+pub use types::{ParseError, ParseResult};
 
 /// A combinator to add tracing to the parser.
 /// [fun] is an identifier for the parser and [parser] is the actual parser.
@@ -109,17 +109,13 @@ impl<'a> RuleParser<'a> {
             )(input)?;
 
             log::debug!(target: "parser", r#"parse_prefix: got prefix "{prefix}" for iri "{iri}""#);
-            self.prefixes
-                .borrow_mut()
-                .entry(prefix)
-                .and_modify(|entry| {
-                    // TODO: should this throw a parse error instead?
-                    log::warn!(target: "parser", r#"redefining prefix "{prefix}" from "{entry}" to "{iri}""#);
-                    *entry = iri;
-                })
-                .or_insert(iri);
-
-            Ok((remainder, prefix))
+            if self.prefixes.borrow_mut().insert(prefix, iri).is_some() {
+                Err(nom::Err::Error(
+                    ParseError::RedeclaredPrefix(prefix.to_owned()).into(),
+                ))
+            } else {
+                Ok((remainder, prefix))
+            }
         })
     }
 
