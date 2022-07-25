@@ -3,10 +3,10 @@ use macros::traced;
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::satisfy,
+    character::complete::{one_of, satisfy},
     combinator::{opt, recognize},
     multi::{many0, many1, separated_list0},
-    sequence::{delimited, pair, terminated, tuple},
+    sequence::{delimited, pair, preceded, terminated, tuple},
 };
 
 use super::{iri, rfc5234::digit, turtle::hex, types::IntermediateResult};
@@ -93,7 +93,7 @@ pub fn percent(input: &str) -> IntermediateResult<&str> {
 
 #[traced("parser::sparql")]
 pub fn pn_local_esc(input: &str) -> IntermediateResult<&str> {
-    todo!()
+    recognize(preceded(tag(r#"\"#), one_of(r#"_~.-!$&'()*+,;=/?#@%"#)))(input)
 }
 
 #[traced("parser::sparql")]
