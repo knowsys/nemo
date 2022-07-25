@@ -153,7 +153,7 @@ impl<'a> RuleParser<'a> {
             log::trace!(target: "parser", "found fact {predicate_name}({terms:?})");
             let predicate = Identifier(self.intern_term(predicate_name.to_owned()));
 
-            Ok((remainder, Fact(Atom { predicate, terms })))
+            Ok((remainder, Fact(Atom::new(predicate, terms))))
         })
     }
 
@@ -205,17 +205,30 @@ impl<'a> RuleParser<'a> {
                 ),
             )(input)?;
 
-            // TODO: check constraints on variable usage.
             log::trace!(target: "parser", r#"found rule "{head:?}" :- "{body:?}""#);
 
-            Ok((remainder, Rule { head, body }))
+            Ok((remainder, Rule::new_validated(head, body, self)?))
         })
     }
 
+    /// Parse an atom.
     pub fn parse_atom(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Atom> {
-        traced("parse_atom", move |input| todo!())
+        traced("parse_atom", move |input| {
+            let (remainder, predicate_name) = self.parse_predicate_name()(input)?;
+            let (remainder, terms) = delimited(
+                terminated(tag("("), multispace0),
+                separated_list1(self.parse_comma(), self.parse_term()),
+                preceded(multispace0, tag(")")),
+            )(remainder)?;
+
+            log::trace!(target: "parser", "found atom {predicate_name}({terms:?})");
+            let predicate = Identifier(self.intern_term(predicate_name.to_owned()));
+
+            Ok((remainder, Atom::new(predicate, terms)))
+        })
     }
 
+    /// Parse a term.
     pub fn parse_term(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
         traced(
             "parse_term",
@@ -223,6 +236,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
+    /// Parse a variable.
     pub fn parse_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
         traced(
             "parse_variable",
@@ -233,6 +247,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
+    /// Parse a universally quantified variable.
     pub fn parse_universal_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
         traced(
             "parse_universal_variable",
@@ -243,6 +258,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
+    /// Parse an existentially quantified variable.
     pub fn parse_existential_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
         traced(
             "parse_existential_variable",
@@ -253,6 +269,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
+    /// Parse a variable name.
     pub fn parse_variable_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
         traced("parse_variable", move |input| {
             let (remainder, name) = recognize(pair(alpha1, alphanumeric0))(input)?;
@@ -261,6 +278,7 @@ impl<'a> RuleParser<'a> {
         })
     }
 
+    /// Parse a literal (i.e., a possibly negated atom).
     pub fn parse_literal(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Literal> {
         traced(
             "parse_literal",
@@ -268,6 +286,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
+    /// Parse a non-negated literal.
     pub fn parse_positive_literal(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Literal> {
         traced(
             "parse_positive_literal",
@@ -275,6 +294,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
+    /// Parse a negated literal.
     pub fn parse_negative_literal(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Literal> {
         traced(
             "parse_negative_literal",
@@ -308,15 +328,7 @@ impl<'a> RuleParser<'a> {
                 Statement::Rule(value) => rules.push(value.clone()),
             });
 
-            Ok((
-                remainder,
-                Program {
-                    base,
-                    prefixes,
-                    rules,
-                    facts,
-                },
-            ))
+            Ok((remainder, Program::new(base, prefixes, rules, facts)))
         })
     }
 
@@ -352,8 +364,12 @@ impl<'a> RuleParser<'a> {
 
     /// Try to abbreviate an IRI given declared prefixes and base.
     #[must_use]
-    pub fn unresolve_absolute_iri(iri: &str) -> &str {
-        todo!()
+    pub fn unresolve_absolute_iri(iri: &str) -> String {
+        if iri::is_relative(iri) {
+            iri.to_owned()
+        } else {
+            todo!()
+        }
     }
 
     /// Intern a term.
@@ -445,13 +461,13 @@ mod test {
         assert_parse!(
             parser.parse_fact(),
             &fact,
-            Fact(Atom {
-                predicate: p,
-                terms: vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            Fact(Atom::new(
+                p,
+                vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
                     value: v,
                     datatype: t
                 })]
-            })
+            ))
         );
     }
 }
