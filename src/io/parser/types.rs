@@ -1,4 +1,4 @@
-use nom::{error, IResult};
+use nom::{error, Err, IResult};
 use std::num::{ParseFloatError, ParseIntError};
 use thiserror::Error;
 
@@ -23,6 +23,15 @@ pub enum ParseError {
     /// Re-declared prefix
     #[error(r#"Prefix "{0}" re-declared"#)]
     RedeclaredPrefix(String),
+    /// An existentially quantified variable occurs in the body of a rule.
+    #[error(r#"Variable "{0}" occurs existentially quantified in the rule body."#)]
+    BodyExistential(String),
+    /// A variable only occurs in negative literals in the rule body.
+    #[error(r#"Variable "{0}" only occurs unsafely in negative literals in the rule body."#)]
+    UnsafeNegatedVariable(String),
+    /// A variable is both existentially and universally quantified
+    #[error(r#"Variable "{0}" occurs with existential and universal quantification"#)]
+    BothQuantifiers(String),
 }
 
 impl<'a> From<error::Error<&'a str>> for Error {
@@ -35,6 +44,12 @@ impl<'a> From<error::Error<&'a str>> for Error {
             }
             .into(),
         )
+    }
+}
+
+impl From<ParseError> for Err<Error> {
+    fn from(e: ParseError) -> Self {
+        Err::Error(Error::ParseError(e))
     }
 }
 
