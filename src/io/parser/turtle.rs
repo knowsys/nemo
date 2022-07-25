@@ -135,7 +135,7 @@ pub fn double(input: &str) -> IntermediateResult<NumericLiteral> {
                     recognize(pair(digit1, exponent)),
                 )),
             )),
-            |value| value.parse().map(|number| Double::new(number)),
+            |value| value.parse().map(Double::new),
         ),
         |number| number.map(NumericLiteral::Double),
     )(input)
@@ -172,6 +172,7 @@ pub fn langtag(input: &str) -> IntermediateResult<&str> {
     )))(input)
 }
 
+#[allow(dead_code)]
 #[traced("parser::turtle")]
 pub fn boolean_literal(input: &str) -> IntermediateResult<bool> {
     alt((map(tag("true"), |_| true), map(tag("false"), |_| false)))(input)
