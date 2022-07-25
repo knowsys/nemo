@@ -100,6 +100,8 @@ impl<'a> TrieSelectEqual<'a> {
 }
 
 impl<'a> TrieScan<'a> for TrieSelectEqual<'a> {
+    #[allow(clippy::unnecessary_lazy_evaluations)] // not actually
+                                                   // unnecessary, as the subtraction might underflow
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
 
@@ -229,6 +231,8 @@ impl<'a> TrieSelectValue<'a> {
 }
 
 impl<'a> TrieScan<'a> for TrieSelectValue<'a> {
+    #[allow(clippy::unnecessary_lazy_evaluations)] // not actually
+                                                   // unnecessary, as the subtraction might underflow
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
 

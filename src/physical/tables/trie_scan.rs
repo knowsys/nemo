@@ -53,6 +53,8 @@ impl<'a> IntervalTrieScan<'a> {
     }
 }
 
+#[allow(clippy::unnecessary_lazy_evaluations)] // not actually
+                                               // unnecessary, as the subtraction might underflow
 impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
     fn up(&mut self) {
         self.current_layer = self
