@@ -4,7 +4,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
     ops::Neg,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use crate::{
@@ -329,10 +329,11 @@ pub enum Statement {
 /// A full program.
 #[derive(Debug)]
 pub struct Program {
-    pub(crate) base: Option<usize>,
-    pub(crate) prefixes: HashMap<String, usize>,
-    pub(crate) rules: Vec<Rule>,
-    pub(crate) facts: Vec<Fact>,
+    base: Option<usize>,
+    prefixes: HashMap<String, usize>,
+    sources: Vec<DataSourceDeclaration>,
+    rules: Vec<Rule>,
+    facts: Vec<Fact>,
 }
 
 impl Program {
@@ -340,12 +341,14 @@ impl Program {
     pub fn new(
         base: Option<usize>,
         prefixes: HashMap<String, usize>,
+        sources: Vec<DataSourceDeclaration>,
         rules: Vec<Rule>,
         facts: Vec<Fact>,
     ) -> Self {
         Self {
             base,
             prefixes,
+            sources,
             rules,
             facts,
         }
@@ -372,6 +375,13 @@ impl Program {
         self.prefixes.iter()
     }
 
+    /// Iterate over all data sources in the program.
+    pub fn sources(&self) -> impl Iterator<Item = ((Identifier, usize), &DataSource)> {
+        self.sources
+            .iter()
+            .map(|source| ((source.predicate, source.arity), &source.source))
+    }
+
     /// Look up a given prefix.
     pub fn resolve_prefix(&self, tag: &str) -> Option<usize> {
         self.prefixes.get(tag).copied()
@@ -388,7 +398,7 @@ pub enum Directive {
 }
 
 /// A SPARQL query.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SparqlQuery {
     /// The SPARQL endpoint, should be an IRI.
     endpoint: String,
@@ -398,13 +408,127 @@ pub struct SparqlQuery {
     query: String,
 }
 
+impl SparqlQuery {
+    /// Construct a new SPARQL query.
+    pub fn new(endpoint: String, projection: String, query: String) -> Self {
+        Self {
+            endpoint,
+            projection,
+            query,
+        }
+    }
+
+    /// Get the endpoint.
+    #[must_use]
+    pub fn endpoint(&self) -> &str {
+        self.endpoint.as_ref()
+    }
+
+    /// Get the projection clause.
+    #[must_use]
+    pub fn projection(&self) -> &str {
+        self.projection.as_ref()
+    }
+
+    /// Get the query part.
+    #[must_use]
+    pub fn query(&self) -> &str {
+        self.query.as_ref()
+    }
+
+    /// Format a full SPARQL query.
+    #[must_use]
+    pub fn format_query(&self) -> String {
+        format!("SELECT {} WHERE {{ {} }}", self.projection, self.query)
+    }
+}
+
 /// An external data source.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DataSource {
     /// A CSV file data source with the given path.
-    CsvFile(Box<Path>),
+    CsvFile(Box<PathBuf>),
     /// An RDF file data source with the given path.
-    RdfFile(Box<Path>),
+    RdfFile(Box<PathBuf>),
     /// A SPARQL query data source.
     SparqlQuery(Box<SparqlQuery>),
+}
+
+impl DataSource {
+    /// Construct a new CSV file data source from a given path.
+    pub fn csv_file(path: &str) -> Result<Self, ParseError> {
+        Ok(Self::CsvFile(Box::new(PathBuf::from(path))))
+    }
+
+    /// Construct a new RDF file data source from a given path.
+    pub fn rdf_file(path: &str) -> Result<Self, ParseError> {
+        Ok(Self::RdfFile(Box::new(PathBuf::from(path))))
+    }
+
+    /// Construct a new SPARQL query data source from a given query.
+    pub fn sparql_query(query: SparqlQuery) -> Result<Self, ParseError> {
+        Ok(Self::SparqlQuery(Box::new(query)))
+    }
+}
+
+/// A Data source declaration.
+#[derive(Debug, Clone)]
+pub struct DataSourceDeclaration {
+    predicate: Identifier,
+    arity: usize,
+    source: DataSource,
+}
+
+impl DataSourceDeclaration {
+    /// Construct a new data source declaration.
+    pub fn new(predicate: Identifier, arity: usize, source: DataSource) -> Self {
+        Self {
+            predicate,
+            arity,
+            source,
+        }
+    }
+
+    /// Construct a new data source declaration, validating constraints on, e.g., arity.
+    pub(crate) fn new_validated(
+        predicate: Identifier,
+        arity: usize,
+        source: DataSource,
+        parser: &RuleParser,
+    ) -> Result<Self, ParseError> {
+        match source {
+            DataSource::CsvFile(_) => (), // no validation for CSV files
+            DataSource::RdfFile(ref path) => {
+                if arity != 3 {
+                    return Err(ParseError::RdfSourceInvalidArity(
+                        parser
+                            .resolve_term(predicate.0)
+                            .expect("predicate has been parsed, must be known"),
+                        path.to_str()
+                            .unwrap_or("<path is invalid unicode>")
+                            .to_owned(),
+                        arity,
+                    ));
+                }
+            }
+            DataSource::SparqlQuery(ref query) => {
+                let variables = query.projection().split(',').count();
+                if variables != arity {
+                    return Err(ParseError::SparqlSourceInvalidArity(
+                        parser
+                            .resolve_term(predicate.0)
+                            .expect("predicate has been parsed, must be known"),
+                        variables,
+                        arity,
+                    ));
+                }
+            }
+        };
+
+        Ok(Self {
+            predicate,
+            arity,
+            source,
+        })
+    }
 }
