@@ -23,7 +23,7 @@ pub trait TrieScan<'a>: Debug {
     /// Return the underlying [`RangedColumnScanT`] object given an index.
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>>;
 
-    /// Return the underlying [`TrieSchema`].
+    /// Return the underlying [`TableSchema`].
     fn get_schema(&self) -> &dyn TableSchema;
 }
 
