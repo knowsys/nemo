@@ -192,7 +192,7 @@ impl Permutator {
 
     /// Applies the permutator to a given column by using a provided [`ColumnBuilder`].
     ///
-    /// *Returns* either a ['Column'] or an [Error][Error::Permutation]
+    /// *Returns* either a ['Column'] or an [Error][Error::PermutationApplyWrongLen]
     pub fn apply_column<'a, T, U>(
         &self,
         column: &ColumnEnum<T>,
