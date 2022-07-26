@@ -5,7 +5,7 @@ use crate::physical::datatypes::{data_value::VecT, DataTypeName};
 use csv::Reader;
 
 /// Imports a csv file
-/// Needs a list of Options of [Datatypename] and a [csv::Reader] reference
+/// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference
 pub fn read<T>(
     datatypes: &[Option<DataTypeName>],
     csv_reader: &mut Reader<T>,

@@ -5,8 +5,8 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{alpha1, alphanumeric0, multispace0, multispace1},
-    combinator::{map, opt, recognize},
+    character::complete::{alpha1, alphanumeric0, digit1, multispace0, multispace1},
+    combinator::{map, map_res, opt, recognize},
     multi::{many0, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
@@ -53,6 +53,8 @@ pub struct RuleParser<'a> {
     base: RefCell<Option<&'a str>>,
     /// A map from Prefixes to IRIs.
     prefixes: RefCell<HashMap<&'a str, &'a str>>,
+    /// The external data sources.
+    sources: RefCell<Vec<DataSourceDeclaration>>,
 }
 
 impl<'a> RuleParser<'a> {
@@ -81,6 +83,22 @@ impl<'a> RuleParser<'a> {
         traced(
             "parse_arrow",
             delimited(multispace0, tag(":-"), multispace0),
+        )
+    }
+
+    /// Parse an opening parenthesis, optionally surrounded by spaces.
+    fn parse_open_parenthesis(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
+        traced(
+            "parse_open_parenthesis",
+            delimited(multispace0, tag("("), multispace0),
+        )
+    }
+
+    /// Parse a closing parenthesis, optionally surrounded by spaces.
+    fn parse_close_parenthesis(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
+        traced(
+            "parse_close_parenthesis",
+            delimited(multispace0, tag(")"), multispace0),
         )
     }
 
@@ -120,8 +138,71 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parses a data source declaration.
-    pub fn parse_source(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<DataSource> {
-        |_| todo!()
+    pub fn parse_source(
+        &'a self,
+    ) -> impl FnMut(&'a str) -> IntermediateResult<DataSourceDeclaration> {
+        traced("parse_source", move |input| {
+            let (remainder, (predicate_name, arity)) = preceded(
+                terminated(tag("@source"), multispace1),
+                pair(
+                    self.parse_predicate_name(),
+                    delimited(
+                        tag("["),
+                        map_res(digit1, |number: &str| number.parse::<usize>()),
+                        tag("]"),
+                    ),
+                ),
+            )(input)?;
+
+            let predicate = Identifier(self.intern_term(predicate_name.to_owned()));
+
+            let (remainder, datasource) = preceded(
+                terminated(tag(":"), multispace1),
+                alt((
+                    map(
+                        delimited(
+                            preceded(tag("load-csv"), self.parse_open_parenthesis()),
+                            turtle::string,
+                            self.parse_close_parenthesis(),
+                        ),
+                        DataSource::csv_file,
+                    ),
+                    map(
+                        delimited(
+                            preceded(tag("load-rdf"), self.parse_open_parenthesis()),
+                            turtle::string,
+                            self.parse_close_parenthesis(),
+                        ),
+                        DataSource::rdf_file,
+                    ),
+                    map(
+                        delimited(
+                            preceded(tag("sparql"), self.parse_open_parenthesis()),
+                            tuple((
+                                self.parse_iri(),
+                                delimited(self.parse_comma(), turtle::string, self.parse_comma()),
+                                turtle::string,
+                            )),
+                            self.parse_close_parenthesis(),
+                        ),
+                        |(endpoint, projection, query)| {
+                            DataSource::sparql_query(SparqlQuery::new(
+                                endpoint.to_owned(),
+                                projection.to_owned(),
+                                query.to_owned(),
+                            ))
+                        },
+                    ),
+                )),
+            )(remainder)?;
+
+            let source = DataSourceDeclaration::new_validated(predicate, arity, datasource?, self)?;
+
+            log::trace!("Found external data source {source:?}");
+            self.sources.borrow_mut().push(source.clone());
+
+            Ok((remainder, source))
+        })
     }
 
     /// Parses a statement.
@@ -216,9 +297,9 @@ impl<'a> RuleParser<'a> {
         traced("parse_atom", move |input| {
             let (remainder, predicate_name) = self.parse_predicate_name()(input)?;
             let (remainder, terms) = delimited(
-                terminated(tag("("), multispace0),
+                self.parse_open_parenthesis(),
                 separated_list1(self.parse_comma(), self.parse_term()),
-                preceded(multispace0, tag(")")),
+                self.parse_close_parenthesis(),
             )(remainder)?;
 
             log::trace!(target: "parser", "found atom {predicate_name}({terms:?})");
@@ -328,7 +409,10 @@ impl<'a> RuleParser<'a> {
                 Statement::Rule(value) => rules.push(value.clone()),
             });
 
-            Ok((remainder, Program::new(base, prefixes, rules, facts)))
+            Ok((
+                remainder,
+                Program::new(base, prefixes, self.sources.borrow().clone(), rules, facts),
+            ))
         })
     }
 

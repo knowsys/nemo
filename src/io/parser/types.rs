@@ -32,6 +32,16 @@ pub enum ParseError {
     /// A variable is both existentially and universally quantified
     #[error(r#"Variable "{0}" occurs with existential and universal quantification"#)]
     BothQuantifiers(String),
+    /// An RDF data source declaration has arity != 3.
+    #[error(
+        r#"RDF data source for predicate "{0}" (from "{1}") has invalid arity {2}, should be 3"#
+    )]
+    RdfSourceInvalidArity(String, String, usize),
+    /// A SPARQL query data source has an arity that doesn't match the number of variables given.
+    #[error(
+        r#"SPARQL data source for predicate "{0}" has arity {1}, but {2} variables are given"#
+    )]
+    SparqlSourceInvalidArity(String, usize, usize),
 }
 
 impl<'a> From<error::Error<&'a str>> for Error {
