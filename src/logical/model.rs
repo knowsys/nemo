@@ -189,6 +189,13 @@ impl Literal {
     pub fn is_negative(&self) -> bool {
         matches!(self, Self::Negative(_))
     }
+
+    pub fn atom(&self) -> &Atom {
+        match self {
+            Self::Positive(atom) => atom,
+            Self::Negative(atom) => atom,
+        }
+    }
 }
 
 impl Neg for Literal {
@@ -278,6 +285,8 @@ pub struct Rule {
     pub body: Vec<Literal>,
     /// Filters applied to the body
     pub filters: Vec<Filter>,
+    pub head: Vec<Atom>,
+    pub body: Vec<Literal>,
 }
 
 impl Rule {
@@ -397,7 +406,7 @@ pub struct Program {
     base: Option<usize>,
     prefixes: HashMap<String, usize>,
     sources: Vec<DataSourceDeclaration>,
-    rules: Vec<Rule>,
+    pub rules: Vec<Rule>,
     facts: Vec<Fact>,
 }
 
