@@ -189,6 +189,13 @@ impl Literal {
     pub fn is_negative(&self) -> bool {
         matches!(self, Self::Negative(_))
     }
+
+    pub fn atom(&self) -> &Atom {
+        match self {
+            Self::Positive(atom) => atom,
+            Self::Negative(atom) => atom,
+        }
+    }
 }
 
 impl Neg for Literal {
