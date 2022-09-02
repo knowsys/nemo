@@ -28,3 +28,7 @@ pub use columnscan_minus::ColumnScanMinus;
 /// Module for defining [`ColumnScanUnion`]
 pub mod columnscan_union;
 pub use columnscan_union::ColumnScanUnion;
+
+/// Module for definiting [`ColumnScanWithTrieLookahead`]
+pub mod columnscan_with_trie_lookahead;
+pub use columnscan_with_trie_lookahead::ColumnScanWithTrieLookahead;

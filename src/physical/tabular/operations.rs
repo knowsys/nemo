@@ -27,3 +27,7 @@ pub use triescan_join::TrieScanJoin;
 
 /// Module for defining append functionality
 pub mod triescan_append;
+
+/// Module for defining [`TrieFull`]
+pub mod trie_full;
+pub use trie_full::TrieFull;

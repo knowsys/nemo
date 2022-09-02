@@ -1,7 +1,7 @@
 use super::super::column_types::{rle::ColumnScanRle, vector::ColumnScanVector};
 use super::super::operations::{
     ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus,
-    ColumnScanPass, ColumnScanReorder, ColumnScanUnion,
+    ColumnScanPass, ColumnScanReorder, ColumnScanUnion, ColumnScanWithTrieLookahead,
 };
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
@@ -62,6 +62,8 @@ where
     ColumnScanMinus(ColumnScanMinus<'a, T>),
     /// Case ColumnScanUnion
     ColumnScanUnion(ColumnScanUnion<'a, T>),
+    /// Case ColumnScanWithTrieLookahead
+    ColumnScanWithTrieLookahead(ColumnScanWithTrieLookahead<'a, T>),
 }
 
 /// The following impl statements allow converting from a specific [`ColumnScan`] into a gerneral [`ColumnScanEnum`]
@@ -226,7 +228,8 @@ generate_forwarder!(forward_to_columnscan;
     ColumnScanPass,
     ColumnScanFollow,
     ColumnScanMinus,
-    ColumnScanUnion);
+    ColumnScanUnion,
+    ColumnScanWithTrieLookahead);
 
 impl<'a, T> Iterator for ColumnScanEnum<'a, T>
 where
