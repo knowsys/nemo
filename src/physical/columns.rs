@@ -79,3 +79,7 @@ pub use difference_scan::MinusScan;
 /// Module for defining [`UnionScan`]
 pub mod union_scan;
 pub use union_scan::UnionScan;
+
+/// Module for definiting [`LookaheadScan`]
+pub mod lookahead_scan;
+pub use lookahead_scan::LookaheadScan;

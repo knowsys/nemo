@@ -53,3 +53,7 @@ pub use trie_union::TrieUnion;
 /// Module for defining [`TrieJoin`]
 pub mod trie_join;
 pub use trie_join::TrieJoin;
+
+/// Module for defining [`TrieFull`]
+pub mod trie_full;
+pub use trie_full::TrieFull;
