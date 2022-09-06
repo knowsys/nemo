@@ -6,8 +6,7 @@ use crate::physical::columns::{
 use crate::physical::datatypes::DataTypeName;
 
 /// Given a TrieScan iterator, materialize its content into a trie
-/// If not_empty is provided, the function will search for the first entry
-pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bool>) -> Trie {
+pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
     // Compute target schema (which is the same as the input schema...)
     // TODO: There should be a better way to clone something like this...
     let input_schema = trie_scan.get_schema();
@@ -55,9 +54,6 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
         if let Some(val) = current_value {
             if current_row[current_layer] {
                 data_column_builders[current_layer].add(val);
-                if let Some(not_empty_bool) = not_empty.as_mut() {
-                    *not_empty_bool = true;
-                }
 
                 if !is_last_layer {
                     current_row[current_layer] = false;
@@ -115,19 +111,6 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
 
     // Finally, return finished trie
     Trie::new(target_schema, result_columns)
-}
-
-/// Given a TrieScan iterator, materialize its content into a trie
-pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
-    materialize_inner(trie_scan, &mut None)
-}
-
-/// Tests whether an iterator is empty by materializing it until the first element
-pub fn scan_is_empty(trie_scan: &mut TrieScanEnum) -> bool {
-    let mut result = Some(false);
-    materialize_inner(trie_scan, &mut result);
-
-    result.unwrap()
 }
 
 #[cfg(test)]
@@ -352,6 +335,4 @@ mod test {
             vec![0, 2, 3]
         );
     }
-
-    // TODO: Tets scan_is_empty
 }
