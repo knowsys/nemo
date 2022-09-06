@@ -95,7 +95,7 @@ impl<'a> TrieScan<'a> for TrieFull<'a> {
     }
 
     fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        Some(self.current_col_scan.as_ref()?)
+        self.current_col_scan.as_ref()
     }
 
     fn get_scan(&self, _index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {

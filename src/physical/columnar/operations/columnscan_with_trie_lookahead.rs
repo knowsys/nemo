@@ -95,7 +95,7 @@ where
             }
         }
 
-        return false;
+        false
     }
 }
 

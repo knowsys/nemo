@@ -18,7 +18,7 @@ use crate::physical::{
 
 /// Given a TrieScan iterator, materialize its content into a trie
 /// If not_empty is provided, the function will search for the first entry
-pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bool>) -> Trie {
+fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bool>) -> Trie {
     let mut next_count: usize = 0;
 
     // Compute target schema (which is the same as the input schema...)
@@ -352,6 +352,4 @@ mod test {
             vec![0, 2, 3]
         );
     }
-
-    // TODO: Tets scan_is_empty
 }
