@@ -50,3 +50,25 @@ jobs:
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
+
+  miri:
+    name: Check for undefined behaviour with miri
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+          components: miri
+      - name: miri setup
+        uses: actions-rs/cargo@v1
+        with:
+          command: miri
+          args: setup
+      - name: miri test
+        uses: actions-rs/cargo@v1
+        with:
+          command: miri
+          args: test
