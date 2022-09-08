@@ -190,6 +190,7 @@ impl Literal {
         matches!(self, Self::Negative(_))
     }
 
+    /// Returns the underlying atom
     pub fn atom(&self) -> &Atom {
         match self {
             Self::Positive(atom) => atom,
