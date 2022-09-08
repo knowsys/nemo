@@ -118,7 +118,7 @@ pub struct Atom {
     /// The predicate.
     predicate: Identifier,
     /// The terms.
-    terms: Vec<Term>,
+    pub terms: Vec<Term>,
 }
 
 impl Atom {
@@ -181,6 +181,7 @@ impl Literal {
         matches!(self, Self::Negative(_))
     }
 
+    /// Returns the underlying atom
     pub fn atom(&self) -> &Atom {
         match self {
             Self::Positive(atom) => atom,
@@ -227,7 +228,9 @@ impl Literal {
 /// A rule.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct Rule {
+    /// Head atoms of the rule
     pub head: Vec<Atom>,
+    /// Body atoms of the rule
     pub body: Vec<Literal>,
 }
 
@@ -336,10 +339,12 @@ pub enum Statement {
 /// A full program.
 #[derive(Debug)]
 pub struct Program {
+    /// List of all the rules
+    pub rules: Vec<Rule>,
+
     base: Option<usize>,
     prefixes: HashMap<String, usize>,
     sources: Vec<DataSourceDeclaration>,
-    pub rules: Vec<Rule>,
     facts: Vec<Fact>,
 }
 
