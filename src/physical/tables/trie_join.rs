@@ -30,7 +30,11 @@ pub struct TrieJoin<'a> {
 
 impl<'a> TrieJoin<'a> {
     /// Construct new TrieJoin object.
-    pub fn new(trie_scans: Vec<TrieScanEnum<'a>>, target_schema: TrieSchema) -> Self {
+    pub fn new(
+        trie_scans: Vec<TrieScanEnum<'a>>,
+        bindings: &Vec<Vec<usize>>,
+        target_schema: TrieSchema,
+    ) -> Self {
         let mut variable_to_scan = repeat(Vec::new())
             .take(target_schema.arity())
             .collect::<Vec<_>>();
@@ -40,39 +44,28 @@ impl<'a> TrieJoin<'a> {
 
         let mut merge_joins: Vec<UnsafeCell<RangedColumnScanT<'a>>> = Vec::new();
 
-        for (scan_index, scan) in trie_scans.iter().enumerate() {
-            let current_schema = scan.get_schema();
-            for entry_index in 0..current_schema.arity() {
-                variable_to_scan[current_schema.get_label(entry_index)].push(scan_index);
+        for (scan_index, binding) in bindings.iter().enumerate() {
+            for (col_index, &var) in binding.iter().enumerate() {
+                variable_to_scan[var].push(scan_index);
+                merge_join_indices[var].push(col_index);
             }
         }
 
-        for (target_label_index, merge_join_index) in merge_join_indices.iter_mut().enumerate() {
-            for scan in &trie_scans {
-                merge_join_index.push(
-                    scan.get_schema()
-                        .find_index(target_schema.get_label(target_label_index)),
-                );
-            }
-        }
-
-        for (variable_index, merge_join_index) in merge_join_indices.iter_mut().enumerate() {
+        for (variable, scan_indices) in variable_to_scan.iter().enumerate() {
             macro_rules! merge_join_for_datatype {
                 ($variant:ident, $type:ty) => {{
                     let mut scans = Vec::<&RangedColumnScanCell<$type>>::new();
-                    for (scan_index, scan) in merge_join_index.iter().enumerate() {
-                        match scan {
-                            Some(label_index) => unsafe {
-                                let column_scan =
-                                    &*trie_scans[scan_index].get_scan(*label_index).unwrap().get();
+                    for (index, &scan_index) in scan_indices.iter().enumerate() {
+                        let column_index = merge_join_indices[variable][index];
+                        unsafe {
+                            let column_scan =
+                                &*trie_scans[scan_index].get_scan(column_index).unwrap().get();
 
-                                if let RangedColumnScanT::$variant(cs) = column_scan {
-                                    scans.push(cs);
-                                } else {
-                                    panic!("expected a column scan of type {}", stringify!($type));
-                                }
-                            },
-                            None => {}
+                            if let RangedColumnScanT::$variant(cs) = column_scan {
+                                scans.push(cs);
+                            } else {
+                                panic!("expected a column scan of type {}", stringify!($type));
+                            }
                         }
                     }
 
@@ -84,7 +77,7 @@ impl<'a> TrieJoin<'a> {
                 }};
             }
 
-            match target_schema.get_type(variable_index) {
+            match target_schema.get_type(variable) {
                 DataTypeName::U64 => merge_join_for_datatype!(U64, u64),
                 DataTypeName::Float => merge_join_for_datatype!(Float, Float),
                 DataTypeName::Double => merge_join_for_datatype!(Double, Double),
@@ -194,36 +187,36 @@ mod test {
 
         let schema_a = TrieSchema::new(vec![
             TrieSchemaEntry {
-                label: 0,
+                label: 10,
                 datatype: DataTypeName::U64,
             },
             TrieSchemaEntry {
-                label: 1,
+                label: 11,
                 datatype: DataTypeName::U64,
             },
         ]);
         let schema_b = TrieSchema::new(vec![
             TrieSchemaEntry {
-                label: 1,
+                label: 12,
                 datatype: DataTypeName::U64,
             },
             TrieSchemaEntry {
-                label: 2,
+                label: 13,
                 datatype: DataTypeName::U64,
             },
         ]);
 
         let schema_target = TrieSchema::new(vec![
             TrieSchemaEntry {
-                label: 0,
+                label: 100,
                 datatype: DataTypeName::U64,
             },
             TrieSchemaEntry {
-                label: 1,
+                label: 101,
                 datatype: DataTypeName::U64,
             },
             TrieSchemaEntry {
-                label: 2,
+                label: 102,
                 datatype: DataTypeName::U64,
             },
         ]);
@@ -239,6 +232,7 @@ mod test {
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
             ],
+            &vec![vec![0, 1], vec![1, 2]],
             schema_target,
         );
 
@@ -307,11 +301,11 @@ mod test {
 
         let schema_c = TrieSchema::new(vec![
             TrieSchemaEntry {
-                label: 0,
+                label: 20,
                 datatype: DataTypeName::U64,
             },
             TrieSchemaEntry {
-                label: 1,
+                label: 21,
                 datatype: DataTypeName::U64,
             },
         ]);
@@ -322,6 +316,7 @@ mod test {
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
             ],
+            &vec![vec![0, 1], vec![1, 2]],
             schema_target_clone,
         );
 
@@ -330,6 +325,7 @@ mod test {
                 TrieScanEnum::TrieJoin(join_iter_ab),
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_c)),
             ],
+            &vec![vec![0, 1, 2], vec![0, 1]],
             schema_target_clone_2,
         );
 
@@ -407,6 +403,7 @@ mod test {
             vec![TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(
                 &my_trie,
             ))],
+            &vec![vec![0]],
             schema_target,
         );
 
