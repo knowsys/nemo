@@ -1,9 +1,9 @@
-use super::super::traits::columnscan::{ColumnScan, ColumnScanRc, ColumnScanT};
+use super::super::traits::columnscan::{ColumnScan, ColumnScanRc};
 use crate::physical::{
-    datatypes::{ColumnDataType, DataTypeName},
+    datatypes::ColumnDataType,
     tabular::traits::triescan::{TrieScan, TrieScanEnum},
 };
-use std::{cell::UnsafeCell, fmt::Debug, mem, ops::Range, rc::Rc};
+use std::{cell::UnsafeCell, fmt::Debug, ops::Range, rc::Rc};
 
 /// Column iterator for a column that represents a layer of partial trie iterator
 /// Only returns those values which would be included if the trie where to be materialized
@@ -15,8 +15,7 @@ where
     // TODO: we could build something like RangedColumnScanRc and RangedColumnScanRc trie scans
     trie_scan: Rc<UnsafeCell<TrieScanEnum<'a>>>,
     current_layer: usize,
-    current: Option<T>,
-    datatype_name: DataTypeName,
+    col_scan: ColumnScanRc<'a, T>, // NOTE: this needs to be the current column scan from the trie_scan
 }
 
 impl<'a, T> ColumnScanWithTrieLookahead<'a, T>
@@ -27,37 +26,13 @@ where
     pub fn new(
         trie_scan: Rc<UnsafeCell<TrieScanEnum<'a>>>,
         current_layer: usize,
-        datatype_name: DataTypeName,
+        col_scan: ColumnScanRc<'a, T>,
     ) -> ColumnScanWithTrieLookahead<'a, T> {
         ColumnScanWithTrieLookahead {
             trie_scan,
-            current: None,
             current_layer,
-            datatype_name,
+            col_scan,
         }
-    }
-
-    /// Returns the column scan of the current layer
-    fn get_current_columnscan(&self) -> &ColumnScanRc<'a, T> {
-        macro_rules! return_scan_for_datatype {
-            ($variant:ident) => {
-                unsafe {
-                    if let ColumnScanT::$variant(base_scan) = (*self.trie_scan.get()).current_scan().unwrap()
-                    {
-                        // TODO: get rid of this; having LookaheadScan generic over T is somewhat unintuitive since T does not occur on any of the inputs in new
-                        return mem::transmute(base_scan);
-                    } else {
-                        panic!("Expected a column scan of type {}", stringify!($variant));
-                    }
-                }
-            };
-        }
-
-        match self.datatype_name {
-            DataTypeName::U64 => return_scan_for_datatype!(U64),
-            DataTypeName::Float => return_scan_for_datatype!(Float),
-            DataTypeName::Double => return_scan_for_datatype!(Double),
-        };
     }
 
     // Check whether the current value of the given trie scan actually exists
@@ -72,7 +47,10 @@ where
         loop {
             let is_last_layer =
                 current_layer >= unsafe { &*self.trie_scan.get() }.get_schema().arity() - 1;
-            let next_value = self.get_current_columnscan().next();
+            let next_value = unsafe { &mut *self.trie_scan.get() }
+                .current_scan()
+                .unwrap()
+                .next();
 
             if next_value.is_none() {
                 unsafe { &mut *self.trie_scan.get() }.up();
@@ -110,12 +88,9 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.current = None;
-
         loop {
-            let possible_result = Some(self.get_current_columnscan().next()?);
+            let possible_result = Some(self.col_scan.next()?);
             if self.value_exists() {
-                self.current = possible_result;
                 return possible_result;
             }
         }
@@ -127,12 +102,9 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        self.current = None;
-
-        let possible_result = Some(self.get_current_columnscan().seek(value)?);
+        let possible_result = Some(self.col_scan.seek(value)?);
 
         if self.value_exists() {
-            self.current = possible_result;
             possible_result
         } else {
             self.next()
@@ -140,17 +112,17 @@ where
     }
 
     fn current(&mut self) -> Option<T> {
-        self.current
+        self.col_scan.current()
     }
 
     fn reset(&mut self) {
-        self.get_current_columnscan().reset();
+        self.col_scan.reset();
     }
 
     fn pos(&self) -> Option<usize> {
-        self.get_current_columnscan().pos()
+        self.col_scan.pos()
     }
     fn narrow(&mut self, interval: Range<usize>) {
-        self.get_current_columnscan().narrow(interval);
+        self.col_scan.narrow(interval);
     }
 }

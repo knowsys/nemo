@@ -40,10 +40,20 @@ impl<'a> TrieFull<'a> {
 
             macro_rules! init_scans_for_datatype {
                 ($variant:ident, $type:ty) => {{
+                    let col_scan = if let ColumnScanT::$variant(cs) =
+                        unsafe { &mut *self.trie_scan.get() }
+                            .current_scan()
+                            .unwrap()
+                    {
+                        cs.clone()
+                    } else {
+                        panic!("expected a column scan of type {}", stringify!($type));
+                    };
+
                     let lookahead_scan = ColumnScanWithTrieLookahead::<$type>::new(
                         Rc::clone(&self.trie_scan),
                         current_layer,
-                        current_type,
+                        col_scan,
                     );
 
                     self.current_col_scan = Some(ColumnScanT::$variant(ColumnScanRc::new(
