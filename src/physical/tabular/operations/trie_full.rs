@@ -3,18 +3,19 @@ use super::super::traits::{
     triescan::{TrieScan, TrieScanEnum},
 };
 use crate::physical::columnar::operations::ColumnScanWithTrieLookahead;
-use crate::physical::columnar::traits::columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT};
+use crate::physical::columnar::traits::columnscan::{
+    ColumnScanCell, ColumnScanEnum, ColumnScanRc, ColumnScanT,
+};
 
 use crate::physical::datatypes::{DataTypeName, Double, Float};
-use std::cell::UnsafeCell;
-use std::fmt::Debug;
+use std::{cell::UnsafeCell, fmt::Debug, rc::Rc};
 
 /// Iterator which turns an underlying 'partial' iterator into a full one,
 /// meaining that it only returns values that would be present were the iterator to be materialized
 #[derive(Debug)]
 pub struct TrieFull<'a> {
-    trie_scan: Box<UnsafeCell<TrieScanEnum<'a>>>,
-    current_col_scan: Option<UnsafeCell<ColumnScanT<'a>>>,
+    trie_scan: Rc<UnsafeCell<TrieScanEnum<'a>>>,
+    current_col_scan: Option<ColumnScanT<'a>>,
     current_layer: Option<usize>,
 }
 
@@ -22,7 +23,7 @@ impl<'a> TrieFull<'a> {
     /// Construct new TrieFull object.
     pub fn new(trie_scan: TrieScanEnum<'a>) -> TrieFull<'a> {
         TrieFull {
-            trie_scan: Box::new(UnsafeCell::new(trie_scan)),
+            trie_scan: Rc::new(UnsafeCell::new(trie_scan)),
             current_col_scan: None,
             current_layer: None,
         }
@@ -33,27 +34,24 @@ impl<'a> TrieFull<'a> {
             self.current_col_scan = None;
         } else {
             let current_layer = self.current_layer.unwrap();
-            let current_type = unsafe {
-                (*self.trie_scan.get())
-                    .get_schema()
-                    .get_type(self.current_layer.unwrap())
-            };
+            let current_type = unsafe { &*self.trie_scan.get() }
+                .get_schema()
+                .get_type(self.current_layer.unwrap());
 
             macro_rules! init_scans_for_datatype {
-                ($variant:ident, $type:ty) => {
-                    unsafe {
-                        let lookahead_scan = ColumnScanWithTrieLookahead::<$type>::new(
-                            self.trie_scan.as_ref().get().as_mut().unwrap(),
-                            current_layer,
-                            current_type,
-                        );
+                ($variant:ident, $type:ty) => {{
+                    let lookahead_scan = ColumnScanWithTrieLookahead::<$type>::new(
+                        Rc::clone(&self.trie_scan),
+                        current_layer,
+                        current_type,
+                    );
 
-                        self.current_col_scan =
-                            Some(UnsafeCell::new(ColumnScanT::$variant(ColumnScanCell::new(
-                                ColumnScanEnum::ColumnScanWithTrieLookahead(lookahead_scan),
-                            ))));
-                    }
-                };
+                    self.current_col_scan = Some(ColumnScanT::$variant(ColumnScanRc::new(
+                        ColumnScanCell::new(ColumnScanEnum::ColumnScanWithTrieLookahead(
+                            lookahead_scan,
+                        )),
+                    )));
+                }};
             }
 
             match current_type {
@@ -76,7 +74,7 @@ impl<'a> TrieScan<'a> for TrieFull<'a> {
 
         self.current_layer = up_layer;
 
-        let current_scan = unsafe { &mut (*self.trie_scan.get()) };
+        let current_scan = unsafe { &mut *self.trie_scan.get() };
         current_scan.up();
 
         self.set_current_col_scan();
@@ -88,22 +86,22 @@ impl<'a> TrieScan<'a> for TrieFull<'a> {
 
         debug_assert!(self.current_layer.unwrap() < self.get_schema().arity());
 
-        let current_scan = unsafe { &mut (*self.trie_scan.get()) };
+        let current_scan = unsafe { &mut *self.trie_scan.get() };
         current_scan.down();
 
         self.set_current_col_scan();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        self.current_col_scan.as_ref()
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
+        self.current_col_scan.as_mut()
     }
 
-    fn get_scan(&self, _index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn get_scan(&mut self, _index: usize) -> Option<&mut ColumnScanT<'a>> {
         panic!("get_scan not possible for Full iterators.")
     }
 
     fn get_schema(&self) -> &dyn TableSchema {
-        unsafe { (*self.trie_scan.get()).get_schema() }
+        unsafe { &*self.trie_scan.get() }.get_schema()
     }
 }
 
@@ -123,22 +121,18 @@ mod test {
     use test_log::test;
 
     fn full_next(scan: &mut TrieFull) -> Option<u64> {
-        unsafe {
-            if let ColumnScanT::U64(rcs) = &(*scan.current_scan()?.get()) {
-                rcs.next()
-            } else {
-                panic!("type should be u64");
-            }
+        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
+            rcs.next()
+        } else {
+            panic!("type should be u64");
         }
     }
 
     fn full_current(scan: &mut TrieFull) -> Option<u64> {
-        unsafe {
-            if let ColumnScanT::U64(rcs) = &(*scan.current_scan()?.get()) {
-                rcs.current()
-            } else {
-                panic!("type should be u64");
-            }
+        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
+            rcs.current()
+        } else {
+            panic!("type should be u64");
         }
     }
 

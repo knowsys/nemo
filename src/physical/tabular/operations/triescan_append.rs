@@ -150,7 +150,7 @@ mod test {
     use super::trie_add_constant;
 
     fn scan_next(int_scan: &mut TrieScanGeneric) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -158,12 +158,10 @@ mod test {
     }
 
     fn scan_current(int_scan: &mut TrieScanGeneric) -> Option<u64> {
-        unsafe {
-            if let ColumnScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
-                rcs.current()
-            } else {
-                panic!("type should be u64");
-            }
+        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
+            rcs.current()
+        } else {
+            panic!("type should be u64");
         }
     }
 

@@ -1,7 +1,9 @@
 use crate::physical::{
     columnar::{
         operations::{ColumnScanFollow, ColumnScanMinus, ColumnScanPass},
-        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+        traits::columnscan::{
+            ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanRc, ColumnScanT,
+        },
     },
     datatypes::DataTypeName,
     tabular::traits::{
@@ -9,7 +11,6 @@ use crate::physical::{
         triescan::{TrieScan, TrieScanEnum},
     },
 };
-use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
 /// Trie iterator representing the difference between other trie iterators
@@ -19,53 +20,53 @@ pub struct TrieScanMinus<'a> {
     trie_right: Box<TrieScanEnum<'a>>,
     layer_left: Option<usize>,
     layer_right: Option<usize>,
-    difference_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
+    difference_scans: Vec<ColumnScanT<'a>>,
 }
 
 impl<'a> TrieScanMinus<'a> {
     /// Construct new TrieScanMinus object.
-    pub fn new(trie_left: TrieScanEnum<'a>, trie_right: TrieScanEnum<'a>) -> TrieScanMinus<'a> {
-        let target_schema = trie_left.get_schema();
-        let layer_count = target_schema.arity();
+    pub fn new(
+        mut trie_left: TrieScanEnum<'a>,
+        mut trie_right: TrieScanEnum<'a>,
+    ) -> TrieScanMinus<'a> {
+        let layer_count = trie_left.get_schema().arity();
 
-        let mut difference_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(layer_count);
+        let mut difference_scans = Vec::<ColumnScanT<'a>>::with_capacity(layer_count);
 
-        for layer_index in 0..target_schema.arity() {
+        for layer_index in 0..layer_count {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
-                    unsafe {
-                        if let ColumnScanT::$variant(left_scan_enum) =
-                            &*trie_left.get_scan(layer_index).unwrap().get()
+                    if let ColumnScanT::$variant(left_scan_rc) =
+                        trie_left.get_scan(layer_index).unwrap()
+                    {
+                        if let ColumnScanT::$variant(right_scan_rc) =
+                            trie_right.get_scan(layer_index).unwrap()
                         {
-                            if let ColumnScanT::$variant(right_scan_enum) =
-                                &*trie_right.get_scan(layer_index).unwrap().get()
-                            {
-                                let new_scan = if layer_index == target_schema.arity() - 1 {
-                                    ColumnScanEnum::ColumnScanMinus(ColumnScanMinus::new(
-                                        left_scan_enum,
-                                        right_scan_enum,
-                                    ))
-                                } else {
-                                    ColumnScanEnum::ColumnScanFollow(ColumnScanFollow::new(
-                                        left_scan_enum,
-                                        right_scan_enum,
-                                    ))
-                                };
-
-                                difference_scans.push(UnsafeCell::new(ColumnScanT::$variant(
-                                    ColumnScanCell::new(new_scan),
-                                )));
+                            let new_scan = if layer_index == layer_count - 1 {
+                                ColumnScanEnum::ColumnScanMinus(ColumnScanMinus::new(
+                                    left_scan_rc.clone(),
+                                    right_scan_rc.clone(),
+                                ))
                             } else {
-                                panic!("Expected a column scan of type {}", stringify!($variant));
-                            }
+                                ColumnScanEnum::ColumnScanFollow(ColumnScanFollow::new(
+                                    left_scan_rc.clone(),
+                                    right_scan_rc.clone(),
+                                ))
+                            };
+
+                            difference_scans.push(ColumnScanT::$variant(ColumnScanRc::new(
+                                ColumnScanCell::new(new_scan),
+                            )));
                         } else {
                             panic!("Expected a column scan of type {}", stringify!($variant));
                         }
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($variant));
                     }
                 };
             }
 
-            match target_schema.get_type(layer_index) {
+            match trie_left.get_schema().get_type(layer_index) {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -108,7 +109,7 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
         if next_layer > 0 {
             let current_layer = next_layer - 1;
             if self.layer_left == self.layer_right
-                && self.difference_scans[current_layer].get_mut().is_equal()
+                && self.difference_scans[current_layer].is_equal()
             {
                 self.trie_right.down();
                 self.layer_right = Some(next_layer);
@@ -124,30 +125,27 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
         if next_layer == self.get_schema().arity() - 1 {
             macro_rules! down_for_datatype {
                 ($variant:ident) => {
-                    unsafe {
-                        if let ColumnScanT::$variant(left_scan_enum) =
-                            &*self.trie_left.get_scan(next_layer).unwrap().get()
+                    if let ColumnScanT::$variant(left_scan_rc) =
+                        self.trie_left.get_scan(next_layer).unwrap()
+                    {
+                        if let ColumnScanT::$variant(right_scan_rc) =
+                            self.trie_right.get_scan(next_layer).unwrap()
                         {
-                            if let ColumnScanT::$variant(right_scan_enum) =
-                                &*self.trie_right.get_scan(next_layer).unwrap().get()
-                            {
-                                if self.layer_left == self.layer_right {
-                                    self.difference_scans[next_layer] = UnsafeCell::new(
-                                        ColumnScanT::$variant(ColumnScanCell::new(
-                                            ColumnScanEnum::ColumnScanMinus(ColumnScanMinus::new(
-                                                left_scan_enum,
-                                                right_scan_enum,
-                                            )),
+                            if self.layer_left == self.layer_right {
+                                self.difference_scans[next_layer] =
+                                    ColumnScanT::$variant(ColumnScanRc::new(ColumnScanCell::new(
+                                        ColumnScanEnum::ColumnScanMinus(ColumnScanMinus::new(
+                                            left_scan_rc.clone(),
+                                            right_scan_rc.clone(),
                                         )),
-                                    );
-                                } else {
-                                    self.difference_scans[next_layer] =
-                                        UnsafeCell::new(ColumnScanT::$variant(
-                                            ColumnScanCell::new(ColumnScanEnum::ColumnScanPass(
-                                                ColumnScanPass::new(left_scan_enum),
-                                            )),
-                                        ));
-                                }
+                                    )));
+                            } else {
+                                self.difference_scans[next_layer] =
+                                    ColumnScanT::$variant(ColumnScanRc::new(ColumnScanCell::new(
+                                        ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(
+                                            left_scan_rc.clone(),
+                                        )),
+                                    )));
                             }
                         }
                     }
@@ -160,16 +158,16 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
                 DataTypeName::Double => down_for_datatype!(Double),
             }
         } else {
-            self.difference_scans[next_layer].get_mut().reset();
+            self.difference_scans[next_layer].reset();
         }
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
         self.get_scan(self.layer_left?)
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        Some(&self.difference_scans[index])
+    fn get_scan(&mut self, index: usize) -> Option<&mut ColumnScanT<'a>> {
+        Some(&mut self.difference_scans[index])
     }
 
     fn get_schema(&self) -> &dyn TableSchema {
@@ -190,7 +188,7 @@ mod test {
     use test_log::test;
 
     fn diff_next(diff_scan: &mut TrieScanMinus) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
+        if let ColumnScanT::U64(rcs) = diff_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -198,7 +196,7 @@ mod test {
     }
 
     fn diff_current(diff_scan: &mut TrieScanMinus) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
+        if let ColumnScanT::U64(rcs) = diff_scan.current_scan()? {
             rcs.current()
         } else {
             panic!("type should be u64");

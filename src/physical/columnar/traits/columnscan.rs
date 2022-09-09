@@ -7,7 +7,7 @@ use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
 };
-use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
+use std::{cell::UnsafeCell, fmt::Debug, ops::Range, rc::Rc};
 
 /// Iterator for a sorted interval of values
 pub trait ColumnScan: Debug + Iterator {
@@ -337,8 +337,8 @@ where
     }
 
     /// Forward `narrow_ranges` to the underlying [`ColumnScanEnum`].
-    pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
-        self.0.get_mut().narrow_ranges(intervals)
+    pub fn narrow_ranges(&self, intervals: Vec<Range<usize>>) {
+        unsafe { &mut *self.0.get() }.narrow_ranges(intervals)
     }
 
     /// Forward `is_equal` to the underlying [`ColumnScanEnum`].
@@ -352,8 +352,8 @@ where
     }
 
     /// Forward `get_smallest_scans` to the underlying [`ColumnScanEnum`].
-    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
-        self.0.get_mut().set_active_scans(active_scans);
+    pub fn set_active_scans(&self, active_scans: Vec<usize>) {
+        unsafe { &mut *self.0.get() }.set_active_scans(active_scans);
     }
 }
 
@@ -367,48 +367,137 @@ where
     }
 }
 
+/// A wrapper around a Rc type holding a `ColumnScanCell`.
+#[derive(Debug)]
+pub struct ColumnScanRc<'a, T>(Rc<ColumnScanCell<'a, T>>)
+where
+    T: 'a + ColumnDataType;
+
+impl<'a, T> ColumnScanRc<'a, T>
+where
+    T: 'a + ColumnDataType,
+{
+    /// Construct a new `ColumnScanRc` from the given [`ColumnScanCell`].
+    pub fn new(cs: ColumnScanCell<'a, T>) -> Self {
+        Self(Rc::new(cs))
+    }
+
+    /// Clones the `ColumnScanRc`.
+    pub fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+
+    /// Forward `next` to the underlying [`ColumnScanCell`].
+    pub fn next(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
+        self.0.next()
+    }
+
+    /// Forward `seek` to the underlying [`ColumnScanCell`].
+    pub fn seek(
+        &self,
+        value: <ColumnScanEnum<'a, T> as Iterator>::Item,
+    ) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
+        self.0.seek(value)
+    }
+
+    /// Forward `current` to the underlying [`ColumnScanCell`].
+    pub fn current(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
+        self.0.current()
+    }
+
+    /// Forward `reset` to the underlying [`ColumnScanCell`].
+    pub fn reset(&self) {
+        self.0.reset()
+    }
+
+    /// Forward `pos` to the underlying [`ColumnScanCell`].
+    pub fn pos(&self) -> Option<usize> {
+        self.0.pos()
+    }
+
+    /// Forward `narrow` to the underlying [`ColumnScanCell`].
+    pub fn narrow(&self, interval: Range<usize>) {
+        self.0.narrow(interval)
+    }
+
+    /// Forward `pos_multiple` to the underlying [`ColumnScanCell`].
+    pub fn pos_multiple(&self) -> Option<Vec<usize>> {
+        self.0.pos_multiple()
+    }
+
+    /// Forward `narrow_ranges` to the underlying [`ColumnScanCell`].
+    pub fn narrow_ranges(&self, intervals: Vec<Range<usize>>) {
+        self.0.narrow_ranges(intervals)
+    }
+
+    /// Forward `is_equal` to the underlying [`ColumnScanCell`].
+    pub fn is_equal(&self) -> bool {
+        self.0.is_equal()
+    }
+
+    /// Forward `get_smallest_scans` to the underlying [`ColumnScanCell`].
+    pub fn get_smallest_scans(&self) -> &Vec<bool> {
+        self.0.get_smallest_scans()
+    }
+
+    /// Forward `set_active_scans` to the underlying [`ColumnScanCell`].
+    pub fn set_active_scans(&self, active_scans: Vec<usize>) {
+        self.0.set_active_scans(active_scans);
+    }
+}
+
+impl<'a, S, T> From<S> for ColumnScanRc<'a, T>
+where
+    S: Into<ColumnScanCell<'a, T>>,
+    T: 'a + ColumnDataType,
+{
+    fn from(cs: S) -> Self {
+        Self(Rc::new(cs.into()))
+    }
+}
+
 /// Enum for [`ColumnScan`] for underlying data type
 #[derive(Debug)]
 pub enum ColumnScanT<'a> {
     /// Case u64
-    U64(ColumnScanCell<'a, u64>),
+    U64(ColumnScanRc<'a, u64>),
     /// Case Float
-    Float(ColumnScanCell<'a, Float>),
+    Float(ColumnScanRc<'a, Float>),
     /// Case Double
-    Double(ColumnScanCell<'a, Double>),
+    Double(ColumnScanRc<'a, Double>),
 }
 
-// Generate a macro forward_to_columnscan_cell!, which takes a [`ColumnScanT`] and a function as arguments
+// Generate a macro forward_to_columnscan_rc!, which takes a [`ColumnScanT`] and a function as arguments
 // and unfolds into a `match` statement that calls the datatype specific variant that function.
 // See `physical/util.rs` for a more detailed description of this macro.
-generate_datatype_forwarder!(forward_to_columnscan_cell);
+generate_datatype_forwarder!(forward_to_columnscan_rc);
 
 impl<'a> ColumnScanT<'a> {
     /// Return all positions in the underlying column the cursor is currently at
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
-        forward_to_columnscan_cell!(self, pos_multiple)
+        forward_to_columnscan_rc!(self, pos_multiple)
     }
 
     /// Set iterator to a set of possibly disjoint ranged
-    pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
-        forward_to_columnscan_cell!(self, narrow_ranges(intervals))
+    pub fn narrow_ranges(&self, intervals: Vec<Range<usize>>) {
+        forward_to_columnscan_rc!(self, narrow_ranges(intervals))
     }
 
     /// For ColumnScanFollow, returns whether its scans point to the same value
     pub fn is_equal(&self) -> bool {
-        forward_to_columnscan_cell!(self, is_equal)
+        forward_to_columnscan_rc!(self, is_equal)
     }
 
     /// Assumes that column scan is a union scan
     /// and returns a vector containing the positions of the scans with the smallest values
     pub fn get_smallest_scans(&self) -> &Vec<bool> {
-        forward_to_columnscan_cell!(self, get_smallest_scans)
+        forward_to_columnscan_rc!(self, get_smallest_scans)
     }
 
     /// Assumes that column scan is a union scan
     /// Set a vector that indicates which scans are currently active and should be considered
-    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
-        forward_to_columnscan_cell!(self, set_active_scans(active_scans))
+    pub fn set_active_scans(&self, active_scans: Vec<usize>) {
+        forward_to_columnscan_rc!(self, set_active_scans(active_scans))
     }
 }
 
@@ -416,7 +505,7 @@ impl<'a> Iterator for ColumnScanT<'a> {
     type Item = DataValueT;
 
     fn next(&mut self) -> Option<Self::Item> {
-        forward_to_columnscan_cell!(self, next.map_to(DataValueT))
+        forward_to_columnscan_rc!(self, next.map_to(DataValueT))
     }
 }
 
@@ -439,18 +528,18 @@ impl<'a> ColumnScan for ColumnScanT<'a> {
     }
 
     fn current(&mut self) -> Option<Self::Item> {
-        forward_to_columnscan_cell!(self, current.map_to(DataValueT))
+        forward_to_columnscan_rc!(self, current.map_to(DataValueT))
     }
 
     fn reset(&mut self) {
-        forward_to_columnscan_cell!(self, reset)
+        forward_to_columnscan_rc!(self, reset)
     }
 
     fn pos(&self) -> Option<usize> {
-        forward_to_columnscan_cell!(self, pos)
+        forward_to_columnscan_rc!(self, pos)
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        forward_to_columnscan_cell!(self, narrow(interval))
+        forward_to_columnscan_rc!(self, narrow(interval))
     }
 }

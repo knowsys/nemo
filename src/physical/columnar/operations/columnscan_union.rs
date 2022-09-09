@@ -1,4 +1,4 @@
-use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
+use super::super::traits::columnscan::{ColumnScan, ColumnScanRc};
 use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
@@ -9,7 +9,7 @@ pub struct ColumnScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    column_scans: Vec<&'a ColumnScanCell<'a, T>>,
+    column_scans: Vec<ColumnScanRc<'a, T>>,
     smallest_scans: Vec<bool>,
     smallest_value: Option<T>,
 
@@ -22,7 +22,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new ColumnVectorScan for a Column.
-    pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> ColumnScanUnion<'a, T> {
+    pub fn new(column_scans: Vec<ColumnScanRc<'a, T>>) -> ColumnScanUnion<'a, T> {
         let scans_len = column_scans.len();
         ColumnScanUnion {
             column_scans,
@@ -143,7 +143,7 @@ mod test {
         column_types::vector::ColumnVector,
         traits::{
             column::Column,
-            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanRc},
         },
     };
 
@@ -156,12 +156,17 @@ mod test {
         let column_snd = ColumnVector::new(vec![0u64, 1, 2, 7, 9]);
         let column_trd = ColumnVector::new(vec![0u64, 2, 4, 11]);
 
-        let mut iter_fst = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_fst.iter()));
-        let mut iter_snd = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_snd.iter()));
-        let mut iter_trd = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_trd.iter()));
+        let iter_fst = ColumnScanRc::new(ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(
+            column_fst.iter(),
+        )));
+        let iter_snd = ColumnScanRc::new(ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(
+            column_snd.iter(),
+        )));
+        let iter_trd = ColumnScanRc::new(ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(
+            column_trd.iter(),
+        )));
 
-        let mut union_iter =
-            ColumnScanUnion::new(vec![&mut iter_fst, &mut iter_snd, &mut iter_trd]);
+        let mut union_iter = ColumnScanUnion::new(vec![iter_fst, iter_snd, iter_trd]);
         assert_eq!(union_iter.current(), None);
         assert_eq!(union_iter.next(), Some(0));
         assert_eq!(union_iter.current(), Some(0));

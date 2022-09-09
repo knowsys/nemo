@@ -1,4 +1,4 @@
-use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
+use super::super::traits::columnscan::{ColumnScan, ColumnScanRc};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
@@ -8,7 +8,7 @@ pub struct ColumnScanEqualValue<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    scan: &'a ColumnScanCell<'a, T>,
+    scan: ColumnScanRc<'a, T>,
     value: T,
     current_value: Option<T>,
 }
@@ -17,7 +17,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new ColumnScanEqualValue for a Column.
-    pub fn new(scan: &'a ColumnScanCell<'a, T>, value: T) -> ColumnScanEqualValue<'a, T> {
+    pub fn new(scan: ColumnScanRc<'a, T>, value: T) -> ColumnScanEqualValue<'a, T> {
         ColumnScanEqualValue {
             scan,
             value,
@@ -88,7 +88,7 @@ mod test {
         column_types::vector::ColumnVector,
         traits::{
             column::Column,
-            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanRc},
         },
     };
 
@@ -99,17 +99,21 @@ mod test {
     #[test]
     fn test_u64() {
         let col = ColumnVector::new(vec![1u64, 4, 8]);
-        let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(col.iter()));
+        let col_iter = ColumnScanRc::new(ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(
+            col.iter(),
+        )));
 
-        let mut equal_scan = ColumnScanEqualValue::new(&col_iter, 4);
+        let mut equal_scan = ColumnScanEqualValue::new(col_iter, 4);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), Some(4));
         assert_eq!(equal_scan.current(), Some(4));
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);
 
-        let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(col.iter()));
-        let mut equal_scan = ColumnScanEqualValue::new(&col_iter, 7);
+        let col_iter = ColumnScanRc::new(ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(
+            col.iter(),
+        )));
+        let mut equal_scan = ColumnScanEqualValue::new(col_iter, 7);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);

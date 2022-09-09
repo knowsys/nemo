@@ -6,7 +6,6 @@ use crate::physical::tabular::operations::{
 };
 use crate::physical::tabular::table_types::trie::TrieScanGeneric;
 use crate::physical::tabular::traits::table_schema::TableSchema;
-use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
 /// Iterator for a Trie datastructure.
@@ -20,10 +19,10 @@ pub trait TrieScan<'a>: Debug {
     fn down(&mut self);
 
     /// Return the current position of the scan as a [`ColumnScanT`].
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>>;
 
     /// Return the underlying [`ColumnScanT`] object given an index.
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
+    fn get_scan(&mut self, index: usize) -> Option<&mut ColumnScanT<'a>>;
 
     /// Return the underlying [`TableSchema`].
     fn get_schema(&self) -> &dyn TableSchema;
@@ -59,11 +58,11 @@ impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
         forward_to_scan!(self, down)
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
         forward_to_scan!(self, current_scan)
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn get_scan(&mut self, index: usize) -> Option<&mut ColumnScanT<'a>> {
         forward_to_scan!(self, get_scan(index))
     }
 

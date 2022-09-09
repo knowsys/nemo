@@ -1,4 +1,4 @@
-use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
+use super::super::traits::columnscan::{ColumnScan, ColumnScanRc};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
@@ -8,8 +8,8 @@ pub struct ColumnScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    reference_scan: &'a ColumnScanCell<'a, T>,
-    value_scan: &'a ColumnScanCell<'a, T>,
+    reference_scan: ColumnScanRc<'a, T>,
+    value_scan: ColumnScanRc<'a, T>,
     current_value: Option<T>,
 }
 impl<'a, T> ColumnScanEqualColumn<'a, T>
@@ -18,8 +18,8 @@ where
 {
     /// Constructs a new ColumnScanEqualColumn for a Column.
     pub fn new(
-        reference_scan: &'a ColumnScanCell<'a, T>,
-        value_scan: &'a ColumnScanCell<'a, T>,
+        reference_scan: ColumnScanRc<'a, T>,
+        value_scan: ColumnScanRc<'a, T>,
     ) -> ColumnScanEqualColumn<'a, T> {
         ColumnScanEqualColumn {
             reference_scan,
@@ -92,7 +92,7 @@ mod test {
         column_types::vector::ColumnVector,
         traits::{
             column::Column,
-            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanRc},
         },
     };
 
@@ -104,24 +104,32 @@ mod test {
         let ref_col = ColumnVector::new(vec![0u64, 4, 7]);
         let val_col = ColumnVector::new(vec![1u64, 4, 8]);
 
-        let ref_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
-        let val_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(val_col.iter()));
+        let ref_iter = ColumnScanRc::new(ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(
+            ref_col.iter(),
+        )));
+        let val_iter = ColumnScanRc::new(ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(
+            val_col.iter(),
+        )));
 
         ref_iter.seek(4);
 
-        let mut equal_scan = ColumnScanEqualColumn::new(&ref_iter, &val_iter);
+        let mut equal_scan = ColumnScanEqualColumn::new(ref_iter, val_iter);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), Some(4));
         assert_eq!(equal_scan.current(), Some(4));
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);
 
-        let ref_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
-        let val_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(val_col.iter()));
+        let ref_iter = ColumnScanRc::new(ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(
+            ref_col.iter(),
+        )));
+        let val_iter = ColumnScanRc::new(ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(
+            val_col.iter(),
+        )));
 
         ref_iter.seek(7);
 
-        let mut equal_scan = ColumnScanEqualColumn::new(&ref_iter, &val_iter);
+        let mut equal_scan = ColumnScanEqualColumn::new(ref_iter, val_iter);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);

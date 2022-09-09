@@ -1,7 +1,9 @@
 use crate::physical::{
     columnar::{
         operations::{ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanPass},
-        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+        traits::columnscan::{
+            ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanRc, ColumnScanT,
+        },
     },
     datatypes::{DataTypeName, DataValueT},
     tabular::traits::{
@@ -9,45 +11,42 @@ use crate::physical::{
         triescan::{TrieScan, TrieScanEnum},
     },
 };
-use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
 /// Trie iterator enforcing conditions which state that some columns should have the same value
 #[derive(Debug)]
 pub struct TrieScanSelectEqual<'a> {
     base_trie: Box<TrieScanEnum<'a>>,
-    select_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
+    select_scans: Vec<ColumnScanT<'a>>,
     current_layer: Option<usize>,
 }
 
 impl<'a> TrieScanSelectEqual<'a> {
     /// Construct new TrieScanSelectEqual object.
-    pub fn new(base_trie: TrieScanEnum<'a>, eq_classes: Vec<Vec<usize>>) -> Self {
+    pub fn new(mut base_trie: TrieScanEnum<'a>, eq_classes: Vec<Vec<usize>>) -> Self {
         let target_schema = base_trie.get_schema();
         let arity = target_schema.arity();
-        let mut select_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
+        let mut select_scans = Vec::<ColumnScanT<'a>>::with_capacity(arity);
 
         for col_index in 0..arity {
             macro_rules! init_scans_for_datatype {
-                ($variant:ident) => {
-                    unsafe {
-                        let base_scan_cell = if let ColumnScanT::$variant(base_scan) =
-                            &*base_trie.get_scan(col_index).unwrap().get()
-                        {
-                            base_scan
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($variant));
-                        };
-                        let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanPass(
-                            ColumnScanPass::new(base_scan_cell),
-                        ));
+                ($variant:ident) => {{
+                    let base_scan_rc = if let ColumnScanT::$variant(base_scan) =
+                        base_trie.get_scan(col_index).unwrap()
+                    {
+                        base_scan.clone()
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($variant));
+                    };
+                    let next_scan = ColumnScanRc::new(ColumnScanCell::new(
+                        ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(base_scan_rc)),
+                    ));
 
-                        select_scans.push(UnsafeCell::new(ColumnScanT::$variant(next_scan)));
-                    }
-                };
+                    select_scans.push(ColumnScanT::$variant(next_scan));
+                }};
             }
 
-            match target_schema.get_type(col_index) {
+            match base_trie.get_schema().get_type(col_index) {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -60,37 +59,34 @@ impl<'a> TrieScanSelectEqual<'a> {
                 let current_member_idx = class[member_index];
 
                 macro_rules! init_scans_for_datatype {
-                    ($variant:ident) => {
-                        unsafe {
-                            let reference_scan_enum = if let ColumnScanT::$variant(ref_scan) =
-                                &*base_trie.get_scan(prev_member_idx).unwrap().get()
-                            {
-                                ref_scan
-                            } else {
-                                panic!("Expected a column scan of type {}", stringify!($variant));
-                            };
-                            let value_scan_enum = if let ColumnScanT::$variant(value_scan) =
-                                &*base_trie.get_scan(current_member_idx).unwrap().get()
-                            {
-                                value_scan
-                            } else {
-                                panic!("Expected a column scan of type {}", stringify!($variant));
-                            };
+                    ($variant:ident) => {{
+                        let reference_scan_rc = if let ColumnScanT::$variant(ref_scan) =
+                            base_trie.get_scan(prev_member_idx).unwrap()
+                        {
+                            ref_scan.clone()
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        };
+                        let value_scan_rc = if let ColumnScanT::$variant(value_scan) =
+                            base_trie.get_scan(current_member_idx).unwrap()
+                        {
+                            value_scan.clone()
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        };
 
-                            let next_scan = ColumnScanCell::new(
-                                ColumnScanEnum::ColumnScanEqualColumn(ColumnScanEqualColumn::new(
-                                    reference_scan_enum,
-                                    value_scan_enum,
-                                )),
-                            );
+                        let next_scan = ColumnScanRc::new(ColumnScanCell::new(
+                            ColumnScanEnum::ColumnScanEqualColumn(ColumnScanEqualColumn::new(
+                                reference_scan_rc,
+                                value_scan_rc,
+                            )),
+                        ));
 
-                            select_scans[current_member_idx] =
-                                UnsafeCell::new(ColumnScanT::$variant(next_scan));
-                        }
-                    };
+                        select_scans[current_member_idx] = ColumnScanT::$variant(next_scan);
+                    }};
                 }
 
-                match target_schema.get_type(current_member_idx) {
+                match base_trie.get_schema().get_type(current_member_idx) {
                     DataTypeName::U64 => init_scans_for_datatype!(U64),
                     DataTypeName::Float => init_scans_for_datatype!(Float),
                     DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -123,17 +119,15 @@ impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
 
         self.base_trie.down();
 
-        self.select_scans[self.current_layer.unwrap()]
-            .get_mut()
-            .reset();
+        self.select_scans[self.current_layer.unwrap()].reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
         self.get_scan(self.current_layer?)
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        Some(&self.select_scans[index])
+    fn get_scan(&mut self, index: usize) -> Option<&mut ColumnScanT<'a>> {
+        Some(&mut self.select_scans[index])
     }
 
     fn get_schema(&self) -> &dyn TableSchema {
@@ -145,7 +139,7 @@ impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
 #[derive(Debug)]
 pub struct TrieScanSelectValue<'a> {
     base_trie: Box<TrieScanEnum<'a>>,
-    select_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
+    select_scans: Vec<ColumnScanT<'a>>,
     current_layer: Option<usize>,
 }
 
@@ -160,32 +154,29 @@ pub struct ValueAssignment {
 
 impl<'a> TrieScanSelectValue<'a> {
     /// Construct new TrieScanSelectValue object.
-    pub fn new(base_trie: TrieScanEnum<'a>, assignemnts: Vec<ValueAssignment>) -> Self {
-        let target_schema = base_trie.get_schema();
-        let arity = target_schema.arity();
-        let mut select_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
+    pub fn new(mut base_trie: TrieScanEnum<'a>, assignemnts: Vec<ValueAssignment>) -> Self {
+        let arity = base_trie.get_schema().arity();
+        let mut select_scans = Vec::<ColumnScanT<'a>>::with_capacity(arity);
 
         for col_index in 0..arity {
             macro_rules! init_scans_for_datatype {
-                ($variant:ident) => {
-                    unsafe {
-                        let base_scan_enum = if let ColumnScanT::$variant(base_scan) =
-                            &*base_trie.get_scan(col_index).unwrap().get()
-                        {
-                            base_scan
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($variant));
-                        };
-                        let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanPass(
-                            ColumnScanPass::new(base_scan_enum),
-                        ));
+                ($variant:ident) => {{
+                    let base_scan_rc = if let ColumnScanT::$variant(base_scan) =
+                        base_trie.get_scan(col_index).unwrap()
+                    {
+                        base_scan.clone()
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($variant));
+                    };
+                    let next_scan = ColumnScanRc::new(ColumnScanCell::new(
+                        ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(base_scan_rc)),
+                    ));
 
-                        select_scans.push(UnsafeCell::new(ColumnScanT::$variant(next_scan)));
-                    }
-                };
+                    select_scans.push(ColumnScanT::$variant(next_scan));
+                }};
             }
 
-            match target_schema.get_type(col_index) {
+            match base_trie.get_schema().get_type(col_index) {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -194,32 +185,32 @@ impl<'a> TrieScanSelectValue<'a> {
 
         for assignemnt in assignemnts {
             macro_rules! init_scans_for_datatype {
-                ($variant:ident) => {
-                    unsafe {
-                        let value = if let DataValueT::$variant(value) = assignemnt.value {
-                            value
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($variant));
-                        };
+                ($variant:ident) => {{
+                    let value = if let DataValueT::$variant(value) = assignemnt.value {
+                        value
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($variant));
+                    };
 
-                        let scan_enum = if let ColumnScanT::$variant(scan) =
-                            &*base_trie.get_scan(assignemnt.column_idx).unwrap().get()
-                        {
-                            scan
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($variant));
-                        };
+                    let scan_rc = if let ColumnScanT::$variant(scan) =
+                        base_trie.get_scan(assignemnt.column_idx).unwrap()
+                    {
+                        scan.clone()
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($variant));
+                    };
 
-                        let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanEqualValue(
-                            ColumnScanEqualValue::new(scan_enum, value),
-                        ));
+                    let next_scan = ColumnScanRc::new(ColumnScanCell::new(
+                        ColumnScanEnum::ColumnScanEqualValue(ColumnScanEqualValue::new(
+                            scan_rc, value,
+                        )),
+                    ));
 
-                        select_scans[assignemnt.column_idx] =
-                            UnsafeCell::new(ColumnScanT::$variant(next_scan));
-                    }
-                };
+                    select_scans[assignemnt.column_idx] = ColumnScanT::$variant(next_scan);
+                }};
             }
-            match target_schema.get_type(assignemnt.column_idx) {
+
+            match base_trie.get_schema().get_type(assignemnt.column_idx) {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -251,17 +242,15 @@ impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
 
         self.base_trie.down();
 
-        self.select_scans[self.current_layer.unwrap()]
-            .get_mut()
-            .reset();
+        self.select_scans[self.current_layer.unwrap()].reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
         self.get_scan(self.current_layer?)
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        Some(&self.select_scans[index])
+    fn get_scan(&mut self, index: usize) -> Option<&mut ColumnScanT<'a>> {
+        Some(&mut self.select_scans[index])
     }
 
     fn get_schema(&self) -> &dyn TableSchema {
@@ -282,7 +271,7 @@ mod test {
     use test_log::test;
 
     fn select_eq_next(scan: &mut TrieScanSelectEqual) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.next()
         } else {
             panic!("Type should be u64");
@@ -290,7 +279,7 @@ mod test {
     }
 
     fn select_eq_current(scan: &mut TrieScanSelectEqual) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.current()
         } else {
             panic!("Type should be u64");
@@ -298,7 +287,7 @@ mod test {
     }
 
     fn select_val_next(scan: &mut TrieScanSelectValue) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.next()
         } else {
             panic!("Type should be u64");
@@ -306,7 +295,7 @@ mod test {
     }
 
     fn select_val_current(scan: &mut TrieScanSelectValue) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.current()
         } else {
             panic!("Type should be u64");

@@ -77,6 +77,11 @@ macro_rules! generate_forwarder {
                     $( Self::$variant(value) => $$enum::$variant($$wrap(value.$$func($$($$($$arg),*)?))) ),*
                 }
             };
+            ($$self:ident, $$func:ident$$( ($$( $$arg:tt ),*) )?.wrap_with($$wrap:path).wrap_with($$wrap2:path).as_variant_of($$enum:ident) ) => {
+                match $$self {
+                    $( Self::$variant(value) => $$enum::$variant($$wrap2($$wrap(value.$$func($$($$($$arg),*)?)))) ),*
+                }
+            };
             ($$self:ident, $$func:ident$$( ($$( $$arg:tt ),*) )?.as_variant_of($$enum:ident).wrap_with($$wrap:path) ) => {
                 match $$self {
                     $( Self::$variant(value) => $$wrap($$enum::$variant(value.$$func($$($$($$arg),*)?))) ),*

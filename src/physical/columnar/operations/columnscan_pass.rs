@@ -1,4 +1,4 @@
-use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
+use super::super::traits::columnscan::{ColumnScan, ColumnScanRc};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
@@ -8,14 +8,14 @@ pub struct ColumnScanPass<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    reference_scan: &'a ColumnScanCell<'a, T>,
+    reference_scan: ColumnScanRc<'a, T>,
 }
 impl<'a, T> ColumnScanPass<'a, T>
 where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new ColumnScanPass for a Column.
-    pub fn new(reference_scan: &'a ColumnScanCell<'a, T>) -> ColumnScanPass<'a, T> {
+    pub fn new(reference_scan: ColumnScanRc<'a, T>) -> ColumnScanPass<'a, T> {
         ColumnScanPass { reference_scan }
     }
 }
@@ -61,7 +61,7 @@ mod test {
         column_types::vector::ColumnVector,
         traits::{
             column::Column,
-            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanRc},
         },
     };
 
@@ -71,9 +71,11 @@ mod test {
     #[test]
     fn test_u64() {
         let ref_col = ColumnVector::new(vec![0, 4, 7]);
-        let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
+        let ref_col_iter = ColumnScanRc::new(ColumnScanCell::new(
+            ColumnScanEnum::ColumnScanVector(ref_col.iter()),
+        ));
 
-        let mut pass_scan = ColumnScanPass::new(&ref_col_iter);
+        let mut pass_scan = ColumnScanPass::new(ref_col_iter);
 
         assert_eq!(pass_scan.current(), None);
         assert_eq!(pass_scan.next(), Some(0));

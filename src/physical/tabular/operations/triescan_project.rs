@@ -4,7 +4,7 @@ use crate::physical::{
         operations::columnscan_reorder::ColumnScanReorder,
         traits::{
             column::Column,
-            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanRc, ColumnScanT},
         },
     },
     datatypes::{ColumnDataType, DataTypeName},
@@ -12,7 +12,6 @@ use crate::physical::{
     tabular::traits::{table::Table, table_schema::TableSchema, triescan::TrieScan},
 };
 
-use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -57,7 +56,7 @@ pub struct TrieScanProject<'a> {
     current_layer: Option<usize>,
     target_schema: TrieSchema,
     picked_columns: Vec<usize>,
-    reorder_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
+    reorder_scans: Vec<ColumnScanT<'a>>,
 }
 
 impl<'a> TrieScanProject<'a> {
@@ -65,7 +64,7 @@ impl<'a> TrieScanProject<'a> {
     pub fn new(trie: &'a Trie, picked_columns: Vec<usize>) -> Self {
         let input_schema = trie.schema();
 
-        let mut reorder_scans = Vec::<UnsafeCell<ColumnScanT>>::with_capacity(picked_columns.len());
+        let mut reorder_scans = Vec::<ColumnScanT>::with_capacity(picked_columns.len());
 
         let mut target_attributes = Vec::<TrieSchemaEntry>::with_capacity(picked_columns.len());
         for &col_index in &picked_columns {
@@ -86,7 +85,7 @@ impl<'a> TrieScanProject<'a> {
                             panic!("Do other cases later")
                         };
 
-                    reorder_scans.push(UnsafeCell::new(ColumnScanT::$variant(
+                    reorder_scans.push(ColumnScanT::$variant(ColumnScanRc::new(
                         ColumnScanCell::new(ColumnScanEnum::ColumnScanReorder(
                             ColumnScanReorder::new(current_column.get_data_column()),
                         )),
@@ -153,7 +152,6 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
                         .unwrap_or(self.current_layer.unwrap());
 
                     let current_cursors = self.reorder_scans[self.current_layer.unwrap()]
-                        .get_mut()
                         .pos_multiple()
                         .expect("Should not call down when not on an element");
 
@@ -163,7 +161,6 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
                     // we check this by "shrinking" the cursor positions from the comparison layer
                     let current_cursors: Vec<usize> = if self.current_layer.unwrap() == layer_for_comparison { current_cursors } else {
                         let comparison_cursors = self.reorder_scans[layer_for_comparison]
-                            .get_mut()
                             .pos_multiple()
                             .expect("Should not call down when not on an element");
 
@@ -231,7 +228,6 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
                 log::debug!("NEXT_RANGES {next_layer:?} {next_ranges:?}");
 
                 self.reorder_scans[next_layer]
-                    .get_mut()
                     .narrow_ranges(next_ranges);
             }};
         }
@@ -245,14 +241,14 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
         self.current_layer = Some(next_layer);
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
         debug_assert!(self.current_layer.is_some());
 
-        Some(&self.reorder_scans[self.current_layer?])
+        Some(&mut self.reorder_scans[self.current_layer?])
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        Some(&self.reorder_scans[index])
+    fn get_scan(&mut self, index: usize) -> Option<&mut ColumnScanT<'a>> {
+        Some(&mut self.reorder_scans[index])
     }
 
     fn get_schema(&self) -> &dyn TableSchema {

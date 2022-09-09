@@ -60,8 +60,8 @@ fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bool>)
     trie_scan.down();
     loop {
         let is_last_layer = current_layer >= target_schema.arity() - 1;
-        let current_value = unsafe { (*trie_scan.current_scan().unwrap().get()).current() };
-        let next_value = unsafe { (*trie_scan.current_scan().unwrap().get()).next() };
+        let current_value = trie_scan.current_scan().unwrap().current();
+        let next_value = trie_scan.current_scan().unwrap().next();
         next_count += 1;
 
         if let Some(val) = current_value {

@@ -13,7 +13,6 @@ use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use crate::physical::tabular::traits::{
     table::Table, table_schema::TableSchema, triescan::TrieScan,
 };
-use std::cell::UnsafeCell;
 use std::fmt;
 use std::fmt::Debug;
 use std::iter;
@@ -463,18 +462,18 @@ impl Table for Trie {
 #[derive(Debug)]
 pub struct TrieScanGeneric<'a> {
     trie: &'a Trie,
-    layers: Vec<UnsafeCell<ColumnScanT<'a>>>,
+    layers: Vec<ColumnScanT<'a>>,
     current_layer: Option<usize>,
 }
 
 impl<'a> TrieScanGeneric<'a> {
     /// Construct Trie iterator.
     pub fn new(trie: &'a Trie) -> Self {
-        let mut layers = Vec::<UnsafeCell<ColumnScanT<'a>>>::new();
+        let mut layers = Vec::<ColumnScanT<'a>>::new();
 
         for column_t in trie.columns() {
             let new_scan = column_t.iter();
-            layers.push(UnsafeCell::new(new_scan));
+            layers.push(new_scan);
         }
 
         Self {
@@ -493,7 +492,7 @@ impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
     fn down(&mut self) {
         match self.current_layer {
             None => {
-                self.layers[0].get_mut().reset();
+                self.layers[0].reset();
                 self.current_layer = Some(0);
             }
             Some(index) => {
@@ -503,7 +502,6 @@ impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
                 );
 
                 let current_position = self.layers[index]
-                    .get_mut()
                     .pos()
                     .expect("Going down is only allowed when on an element.");
 
@@ -513,19 +511,19 @@ impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
                     .get_column(next_index)
                     .int_bounds(current_position);
 
-                self.layers[next_index].get_mut().narrow(next_layer_range);
+                self.layers[next_index].narrow(next_layer_range);
 
                 self.current_layer = Some(next_index);
             }
         }
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        Some(&self.layers[self.current_layer?])
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
+        Some(&mut self.layers[self.current_layer?])
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        Some(&self.layers[index])
+    fn get_scan(&mut self, index: usize) -> Option<&mut ColumnScanT<'a>> {
+        Some(&mut self.layers[index])
     }
 
     fn get_schema(&self) -> &dyn TableSchema {
@@ -669,7 +667,7 @@ mod test {
     }
 
     fn scan_seek(int_scan: &mut TrieScanGeneric, value: u64) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
             rcs.seek(value)
         } else {
             panic!("type should be u64");
@@ -677,7 +675,7 @@ mod test {
     }
 
     fn scan_next(int_scan: &mut TrieScanGeneric) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -685,12 +683,10 @@ mod test {
     }
 
     fn scan_current(int_scan: &mut TrieScanGeneric) -> Option<u64> {
-        unsafe {
-            if let ColumnScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
-                rcs.current()
-            } else {
-                panic!("type should be u64");
-            }
+        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
+            rcs.current()
+        } else {
+            panic!("type should be u64");
         }
     }
 

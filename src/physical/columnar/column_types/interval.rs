@@ -2,7 +2,7 @@ use crate::generate_datatype_forwarder;
 use crate::physical::{
     columnar::traits::{
         column::{Column, ColumnEnum},
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
+        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRc, ColumnScanT},
     },
     datatypes::{ColumnDataType, DataValueT, Double, Float},
 };
@@ -131,6 +131,7 @@ impl<'a> Column<'a, DataValueT> for ColumnWithIntervalsT {
         forward_to_interval_column!(
             self,
             iter.wrap_with(ColumnScanCell::new)
+                .wrap_with(ColumnScanRc::new)
                 .as_variant_of(ColumnScanT)
         )
     }

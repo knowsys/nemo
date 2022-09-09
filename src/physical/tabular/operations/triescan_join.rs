@@ -1,7 +1,9 @@
 use crate::physical::{
     columnar::{
         operations::ColumnScanJoin,
-        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+        traits::columnscan::{
+            ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanRc, ColumnScanT,
+        },
     },
     datatypes::{DataTypeName, Double, Float},
     tabular::table_types::trie::TrieSchema,
@@ -11,7 +13,6 @@ use crate::physical::{
     },
 };
 
-use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::iter::repeat;
 
@@ -26,20 +27,13 @@ pub struct TrieScanJoin<'a> {
 
     variable_to_scan: Vec<Vec<usize>>,
 
-    /// We're keeping an [`UnsafeCell`] here since the
-    /// [`ColumnScanT`] are actually borrowed from within
-    /// `trie_scans`. We're not actually modifying through these
-    /// references (since there's another layer of Cells hidden in
-    /// [`ColumnScanT`], we're just using this satisfy the
-    /// borrow checker.  TODO: find a nicer solution for this that
-    /// doesn't expose [`UnsafeCell`] as part of the API.
-    merge_joins: Vec<UnsafeCell<ColumnScanT<'a>>>,
+    merge_joins: Vec<ColumnScanT<'a>>,
 }
 
 impl<'a> TrieScanJoin<'a> {
     /// Construct new TrieScanJoin object.
     pub fn new(
-        trie_scans: Vec<TrieScanEnum<'a>>,
+        mut trie_scans: Vec<TrieScanEnum<'a>>,
         bindings: &[Vec<usize>],
         target_schema: TrieSchema,
     ) -> Self {
@@ -50,7 +44,7 @@ impl<'a> TrieScanJoin<'a> {
             .take(target_schema.arity())
             .collect::<Vec<_>>();
 
-        let mut merge_joins: Vec<UnsafeCell<ColumnScanT<'a>>> = Vec::new();
+        let mut merge_joins: Vec<ColumnScanT<'a>> = Vec::new();
 
         for (scan_index, binding) in bindings.iter().enumerate() {
             for (col_index, &var) in binding.iter().enumerate() {
@@ -62,24 +56,23 @@ impl<'a> TrieScanJoin<'a> {
         for (variable, scan_indices) in variable_to_scan.iter().enumerate() {
             macro_rules! merge_join_for_datatype {
                 ($variant:ident, $type:ty) => {{
-                    let mut scans = Vec::<&ColumnScanCell<$type>>::new();
+                    let mut scans = Vec::<ColumnScanRc<$type>>::new();
                     for (index, &scan_index) in scan_indices.iter().enumerate() {
                         let column_index = merge_join_indices[variable][index];
-                        unsafe {
-                            let column_scan =
-                                &*trie_scans[scan_index].get_scan(column_index).unwrap().get();
+                        let column_scan = trie_scans[scan_index].get_scan(column_index).unwrap();
 
-                            if let ColumnScanT::$variant(cs) = column_scan {
-                                scans.push(cs);
-                            } else {
-                                panic!("expected a column scan of type {}", stringify!($type));
-                            }
+                        if let ColumnScanT::$variant(cs) = column_scan {
+                            scans.push(cs.clone());
+                        } else {
+                            panic!("expected a column scan of type {}", stringify!($type));
                         }
                     }
 
-                    merge_joins.push(UnsafeCell::new(ColumnScanT::$variant(ColumnScanCell::new(
-                        ColumnScanEnum::ColumnScanJoin(ColumnScanJoin::new(scans)),
-                    ))))
+                    merge_joins.push(ColumnScanT::$variant(ColumnScanRc::new(
+                        ColumnScanCell::new(ColumnScanEnum::ColumnScanJoin(ColumnScanJoin::new(
+                            scans,
+                        ))),
+                    )))
                 }};
             }
 
@@ -129,21 +122,21 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
             self.trie_scans[scan_index].down();
         }
 
-        self.merge_joins[current_variable].get_mut().reset();
+        self.merge_joins[current_variable].reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
         debug_assert!(self.current_variable.is_some());
 
         match self.target_schema.get_type(self.current_variable?) {
             DataTypeName::U64 | DataTypeName::Float | DataTypeName::Double => {
-                Some(&self.merge_joins[self.current_variable?])
+                Some(&mut self.merge_joins[self.current_variable?])
             }
         }
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        Some(&self.merge_joins[index])
+    fn get_scan(&mut self, index: usize) -> Option<&mut ColumnScanT<'a>> {
+        Some(&mut self.merge_joins[index])
     }
 
     fn get_schema(&self) -> &dyn TableSchema {
@@ -175,22 +168,18 @@ mod test {
     use test_log::test;
 
     fn join_next(join_scan: &mut TrieScanJoin) -> Option<u64> {
-        unsafe {
-            if let ColumnScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
-                rcs.next()
-            } else {
-                panic!("type should be u64");
-            }
+        if let ColumnScanT::U64(rcs) = join_scan.current_scan()? {
+            rcs.next()
+        } else {
+            panic!("type should be u64");
         }
     }
 
     fn join_current(join_scan: &mut TrieScanJoin) -> Option<u64> {
-        unsafe {
-            if let ColumnScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
-                rcs.current()
-            } else {
-                panic!("type should be u64");
-            }
+        if let ColumnScanT::U64(rcs) = join_scan.current_scan()? {
+            rcs.current()
+        } else {
+            panic!("type should be u64");
         }
     }
 

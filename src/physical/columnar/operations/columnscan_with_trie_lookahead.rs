@@ -1,9 +1,9 @@
-use super::super::traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanT};
+use super::super::traits::columnscan::{ColumnScan, ColumnScanRc, ColumnScanT};
 use crate::physical::{
     datatypes::{ColumnDataType, DataTypeName},
     tabular::traits::triescan::{TrieScan, TrieScanEnum},
 };
-use std::{fmt::Debug, mem, ops::Range};
+use std::{cell::UnsafeCell, fmt::Debug, mem, ops::Range, rc::Rc};
 
 /// Column iterator for a column that represents a layer of partial trie iterator
 /// Only returns those values which would be included if the trie where to be materialized
@@ -12,7 +12,8 @@ pub struct ColumnScanWithTrieLookahead<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    trie_scan: &'a mut TrieScanEnum<'a>,
+    // TODO: we could build something like RangedColumnScanRc and RangedColumnScanRc trie scans
+    trie_scan: Rc<UnsafeCell<TrieScanEnum<'a>>>,
     current_layer: usize,
     current: Option<T>,
     datatype_name: DataTypeName,
@@ -24,7 +25,7 @@ where
 {
     /// Constructs a new ColumnScanWithTrieLookahead for a Column.
     pub fn new(
-        trie_scan: &'a mut TrieScanEnum<'a>,
+        trie_scan: Rc<UnsafeCell<TrieScanEnum<'a>>>,
         current_layer: usize,
         datatype_name: DataTypeName,
     ) -> ColumnScanWithTrieLookahead<'a, T> {
@@ -37,13 +38,13 @@ where
     }
 
     /// Returns the column scan of the current layer
-    fn get_current_columnscan(&self) -> &ColumnScanCell<'a, T> {
+    fn get_current_columnscan(&self) -> &ColumnScanRc<'a, T> {
         macro_rules! return_scan_for_datatype {
             ($variant:ident) => {
                 unsafe {
-                    if let ColumnScanT::$variant(base_scan) =
-                        &*self.trie_scan.current_scan().unwrap().get()
+                    if let ColumnScanT::$variant(base_scan) = (*self.trie_scan.get()).current_scan().unwrap()
                     {
+                        // TODO: get rid of this; having LookaheadScan generic over T is somewhat unintuitive since T does not occur on any of the inputs in new
                         return mem::transmute(base_scan);
                     } else {
                         panic!("Expected a column scan of type {}", stringify!($variant));
@@ -61,19 +62,20 @@ where
 
     // Check whether the current value of the given trie scan actually exists
     fn value_exists(&mut self) -> bool {
-        if self.current_layer == self.trie_scan.get_schema().arity() - 1 {
+        if self.current_layer == unsafe { &*self.trie_scan.get() }.get_schema().arity() - 1 {
             return true;
         }
 
         // Iterate through the trie_scan in a dfs manner
-        self.trie_scan.down();
+        unsafe { &mut *self.trie_scan.get() }.down();
         let mut current_layer = self.current_layer + 1;
         loop {
-            let is_last_layer = current_layer >= self.trie_scan.get_schema().arity() - 1;
+            let is_last_layer =
+                current_layer >= unsafe { &*self.trie_scan.get() }.get_schema().arity() - 1;
             let next_value = self.get_current_columnscan().next();
 
             if next_value.is_none() {
-                self.trie_scan.up();
+                unsafe { &mut *self.trie_scan.get() }.up();
                 current_layer -= 1;
 
                 if current_layer == self.current_layer {
@@ -84,11 +86,13 @@ where
             }
 
             if !is_last_layer {
-                self.trie_scan.down();
+                unsafe { &mut *self.trie_scan.get() }.down();
                 current_layer += 1;
             } else {
-                for _ in self.current_layer..(self.trie_scan.get_schema().arity() - 1) {
-                    self.trie_scan.up();
+                for _ in
+                    self.current_layer..(unsafe { &*self.trie_scan.get() }.get_schema().arity() - 1)
+                {
+                    unsafe { &mut *self.trie_scan.get() }.up();
                 }
 
                 return true;
