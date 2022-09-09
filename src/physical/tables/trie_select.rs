@@ -103,9 +103,7 @@ impl<'a> TrieScan<'a> for TrieSelectEqual<'a> {
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
 
-        self.current_layer = self
-            .current_layer
-            .and_then(|index| (index > 0).then(|| index - 1));
+        self.current_layer = self.current_layer.and_then(|index| index.checked_sub(1));
 
         self.base_trie.up();
     }
@@ -232,9 +230,7 @@ impl<'a> TrieScan<'a> for TrieSelectValue<'a> {
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
 
-        self.current_layer = self
-            .current_layer
-            .and_then(|index| (index > 0).then(|| index - 1));
+        self.current_layer = self.current_layer.and_then(|index| index.checked_sub(1));
 
         self.base_trie.up();
     }

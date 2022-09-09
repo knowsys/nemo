@@ -35,11 +35,11 @@ where
         if next_value < previous_value {
             let diff = previous_value - next_value;
 
-            (next_value == previous_value - diff).then(|| Self::Decrement(diff))
+            (next_value == previous_value - diff).then_some(Self::Decrement(diff))
         } else {
             let diff = next_value - previous_value;
 
-            (next_value == previous_value + diff).then(|| Self::Increment(diff))
+            (next_value == previous_value + diff).then_some(Self::Increment(diff))
         }
     }
 }

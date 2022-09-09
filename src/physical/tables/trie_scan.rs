@@ -55,9 +55,7 @@ impl<'a> IntervalTrieScan<'a> {
 
 impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
     fn up(&mut self) {
-        self.current_layer = self
-            .current_layer
-            .and_then(|index| (index > 0).then(|| index - 1));
+        self.current_layer = self.current_layer.and_then(|index| index.checked_sub(1));
     }
 
     fn down(&mut self) {

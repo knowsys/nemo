@@ -184,7 +184,7 @@ where
 {
     fn pos(&self) -> Option<usize> {
         self.pos
-            .and_then(|pos| (pos < self.interval.end).then(|| pos))
+            .and_then(|pos| (pos < self.interval.end).then_some(pos))
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
