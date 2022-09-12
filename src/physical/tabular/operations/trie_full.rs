@@ -13,7 +13,7 @@ use std::fmt::Debug;
 /// meaining that it only returns values that would be present were the iterator to be materialized
 #[derive(Debug)]
 pub struct TrieFull<'a> {
-    trie_scan: UnsafeCell<TrieScanEnum<'a>>,
+    trie_scan: Box<UnsafeCell<TrieScanEnum<'a>>>,
     current_col_scan: Option<UnsafeCell<ColumnScanT<'a>>>,
     current_layer: Option<usize>,
 }
@@ -22,7 +22,7 @@ impl<'a> TrieFull<'a> {
     /// Construct new TrieFull object.
     pub fn new(trie_scan: TrieScanEnum<'a>) -> TrieFull<'a> {
         TrieFull {
-            trie_scan: UnsafeCell::new(trie_scan),
+            trie_scan: Box::new(UnsafeCell::new(trie_scan)),
             current_col_scan: None,
             current_layer: None,
         }
@@ -43,7 +43,7 @@ impl<'a> TrieFull<'a> {
                 ($variant:ident, $type:ty) => {
                     unsafe {
                         let lookahead_scan = ColumnScanWithTrieLookahead::<$type>::new(
-                            &mut *self.trie_scan.get(),
+                            self.trie_scan.as_ref().get().as_mut().unwrap(),
                             current_layer,
                             current_type,
                         );
