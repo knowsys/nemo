@@ -57,15 +57,21 @@ impl Display for PrintableIdentifier<'_> {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
+pub enum Variable {
+    /// A universally quantified variable.
+    Universal(Identifier),
+    /// An existentially quantified variable.
+    Existential(Identifier),
+}
+
 /// Terms occurring in programs.
 #[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
 pub enum Term {
     /// An (abstract) constant.
     Constant(Identifier),
-    /// A (universally quantified) variable.
-    Variable(Identifier),
-    /// An existentially quantified variable.
-    ExistentialVariable(Identifier),
+    /// A variable.
+    Variable(Variable),
     /// A numeric literal.
     NumericLiteral(NumericLiteral),
     /// An RDF literal.
@@ -139,23 +145,25 @@ impl Atom {
     }
 
     /// Iterate over all variables in the atom.
-    pub fn variables(&self) -> impl Iterator<Item = &Term> {
-        self.terms()
-            .filter(|&term| matches!(term, Term::Variable(_) | Term::ExistentialVariable(_)))
+    pub fn variables(&self) -> impl Iterator<Item = Variable> + '_ {
+        self.terms().filter_map(|&term| match term {
+            Term::Variable(var) => Some(var),
+            _ => None,
+        })
     }
 
     /// Iterate over all universally quantified variables in the atom.
     pub fn universal_variables(&self) -> impl Iterator<Item = Identifier> + '_ {
-        self.variables().filter_map(|&term| match term {
-            Term::Variable(identifier) => Some(identifier),
+        self.variables().filter_map(|var| match var {
+            Variable::Universal(identifier) => Some(identifier),
             _ => None,
         })
     }
 
     /// Iterate over all existentially quantified variables in the atom.
     pub fn existential_variables(&self) -> impl Iterator<Item = Identifier> + '_ {
-        self.variables().filter_map(|&term| match term {
-            Term::ExistentialVariable(identifier) => Some(identifier),
+        self.variables().filter_map(|var| match var {
+            Variable::Existential(identifier) => Some(identifier),
             _ => None,
         })
     }
@@ -196,13 +204,19 @@ impl Neg for Literal {
 generate_forwarder!(forward_to_atom; Positive, Negative);
 
 impl Literal {
+    /// Return the predicate [`Identifier`].
+    #[must_use]
+    pub fn predicate(&self) -> Identifier {
+        forward_to_atom!(self, predicate)
+    }
+
     /// Iterate over the terms in the literal.
     pub fn terms(&self) -> impl Iterator<Item = &Term> {
         forward_to_atom!(self, terms)
     }
 
     /// Iterate over the variables in the literal.
-    pub fn variables(&self) -> impl Iterator<Item = &Term> {
+    pub fn variables(&self) -> impl Iterator<Item = Variable> + '_ {
         forward_to_atom!(self, variables)
     }
 
