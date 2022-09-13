@@ -1,16 +1,19 @@
-use std::{collections::HashMap, ops::Range};
+use std::ops::Range;
 
 use super::{
     execution_plan::{ExecutionNode, ExecutionOperation, ExecutionPlan},
-    model::{Atom, Identifier, Program, Rule, Term},
-    table_manager::{TableManager, TableManagerStrategy, VariableOrder},
+    model::{Atom, Identifier, Program, Term},
+    table_manager::{ColumnOrder, TableManager, TableManagerStrategy},
 };
+
+mod variable_order;
+
+use variable_order::{build_preferable_variable_orders, VariableOrder};
 
 struct RuleInfo {
     step_last_applied: usize,
     // Maps variables used in the rule to an index
-    // TODO: Maybe this type should be called VariableOrder instead of Vec<usize>?
-    promising_orders: Vec<HashMap<Identifier, usize>>,
+    promising_orders: Vec<VariableOrder>,
 }
 
 struct RuleExecutionEngine {
@@ -24,11 +27,13 @@ struct RuleExecutionEngine {
 impl RuleExecutionEngine {
     /// Create new [`RuleExecutionEngine`]
     pub fn new(memory_strategy: TableManagerStrategy, program: Program) -> Self {
-        let rule_infos = program
-            .rules()
-            .map(|r| RuleInfo {
+        // NOTE: indices are the ids of the rules and the rule order in variable_orders is the same as in program
+        let variable_orders = build_preferable_variable_orders(&program);
+        let rule_infos = variable_orders
+            .into_iter()
+            .map(|var_ord| RuleInfo {
                 step_last_applied: 0,
-                promising_orders: RuleExecutionEngine::calc_good_variable_orders(r),
+                promising_orders: var_ord,
             })
             .collect();
 
@@ -38,11 +43,6 @@ impl RuleExecutionEngine {
             program,
             rule_infos,
         }
-    }
-
-    // TODO: Return, you know, good variable orders
-    fn calc_good_variable_orders(rule: &Rule) -> Vec<HashMap<Identifier, usize>> {
-        Vec::new()
     }
 
     /// Executes the program
@@ -105,7 +105,7 @@ impl RuleExecutionEngine {
         &self,
         predicate: Identifier,
         range: &Range<usize>,
-        order: &VariableOrder,
+        order: &ColumnOrder,
         leaves: &mut Vec<ExecutionNode>,
     ) -> ExecutionNode {
         let mut subnodes = Vec::<ExecutionNode>::new();
@@ -127,7 +127,7 @@ impl RuleExecutionEngine {
         }
     }
 
-    fn order_atom(atom: &Atom, variable_map: &HashMap<Identifier, usize>) -> VariableOrder {
+    fn order_atom(atom: &Atom, variable_map: &VariableOrder) -> ColumnOrder {
         let mapped_variables: Vec<usize> = atom
             .terms()
             .map(|t| {
@@ -146,7 +146,7 @@ impl RuleExecutionEngine {
         indices
     }
 
-    fn calc_binding(atoms: &[&Atom], variable_map: &HashMap<Identifier, usize>) -> Vec<Vec<usize>> {
+    fn calc_binding(atoms: &[&Atom], variable_map: &VariableOrder) -> Vec<Vec<usize>> {
         let mut result = Vec::new();
 
         for atom in atoms {
@@ -175,15 +175,15 @@ impl RuleExecutionEngine {
         head: &Atom,
         last_rule_step: usize,
         mid: usize,
-        variable_map: &HashMap<Identifier, usize>,
+        variable_map: &VariableOrder,
         leaves: &mut Vec<ExecutionNode>,
     ) -> ExecutionNode {
         let mut subplans = Vec::<ExecutionNode>::new();
-        for before_mid_index in 0..mid {
+        for atom in atoms.iter().take(mid) {
             subplans.push(self.create_subplan_union(
-                atoms[before_mid_index].predicate(),
+                atom.predicate(),
                 &(0..self.current_step + 1),
-                &RuleExecutionEngine::order_atom(&atoms[before_mid_index], variable_map),
+                &RuleExecutionEngine::order_atom(atom, variable_map),
                 leaves,
             ))
         }
@@ -191,22 +191,22 @@ impl RuleExecutionEngine {
         subplans.push(self.create_subplan_union(
             atoms[mid].predicate(),
             &(last_rule_step..self.current_step + 1),
-            &RuleExecutionEngine::order_atom(&atoms[mid], variable_map),
+            &RuleExecutionEngine::order_atom(atoms[mid], variable_map),
             leaves,
         ));
 
-        for after_mid_index in (mid + 1)..atoms.len() {
+        for atom in atoms.iter().skip(mid + 1) {
             subplans.push(self.create_subplan_union(
-                atoms[after_mid_index].predicate(),
+                atom.predicate(),
                 &(0..last_rule_step),
-                &RuleExecutionEngine::order_atom(&atoms[after_mid_index], variable_map),
+                &RuleExecutionEngine::order_atom(atom, variable_map),
                 leaves,
             ))
         }
 
         let head_order = RuleExecutionEngine::calc_binding(&[head], variable_map)
             .into_iter()
-            .nth(0)
+            .next()
             .unwrap();
 
         ExecutionNode {
@@ -222,7 +222,7 @@ impl RuleExecutionEngine {
         &self,
         rule_id: usize,
         head_index: usize,
-        variable_map: &HashMap<Identifier, usize>,
+        variable_map: &VariableOrder,
     ) -> ExecutionPlan {
         let rule = &self.program.rules[rule_id];
 

@@ -366,13 +366,20 @@ impl<'a> RuleParser<'a> {
     pub fn parse_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
         traced(
             "parse_variable",
-            map(
-                alt((
-                    self.parse_universal_variable(),
-                    self.parse_existential_variable(),
-                )),
-                Term::Variable,
-            ),
+            alt((
+                self.parse_universal_variable(),
+                self.parse_existential_variable(),
+            )),
+        )
+    }
+
+    /// Parse a universally quantified variable.
+    pub fn parse_universal_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
+        traced(
+            "parse_universal_variable",
+            map(preceded(tag("?"), self.parse_variable_name()), |var| {
+                Term::Variable(Variable::Universal(var))
+            }),
         )
     }
 
