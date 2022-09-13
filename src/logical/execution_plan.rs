@@ -1,17 +1,15 @@
 use std::ops::Range;
 
-use crate::physical::tables::TrieSchema;
-
 use super::{
     model::Identifier,
-    table_manager::{TableId, VariableOrder},
+    table_manager::{ColumnOrder, TableId},
 };
 
 /// Represents a database operation that should be performed
 #[derive(Debug, Clone)]
 pub enum ExecutionOperation {
     /// Represents a table that may exist in the table manager
-    Fetch(Identifier, Range<usize>, VariableOrder),
+    Fetch(Identifier, Range<usize>, ColumnOrder),
     /// Join operation
     Join(Vec<ExecutionNode>, Vec<Vec<usize>>, Vec<usize>),
     /// Union operation
