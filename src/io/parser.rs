@@ -332,10 +332,9 @@ impl<'a> RuleParser<'a> {
     pub fn parse_universal_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
         traced(
             "parse_universal_variable",
-            map(
-                preceded(tag("?"), self.parse_variable_name()),
-                Term::Variable,
-            ),
+            map(preceded(tag("?"), self.parse_variable_name()), |var| {
+                Term::Variable(Variable::Universal(var))
+            }),
         )
     }
 
@@ -343,10 +342,9 @@ impl<'a> RuleParser<'a> {
     pub fn parse_existential_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
         traced(
             "parse_existential_variable",
-            map(
-                preceded(tag("!"), self.parse_variable_name()),
-                Term::ExistentialVariable,
-            ),
+            map(preceded(tag("!"), self.parse_variable_name()), |var| {
+                Term::Variable(Variable::Existential(var))
+            }),
         )
     }
 

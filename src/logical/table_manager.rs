@@ -7,32 +7,24 @@ use crate::physical::tables::{
 };
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use superslice::*;
 
 /// Type which represents a variable ordering
-pub type VariableOrder = Vec<usize>;
+pub type ColumnOrder = Vec<usize>;
 
 /// Type which represents table ids
 pub type TableId = usize;
 
 /// Information which identfies a table
 /// Serves as the key to hashmap
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct TableKey {
     /// ID of the predicate
     pub predicate_id: Identifier,
     /// Range of step this table covers
     /// Refers to the normalized ranges
     pub step_range: Range<usize>,
-}
-
-impl Hash for TableKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.predicate_id.hash(state);
-        self.step_range.hash(state);
-    }
 }
 
 /// Represents the storage status of a table
@@ -81,7 +73,7 @@ pub struct TableInfo {
     status: TableStatus,
 
     // Redundant information, TODO: Get rid of this?
-    variable_order: VariableOrder,
+    variable_order: ColumnOrder,
     key: TableKey,
 
     priority: u64,
@@ -93,7 +85,7 @@ pub struct TableInfo {
 pub struct TableManager {
     strategy: TableManagerStrategy,
     tables: Vec<TableInfo>,
-    entries: HashMap<TableKey, Vec<(VariableOrder, TableId)>>,
+    entries: HashMap<TableKey, Vec<(ColumnOrder, TableId)>>,
 
     predicate_to_steps: HashMap<Identifier, Vec<usize>>,
     priority_heap: BinaryHeap<TablePriority>,
@@ -138,11 +130,11 @@ impl TableManager {
         &self,
         predicate_id: Identifier,
         step_range: &Range<usize>,
-    ) -> impl Iterator<Item = &(VariableOrder, TableId)> {
+    ) -> impl Iterator<Item = &(ColumnOrder, TableId)> {
         self.entries
             .get(&TableKey {
                 predicate_id,
-                step_range: self.normalize_range(predicate_id, &step_range),
+                step_range: self.normalize_range(predicate_id, step_range),
             })
             .unwrap()
             .iter()
@@ -153,21 +145,21 @@ impl TableManager {
         &self,
         predicate_id: Identifier,
         step_range: &Range<usize>,
-        variable_order: &VariableOrder,
+        variable_order: &ColumnOrder,
     ) -> Option<TableId> {
         for (order, id) in self.entries.get(&TableKey {
             predicate_id,
-            step_range: self.normalize_range(predicate_id, &step_range),
+            step_range: self.normalize_range(predicate_id, step_range),
         })? {
             if TableManager::orders_equal(variable_order, order) {
                 return Some(*id);
             }
         }
 
-        return None;
+        None
     }
 
-    fn translate_order(order_from: &VariableOrder, order_to: &VariableOrder) -> Vec<usize> {
+    fn translate_order(order_from: &ColumnOrder, order_to: &ColumnOrder) -> Vec<usize> {
         let mut result = Vec::new();
 
         for &to_variable in order_to {
@@ -181,7 +173,7 @@ impl TableManager {
         &self,
         key: &TableKey,
         id: TableId,
-    ) -> Option<(&VariableOrder, &Trie)> {
+    ) -> Option<(&ColumnOrder, &Trie)> {
         for (base_order, base_id) in self.entries.get(key).unwrap() {
             if *base_id == id {
                 continue;
@@ -192,7 +184,7 @@ impl TableManager {
             }
         }
 
-        return None;
+        None
     }
 
     fn materialize_required_tables(&mut self, tables: &HashSet<TableId>) {
@@ -282,11 +274,11 @@ impl TableManager {
         }
     } */
 
-    fn add_table_helper(&mut self, key: TableKey, order: VariableOrder, priority: u64) -> TableId {
+    fn add_table_helper(&mut self, key: TableKey, order: ColumnOrder, priority: u64) -> TableId {
         let new_id = self.current_id;
         self.current_id += 1;
 
-        let table_list = self.entries.entry(key).or_insert_with(|| Vec::new());
+        let table_list = self.entries.entry(key).or_insert_with(Vec::new);
 
         // If the table list contained only one table then this means it couldnt have been deleted until now
         // and therefore wasnt in the priority queue before, so we add it now
@@ -300,7 +292,7 @@ impl TableManager {
             });
         }
 
-        if table_list.len() >= 1 {
+        if !table_list.is_empty() {
             self.priority_heap.push(TablePriority {
                 table_id: new_id,
                 priority,
@@ -317,7 +309,7 @@ impl TableManager {
         &mut self,
         data_source: DataSource,
         predicate: Identifier,
-        variable_order: VariableOrder,
+        variable_order: ColumnOrder,
         priority: u64,
     ) -> TableId {
         let key = TableKey {
@@ -328,7 +320,7 @@ impl TableManager {
         self.tables.push(TableInfo {
             status: TableStatus::OnDisk(data_source),
             variable_order: Vec::new(),
-            key: key.clone(),
+            key,
             priority,
             space: 0, //TODO: How to do this
         });
@@ -345,7 +337,7 @@ impl TableManager {
         &mut self,
         predicate: Identifier,
         absolute_step_range: Range<usize>,
-        variable_order: VariableOrder,
+        variable_order: ColumnOrder,
         priority: u64,
         plan: ExecutionPlan,
     ) -> TableId {
@@ -371,14 +363,14 @@ impl TableManager {
             let table_list = self
                 .predicate_to_steps
                 .entry(key.predicate_id)
-                .or_insert_with(|| Vec::new());
+                .or_insert_with(Vec::new);
             table_list.push(absolute_step_range.start);
         }
 
         self.add_table_helper(key, variable_order, priority)
     }
 
-    fn orders_equal(order_left: &VariableOrder, order_right: &VariableOrder) -> bool {
+    fn orders_equal(order_left: &ColumnOrder, order_right: &ColumnOrder) -> bool {
         if order_left.len() != order_right.len() {
             return false;
         }
@@ -389,7 +381,7 @@ impl TableManager {
             }
         }
 
-        return true;
+        true
     }
 
     /// Checks if the given table is empty
@@ -431,10 +423,10 @@ impl TableManager {
             // TODO: This is tricky
             ExecutionOperation::Join(_subtables, _bindings, _schema) => 0,
             ExecutionOperation::Union(subtables) => {
-                return subtables.iter().map(|s| self.estimate_space(&s)).sum();
+                subtables.iter().map(|s| self.estimate_space(s)).sum()
             }
             ExecutionOperation::Minus(subtables) => {
-                return self.estimate_space(&subtables[0]);
+                self.estimate_space(&subtables[0])
             }
             ExecutionOperation::Project(_table_id, _schema_sorting) => {
                 // Should be easy to calculate
@@ -472,7 +464,7 @@ impl TableManager {
                 if let TableStatus::InMemory(trie) = &table_info.status {
                     let interval_trie_scan = IntervalTrieScan::new(trie);
 
-                    return TrieScanEnum::IntervalTrieScan(interval_trie_scan);
+                    TrieScanEnum::IntervalTrieScan(interval_trie_scan)
                 } else {
                     panic!("Base tables are supposed to be materialized");
                 }
@@ -480,7 +472,7 @@ impl TableManager {
             ExecutionOperation::Join(subtables, bindings, head_binding) => {
                 let subiterators: Vec<TrieScanEnum> = subtables
                     .iter()
-                    .map(|s| self.get_iterator_node(&s))
+                    .map(|s| self.get_iterator_node(s))
                     .collect();
 
                 let mut attributes = Vec::new();
@@ -501,17 +493,17 @@ impl TableManager {
 
                 let schema = TrieSchema::new(attributes);
 
-                return TrieScanEnum::TrieJoin(TrieJoin::new(subiterators, bindings, schema));
+                TrieScanEnum::TrieJoin(TrieJoin::new(subiterators, bindings, schema))
             }
             ExecutionOperation::Union(subtables) => {
                 let union_scan = TrieUnion::new(
                     subtables
                         .iter()
-                        .map(|s| self.get_iterator_node(&s))
+                        .map(|s| self.get_iterator_node(s))
                         .collect(),
                 );
 
-                return TrieScanEnum::TrieUnion(union_scan);
+                TrieScanEnum::TrieUnion(union_scan)
             }
             ExecutionOperation::Minus(subtables) => {
                 debug_assert!(subtables.len() == 2);
@@ -520,12 +512,12 @@ impl TableManager {
                     self.get_iterator_node(&subtables[0]),
                     self.get_iterator_node(&subtables[1]),
                 );
-                return TrieScanEnum::TrieDifference(difference_scan);
+                TrieScanEnum::TrieDifference(difference_scan)
             }
             ExecutionOperation::Project(table_id, schema_sorting) => {
                 if let TableStatus::InMemory(trie) = &self.get_info(*table_id).status {
                     let project_scan = TrieProject::new(trie, schema_sorting.clone());
-                    return TrieScanEnum::TrieProject(project_scan);
+                    TrieScanEnum::TrieProject(project_scan)
                 } else {
                     panic!("Underlying table of project operation must be materialized");
                 }
