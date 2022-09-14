@@ -3,7 +3,9 @@ use super::{
     TrieSelectValue, TrieUnion,
 };
 use crate::generate_forwarder;
-use crate::physical::columns::{Column, IntervalColumn, RangedColumnScan, RangedColumnScanT};
+use crate::physical::columns::{
+    Column, ColumnScan, IntervalColumn, RangedColumnScan, RangedColumnScanT,
+};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
@@ -53,18 +55,23 @@ impl<'a> IntervalTrieScan<'a> {
     }
 }
 
-#[allow(clippy::unnecessary_lazy_evaluations)] // not actually
-                                               // unnecessary, as the subtraction might underflow
 impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
     fn up(&mut self) {
-        self.current_layer = self
-            .current_layer
-            .and_then(|index| (index > 0).then(|| index - 1));
+        if let Some(index) = self.current_layer {
+            if index > 0 {
+                self.current_layer = Some(index - 1);
+            } else {
+                self.current_layer = None;
+            }
+        }
     }
 
     fn down(&mut self) {
         match self.current_layer {
-            None => self.current_layer = Some(0),
+            None => {
+                self.layers[0].get_mut().reset();
+                self.current_layer = Some(0);
+            }
             Some(index) => {
                 debug_assert!(
                     index < self.layers.len(),
@@ -209,7 +216,14 @@ mod test {
         assert!(scan_current(&mut trie_iter).is_none());
 
         trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(1));
+        assert_eq!(scan_current(&mut trie_iter), Some(1));
 
+        trie_iter.up();
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.down();
         assert!(scan_current(&mut trie_iter).is_none());
         assert_eq!(scan_next(&mut trie_iter), Some(1));
         assert_eq!(scan_current(&mut trie_iter), Some(1));
