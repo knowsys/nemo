@@ -1,8 +1,10 @@
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range, slice};
+
+use crate::physical::{columns::Column, tables::Trie};
 
 use super::{
     execution_plan::{ExecutionNode, ExecutionOperation, ExecutionPlan},
-    model::{Atom, Identifier, Program, Term},
+    model::{Atom, DataSource, Identifier, Literal, Program, Rule, Term, Variable},
     table_manager::{ColumnOrder, TableManager, TableManagerStrategy},
 };
 
@@ -38,11 +40,45 @@ impl RuleExecutionEngine {
             .collect();
 
         Self {
-            current_step: 0,
+            current_step: 1,
             table_manager: TableManager::new(memory_strategy),
             program,
             rule_infos,
         }
+    }
+
+    /// Add trie to the table manager; useful for testing
+    pub fn add_trie(
+        &mut self,
+        predicate: Identifier,
+        absolute_step_range: Range<usize>,
+        column_order: ColumnOrder,
+        priority: u64,
+        trie: Trie,
+    ) {
+        self.table_manager
+            .add_trie(predicate, absolute_step_range, column_order, priority, trie);
+    }
+
+    // TODO: Return, you know, good variable orders
+    fn calc_good_variable_orders(rule: &Rule) -> Vec<HashMap<Identifier, usize>> {
+        let mut trivial_map = HashMap::new();
+        let mut variable_counter: usize = 0;
+
+        for body_literal in rule.body() {
+            if let Literal::Positive(body_atom) = body_literal {
+                for term in body_atom.terms() {
+                    if let Term::Variable(Variable::Universal(variable)) = term {
+                        if !trivial_map.contains_key(variable) {
+                            trivial_map.insert(*variable, variable_counter);
+                            variable_counter += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        vec![trivial_map]
     }
 
     /// Executes the program
@@ -83,7 +119,10 @@ impl RuleExecutionEngine {
                     0, // TODO: How to determine this
                     best_plan,
                 );
-                if self.table_manager.table_is_empty(new_table_id) {
+
+                if new_table_id.is_none()
+                    || self.table_manager.table_is_empty(new_table_id.unwrap())
+                {
                     no_derivation = true;
                 }
             }
@@ -96,9 +135,8 @@ impl RuleExecutionEngine {
             }
 
             current_rule_index = (current_rule_index + 1) % self.program.rules.len();
+            self.current_step += 1;
         }
-
-        self.current_step += 1;
     }
 
     fn create_subplan_union(
@@ -172,7 +210,6 @@ impl RuleExecutionEngine {
     fn create_subplan_join(
         &self,
         atoms: &[&Atom],
-        head: &Atom,
         last_rule_step: usize,
         mid: usize,
         variable_map: &VariableOrder,
@@ -204,16 +241,10 @@ impl RuleExecutionEngine {
             ))
         }
 
-        let head_order = RuleExecutionEngine::calc_binding(&[head], variable_map)
-            .into_iter()
-            .next()
-            .unwrap();
-
         ExecutionNode {
             operation: ExecutionOperation::Join(
                 subplans,
                 RuleExecutionEngine::calc_binding(atoms, variable_map),
-                head_order,
             ),
         }
     }
@@ -235,7 +266,6 @@ impl RuleExecutionEngine {
         for body_index in 0..rule.body.len() {
             subjoins.push(self.create_subplan_join(
                 &body_atoms,
-                &rule.head[head_index],
                 self.rule_infos[rule_id].step_last_applied,
                 body_index,
                 variable_map,
@@ -247,6 +277,16 @@ impl RuleExecutionEngine {
             operation: ExecutionOperation::Union(subjoins),
         };
 
+        let head_binding = RuleExecutionEngine::calc_binding(
+            slice::from_ref(&&rule.head[head_index]),
+            variable_map,
+        )
+        .remove(0);
+
+        let project_plan = ExecutionNode {
+            operation: ExecutionOperation::Project(head_binding),
+        };
+
         let head_order = RuleExecutionEngine::order_atom(&rule.head[head_index], variable_map);
         let duplicates_plan = self.create_subplan_union(
             head_predicate,
@@ -255,13 +295,197 @@ impl RuleExecutionEngine {
             &mut leaves,
         );
 
-        let minus_node = ExecutionNode {
-            operation: ExecutionOperation::Minus(vec![temp_plan, duplicates_plan]),
+        let tmp_node = ExecutionNode {
+            operation: ExecutionOperation::Temp(),
+        };
+
+        let minus_plan = ExecutionNode {
+            operation: ExecutionOperation::Minus(vec![tmp_node, duplicates_plan]),
         };
 
         ExecutionPlan {
-            root: minus_node,
+            roots: vec![temp_plan, project_plan, minus_plan],
             leaves,
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+
+    use num::zero;
+
+    use crate::{
+        logical::{
+            model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
+            table_manager::{TableManagerStrategy, TableStatus},
+        },
+        physical::{
+            columns::{Column, IntervalColumnT},
+            datatypes::DataTypeName,
+            tables::{Trie, TrieSchema, TrieSchemaEntry},
+            util::make_gict,
+        },
+    };
+
+    use super::RuleExecutionEngine;
+
+    #[test]
+    fn test_trans_closure() {
+        let trans_rule = Rule::new(
+            vec![Atom::new(
+                Identifier(0),
+                vec![
+                    Term::Variable(Variable::Universal(Identifier(0))),
+                    Term::Variable(Variable::Universal(Identifier(2))),
+                ],
+            )],
+            vec![
+                Literal::Positive(Atom::new(
+                    Identifier(0),
+                    vec![
+                        Term::Variable(Variable::Universal(Identifier(0))),
+                        Term::Variable(Variable::Universal(Identifier(1))),
+                    ],
+                )),
+                Literal::Positive(Atom::new(
+                    Identifier(0),
+                    vec![
+                        Term::Variable(Variable::Universal(Identifier(1))),
+                        Term::Variable(Variable::Universal(Identifier(2))),
+                    ],
+                )),
+            ],
+        );
+
+        let program = Program::new(
+            None,
+            HashMap::new(),
+            Vec::new(),
+            vec![trans_rule],
+            Vec::new(),
+        );
+
+        let mut engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
+
+        let column_x = make_gict(&[1, 2, 5, 7], &[0]);
+        let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 10,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 11,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie = Trie::new(schema, vec![column_x, column_y]);
+        engine.add_trie(Identifier(0), 0..1, vec![0, 1], 0, trie);
+
+        engine.execute();
+
+        if let TableStatus::InMemory(zeroth_table) = &engine.table_manager.get_info(0).status {
+            let first_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(0) {
+                col
+            } else {
+                unreachable!()
+            };
+
+            assert_eq!(
+                first_col.get_data_column().iter().collect::<Vec<u64>>(),
+                vec![1, 2, 5, 7]
+            );
+            assert_eq!(
+                first_col.get_int_column().iter().collect::<Vec<usize>>(),
+                vec![0]
+            );
+
+            let second_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(1) {
+                col
+            } else {
+                unreachable!()
+            };
+
+            assert_eq!(
+                second_col.get_data_column().iter().collect::<Vec<u64>>(),
+                vec![2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10]
+            );
+            assert_eq!(
+                second_col.get_int_column().iter().collect::<Vec<usize>>(),
+                vec![0, 4, 7, 8]
+            );
+        } else {
+            unreachable!()
+        }
+        if let TableStatus::InMemory(first_table) = &engine.table_manager.get_info(1).status {
+            let first_col = if let IntervalColumnT::U64(col) = first_table.get_column(0) {
+                col
+            } else {
+                unreachable!()
+            };
+
+            assert_eq!(
+                first_col.get_data_column().iter().collect::<Vec<u64>>(),
+                vec![1, 2]
+            );
+            assert_eq!(
+                first_col.get_int_column().iter().collect::<Vec<usize>>(),
+                vec![0]
+            );
+
+            let second_col = if let IntervalColumnT::U64(col) = first_table.get_column(1) {
+                col
+            } else {
+                unreachable!()
+            };
+
+            assert_eq!(
+                second_col.get_data_column().iter().collect::<Vec<u64>>(),
+                vec![4, 7, 9, 8, 9]
+            );
+            assert_eq!(
+                second_col.get_int_column().iter().collect::<Vec<usize>>(),
+                vec![0, 3]
+            );
+        } else {
+            unreachable!()
+        }
+        if let TableStatus::InMemory(second_table) = &engine.table_manager.get_info(2).status {
+            let first_col = if let IntervalColumnT::U64(col) = second_table.get_column(0) {
+                col
+            } else {
+                unreachable!()
+            };
+
+            assert_eq!(
+                first_col.get_data_column().iter().collect::<Vec<u64>>(),
+                vec![1]
+            );
+            assert_eq!(
+                first_col.get_int_column().iter().collect::<Vec<usize>>(),
+                vec![0]
+            );
+
+            let second_col = if let IntervalColumnT::U64(col) = second_table.get_column(1) {
+                col
+            } else {
+                unreachable!()
+            };
+
+            assert_eq!(
+                second_col.get_data_column().iter().collect::<Vec<u64>>(),
+                vec![8]
+            );
+            assert_eq!(
+                second_col.get_int_column().iter().collect::<Vec<usize>>(),
+                vec![0]
+            );
+        } else {
+            unreachable!()
         }
     }
 }
