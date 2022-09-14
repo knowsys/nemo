@@ -1,10 +1,11 @@
 // NOTE: Generation of variable orders and the filter functions are taken fron
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 
+use num::rational::Ratio;
 use std::collections::{HashMap, HashSet};
 
 use super::super::{
-    model::{Identifier, Program, Rule, Variable},
+    model::{Identifier, Literal, Program, Rule, Variable},
     table_manager::ColumnOrder,
 };
 
@@ -39,6 +40,10 @@ impl VariableOrder {
         });
         vars.into_iter()
     }
+
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
 }
 
 struct VariableOrderBuilder<'a> {
@@ -46,6 +51,7 @@ struct VariableOrderBuilder<'a> {
     required_trie_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>, // maps predicates to sets of column orders
 }
 
+// TODO: many function stake self just to be able to call them as methods; we should chanse this and possibly move the functions to a broader scope(?)
 impl<'a> VariableOrderBuilder<'a> {
     fn build_for(program: &Program) -> Vec<Vec<VariableOrder>> {
         let mut builder = VariableOrderBuilder {
@@ -94,6 +100,18 @@ impl<'a> VariableOrderBuilder<'a> {
         vec![variable_order]
     }
 
+    fn column_order_for(&self, lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
+        var_order
+            .iter()
+            .flat_map(|var| {
+                lit.variables()
+                    .enumerate()
+                    .filter(move |(_, lit_var)| lit_var == var)
+                    .map(|(i, _)| i)
+            })
+            .collect()
+    }
+
     fn update_trie_column_orders(
         &mut self,
         variable_order: &VariableOrder,
@@ -107,15 +125,7 @@ impl<'a> VariableOrderBuilder<'a> {
         });
 
         for lit in literals {
-            let column_ord: ColumnOrder = variable_order
-                .iter()
-                .flat_map(|var| {
-                    lit.variables()
-                        .enumerate()
-                        .filter(move |(_, lit_var)| lit_var == var)
-                        .map(|(i, _)| i)
-                })
-                .collect();
+            let column_ord: ColumnOrder = self.column_order_for(lit, variable_order);
 
             let set = self
                 .required_trie_column_orders
@@ -150,8 +160,57 @@ impl<'a> VariableOrderBuilder<'a> {
         partial_var_order: &'a VariableOrder,
         rule: &'a Rule,
     ) -> impl Iterator<Item = &'a Variable> {
-        // TODO: implement this
-        candidate_vars
+        let (vars, ratios): (Vec<_>, Vec<_>) = candidate_vars
+            .map(|var| {
+                let mut extended_var_order: VariableOrder = partial_var_order.clone();
+                extended_var_order.push(*var);
+
+                let literals = rule
+                    .body()
+                    .filter(|lit| lit.variables().any(|lit_var| lit_var == *var));
+
+                let (total_literals, literals_requiring_new_orders) =
+                    literals.fold((0, 0), |acc, lit| {
+                        let new_col_order_required: bool = !self
+                            .required_trie_column_orders
+                            .get(&lit.predicate())
+                            .map(|set| {
+                                set.contains(&self.column_order_for(lit, &extended_var_order))
+                            })
+                            .unwrap_or(false);
+
+                        (acc.0 + 1, acc.1 + usize::from(new_col_order_required))
+                        // bool is coverted to 1 for true and 0 for false
+                    });
+
+                // we only consider variables from the rule so there is at least one literals in the rule that features the variable
+                debug_assert!(total_literals > 0);
+
+                (
+                    var,
+                    Ratio::new(literals_requiring_new_orders, total_literals),
+                )
+            })
+            .unzip();
+        //.fold((iter::empty(), Ratio::new(usize::MAX, 1)), |(current_iter, current_min), (var, ratio)| {
+        //    if ratio < current_min {
+        //        (iter::once(var), ratio)
+        //    } else if ratio == current_min {
+        //        (current_iter.chain(iter::once(var)), current_min)
+        //    } else {
+        //        (current_iter, current_min)
+        //    }
+        //})
+        //.0
+
+        let min_ratio: Ratio<usize> = *ratios
+            .iter()
+            .min()
+            .expect("the cadidate_vars and therefore the ratios are non-empty");
+        vars.into_iter()
+            .zip(ratios.into_iter())
+            .filter(move |(_, ratio)| *ratio == min_ratio)
+            .map(|(var, _)| var)
     }
 }
 
