@@ -366,6 +366,101 @@ mod test {
         assert_eq!(join_current(&mut join_iter_abc), None);
     }
 
+    #[test]
+    fn test_self_join() {
+        let column_x = make_gict(&[1, 2, 5, 7], &[0]);
+        let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 10,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 11,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie = Trie::new(schema, vec![column_x, column_y]);
+
+        let schema_target = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 100,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 101,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 102,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let mut join_iter = TrieJoin::new(
+            vec![
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie)),
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie)),
+            ],
+            &vec![vec![0, 1], vec![1, 2]],
+            schema_target,
+        );
+
+        join_iter.down();
+        assert_eq!(join_current(&mut join_iter), None);
+        assert_eq!(join_next(&mut join_iter), Some(1));
+        assert_eq!(join_current(&mut join_iter), Some(1));
+
+        join_iter.down();
+        assert_eq!(join_current(&mut join_iter), None);
+        assert_eq!(join_next(&mut join_iter), Some(2));
+        assert_eq!(join_current(&mut join_iter), Some(2));
+
+        join_iter.down();
+        assert_eq!(join_current(&mut join_iter), None);
+        assert_eq!(join_next(&mut join_iter), Some(4));
+        assert_eq!(join_current(&mut join_iter), Some(4));
+        assert_eq!(join_next(&mut join_iter), Some(7));
+        assert_eq!(join_current(&mut join_iter), Some(7));
+        assert_eq!(join_next(&mut join_iter), Some(10));
+        assert_eq!(join_current(&mut join_iter), Some(10));
+        assert_eq!(join_next(&mut join_iter), None);
+        assert_eq!(join_current(&mut join_iter), None);
+
+        join_iter.up();
+        assert_eq!(join_next(&mut join_iter), Some(5));
+        assert_eq!(join_current(&mut join_iter), Some(5));
+
+        join_iter.down();
+        assert_eq!(join_next(&mut join_iter), Some(9));
+        assert_eq!(join_current(&mut join_iter), Some(9));
+
+        join_iter.up();
+        assert_eq!(join_next(&mut join_iter), None);
+        assert_eq!(join_current(&mut join_iter), None);
+
+        join_iter.up();
+        assert_eq!(join_next(&mut join_iter), Some(2));
+        assert_eq!(join_current(&mut join_iter), Some(2));
+
+        join_iter.down();
+        assert_eq!(join_next(&mut join_iter), Some(7));
+        assert_eq!(join_current(&mut join_iter), Some(7));
+
+        join_iter.down();
+        assert_eq!(join_current(&mut join_iter), None);
+        assert_eq!(join_next(&mut join_iter), Some(8));
+        assert_eq!(join_current(&mut join_iter), Some(8));
+        assert_eq!(join_next(&mut join_iter), Some(9));
+        assert_eq!(join_current(&mut join_iter), Some(9));
+        assert_eq!(join_next(&mut join_iter), Some(10));
+        assert_eq!(join_current(&mut join_iter), Some(10));
+        assert_eq!(join_next(&mut join_iter), None);
+        assert_eq!(join_current(&mut join_iter), None);
+    }
+
     use crate::physical::columns::{
         AdaptiveColumnBuilder, ColumnBuilder, IntervalColumnT, VectorColumn,
     };
