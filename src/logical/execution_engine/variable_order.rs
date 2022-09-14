@@ -9,6 +9,7 @@ use super::super::{
 };
 
 #[repr(transparent)]
+#[derive(Debug)]
 pub(super) struct VariableOrder(HashMap<Variable, usize>);
 
 impl VariableOrder {
@@ -76,12 +77,12 @@ impl<'a> VariableOrderBuilder<'a> {
                 let mut trie_filter =
                     self.filter_tries(cartesian_product_filter, &variable_order, rule);
 
-                *trie_filter.next().unwrap_or_else(||
+                *trie_filter.next().unwrap_or_else(|| {
                     remaining_vars
                         .iter()
                         .next()
-                        .expect("there is at least one var left"),
-                )
+                        .expect("there is at least one var left")
+                })
             };
 
             variable_order.push(next_var);
