@@ -57,6 +57,7 @@ impl Display for PrintableIdentifier<'_> {
     }
 }
 
+/// Variable occuring in a rule
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
 /// A Variable.
 pub enum Variable {
