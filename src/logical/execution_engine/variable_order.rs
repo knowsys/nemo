@@ -1,6 +1,7 @@
 // NOTE: Generation of variable orders and the filter functions are taken fron
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 
+use crate::logical::Permutator;
 use num::rational::Ratio;
 use std::collections::{HashMap, HashSet};
 
@@ -10,7 +11,7 @@ use super::super::{
 };
 
 #[repr(transparent)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(super) struct VariableOrder(HashMap<Variable, usize>);
 
 impl VariableOrder {
@@ -46,23 +47,50 @@ impl VariableOrder {
     }
 }
 
+enum IterationOrder {
+    Forward,
+    Backward,
+    InsideOut,
+}
+
+impl IterationOrder {
+    fn get_permutator(&self, len: usize) -> Permutator {
+        match self {
+            Self::Forward => Permutator::sort_from_vec(&(0..len).collect::<Vec<_>>()),
+            Self::Backward => Permutator::sort_from_vec(&(0..len).rev().collect::<Vec<_>>()),
+            Self::InsideOut => Permutator::sort_from_vec(
+                &(0..len / 2)
+                    .rev()
+                    .zip((len / 2)..len)
+                    .flat_map(|(l, r)| vec![l, r])
+                    .collect::<Vec<_>>(),
+            ),
+        }
+    }
+}
+
 struct VariableOrderBuilder<'a> {
     program: &'a Program,
+    iteration_order_within_rule: IterationOrder,
     required_trie_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>, // maps predicates to sets of column orders
 }
 
 // TODO: many function stake self just to be able to call them as methods; we should chanse this and possibly move the functions to a broader scope(?)
 impl<'a> VariableOrderBuilder<'a> {
-    fn build_for(program: &Program) -> Vec<Vec<VariableOrder>> {
+    fn build_for(
+        program: &Program,
+        iteration_order_within_rule: IterationOrder,
+    ) -> Vec<VariableOrder> {
         let mut builder = VariableOrderBuilder {
             program,
+            iteration_order_within_rule,
             required_trie_column_orders: HashMap::new(),
         };
 
         builder.generate_variable_orders()
     }
 
-    fn generate_variable_orders(&mut self) -> Vec<Vec<VariableOrder>> {
+    fn generate_variable_orders(&mut self) -> Vec<VariableOrder> {
         // TODO: pick good order of rules; take care of not messing up indices
         self.program
             .rules
@@ -71,10 +99,25 @@ impl<'a> VariableOrderBuilder<'a> {
             .collect()
     }
 
-    fn generate_variable_order_for_rule(&mut self, rule: &Rule) -> Vec<VariableOrder> {
+    fn generate_variable_order_for_rule(&mut self, rule: &Rule) -> VariableOrder {
         let mut variable_order: VariableOrder = VariableOrder::new();
-        let mut remaining_vars: HashSet<Variable> =
-            rule.body().flat_map(|lit| lit.variables()).collect();
+        let mut remaining_vars = {
+            let remaining_vars_unpermutated: Vec<Variable> = rule
+                .body()
+                .flat_map(|lit| lit.variables())
+                .fold(vec![], |mut acc, var| {
+                    if !acc.contains(&var) {
+                        acc.push(var);
+                    }
+
+                    acc
+                });
+
+            self.iteration_order_within_rule
+                .get_permutator(remaining_vars_unpermutated.len())
+                .permutate(&remaining_vars_unpermutated)
+                .expect("we are checking the length so everything should work out")
+        };
 
         while !remaining_vars.is_empty() {
             let next_var = {
@@ -85,19 +128,17 @@ impl<'a> VariableOrderBuilder<'a> {
 
                 *trie_filter.next().unwrap_or_else(|| {
                     remaining_vars
-                        .iter()
-                        .next()
+                        .first()
                         .expect("there is at least one var left")
                 })
             };
 
             variable_order.push(next_var);
-            remaining_vars.remove(&next_var);
+            remaining_vars.retain(|var| var != &next_var);
             self.update_trie_column_orders(&variable_order, HashSet::from([next_var]), rule);
         }
 
-        // TODO: return more than one candidate
-        vec![variable_order]
+        variable_order
     }
 
     fn column_order_for(&self, lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
@@ -214,5 +255,33 @@ impl<'a> VariableOrderBuilder<'a> {
 }
 
 pub(super) fn build_preferable_variable_orders(program: &Program) -> Vec<Vec<VariableOrder>> {
-    VariableOrderBuilder::build_for(program)
+    let orders = [
+        IterationOrder::Forward,
+        IterationOrder::Backward,
+        IterationOrder::InsideOut,
+    ];
+
+    orders
+        .into_iter()
+        .map(|iter_ord| {
+            VariableOrderBuilder::build_for(program, iter_ord)
+                .into_iter()
+                .map(|var_ord| vec![var_ord])
+                .collect()
+        })
+        .reduce(|mut vec_a: Vec<Vec<VariableOrder>>, vec_b| {
+            vec_a
+                .iter_mut()
+                .zip(vec_b)
+                .for_each(|(var_ords_a, mut var_ords_b)| {
+                    let new_element = var_ords_b
+                        .pop()
+                        .expect("we knwo that var_ords_b contains exactly one element");
+                    if !var_ords_a.contains(&new_element) {
+                        var_ords_a.push(new_element);
+                    }
+                });
+            vec_a
+        })
+        .expect("orders are defined above and is non-empty")
 }
