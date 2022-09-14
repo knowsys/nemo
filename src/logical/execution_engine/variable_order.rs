@@ -203,13 +203,12 @@ impl<'a> VariableOrderBuilder<'a> {
         //})
         //.0
 
-        let min_ratio: Ratio<usize> = *ratios
-            .iter()
-            .min()
-            .expect("the cadidate_vars and therefore the ratios are non-empty");
+        let min_ratio: Option<Ratio<usize>> = ratios.iter().min().copied();
         vars.into_iter()
             .zip(ratios.into_iter())
-            .filter(move |(_, ratio)| *ratio == min_ratio)
+            .filter(move |(_, ratio)| {
+                *ratio == min_ratio.expect("the vars and therefore the ratios are non-empty")
+            })
             .map(|(var, _)| var)
     }
 }
