@@ -1,6 +1,9 @@
+//! Managing of tables
+
 use super::execution_plan::{ExecutionNode, ExecutionOperation, ExecutionPlan};
 use super::model::{DataSource, Identifier};
 
+use crate::physical::datatypes::DataTypeName;
 use crate::physical::tables::{
     materialize, IntervalTrieScan, Table, Trie, TrieDifference, TrieJoin, TrieProject, TrieScan,
     TrieScanEnum, TrieSchema, TrieSchemaEntry, TrieUnion,
@@ -70,7 +73,8 @@ impl PartialOrd for TablePriority {
 /// Contains all the relevant information to a table stored in the [`TableManager`]
 #[derive(Debug)]
 pub struct TableInfo {
-    status: TableStatus,
+    /// Storage location of the table
+    pub status: TableStatus,
 
     // Redundant information, TODO: Get rid of this?
     variable_order: ColumnOrder,
@@ -109,13 +113,15 @@ impl TableManager {
     }
 
     fn normalize_range(&self, predicate: Identifier, range: &Range<usize>) -> Range<usize> {
+        // debug_assert!(range.end > 0);
+
         let step_vec = self
             .predicate_to_steps
             .get(&predicate)
             .expect("Just don't put unknown predicates here");
 
         let left = step_vec.lower_bound(&range.start);
-        let right = step_vec.upper_bound(&range.end);
+        let right = step_vec.lower_bound(&range.end);
 
         left..right
     }
@@ -312,9 +318,15 @@ impl TableManager {
         variable_order: ColumnOrder,
         priority: u64,
     ) -> TableId {
+        let table_list = self
+            .predicate_to_steps
+            .entry(predicate)
+            .or_insert_with(|| Vec::new());
+        table_list.push(0);
+
         let key = TableKey {
             predicate_id: predicate,
-            step_range: (0..0),
+            step_range: (0..1),
         };
 
         self.tables.push(TableInfo {
@@ -326,7 +338,7 @@ impl TableManager {
         });
         let key = TableKey {
             predicate_id: predicate,
-            step_range: (0..0),
+            step_range: (0..1),
         };
 
         self.add_table_helper(key, variable_order, priority)
@@ -340,11 +352,35 @@ impl TableManager {
         variable_order: ColumnOrder,
         priority: u64,
         plan: ExecutionPlan,
+    ) -> Option<TableId> {
+        let trie = self.execute_plan(plan)?;
+
+        Some(self.add_trie(
+            predicate,
+            absolute_step_range,
+            variable_order,
+            priority,
+            trie,
+        ))
+    }
+
+    /// Add trie to the table manager; useful for testing
+    pub fn add_trie(
+        &mut self,
+        predicate: Identifier,
+        absolute_step_range: Range<usize>,
+        variable_order: ColumnOrder,
+        priority: u64,
+        trie: Trie,
     ) -> TableId {
-        // TODO: Compute table and do memory checks...
-        // Below is a place holder
-        let mut iterator = self.get_iterator(plan);
-        let trie = materialize(&mut iterator);
+        // Tables only covers a single step
+        if absolute_step_range.end - absolute_step_range.start == 1 {
+            let table_list = self
+                .predicate_to_steps
+                .entry(predicate)
+                .or_insert_with(|| Vec::new());
+            table_list.push(absolute_step_range.start);
+        }
 
         let key = TableKey {
             predicate_id: predicate,
@@ -357,15 +393,6 @@ impl TableManager {
             priority,
             space: 0, //TODO: How to do this
         });
-
-        // Tables only covers a single step
-        if absolute_step_range.end - absolute_step_range.start == 1 {
-            let table_list = self
-                .predicate_to_steps
-                .entry(key.predicate_id)
-                .or_insert_with(Vec::new);
-            table_list.push(absolute_step_range.start);
-        }
 
         self.add_table_helper(key, variable_order, priority)
     }
@@ -389,7 +416,7 @@ impl TableManager {
         let table_info = &self.tables[table_id];
 
         match &table_info.status {
-            TableStatus::InMemory(trie) => trie.row_num() > 0,
+            TableStatus::InMemory(trie) => trie.row_num() == 0,
             TableStatus::Derived => {
                 false
                 // self.table_is_empty(*derived_id)
@@ -421,21 +448,21 @@ impl TableManager {
             // TODO:
             ExecutionOperation::Fetch(_, _, _) => 0,
             // TODO: This is tricky
-            ExecutionOperation::Join(_subtables, _bindings, _schema) => 0,
+            ExecutionOperation::Join(_subtables, _bindings) => 0,
             ExecutionOperation::Union(subtables) => {
                 subtables.iter().map(|s| self.estimate_space(s)).sum()
             }
-            ExecutionOperation::Minus(subtables) => {
-                self.estimate_space(&subtables[0])
-            }
-            ExecutionOperation::Project(_table_id, _schema_sorting) => {
+            ExecutionOperation::Minus(subtables) => self.estimate_space(&subtables[0]),
+            ExecutionOperation::Project(_schema_sorting) => {
                 // Should be easy to calculate
                 0
             }
+            ExecutionOperation::Temp() => 0,
         }
     }
 
-    fn get_iterator(&mut self, plan: ExecutionPlan) -> TrieScanEnum {
+    /// Executes a given plan resuling in a Trie (None if it guaranteed to be empty)
+    fn execute_plan(&mut self, plan: ExecutionPlan) -> Option<Trie> {
         let mut table_ids = HashSet::new();
         for leave_node in plan.leaves {
             if let ExecutionOperation::Fetch(predicate, absolute_step_range, variable_order) =
@@ -452,75 +479,115 @@ impl TableManager {
 
         self.materialize_required_tables(&table_ids);
 
-        self.get_iterator_node(&plan.root)
+        let mut tmp_trie: Option<Trie> = None;
+        for root in &plan.roots {
+            let mut iter = self.get_iterator_node(root, tmp_trie.as_ref())?;
+
+            // TODO: Materializig should check memory and so on...
+            tmp_trie = Some(materialize(&mut iter));
+        }
+
+        tmp_trie
     }
 
-    fn get_iterator_node(&self, node: &ExecutionNode) -> TrieScanEnum {
+    /// Returns None if the TrieScan would be empty
+    fn get_iterator_node<'a>(
+        &'a self,
+        node: &'a ExecutionNode,
+        tmp: Option<&'a Trie>,
+    ) -> Option<TrieScanEnum> {
         match &node.operation {
+            ExecutionOperation::Temp() => {
+                return Some(TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(tmp?)));
+            }
             ExecutionOperation::Fetch(predicate, absolute_step_range, variable_order) => {
-                let table_info = &self.tables[self
-                    .get_table(*predicate, absolute_step_range, variable_order)
-                    .unwrap()];
+                let table_info = &self.tables
+                    [self.get_table(*predicate, absolute_step_range, variable_order)?];
                 if let TableStatus::InMemory(trie) = &table_info.status {
                     let interval_trie_scan = IntervalTrieScan::new(trie);
 
-                    TrieScanEnum::IntervalTrieScan(interval_trie_scan)
+                    return Some(TrieScanEnum::IntervalTrieScan(interval_trie_scan));
                 } else {
                     panic!("Base tables are supposed to be materialized");
                 }
             }
-            ExecutionOperation::Join(subtables, bindings, head_binding) => {
+            ExecutionOperation::Join(subtables, bindings) => {
                 let subiterators: Vec<TrieScanEnum> = subtables
                     .iter()
-                    .map(|s| self.get_iterator_node(s))
+                    .map(|s| self.get_iterator_node(&s, tmp))
+                    .filter(|s| s.is_some())
+                    .flatten()
                     .collect();
 
+                if subiterators.len() != subtables.len() {
+                    return None;
+                }
+
+                let mut datatype_map = HashMap::<usize, DataTypeName>::new();
+                for (atom_index, binding) in bindings.iter().enumerate() {
+                    for (term_index, variable) in binding.iter().enumerate() {
+                        datatype_map.insert(
+                            *variable,
+                            subiterators[atom_index].get_schema().get_type(term_index),
+                        );
+                    }
+                }
+
                 let mut attributes = Vec::new();
-                for &variable in head_binding {
-                    for atom_index in 0..bindings.len() {
-                        for term_index in 0..bindings[atom_index].len() {
-                            if bindings[atom_index][term_index] == variable {
-                                attributes.push(TrieSchemaEntry {
-                                    label: 0, // TODO: This should get perhaps a new label
-                                    datatype: subiterators[atom_index]
-                                        .get_schema()
-                                        .get_type(term_index),
-                                });
-                            }
-                        }
+                let mut variable: usize = 0;
+                loop {
+                    if let Some(datatype) = datatype_map.get(&variable) {
+                        attributes.push(TrieSchemaEntry {
+                            label: 0, // TODO: This should get perhaps a new label
+                            datatype: *datatype,
+                        });
+                        variable += 1;
+                    } else {
+                        break;
                     }
                 }
 
                 let schema = TrieSchema::new(attributes);
 
-                TrieScanEnum::TrieJoin(TrieJoin::new(subiterators, bindings, schema))
+                return Some(TrieScanEnum::TrieJoin(TrieJoin::new(
+                    subiterators,
+                    bindings,
+                    schema,
+                )));
             }
             ExecutionOperation::Union(subtables) => {
-                let union_scan = TrieUnion::new(
-                    subtables
-                        .iter()
-                        .map(|s| self.get_iterator_node(s))
-                        .collect(),
-                );
+                let subtables: Vec<TrieScanEnum> = subtables
+                    .iter()
+                    .map(|s| self.get_iterator_node(&s, tmp))
+                    .filter(|s| s.is_some())
+                    .flatten()
+                    .collect();
 
-                TrieScanEnum::TrieUnion(union_scan)
+                if subtables.len() == 0 {
+                    return None;
+                }
+
+                let union_scan = TrieUnion::new(subtables);
+
+                return Some(TrieScanEnum::TrieUnion(union_scan));
             }
             ExecutionOperation::Minus(subtables) => {
                 debug_assert!(subtables.len() == 2);
 
-                let difference_scan = TrieDifference::new(
-                    self.get_iterator_node(&subtables[0]),
-                    self.get_iterator_node(&subtables[1]),
-                );
-                TrieScanEnum::TrieDifference(difference_scan)
-            }
-            ExecutionOperation::Project(table_id, schema_sorting) => {
-                if let TableStatus::InMemory(trie) = &self.get_info(*table_id).status {
-                    let project_scan = TrieProject::new(trie, schema_sorting.clone());
-                    TrieScanEnum::TrieProject(project_scan)
+                let left_scan = self.get_iterator_node(&subtables[0], tmp);
+                // TODO: Might be empty as well
+                let right = self.get_iterator_node(&subtables[1], tmp).unwrap();
+
+                if let Some(left) = left_scan {
+                    let difference_scan = TrieDifference::new(left, right);
+                    Some(TrieScanEnum::TrieDifference(difference_scan))
                 } else {
-                    panic!("Underlying table of project operation must be materialized");
+                    None
                 }
+            }
+            ExecutionOperation::Project(schema_sorting) => {
+                let project_scan = TrieProject::new(tmp?, schema_sorting.clone());
+                return Some(TrieScanEnum::TrieProject(project_scan));
             }
         }
     }
