@@ -1,10 +1,10 @@
 use std::{collections::HashMap, ops::Range, slice};
 
-use crate::physical::{columns::Column, tables::Trie};
+use crate::physical::tables::Trie;
 
 use super::{
     execution_plan::{ExecutionNode, ExecutionOperation, ExecutionPlan},
-    model::{Atom, DataSource, Identifier, Literal, Program, Rule, Term, Variable},
+    model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
     table_manager::{ColumnOrder, TableManager, TableManagerStrategy},
 };
 
@@ -313,8 +313,6 @@ impl RuleExecutionEngine {
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
-
-    use num::zero;
 
     use crate::{
         logical::{
