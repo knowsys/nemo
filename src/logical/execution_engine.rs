@@ -1,10 +1,11 @@
-use std::{collections::HashMap, ops::Range, slice};
+//! Functionality which handles the execution of a program
+use std::{ops::Range, slice};
 
 use crate::physical::tables::Trie;
 
 use super::{
     execution_plan::{ExecutionNode, ExecutionOperation, ExecutionPlan},
-    model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
+    model::{Atom, Identifier, Program, Term},
     table_manager::{ColumnOrder, TableManager, TableManagerStrategy},
 };
 
@@ -12,13 +13,16 @@ mod variable_order;
 
 use variable_order::{build_preferable_variable_orders, VariableOrder};
 
+#[derive(Debug)]
 struct RuleInfo {
     step_last_applied: usize,
     // Maps variables used in the rule to an index
     promising_orders: Vec<VariableOrder>,
 }
 
-struct RuleExecutionEngine {
+/// Object which handles the evaluation of the program
+#[derive(Debug)]
+pub struct RuleExecutionEngine {
     current_step: usize,
     table_manager: TableManager,
     program: Program,
@@ -58,27 +62,6 @@ impl RuleExecutionEngine {
     ) {
         self.table_manager
             .add_trie(predicate, absolute_step_range, column_order, priority, trie);
-    }
-
-    // TODO: Return, you know, good variable orders
-    fn calc_good_variable_orders(rule: &Rule) -> Vec<HashMap<Identifier, usize>> {
-        let mut trivial_map = HashMap::new();
-        let mut variable_counter: usize = 0;
-
-        for body_literal in rule.body() {
-            if let Literal::Positive(body_atom) = body_literal {
-                for term in body_atom.terms() {
-                    if let Term::Variable(Variable::Universal(variable)) = term {
-                        if !trivial_map.contains_key(variable) {
-                            trivial_map.insert(*variable, variable_counter);
-                            variable_counter += 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        vec![trivial_map]
     }
 
     /// Executes the program
