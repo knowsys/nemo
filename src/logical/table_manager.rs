@@ -321,7 +321,7 @@ impl TableManager {
         let table_list = self
             .predicate_to_steps
             .entry(predicate)
-            .or_insert_with(|| Vec::new());
+            .or_insert_with(Vec::new);
         table_list.push(0);
 
         let key = TableKey {
@@ -378,7 +378,7 @@ impl TableManager {
             let table_list = self
                 .predicate_to_steps
                 .entry(predicate)
-                .or_insert_with(|| Vec::new());
+                .or_insert_with(Vec::new);
             table_list.push(absolute_step_range.start);
         }
 
@@ -514,7 +514,7 @@ impl TableManager {
             ExecutionOperation::Join(subtables, bindings) => {
                 let subiterators: Vec<TrieScanEnum> = subtables
                     .iter()
-                    .map(|s| self.get_iterator_node(&s, tmp))
+                    .map(|s| self.get_iterator_node(s, tmp))
                     .filter(|s| s.is_some())
                     .flatten()
                     .collect();
@@ -535,16 +535,12 @@ impl TableManager {
 
                 let mut attributes = Vec::new();
                 let mut variable: usize = 0;
-                loop {
-                    if let Some(datatype) = datatype_map.get(&variable) {
-                        attributes.push(TrieSchemaEntry {
-                            label: 0, // TODO: This should get perhaps a new label
-                            datatype: *datatype,
-                        });
-                        variable += 1;
-                    } else {
-                        break;
-                    }
+                while let Some(datatype) = datatype_map.get(&variable) {
+                    attributes.push(TrieSchemaEntry {
+                        label: 0, // TODO: This should get perhaps a new label
+                        datatype: *datatype,
+                    });
+                    variable += 1;
                 }
 
                 let schema = TrieSchema::new(attributes);
@@ -558,12 +554,12 @@ impl TableManager {
             ExecutionOperation::Union(subtables) => {
                 let subtables: Vec<TrieScanEnum> = subtables
                     .iter()
-                    .map(|s| self.get_iterator_node(&s, tmp))
+                    .map(|s| self.get_iterator_node(s, tmp))
                     .filter(|s| s.is_some())
                     .flatten()
                     .collect();
 
-                if subtables.len() == 0 {
+                if subtables.is_empty() {
                     return None;
                 }
 

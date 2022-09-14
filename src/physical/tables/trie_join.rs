@@ -32,7 +32,7 @@ impl<'a> TrieJoin<'a> {
     /// Construct new TrieJoin object.
     pub fn new(
         trie_scans: Vec<TrieScanEnum<'a>>,
-        bindings: &Vec<Vec<usize>>,
+        bindings: &[Vec<usize>],
         target_schema: TrieSchema,
     ) -> Self {
         let mut variable_to_scan = repeat(Vec::new())
