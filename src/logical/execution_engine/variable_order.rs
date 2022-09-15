@@ -178,6 +178,7 @@ struct VariableOrderBuilder<'a> {
     program: &'a Program,
     iteration_order_within_rule: IterationOrder,
     required_trie_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>, // maps predicates to sets of column orders
+    idb_preds: HashSet<Identifier>,
 }
 
 impl<'a> VariableOrderBuilder<'a> {
@@ -189,24 +190,64 @@ impl<'a> VariableOrderBuilder<'a> {
             program,
             iteration_order_within_rule,
             required_trie_column_orders: HashMap::new(),
+            idb_preds: program.idb_predicates(),
         };
 
         builder.generate_variable_orders()
     }
 
+    fn get_already_present_idb_edb_count_for_rule_in_tries(&self, rule: &Rule) -> (usize, usize) {
+        let preds_with_tries = rule.body().filter_map(|lit| {
+            let pred = lit.predicate();
+            self.required_trie_column_orders
+                .get(&pred)
+                .map_or(false, |orders| !orders.is_empty())
+                .then_some(pred)
+        });
+
+        let (idb_count, edb_count) = preds_with_tries.fold((0, 0), |(idb, edb), pred| {
+            if self.idb_preds.contains(&pred) {
+                (idb + 1, edb)
+            } else {
+                (idb, edb + 1)
+            }
+        });
+
+        (idb_count, edb_count)
+    }
+
     fn generate_variable_orders(&mut self) -> Vec<VariableOrder> {
-        // TODO: pick good order of rules; take care of not messing up indices
-        self.program
-            .rules
-            .iter()
-            .map(|rule| self.generate_variable_order_for_rule(rule))
-            .collect()
+        let mut remaining_rules: HashMap<usize, &Rule> =
+            self.program.rules.iter().enumerate().collect();
+
+        let mut result: Vec<(usize, VariableOrder)> = Vec::with_capacity(self.program.rules.len());
+
+        while !remaining_rules.is_empty() {
+            let (next_index, next_rule) = remaining_rules
+                .iter()
+                .max_by(|(_, rule_a), (_, rule_b)| {
+                    let (idb_count_a, edb_count_a) =
+                        self.get_already_present_idb_edb_count_for_rule_in_tries(rule_a);
+                    let (idb_count_b, edb_count_b) =
+                        self.get_already_present_idb_edb_count_for_rule_in_tries(rule_b);
+
+                    (idb_count_a != idb_count_b)
+                        .then(|| idb_count_a.cmp(&idb_count_b))
+                        .unwrap_or_else(|| edb_count_a.cmp(&edb_count_b))
+                })
+                .expect("the remaining rules are never empty here");
+
+            let next_index = *next_index;
+            let var_order = self.generate_variable_order_for_rule(next_rule);
+            remaining_rules.remove(&next_index);
+            result.push((next_index, var_order));
+        }
+
+        result.sort_by_key(|(i, _)| *i);
+        result.into_iter().map(|(_, ord)| ord).collect()
     }
 
     fn generate_variable_order_for_rule(&mut self, rule: &Rule) -> VariableOrder {
-        let idb_preds = self.program.idb_predicates();
-        let edb_preds = self.program.edb_predicates();
-
         let mut variable_order: VariableOrder = VariableOrder::new();
         let mut remaining_vars = {
             let remaining_vars_unpermutated: Vec<Variable> = rule
@@ -235,13 +276,13 @@ impl<'a> VariableOrderBuilder<'a> {
                         &variable_order,
                         rule,
                         &self.required_trie_column_orders,
-                        |pred| idb_preds.contains(pred),
+                        |pred| self.idb_preds.contains(pred),
                     )
                     .filter_tries(
                         &variable_order,
                         rule,
                         &self.required_trie_column_orders,
-                        |pred| edb_preds.contains(pred),
+                        |pred| !self.idb_preds.contains(pred),
                     )
                     .first()
                     .copied()
@@ -312,3 +353,5 @@ pub(super) fn build_preferable_variable_orders(program: &Program) -> Vec<Vec<Var
         })
         .expect("orders are defined above and is non-empty")
 }
+
+// TODO: write tests
