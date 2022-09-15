@@ -121,16 +121,16 @@ impl<'a> VariableOrderBuilder<'a> {
 
         while !remaining_vars.is_empty() {
             let next_var = {
-                let cartesian_product_filter =
-                    self.filter_cartesian_product(remaining_vars.iter(), &variable_order, rule);
-                let mut trie_filter =
-                    self.filter_tries(cartesian_product_filter, &variable_order, rule);
+                let cartesian_product_filtered =
+                    self.filter_cartesian_product(remaining_vars.clone(), &variable_order, rule);
 
-                *trie_filter.next().unwrap_or_else(|| {
-                    remaining_vars
-                        .first()
-                        .expect("there is at least one var left")
-                })
+                // TODO: consider trie_filter for edb and idb predicates individually
+                let trie_filtered =
+                    self.filter_tries(cartesian_product_filtered, &variable_order, rule);
+
+                *trie_filtered
+                    .first()
+                    .expect("the filter results are guaranteed to be non-empty")
             };
 
             variable_order.push(next_var);
@@ -177,31 +177,42 @@ impl<'a> VariableOrderBuilder<'a> {
         }
     }
 
-    fn filter_cartesian_product<T: Iterator<Item = &'a Variable>>(
-        &'a self,
-        candidate_vars: T,
-        partial_var_order: &'a VariableOrder,
-        rule: &'a Rule,
-    ) -> impl Iterator<Item = &'a Variable> {
-        candidate_vars.filter(|var| {
-            rule.body().any(|lit| {
-                let predicate_vars: Vec<Variable> = lit.atom().variables().collect();
+    fn filter_cartesian_product(
+        &self,
+        candidate_vars: Vec<Variable>,
+        partial_var_order: &VariableOrder,
+        rule: &Rule,
+    ) -> Vec<Variable> {
+        let result: Vec<Variable> = candidate_vars
+            .iter()
+            .filter(|var| {
+                rule.body().any(|lit| {
+                    let predicate_vars: Vec<Variable> = lit.atom().variables().collect();
 
-                predicate_vars.iter().any(|pred_var| pred_var == *var)
-                    && predicate_vars
-                        .iter()
-                        .any(|pred_var| partial_var_order.contains(pred_var))
+                    predicate_vars.iter().any(|pred_var| pred_var == *var)
+                        && predicate_vars
+                            .iter()
+                            .any(|pred_var| partial_var_order.contains(pred_var))
+                })
             })
-        })
+            .copied()
+            .collect();
+
+        if result.is_empty() {
+            candidate_vars
+        } else {
+            result
+        }
     }
 
-    fn filter_tries<T: Iterator<Item = &'a Variable>>(
-        &'a self,
-        candidate_vars: T,
-        partial_var_order: &'a VariableOrder,
-        rule: &'a Rule,
-    ) -> impl Iterator<Item = &'a Variable> {
-        let (vars, ratios): (Vec<_>, Vec<_>) = candidate_vars
+    fn filter_tries(
+        &self,
+        candidate_vars: Vec<Variable>,
+        partial_var_order: &VariableOrder,
+        rule: &Rule,
+    ) -> Vec<Variable> {
+        let ratios: Vec<Ratio<usize>> = candidate_vars
+            .iter()
             .map(|var| {
                 let mut extended_var_order: VariableOrder = partial_var_order.clone();
                 extended_var_order.push(*var);
@@ -227,30 +238,19 @@ impl<'a> VariableOrderBuilder<'a> {
                 // we only consider variables from the rule so there is at least one literals in the rule that features the variable
                 debug_assert!(total_literals > 0);
 
-                (
-                    var,
-                    Ratio::new(literals_requiring_new_orders, total_literals),
-                )
+                Ratio::new(literals_requiring_new_orders, total_literals)
             })
-            .unzip();
-        //.fold((iter::empty(), Ratio::new(usize::MAX, 1)), |(current_iter, current_min), (var, ratio)| {
-        //    if ratio < current_min {
-        //        (iter::once(var), ratio)
-        //    } else if ratio == current_min {
-        //        (current_iter.chain(iter::once(var)), current_min)
-        //    } else {
-        //        (current_iter, current_min)
-        //    }
-        //})
-        //.0
+            .collect();
 
         let min_ratio: Option<Ratio<usize>> = ratios.iter().min().copied();
-        vars.into_iter()
+        candidate_vars
+            .into_iter()
             .zip(ratios.into_iter())
             .filter(move |(_, ratio)| {
                 *ratio == min_ratio.expect("the vars and therefore the ratios are non-empty")
             })
             .map(|(var, _)| var)
+            .collect()
     }
 }
 
