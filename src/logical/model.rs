@@ -443,6 +443,34 @@ impl Program {
         self.facts.iter()
     }
 
+    /// Return a HashSet of all predicates in the program (in rules and facts).
+    pub fn predicates(&self) -> HashSet<Identifier> {
+        self.rules()
+            .flat_map(|rule| {
+                rule.head()
+                    .map(|atom| atom.predicate())
+                    .chain(rule.body().map(|literal| literal.predicate()))
+            })
+            .chain(self.facts().map(|atom| atom.0.predicate()))
+            .collect()
+    }
+
+    /// Return a HashSet of all idb predicates (predicated occuring rule heads) in the program.
+    pub fn idb_predicates(&self) -> HashSet<Identifier> {
+        self.rules()
+            .flat_map(|rule| rule.head())
+            .map(|atom| atom.predicate())
+            .collect()
+    }
+
+    /// Return a HashSet of all edb predicates (all predicates minus idb predicates) in the program.
+    pub fn edb_predicates(&self) -> HashSet<Identifier> {
+        self.predicates()
+            .difference(&self.idb_predicates())
+            .copied()
+            .collect()
+    }
+
     /// Iterate over all prefixes in the program.
     pub fn prefixes(&self) -> impl Iterator<Item = (&String, &usize)> {
         self.prefixes.iter()
