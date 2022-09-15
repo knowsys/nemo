@@ -1,5 +1,6 @@
-// NOTE: Generation of variable orders and the filter functions are taken fron
+// NOTE: Generation of variable orders and the filter functions are taken from
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
+// NOTE: some functions are slightly modified but the overall idea is reflected
 
 use crate::logical::Permutator;
 use num::rational::Ratio;
@@ -88,11 +89,12 @@ trait RuleVariableList {
         rule: &Rule,
     ) -> Vec<Variable>;
 
-    fn filter_tries(
+    fn filter_tries<P: FnMut(&Identifier) -> bool>(
         self,
         partial_var_order: &VariableOrder,
         rule: &Rule,
         required_trie_column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
+        predicate_filter: P,
     ) -> Vec<Variable>;
 }
 
@@ -124,11 +126,12 @@ impl RuleVariableList for Vec<Variable> {
         }
     }
 
-    fn filter_tries(
+    fn filter_tries<P: FnMut(&Identifier) -> bool>(
         self,
         partial_var_order: &VariableOrder,
         rule: &Rule,
         required_trie_column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
+        mut predicate_filter: P,
     ) -> Vec<Variable> {
         let ratios: Vec<Ratio<usize>> = self
             .iter()
@@ -138,6 +141,7 @@ impl RuleVariableList for Vec<Variable> {
 
                 let literals = rule
                     .body()
+                    .filter(|lit| predicate_filter(&lit.predicate()))
                     .filter(|lit| lit.variables().any(|lit_var| lit_var == *var));
 
                 let (total_literals, literals_requiring_new_orders) =
@@ -151,10 +155,11 @@ impl RuleVariableList for Vec<Variable> {
                         // bool is coverted to 1 for true and 0 for false
                     });
 
-                // we only consider variables from the rule so there is at least one literals in the rule that features the variable
-                debug_assert!(total_literals > 0);
-
-                Ratio::new(literals_requiring_new_orders, total_literals)
+                if total_literals == 0 {
+                    Ratio::new(0, 1) // literals_requiring_new_orders == 0 here since literals_requiring_new_orders <= total_literals
+                } else {
+                    Ratio::new(literals_requiring_new_orders, total_literals)
+                }
             })
             .collect();
 
@@ -199,6 +204,9 @@ impl<'a> VariableOrderBuilder<'a> {
     }
 
     fn generate_variable_order_for_rule(&mut self, rule: &Rule) -> VariableOrder {
+        let idb_preds = self.program.idb_predicates();
+        let edb_preds = self.program.edb_predicates();
+
         let mut variable_order: VariableOrder = VariableOrder::new();
         let mut remaining_vars = {
             let remaining_vars_unpermutated: Vec<Variable> = rule
@@ -223,8 +231,18 @@ impl<'a> VariableOrderBuilder<'a> {
                 remaining_vars
                     .clone()
                     .filter_cartesian_product(&variable_order, rule)
-                    // TODO: consider trie_filter for edb and idb predicates individually
-                    .filter_tries(&variable_order, rule, &self.required_trie_column_orders)
+                    .filter_tries(
+                        &variable_order,
+                        rule,
+                        &self.required_trie_column_orders,
+                        |pred| idb_preds.contains(pred),
+                    )
+                    .filter_tries(
+                        &variable_order,
+                        rule,
+                        &self.required_trie_column_orders,
+                        |pred| edb_preds.contains(pred),
+                    )
                     .first()
                     .copied()
                     .expect("the filter results are guaranteed to be non-empty")
