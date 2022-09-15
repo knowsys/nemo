@@ -69,13 +69,112 @@ impl IterationOrder {
     }
 }
 
+fn column_order_for(lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
+    var_order
+        .iter()
+        .flat_map(|var| {
+            lit.variables()
+                .enumerate()
+                .filter(move |(_, lit_var)| lit_var == var)
+                .map(|(i, _)| i)
+        })
+        .collect()
+}
+
+trait RuleVariableList {
+    fn filter_cartesian_product(
+        self,
+        partial_var_order: &VariableOrder,
+        rule: &Rule,
+    ) -> Vec<Variable>;
+
+    fn filter_tries(
+        self,
+        partial_var_order: &VariableOrder,
+        rule: &Rule,
+        required_trie_column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
+    ) -> Vec<Variable>;
+}
+
+impl RuleVariableList for Vec<Variable> {
+    fn filter_cartesian_product(
+        self,
+        partial_var_order: &VariableOrder,
+        rule: &Rule,
+    ) -> Vec<Variable> {
+        let result: Vec<Variable> = self
+            .iter()
+            .filter(|var| {
+                rule.body().any(|lit| {
+                    let predicate_vars: Vec<Variable> = lit.atom().variables().collect();
+
+                    predicate_vars.iter().any(|pred_var| pred_var == *var)
+                        && predicate_vars
+                            .iter()
+                            .any(|pred_var| partial_var_order.contains(pred_var))
+                })
+            })
+            .copied()
+            .collect();
+
+        if result.is_empty() {
+            self
+        } else {
+            result
+        }
+    }
+
+    fn filter_tries(
+        self,
+        partial_var_order: &VariableOrder,
+        rule: &Rule,
+        required_trie_column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
+    ) -> Vec<Variable> {
+        let ratios: Vec<Ratio<usize>> = self
+            .iter()
+            .map(|var| {
+                let mut extended_var_order: VariableOrder = partial_var_order.clone();
+                extended_var_order.push(*var);
+
+                let literals = rule
+                    .body()
+                    .filter(|lit| lit.variables().any(|lit_var| lit_var == *var));
+
+                let (total_literals, literals_requiring_new_orders) =
+                    literals.fold((0, 0), |acc, lit| {
+                        let new_col_order_required: bool = required_trie_column_orders
+                            .get(&lit.predicate())
+                            .map(|set| set.contains(&column_order_for(lit, &extended_var_order)))
+                            .unwrap_or(false);
+
+                        (acc.0 + 1, acc.1 + usize::from(new_col_order_required))
+                        // bool is coverted to 1 for true and 0 for false
+                    });
+
+                // we only consider variables from the rule so there is at least one literals in the rule that features the variable
+                debug_assert!(total_literals > 0);
+
+                Ratio::new(literals_requiring_new_orders, total_literals)
+            })
+            .collect();
+
+        let min_ratio: Option<Ratio<usize>> = ratios.iter().min().copied();
+        self.into_iter()
+            .zip(ratios.into_iter())
+            .filter(move |(_, ratio)| {
+                *ratio == min_ratio.expect("the vars and therefore the ratios are non-empty")
+            })
+            .map(|(var, _)| var)
+            .collect()
+    }
+}
+
 struct VariableOrderBuilder<'a> {
     program: &'a Program,
     iteration_order_within_rule: IterationOrder,
     required_trie_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>, // maps predicates to sets of column orders
 }
 
-// TODO: many function stake self just to be able to call them as methods; we should chanse this and possibly move the functions to a broader scope(?)
 impl<'a> VariableOrderBuilder<'a> {
     fn build_for(
         program: &Program,
@@ -121,15 +220,13 @@ impl<'a> VariableOrderBuilder<'a> {
 
         while !remaining_vars.is_empty() {
             let next_var = {
-                let cartesian_product_filtered =
-                    self.filter_cartesian_product(remaining_vars.clone(), &variable_order, rule);
-
-                // TODO: consider trie_filter for edb and idb predicates individually
-                let trie_filtered =
-                    self.filter_tries(cartesian_product_filtered, &variable_order, rule);
-
-                *trie_filtered
+                remaining_vars
+                    .clone()
+                    .filter_cartesian_product(&variable_order, rule)
+                    // TODO: consider trie_filter for edb and idb predicates individually
+                    .filter_tries(&variable_order, rule, &self.required_trie_column_orders)
                     .first()
+                    .copied()
                     .expect("the filter results are guaranteed to be non-empty")
             };
 
@@ -139,18 +236,6 @@ impl<'a> VariableOrderBuilder<'a> {
         }
 
         variable_order
-    }
-
-    fn column_order_for(&self, lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
-        var_order
-            .iter()
-            .flat_map(|var| {
-                lit.variables()
-                    .enumerate()
-                    .filter(move |(_, lit_var)| lit_var == var)
-                    .map(|(i, _)| i)
-            })
-            .collect()
     }
 
     fn update_trie_column_orders(
@@ -166,7 +251,7 @@ impl<'a> VariableOrderBuilder<'a> {
         });
 
         for lit in literals {
-            let column_ord: ColumnOrder = self.column_order_for(lit, variable_order);
+            let column_ord: ColumnOrder = column_order_for(lit, variable_order);
 
             let set = self
                 .required_trie_column_orders
@@ -175,82 +260,6 @@ impl<'a> VariableOrderBuilder<'a> {
 
             set.insert(column_ord);
         }
-    }
-
-    fn filter_cartesian_product(
-        &self,
-        candidate_vars: Vec<Variable>,
-        partial_var_order: &VariableOrder,
-        rule: &Rule,
-    ) -> Vec<Variable> {
-        let result: Vec<Variable> = candidate_vars
-            .iter()
-            .filter(|var| {
-                rule.body().any(|lit| {
-                    let predicate_vars: Vec<Variable> = lit.atom().variables().collect();
-
-                    predicate_vars.iter().any(|pred_var| pred_var == *var)
-                        && predicate_vars
-                            .iter()
-                            .any(|pred_var| partial_var_order.contains(pred_var))
-                })
-            })
-            .copied()
-            .collect();
-
-        if result.is_empty() {
-            candidate_vars
-        } else {
-            result
-        }
-    }
-
-    fn filter_tries(
-        &self,
-        candidate_vars: Vec<Variable>,
-        partial_var_order: &VariableOrder,
-        rule: &Rule,
-    ) -> Vec<Variable> {
-        let ratios: Vec<Ratio<usize>> = candidate_vars
-            .iter()
-            .map(|var| {
-                let mut extended_var_order: VariableOrder = partial_var_order.clone();
-                extended_var_order.push(*var);
-
-                let literals = rule
-                    .body()
-                    .filter(|lit| lit.variables().any(|lit_var| lit_var == *var));
-
-                let (total_literals, literals_requiring_new_orders) =
-                    literals.fold((0, 0), |acc, lit| {
-                        let new_col_order_required: bool = !self
-                            .required_trie_column_orders
-                            .get(&lit.predicate())
-                            .map(|set| {
-                                set.contains(&self.column_order_for(lit, &extended_var_order))
-                            })
-                            .unwrap_or(false);
-
-                        (acc.0 + 1, acc.1 + usize::from(new_col_order_required))
-                        // bool is coverted to 1 for true and 0 for false
-                    });
-
-                // we only consider variables from the rule so there is at least one literals in the rule that features the variable
-                debug_assert!(total_literals > 0);
-
-                Ratio::new(literals_requiring_new_orders, total_literals)
-            })
-            .collect();
-
-        let min_ratio: Option<Ratio<usize>> = ratios.iter().min().copied();
-        candidate_vars
-            .into_iter()
-            .zip(ratios.into_iter())
-            .filter(move |(_, ratio)| {
-                *ratio == min_ratio.expect("the vars and therefore the ratios are non-empty")
-            })
-            .map(|(var, _)| var)
-            .collect()
     }
 }
 
