@@ -48,11 +48,11 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
         let current_value = unsafe { (*trie_scan.current_scan().unwrap().get()).current() };
         let next_value = unsafe { (*trie_scan.current_scan().unwrap().get()).next() };
 
-        if !current_row.last().unwrap() && is_last_layer {
-            current_row = vec![true; target_schema.arity()];
-        }
-
         if let Some(val) = current_value {
+            if !current_row.last().unwrap() && is_last_layer {
+                current_row = vec![true; target_schema.arity()];
+            }
+
             if current_row[current_layer] {
                 data_column_builders[current_layer].add(val);
                 if let Some(not_empty_bool) = not_empty.as_mut() {
