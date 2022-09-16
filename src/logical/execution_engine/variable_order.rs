@@ -12,8 +12,8 @@ use super::super::{
 };
 
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct VariableOrder(HashMap<Variable, usize>);
+#[derive(Debug, PartialEq)]
+pub(super) struct VariableOrder(pub HashMap<Variable, usize>);
 
 impl VariableOrder {
     fn new() -> Self {
