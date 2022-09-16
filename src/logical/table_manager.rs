@@ -77,7 +77,7 @@ pub struct TableInfo {
     pub status: TableStatus,
 
     // Redundant information, TODO: Get rid of this?
-    variable_order: ColumnOrder,
+    column_order: ColumnOrder,
     key: TableKey,
 
     priority: u64,
@@ -151,13 +151,13 @@ impl TableManager {
         &self,
         predicate_id: Identifier,
         step_range: &Range<usize>,
-        variable_order: &ColumnOrder,
+        column_order: &ColumnOrder,
     ) -> Option<TableId> {
         for (order, id) in self.entries.get(&TableKey {
             predicate_id,
             step_range: self.normalize_range(predicate_id, step_range),
         })? {
-            if TableManager::orders_equal(variable_order, order) {
+            if TableManager::orders_equal(column_order, order) {
                 return Some(*id);
             }
         }
@@ -169,7 +169,7 @@ impl TableManager {
         let mut result = Vec::new();
 
         for &to_variable in order_to {
-            result.push(*order_from.iter().find(|&&x| x == to_variable).unwrap());
+            result.push(order_from.iter().position(|&x| x == to_variable).unwrap());
         }
 
         result
@@ -202,7 +202,7 @@ impl TableManager {
 
                 let project_iter = TrieProject::new(
                     base_trie,
-                    TableManager::translate_order(base_order, &info.variable_order),
+                    TableManager::translate_order(base_order, &info.column_order),
                 );
 
                 let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
@@ -315,7 +315,7 @@ impl TableManager {
         &mut self,
         data_source: DataSource,
         predicate: Identifier,
-        variable_order: ColumnOrder,
+        column_order: ColumnOrder,
         priority: u64,
     ) -> TableId {
         let table_list = self
@@ -331,17 +331,13 @@ impl TableManager {
 
         self.tables.push(TableInfo {
             status: TableStatus::OnDisk(data_source),
-            variable_order: Vec::new(),
-            key,
+            column_order: column_order.clone(),
+            key: key.clone(),
             priority,
             space: 0, //TODO: How to do this
         });
-        let key = TableKey {
-            predicate_id: predicate,
-            step_range: (0..1),
-        };
 
-        self.add_table_helper(key, variable_order, priority)
+        self.add_table_helper(key, column_order, priority)
     }
 
     /// Add a computed table to the manager
@@ -349,19 +345,13 @@ impl TableManager {
         &mut self,
         predicate: Identifier,
         absolute_step_range: Range<usize>,
-        variable_order: ColumnOrder,
+        column_order: ColumnOrder,
         priority: u64,
         plan: ExecutionPlan,
     ) -> Option<TableId> {
         let trie = self.execute_plan(plan)?;
 
-        Some(self.add_trie(
-            predicate,
-            absolute_step_range,
-            variable_order,
-            priority,
-            trie,
-        ))
+        Some(self.add_trie(predicate, absolute_step_range, column_order, priority, trie))
     }
 
     /// Add trie to the table manager; useful for testing
@@ -369,7 +359,7 @@ impl TableManager {
         &mut self,
         predicate: Identifier,
         absolute_step_range: Range<usize>,
-        variable_order: ColumnOrder,
+        column_order: ColumnOrder,
         priority: u64,
         trie: Trie,
     ) -> TableId {
@@ -388,13 +378,13 @@ impl TableManager {
         };
         self.tables.push(TableInfo {
             status: TableStatus::InMemory(trie),
-            variable_order: variable_order.clone(),
+            column_order: column_order.clone(),
             key: key.clone(),
             priority,
             space: 0, //TODO: How to do this
         });
 
-        self.add_table_helper(key, variable_order, priority)
+        self.add_table_helper(key, column_order, priority)
     }
 
     fn orders_equal(order_left: &ColumnOrder, order_right: &ColumnOrder) -> bool {
@@ -461,22 +451,54 @@ impl TableManager {
         }
     }
 
+    /// Add table and mark its contents as derived
+    pub fn add_derived(
+        &mut self,
+        predicate: Identifier,
+        absolute_step_range: Range<usize>,
+        column_order: ColumnOrder,
+        priority: u64,
+    ) -> TableId {
+        let key = TableKey {
+            predicate_id: predicate,
+            step_range: self.normalize_range(predicate, &absolute_step_range),
+        };
+
+        self.tables.push(TableInfo {
+            status: TableStatus::Derived,
+            column_order: column_order.clone(),
+            key: key.clone(),
+            priority,
+            space: 0, //TODO: How to do this
+        });
+
+        self.add_table_helper(key, column_order, priority)
+    }
+
     /// Executes a given plan resuling in a Trie (None if it guaranteed to be empty)
     fn execute_plan(&mut self, plan: ExecutionPlan) -> Option<Trie> {
         let mut table_ids = HashSet::new();
         for leave_node in plan.leaves {
-            if let ExecutionOperation::Fetch(predicate, absolute_step_range, variable_order) =
+            if let ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) =
                 &leave_node.operation
             {
-                table_ids.insert(
-                    self.get_table(*predicate, absolute_step_range, variable_order)
-                        .unwrap(),
-                );
+                let id = match self.get_table(*predicate, absolute_step_range, column_order) {
+                    None => self.add_derived(
+                        *predicate,
+                        absolute_step_range.clone(),
+                        column_order.clone(),
+                        0,
+                    ),
+                    Some(id) => id,
+                };
+
+                table_ids.insert(id);
             } else {
                 unreachable!();
             }
         }
 
+        // TODO: Materializig should check memory and so on...
         self.materialize_required_tables(&table_ids);
 
         let mut tmp_trie: Option<Trie> = None;

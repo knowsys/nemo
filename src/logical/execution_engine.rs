@@ -1,11 +1,11 @@
 //! Functionality which handles the execution of a program
-use std::{ops::Range, slice};
+use std::{collections::HashMap, ops::Range, slice};
 
 use crate::physical::tables::Trie;
 
 use super::{
     execution_plan::{ExecutionNode, ExecutionOperation, ExecutionPlan},
-    model::{Atom, Identifier, Program, Term},
+    model::{Atom, Identifier, Program, Term, Variable},
     table_manager::{ColumnOrder, TableManager, TableManagerStrategy},
 };
 
@@ -34,7 +34,9 @@ impl RuleExecutionEngine {
     /// Create new [`RuleExecutionEngine`]
     pub fn new(memory_strategy: TableManagerStrategy, program: Program) -> Self {
         // NOTE: indices are the ids of the rules and the rule order in variable_orders is the same as in program
-        let variable_orders = build_preferable_variable_orders(&program);
+        // For easier testing, we use another function for now
+        let _ = build_preferable_variable_orders(&program);
+        let variable_orders = RuleExecutionEngine::specific_order(&program);
         let rule_infos = variable_orders
             .into_iter()
             .map(|var_ord| RuleInfo {
@@ -49,6 +51,22 @@ impl RuleExecutionEngine {
             program,
             rule_infos,
         }
+    }
+
+    /// Function that generates one hard-coded order; useful for testing
+    fn specific_order(program: &Program) -> Vec<Vec<VariableOrder>> {
+        let mut result = Vec::new();
+
+        for _ in &program.rules {
+            let mut new_order = HashMap::new();
+            new_order.insert(Variable::Universal(Identifier(0)), 0usize);
+            new_order.insert(Variable::Universal(Identifier(1)), 1);
+            new_order.insert(Variable::Universal(Identifier(2)), 2);
+
+            result.push(vec![VariableOrder(new_order)]);
+        }
+
+        result
     }
 
     /// Add trie to the table manager; useful for testing
@@ -162,8 +180,7 @@ impl RuleExecutionEngine {
             .collect();
 
         let mut indices = (0..mapped_variables.len()).collect::<Vec<_>>();
-        indices.sort_by_key(|&i| &mapped_variables[i]);
-
+        indices.sort_by_key(|&i| mapped_variables[i]);
         indices
     }
 
