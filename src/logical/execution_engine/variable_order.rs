@@ -20,6 +20,10 @@ impl VariableOrder {
         Self(HashMap::new())
     }
 
+    fn from_vec(vec: Vec<Variable>) -> Self {
+        Self(vec.into_iter().enumerate().map(|(i, v)| (v, i)).collect())
+    }
+
     fn push(&mut self, variable: Variable) {
         let max_index = self.0.values().max();
         self.0.insert(variable, max_index.map_or(0, |i| i + 1));
@@ -60,10 +64,10 @@ impl IterationOrder {
             Self::Forward => Permutator::sort_from_vec(&(0..len).collect::<Vec<_>>()),
             Self::Backward => Permutator::sort_from_vec(&(0..len).rev().collect::<Vec<_>>()),
             Self::InsideOut => Permutator::sort_from_vec(
-                &(0..len / 2)
+                &(0..(len / 2))
+                    .map(|i| i * 2 + 1)
                     .rev()
-                    .zip((len / 2)..len)
-                    .flat_map(|(l, r)| vec![l, r])
+                    .chain((0..(len + 1) / 2).map(|i| i * 2))
                     .collect::<Vec<_>>(),
             ),
         }
@@ -133,6 +137,7 @@ impl RuleVariableList for Vec<Variable> {
         required_trie_column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
         mut predicate_filter: P,
     ) -> Vec<Variable> {
+        // TODO: do not use ratios here but compare both values individually (as in original implementation)
         let ratios: Vec<Ratio<usize>> = self
             .iter()
             .map(|var| {
@@ -146,14 +151,18 @@ impl RuleVariableList for Vec<Variable> {
 
                 let (total_literals, literals_requiring_new_orders) =
                     literals.fold((0, 0), |acc, lit| {
-                        let new_col_order_required: bool = required_trie_column_orders
+                        let fitting_column_order_exists: bool = required_trie_column_orders
                             .get(&lit.predicate())
                             .map(|set| set.contains(&column_order_for(lit, &extended_var_order)))
                             .unwrap_or(false);
 
+                        let new_col_order_required = !fitting_column_order_exists;
+
                         (acc.0 + 1, acc.1 + usize::from(new_col_order_required))
                         // bool is coverted to 1 for true and 0 for false
                     });
+
+                eprintln!("{:?}", literals_requiring_new_orders);
 
                 if total_literals == 0 {
                     Ratio::new(0, 1) // literals_requiring_new_orders == 0 here since literals_requiring_new_orders <= total_literals
@@ -162,6 +171,8 @@ impl RuleVariableList for Vec<Variable> {
                 }
             })
             .collect();
+
+        eprintln!("{:?}", ratios);
 
         let min_ratio: Option<Ratio<usize>> = ratios.iter().min().copied();
         self.into_iter()
@@ -354,4 +365,229 @@ pub(super) fn build_preferable_variable_orders(program: &Program) -> Vec<Vec<Var
         .expect("orders are defined above and is non-empty")
 }
 
-// TODO: write tests
+#[cfg(test)]
+mod test {
+    use super::{
+        super::super::{
+            model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
+            table_manager::ColumnOrder,
+        },
+        IterationOrder, RuleVariableList, VariableOrder,
+    };
+    use std::collections::{HashMap, HashSet};
+
+    #[test]
+    fn get_iteration_order_permutator() {
+        let orders = [
+            IterationOrder::Forward,
+            IterationOrder::Backward,
+            IterationOrder::InsideOut,
+        ];
+
+        let test_vec_5: Vec<usize> = (0..5).collect();
+        let test_vec_6: Vec<usize> = (0..6).collect();
+
+        let expected_5: Vec<Vec<usize>> = vec![
+            vec![0, 1, 2, 3, 4],
+            vec![4, 3, 2, 1, 0],
+            vec![2, 1, 3, 0, 4],
+        ];
+        let expected_6: Vec<Vec<usize>> = vec![
+            vec![0, 1, 2, 3, 4, 5],
+            vec![5, 4, 3, 2, 1, 0],
+            vec![3, 2, 4, 1, 5, 0],
+        ];
+
+        let results_5: Vec<Vec<usize>> = orders
+            .iter()
+            .map(|ord| {
+                ord.get_permutator(5)
+                    .permutate(&test_vec_5)
+                    .expect("the length is correct")
+            })
+            .collect();
+        let results_6: Vec<Vec<usize>> = orders
+            .iter()
+            .map(|ord| {
+                ord.get_permutator(6)
+                    .permutate(&test_vec_6)
+                    .expect("the length is correct")
+            })
+            .collect();
+
+        assert_eq!(expected_5, results_5);
+        assert_eq!(expected_6, results_6);
+    }
+
+    fn get_test_rule_with_vars_where_predicates_are_different() -> (Rule, Vec<Variable>) {
+        let a = Identifier(11);
+        let b = Identifier(12);
+        let c = Identifier(13);
+
+        let x = Variable::Universal(Identifier(21));
+        let y = Variable::Universal(Identifier(22));
+        let z = Variable::Universal(Identifier(23));
+
+        let tx = Term::Variable(x);
+        let ty = Term::Variable(y);
+        let tz = Term::Variable(z);
+
+        (
+            Rule::new(
+                vec![Atom::new(c, vec![tx, tz])],
+                vec![
+                    Literal::Positive(Atom::new(a, vec![tx, ty])),
+                    Literal::Positive(Atom::new(b, vec![ty, tz])),
+                ],
+            ),
+            vec![x, y, z],
+        )
+    }
+
+    fn get_test_rule_with_vars_where_predicates_are_the_same() -> (Rule, Vec<Variable>) {
+        let a = Identifier(11);
+
+        let x = Variable::Universal(Identifier(21));
+        let y = Variable::Universal(Identifier(22));
+        let z = Variable::Universal(Identifier(23));
+
+        let tx = Term::Variable(x);
+        let ty = Term::Variable(y);
+        let tz = Term::Variable(z);
+
+        (
+            Rule::new(
+                vec![Atom::new(a, vec![tx, tz])],
+                vec![
+                    Literal::Positive(Atom::new(a, vec![tx, ty])),
+                    Literal::Positive(Atom::new(a, vec![ty, tz])),
+                ],
+            ),
+            vec![x, y, z],
+        )
+    }
+
+    enum RulePredicateVariant {
+        Same,
+        Different,
+    }
+
+    fn filter_cartesian_product_with_empty_var_order(pred_variant: RulePredicateVariant) {
+        let (rule, vars) = match pred_variant {
+            RulePredicateVariant::Same => get_test_rule_with_vars_where_predicates_are_the_same(),
+            RulePredicateVariant::Different => {
+                get_test_rule_with_vars_where_predicates_are_different()
+            }
+        };
+        let empty_ord = VariableOrder::new();
+
+        let expected = vars.clone();
+
+        let filtered_vars = vars.filter_cartesian_product(&empty_ord, &rule);
+
+        assert_eq!(expected, filtered_vars);
+    }
+
+    fn filter_cartesian_product_with_only_x_in_var_order(pred_variant: RulePredicateVariant) {
+        let (rule, vars) = match pred_variant {
+            RulePredicateVariant::Same => get_test_rule_with_vars_where_predicates_are_the_same(),
+            RulePredicateVariant::Different => {
+                get_test_rule_with_vars_where_predicates_are_different()
+            }
+        };
+        let x = vars[0];
+        let y = vars[1];
+        let mut ord_with_x = VariableOrder::new();
+        ord_with_x.push(x);
+
+        let remaining_vars: Vec<Variable> = vars.into_iter().filter(|v| v != &x).collect();
+
+        let expected = vec![y];
+
+        let filtered_vars = remaining_vars.filter_cartesian_product(&ord_with_x, &rule);
+
+        assert_eq!(expected, filtered_vars);
+    }
+
+    #[test]
+    fn filter_cartesian_product_where_all_rules_predicates_are_different_with_empty_var_order() {
+        filter_cartesian_product_with_empty_var_order(RulePredicateVariant::Different);
+    }
+
+    #[test]
+    fn filter_cartesian_product_where_all_rules_predicates_are_the_same_with_empty_var_order() {
+        filter_cartesian_product_with_empty_var_order(RulePredicateVariant::Same);
+    }
+
+    #[test]
+    fn filter_cartesian_product_where_all_rules_predicates_are_different_with_only_x_in_var_order()
+    {
+        filter_cartesian_product_with_only_x_in_var_order(RulePredicateVariant::Different);
+    }
+
+    #[test]
+    fn filter_cartesian_product_where_all_rules_predicates_are_the_same_with_only_x_in_var_order() {
+        filter_cartesian_product_with_only_x_in_var_order(RulePredicateVariant::Same);
+    }
+
+    #[test]
+    #[ignore]
+    fn filter_tries_where_rule_predicates_are_different_with_empty_var_order_and_empty_trie_cache()
+    {
+        let (rule, vars) = get_test_rule_with_vars_where_predicates_are_different();
+        let empty_ord = VariableOrder::new();
+        let empty_trie_cache: HashMap<Identifier, HashSet<ColumnOrder>> = HashMap::new();
+
+        let expected = vars.clone();
+
+        let filtered_vars = vars.filter_tries(&empty_ord, &rule, &empty_trie_cache, |_| true);
+
+        assert_eq!(expected, filtered_vars);
+    }
+
+    #[test]
+    #[ignore]
+    fn filter_tries_where_rule_predicates_are_the_same_with_empty_var_order_and_empty_trie_cache() {
+        let (rule, vars) = get_test_rule_with_vars_where_predicates_are_the_same();
+        let x = vars[0];
+        let z = vars[2];
+        let empty_ord = VariableOrder::new();
+        let empty_trie_cache: HashMap<Identifier, HashSet<ColumnOrder>> = HashMap::new();
+
+        let expected = vec![x, z];
+
+        let filtered_vars = vars.filter_tries(&empty_ord, &rule, &empty_trie_cache, |_| true);
+
+        assert_eq!(expected, filtered_vars);
+    }
+
+    #[test]
+    #[ignore]
+    fn build_preferable_variable_orders() {
+        let (rules, var_lists): (Vec<Rule>, Vec<Vec<Variable>>) = vec![
+            get_test_rule_with_vars_where_predicates_are_different(),
+            get_test_rule_with_vars_where_predicates_are_the_same(),
+        ]
+        .into_iter()
+        .unzip();
+
+        let program = Program::new(None, HashMap::new(), vec![], rules, vec![]);
+
+        let rule_1_vars = &var_lists[0];
+        let rule_1_var_orders: Vec<VariableOrder> = vec![
+            VariableOrder::from_vec(vec![rule_1_vars[0], rule_1_vars[1], rule_1_vars[2]]),
+            VariableOrder::from_vec(vec![rule_1_vars[1], rule_1_vars[0], rule_1_vars[2]]),
+            VariableOrder::from_vec(vec![rule_1_vars[2], rule_1_vars[1], rule_1_vars[0]]),
+        ];
+        let rule_2_vars = &var_lists[1];
+        let rule_2_var_orders: Vec<VariableOrder> = vec![
+            VariableOrder::from_vec(vec![rule_2_vars[0], rule_2_vars[1], rule_2_vars[2]]),
+            VariableOrder::from_vec(vec![rule_2_vars[2], rule_2_vars[1], rule_2_vars[0]]),
+        ];
+
+        assert_eq!(
+            vec![rule_1_var_orders, rule_2_var_orders],
+            super::build_preferable_variable_orders(&program),
+        );
+    }
+}
