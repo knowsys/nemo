@@ -149,11 +149,11 @@ impl<'a> TrieScan<'a> for TrieJoin<'a> {
 mod test {
     use super::TrieJoin;
     use crate::physical::columns::{
-        ColumnEnum, GenericIntervalColumn, IntervalColumnEnum, RangedColumnScanT,
+        Column, ColumnEnum, GenericIntervalColumn, IntervalColumnEnum, RangedColumnScanT,
     };
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::{
-        IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
+        materialize, IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
     };
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
@@ -459,6 +459,102 @@ mod test {
         assert_eq!(join_current(&mut join_iter), Some(10));
         assert_eq!(join_next(&mut join_iter), None);
         assert_eq!(join_current(&mut join_iter), None);
+    }
+
+    #[test]
+    fn test_self_join_inverse() {
+        let column_x = make_gict(&[1, 2, 5, 7], &[0]);
+        let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
+        let column_inv_x = make_gict(&[2, 3, 4, 5, 7, 8, 9, 10], &[0]);
+        let column_inv_y = make_gict(
+            &[1, 1, 2, 1, 2, 7, 5, 7, 1, 2, 7],
+            &[0, 1, 2, 3, 4, 5, 6, 8],
+        );
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 10,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 11,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie = Trie::new(schema, vec![column_x, column_y]);
+
+        let schema_inv = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 20,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 21,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie_inv = Trie::new(schema_inv, vec![column_inv_x, column_inv_y]);
+
+        let schema_target = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 100,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 101,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 102,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let join_iter = TrieJoin::new(
+            vec![
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie)),
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_inv)),
+            ],
+            &vec![vec![0, 2], vec![1, 2]],
+            schema_target,
+        );
+
+        let join_trie = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
+
+        let join_col_fst = if let IntervalColumnT::U64(col) = join_trie.get_column(0) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let join_col_snd = if let IntervalColumnT::U64(col) = join_trie.get_column(1) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        let join_col_trd = if let IntervalColumnT::U64(col) = join_trie.get_column(2) {
+            col
+        } else {
+            panic!("...")
+        };
+
+        assert_eq!(
+            join_col_fst.get_data_column().iter().collect::<Vec<u64>>(),
+            vec![1, 2]
+        );
+
+        assert_eq!(
+            join_col_snd.get_data_column().iter().collect::<Vec<u64>>(),
+            vec![4, 7, 9, 10, 8, 9, 10]
+        );
+
+        assert_eq!(
+            join_col_trd.get_data_column().iter().collect::<Vec<u64>>(),
+            vec![2, 2, 5, 2, 7, 7, 7]
+        );
     }
 
     use crate::physical::columns::{
