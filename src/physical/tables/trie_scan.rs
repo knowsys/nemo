@@ -78,7 +78,10 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
                     "Called down while on the last layer"
                 );
 
-                let current_position = self.layers[index].get_mut().pos().unwrap();
+                let current_position = self.layers[index]
+                    .get_mut()
+                    .pos()
+                    .expect("Going down is only allowed when on an element.");
 
                 let next_index = index + 1;
                 let next_layer_range = self
