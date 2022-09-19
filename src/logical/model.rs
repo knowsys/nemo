@@ -455,7 +455,7 @@ impl Rule {
 
 /// A (ground) fact.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
-pub struct Fact(pub(crate) Atom);
+pub struct Fact(pub Atom);
 
 /// A statement that can occur in the program.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]

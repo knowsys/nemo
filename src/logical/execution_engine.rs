@@ -30,7 +30,7 @@ struct RuleInfo {
 #[derive(Debug)]
 pub struct RuleExecutionEngine {
     current_step: usize,
-    table_manager: TableManager,
+    pub table_manager: TableManager,
     program: Program,
 
     rule_infos: Vec<RuleInfo>,
