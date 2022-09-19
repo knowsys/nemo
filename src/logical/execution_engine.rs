@@ -101,7 +101,7 @@ impl RuleExecutionEngine {
                 // Get the index of the one with the minimal costs
                 let best_plan_index = plans
                     .iter()
-                    .map(|p| self.table_manager.estimate_runtime_costs(p))
+                    .map(TableManager::estimate_runtime_costs)
                     .enumerate()
                     .min_by(|(_, a), (_, b)| (*a).cmp(b))
                     .map(|(index, _)| index)
