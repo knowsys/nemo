@@ -103,9 +103,7 @@ impl RuleExecutionEngine {
                     best_plan,
                 );
 
-                if new_table_id.is_none()
-                    || self.table_manager.table_is_empty(new_table_id.unwrap())
-                {
+                if new_table_id.is_none() {
                     no_derivation = true;
                 }
             }
@@ -367,6 +365,9 @@ mod test {
         engine.add_trie(Identifier(0), 0..1, vec![0, 1], 0, trie);
 
         engine.execute();
+
+        let no_three = std::panic::catch_unwind(|| engine.table_manager.get_info(3));
+        assert!(no_three.is_err());
 
         if let TableStatus::InMemory(zeroth_table) = &engine.table_manager.get_info(0).status {
             let first_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(0) {

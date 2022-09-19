@@ -354,7 +354,7 @@ impl TableManager {
     ) -> Option<TableId> {
         let trie = self.execute_plan(plan)?;
 
-        Some(self.add_trie(predicate, absolute_step_range, column_order, priority, trie))
+        self.add_trie(predicate, absolute_step_range, column_order, priority, trie)
     }
 
     /// Add trie to the table manager; useful for testing
@@ -365,7 +365,11 @@ impl TableManager {
         column_order: ColumnOrder,
         priority: u64,
         trie: Trie,
-    ) -> TableId {
+    ) -> Option<TableId> {
+        if trie.row_num() == 0 {
+            return None;
+        }
+
         // Tables only covers a single step
         if absolute_step_range.end - absolute_step_range.start == 1 {
             let table_list = self
@@ -387,7 +391,7 @@ impl TableManager {
             space: 0, //TODO: How to do this
         });
 
-        self.add_table_helper(key, column_order, priority)
+        Some(self.add_table_helper(key, column_order, priority))
     }
 
     fn orders_equal(order_left: &ColumnOrder, order_right: &ColumnOrder) -> bool {
