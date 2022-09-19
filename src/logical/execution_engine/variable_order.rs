@@ -3,7 +3,7 @@
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
 use crate::logical::Permutator;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::super::{
     model::{Identifier, Literal, Program, Rule, Variable},
@@ -228,7 +228,8 @@ impl<'a> VariableOrderBuilder<'a> {
     }
 
     fn generate_variable_orders(&mut self) -> Vec<VariableOrder> {
-        let mut remaining_rules: HashMap<usize, &Rule> =
+        // NOTE: We use a BTreeMap to determinise the iteration order for easier debugging; this should not be performance critical
+        let mut remaining_rules: BTreeMap<usize, &Rule> =
             self.program.rules.iter().enumerate().collect();
 
         let mut result: Vec<(usize, VariableOrder)> = Vec::with_capacity(self.program.rules.len());
@@ -562,7 +563,49 @@ mod test {
     }
 
     #[test]
-    fn build_preferable_variable_orders() {
+    fn build_preferable_variable_orders_with_different_predicate_rule() {
+        let (rules, var_lists): (Vec<Rule>, Vec<Vec<Variable>>) =
+            vec![get_test_rule_with_vars_where_predicates_are_different()]
+                .into_iter()
+                .unzip();
+
+        let program = Program::new(None, HashMap::new(), vec![], rules, vec![]);
+
+        let rule_vars = &var_lists[0];
+        let rule_var_orders: Vec<VariableOrder> = vec![
+            VariableOrder::from_vec(vec![rule_vars[0], rule_vars[1], rule_vars[2]]),
+            VariableOrder::from_vec(vec![rule_vars[2], rule_vars[1], rule_vars[0]]),
+        ];
+
+        assert_eq!(
+            vec![rule_var_orders],
+            super::build_preferable_variable_orders(&program),
+        );
+    }
+
+    #[test]
+    fn build_preferable_variable_orders_with_same_predicate_rule() {
+        let (rules, var_lists): (Vec<Rule>, Vec<Vec<Variable>>) =
+            vec![get_test_rule_with_vars_where_predicates_are_the_same()]
+                .into_iter()
+                .unzip();
+
+        let program = Program::new(None, HashMap::new(), vec![], rules, vec![]);
+
+        let rule_vars = &var_lists[0];
+        let rule_var_orders: Vec<VariableOrder> = vec![
+            VariableOrder::from_vec(vec![rule_vars[0], rule_vars[1], rule_vars[2]]),
+            VariableOrder::from_vec(vec![rule_vars[2], rule_vars[1], rule_vars[0]]),
+        ];
+
+        assert_eq!(
+            vec![rule_var_orders],
+            super::build_preferable_variable_orders(&program),
+        );
+    }
+
+    #[test]
+    fn build_preferable_variable_orders_with_both_rules() {
         let (rules, var_lists): (Vec<Rule>, Vec<Vec<Variable>>) = vec![
             get_test_rule_with_vars_where_predicates_are_different(),
             get_test_rule_with_vars_where_predicates_are_the_same(),
