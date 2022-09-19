@@ -288,7 +288,7 @@ mod test {
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
             ],
-            &vec![vec![0, 1], vec![1, 2]],
+            &[vec![0, 1], vec![1, 2]],
             schema_target,
         ));
 

@@ -19,10 +19,6 @@ impl VariableOrder {
         Self(HashMap::new())
     }
 
-    fn from_vec(vec: Vec<Variable>) -> Self {
-        Self(vec.into_iter().enumerate().map(|(i, v)| (v, i)).collect())
-    }
-
     fn push(&mut self, variable: Variable) {
         let max_index = self.0.values().max();
         self.0.insert(variable, max_index.map_or(0, |i| i + 1));
@@ -376,6 +372,12 @@ mod test {
         IterationOrder, RuleVariableList, VariableOrder,
     };
     use std::collections::{HashMap, HashSet};
+
+    impl VariableOrder {
+        fn from_vec(vec: Vec<Variable>) -> Self {
+            Self(vec.into_iter().enumerate().map(|(i, v)| (v, i)).collect())
+        }
+    }
 
     #[test]
     fn get_iteration_order_permutator() {
