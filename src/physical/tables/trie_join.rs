@@ -232,7 +232,7 @@ mod test {
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
             ],
-            &vec![vec![0, 1], vec![1, 2]],
+            &[vec![0, 1], vec![1, 2]],
             schema_target,
         );
 
@@ -316,7 +316,7 @@ mod test {
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
             ],
-            &vec![vec![0, 1], vec![1, 2]],
+            &[vec![0, 1], vec![1, 2]],
             schema_target_clone,
         );
 
@@ -325,7 +325,7 @@ mod test {
                 TrieScanEnum::TrieJoin(join_iter_ab),
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_c)),
             ],
-            &vec![vec![0, 1, 2], vec![0, 1]],
+            &[vec![0, 1, 2], vec![0, 1]],
             schema_target_clone_2,
         );
 
@@ -404,7 +404,7 @@ mod test {
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie)),
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie)),
             ],
-            &vec![vec![0, 1], vec![1, 2]],
+            &[vec![0, 1], vec![1, 2]],
             schema_target,
         );
 
@@ -517,7 +517,7 @@ mod test {
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie)),
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_inv)),
             ],
-            &vec![vec![0, 2], vec![1, 2]],
+            &[vec![0, 2], vec![1, 2]],
             schema_target,
         );
 
@@ -594,7 +594,7 @@ mod test {
             vec![TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(
                 &my_trie,
             ))],
-            &vec![vec![0]],
+            &[vec![0]],
             schema_target,
         );
 
