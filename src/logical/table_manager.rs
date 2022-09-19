@@ -81,12 +81,14 @@ pub struct TableInfo {
     key: TableKey,
 
     priority: u64,
+    #[allow(dead_code)]
     space: u64,
 }
 
 /// Object for keeping track of all the tables
 #[derive(Debug)]
 pub struct TableManager {
+    #[allow(dead_code)]
     strategy: TableManagerStrategy,
     tables: Vec<TableInfo>,
     entries: HashMap<TableKey, Vec<(ColumnOrder, TableId)>>,
@@ -95,6 +97,7 @@ pub struct TableManager {
     priority_heap: BinaryHeap<TablePriority>,
     current_id: TableId,
 
+    #[allow(dead_code)]
     space_consumed: u64,
 }
 
