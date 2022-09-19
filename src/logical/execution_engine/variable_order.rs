@@ -3,7 +3,6 @@
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
 use crate::logical::Permutator;
-use num::rational::Ratio;
 use std::collections::{HashMap, HashSet};
 
 use super::super::{
@@ -52,6 +51,7 @@ impl VariableOrder {
     }
 }
 
+#[derive(Debug)]
 enum IterationOrder {
     Forward,
     Backward,
@@ -137,8 +137,7 @@ impl RuleVariableList for Vec<Variable> {
         required_trie_column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
         mut predicate_filter: P,
     ) -> Vec<Variable> {
-        // TODO: do not use ratios here but compare both values individually (as in original implementation)
-        let ratios: Vec<Ratio<usize>> = self
+        let ratios: Vec<(usize, usize)> = self
             .iter()
             .map(|var| {
                 let mut extended_var_order: VariableOrder = partial_var_order.clone();
@@ -162,19 +161,20 @@ impl RuleVariableList for Vec<Variable> {
                         // bool is coverted to 1 for true and 0 for false
                     });
 
-                eprintln!("{:?}", literals_requiring_new_orders);
-
-                if total_literals == 0 {
-                    Ratio::new(0, 1) // literals_requiring_new_orders == 0 here since literals_requiring_new_orders <= total_literals
-                } else {
-                    Ratio::new(literals_requiring_new_orders, total_literals)
-                }
+                (literals_requiring_new_orders, total_literals)
             })
             .collect();
 
-        eprintln!("{:?}", ratios);
-
-        let min_ratio: Option<Ratio<usize>> = ratios.iter().min().copied();
+        let min_ratio: Option<(usize, usize)> = ratios
+            .iter()
+            .min_by(|a, b| {
+                if a.0 != b.0 {
+                    a.0.cmp(&b.0)
+                } else {
+                    b.1.cmp(&a.1)
+                }
+            })
+            .copied();
         self.into_iter()
             .zip(ratios.into_iter())
             .filter(move |(_, ratio)| {
@@ -531,14 +531,15 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn filter_tries_where_rule_predicates_are_different_with_empty_var_order_and_empty_trie_cache()
     {
         let (rule, vars) = get_test_rule_with_vars_where_predicates_are_different();
+        let x = vars[0];
+        let z = vars[2];
         let empty_ord = VariableOrder::new();
         let empty_trie_cache: HashMap<Identifier, HashSet<ColumnOrder>> = HashMap::new();
 
-        let expected = vars.clone();
+        let expected = vec![x, z];
 
         let filtered_vars = vars.filter_tries(&empty_ord, &rule, &empty_trie_cache, |_| true);
 
@@ -546,7 +547,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn filter_tries_where_rule_predicates_are_the_same_with_empty_var_order_and_empty_trie_cache() {
         let (rule, vars) = get_test_rule_with_vars_where_predicates_are_the_same();
         let x = vars[0];
@@ -562,7 +562,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn build_preferable_variable_orders() {
         let (rules, var_lists): (Vec<Rule>, Vec<Vec<Variable>>) = vec![
             get_test_rule_with_vars_where_predicates_are_different(),
@@ -575,9 +574,7 @@ mod test {
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_1_vars[0], rule_1_vars[1], rule_1_vars[2]]),
-            VariableOrder::from_vec(vec![rule_1_vars[1], rule_1_vars[0], rule_1_vars[2]]),
-            VariableOrder::from_vec(vec![rule_1_vars[2], rule_1_vars[1], rule_1_vars[0]]),
+            VariableOrder::from_vec(vec![rule_1_vars[2], rule_1_vars[1], rule_1_vars[0]]), // z is always first here since it occurs only in edb predicate; x and y occur in A(...) which is idb by rule 2
         ];
         let rule_2_vars = &var_lists[1];
         let rule_2_var_orders: Vec<VariableOrder> = vec![
