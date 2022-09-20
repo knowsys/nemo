@@ -1,7 +1,8 @@
 //! Managing of tables
 
-use super::execution_plan::{ExecutionNode, ExecutionOperation, ExecutionPlan};
+use super::execution_plan::{ExecutionNode, ExecutionOperation, ExecutionResult};
 use super::model::{DataSource, Identifier};
+use super::ExecutionSeries;
 
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::tables::{
@@ -344,20 +345,20 @@ impl TableManager {
     }
 
     /// Add a computed table to the manager
-    pub fn add_idb(
-        &mut self,
-        predicate: Identifier,
-        absolute_step_range: Range<usize>,
-        column_order: ColumnOrder,
-        priority: u64,
-        plan: ExecutionPlan,
-    ) -> Option<TableId> {
-        let trie = self.execute_plan(plan)?;
+    // pub fn add_idb(
+    //     &mut self,
+    //     predicate: Identifier,
+    //     absolute_step_range: Range<usize>,
+    //     column_order: ColumnOrder,
+    //     priority: u64,
+    //     plan: ExecutionPlan,
+    // ) -> Option<TableId> {
+    //     let trie = self.execute_plan(plan)?;
 
-        self.add_trie(predicate, absolute_step_range, column_order, priority, trie)
-    }
+    //     self.add_trie(predicate, absolute_step_range, column_order, priority, trie)
+    // }
 
-    /// Add trie to the table manager; useful for testing
+    /// Add trie to the table manager
     pub fn add_trie(
         &mut self,
         predicate: Identifier,
@@ -434,8 +435,9 @@ impl TableManager {
         &self.tables[table_id]
     }
 
-    ///TODO: ...
-    pub fn estimate_runtime_costs(&self, _plan: &ExecutionPlan) -> u64 {
+    /// Estimates the amount of time executing a [`ExecutionSeries`] would take
+    /// TODO: Returns just 0 for now
+    pub fn estimate_runtime_costs(_series: &ExecutionSeries) -> u64 {
         0
     }
 
@@ -449,12 +451,12 @@ impl TableManager {
             ExecutionOperation::Union(subtables) => {
                 subtables.iter().map(Self::estimate_space).sum()
             }
-            ExecutionOperation::Minus(subtables) => Self::estimate_space(&subtables[0]),
-            ExecutionOperation::Project(_schema_sorting) => {
+            ExecutionOperation::Minus(left, _right) => Self::estimate_space(&left),
+            ExecutionOperation::Project(_id, _sorting) => {
                 // Should be easy to calculate
                 0
             }
-            ExecutionOperation::Temp() => 0,
+            ExecutionOperation::Temp(_) => 0,
         }
     }
 
@@ -482,60 +484,81 @@ impl TableManager {
         self.add_table_helper(key, column_order, priority)
     }
 
-    /// Executes a given plan resuling in a Trie (None if it guaranteed to be empty)
-    fn execute_plan(&mut self, plan: ExecutionPlan) -> Option<Trie> {
-        let mut table_ids = HashSet::new();
-        for leave_node in plan.leaves {
-            if let ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) =
-                &leave_node.operation
-            {
-                let id = match self.get_table(*predicate, absolute_step_range, column_order) {
-                    None => self.add_derived(
-                        *predicate,
-                        absolute_step_range.clone(),
-                        column_order.clone(),
-                        0,
-                    ),
-                    Some(id) => id,
-                };
+    /// Executes an [`ExecutionSeries`] and adds the resulting tables
+    /// Returns true if a non-empty table was added, false otherwise
+    pub fn execute_series(&mut self, series: ExecutionSeries) -> bool {
+        let mut new_table = false;
+        let mut temp_tries = HashMap::<TableId, Option<Trie>>::new();
 
-                table_ids.insert(id);
-            } else {
-                unreachable!();
+        for plan in series.plans {
+            let mut table_ids = HashSet::new();
+            for leave_node in plan.leaves {
+                if let ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) =
+                    &leave_node.operation
+                {
+                    let id = match self.get_table(*predicate, absolute_step_range, column_order) {
+                        None => self.add_derived(
+                            *predicate,
+                            absolute_step_range.clone(),
+                            column_order.clone(),
+                            0,
+                        ),
+                        Some(id) => id,
+                    };
+
+                    table_ids.insert(id);
+                } else {
+                    unreachable!();
+                }
+            }
+
+            // TODO: Materializig should check memory and so on...
+            self.materialize_required_tables(&table_ids);
+
+            let iter_option = self.get_iterator_node(&plan.root, &temp_tries);
+            if let Some(mut iter) = iter_option {
+                // TODO: Materializig should check memory and so on...
+                let new_trie = materialize(&mut iter);
+                match plan.result {
+                    ExecutionResult::Temp(id) => {
+                        if new_trie.row_num() > 0 {
+                            temp_tries.insert(id, Some(new_trie));
+                        } else {
+                            temp_tries.insert(id, None);
+                        }
+                    }
+                    ExecutionResult::Save(pred, range, order, priority) => {
+                        if new_trie.row_num() > 0 {
+                            new_table = true;
+
+                            self.add_trie(pred, range, order, priority, new_trie);
+                        }
+                    }
+                }
             }
         }
 
-        // TODO: Materializig should check memory and so on...
-        self.materialize_required_tables(&table_ids);
-
-        let mut tmp_trie: Option<Trie> = None;
-        for root in &plan.roots {
-            let mut iter = self.get_iterator_node(root, tmp_trie.as_ref())?;
-
-            // TODO: Materializig should check memory and so on...
-            tmp_trie = Some(materialize(&mut iter));
-        }
-
-        tmp_trie
+        new_table
     }
 
     /// Returns None if the TrieScan would be empty
-    fn get_iterator_node<'a>(
+    // TODO: Remove pub
+    pub fn get_iterator_node<'a>(
         &'a self,
         node: &'a ExecutionNode,
-        tmp: Option<&'a Trie>,
+        temp_tries: &'a HashMap<TableId, Option<Trie>>,
     ) -> Option<TrieScanEnum> {
         match &node.operation {
-            ExecutionOperation::Temp() => {
-                return Some(TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(tmp?)));
-            }
+            ExecutionOperation::Temp(id) => Some(TrieScanEnum::IntervalTrieScan(
+                IntervalTrieScan::new(temp_tries.get(id)?.as_ref()?),
+            )),
             ExecutionOperation::Fetch(predicate, absolute_step_range, variable_order) => {
                 let table_info = &self.tables
                     [self.get_table(*predicate, absolute_step_range, variable_order)?];
                 if let TableStatus::InMemory(trie) = &table_info.status {
                     let interval_trie_scan = IntervalTrieScan::new(trie);
 
-                    return Some(TrieScanEnum::IntervalTrieScan(interval_trie_scan));
+                    Some(TrieScanEnum::IntervalTrieScan(interval_trie_scan))
                 } else {
                     panic!("Base tables are supposed to be materialized");
                 }
@@ -543,7 +566,7 @@ impl TableManager {
             ExecutionOperation::Join(subtables, bindings) => {
                 let subiterators: Vec<TrieScanEnum> = subtables
                     .iter()
-                    .map(|s| self.get_iterator_node(s, tmp))
+                    .map(|s| self.get_iterator_node(s, temp_tries))
                     .filter(|s| s.is_some())
                     .flatten()
                     .collect();
@@ -574,16 +597,16 @@ impl TableManager {
 
                 let schema = TrieSchema::new(attributes);
 
-                return Some(TrieScanEnum::TrieJoin(TrieJoin::new(
+                Some(TrieScanEnum::TrieJoin(TrieJoin::new(
                     subiterators,
                     bindings,
                     schema,
-                )));
+                )))
             }
             ExecutionOperation::Union(subtables) => {
                 let subtables: Vec<TrieScanEnum> = subtables
                     .iter()
-                    .map(|s| self.get_iterator_node(s, tmp))
+                    .map(|s| self.get_iterator_node(s, temp_tries))
                     .filter(|s| s.is_some())
                     .flatten()
                     .collect();
@@ -594,25 +617,28 @@ impl TableManager {
 
                 let union_scan = TrieUnion::new(subtables);
 
-                return Some(TrieScanEnum::TrieUnion(union_scan));
+                Some(TrieScanEnum::TrieUnion(union_scan))
             }
-            ExecutionOperation::Minus(subtables) => {
-                debug_assert!(subtables.len() == 2);
-
-                let left_scan = self.get_iterator_node(&subtables[0], tmp);
-                // TODO: Might be empty as well
-                let right = self.get_iterator_node(&subtables[1], tmp).unwrap();
+            ExecutionOperation::Minus(subtable_left, subtable_right) => {
+                let left_scan = self.get_iterator_node(&subtable_left, temp_tries);
+                let right_scan = self.get_iterator_node(&subtable_right, temp_tries);
 
                 if let Some(left) = left_scan {
-                    let difference_scan = TrieDifference::new(left, right);
-                    Some(TrieScanEnum::TrieDifference(difference_scan))
+                    if let Some(right) = right_scan {
+                        let difference_scan = TrieDifference::new(left, right);
+                        Some(TrieScanEnum::TrieDifference(difference_scan))
+                    } else {
+                        Some(left)
+                    }
                 } else {
                     None
                 }
             }
-            ExecutionOperation::Project(schema_sorting) => {
-                let project_scan = TrieProject::new(tmp?, schema_sorting.clone());
-                return Some(TrieScanEnum::TrieProject(project_scan));
+            ExecutionOperation::Project(id, sorting) => {
+                let tmp_trie = temp_tries.get(id)?.as_ref()?;
+                let project_scan = TrieProject::new(tmp_trie, sorting.clone());
+
+                Some(TrieScanEnum::TrieProject(project_scan))
             }
         }
     }
