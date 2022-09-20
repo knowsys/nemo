@@ -49,58 +49,38 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut next_smallest_scans = Vec::<usize>::with_capacity(self.column_scans.len());
-        let mut next_smallest: Option<T> = None;
-        let mut smallest_scans_pointer = 0;
-
-        if self.smallest_value.is_none() {
-            for &index in &self.active_scans {
+        if self.smallest_value.is_some() {
+            // At the beginning, we need to move every scan one forward
+            for &index in &self.smallest_scans {
                 let scan = &mut self.column_scans[index];
-                let current_element = scan.next();
-
-                if next_smallest.is_none() {
-                    next_smallest = current_element;
-                } else if current_element.is_some()
-                    && current_element.unwrap() < next_smallest.unwrap()
-                {
-                    next_smallest = current_element;
-                    next_smallest_scans.clear();
-                }
-
-                if next_smallest == current_element {
-                    next_smallest_scans.push(index);
-                }
+                scan.next();
             }
         } else {
+            // You only call next on those scans containing the smallest values
             for &index in &self.active_scans {
                 let scan = &mut self.column_scans[index];
-                let current_smallest = if smallest_scans_pointer < self.smallest_scans.len() {
-                    Some(self.smallest_scans[smallest_scans_pointer])
-                } else {
-                    None
-                };
+                scan.next();
+            }
+        }
 
-                let current_element =
-                    if current_smallest.is_some() && index == current_smallest.unwrap() {
-                        smallest_scans_pointer += 1;
-                        scan.next()
-                    } else {
-                        scan.current()
-                    };
+        let mut next_smallest_scans = Vec::<usize>::with_capacity(self.column_scans.len());
+        let mut next_smallest: Option<T> = None;
 
-                if next_smallest.is_none() {
-                    next_smallest = current_element;
-                } else if current_element.is_some()
-                    && current_element.unwrap() < next_smallest.unwrap()
-                {
-                    next_smallest = current_element;
-                    next_smallest_scans.clear();
-                    smallest_scans_pointer = 0;
-                }
+        // Simply find the smallest value among the active scans
+        for &index in &self.active_scans {
+            let scan = &mut self.column_scans[index];
+            let current_element = scan.current();
 
-                if next_smallest.is_some() && next_smallest == current_element {
-                    next_smallest_scans.push(index);
-                }
+            if next_smallest.is_none() {
+                next_smallest = current_element;
+            } else if current_element.is_some() && current_element.unwrap() < next_smallest.unwrap()
+            {
+                next_smallest = current_element;
+                next_smallest_scans.clear();
+            }
+
+            if next_smallest.is_some() && next_smallest == current_element {
+                next_smallest_scans.push(index);
             }
         }
 
@@ -118,6 +98,7 @@ where
     fn seek(&mut self, value: T) -> Option<T> {
         let mut next_smallest_scans = Vec::<usize>::with_capacity(self.column_scans.len());
         let mut next_smallest: Option<T> = None;
+
         for &index in &self.active_scans {
             let scan = &mut self.column_scans[index];
             let current_element = scan.seek(value);
@@ -127,11 +108,10 @@ where
             } else if current_element.is_some() && current_element.unwrap() < next_smallest.unwrap()
             {
                 next_smallest = current_element;
-
                 next_smallest_scans.clear();
             }
 
-            if next_smallest == current_element {
+            if next_smallest.is_some() && next_smallest == current_element {
                 next_smallest_scans.push(index);
             }
         }
