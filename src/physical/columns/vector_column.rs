@@ -2,7 +2,7 @@ use super::{Column, GenericColumnScan};
 use std::{fmt::Debug, ops::Index};
 
 /// Simple implementation of [`Column`] that uses Vec to store data.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VectorColumn<T> {
     data: Vec<T>,
 }
