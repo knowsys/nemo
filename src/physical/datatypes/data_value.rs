@@ -64,6 +64,16 @@ impl DataValueT {
     }
 }
 
+impl std::fmt::Display for DataValueT {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::U64(val) => write!(f, "{}", val),
+            Self::Float(val) => write!(f, "{}", val),
+            Self::Double(val) => write!(f, "{}", val),
+        }
+    }
+}
+
 /// Enum for vectors of different supported input types
 #[derive(Debug)]
 pub enum VecT {
