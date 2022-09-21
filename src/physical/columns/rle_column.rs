@@ -1,5 +1,5 @@
 use super::{Column, ColumnBuilder, ColumnScan, RangedColumnScan};
-use crate::physical::datatypes::{Field, FloorToUsize, Ring};
+use crate::physical::datatypes::{ColumnDataType, Field, Ring};
 use num::Zero;
 use std::{
     fmt::Debug,
@@ -178,7 +178,7 @@ impl<T> RleColumnBuilder<T> {
 
 impl<T> RleColumnBuilder<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Default + Field + FloorToUsize,
+    T: ColumnDataType + Default,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
@@ -201,7 +201,7 @@ where
 
 impl<'a, T> ColumnBuilder<'a, T> for RleColumnBuilder<T>
 where
-    T: 'a + Copy + Ord + TryFrom<usize> + Debug + Default + Field + FloorToUsize,
+    T: 'a + ColumnDataType + Default,
 {
     type Col = RleColumn<T>;
 
@@ -277,7 +277,7 @@ pub struct RleColumn<T> {
 
 impl<T> RleColumn<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Default + Field + FloorToUsize,
+    T: ColumnDataType + Default,
 {
     /// Constructs a new RleColumn from a vector of RleElements.
     fn from_rle_elements(elements: Vec<RleElement<T>>) -> RleColumn<T> {
@@ -316,7 +316,7 @@ where
 
 impl<T> RleColumn<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: ColumnDataType,
 {
     fn get_element_and_increment_index_from_global_index(&self, index: usize) -> (usize, usize) {
         let element_index = if index == 0 {
@@ -360,7 +360,7 @@ where
 
 impl<'a, T> Column<'a, T> for RleColumn<T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: 'a + ColumnDataType,
 {
     type ColScan = RleColumnScan<'a, T>;
 
@@ -400,7 +400,7 @@ pub struct RleColumnScan<'a, T> {
 
 impl<'a, T> RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: ColumnDataType,
 {
     /// Constructor for RleColumnScan
     pub fn new(column: &'a RleColumn<T>) -> RleColumnScan<'a, T> {
@@ -448,7 +448,7 @@ where
 
 impl<'a, T> Iterator for RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: ColumnDataType,
 {
     type Item = T;
 
@@ -489,7 +489,7 @@ where
 
 impl<'a, T> ColumnScan for RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: ColumnDataType,
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.
@@ -604,7 +604,7 @@ where
 
 impl<'a, T> RangedColumnScan for RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: ColumnDataType,
 {
     fn pos(&self) -> Option<usize> {
         self.pos_for_element_and_increment_index(self.element_index?, self.increment_index?)

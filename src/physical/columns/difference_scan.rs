@@ -1,5 +1,5 @@
 use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell};
-use crate::physical::datatypes::{Field, FloorToUsize};
+use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -7,7 +7,7 @@ use std::ops::Range;
 #[derive(Debug)]
 pub struct DifferenceScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     scan_left: &'a RangedColumnScanCell<'a, T>,
     scan_right: &'a RangedColumnScanCell<'a, T>,
@@ -17,7 +17,7 @@ where
 
 impl<'a, T> DifferenceScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     /// Constructs a new VectorColumnScan for a Column.
     pub fn new(
@@ -40,7 +40,7 @@ where
 
 impl<'a, T> Iterator for DifferenceScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     type Item = T;
 
@@ -58,7 +58,7 @@ where
 
 impl<'a, T> ColumnScan for DifferenceScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         self.current = self.scan_left.seek(value);
@@ -80,7 +80,7 @@ where
 
 impl<'a, T> RangedColumnScan for DifferenceScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn pos(&self) -> Option<usize> {
         unimplemented!(
@@ -98,7 +98,7 @@ where
 #[derive(Debug)]
 pub struct MinusScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     scan_left: &'a RangedColumnScanCell<'a, T>,
     scan_right: &'a RangedColumnScanCell<'a, T>,
@@ -107,7 +107,7 @@ where
 
 impl<'a, T> MinusScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     /// Constructs a new VectorColumnScan for a Column.
     pub fn new(
@@ -124,7 +124,7 @@ where
 
 impl<'a, T: Eq + Debug + Copy> Iterator for MinusScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     type Item = T;
 
@@ -151,7 +151,7 @@ where
 
 impl<'a, T: Ord + Copy + Debug> ColumnScan for MinusScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         self.current = self.scan_left.seek(value);
@@ -178,7 +178,7 @@ where
 
 impl<'a, T: Ord + Copy + Debug> RangedColumnScan for MinusScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn pos(&self) -> Option<usize> {
         unimplemented!(

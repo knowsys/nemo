@@ -1,5 +1,5 @@
 use super::{Column, ColumnBuilder, ColumnEnum, RleColumnBuilder, VectorColumn};
-use crate::physical::datatypes::{DataTypeName, DataValueT, Double, Field, Float, FloorToUsize};
+use crate::physical::datatypes::{ColumnDataType, DataTypeName, DataValueT, Double, Float};
 use std::fmt::Debug;
 
 // Number of rle elements in rle column builder after which to decide which column type to use.
@@ -30,7 +30,7 @@ pub struct AdaptiveColumnBuilder<T> {
 
 impl<T> AdaptiveColumnBuilder<T>
 where
-    T: Debug + Copy + TryFrom<usize> + Ord + Default + Field + FloorToUsize,
+    T: ColumnDataType + Default,
 {
     /// Constructor.
     pub fn new() -> AdaptiveColumnBuilder<T> {
@@ -57,7 +57,7 @@ where
 
 impl<'a, T> ColumnBuilder<'a, T> for AdaptiveColumnBuilder<T>
 where
-    T: 'a + Debug + Copy + TryFrom<usize> + Ord + Default + Field + FloorToUsize,
+    T: 'a + ColumnDataType + Default,
 {
     type Col = ColumnEnum<T>;
 
@@ -109,7 +109,7 @@ where
 
 impl<A> FromIterator<A> for AdaptiveColumnBuilder<A>
 where
-    A: Debug + Copy + TryFrom<usize> + Ord + Default + Field + FloorToUsize,
+    A: ColumnDataType + Default,
 {
     fn from_iter<T>(iter: T) -> Self
     where

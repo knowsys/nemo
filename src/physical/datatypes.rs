@@ -24,3 +24,7 @@ pub use field::Field;
 /// Module for defining [`FloorToUsize`]
 pub mod floor_to_usize;
 pub use floor_to_usize::FloorToUsize;
+
+/// Module for defining [`ColumnDataType`]
+pub mod column_data_type;
+pub use column_data_type::ColumnDataType;
