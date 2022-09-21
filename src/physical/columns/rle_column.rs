@@ -8,10 +8,33 @@ use std::{
     ops::{Add, Mul, Range},
 };
 
+trait ReversibleMul {
+    fn reversible_mul(self, rhs: Self) -> Option<Self>
+    where
+        Self: Sized;
+}
+
+impl<T> ReversibleMul for T
+where
+    T: Copy + Ord + Field + std::panic::RefUnwindSafe,
+{
+    fn reversible_mul(self, rhs: Self) -> Option<Self> {
+        // NOTE: we use this to catch overflow in multiplication
+        std::panic::catch_unwind(|| self * rhs)
+            .ok()
+            // NOTE: we use this to rule out that product is not something like f32::INFINITY
+            .and_then(|product| (product / rhs == self).then_some(product))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Step<T> {
     Increment(T),
     Decrement(T),
+    // the following two are used as alternative to multiplication
+    // when multiplication would overflow T
+    RepeatedIncrement(T, usize),
+    RepeatedDecrement(T, usize),
 }
 
 impl<T> Eq for Step<T> where T: PartialEq {}
@@ -42,11 +65,20 @@ where
             (next_value == previous_value + diff).then_some(Self::Increment(diff))
         }
     }
+
+    // just a special case of from_two_values with the first being zero and without the checks
+    fn from_t(value: T) -> Self {
+        if value < T::zero() {
+            Self::Decrement(T::zero() - value)
+        } else {
+            Self::Increment(value)
+        }
+    }
 }
 
 impl<T> Add<T> for Step<T>
 where
-    T: Ring,
+    T: Copy + Ring,
 {
     type Output = T;
 
@@ -54,70 +86,55 @@ where
         match self {
             Self::Increment(inc) => rhs + inc,
             Self::Decrement(dec) => rhs - dec,
+            Self::RepeatedIncrement(inc, mul) => {
+                repeat(inc).take(mul).fold(rhs, |sum, inc| sum + inc)
+            }
+            Self::RepeatedDecrement(dec, mul) => {
+                repeat(dec).take(mul).fold(rhs, |sum, dec| sum - dec)
+            }
         }
     }
 }
 
 impl<T> Add for Step<T>
 where
-    T: Ord + Ring,
+    T: Copy + Ord + Ring,
 {
     type Output = Self;
 
+    // NOTE: this may overflow but it should be fine for our use cases
     fn add(self, rhs: Self) -> Self {
-        match self {
-            Self::Increment(l_inc) => match rhs {
-                Self::Increment(r_inc) => Self::Increment(l_inc + r_inc),
-                Self::Decrement(r_dec) => {
-                    if l_inc < r_dec {
-                        Self::Decrement(r_dec - l_inc)
-                    } else {
-                        Self::Increment(l_inc - r_dec)
-                    }
-                }
-            },
-            Self::Decrement(l_dec) => match rhs {
-                Self::Decrement(r_dec) => Self::Decrement(l_dec + r_dec),
-                Self::Increment(r_inc) => {
-                    if r_inc < l_dec {
-                        Self::Decrement(l_dec - r_inc)
-                    } else {
-                        Self::Increment(r_inc - l_dec)
-                    }
-                }
-            },
-        }
+        Self::from_t(self + (rhs + T::zero()))
     }
 }
 
 impl<T> Mul<usize> for Step<T>
 where
-    T: Copy + TryFrom<usize> + Ring,
+    T: Copy + Ord + TryFrom<usize> + Field + std::panic::RefUnwindSafe,
 {
     type Output = Self;
 
     fn mul(self, rhs: usize) -> Self {
-        let raw_increment = match self {
-            Self::Increment(inc) => inc,
-            Self::Decrement(dec) => dec,
-        };
-
-        let total_increment = if let Ok(t_rhs) = T::try_from(rhs) {
-            t_rhs * raw_increment
-        } else {
-            repeat(raw_increment).take(rhs).sum()
-        };
-
         match self {
-            Self::Increment(_) => Self::Increment(total_increment),
-            Self::Decrement(_) => Self::Decrement(total_increment),
+            Self::Increment(inc) => T::try_from(rhs)
+                .ok()
+                .and_then(|t_rhs| inc.reversible_mul(t_rhs))
+                .map(|prod| Self::Increment(prod))
+                .unwrap_or(Self::RepeatedIncrement(inc, rhs)),
+            Self::Decrement(dec) => T::try_from(rhs)
+                .ok()
+                .and_then(|t_rhs| dec.reversible_mul(t_rhs))
+                .map(|prod| Self::Decrement(prod))
+                .unwrap_or(Self::RepeatedDecrement(dec, rhs)),
+            Self::RepeatedIncrement(inc, mul) => Self::RepeatedIncrement(inc, rhs * mul),
+            Self::RepeatedDecrement(dec, mul) => Self::RepeatedDecrement(dec, rhs * mul),
         }
     }
 }
 
 impl<T> Zero for Step<T>
 where
-    T: Zero + Ord + Ring,
+    T: Copy + Zero + Ord + Ring,
 {
     fn zero() -> Self {
         Self::Increment(T::zero())
@@ -127,6 +144,8 @@ where
         match self {
             Self::Increment(inc) => inc.is_zero(),
             Self::Decrement(dec) => dec.is_zero(),
+            Self::RepeatedIncrement(inc, mul) => inc.is_zero() || mul.is_zero(),
+            Self::RepeatedDecrement(dec, mul) => dec.is_zero() || mul.is_zero(),
         }
     }
 }
@@ -728,6 +747,44 @@ mod test {
         let control_data = get_control_data_with_inc_zero();
         let c: RleColumn<u8> = get_test_column_with_inc_zero();
 
+        control_data
+            .iter()
+            .enumerate()
+            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
+    }
+
+    #[test]
+    fn get_large_increment_overflowing_value_space_i64() {
+        let control_data = vec![-i64::MAX, 0, i64::MAX];
+        let c = RleColumn::new(control_data.clone());
+        control_data
+            .iter()
+            .enumerate()
+            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
+    }
+
+    #[test]
+    fn get_large_increment_overflowing_value_space_float() {
+        let control_data = vec![
+            Float::new(f32::MIN).unwrap(),
+            Float::new(0.0).unwrap(),
+            Float::new(f32::MAX).unwrap(),
+        ];
+        let c = RleColumn::new(control_data.clone());
+        control_data
+            .iter()
+            .enumerate()
+            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
+    }
+
+    #[test]
+    fn get_large_increment_overflowing_value_space_double() {
+        let control_data = vec![
+            Double::new(f64::MIN).unwrap(),
+            Double::new(0.0).unwrap(),
+            Double::new(f64::MAX).unwrap(),
+        ];
+        let c = RleColumn::new(control_data.clone());
         control_data
             .iter()
             .enumerate()
