@@ -295,6 +295,50 @@ where
     }
 }
 
+impl<T> RleColumn<T>
+where
+    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+{
+    fn get_element_and_increment_index_from_global_index(&self, index: usize) -> (usize, usize) {
+        let element_index = if index == 0 {
+            0
+        } else {
+            self.end_indices
+                .binary_search(
+                    &NonZeroUsize::new(index)
+                        .expect("index is > 0 in this branch of the condition"),
+                )
+                .map(|i| i + 1)
+                .unwrap_or_else(|i| i)
+        };
+
+        let increment_index = index
+            - element_index
+                .checked_sub(1)
+                .map(|i| self.end_indices[i].get())
+                .unwrap_or(0);
+
+        (element_index, increment_index)
+    }
+
+    fn get_internal(&self, element_index: usize, increment_index: usize) -> T {
+        let value = self.values[element_index];
+        let increment = self.increments[element_index];
+
+        if increment.is_zero() {
+            return value;
+        }
+
+        // explicit check for zero since increment may be Infinity for floating point types
+        // (and Infinity * 0 produces NaN)
+        if increment_index == 0 {
+            value
+        } else {
+            increment * increment_index + value
+        }
+    }
+}
+
 impl<'a, T> Column<'a, T> for RleColumn<T>
 where
     T: 'a + Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
@@ -313,37 +357,10 @@ where
     }
 
     fn get(&self, index: usize) -> T {
-        let target_index_in_datastructure = if index == 0 {
-            0
-        } else {
-            self.end_indices
-                .binary_search(
-                    &NonZeroUsize::new(index)
-                        .expect("index is > 0 in this branch of the condition"),
-                )
-                .map(|i| i + 1)
-                .unwrap_or_else(|i| i)
-        };
+        let (element_index, increment_index) =
+            self.get_element_and_increment_index_from_global_index(index);
 
-        let remainder = index
-            - target_index_in_datastructure
-                .checked_sub(1)
-                .map(|i| self.end_indices[i].get())
-                .unwrap_or(0);
-        let value = self.values[target_index_in_datastructure];
-        let increment = self.increments[target_index_in_datastructure];
-
-        if increment.is_zero() {
-            return value;
-        }
-
-        // explicit check for zero since increment may be Infinity for floating point types
-        // (and Infinity * 0 produces NaN)
-        if remainder == 0 {
-            value
-        } else {
-            increment * remainder + value
-        }
+        self.get_internal(element_index, increment_index)
     }
 
     fn iter(&'a self) -> Self::ColScan {
@@ -358,9 +375,14 @@ pub struct RleColumnScan<'a, T> {
     element_index: Option<usize>,
     increment_index: Option<usize>,
     current: Option<T>,
+    lower_bound_inclusive: (usize, usize), // element_index and increment index
+    upper_bound_exclusive: (usize, usize), // element_index and increment index
 }
 
-impl<'a, T> RleColumnScan<'a, T> {
+impl<'a, T> RleColumnScan<'a, T>
+where
+    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+{
     /// Constructor for RleColumnScan
     pub fn new(column: &'a RleColumn<T>) -> RleColumnScan<'a, T> {
         RleColumnScan {
@@ -368,28 +390,68 @@ impl<'a, T> RleColumnScan<'a, T> {
             element_index: None,
             increment_index: None,
             current: None,
+            lower_bound_inclusive: (0, 0),
+            upper_bound_exclusive: column.get_element_and_increment_index_from_global_index(
+                column.end_indices.last().map(|nzu| nzu.get()).unwrap_or(0),
+            ),
         }
+    }
+
+    fn pos_for_element_and_increment_index(
+        &self,
+        el_idx: Option<usize>,
+        inc_idx: Option<usize>,
+    ) -> Option<usize> {
+        let el_idx = el_idx?;
+        let inc_idx = inc_idx?;
+
+        self.are_indices_in_range(el_idx, inc_idx).then(|| {
+            el_idx
+                .checked_sub(1)
+                .map(|el_idx| self.column.end_indices[el_idx].get())
+                .unwrap_or(0)
+                + inc_idx
+        })
+    }
+
+    fn are_indices_in_range(&self, el_idx: usize, inc_idx: usize) -> bool {
+        let (lower_el, lower_inc) = self.lower_bound_inclusive;
+        let (upper_el, upper_inc) = self.upper_bound_exclusive;
+
+        let lower_bound_ok = el_idx > lower_el || (el_idx == lower_el && inc_idx >= lower_inc);
+        let upper_bound_ok = el_idx < upper_el || (el_idx == upper_el && inc_idx < upper_inc);
+
+        lower_bound_ok && upper_bound_ok
+    }
+
+    fn is_self_in_range(&self) -> bool {
+        self.element_index
+            .and_then(|el_idx| {
+                self.increment_index
+                    .map(|inc_idx| self.are_indices_in_range(el_idx, inc_idx))
+            })
+            .unwrap_or(false)
     }
 }
 
 impl<'a, T> Iterator for RleColumnScan<'a, T>
 where
-    T: Copy + Ord + TryFrom<usize> + Ring,
+    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
 {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut element_index = self.element_index.unwrap_or_default();
+        let mut element_index = self.element_index.unwrap_or(self.lower_bound_inclusive.0);
         let mut increment_index = self
             .increment_index
-            .map_or_else(Default::default, |i| i + 1);
+            .map_or(self.lower_bound_inclusive.1, |i| i + 1);
 
-        if element_index < self.column.values.len()
+        if self.are_indices_in_range(element_index, increment_index)
             && increment_index
                 >= self.column.end_indices[element_index].get()
                     - element_index
                         .checked_sub(1)
-                        .map(|i| self.column.end_indices[i].get())
+                        .map(|el_idx| self.column.end_indices[el_idx].get())
                         .unwrap_or(0)
         {
             element_index += 1;
@@ -399,15 +461,13 @@ where
         self.element_index = Some(element_index);
         self.increment_index = Some(increment_index);
 
-        self.current = (element_index < self.column.values.len()).then(|| {
+        self.current = self.is_self_in_range().then(|| {
             if increment_index == 0 {
                 self.column.values[element_index]
-            } else {
-                let current = self
-                    .current
-                    .expect("after the first iteration the current value is always set");
-
+            } else if let Some(current) = self.current {
                 self.column.increments[element_index] + current
+            } else {
+                self.column.get_internal(element_index, increment_index)
             }
         });
 
@@ -445,7 +505,12 @@ where
         // holds the same value as the matching element; in this case, we want to position the
         // iterator on that element;
         // hence we subtract 1 in any case
-        let bin_search_element_index = self.column.values[current_element_index..]
+        let bin_search_element_index = self.column.values[current_element_index
+            ..(if self.upper_bound_exclusive.1 > 0 {
+                self.upper_bound_exclusive.0 + 1
+            } else {
+                self.upper_bound_exclusive.0
+            })]
             .binary_search(&value)
             .unwrap_or_else(|err| err)
             .saturating_sub(1)
@@ -469,13 +534,13 @@ where
                     .floor_to_usize()
                     .unwrap_or_default();
 
-                if bin_search_element_index
-                    .checked_sub(1)
-                    .and_then(|el_idx| self.column.end_indices.get(el_idx))
-                    .map(|nzu| nzu.get())
-                    .unwrap_or(0)
-                    + seek_increment_index
-                    >= self.column.end_indices[bin_search_element_index].get()
+                if self
+                    .pos_for_element_and_increment_index(
+                        Some(bin_search_element_index),
+                        Some(seek_increment_index),
+                    )
+                    .map(|pos| pos >= self.column.end_indices[bin_search_element_index].get())
+                    .unwrap_or(false)
                 {
                     seek_element_index = bin_search_element_index + 1;
                     seek_increment_index = 0;
@@ -496,27 +561,14 @@ where
             self.increment_index = Some(current_increment_index);
         }
 
-        self.current = if self
-            .element_index
-            .expect("This is just set a few lines above.")
-            >= self.column.values.len()
-        {
-            None
-        } else {
-            Some(
-                self.column.get(
-                    self.element_index
-                        .expect("This is just set a few lines above.")
-                        .checked_sub(1)
-                        .and_then(|el_idx| self.column.end_indices.get(el_idx))
-                        .map(|nzu| nzu.get())
-                        .unwrap_or(0)
-                        + self
-                            .increment_index
-                            .expect("This is just set a few lines above."),
-                ),
+        self.current = self.is_self_in_range().then(|| {
+            self.column.get_internal(
+                self.element_index
+                    .expect("This is just set a few lines above."),
+                self.increment_index
+                    .expect("This is just set a few lines above."),
             )
-        };
+        });
 
         if let Some(cur) = self.current {
             if cur >= value {
@@ -543,17 +595,22 @@ where
     T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
 {
     fn pos(&self) -> Option<usize> {
-        unimplemented!("RleColumnScan does not support intervals for now");
+        self.pos_for_element_and_increment_index(self.element_index, self.increment_index)
     }
 
-    fn narrow(&mut self, _interval: Range<usize>) {
-        unimplemented!("RleColumnScan does not support intervals for now");
+    fn narrow(&mut self, interval: Range<usize>) {
+        self.lower_bound_inclusive = self
+            .column
+            .get_element_and_increment_index_from_global_index(interval.start);
+        self.upper_bound_exclusive = self
+            .column
+            .get_element_and_increment_index_from_global_index(interval.end);
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{Column, ColumnScan, RleColumn, Step};
+    use super::{Column, ColumnScan, RangedColumnScan, RleColumn, Step};
     use crate::physical::datatypes::{Double, Float};
     use num::Zero;
     use quickcheck_macros::quickcheck;
@@ -754,7 +811,7 @@ mod test {
     }
 
     #[test]
-    fn seek() {
+    fn seek_and_get_pos() {
         let seek_test_col = RleColumn {
             values: vec![2, 22],
             end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
@@ -762,19 +819,73 @@ mod test {
         };
 
         let mut iter = seek_test_col.iter();
+
+        assert_eq!(iter.current(), None);
+        assert_eq!(iter.pos(), None);
+
         iter.seek(10);
 
         assert_eq!(iter.current().unwrap(), 12);
+        assert_eq!(iter.pos().unwrap(), 2);
 
-        let mut iter = seek_test_col.iter();
         iter.seek(22);
 
         assert_eq!(iter.current().unwrap(), 22);
+        assert_eq!(iter.pos().unwrap(), 3);
 
-        let mut iter = seek_test_col.iter();
+        iter.seek(25);
+
+        assert_eq!(iter.current().unwrap(), 25);
+        assert_eq!(iter.pos().unwrap(), 6);
+
         iter.seek(28);
 
         assert_eq!(iter.current(), None);
+        assert_eq!(iter.pos(), None);
+    }
+
+    #[test]
+    fn next_and_seek_and_get_pos_on_narrowed_column() {
+        let seek_test_col = RleColumn {
+            values: vec![2, 22],
+            end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
+            increments: vec![Step::Increment(5), Step::Increment(1)],
+        };
+
+        let mut iter = seek_test_col.iter();
+
+        assert_eq!(iter.current(), None);
+        assert_eq!(iter.pos(), None);
+
+        iter.narrow(1..6);
+
+        assert_eq!(iter.current(), None);
+        assert_eq!(iter.pos(), None);
+
+        iter.next();
+
+        assert_eq!(iter.current().unwrap(), 7);
+        assert_eq!(iter.pos().unwrap(), 1);
+
+        iter.seek(10);
+
+        assert_eq!(iter.current().unwrap(), 12);
+        assert_eq!(iter.pos().unwrap(), 2);
+
+        iter.seek(22);
+
+        assert_eq!(iter.current().unwrap(), 22);
+        assert_eq!(iter.pos().unwrap(), 3);
+
+        iter.seek(25);
+
+        assert_eq!(iter.current(), None);
+        assert_eq!(iter.pos(), None);
+
+        iter.next();
+
+        assert_eq!(iter.current(), None);
+        assert_eq!(iter.pos(), None);
     }
 
     #[quickcheck]
