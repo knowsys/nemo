@@ -31,7 +31,7 @@ pub struct ExecutionNode {
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExecutionResult {
     /// Temporary table with the id
     Temp(TableId),
