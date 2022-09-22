@@ -1,5 +1,5 @@
 use super::{Column, ColumnBuilder, ColumnEnum, RleColumnBuilder, VectorColumn};
-use crate::physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize};
+use crate::physical::datatypes::{DataTypeName, DataValueT, Double, Field, Float, FloorToUsize};
 use std::fmt::Debug;
 
 // Number of rle elements in rle column builder after which to decide which column type to use.
@@ -107,6 +107,22 @@ where
     }
 }
 
+impl<A> FromIterator<A> for AdaptiveColumnBuilder<A>
+where
+    A: Debug + Copy + TryFrom<usize> + Ord + Default + Field + FloorToUsize,
+{
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = A>,
+    {
+        let mut builder = Self::new();
+        for item in iter {
+            builder.add(item);
+        }
+        builder
+    }
+}
+
 /// Enum for AdaptiveColumnBuilder with different underlying datatypes
 #[derive(Debug)]
 pub enum AdaptiveColumnBuilderT {
@@ -119,6 +135,15 @@ pub enum AdaptiveColumnBuilderT {
 }
 
 impl AdaptiveColumnBuilderT {
+    /// Creates a new empty AdaptiveColumnBuilderT for the given DataTypeName
+    pub fn new(dtn: DataTypeName) -> Self {
+        match dtn {
+            DataTypeName::U64 => Self::U64(AdaptiveColumnBuilder::new()),
+            DataTypeName::Float => Self::Float(AdaptiveColumnBuilder::new()),
+            DataTypeName::Double => Self::Double(AdaptiveColumnBuilder::new()),
+        }
+    }
+
     /// Adds value of arbitrary type to the column builder
     pub fn add(&mut self, value: DataValueT) {
         match self {
@@ -153,6 +178,25 @@ impl AdaptiveColumnBuilderT {
             Self::Float(cb) => cb.count(),
             Self::Double(cb) => cb.count(),
         }
+    }
+}
+
+impl FromIterator<DataValueT> for AdaptiveColumnBuilderT {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = DataValueT>,
+    {
+        let mut peekable = iter.into_iter().peekable();
+        let mut builder = Self::new(
+            peekable
+                .peek()
+                .map(|dv| dv.get_type())
+                .unwrap_or(DataTypeName::U64),
+        );
+        for item in peekable {
+            builder.add(item);
+        }
+        builder
     }
 }
 

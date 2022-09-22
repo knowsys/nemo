@@ -31,7 +31,7 @@ pub trait Column<'a, T>: Debug + Clone {
 }
 
 /// Enum for column implementations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ColumnEnum<T> {
     /// Case VectorColumn
     VectorColumn(VectorColumn<T>),

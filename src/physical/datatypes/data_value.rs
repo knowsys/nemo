@@ -4,12 +4,13 @@ use crate::generate_datatype_forwarder;
 
 use super::double::Double;
 use super::float::Float;
+use super::DataTypeName;
 
 /// Enum for values of all supported basic types.
 /// This should not be used to represent large numbers of values,
 /// due to the overhead for each value, but it can be a convenient
 /// option to interface with unknown values.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DataValueT {
     /// Case u64
     U64(u64),
@@ -52,6 +53,15 @@ impl DataValueT {
             DataValueT::Double(val) => other.as_double().map(|otherval| val.cmp(&otherval)),
         }
     }
+
+    /// Returns the type of the VecT as DataTypeName
+    pub fn get_type(&self) -> DataTypeName {
+        match self {
+            Self::U64(_) => DataTypeName::U64,
+            Self::Float(_) => DataTypeName::Float,
+            Self::Double(_) => DataTypeName::Double,
+        }
+    }
 }
 
 /// Enum for vectors of different supported input types
@@ -68,9 +78,36 @@ pub enum VecT {
 generate_datatype_forwarder!(forward_to_vec);
 
 impl VecT {
+    /// Creates a new empty VecT for the given DataTypeName
+    pub fn new(dtn: DataTypeName) -> Self {
+        match dtn {
+            DataTypeName::U64 => Self::U64(Vec::new()),
+            DataTypeName::Float => Self::Float(Vec::new()),
+            DataTypeName::Double => Self::Double(Vec::new()),
+        }
+    }
+
+    /// Returns the type of the VecT as DataTypeName
+    pub fn get_type(&self) -> DataTypeName {
+        match self {
+            Self::U64(_) => DataTypeName::U64,
+            Self::Float(_) => DataTypeName::Float,
+            Self::Double(_) => DataTypeName::Double,
+        }
+    }
+
     /// Removes the last element in the corresponding vector
     pub fn pop(&mut self) {
         forward_to_vec!(self, pop;)
+    }
+
+    /// Get the value at the given index as DataValueT
+    pub fn get(&self, index: usize) -> Option<DataValueT> {
+        match self {
+            VecT::U64(vec) => vec.get(index).copied().map(DataValueT::U64),
+            VecT::Float(vec) => vec.get(index).copied().map(DataValueT::Float),
+            VecT::Double(vec) => vec.get(index).copied().map(DataValueT::Double),
+        }
     }
 
     /// Inserts the Value to the corresponding Vector if the datatypes are compatible
