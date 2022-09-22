@@ -2,10 +2,12 @@ use super::{Table, TableSchema};
 use crate::logical::Permutator;
 use crate::physical::columns::{
     AdaptiveColumnBuilder, AdaptiveColumnBuilderT, Column, ColumnBuilder, GenericIntervalColumn,
-    IntervalColumnEnum, IntervalColumnT,
+    IntervalColumn, IntervalColumnEnum, IntervalColumnT,
 };
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
+use std::fmt;
 use std::fmt::Debug;
+use std::iter;
 
 /// Represents one attribute in [`TrieSchema`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -80,6 +82,66 @@ impl Trie {
     /// Panics if index is out of range
     pub fn get_column(&self, index: usize) -> &IntervalColumnT {
         &self.columns[index]
+    }
+}
+
+impl fmt::Display for Trie {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.columns.is_empty() {
+            writeln!(f)?;
+            return Ok(());
+        }
+
+        // outer vecs are build in reverse order
+        let mut last_interval_lengths: Vec<usize> = self
+            .columns
+            .last()
+            .expect("we return early if columns are empty")
+            .iter()
+            .map(|_| 1)
+            .collect();
+        let mut str_cols: Vec<Vec<String>> = vec![self
+            .columns
+            .last()
+            .expect("we return early if columns are empty")
+            .iter()
+            .map(|val| val.to_string())
+            .collect()];
+        for column_index in (0..(self.columns.len() - 1)).rev() {
+            let current_column = &self.columns[column_index];
+            let last_column = &self.columns[column_index + 1];
+
+            let current_interval_lengths: Vec<usize> = (0..current_column.len())
+                .map(|element_index_in_current_column| {
+                    last_column
+                        .int_bounds(element_index_in_current_column)
+                        .map(|index_in_interval| last_interval_lengths[index_in_interval])
+                        .sum()
+                })
+                .collect();
+
+            let padding_lengths = current_interval_lengths.iter().map(|length| length - 1);
+
+            str_cols.push(
+                current_column
+                    .iter()
+                    .zip(padding_lengths)
+                    .flat_map(|(val, pl)| {
+                        iter::once(val.to_string()).chain(iter::repeat(" ".to_string()).take(pl))
+                    })
+                    .collect(),
+            );
+
+            last_interval_lengths = current_interval_lengths;
+        }
+
+        for row_index in 0..str_cols[0].len() {
+            for col_index in (0..str_cols.len()).rev() {
+                write!(f, "{} ", str_cols[col_index][row_index])?;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
     }
 }
 
@@ -374,5 +436,20 @@ mod test {
         let constructed_trie = Trie::from_rows(schema, rows);
 
         assert_eq!(expected_trie, constructed_trie);
+    }
+
+    #[test]
+    fn display_trie() {
+        let trie = get_test_table_as_trie();
+        let expected_output = "1 2 7 \
+           \n    8 \
+           \n  3 8 \
+           \n2 3 9 \
+           \n  6 9 \
+           \n";
+
+        let actual_output = format!("{}", trie);
+
+        assert_eq!(expected_output, actual_output);
     }
 }
