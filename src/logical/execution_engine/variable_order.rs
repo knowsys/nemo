@@ -442,6 +442,7 @@ mod test {
                     Literal::Positive(Atom::new(a, vec![tx, ty])),
                     Literal::Positive(Atom::new(b, vec![ty, tz])),
                 ],
+                vec![],
             ),
             vec![x, y, z],
         )
@@ -465,6 +466,7 @@ mod test {
                     Literal::Positive(Atom::new(a, vec![tx, ty])),
                     Literal::Positive(Atom::new(a, vec![ty, tz])),
                 ],
+                vec![],
             ),
             vec![x, y, z],
         )
