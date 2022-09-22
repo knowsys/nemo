@@ -97,6 +97,34 @@ impl Table for Trie {
                 .unwrap_or(true)
         });
 
+        macro_rules! build_interval_column {
+            ($col_builder:ident, $interval_builder:ident; $($variant:ident);+) => {
+                match $col_builder {
+                    $(AdaptiveColumnBuilderT::$variant(vec) => IntervalColumnT::$variant(
+                    IntervalColumnEnum::GenericIntervalColumn(GenericIntervalColumn::new(
+                        vec.finalize(),
+                        $interval_builder.finalize(),
+                    )),
+                )),+
+                }
+            }
+        }
+
+        // if the first col is empty, then all of them are; we return early in this case
+        if cols.get(0).map(|col| col.is_empty()).unwrap_or(true) {
+            return Self::new(
+                schema,
+                cols
+                    .into_iter()
+                    .map(|_| {
+                        let empty_data_col = AdaptiveColumnBuilderT::new(DataTypeName::U64);
+                        let empty_interval_col = AdaptiveColumnBuilder::<usize>::new();
+                        build_interval_column!(empty_data_col, empty_interval_col; U64; Float; Double)
+                    })
+                    .collect(),
+            );
+        }
+
         let permutator = Permutator::sort_from_multiple_vec(&cols)
             .expect("debug assert above ensures that cols have the same length");
         let mut sorted_cols: Vec<VecT> =
@@ -114,60 +142,57 @@ impl Table for Trie {
                 })
                 .collect();
 
-        // NOTE: we talk about "condensed" and "uncondesed" in the following
-        // "uncondesed" refers to the input version of the column vectors (and their indices), i.e. they have the same length and no duplicates have been removed
-        // "condesed" refers to the "cleaned up" version of the columns where duplicates have been removed (largely) and a trie structure is resembled
+        // NOTE: we talk about "condensed" and "uncondensed" in the following
+        // "uncondensed" refers to the input version of the column vectors (and their indices), i.e. they have the same length and no duplicates have been removed
+        // "condensed" refers to the "cleaned up" version of the columns where duplicates have been removed (largely) and a trie structure is resembled
         // we name our variables accordingly to clarify which version a column vector or index corresponds to
-        let mut uncondensed_interval_starts: Vec<Vec<usize>> = vec![vec![0]];
+        let mut last_uncondensed_interval_starts: Vec<usize> = vec![0];
         let mut condensed_data_builders: Vec<AdaptiveColumnBuilderT> = vec![];
         let mut condensed_interval_starts_builders: Vec<AdaptiveColumnBuilder<usize>> = vec![];
 
-        for i in 0..(sorted_cols.len() - 1) {
+        for sorted_col in sorted_cols.iter().take(sorted_cols.len() - 1) {
             let mut current_uncondensed_interval_starts = vec![0];
             let mut current_condensed_data: AdaptiveColumnBuilderT =
-                AdaptiveColumnBuilderT::new(sorted_cols[i].get_type());
+                AdaptiveColumnBuilderT::new(sorted_col.get_type());
             let mut current_condensed_interval_starts_builder: AdaptiveColumnBuilder<usize> =
                 AdaptiveColumnBuilder::new();
 
-            if !sorted_cols[i].is_empty() {
-                let mut interval_index = 0;
+            let mut uncondensed_interval_ends =
+                last_uncondensed_interval_starts.iter().skip(1).copied();
+            let mut uncondensed_interval_end = uncondensed_interval_ends
+                .next()
+                .unwrap_or_else(|| sorted_col.len());
 
-                let mut current_val = sorted_cols[i]
-                    .get(0)
-                    .expect("we just checked that the length is > 0");
-                current_condensed_data.add(current_val);
-                current_condensed_interval_starts_builder.add(0);
+            let mut current_val = sorted_col
+                .get(0)
+                .expect("we return early if the first column (and thus all) are empty");
+            current_condensed_data.add(current_val);
+            current_condensed_interval_starts_builder.add(0);
 
-                for j in 1..sorted_cols[i].len() {
-                    let possible_next_val = sorted_cols[i]
-                        .get(j)
-                        .expect("the index is guaranteed to be in range");
+            for uncondensed_col_index in 1..sorted_col.len() {
+                let possible_next_val = sorted_col
+                    .get(uncondensed_col_index)
+                    .expect("index is gauranteed to be in range");
 
-                    if possible_next_val != current_val
-                        || j >= uncondensed_interval_starts[i]
-                            .get(interval_index + 1)
-                            .copied()
-                            .unwrap_or_else(|| sorted_cols[i].len())
-                    {
-                        current_uncondensed_interval_starts.push(j);
-                        current_val = possible_next_val;
-                        current_condensed_data.add(current_val);
-                    }
+                if possible_next_val != current_val
+                    || uncondensed_col_index >= uncondensed_interval_end
+                {
+                    current_uncondensed_interval_starts.push(uncondensed_col_index);
+                    current_val = possible_next_val;
+                    current_condensed_data.add(current_val);
+                }
 
-                    // if the second condition above is true, we need to adjust additional intercal information
-                    if j >= uncondensed_interval_starts[i]
-                        .get(interval_index + 1)
-                        .copied()
-                        .unwrap_or_else(|| sorted_cols[i].len())
-                    {
-                        current_condensed_interval_starts_builder
-                            .add(current_condensed_data.count() - 1);
-                        interval_index += 1;
-                    }
+                // if the second condition above is true, we need to adjust additional intercal information
+                if uncondensed_col_index >= uncondensed_interval_end {
+                    current_condensed_interval_starts_builder
+                        .add(current_condensed_data.count() - 1);
+                    uncondensed_interval_end = uncondensed_interval_ends
+                        .next()
+                        .unwrap_or_else(|| sorted_col.len());
                 }
             }
 
-            uncondensed_interval_starts.push(current_uncondensed_interval_starts);
+            last_uncondensed_interval_starts = current_uncondensed_interval_starts;
             condensed_data_builders.push(current_condensed_data);
             condensed_interval_starts_builders.push(current_condensed_interval_starts_builder);
         }
@@ -180,9 +205,7 @@ impl Table for Trie {
                     .collect::<AdaptiveColumnBuilderT>(),
             );
             condensed_interval_starts_builders.push(
-                uncondensed_interval_starts
-                    .pop()
-                    .expect("intervals vector has as many elements as sorted_cols vector")
+                last_uncondensed_interval_starts
                     .into_iter()
                     .collect::<AdaptiveColumnBuilder<usize>>(),
             );
@@ -191,9 +214,9 @@ impl Table for Trie {
         macro_rules! build_interval_column {
             ($col_builder:ident, $interval_builder:ident; $($variant:ident);+) => {
                 match $col_builder {
-                    $(AdaptiveColumnBuilderT::$variant(vec) => IntervalColumnT::$variant(
+                    $(AdaptiveColumnBuilderT::$variant(data_col) => IntervalColumnT::$variant(
                     IntervalColumnEnum::GenericIntervalColumn(GenericIntervalColumn::new(
-                        vec.finalize(),
+                        data_col.finalize(),
                         $interval_builder.finalize(),
                     )),
                 )),+
