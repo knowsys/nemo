@@ -240,6 +240,43 @@ impl Literal {
     }
 }
 
+/// Operation for a filter
+#[derive(Debug, Eq, PartialEq, Clone, Copy, PartialOrd, Ord)]
+pub enum FilterOperation {
+    /// Variable es equal than term
+    Equals,
+    /// Value of variable is less than the value of the term
+    LessThan,
+    /// Value of variable is greater than the value of the term
+    GreaterThan,
+    /// Value of variable is less than or equal to the value of the term
+    LessThanEq,
+    /// Value of variable is gretaer than or equal to the value of the term
+    GreaterThanEq,
+}
+
+/// Filter of the form <variable> <operation> <term>
+#[derive(Debug, Eq, PartialEq, Clone, Copy, PartialOrd, Ord)]
+pub struct Filter {
+    /// Operation to be performed
+    pub operation: FilterOperation,
+    /// Left-hand side
+    pub left: Variable,
+    /// Right-hand side
+    pub right: Term,
+}
+
+impl Filter {
+    /// Creates a new [`Filter`]
+    pub fn new(operation: FilterOperation, left: Variable, right: Term) -> Self {
+        Self {
+            operation,
+            left,
+            right,
+        }
+    }
+}
+
 /// A rule.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct Rule {
@@ -247,18 +284,25 @@ pub struct Rule {
     pub head: Vec<Atom>,
     /// Body atoms of the rule
     pub body: Vec<Literal>,
+    /// Filters applied to the body
+    pub filters: Vec<Filter>,
 }
 
 impl Rule {
     /// Construct a new rule.
-    pub fn new(head: Vec<Atom>, body: Vec<Literal>) -> Self {
-        Self { head, body }
+    pub fn new(head: Vec<Atom>, body: Vec<Literal>, filters: Vec<Filter>) -> Self {
+        Self {
+            head,
+            body,
+            filters,
+        }
     }
 
     /// Construct a new rule, validating constraints on variable usage.
     pub(crate) fn new_validated(
         head: Vec<Atom>,
         body: Vec<Literal>,
+        filters: Vec<Filter>,
         parser: &RuleParser,
     ) -> Result<Self, ParseError> {
         // Check if existential variables occur in the body.
@@ -324,7 +368,11 @@ impl Rule {
             ));
         }
 
-        Ok(Rule { head, body })
+        Ok(Rule {
+            head,
+            body,
+            filters,
+        })
     }
 
     /// Iterate over the head atoms of the rule.
