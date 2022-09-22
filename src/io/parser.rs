@@ -358,12 +358,15 @@ impl<'a> RuleParser<'a> {
     pub fn parse_term(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
         traced(
             "parse_term",
-            alt((self.parse_ground_term(), self.parse_variable())),
+            alt((
+                self.parse_ground_term(),
+                map(self.parse_variable(), |v| Term::Variable(v)),
+            )),
         )
     }
 
     /// Parse a variable.
-    pub fn parse_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
+    pub fn parse_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Variable> {
         traced(
             "parse_variable",
             alt((
@@ -374,11 +377,13 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a universally quantified variable.
-    pub fn parse_universal_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
+    pub fn parse_universal_variable(
+        &'a self,
+    ) -> impl FnMut(&'a str) -> IntermediateResult<Variable> {
         traced(
             "parse_universal_variable",
             map(preceded(tag("?"), self.parse_variable_name()), |var| {
-                Term::Variable(Variable::Universal(var))
+                Variable::Universal(var)
             }),
         )
     }
@@ -744,7 +749,6 @@ mod test {
         );
     }
 
-    // TODO: <= and >= dont work for some reason
     #[test]
     fn filter() {
         let parser = RuleParser::new();

@@ -626,6 +626,7 @@ mod test {
                     ],
                 )),
             ],
+            vec![],
         );
 
         let program = Program::new(
@@ -796,6 +797,7 @@ mod test {
                     ],
                 )),
             ],
+            vec![],
         );
 
         let program = Program::new(
