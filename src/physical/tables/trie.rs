@@ -87,32 +87,43 @@ impl Trie {
 
 impl fmt::Display for Trie {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.columns.is_empty() {
+            writeln!(f)?;
+            return Ok(());
+        }
+
         // outer vecs are build in reverse order
-        let mut interval_lengths: Vec<Vec<usize>> = vec![];
-        let mut str_cols: Vec<Vec<String>> = vec![];
-        for i in (0..self.columns.len()).rev() {
-            let interval_lengths_for_col = (0..self.columns[i].len())
-                .map(|j| {
-                    self.columns
-                        .get(i + 1)
-                        .map(|col| {
-                            col.int_bounds(j)
-                                .map(|k| interval_lengths.last().expect("this is not run in the first iteration so one element is always contained in interval_lengths")[k])
-                                .sum()
-                        })
-                        .unwrap_or(1)
+        let mut last_interval_lengths: Vec<usize> = self
+            .columns
+            .last()
+            .expect("we return early if columns are empty")
+            .iter()
+            .map(|_| 1)
+            .collect();
+        let mut str_cols: Vec<Vec<String>> = vec![self
+            .columns
+            .last()
+            .expect("we return early if columns are empty")
+            .iter()
+            .map(|val| val.to_string())
+            .collect()];
+        for column_index in (0..(self.columns.len() - 1)).rev() {
+            let current_column = &self.columns[column_index];
+            let last_column = &self.columns[column_index + 1];
+
+            let current_interval_lengths: Vec<usize> = (0..current_column.len())
+                .map(|element_index_in_current_column| {
+                    last_column
+                        .int_bounds(element_index_in_current_column)
+                        .map(|index_in_interval| last_interval_lengths[index_in_interval])
+                        .sum()
                 })
                 .collect();
-            interval_lengths.push(interval_lengths_for_col);
 
-            let padding_lengths = interval_lengths
-                .last()
-                .expect("we just added the element")
-                .iter()
-                .map(|l| l - 1);
+            let padding_lengths = current_interval_lengths.iter().map(|length| length - 1);
 
             str_cols.push(
-                self.columns[i]
+                current_column
                     .iter()
                     .zip(padding_lengths)
                     .flat_map(|(val, pl)| {
@@ -120,11 +131,13 @@ impl fmt::Display for Trie {
                     })
                     .collect(),
             );
+
+            last_interval_lengths = current_interval_lengths;
         }
 
-        for i in 0..str_cols[0].len() {
-            for j in (0..str_cols.len()).rev() {
-                write!(f, "{} ", str_cols[j][i])?;
+        for row_index in 0..str_cols[0].len() {
+            for col_index in (0..str_cols.len()).rev() {
+                write!(f, "{} ", str_cols[col_index][row_index])?;
             }
             writeln!(f)?;
         }
