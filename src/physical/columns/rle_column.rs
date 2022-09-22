@@ -397,14 +397,7 @@ where
         }
     }
 
-    fn pos_for_element_and_increment_index(
-        &self,
-        el_idx: Option<usize>,
-        inc_idx: Option<usize>,
-    ) -> Option<usize> {
-        let el_idx = el_idx?;
-        let inc_idx = inc_idx?;
-
+    fn pos_for_element_and_increment_index(&self, el_idx: usize, inc_idx: usize) -> Option<usize> {
         self.are_indices_in_range(el_idx, inc_idx).then(|| {
             el_idx
                 .checked_sub(1)
@@ -536,8 +529,8 @@ where
 
                 if self
                     .pos_for_element_and_increment_index(
-                        Some(bin_search_element_index),
-                        Some(seek_increment_index),
+                        bin_search_element_index,
+                        seek_increment_index,
                     )
                     .map(|pos| pos >= self.column.end_indices[bin_search_element_index].get())
                     .unwrap_or(false)
@@ -595,7 +588,7 @@ where
     T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
 {
     fn pos(&self) -> Option<usize> {
-        self.pos_for_element_and_increment_index(self.element_index, self.increment_index)
+        self.pos_for_element_and_increment_index(self.element_index?, self.increment_index?)
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
