@@ -22,7 +22,7 @@ pub trait IntervalColumn<'a, T>: Debug + Column<'a, T> {
 }
 
 /// Enum for columns of all supported basic types.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IntervalColumnEnum<T>
 where
     T: ColumnDataType,
@@ -90,7 +90,7 @@ where
 }
 
 /// Enum for Interval Column with different underlying datatypes
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IntervalColumnT {
     /// Case u64
     U64(IntervalColumnEnum<u64>),

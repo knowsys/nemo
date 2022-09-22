@@ -8,26 +8,23 @@ use std::{
     ops::{Add, Mul, Range},
 };
 
-trait ReversibleMul {
-    fn reversible_mul(self, rhs: Self) -> Option<Self>
+trait CheckedMul<T = Self> {
+    fn checked_mul(self, rhs: T) -> Option<Self>
     where
         Self: Sized;
 }
 
-impl<T> ReversibleMul for T
+impl<T> CheckedMul for T
 where
     T: Copy + Ord + Field + std::panic::RefUnwindSafe,
 {
-    fn reversible_mul(self, rhs: Self) -> Option<Self> {
+    fn checked_mul(self, rhs: Self) -> Option<Self> {
         // NOTE: we use this to catch overflow in multiplication
-        std::panic::catch_unwind(|| self * rhs)
-            .ok()
-            // NOTE: we use this to rule out that product is not something like f32::INFINITY
-            .and_then(|product| (product / rhs == self).then_some(product))
+        std::panic::catch_unwind(|| self * rhs).ok()
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step<T> {
     Increment(T),
     Decrement(T),
@@ -36,8 +33,6 @@ enum Step<T> {
     RepeatedIncrement(T, usize),
     RepeatedDecrement(T, usize),
 }
-
-impl<T> Eq for Step<T> where T: PartialEq {}
 
 impl<T> Default for Step<T>
 where
@@ -50,7 +45,7 @@ where
 
 impl<T> Step<T>
 where
-    T: Copy + Ord + Ring,
+    T: Copy + Ord + TryFrom<usize> + Ring,
 {
     // returns None if the computed diff does not allow the computation of the original value
     // (may happen for floating point numbers)
@@ -72,6 +67,14 @@ where
             Self::Decrement(T::zero() - value)
         } else {
             Self::Increment(value)
+        }
+    }
+
+    fn into_repeated(self) -> Self {
+        match self {
+            Self::Increment(inc) => Self::RepeatedIncrement(inc, 1),
+            Self::Decrement(dec) => Self::RepeatedDecrement(dec, 1),
+            Self::RepeatedIncrement(_, _) | Self::RepeatedDecrement(_, _) => self,
         }
     }
 }
@@ -98,7 +101,7 @@ where
 
 impl<T> Add for Step<T>
 where
-    T: Copy + Ord + Ring,
+    T: Copy + Ord + TryFrom<usize> + Ring,
 {
     type Output = Self;
 
@@ -116,25 +119,45 @@ where
 
     fn mul(self, rhs: usize) -> Self {
         match self {
-            Self::Increment(inc) => T::try_from(rhs)
-                .ok()
-                .and_then(|t_rhs| inc.reversible_mul(t_rhs))
-                .map(|prod| Self::Increment(prod))
-                .unwrap_or(Self::RepeatedIncrement(inc, rhs)),
-            Self::Decrement(dec) => T::try_from(rhs)
-                .ok()
-                .and_then(|t_rhs| dec.reversible_mul(t_rhs))
-                .map(|prod| Self::Decrement(prod))
-                .unwrap_or(Self::RepeatedDecrement(dec, rhs)),
+            Self::Increment(inc) => Self::Increment(
+                inc * T::try_from(rhs)
+                    .ok()
+                    .expect("this is ensured during construction"),
+            ),
+            Self::Decrement(dec) => Self::Decrement(
+                dec * T::try_from(rhs)
+                    .ok()
+                    .expect("this is ensured during construction"),
+            ),
             Self::RepeatedIncrement(inc, mul) => Self::RepeatedIncrement(inc, rhs * mul),
             Self::RepeatedDecrement(dec, mul) => Self::RepeatedDecrement(dec, rhs * mul),
         }
     }
 }
 
+impl<T> CheckedMul<usize> for Step<T>
+where
+    T: Copy + Ord + TryFrom<usize> + Field + std::panic::RefUnwindSafe,
+{
+    fn checked_mul(self, rhs: usize) -> Option<Self> {
+        match self {
+            Self::Increment(inc) => T::try_from(rhs)
+                .ok()
+                .and_then(|t_rhs| inc.checked_mul(t_rhs))
+                .map(Self::Increment),
+            Self::Decrement(dec) => T::try_from(rhs)
+                .ok()
+                .and_then(|t_rhs| dec.checked_mul(t_rhs))
+                .map(Self::Decrement),
+            Self::RepeatedIncrement(inc, mul) => Some(Self::RepeatedIncrement(inc, rhs * mul)),
+            Self::RepeatedDecrement(dec, mul) => Some(Self::RepeatedDecrement(dec, rhs * mul)),
+        }
+    }
+}
+
 impl<T> Zero for Step<T>
 where
-    T: Copy + Zero + Ord + Ring,
+    T: Copy + Zero + Ord + TryFrom<usize> + Ring,
 {
     fn zero() -> Self {
         Self::Increment(T::zero())
@@ -235,9 +258,25 @@ where
                 if last_element.length == NonZeroUsize::new(1).expect("1 is non-zero") {
                     last_element.length = NonZeroUsize::new(2).expect("2 is non-zero");
                     last_element.increment = cur_inc;
-                } else if last_element.increment == cur_inc {
-                    last_element.length = NonZeroUsize::new(last_element.length.get() + 1)
-                        .expect("usize + 1 is non-zero");
+                } else if last_element.increment == cur_inc
+                    || last_element.increment == cur_inc.into_repeated()
+                {
+                    let last_length = last_element.length.get();
+
+                    // check that the current value is preproducible when using multiplication
+                    // NOTE: we have special handling for increment zero so in this case, we do not have to change the enum variant
+                    if !cur_inc.is_zero()
+                        && cur_inc
+                            .checked_mul(last_length)
+                            .map(|prod| prod + last_element.value != current_value)
+                            .unwrap_or(true)
+                    {
+                        // if this is not the case, then just sum up iteratively (by marking the increment with a special enum variant)
+                        last_element.increment = cur_inc.into_repeated();
+                    }
+
+                    last_element.length =
+                        NonZeroUsize::new(last_length + 1).expect("usize + 1 is non-zero");
                 } else {
                     self.elements.push(RleElement {
                         value: current_value,
@@ -268,7 +307,7 @@ where
 }
 
 /// Implementation of [`Column`] that allows the use of incremental run length encoding.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct RleColumn<T> {
     values: Vec<T>,
     end_indices: Vec<NonZeroUsize>,

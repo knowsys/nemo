@@ -3,7 +3,7 @@ use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`IntervalColumn`] that uses a second column to manage interval bounds.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenericIntervalColumn<T> {
     data: ColumnEnum<T>,
     int_starts: ColumnEnum<usize>,

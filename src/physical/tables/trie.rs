@@ -58,7 +58,7 @@ impl TableSchema for TrieSchema {
 
 /// Implementation of a trie data structure.
 /// The underlying data is oragnized in IntervalColumns.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Trie {
     // TODO: could be generic in column type (one of accepted types still is IntervalColumnT)
     schema: TrieSchema,
