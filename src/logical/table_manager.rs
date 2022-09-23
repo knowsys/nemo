@@ -7,7 +7,7 @@ use super::ExecutionSeries;
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::tables::{
     materialize, IntervalTrieScan, Table, Trie, TrieDifference, TrieJoin, TrieProject, TrieScan,
-    TrieScanEnum, TrieSchema, TrieSchemaEntry, TrieUnion,
+    TrieScanEnum, TrieSchema, TrieSchemaEntry, TrieSelectEqual, TrieSelectValue, TrieUnion,
 };
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -457,6 +457,8 @@ impl TableManager {
                 0
             }
             ExecutionOperation::Temp(_) => 0,
+            ExecutionOperation::SelectValue(subtable, _) => Self::estimate_space(subtable),
+            ExecutionOperation::SelectEqual(subtable, _) => Self::estimate_space(subtable),
         }
     }
 
@@ -639,6 +641,18 @@ impl TableManager {
                 let project_scan = TrieProject::new(tmp_trie, sorting.clone());
 
                 Some(TrieScanEnum::TrieProject(project_scan))
+            }
+            ExecutionOperation::SelectValue(subtable, assignments) => {
+                let subiterator = self.get_iterator_node(subtable, temp_tries)?;
+                let select_scan = TrieSelectValue::new(subiterator, assignments.clone());
+
+                Some(TrieScanEnum::TrieSelectValue(select_scan))
+            }
+            ExecutionOperation::SelectEqual(subtable, classes) => {
+                let subiterator = self.get_iterator_node(subtable, temp_tries)?;
+                let select_scan = TrieSelectEqual::new(subiterator, classes.clone());
+
+                Some(TrieScanEnum::TrieSelectEqual(select_scan))
             }
         }
     }
