@@ -1,6 +1,8 @@
 //! Structure that represents a series of database operations
 use std::ops::Range;
 
+use crate::physical::tables::ValueAssignment;
+
 use super::{
     model::Identifier,
     table_manager::{ColumnOrder, TableId},
@@ -21,6 +23,10 @@ pub enum ExecutionOperation {
     Minus(Box<ExecutionNode>, Box<ExecutionNode>),
     /// Table project operation, takes the temporary table as input
     Project(TableId, ColumnOrder),
+    /// Only leave entries in that have a certain value
+    SelectValue(Box<ExecutionNode>, Vec<ValueAssignment>),
+    /// Only leave entries in that contain equal values in certain columns
+    SelectEqual(Box<ExecutionNode>, Vec<Vec<usize>>),
 }
 
 /// Represents a node in the operation tree of a [`ExecutionPlan`]

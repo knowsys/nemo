@@ -4,11 +4,14 @@ use std::{
     ops::Range,
 };
 
-use crate::{logical::model::Variable, physical::tables::Trie};
+use crate::{
+    logical::model::{Filter, FilterOperation, Variable},
+    physical::tables::{Trie, ValueAssignment},
+};
 
 use super::{
     execution_plan::{ExecutionNode, ExecutionOperation, ExecutionPlan, ExecutionResult},
-    model::{Atom, Identifier, Program, Term},
+    model::{Atom, Identifier, Literal, Program, Rule, Term},
     table_manager::{ColumnOrder, TableManager, TableManagerStrategy},
     ExecutionSeries,
 };
@@ -35,7 +38,13 @@ pub struct RuleExecutionEngine {
 
 impl RuleExecutionEngine {
     /// Create new [`RuleExecutionEngine`]
-    pub fn new(memory_strategy: TableManagerStrategy, program: Program) -> Self {
+    pub fn new(memory_strategy: TableManagerStrategy, mut program: Program) -> Self {
+        // First, normalize all the rules in the program
+        program
+            .rules
+            .iter_mut()
+            .for_each(|r| RuleExecutionEngine::normalize_rule(r));
+
         // NOTE: indices are the ids of the rules and the rule order in variable_orders is the same as in program
         let variable_orders = build_preferable_variable_orders(&program);
         let rule_infos = variable_orders
@@ -51,6 +60,83 @@ impl RuleExecutionEngine {
             table_manager: TableManager::new(memory_strategy),
             program,
             rule_infos,
+        }
+    }
+
+    // Applies equality filters, e.g., "a(x, y), b(z), y = z" will turn into "a(x, y), b(y)"
+    // Also, turns literals like "a(x, 3, x)" into "a(x, y, z), y = 3, z = x"
+    fn normalize_rule(rule: &mut Rule) {
+        // Apply all equality filters
+
+        // We'll just remove everything from rules.filters and put stuff we want to keep here,
+        // so we don't have to delete elements in the vector while iterating on it
+        let mut new_filters = Vec::<Filter>::new();
+        while !rule.filters.is_empty() {
+            let filter = rule.filters.pop().expect("Vector is not empty");
+
+            if filter.operation == FilterOperation::Equals {
+                if let Term::Variable(right_variable) = filter.right {
+                    for body_literal in &mut rule.body {
+                        // TODO: We dont support negation yet
+                        if let Literal::Positive(body_atom) = body_literal {
+                            for term in &mut body_atom.terms {
+                                if let Term::Variable(current_variable) = term {
+                                    if *current_variable == filter.left {
+                                        *current_variable = right_variable.clone();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Since we apply this filter we don't need to add it to new_filters
+                    continue;
+                }
+            }
+
+            new_filters.push(filter);
+        }
+
+        // Don't forget to assign the new filters
+        rule.filters = new_filters;
+
+        // Create new filters for handling constants or duplicate variables within one atom
+
+        // TODO: This is horrible and should obviously not work that way,
+        // but implementing this properly would need some discussions first
+        const FRESH_ID: usize = 10000;
+        let mut current_id = FRESH_ID;
+
+        for body_literal in &mut rule.body {
+            // TODO: We dont support negation yet
+            if let Literal::Positive(body_atom) = body_literal {
+                let mut atom_variables = HashSet::new();
+                for term in &mut body_atom.terms {
+                    let add_filter = if let Term::Variable(variable) = term {
+                        // If term is a variable we add a filter iff it has already occured
+                        !atom_variables.insert(variable.clone())
+                    } else {
+                        // If term is not a variable then we need to add a filter
+                        true
+                    };
+
+                    if add_filter {
+                        // Create fresh variable
+                        let new_variable = Variable::Universal(Identifier(current_id));
+                        current_id += 1;
+
+                        // Add new filter expression
+                        rule.filters.push(Filter::new(
+                            FilterOperation::Equals,
+                            new_variable.clone(),
+                            term.clone(),
+                        ));
+
+                        // Replace current term with the new variable
+                        *term = Term::Variable(new_variable);
+                    }
+                }
+            }
         }
     }
 
@@ -126,8 +212,13 @@ impl RuleExecutionEngine {
             subnodes.push(new_node);
         }
 
-        ExecutionNode {
-            operation: ExecutionOperation::Union(subnodes),
+        if subnodes.len() == 1 {
+            // No need for union if its just element
+            subnodes.remove(0)
+        } else {
+            ExecutionNode {
+                operation: ExecutionOperation::Union(subnodes),
+            }
         }
     }
 
@@ -166,8 +257,13 @@ impl RuleExecutionEngine {
             ))
         }
 
-        ExecutionNode {
-            operation: ExecutionOperation::Join(subplans, join_binding.clone()),
+        if subplans.len() == 1 {
+            // No need for join if its just one element
+            subplans.remove(0)
+        } else {
+            ExecutionNode {
+                operation: ExecutionOperation::Join(subplans, join_binding.clone()),
+            }
         }
     }
 
@@ -281,7 +377,7 @@ impl RuleExecutionEngine {
         const ID_BODY_FRONTIER: usize = 2;
         const ID_HEAD_FRONTIER: usize = 3;
         const ID_EXISTENTIAL_DIFF: usize = 4;
-        const ID_NEW_TABLES: usize = 5;
+        const ID_NEW_TABLES: usize = 5; // Must be one greater than the last constant
 
         let rule = &self.program.rules[rule_id];
 
@@ -334,6 +430,77 @@ impl RuleExecutionEngine {
             })
             .fold(false, |acc, b| acc || b);
 
+        // Calculate the filters
+        let mut body_variables_sorted = body_variables.iter().collect::<Vec<_>>();
+        body_variables_sorted.sort_by(|a, b| {
+            variable_order
+                .get(a)
+                .unwrap()
+                .cmp(variable_order.get(b).unwrap())
+        });
+        let mut variable_to_columnindex = HashMap::new();
+        for (index, variable) in body_variables_sorted.iter().enumerate() {
+            variable_to_columnindex.insert(*variable, index);
+        }
+
+        let mut filter_assignments = Vec::<ValueAssignment>::new();
+        let mut filter_classes = Vec::<HashSet<&Variable>>::new();
+        for filter in &rule.filters {
+            match &filter.right {
+                Term::Variable(right_variable) => {
+                    let left_variable = &filter.left;
+
+                    let left_index = filter_classes
+                        .iter()
+                        .position(|s| s.contains(left_variable));
+                    let right_index = filter_classes
+                        .iter()
+                        .position(|s| s.contains(right_variable));
+
+                    if left_index.is_some() && right_index.is_some() {
+                        if right_index.unwrap() > left_index.unwrap() {
+                            let other_set = filter_classes.remove(right_index.unwrap());
+                            filter_classes[left_index.unwrap()].extend(other_set);
+                        } else {
+                            let other_set = filter_classes.remove(left_index.unwrap());
+                            filter_classes[right_index.unwrap()].extend(other_set);
+                        }
+                    } else if left_index.is_some() {
+                        filter_classes[left_index.unwrap()].insert(right_variable);
+                    } else if right_index.is_some() {
+                        filter_classes[right_index.unwrap()].insert(left_variable);
+                    } else {
+                        let mut new_set = HashSet::new();
+                        new_set.insert(left_variable);
+                        new_set.insert(right_variable);
+
+                        filter_classes.push(new_set);
+                    }
+                }
+                _ => {
+                    if let Some(datavalue) = filter.right.to_datavalue_t() {
+                        filter_assignments.push(ValueAssignment {
+                            column_idx: *variable_to_columnindex.get(&filter.left).unwrap(),
+                            value: datavalue,
+                        });
+                    } else {
+                        // TODO: Not sure what to do in this case
+                    }
+                }
+            }
+        }
+        let filter_classes: Vec<Vec<usize>> = filter_classes
+            .iter()
+            .map(|s| {
+                let mut r = s
+                    .iter()
+                    .map(|v| *variable_to_columnindex.get(v).unwrap())
+                    .collect::<Vec<usize>>();
+                r.sort();
+                r
+            })
+            .collect();
+
         // All the plans will be stored in this vector
         let mut plans = Vec::<ExecutionPlan>::new();
 
@@ -356,14 +523,26 @@ impl RuleExecutionEngine {
         }
 
         // Results of the join have to be combined
-        let body_join_union = ExecutionNode {
+        let mut body_node = ExecutionNode {
             operation: ExecutionOperation::Union(body_joins),
         };
+
+        // If there are filters apply them
+        if !filter_assignments.is_empty() {
+            body_node = ExecutionNode {
+                operation: ExecutionOperation::SelectValue(Box::new(body_node), filter_assignments),
+            };
+        }
+        if !filter_classes.is_empty() {
+            body_node = ExecutionNode {
+                operation: ExecutionOperation::SelectEqual(Box::new(body_node), filter_classes),
+            };
+        }
 
         // We want to materialize this table
         // since the results will be derived from it through projection/reordering
         let body_plan = ExecutionPlan {
-            root: body_join_union,
+            root: body_node,
             leaves: body_leaves,
             result: ExecutionResult::Temp(0),
         };

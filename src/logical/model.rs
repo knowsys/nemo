@@ -11,7 +11,7 @@ use crate::{
     generate_forwarder,
     io::parser::{ParseError, RuleParser},
     physical::{
-        datatypes::Double,
+        datatypes::{DataValueT, Double},
         dictionary::{Dictionary, PrefixedStringDictionary},
     },
 };
@@ -86,6 +86,21 @@ impl Term {
             self,
             Self::Constant(_) | Self::NumericLiteral(_) | Self::RdfLiteral(_)
         )
+    }
+
+    // TODO: Not sure if this is a sane way to do it, some discussion needed
+    /// Coverts term to DataValueT
+    pub fn to_datavalue_t(&self) -> Option<DataValueT> {
+        match self {
+            Self::Constant(Identifier(i)) => Some(DataValueT::U64((*i).try_into().ok()?)),
+            Self::Variable(_) => unreachable!(),
+            Self::NumericLiteral(n) => match n {
+                NumericLiteral::Integer(i) => Some(DataValueT::U64((*i).try_into().ok()?)),
+                NumericLiteral::Decimal(_, _) => todo!(),
+                NumericLiteral::Double(d) => Some(DataValueT::Double(*d)),
+            },
+            Self::RdfLiteral(_) => todo!(),
+        }
     }
 }
 
