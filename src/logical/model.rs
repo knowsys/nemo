@@ -11,7 +11,7 @@ use crate::{
     generate_forwarder,
     io::parser::{ParseError, RuleParser},
     physical::{
-        datatypes::Double,
+        datatypes::{DataValueT, Double, Float},
         dictionary::{Dictionary, PrefixedStringDictionary},
     },
 };
@@ -87,6 +87,66 @@ impl Term {
             self,
             Self::Constant(_) | Self::NumericLiteral(_) | Self::RdfLiteral(_)
         )
+    }
+
+    // TODO: Not sure if this is a sane way to do it, some discussion needed
+    /// Converts term to u64, if possible
+    pub fn to_u64(&self) -> Option<u64> {
+        match self {
+            Self::Constant(Identifier(i)) => (*i).try_into().ok(),
+            Self::Variable(_) => unreachable!(),
+            Self::NumericLiteral(n) => match n {
+                NumericLiteral::Integer(i) => (*i).try_into().ok(),
+                NumericLiteral::Decimal(i, _) => (*i).try_into().ok(),
+                NumericLiteral::Double(d) => (f64::from(*d) as i64).try_into().ok(),
+            },
+            Self::RdfLiteral(_) => todo!(),
+        }
+    }
+
+    /// Converts term to Float, if possible
+    pub fn to_float(&self) -> Option<Float> {
+        match self {
+            Self::Constant(_) => unreachable!(),
+            Self::Variable(_) => unreachable!(),
+            Self::NumericLiteral(n) => match n {
+                NumericLiteral::Integer(i) => Some(Float::from_number(*i as f32)),
+                // TODO: Handle the decimal part...
+                NumericLiteral::Decimal(i, _) => Some(Float::from_number(*i as f32)),
+                NumericLiteral::Double(d) => Some(Float::from_number(f64::from(*d) as f32)),
+            },
+            Self::RdfLiteral(_) => todo!(),
+        }
+    }
+
+    /// Converts term to Double, if possible
+    pub fn to_double(&self) -> Option<Double> {
+        match self {
+            Self::Constant(_) => unreachable!(),
+            Self::Variable(_) => unreachable!(),
+            Self::NumericLiteral(n) => match n {
+                NumericLiteral::Integer(i) => Some(Double::from_number(*i as f64)),
+                // TODO: Handle the decimal part...
+                NumericLiteral::Decimal(i, _) => Some(Double::from_number(*i as f64)),
+                NumericLiteral::Double(d) => Some(*d),
+            },
+            Self::RdfLiteral(_) => todo!(),
+        }
+    }
+
+    // Or instead of the above do this?
+    /// Coverts term to DataValueT
+    pub fn to_datavalue_t(&self) -> Option<DataValueT> {
+        match self {
+            Self::Constant(Identifier(i)) => Some(DataValueT::U64((*i).try_into().ok()?)),
+            Self::Variable(_) => unreachable!(),
+            Self::NumericLiteral(n) => match n {
+                NumericLiteral::Integer(i) => Some(DataValueT::U64((*i).try_into().ok()?)),
+                NumericLiteral::Decimal(_, _) => todo!(),
+                NumericLiteral::Double(d) => Some(DataValueT::Double(*d)),
+            },
+            Self::RdfLiteral(_) => todo!(),
+        }
     }
 }
 
