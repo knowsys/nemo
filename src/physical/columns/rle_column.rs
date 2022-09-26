@@ -1,28 +1,12 @@
 use super::{Column, ColumnBuilder, ColumnScan, RangedColumnScan};
 use crate::physical::datatypes::{ColumnDataType, Field, Ring};
-use num::Zero;
+use num::{CheckedMul, Zero};
 use std::{
     fmt::Debug,
     iter::repeat,
     num::NonZeroUsize,
     ops::{Add, Mul, Range},
 };
-
-trait CheckedMul<T = Self> {
-    fn checked_mul(self, rhs: T) -> Option<Self>
-    where
-        Self: Sized;
-}
-
-impl<T> CheckedMul for T
-where
-    T: Copy + Ord + Field + std::panic::RefUnwindSafe,
-{
-    fn checked_mul(self, rhs: Self) -> Option<Self> {
-        // NOTE: we use this to catch overflow in multiplication
-        std::panic::catch_unwind(|| self * rhs).ok()
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step<T> {
@@ -79,6 +63,27 @@ where
     }
 }
 
+impl<T> Step<T>
+where
+    T: Copy + TryFrom<usize> + CheckedMul,
+{
+    // NOTE: num::CheckedMul is not generic over `rhs` so we cannot use this trait here
+    fn checked_mul(self, rhs: usize) -> Option<Self> {
+        match self {
+            Self::Increment(inc) => T::try_from(rhs)
+                .ok()
+                .and_then(|t_rhs| inc.checked_mul(&t_rhs))
+                .map(Self::Increment),
+            Self::Decrement(dec) => T::try_from(rhs)
+                .ok()
+                .and_then(|t_rhs| dec.checked_mul(&t_rhs))
+                .map(Self::Decrement),
+            Self::RepeatedIncrement(inc, mul) => Some(Self::RepeatedIncrement(inc, rhs * mul)),
+            Self::RepeatedDecrement(dec, mul) => Some(Self::RepeatedDecrement(dec, rhs * mul)),
+        }
+    }
+}
+
 impl<T> Add<T> for Step<T>
 where
     T: Copy + Ring,
@@ -113,7 +118,7 @@ where
 
 impl<T> Mul<usize> for Step<T>
 where
-    T: Copy + Ord + TryFrom<usize> + Field + std::panic::RefUnwindSafe,
+    T: Copy + Ord + TryFrom<usize> + Field,
 {
     type Output = Self;
 
@@ -131,26 +136,6 @@ where
             ),
             Self::RepeatedIncrement(inc, mul) => Self::RepeatedIncrement(inc, rhs * mul),
             Self::RepeatedDecrement(dec, mul) => Self::RepeatedDecrement(dec, rhs * mul),
-        }
-    }
-}
-
-impl<T> CheckedMul<usize> for Step<T>
-where
-    T: Copy + Ord + TryFrom<usize> + Field + std::panic::RefUnwindSafe,
-{
-    fn checked_mul(self, rhs: usize) -> Option<Self> {
-        match self {
-            Self::Increment(inc) => T::try_from(rhs)
-                .ok()
-                .and_then(|t_rhs| inc.checked_mul(t_rhs))
-                .map(Self::Increment),
-            Self::Decrement(dec) => T::try_from(rhs)
-                .ok()
-                .and_then(|t_rhs| dec.checked_mul(t_rhs))
-                .map(Self::Decrement),
-            Self::RepeatedIncrement(inc, mul) => Some(Self::RepeatedIncrement(inc, rhs * mul)),
-            Self::RepeatedDecrement(dec, mul) => Some(Self::RepeatedDecrement(dec, rhs * mul)),
         }
     }
 }
@@ -263,7 +248,7 @@ where
                 {
                     let last_length = last_element.length.get();
 
-                    // check that the current value is preproducible when using multiplication
+                    // check that the current value is reproducible when using multiplication
                     // NOTE: we have special handling for increment zero so in this case, we do not have to change the enum variant
                     if !cur_inc.is_zero()
                         && cur_inc
