@@ -98,7 +98,12 @@ impl MulAssign for Float {
 
 impl CheckedMul for Float {
     fn checked_mul(&self, rhs: &Self) -> Option<Self> {
-        Some(*self * *rhs)
+        let prod = self.0 * rhs.0;
+        if prod.is_finite() {
+            Self::new(prod).ok()
+        } else {
+            None
+        }
     }
 }
 

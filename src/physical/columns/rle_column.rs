@@ -65,21 +65,23 @@ where
 
 impl<T> Step<T>
 where
-    T: Copy + TryFrom<usize> + CheckedMul,
+    T: Copy + Ord + TryFrom<usize> + Ring + CheckedMul,
 {
-    // NOTE: num::CheckedMul is not generic over `rhs` so we cannot use this trait here
-    fn checked_mul(self, rhs: usize) -> Option<Self> {
+    fn will_mul_overflow(&self, rhs: usize) -> bool {
+        // NOTE: we have special handling for increment zero so in this case, we do not have to change the enum variant
+        if self.is_zero() {
+            return false;
+        }
+
         match self {
-            Self::Increment(inc) => T::try_from(rhs)
+            Self::Increment(raw_inc) | Self::Decrement(raw_inc) => T::try_from(rhs)
                 .ok()
-                .and_then(|t_rhs| inc.checked_mul(&t_rhs))
-                .map(Self::Increment),
-            Self::Decrement(dec) => T::try_from(rhs)
-                .ok()
-                .and_then(|t_rhs| dec.checked_mul(&t_rhs))
-                .map(Self::Decrement),
-            Self::RepeatedIncrement(inc, mul) => Some(Self::RepeatedIncrement(inc, rhs * mul)),
-            Self::RepeatedDecrement(dec, mul) => Some(Self::RepeatedDecrement(dec, rhs * mul)),
+                .and_then(|t_rhs| raw_inc.checked_mul(&t_rhs))
+                .is_none(),
+            // NOTE: we are actually only interested in the non-repeated cases in this method; we still provide the following cases to be complete
+            Self::RepeatedIncrement(_, mul) | Self::RepeatedDecrement(_, mul) => {
+                mul.checked_mul(&rhs).is_none()
+            }
         }
     }
 }
@@ -125,11 +127,13 @@ where
     fn mul(self, rhs: usize) -> Self {
         match self {
             Self::Increment(inc) => Self::Increment(
+                // NOTE: we check during construction that this multiplication will not overflow
                 inc * T::try_from(rhs)
                     .ok()
                     .expect("this is ensured during construction"),
             ),
             Self::Decrement(dec) => Self::Decrement(
+                // NOTE: we check during construction that this multiplication will not overflow
                 dec * T::try_from(rhs)
                     .ok()
                     .expect("this is ensured during construction"),
@@ -248,15 +252,9 @@ where
                 {
                     let last_length = last_element.length.get();
 
-                    // check that the current value is reproducible when using multiplication
-                    // NOTE: we have special handling for increment zero so in this case, we do not have to change the enum variant
-                    if !cur_inc.is_zero()
-                        && cur_inc
-                            .checked_mul(last_length)
-                            .map(|prod| prod + last_element.value != current_value)
-                            .unwrap_or(true)
-                    {
-                        // if this is not the case, then just sum up iteratively (by marking the increment with a special enum variant)
+                    // check that the current value is reproducible when using multiplication (i.e. multiplied increment is not infinite)
+                    if cur_inc.will_mul_overflow(last_length) {
+                        // if the multiplication will overflow, then just sum up iteratively (by marking the increment with a special enum variant)
                         last_element.increment = cur_inc.into_repeated();
                     }
 
