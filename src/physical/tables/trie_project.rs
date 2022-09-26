@@ -3,7 +3,7 @@ use crate::physical::columns::{
     Column, ColumnScan, IntervalColumn, IntervalColumnEnum, IntervalColumnT, RangedColumnScan,
     RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT, ReorderScan,
 };
-use crate::physical::datatypes::{DataTypeName, Field, FloorToUsize};
+use crate::physical::datatypes::{ColumnDataType, DataTypeName};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
@@ -22,7 +22,7 @@ fn expand_range(column: &IntervalColumnT, range: Range<usize>) -> Range<usize> {
 fn shrink_position(column: &IntervalColumnT, pos: usize) -> usize {
     fn shrink_position_t<T>(column: &IntervalColumnEnum<T>, pos: usize) -> usize
     where
-        T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+        T: ColumnDataType,
     {
         let mut column_iter = column.get_int_column().iter();
         column_iter.seek(pos + 1);

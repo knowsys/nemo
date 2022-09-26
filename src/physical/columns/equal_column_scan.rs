@@ -1,12 +1,12 @@
 use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell};
-use crate::physical::datatypes::{Field, FloorToUsize};
+use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
 /// Iterator which allows its sub iterator to only jump to the value pointed to by a reference iterator
 #[derive(Debug)]
 pub struct EqualColumnScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     reference_scan: &'a RangedColumnScanCell<'a, T>,
     value_scan: &'a RangedColumnScanCell<'a, T>,
@@ -14,7 +14,7 @@ where
 }
 impl<'a, T> EqualColumnScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     /// Constructs a new EqualColumnScan for a Column.
     pub fn new(
@@ -31,7 +31,7 @@ where
 
 impl<'a, T> Iterator for EqualColumnScan<'a, T>
 where
-    T: 'a + Debug + Copy + Eq + PartialOrd + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType + Eq,
 {
     type Item = T;
 
@@ -58,7 +58,7 @@ where
 
 impl<'a, T> ColumnScan for EqualColumnScan<'a, T>
 where
-    T: 'a + Debug + Copy + Eq + PartialOrd + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType + Eq,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         let reference_value = self.reference_scan.current()?;
@@ -81,7 +81,7 @@ where
 
 impl<'a, T> RangedColumnScan for EqualColumnScan<'a, T>
 where
-    T: 'a + Debug + Copy + Eq + PartialOrd + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType + Eq,
 {
     fn pos(&self) -> Option<usize> {
         unimplemented!(

@@ -1,6 +1,6 @@
 use super::{Column, ColumnScan, GenericIntervalColumn, RangedColumnScan, VectorColumn};
 use crate::generate_forwarder;
-use crate::physical::datatypes::{Field, FloorToUsize};
+use crate::physical::datatypes::ColumnDataType;
 use std::marker::PhantomData;
 use std::{fmt::Debug, ops::Range};
 
@@ -17,7 +17,7 @@ pub struct GenericColumnScan<'a, T, Col: Column<'a, T>> {
 #[derive(Debug)]
 pub enum GenericColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     /// Case Scan with VectorColumn
     VectorColumn(GenericColumnScan<'a, T, VectorColumn<T>>),
@@ -31,7 +31,7 @@ generate_forwarder!(forward_to_column_scan;
 
 impl<'a, T> From<GenericColumnScan<'a, T, VectorColumn<T>>> for GenericColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: GenericColumnScan<'a, T, VectorColumn<T>>) -> Self {
         Self::VectorColumn(cs)
@@ -41,7 +41,7 @@ where
 impl<'a, T> From<GenericColumnScan<'a, T, GenericIntervalColumn<T>>>
     for GenericColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: GenericColumnScan<'a, T, GenericIntervalColumn<T>>) -> Self {
         Self::GenericIntervalColumn(cs)
@@ -196,7 +196,7 @@ where
 
 impl<'a, T> Iterator for GenericColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     type Item = T;
 
@@ -207,7 +207,7 @@ where
 
 impl<'a, T> ColumnScan for GenericColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         forward_to_column_scan!(self, seek(value))
@@ -224,7 +224,7 @@ where
 
 impl<'a, T> RangedColumnScan for GenericColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn pos(&self) -> Option<usize> {
         forward_to_column_scan!(self, pos)

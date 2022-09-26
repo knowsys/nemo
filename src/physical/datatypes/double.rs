@@ -1,7 +1,6 @@
 use super::{FloatIsNaN, FloorToUsize};
 use crate::error::Error;
-use num::FromPrimitive;
-use num::{One, Zero};
+use num::{CheckedMul, FromPrimitive, One, Zero};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
@@ -94,6 +93,17 @@ impl Mul for Double {
 impl MulAssign for Double {
     fn mul_assign(&mut self, rhs: Self) {
         self.0.mul_assign(rhs.0)
+    }
+}
+
+impl CheckedMul for Double {
+    fn checked_mul(&self, rhs: &Self) -> Option<Self> {
+        let prod = self.0 * rhs.0;
+        if prod.is_finite() {
+            Self::new(prod).ok()
+        } else {
+            None
+        }
     }
 }
 

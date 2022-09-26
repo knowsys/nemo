@@ -3,7 +3,7 @@ use super::{
 };
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
-    physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize},
+    physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
 };
 use std::fmt::Debug;
 
@@ -31,7 +31,7 @@ pub trait Column<'a, T>: Debug + Clone {
 }
 
 /// Enum for column implementations
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColumnEnum<T> {
     /// Case VectorColumn
     VectorColumn(VectorColumn<T>),
@@ -45,7 +45,7 @@ generate_forwarder!(forward_to_column;
 
 impl<'a, T> Column<'a, T> for ColumnEnum<T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     type ColScan = RangedColumnScanEnum<'a, T>;
 

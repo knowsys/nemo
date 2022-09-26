@@ -1,5 +1,5 @@
 use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell};
-use crate::physical::datatypes::{Field, FloorToUsize};
+use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -7,7 +7,7 @@ use std::ops::Range;
 #[derive(Debug)]
 pub struct UnionScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     column_scans: Vec<&'a RangedColumnScanCell<'a, T>>,
     smallest_scans: Vec<usize>,
@@ -18,7 +18,7 @@ where
 
 impl<'a, T> UnionScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     /// Constructs a new VectorColumnScan for a Column.
     pub fn new(column_scans: Vec<&'a RangedColumnScanCell<'a, T>>) -> UnionScan<'a, T> {
@@ -44,7 +44,7 @@ where
 
 impl<'a, T> Iterator for UnionScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     type Item = T;
 
@@ -113,7 +113,7 @@ where
 
 impl<'a, T: Ord + Copy + Debug + PartialOrd> ColumnScan for UnionScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         let mut next_smallest_scans = Vec::<usize>::with_capacity(self.column_scans.len());
@@ -154,7 +154,7 @@ where
 
 impl<'a, T: Ord + Copy + Debug> RangedColumnScan for UnionScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn pos(&self) -> Option<usize> {
         unimplemented!(

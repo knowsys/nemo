@@ -1,6 +1,6 @@
 use super::{Column, ColumnBuilder, ColumnScan, RangedColumnScan};
-use crate::physical::datatypes::{Field, FloorToUsize, Ring};
-use num::Zero;
+use crate::physical::datatypes::{ColumnDataType, Field, Ring};
+use num::{CheckedMul, Zero};
 use std::{
     fmt::Debug,
     iter::repeat,
@@ -8,13 +8,15 @@ use std::{
     ops::{Add, Mul, Range},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step<T> {
     Increment(T),
     Decrement(T),
+    // the following two are used as alternative to multiplication
+    // when multiplication would overflow T
+    RepeatedIncrement(T, usize),
+    RepeatedDecrement(T, usize),
 }
-
-impl<T> Eq for Step<T> where T: PartialEq {}
 
 impl<T> Default for Step<T>
 where
@@ -27,7 +29,7 @@ where
 
 impl<T> Step<T>
 where
-    T: Copy + Ord + Ring,
+    T: Copy + Ord + TryFrom<usize> + Ring,
 {
     // returns None if the computed diff does not allow the computation of the original value
     // (may happen for floating point numbers)
@@ -42,11 +44,51 @@ where
             (next_value == previous_value + diff).then_some(Self::Increment(diff))
         }
     }
+
+    // just a special case of from_two_values with the first being zero and without the checks
+    fn from_t(value: T) -> Self {
+        if value < T::zero() {
+            Self::Decrement(T::zero() - value)
+        } else {
+            Self::Increment(value)
+        }
+    }
+
+    fn into_repeated(self) -> Self {
+        match self {
+            Self::Increment(inc) => Self::RepeatedIncrement(inc, 1),
+            Self::Decrement(dec) => Self::RepeatedDecrement(dec, 1),
+            Self::RepeatedIncrement(_, _) | Self::RepeatedDecrement(_, _) => self,
+        }
+    }
+}
+
+impl<T> Step<T>
+where
+    T: Copy + Ord + TryFrom<usize> + Ring + CheckedMul,
+{
+    fn will_mul_overflow(&self, rhs: usize) -> bool {
+        // NOTE: we have special handling for increment zero so in this case, we do not have to change the enum variant
+        if self.is_zero() {
+            return false;
+        }
+
+        match self {
+            Self::Increment(raw_inc) | Self::Decrement(raw_inc) => T::try_from(rhs)
+                .ok()
+                .and_then(|t_rhs| raw_inc.checked_mul(&t_rhs))
+                .is_none(),
+            // NOTE: we are actually only interested in the non-repeated cases in this method; we still provide the following cases to be complete
+            Self::RepeatedIncrement(_, mul) | Self::RepeatedDecrement(_, mul) => {
+                mul.checked_mul(&rhs).is_none()
+            }
+        }
+    }
 }
 
 impl<T> Add<T> for Step<T>
 where
-    T: Ring,
+    T: Copy + Ring,
 {
     type Output = T;
 
@@ -54,70 +96,57 @@ where
         match self {
             Self::Increment(inc) => rhs + inc,
             Self::Decrement(dec) => rhs - dec,
+            Self::RepeatedIncrement(inc, mul) => {
+                repeat(inc).take(mul).fold(rhs, |sum, inc| sum + inc)
+            }
+            Self::RepeatedDecrement(dec, mul) => {
+                repeat(dec).take(mul).fold(rhs, |sum, dec| sum - dec)
+            }
         }
     }
 }
 
 impl<T> Add for Step<T>
 where
-    T: Ord + Ring,
+    T: Copy + Ord + TryFrom<usize> + Ring,
 {
     type Output = Self;
 
+    // NOTE: this may overflow but it should be fine for our use cases
     fn add(self, rhs: Self) -> Self {
-        match self {
-            Self::Increment(l_inc) => match rhs {
-                Self::Increment(r_inc) => Self::Increment(l_inc + r_inc),
-                Self::Decrement(r_dec) => {
-                    if l_inc < r_dec {
-                        Self::Decrement(r_dec - l_inc)
-                    } else {
-                        Self::Increment(l_inc - r_dec)
-                    }
-                }
-            },
-            Self::Decrement(l_dec) => match rhs {
-                Self::Decrement(r_dec) => Self::Decrement(l_dec + r_dec),
-                Self::Increment(r_inc) => {
-                    if r_inc < l_dec {
-                        Self::Decrement(l_dec - r_inc)
-                    } else {
-                        Self::Increment(r_inc - l_dec)
-                    }
-                }
-            },
-        }
+        Self::from_t(self + (rhs + T::zero()))
     }
 }
 
 impl<T> Mul<usize> for Step<T>
 where
-    T: Copy + TryFrom<usize> + Ring,
+    T: Copy + Ord + TryFrom<usize> + Field,
 {
     type Output = Self;
 
     fn mul(self, rhs: usize) -> Self {
-        let raw_increment = match self {
-            Self::Increment(inc) => inc,
-            Self::Decrement(dec) => dec,
-        };
-
-        let total_increment = if let Ok(t_rhs) = T::try_from(rhs) {
-            t_rhs * raw_increment
-        } else {
-            repeat(raw_increment).take(rhs).sum()
-        };
-
         match self {
-            Self::Increment(_) => Self::Increment(total_increment),
-            Self::Decrement(_) => Self::Decrement(total_increment),
+            Self::Increment(inc) => Self::Increment(
+                // NOTE: we check during construction that this multiplication will not overflow
+                inc * T::try_from(rhs)
+                    .ok()
+                    .expect("this is ensured during construction"),
+            ),
+            Self::Decrement(dec) => Self::Decrement(
+                // NOTE: we check during construction that this multiplication will not overflow
+                dec * T::try_from(rhs)
+                    .ok()
+                    .expect("this is ensured during construction"),
+            ),
+            Self::RepeatedIncrement(inc, mul) => Self::RepeatedIncrement(inc, rhs * mul),
+            Self::RepeatedDecrement(dec, mul) => Self::RepeatedDecrement(dec, rhs * mul),
         }
     }
 }
 
 impl<T> Zero for Step<T>
 where
-    T: Zero + Ord + Ring,
+    T: Copy + Zero + Ord + TryFrom<usize> + Ring,
 {
     fn zero() -> Self {
         Self::Increment(T::zero())
@@ -127,6 +156,8 @@ where
         match self {
             Self::Increment(inc) => inc.is_zero(),
             Self::Decrement(dec) => dec.is_zero(),
+            Self::RepeatedIncrement(inc, mul) => inc.is_zero() || mul.is_zero(),
+            Self::RepeatedDecrement(dec, mul) => dec.is_zero() || mul.is_zero(),
         }
     }
 }
@@ -159,7 +190,7 @@ impl<T> RleColumnBuilder<T> {
 
 impl<T> RleColumnBuilder<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Default + Field + FloorToUsize,
+    T: ColumnDataType + Default,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub fn avg_length_of_rle_elements(&self) -> usize {
@@ -182,7 +213,7 @@ where
 
 impl<'a, T> ColumnBuilder<'a, T> for RleColumnBuilder<T>
 where
-    T: 'a + Copy + Ord + TryFrom<usize> + Debug + Default + Field + FloorToUsize,
+    T: 'a + ColumnDataType + Default,
 {
     type Col = RleColumn<T>;
 
@@ -216,9 +247,19 @@ where
                 if last_element.length == NonZeroUsize::new(1).expect("1 is non-zero") {
                     last_element.length = NonZeroUsize::new(2).expect("2 is non-zero");
                     last_element.increment = cur_inc;
-                } else if last_element.increment == cur_inc {
-                    last_element.length = NonZeroUsize::new(last_element.length.get() + 1)
-                        .expect("usize + 1 is non-zero");
+                } else if last_element.increment == cur_inc
+                    || last_element.increment == cur_inc.into_repeated()
+                {
+                    let last_length = last_element.length.get();
+
+                    // check that the current value is reproducible when using multiplication (i.e. multiplied increment is not infinite)
+                    if cur_inc.will_mul_overflow(last_length) {
+                        // if the multiplication will overflow, then just sum up iteratively (by marking the increment with a special enum variant)
+                        last_element.increment = cur_inc.into_repeated();
+                    }
+
+                    last_element.length =
+                        NonZeroUsize::new(last_length + 1).expect("usize + 1 is non-zero");
                 } else {
                     self.elements.push(RleElement {
                         value: current_value,
@@ -249,7 +290,7 @@ where
 }
 
 /// Implementation of [`Column`] that allows the use of incremental run length encoding.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct RleColumn<T> {
     values: Vec<T>,
     end_indices: Vec<NonZeroUsize>,
@@ -258,7 +299,7 @@ pub struct RleColumn<T> {
 
 impl<T> RleColumn<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Default + Field + FloorToUsize,
+    T: ColumnDataType + Default,
 {
     /// Constructs a new RleColumn from a vector of RleElements.
     fn from_rle_elements(elements: Vec<RleElement<T>>) -> RleColumn<T> {
@@ -297,7 +338,7 @@ where
 
 impl<T> RleColumn<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: ColumnDataType,
 {
     fn get_element_and_increment_index_from_global_index(&self, index: usize) -> (usize, usize) {
         let element_index = if index == 0 {
@@ -341,7 +382,7 @@ where
 
 impl<'a, T> Column<'a, T> for RleColumn<T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: 'a + ColumnDataType,
 {
     type ColScan = RleColumnScan<'a, T>;
 
@@ -381,7 +422,7 @@ pub struct RleColumnScan<'a, T> {
 
 impl<'a, T> RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: ColumnDataType,
 {
     /// Constructor for RleColumnScan
     pub fn new(column: &'a RleColumn<T>) -> RleColumnScan<'a, T> {
@@ -429,7 +470,7 @@ where
 
 impl<'a, T> Iterator for RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: ColumnDataType,
 {
     type Item = T;
 
@@ -470,7 +511,7 @@ where
 
 impl<'a, T> ColumnScan for RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: ColumnDataType,
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.
@@ -585,7 +626,7 @@ where
 
 impl<'a, T> RangedColumnScan for RleColumnScan<'a, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + Field + FloorToUsize,
+    T: ColumnDataType,
 {
     fn pos(&self) -> Option<usize> {
         self.pos_for_element_and_increment_index(self.element_index?, self.increment_index?)
@@ -728,6 +769,44 @@ mod test {
         let control_data = get_control_data_with_inc_zero();
         let c: RleColumn<u8> = get_test_column_with_inc_zero();
 
+        control_data
+            .iter()
+            .enumerate()
+            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
+    }
+
+    #[test]
+    fn get_large_increment_overflowing_value_space_i64() {
+        let control_data = vec![-i64::MAX, 0, i64::MAX];
+        let c = RleColumn::new(control_data.clone());
+        control_data
+            .iter()
+            .enumerate()
+            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
+    }
+
+    #[test]
+    fn get_large_increment_overflowing_value_space_float() {
+        let control_data = vec![
+            Float::new(f32::MIN).unwrap(),
+            Float::new(0.0).unwrap(),
+            Float::new(f32::MAX).unwrap(),
+        ];
+        let c = RleColumn::new(control_data.clone());
+        control_data
+            .iter()
+            .enumerate()
+            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
+    }
+
+    #[test]
+    fn get_large_increment_overflowing_value_space_double() {
+        let control_data = vec![
+            Double::new(f64::MIN).unwrap(),
+            Double::new(0.0).unwrap(),
+            Double::new(f64::MAX).unwrap(),
+        ];
+        let c = RleColumn::new(control_data.clone());
         control_data
             .iter()
             .enumerate()

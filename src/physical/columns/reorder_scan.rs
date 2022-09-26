@@ -1,6 +1,6 @@
 use super::{Column, ColumnEnum, ColumnScan, RangedColumnScan};
 use crate::logical::Permutator;
-use crate::physical::datatypes::{Field, FloorToUsize};
+use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -19,7 +19,7 @@ pub struct ReorderScan<'a, T> {
 
 impl<'a, T> ReorderScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     /// Construct a new ReorderScan for a Column.
     pub fn new(column: &'a ColumnEnum<T>) -> Self {
@@ -62,7 +62,7 @@ where
 
 impl<'a, T: Eq + Debug + Copy> Iterator for ReorderScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     type Item = T;
 
@@ -93,7 +93,7 @@ where
 
 impl<'a, T: Ord + Copy + Debug> ColumnScan for ReorderScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         if self.current_value? >= value {
@@ -117,7 +117,7 @@ where
 
 impl<'a, T: Ord + Copy + Debug> RangedColumnScan for ReorderScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn pos(&self) -> Option<usize> {
         unimplemented!("Because of possible duplicates, use pos_multiple");

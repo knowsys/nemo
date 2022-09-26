@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
-    physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize},
+    physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
 };
 use std::{fmt::Debug, ops::Range};
 
@@ -22,10 +22,10 @@ pub trait IntervalColumn<'a, T>: Debug + Column<'a, T> {
 }
 
 /// Enum for columns of all supported basic types.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IntervalColumnEnum<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: ColumnDataType,
 {
     /// Case GenericIntervalColumn
     GenericIntervalColumn(GenericIntervalColumn<T>),
@@ -36,7 +36,7 @@ generate_forwarder!(forward_to_interval_column;
 
 impl<T> IntervalColumnEnum<T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: ColumnDataType,
 {
     /// Return data column
     pub fn get_data_column(&self) -> &ColumnEnum<T> {
@@ -51,7 +51,7 @@ where
 
 impl<'a, T> Column<'a, T> for IntervalColumnEnum<T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     type ColScan = RangedColumnScanEnum<'a, T>;
 
@@ -78,7 +78,7 @@ where
 
 impl<'a, T> IntervalColumn<'a, T> for IntervalColumnEnum<T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn int_len(&self) -> usize {
         forward_to_interval_column!(self, int_len)
@@ -90,7 +90,7 @@ where
 }
 
 /// Enum for Interval Column with different underlying datatypes
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IntervalColumnT {
     /// Case u64
     U64(IntervalColumnEnum<u64>),

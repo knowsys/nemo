@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
-    physical::datatypes::{DataValueT, Double, Field, Float, FloorToUsize},
+    physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
 };
 use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
@@ -23,7 +23,7 @@ pub trait RangedColumnScan: ColumnScan {
 #[derive(Debug)]
 pub enum RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     /// Case GenericColumnScan
     GenericColumnScan(GenericColumnScanEnum<'a, T>),
@@ -49,7 +49,7 @@ where
 
 impl<'a, T> From<GenericColumnScanEnum<'a, T>> for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: GenericColumnScanEnum<'a, T>) -> Self {
         Self::GenericColumnScan(cs)
@@ -58,7 +58,7 @@ where
 
 impl<'a, T> From<RleColumnScan<'a, T>> for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: RleColumnScan<'a, T>) -> Self {
         Self::RleColumnScan(cs)
@@ -67,7 +67,7 @@ where
 
 impl<'a, T> From<OrderedMergeJoin<'a, T>> for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: OrderedMergeJoin<'a, T>) -> Self {
         Self::OrderedMergeJoin(cs)
@@ -76,7 +76,7 @@ where
 
 impl<'a, T> From<ReorderScan<'a, T>> for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: ReorderScan<'a, T>) -> Self {
         Self::ReorderScan(cs)
@@ -85,7 +85,7 @@ where
 
 impl<'a, T> From<EqualColumnScan<'a, T>> for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: EqualColumnScan<'a, T>) -> Self {
         Self::EqualColumnScan(cs)
@@ -94,7 +94,7 @@ where
 
 impl<'a, T> From<EqualValueScan<'a, T>> for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: EqualValueScan<'a, T>) -> Self {
         Self::EqualValueScan(cs)
@@ -103,7 +103,7 @@ where
 
 impl<'a, T> From<PassScan<'a, T>> for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: PassScan<'a, T>) -> Self {
         Self::PassScan(cs)
@@ -112,7 +112,7 @@ where
 
 impl<'a, T> From<MinusScan<'a, T>> for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: MinusScan<'a, T>) -> Self {
         Self::MinusScan(cs)
@@ -121,7 +121,7 @@ where
 
 impl<'a, T> From<DifferenceScan<'a, T>> for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: DifferenceScan<'a, T>) -> Self {
         Self::DifferenceScan(cs)
@@ -130,7 +130,7 @@ where
 
 impl<'a, T> From<UnionScan<'a, T>> for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: UnionScan<'a, T>) -> Self {
         Self::UnionScan(cs)
@@ -151,7 +151,7 @@ generate_forwarder!(forward_to_column_scan;
 
 impl<'a, T> RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     /// Return all positions in the underlying column the cursor is currently at
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
@@ -206,7 +206,7 @@ where
 
 impl<'a, T> Iterator for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     type Item = T;
 
@@ -217,7 +217,7 @@ where
 
 impl<'a, T> ColumnScan for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
         forward_to_column_scan!(self, seek(value))
@@ -234,7 +234,7 @@ where
 
 impl<'a, T> RangedColumnScan for RangedColumnScanEnum<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn pos(&self) -> Option<usize> {
         forward_to_column_scan!(self, pos)
@@ -249,11 +249,11 @@ where
 #[repr(transparent)]
 pub struct RangedColumnScanCell<'a, T>(UnsafeCell<RangedColumnScanEnum<'a, T>>)
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field;
+    T: 'a + ColumnDataType;
 
 impl<T> Debug for RangedColumnScanCell<'_, T>
 where
-    T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: ColumnDataType,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let rcs = unsafe { &*self.0.get() };
@@ -263,7 +263,7 @@ where
 
 impl<'a, T> RangedColumnScanCell<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     /// Construct a new `RangedColumnScanCell` from the given [`RangedColumnScanEnum`].
     pub fn new(cs: RangedColumnScanEnum<'a, T>) -> Self {
@@ -338,7 +338,7 @@ where
 impl<'a, S, T> From<S> for RangedColumnScanCell<'a, T>
 where
     S: Into<RangedColumnScanEnum<'a, T>>,
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn from(cs: S) -> Self {
         Self(UnsafeCell::new(cs.into()))

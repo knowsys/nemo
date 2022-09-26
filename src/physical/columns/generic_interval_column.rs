@@ -1,9 +1,9 @@
 use super::{Column, ColumnEnum, GenericColumnScan, IntervalColumn};
-use crate::physical::datatypes::{Field, FloorToUsize};
+use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`IntervalColumn`] that uses a second column to manage interval bounds.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenericIntervalColumn<T> {
     data: ColumnEnum<T>,
     int_starts: ColumnEnum<usize>,
@@ -28,7 +28,7 @@ impl<T> GenericIntervalColumn<T> {
 
 impl<'a, T> Column<'a, T> for GenericIntervalColumn<T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     type ColScan = GenericColumnScan<'a, T, GenericIntervalColumn<T>>;
 
@@ -51,7 +51,7 @@ where
 
 impl<'a, T> IntervalColumn<'a, T> for GenericIntervalColumn<T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     fn int_len(&self) -> usize {
         self.int_starts.len()

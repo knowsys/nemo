@@ -1,6 +1,6 @@
 //! Holds the [Permutator] struct, which allows one to define a logical permutation of the content of index-based data structures
 
-use crate::physical::datatypes::{Field, FloorToUsize};
+use crate::physical::datatypes::ColumnDataType;
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::ops::Range;
@@ -46,7 +46,7 @@ impl Permutator {
     /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
     pub fn sort_from_column_range<T>(data: &ColumnEnum<T>, ranges: &[Range<usize>]) -> Permutator
     where
-        T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
+        T: ColumnDataType + Ord,
     {
         let mut vec = ranges.iter().flat_map(|r| r.clone()).collect::<Vec<_>>();
 
@@ -60,7 +60,7 @@ impl Permutator {
     /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
     pub fn sort_from_column<T>(data: &ColumnEnum<T>) -> Permutator
     where
-        T: Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + Ord,
+        T: ColumnDataType + Ord,
     {
         Permutator::sort_from_column_range(data, &[(0..data.len())])
     }
@@ -199,7 +199,7 @@ impl Permutator {
         mut cb: U,
     ) -> Result<ColumnEnum<T>, Error>
     where
-        T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+        T: 'a + ColumnDataType,
         U: ColumnBuilder<'a, T, Col = ColumnEnum<T>>,
     {
         if column.len() < (self.sort_vec.len() + self.offset) {

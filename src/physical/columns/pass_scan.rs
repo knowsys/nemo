@@ -1,18 +1,18 @@
 use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell};
-use crate::physical::datatypes::{Field, FloorToUsize};
+use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
 /// Dummy Iterator that defers everything to its sub iterator
 #[derive(Debug)]
 pub struct PassScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     reference_scan: &'a RangedColumnScanCell<'a, T>,
 }
 impl<'a, T> PassScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     /// Constructs a new PassScan for a Column.
     pub fn new(reference_scan: &'a RangedColumnScanCell<'a, T>) -> PassScan<'a, T> {
@@ -22,7 +22,7 @@ where
 
 impl<'a, T> Iterator for PassScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + PartialOrd + Eq,
+    T: 'a + ColumnDataType + PartialOrd + Eq,
 {
     type Item = T;
 
@@ -33,7 +33,7 @@ where
 
 impl<'a, T> ColumnScan for PassScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + PartialOrd + Eq,
+    T: 'a + ColumnDataType + PartialOrd + Eq,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         self.reference_scan.seek(value)
@@ -50,7 +50,7 @@ where
 
 impl<'a, T> RangedColumnScan for PassScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + PartialOrd + Eq,
+    T: 'a + ColumnDataType + PartialOrd + Eq,
 {
     fn pos(&self) -> Option<usize> {
         self.reference_scan.pos()
