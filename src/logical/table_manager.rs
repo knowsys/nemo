@@ -102,6 +102,15 @@ pub struct TableManager {
     space_consumed: u64,
 }
 
+/// Encodes the things that can go wrong while asking for a table
+#[derive(Debug, Copy, Clone)]
+pub enum GetTableError {
+    /// Manager does not contain a table with that predicate and step range
+    NoTable,
+    /// Manager contains the table but in a wrong column order
+    WrongOrder,
+}
+
 impl TableManager {
     /// Create new [`TableManager`]
     pub fn new(strategy: TableManagerStrategy) -> Self {
@@ -132,7 +141,10 @@ impl TableManager {
 
     /// Given a range, returns all the block-numbers available for a predicate
     pub fn get_blocks_within_range(&self, predicate: Identifier, range: &Range<usize>) -> &[usize] {
-        &self.predicate_to_steps.get(&predicate).unwrap()[self.normalize_range(predicate, range)]
+        match self.predicate_to_steps.get(&predicate) {
+            Some(vec) => &vec[self.normalize_range(predicate, range)],
+            None => &[],
+        }
     }
 
     /// Iterator for all the different variable orders a table is stored in
@@ -146,6 +158,7 @@ impl TableManager {
                 predicate_id,
                 step_range: self.normalize_range(predicate_id, step_range),
             })
+            // TODO: Replace this unwrap with something that returns an empty iterator?
             .unwrap()
             .iter()
     }
@@ -156,17 +169,22 @@ impl TableManager {
         predicate_id: Identifier,
         step_range: &Range<usize>,
         column_order: &ColumnOrder,
-    ) -> Option<TableId> {
-        for (order, id) in self.entries.get(&TableKey {
-            predicate_id,
-            step_range: self.normalize_range(predicate_id, step_range),
-        })? {
+    ) -> Result<TableId, GetTableError> {
+        let orders = self
+            .entries
+            .get(&TableKey {
+                predicate_id,
+                step_range: self.normalize_range(predicate_id, step_range),
+            })
+            .ok_or(GetTableError::NoTable)?;
+
+        for (order, id) in orders {
             if TableManager::orders_equal(column_order, order) {
-                return Some(*id);
+                return Ok(*id);
             }
         }
 
-        None
+        Err(GetTableError::WrongOrder)
     }
 
     fn translate_order(order_from: &ColumnOrder, order_to: &ColumnOrder) -> Vec<usize> {
@@ -216,7 +234,7 @@ impl TableManager {
         }
     }
 
-    ///
+    /// This was for doing the memory management, needs some thinking
     /*
     fn update_status(&mut self, id: TableId) {
         let table_info = &mut self.tables[id];
@@ -415,11 +433,7 @@ impl TableManager {
 
         match &table_info.status {
             TableStatus::InMemory(trie) => trie.row_num() == 0,
-            TableStatus::Derived => {
-                false
-                // self.table_is_empty(*derived_id)
-                // scan_is_empty(&mut self.get_iterator(table_info.plan.as_ref().unwrap()))
-            }
+            TableStatus::Derived => false,
             TableStatus::OnDisk(_) => false, // TODO: Whats the best way to determine this?
             TableStatus::Deleted => true,
         }
@@ -498,17 +512,23 @@ impl TableManager {
                 if let ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) =
                     &leave_node.operation
                 {
-                    let id = match self.get_table(*predicate, absolute_step_range, column_order) {
-                        None => self.add_derived(
-                            *predicate,
-                            absolute_step_range.clone(),
-                            column_order.clone(),
-                            0,
-                        ),
-                        Some(id) => id,
-                    };
+                    match self.get_table(*predicate, absolute_step_range, column_order) {
+                        Err(error) => match error {
+                            GetTableError::NoTable => {}
+                            GetTableError::WrongOrder => {
+                                table_ids.insert(self.add_derived(
+                                    *predicate,
+                                    absolute_step_range.clone(),
+                                    column_order.clone(),
+                                    0,
+                                ));
+                            }
+                        },
 
-                    table_ids.insert(id);
+                        Ok(id) => {
+                            table_ids.insert(id);
+                        }
+                    };
                 } else {
                     unreachable!();
                 }
@@ -554,9 +574,10 @@ impl TableManager {
             ExecutionOperation::Temp(id) => Some(TrieScanEnum::IntervalTrieScan(
                 IntervalTrieScan::new(temp_tries.get(id)?.as_ref()?),
             )),
-            ExecutionOperation::Fetch(predicate, absolute_step_range, variable_order) => {
-                let table_info = &self.tables
-                    [self.get_table(*predicate, absolute_step_range, variable_order)?];
+            ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) => {
+                let table_info = &self.tables[self
+                    .get_table(*predicate, absolute_step_range, column_order)
+                    .ok()?];
                 if let TableStatus::InMemory(trie) = &table_info.status {
                     let interval_trie_scan = IntervalTrieScan::new(trie);
 

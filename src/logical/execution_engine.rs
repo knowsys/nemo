@@ -418,7 +418,7 @@ impl RuleExecutionEngine {
         }
 
         // Existential rules require a lot more computation
-        let is_exisential = rule
+        let is_existential = rule
             .head()
             .map(|a| {
                 for t in a.terms() {
@@ -549,7 +549,7 @@ impl RuleExecutionEngine {
 
         plans.push(body_plan);
 
-        if is_exisential {
+        if is_existential {
             // 1. Compute the join over the head expression
             let mut head_bindings = Vec::new();
             let mut head_join_leaves = Vec::new();
@@ -658,7 +658,7 @@ impl RuleExecutionEngine {
 
             // For datalog rules we can simply start with the body join table
             // For existential rules we need to find matches for the head
-            let projection_base_id = if is_exisential {
+            let projection_base_id = if is_existential {
                 ID_EXISTENTIAL_DIFF
             } else {
                 ID_BODY_JOIN
@@ -766,7 +766,7 @@ mod test {
 
     use crate::{
         logical::{
-            model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
+            model::{Atom, Identifier, Literal, NumericLiteral, Program, Rule, Term, Variable},
             table_manager::{TableManagerStrategy, TableStatus},
         },
         physical::{
@@ -1142,6 +1142,83 @@ mod test {
             assert_eq!(
                 second_col.get_int_column().iter().collect::<Vec<usize>>(),
                 vec![0, 1, 6, 9]
+            );
+        } else {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn body_constants_repeated_vars() {
+        let rule = Rule::new(
+            vec![Atom::new(
+                Identifier(1),
+                vec![Term::Variable(Variable::Universal(Identifier(0)))],
+            )],
+            vec![
+                Literal::Positive(Atom::new(
+                    Identifier(2),
+                    vec![
+                        Term::Variable(Variable::Universal(Identifier(0))),
+                        Term::Variable(Variable::Universal(Identifier(0))),
+                    ],
+                )),
+                Literal::Positive(Atom::new(
+                    Identifier(3),
+                    vec![
+                        Term::Variable(Variable::Universal(Identifier(0))),
+                        Term::NumericLiteral(NumericLiteral::Integer(3)),
+                    ],
+                )),
+            ],
+            vec![],
+        );
+
+        let program = Program::new(None, HashMap::new(), Vec::new(), vec![rule], Vec::new());
+
+        let mut engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
+
+        let a_column_x = make_gict(&[1, 2, 3, 4, 5], &[0]);
+        let a_column_y = make_gict(&[2, 3, 1, 2, 4, 2, 3, 2, 4, 4], &[0, 2, 5, 7, 9]);
+
+        let b_column_x = make_gict(&[1, 2, 3, 4], &[0]);
+        let b_column_y = make_gict(&[3, 2, 3, 2, 2, 3], &[0, 1, 3, 4]);
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 10,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 11,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie_a = Trie::new(schema.clone(), vec![a_column_x, a_column_y]);
+        let trie_b = Trie::new(schema.clone(), vec![b_column_x, b_column_y]);
+        engine.add_trie(Identifier(2), 0..1, vec![0, 1], 0, trie_a);
+        engine.add_trie(Identifier(3), 0..1, vec![0, 1], 0, trie_b);
+
+        engine.execute();
+
+        let no_five = std::panic::catch_unwind(|| engine.table_manager.get_info(5));
+        assert!(no_five.is_err());
+
+        if let TableStatus::InMemory(result_table) = &engine.table_manager.get_info(3).status {
+            let first_col = if let IntervalColumnT::U64(col) = result_table.get_column(0) {
+                col
+            } else {
+                unreachable!()
+            };
+
+            assert_eq!(
+                first_col.get_data_column().iter().collect::<Vec<u64>>(),
+                vec![2, 4]
+            );
+            assert_eq!(
+                first_col.get_int_column().iter().collect::<Vec<usize>>(),
+                vec![0]
             );
         } else {
             unreachable!()
