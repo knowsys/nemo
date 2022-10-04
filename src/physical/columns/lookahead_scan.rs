@@ -1,6 +1,6 @@
 use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell, RangedColumnScanT};
 use crate::physical::{
-    datatypes::{DataTypeName, Field, FloorToUsize},
+    datatypes::{ColumnDataType, DataTypeName},
     tables::{TrieScan, TrieScanEnum},
 };
 use std::{fmt::Debug, mem, ops::Range};
@@ -10,7 +10,7 @@ use std::{fmt::Debug, mem, ops::Range};
 #[derive(Debug)]
 pub struct LookaheadScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     trie_scan: &'a mut TrieScanEnum<'a>,
     current_layer: usize,
@@ -20,7 +20,7 @@ where
 
 impl<'a, T> LookaheadScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field,
+    T: 'a + ColumnDataType,
 {
     /// Constructs a new LookaheadScan for a Column.
     pub fn new(
@@ -101,7 +101,7 @@ where
 
 impl<'a, T> Iterator for LookaheadScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + PartialOrd + Eq,
+    T: 'a + ColumnDataType,
 {
     type Item = T;
 
@@ -120,7 +120,7 @@ where
 
 impl<'a, T> ColumnScan for LookaheadScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + PartialOrd + Eq,
+    T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         self.current = None;
@@ -146,7 +146,7 @@ where
 
 impl<'a, T> RangedColumnScan for LookaheadScan<'a, T>
 where
-    T: 'a + Debug + Copy + Ord + TryFrom<usize> + FloorToUsize + Field + PartialOrd + Eq,
+    T: 'a + ColumnDataType,
 {
     fn pos(&self) -> Option<usize> {
         self.get_current_columnscan().pos()
