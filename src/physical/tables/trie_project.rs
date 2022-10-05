@@ -8,7 +8,9 @@ use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
 
-fn expand_range(column: &IntervalColumnT, range: Range<usize>) -> Range<usize> {
+/// Helper function which, given a continous range, expands it in such a way
+/// that all of the child nodes are covered as well
+pub fn expand_range(column: &IntervalColumnT, range: Range<usize>) -> Range<usize> {
     let start = column.int_bounds(range.start).start;
     let end = if range.end >= column.int_len() {
         column.len()
