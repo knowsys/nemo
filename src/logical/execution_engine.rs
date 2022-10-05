@@ -12,7 +12,7 @@ use crate::{
 use super::{
     execution_plan::{ExecutionNode, ExecutionOperation, ExecutionPlan, ExecutionResult},
     model::{Atom, Identifier, Literal, Program, Rule, Term},
-    table_manager::{ColumnOrder, TableManager, TableManagerStrategy},
+    table_manager::{ColumnOrder, TableManager, TableManagerStrategy, TableStatus},
     ExecutionSeries,
 };
 
@@ -60,6 +60,42 @@ impl RuleExecutionEngine {
             table_manager: TableManager::new(memory_strategy),
             program,
             rule_infos,
+        }
+    }
+
+    /// Collects all parts of a table and returns it
+    pub fn get_final_table(&mut self, predicate: Identifier, order: ColumnOrder) -> Option<&Trie> {
+        let mut union_leaves = Vec::<ExecutionNode>::new();
+        let union_node = self.create_subplan_union(
+            predicate,
+            &(0..self.current_step),
+            &order,
+            &mut union_leaves,
+        );
+        let union_plan = ExecutionPlan {
+            root: union_node,
+            leaves: union_leaves,
+            result: ExecutionResult::Save(
+                predicate,
+                self.current_step..self.current_step + 1,
+                order.clone(),
+                0,
+            ),
+        };
+
+        self.table_manager.execute_series(ExecutionSeries {
+            plans: vec![union_plan],
+        });
+
+        let new_id = self
+            .table_manager
+            .get_table(predicate, &(0..self.current_step), &order)
+            .ok()?;
+
+        if let TableStatus::InMemory(trie) = &self.table_manager.get_info(new_id).status {
+            return Some(trie);
+        } else {
+            return None;
         }
     }
 
