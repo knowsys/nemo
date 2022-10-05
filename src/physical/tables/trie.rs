@@ -70,6 +70,11 @@ impl Trie {
         &self.columns
     }
 
+    /// Return mutable reference to all columns.
+    pub fn columns_mut(&mut self) -> &mut Vec<IntervalColumnT> {
+        &mut self.columns
+    }
+
     /// Return reference to a column given an index.
     ///
     /// # Panics
