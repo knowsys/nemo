@@ -8,9 +8,12 @@ use std::{
     ops::{Add, Mul, Range},
 };
 
+/// Denotes a step in positive or negative direction
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Step<T> {
+pub enum Step<T> {
+    /// Step in positive direction
     Increment(T),
+    /// Step in negative direction
     Decrement(T),
     // the following two are used as alternative to multiplication
     // when multiplication would overflow T
@@ -162,11 +165,23 @@ where
     }
 }
 
+/// Entry in an [`RleColumn`]
 #[derive(Debug, PartialEq)]
-struct RleElement<T> {
+pub struct RleElement<T> {
     value: T,
     length: NonZeroUsize,
     increment: Step<T>,
+}
+
+impl<T> RleElement<T> {
+    /// Creates a new [`RleElement`]
+    pub fn new(value: T, length: NonZeroUsize, increment: Step<T>) -> Self {
+        Self {
+            value,
+            length,
+            increment,
+        }
+    }
 }
 
 /// Implementation of [`ColumnBuilder`] that allows the use of incremental run length encoding.
@@ -302,7 +317,7 @@ where
     T: ColumnDataType + Default,
 {
     /// Constructs a new RleColumn from a vector of RleElements.
-    fn from_rle_elements(elements: Vec<RleElement<T>>) -> RleColumn<T> {
+    pub fn from_rle_elements(elements: Vec<RleElement<T>>) -> RleColumn<T> {
         let mut values: Vec<T> = vec![];
         let mut end_indices: Vec<NonZeroUsize> = vec![];
         let mut increments: Vec<Step<T>> = vec![];

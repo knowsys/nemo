@@ -6,7 +6,8 @@ use std::fmt::Debug;
 const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5;
 
 // The average minimum length of the elements in the incremental RLE
-const TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS: usize = 3;
+// TODO: Since this is not fully implemented yet; set it to a high value
+const TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS: usize = 2000;
 
 #[derive(Debug, PartialEq)]
 enum ColumnBuilderType<T> {
