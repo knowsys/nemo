@@ -440,16 +440,16 @@ impl TableManager {
     }
 
     /// Estimate the potential space the materialization of a [`ExecutionPlan`] would take
-    pub fn estimate_space(&self, plan: &ExecutionNode) -> u64 {
+    pub fn estimate_space(plan: &ExecutionNode) -> u64 {
         match &plan.operation {
             // TODO:
             ExecutionOperation::Fetch(_, _, _) => 0,
             // TODO: This is tricky
             ExecutionOperation::Join(_subtables, _bindings) => 0,
             ExecutionOperation::Union(subtables) => {
-                subtables.iter().map(|s| self.estimate_space(s)).sum()
+                subtables.iter().map(Self::estimate_space).sum()
             }
-            ExecutionOperation::Minus(subtables) => self.estimate_space(&subtables[0]),
+            ExecutionOperation::Minus(subtables) => Self::estimate_space(&subtables[0]),
             ExecutionOperation::Project(_schema_sorting) => {
                 // Should be easy to calculate
                 0
