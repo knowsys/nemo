@@ -126,7 +126,6 @@ pub fn trie_add_duplicates(mut trie: Trie, indices: &[Vec<usize>]) -> Trie {
         for &index in current_indices.iter().rev() {
             if let IntervalColumnT::U64(reference_column) = trie.get_column(index) {
                 let reference_data = reference_column.get_data_column();
-
             }
         }
     }
@@ -151,7 +150,7 @@ mod test {
     fn scan_next(int_scan: &mut IntervalTrieScan) -> Option<u64> {
         if let RangedColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
             rcs.next()
-        } else {_mut
+        } else {
             panic!("type should be u64");
         }
     }
