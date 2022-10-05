@@ -382,11 +382,6 @@ where
         Self(Rc::new(cs))
     }
 
-    /// Clones the `ColumnScanRc`.
-    pub fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-
     /// Forward `next` to the underlying [`ColumnScanCell`].
     pub fn next(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
         self.0.next()
@@ -443,6 +438,15 @@ where
     /// Forward `set_active_scans` to the underlying [`ColumnScanCell`].
     pub fn set_active_scans(&self, active_scans: Vec<usize>) {
         self.0.set_active_scans(active_scans);
+    }
+}
+
+impl<'a, T> Clone for ColumnScanRc<'a, T>
+where
+    T: 'a + ColumnDataType,
+{
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
     }
 }
 
