@@ -19,11 +19,13 @@ fn main() {
     eprintln!("{:?}", program);
 
     let facts: Vec<&Fact> = program.facts().collect();
-    let preds: HashSet<Identifier> = facts.iter().map(|f| f.0.predicate()).collect();
+    let fact_preds: HashSet<(Identifier, usize)> = facts.iter().map(|f| (f.0.predicate(), f.0.terms.len())).collect();
+    let head_preds: HashSet<(Identifier, usize)> = program.rules().flat_map(|rule| rule.head().map(|atom| (atom.predicate(), atom.terms.len()))).collect();
+    let all_preds: HashSet<(Identifier, usize)> = fact_preds.union(&head_preds).copied().collect();
 
-    let tries: Vec<(Identifier, Trie)> = preds
+    let tries: Vec<(Identifier, Trie)> = fact_preds
         .iter()
-        .map(|p| {
+        .map(|(p, _)| {
             let pred_facts: Vec<&Fact> = facts
                 .iter()
                 .copied()
@@ -64,7 +66,8 @@ fn main() {
         })
         .collect();
 
-    for (_, trie) in &tries {
+    for (pred, trie) in &tries {
+        eprintln!("{:?}", pred);
         eprintln!("{}", trie);
     }
 
@@ -76,11 +79,13 @@ fn main() {
 
     exec_engine.execute();
 
-    println!("{:?}", exec_engine.table_manager.get_info(0));
-    println!("{:?}", exec_engine.table_manager.get_info(1));
-    println!("{:?}", exec_engine.table_manager.get_info(2));
-    println!("{:?}", exec_engine.table_manager.get_info(3));
-    println!("{:?}", exec_engine.table_manager.get_info(4));
-    println!("{:?}", exec_engine.table_manager.get_info(5));
-    println!("{:?}", exec_engine.table_manager.get_info(6));
+    println!("Results:");
+    for (pred, arity) in all_preds {
+        println!("{:?}", pred);
+        let trie_option = exec_engine.get_final_table(pred, (0..arity).collect());
+
+        if let Some(trie) = trie_option {
+            println!("{}", trie);
+        }
+    }
 }
