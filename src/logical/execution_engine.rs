@@ -75,12 +75,7 @@ impl RuleExecutionEngine {
         let union_plan = ExecutionPlan {
             root: union_node,
             leaves: union_leaves,
-            result: ExecutionResult::Save(
-                predicate,
-                self.current_step..self.current_step + 1,
-                order.clone(),
-                0,
-            ),
+            result: ExecutionResult::Save(predicate, 0..self.current_step, order.clone(), 0),
         };
 
         self.table_manager.execute_series(ExecutionSeries {
