@@ -12,7 +12,7 @@ use crate::{
 use super::{
     execution_plan::{ExecutionNode, ExecutionOperation, ExecutionPlan, ExecutionResult},
     model::{Atom, Identifier, Literal, Program, Rule, Term},
-    table_manager::{ColumnOrder, TableManager, TableManagerStrategy, TableStatus},
+    table_manager::{self, ColumnOrder, TableManager, TableManagerStrategy, TableStatus},
     ExecutionSeries,
 };
 
@@ -39,6 +39,13 @@ pub struct RuleExecutionEngine {
 impl RuleExecutionEngine {
     /// Create new [`RuleExecutionEngine`]
     pub fn new(memory_strategy: TableManagerStrategy, mut program: Program) -> Self {
+        let mut table_manager = TableManager::new(memory_strategy);
+
+        // Handle all datasource declaratiokns
+        for ((predicate, arity), source) in program.sources() {
+            table_manager.add_edb(source.clone(), predicate, (0..arity).collect(), 0);
+        }
+
         // First, normalize all the rules in the program
         program
             .rules
@@ -57,7 +64,7 @@ impl RuleExecutionEngine {
 
         Self {
             current_step: 1,
-            table_manager: TableManager::new(memory_strategy),
+            table_manager,
             program,
             rule_infos,
         }
@@ -171,7 +178,7 @@ impl RuleExecutionEngine {
         }
     }
 
-    /// Add trie to the table manager; useful for testing
+    /// Add trie to the table manager
     pub fn add_trie(
         &mut self,
         predicate: Identifier,

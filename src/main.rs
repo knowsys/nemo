@@ -19,8 +19,14 @@ fn main() {
     eprintln!("{:?}", program);
 
     let facts: Vec<&Fact> = program.facts().collect();
-    let fact_preds: HashSet<(Identifier, usize)> = facts.iter().map(|f| (f.0.predicate(), f.0.terms.len())).collect();
-    let head_preds: HashSet<(Identifier, usize)> = program.rules().flat_map(|rule| rule.head().map(|atom| (atom.predicate(), atom.terms.len()))).collect();
+    let fact_preds: HashSet<(Identifier, usize)> = facts
+        .iter()
+        .map(|f| (f.0.predicate(), f.0.terms.len()))
+        .collect();
+    let head_preds: HashSet<(Identifier, usize)> = program
+        .rules()
+        .flat_map(|rule| rule.head().map(|atom| (atom.predicate(), atom.terms.len())))
+        .collect();
     let all_preds: HashSet<(Identifier, usize)> = fact_preds.union(&head_preds).copied().collect();
 
     let tries: Vec<(Identifier, Trie)> = fact_preds
@@ -66,12 +72,12 @@ fn main() {
         })
         .collect();
 
-    for (pred, trie) in &tries {
-        eprintln!("{:?}", pred);
-        eprintln!("{}", trie);
-    }
-
     let mut exec_engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
+
+    // for (pred, trie) in &tries {
+    //     eprintln!("{:?}", pred);
+    //     eprintln!("{}", trie);
+    // }
 
     for (pred, trie) in tries {
         exec_engine.add_trie(pred, 0..1, (0..trie.schema().arity()).collect(), 0, trie);
