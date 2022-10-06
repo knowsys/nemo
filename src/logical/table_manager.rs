@@ -234,7 +234,34 @@ impl TableManager {
             } else if let TableStatus::OnDisk(source) = &info.status {
                 match source {
                     DataSource::CsvFile(file) => {
-                        // let row_table = read(datatypes, csv_reader).unwrap();
+                        // TODO: not everything is u64 :D
+                        let datatypes: Vec<Option<DataTypeName>> =
+                            (0..info.column_order.len()).map(|_| None).collect();
+                        let mut reader = csv::Reader::from_path(file.as_path()).unwrap();
+
+                        let col_table = read(&datatypes, &mut reader).unwrap();
+
+                        let schema = TrieSchema::new(
+                            (0..col_table.len())
+                                .map(|i| TrieSchemaEntry {
+                                    label: i,
+                                    datatype: DataTypeName::U64,
+                                })
+                                .collect(),
+                        );
+
+                        let trie = Trie::from_cols(schema, col_table);
+
+                        // TODO: is the reordering necessary here?
+                        // (I tried this because of a runtime error but it still does not work)
+                        let project_iter = TrieProject::new(
+                            &trie,
+                            info.column_order.clone(),
+                        );
+
+                        let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+
+                        self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
                     }
                     DataSource::RdfFile(_) => todo!(),
                     DataSource::SparqlQuery(_) => todo!(),

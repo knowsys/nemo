@@ -163,7 +163,7 @@ impl<'a> RuleParser<'a> {
                 ),
             )(input)?;
 
-            let (remainder, datasource) = preceded(
+            let (remainder, datasource) = delimited(
                 terminated(tag(":"), multispace1),
                 alt((
                     map(
@@ -202,6 +202,7 @@ impl<'a> RuleParser<'a> {
                         },
                     ),
                 )),
+                self.parse_dot(),
             )(remainder)?;
 
             let source = DataSourceDeclaration::new_validated(predicate, arity, datasource?, self)?;

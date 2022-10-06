@@ -1,7 +1,8 @@
 //! Represents different data-import methods
 
 use crate::error::Error;
-use crate::physical::datatypes::{data_value::VecT, DataTypeName};
+use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
+use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use csv::Reader;
 
 /// Imports a csv file
@@ -13,16 +14,24 @@ pub fn read<T>(
 where
     T: std::io::Read,
 {
+    let mut dictionary = PrefixedStringDictionary::init();
     let mut result: Vec<Option<VecT>> = Vec::new();
 
     datatypes.iter().for_each(|dtype| {
-        result.push(dtype.and_then(|dt| {
-            Some(match dt {
-                DataTypeName::U64 => VecT::U64(Vec::new()),
-                DataTypeName::Float => VecT::Float(Vec::new()),
-                DataTypeName::Double => VecT::Double(Vec::new()),
-            })
-        }));
+        result.push(
+            dtype
+                .map(|dt| match dt {
+                    DataTypeName::U64 => VecT::U64(Vec::new()),
+                    DataTypeName::Float => VecT::Float(Vec::new()),
+                    DataTypeName::Double => VecT::Double(Vec::new()),
+                })
+                .or_else(|| {
+                    // TODO: not sure if we actually want to handle everything as string which is not specified
+                    // but let's just do this on the playground branch for now
+                    // (we use u64 with a dictionary for strings)
+                    Some(VecT::U64(Vec::new()))
+                }),
+        );
     });
     csv_reader.records().for_each(|rec| {
         if let Ok(row) = rec {
@@ -44,6 +53,15 @@ where
                             }
                         }
                     } else {
+                        // TODO: not sure if we actually want to handle everything as string which is not specified
+                        // but let's just do this on the playground branch for now
+
+                        let u64_equivalent =
+                            DataValueT::U64(dictionary.add(item.to_string()).try_into().unwrap());
+                        if let Some(result_col) = result[idx].as_mut() {
+                            result_col.push(&u64_equivalent);
+                        }
+
                         Ok(())
                     }
                 })
