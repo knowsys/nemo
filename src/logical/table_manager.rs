@@ -234,7 +234,7 @@ impl TableManager {
             } else if let TableStatus::OnDisk(source) = &info.status {
                 match source {
                     DataSource::CsvFile(file) => {
-                        let row_table = read(datatypes, csv_reader).unwrap();
+                        // let row_table = read(datatypes, csv_reader).unwrap();
                     }
                     DataSource::RdfFile(_) => todo!(),
                     DataSource::SparqlQuery(_) => todo!(),
