@@ -106,7 +106,7 @@ pub fn pname_local(input: &str) -> IntermediateResult<&str> {
     recognize(pair(
         alt((pn_chars_u, tag(":"), digit, plx)),
         opt(separated_list0(
-            many0(tag(".")),
+            many1(tag(".")),
             many0(alt((pn_chars, tag(":"), plx))),
         )),
     ))(input)
