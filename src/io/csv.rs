@@ -1,28 +1,37 @@
 //! Represents different data-import methods
 
 use crate::error::Error;
-use crate::physical::datatypes::{data_value::VecT, DataTypeName};
+use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
+use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use csv::Reader;
 
 /// Imports a csv file
 /// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference
 pub fn read<T>(
-    datatypes: &[Option<DataTypeName>],
+    datatypes: &[Option<DataTypeName>], // If no datatype (i.e. None) is specified, we treat the column as string (for now); TODO: discuss this
     csv_reader: &mut Reader<T>,
 ) -> Result<Vec<VecT>, Error>
 where
     T: std::io::Read,
 {
+    let mut dictionary = PrefixedStringDictionary::init();
     let mut result: Vec<Option<VecT>> = Vec::new();
 
     datatypes.iter().for_each(|dtype| {
-        result.push(dtype.and_then(|dt| {
-            Some(match dt {
-                DataTypeName::U64 => VecT::U64(Vec::new()),
-                DataTypeName::Float => VecT::Float(Vec::new()),
-                DataTypeName::Double => VecT::Double(Vec::new()),
-            })
-        }));
+        result.push(
+            dtype
+                .map(|dt| match dt {
+                    DataTypeName::U64 => VecT::U64(Vec::new()),
+                    DataTypeName::Float => VecT::Float(Vec::new()),
+                    DataTypeName::Double => VecT::Double(Vec::new()),
+                })
+                .or_else(|| {
+                    // TODO: not sure if we actually want to handle everything as string which is not specified
+                    // but let's just do this on for now
+                    // (we use u64 with a dictionary for strings)
+                    Some(VecT::U64(Vec::new()))
+                }),
+        );
     });
     csv_reader.records().for_each(|rec| {
         if let Ok(row) = rec {
@@ -44,6 +53,16 @@ where
                             }
                         }
                     } else {
+                        // TODO: not sure if we actually want to handle everything as string which is not specified
+                        // but let's just do this for now
+                        // (we use u64 with a dictionary for strings)
+
+                        let u64_equivalent =
+                            DataValueT::U64(dictionary.add(item.to_string()).try_into().unwrap());
+                        if let Some(result_col) = result[idx].as_mut() {
+                            result_col.push(&u64_equivalent);
+                        }
+
                         Ok(())
                     }
                 })
