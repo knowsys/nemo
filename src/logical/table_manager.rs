@@ -4,6 +4,7 @@ use super::execution_plan::{ExecutionNode, ExecutionOperation, ExecutionResult};
 use super::model::{DataSource, Identifier};
 use super::ExecutionSeries;
 
+use crate::io::csv::read;
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::tables::{
     materialize, IntervalTrieScan, Table, Trie, TrieDifference, TrieJoin, TrieProject, TrieScan,
@@ -230,6 +231,14 @@ impl TableManager {
                 let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
 
                 self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
+            } else if let TableStatus::OnDisk(source) = &info.status {
+                match source {
+                    DataSource::CsvFile(file) => {
+                        let row_table = read(datatypes, csv_reader).unwrap();
+                    }
+                    DataSource::RdfFile(_) => todo!(),
+                    DataSource::SparqlQuery(_) => todo!(),
+                }
             }
         }
     }
