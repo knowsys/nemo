@@ -5,13 +5,15 @@ use stage2::logical::table_manager::TableManagerStrategy;
 use stage2::physical::datatypes::{DataTypeName, DataValueT};
 use stage2::physical::tables::{Table, TableSchema, Trie, TrieSchema, TrieSchemaEntry};
 use std::collections::HashSet;
+use std::fs::read_to_string;
 use std::io::{stdin, Read};
 
 fn main() {
     env_logger::init();
 
-    let mut input: String = "".to_string();
-    stdin().read_to_string(&mut input).unwrap();
+    // let mut input: String = "".to_string();
+    // stdin().read_to_string(&mut input).unwrap();
+    let input = read_to_string("test-files/galen-el-without-constants.rls").unwrap();
     let parser = RuleParser::new();
     let mut parser_function = parser.parse_program();
     let program = parser_function(&input).unwrap().1;
@@ -91,7 +93,7 @@ fn main() {
         let trie_option = exec_engine.get_final_table(pred, (0..arity).collect());
 
         if let Some(trie) = trie_option {
-            println!("{}", trie);
+            println!("{}", trie.row_num());
         }
     }
 }
