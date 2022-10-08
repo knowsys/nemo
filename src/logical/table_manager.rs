@@ -10,8 +10,10 @@ use crate::physical::tables::{
     materialize, IntervalTrieScan, Table, Trie, TrieDifference, TrieJoin, TrieProject, TrieScan,
     TrieScanEnum, TrieSchema, TrieSchemaEntry, TrieSelectEqual, TrieSelectValue, TrieUnion,
 };
+use csv::ReaderBuilder;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::fs::File;
 use std::ops::Range;
 use superslice::*;
 
@@ -126,24 +128,25 @@ impl TableManager {
         }
     }
 
-    fn normalize_range(&self, predicate: Identifier, range: &Range<usize>) -> Range<usize> {
+    fn normalize_range(&self, predicate: Identifier, range: &Range<usize>) -> Option<Range<usize>> {
         // debug_assert!(range.end > 0);
 
-        let step_vec = self
-            .predicate_to_steps
-            .get(&predicate)
-            .expect("Just don't put unknown predicates here");
+        let step_vec = self.predicate_to_steps.get(&predicate)?;
 
         let left = step_vec.lower_bound(&range.start);
         let right = step_vec.lower_bound(&range.end);
 
-        left..right
+        Some(left..right)
     }
 
     /// Given a range, returns all the block-numbers available for a predicate
     pub fn get_blocks_within_range(&self, predicate: Identifier, range: &Range<usize>) -> &[usize] {
         match self.predicate_to_steps.get(&predicate) {
-            Some(vec) => &vec[self.normalize_range(predicate, range)],
+            Some(vec) => {
+                &vec[self
+                    .normalize_range(predicate, range)
+                    .expect("We are in the some case")]
+            }
             None => &[],
         }
     }
@@ -153,15 +156,18 @@ impl TableManager {
         &self,
         predicate_id: Identifier,
         step_range: &Range<usize>,
-    ) -> impl Iterator<Item = &(ColumnOrder, TableId)> {
-        self.entries
-            .get(&TableKey {
-                predicate_id,
-                step_range: self.normalize_range(predicate_id, step_range),
-            })
-            // TODO: Replace this unwrap with something that returns an empty iterator?
-            .unwrap()
-            .iter()
+    ) -> &[(ColumnOrder, TableId)] {
+        if let Some(step_range) = self.normalize_range(predicate_id, step_range) {
+            return self
+                .entries
+                .get(&TableKey {
+                    predicate_id,
+                    step_range,
+                })
+                .map_or(&[], |p| p);
+        }
+
+        &[]
     }
 
     /// Searches for table given predicate, step range and variable order
@@ -175,7 +181,9 @@ impl TableManager {
             .entries
             .get(&TableKey {
                 predicate_id,
-                step_range: self.normalize_range(predicate_id, step_range),
+                step_range: self
+                    .normalize_range(predicate_id, step_range)
+                    .ok_or(GetTableError::NoTable)?,
             })
             .ok_or(GetTableError::NoTable)?;
 
@@ -198,18 +206,59 @@ impl TableManager {
         result
     }
 
-    fn find_materialized_table(
-        &self,
-        key: &TableKey,
-        id: TableId,
-    ) -> Option<(&ColumnOrder, &Trie)> {
-        for (base_order, base_id) in self.entries.get(key).unwrap() {
+    fn materialize_on_disk(source: &DataSource, order: &ColumnOrder) -> Trie {
+        match source {
+            DataSource::CsvFile(file) => {
+                // TODO: not everything is u64 :D
+                let datatypes: Vec<Option<DataTypeName>> = (0..order.len()).map(|_| None).collect();
+
+                // let mut csv_reader = csv::Reader::from_path(file.as_path()).unwrap();
+                let mut reader = ReaderBuilder::new()
+                    .delimiter(b',')
+                    .has_headers(false)
+                    .from_reader(File::open(file.as_path()).unwrap());
+
+                let col_table = read(&datatypes, &mut reader).unwrap();
+
+                let schema = TrieSchema::new(
+                    (0..col_table.len())
+                        .map(|i| TrieSchemaEntry {
+                            label: i,
+                            datatype: DataTypeName::U64,
+                        })
+                        .collect(),
+                );
+
+                let trie = Trie::from_cols(schema, col_table);
+                return trie;
+                // TODO: is the reordering necessary here?
+                // (I tried this because of a runtime error but it still does not work)
+                // let project_iter = TrieProject::new(
+                //     &trie,
+                //     info.column_order.clone(),
+                // );
+
+                // let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+
+                // self.tables[table_id].status = TableStatus::InMemory(trie);
+            }
+            DataSource::RdfFile(_) => todo!(),
+            DataSource::SparqlQuery(_) => todo!(),
+        }
+    }
+
+    fn find_materialized_table(&self, key: &TableKey, id: TableId) -> Option<TableId> {
+        for (_, base_id) in self.entries.get(key).unwrap() {
             if *base_id == id {
                 continue;
             }
 
-            if let TableStatus::InMemory(base_trie) = &self.tables[*base_id].status {
-                return Some((base_order, base_trie));
+            let status = &self.tables[*base_id].status;
+
+            if matches!(status, TableStatus::InMemory(_))
+                || matches!(status, TableStatus::OnDisk(_))
+            {
+                return Some(*base_id);
             }
         }
 
@@ -219,53 +268,34 @@ impl TableManager {
     fn materialize_required_tables(&mut self, tables: &HashSet<TableId>) {
         for &table_id in tables {
             let info = &self.tables[table_id];
+            let info_order = info.column_order.clone(); // TODO: Clones because of borrow checker
             if let TableStatus::Derived = info.status {
-                let (base_order, base_trie) =
-                    self.find_materialized_table(&info.key, table_id).unwrap();
+                let base_id = self.find_materialized_table(&info.key, table_id).unwrap();
+                let base_order = &self.tables[base_id].column_order.clone(); // TODO: Clones because of borrow checker
+                let base_trie = if let TableStatus::InMemory(trie) = &self.tables[base_id].status {
+                    trie
+                } else if let TableStatus::OnDisk(source) = &self.tables[base_id].status {
+                    let trie = TableManager::materialize_on_disk(source, &info.column_order);
+                    self.tables[table_id].status = TableStatus::InMemory(trie);
+                    if let TableStatus::InMemory(trie) = &self.tables[table_id].status {
+                        trie
+                    } else {
+                        unreachable!()
+                    }
+                } else {
+                    unreachable!()
+                };
 
                 let project_iter = TrieProject::new(
                     base_trie,
-                    TableManager::translate_order(base_order, &info.column_order),
+                    TableManager::translate_order(base_order, &info_order),
                 );
 
                 let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
-
                 self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
             } else if let TableStatus::OnDisk(source) = &info.status {
-                match source {
-                    DataSource::CsvFile(file) => {
-                        // TODO: not everything is u64 :D
-                        let datatypes: Vec<Option<DataTypeName>> =
-                            (0..info.column_order.len()).map(|_| None).collect();
-                        let mut reader = csv::Reader::from_path(file.as_path()).unwrap();
-
-                        let col_table = read(&datatypes, &mut reader).unwrap();
-
-                        let schema = TrieSchema::new(
-                            (0..col_table.len())
-                                .map(|i| TrieSchemaEntry {
-                                    label: i,
-                                    datatype: DataTypeName::U64,
-                                })
-                                .collect(),
-                        );
-
-                        let trie = Trie::from_cols(schema, col_table);
-
-                        // TODO: is the reordering necessary here?
-                        // (I tried this because of a runtime error but it still does not work)
-                        let project_iter = TrieProject::new(
-                            &trie,
-                            info.column_order.clone(),
-                        );
-
-                        let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
-
-                        self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
-                    }
-                    DataSource::RdfFile(_) => todo!(),
-                    DataSource::SparqlQuery(_) => todo!(),
-                }
+                let trie = TableManager::materialize_on_disk(source, &info.column_order);
+                self.tables[table_id].status = TableStatus::InMemory(trie);
             }
         }
     }
@@ -363,6 +393,12 @@ impl TableManager {
             });
         }
 
+        // For debugging, check if arity is equal
+        // TODO: Remove this
+        if table_list.len() > 0 {
+            debug_assert!(table_list[0].0.len() == order.len());
+        }
+
         table_list.push((order, new_id));
 
         new_id
@@ -387,13 +423,22 @@ impl TableManager {
             step_range: (0..1),
         };
 
+        let trie = TableManager::materialize_on_disk(&data_source, &column_order);
         self.tables.push(TableInfo {
-            status: TableStatus::OnDisk(data_source),
+            status: TableStatus::InMemory(trie),
             column_order: column_order.clone(),
             key: key.clone(),
             priority,
             space: 0, //TODO: How to do this
         });
+
+        // self.tables.push(TableInfo {
+        //     status: TableStatus::OnDisk(data_source),
+        //     column_order: column_order.clone(),
+        //     key: key.clone(),
+        //     priority,
+        //     space: 0, //TODO: How to do this
+        // });
 
         self.add_table_helper(key, column_order, priority)
     }
@@ -436,7 +481,7 @@ impl TableManager {
 
         let key = TableKey {
             predicate_id: predicate,
-            step_range: self.normalize_range(predicate, &absolute_step_range),
+            step_range: self.normalize_range(predicate, &absolute_step_range)?,
         };
         self.tables.push(TableInfo {
             status: TableStatus::InMemory(trie),
@@ -522,7 +567,9 @@ impl TableManager {
     ) -> TableId {
         let key = TableKey {
             predicate_id: predicate,
-            step_range: self.normalize_range(predicate, &absolute_step_range),
+            step_range: self
+                .normalize_range(predicate, &absolute_step_range)
+                .expect("If its derived then there must already exist one"),
         };
 
         self.tables.push(TableInfo {
