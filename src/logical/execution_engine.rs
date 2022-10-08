@@ -196,6 +196,8 @@ impl RuleExecutionEngine {
         let mut without_derivation: usize = 0;
         let mut current_rule_index: usize = 0;
         while without_derivation < self.program.rules.len() {
+            println!("Step: {}, Rule: {}", self.current_step, current_rule_index);
+
             let promising_orders = &self.rule_infos[current_rule_index].promising_orders;
 
             // Compute all possible plans from orders
@@ -286,7 +288,7 @@ impl RuleExecutionEngine {
             leaves,
         ));
 
-        for (atom_index, atom) in atoms.iter().skip(mid + 1).enumerate() {
+        for (atom_index, atom) in atoms.iter().enumerate().skip(mid + 1) {
             subplans.push(self.create_subplan_union(
                 atom.predicate(),
                 &(0..last_rule_step),
