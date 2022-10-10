@@ -58,6 +58,8 @@ where
 
     /// Constructs a new [`GenericColumnScan`] for a Column.
     pub fn new(column: &'a Col) -> Self {
+        debug_assert!(column.len() > 0);
+
         Self {
             _t: PhantomData,
             column,
@@ -69,6 +71,8 @@ where
     /// Constructs a new [`GenericColumnScan`] for a Column, narrowed
     /// to the given interval.
     pub fn narrowed(column: &'a Col, interval: Range<usize>) -> Self {
+        debug_assert!(interval.end > interval.start);
+
         let result = Self {
             _t: PhantomData,
             column,
@@ -88,6 +92,8 @@ where
 
     /// Lifts any restriction of the interval to some interval.
     pub fn widen(&mut self) -> &mut Self {
+        debug_assert!(self.column.len() > 0);
+
         self.interval = 0..self.column.len();
         self.pos = None;
         self
@@ -188,6 +194,8 @@ where
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
+        debug_assert!(interval.end > interval.start);
+
         self.interval = interval;
         self.pos = None;
         self.validate_interval();
