@@ -17,16 +17,21 @@ use super::{iri, rfc5234::digit, turtle::hex, types::IntermediateResult};
 pub enum Name<'a> {
     IriReference(&'a str),
     PrefixedName { prefix: &'a str, local: &'a str },
+    BlankNode(&'a str),
 }
 
 impl<'a> Name<'a> {
     pub fn as_iri_reference(&'a self) -> Option<&'a str> {
         match *self {
             Name::IriReference(iri) => Some(iri),
-            Name::PrefixedName {
-                prefix: _,
-                local: _,
-            } => None,
+            _ => None,
+        }
+    }
+
+    pub fn as_blank_node_label(&'a self) -> Option<&'a str> {
+        match *self {
+            Name::BlankNode(label) => Some(label),
+            _ => None,
         }
     }
 }
@@ -36,6 +41,7 @@ impl Display for Name<'_> {
         match *self {
             Name::IriReference(iri) => write!(f, "{iri}"),
             Name::PrefixedName { prefix, local } => write!(f, "{prefix}:{local}"),
+            Name::BlankNode(label) => write!(f, "_:{label}"),
         }
     }
 }
@@ -154,4 +160,18 @@ pub fn prefixed_name(input: &str) -> IntermediateResult<Name> {
         pname_ln,
         map(pname_ns, |prefix| Name::PrefixedName { prefix, local: "" }),
     ))(input)
+}
+
+#[traced("parser::sparql")]
+pub fn blank_node_label(input: &str) -> IntermediateResult<Name> {
+    preceded(
+        tag("_:"),
+        map(
+            recognize(pair(
+                alt((pn_chars_u, digit)),
+                opt(separated_list0(many1(tag(".")), many0(pn_chars))),
+            )),
+            Name::BlankNode,
+        ),
+    )(input)
 }
