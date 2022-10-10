@@ -14,6 +14,7 @@ use nom::{
 use super::{iri, rfc5234::digit, turtle::hex, types::IntermediateResult};
 
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)] // `PrefixedName` comes from the SPARQL grammar
 pub enum Name<'a> {
     IriReference(&'a str),
     PrefixedName { prefix: &'a str, local: &'a str },
