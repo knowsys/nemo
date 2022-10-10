@@ -11,7 +11,7 @@ pub(super) type IntermediateResult<'a, T> = IResult<&'a str, T, Error>;
 pub type ParseResult<'a, T> = Result<T, Error>;
 
 /// Errors that can occur during parsing.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum ParseError {
     /// A syntax error. Note that we cannot take [&'a str] here, as
     /// bounds on [std::error::Error] require ['static] lifetime.

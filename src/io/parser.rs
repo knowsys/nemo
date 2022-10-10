@@ -103,7 +103,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a base declaration.
-    fn parse_base(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
+    fn parse_base(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
         traced("parse_base", move |input| {
             let (remainder, base) = delimited(
                 terminated(tag("@base"), multispace1),
@@ -112,9 +112,9 @@ impl<'a> RuleParser<'a> {
             )(input)?;
 
             log::debug!(target: "parser", r#"parse_base: set new base: "{base}""#);
-            *self.base.borrow_mut() = Some(base);
+            *self.base.borrow_mut() = Some(&base);
 
-            Ok((remainder, base))
+            Ok((remainder, Identifier(self.intern_term(base.to_owned()))))
         })
     }
 
@@ -142,7 +142,7 @@ impl<'a> RuleParser<'a> {
         &'a self,
     ) -> impl FnMut(&'a str) -> IntermediateResult<DataSourceDeclaration> {
         traced("parse_source", move |input| {
-            let (remainder, (predicate_name, arity)) = preceded(
+            let (remainder, (predicate, arity)) = preceded(
                 terminated(tag("@source"), multispace1),
                 pair(
                     self.parse_predicate_name(),
@@ -153,8 +153,6 @@ impl<'a> RuleParser<'a> {
                     ),
                 ),
             )(input)?;
-
-            let predicate = Identifier(self.intern_term(predicate_name.to_owned()));
 
             let (remainder, datasource) = preceded(
                 terminated(tag(":"), multispace1),
@@ -187,7 +185,8 @@ impl<'a> RuleParser<'a> {
                         ),
                         |(endpoint, projection, query)| {
                             DataSource::sparql_query(SparqlQuery::new(
-                                endpoint.to_owned(),
+                                self.resolve_term(endpoint.0)
+                                    .expect("should have been interned during parsing"),
                                 projection.to_owned(),
                                 query.to_owned(),
                             ))
@@ -219,7 +218,7 @@ impl<'a> RuleParser<'a> {
     /// Parse a fact.
     pub fn parse_fact(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Fact> {
         traced("parse_fact", move |input| {
-            let (remainder, (predicate_name, terms)) = terminated(
+            let (remainder, (predicate, terms)) = terminated(
                 pair(
                     self.parse_predicate_name(),
                     delimited(
@@ -231,20 +230,35 @@ impl<'a> RuleParser<'a> {
                 self.parse_dot(),
             )(input)?;
 
+            let predicate_name = self
+                .resolve_term(predicate.0)
+                .expect("should have been interned during parsing");
             log::trace!(target: "parser", "found fact {predicate_name}({terms:?})");
-            let predicate = Identifier(self.intern_term(predicate_name.to_owned()));
 
             Ok((remainder, Fact(Atom::new(predicate, terms))))
         })
     }
 
     /// Parse an IRI.
-    pub fn parse_iri(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
-        traced("parse_iri", alt((sparql::iriref, sparql::prefixed_name)))
+    pub fn parse_iri(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
+        move |input| {
+            let (remainder, name) = traced(
+                "parse_iri",
+                alt((
+                    map(sparql::iriref, sparql::Name::IriReference),
+                    sparql::prefixed_name,
+                )),
+            )(input)?;
+
+            Ok((
+                remainder,
+                Identifier(self.intern_term(self.resolve_prefixed_name(name)?)),
+            ))
+        }
     }
 
     /// Parse a predicate name.
-    pub fn parse_predicate_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
+    pub fn parse_predicate_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
         traced(
             "parse_predicate_name",
             alt((self.parse_iri(), self.parse_pred_name())),
@@ -252,8 +266,12 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a PREDNAME, i.e., a predicate name that is not an IRI.
-    pub fn parse_pred_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
-        traced("parse_pred_name", recognize(pair(alpha1, alphanumeric0)))
+    pub fn parse_pred_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
+        traced("parse_pred_name", move |input| {
+            let (remainder, name) = recognize(pair(alpha1, alphanumeric0))(input)?;
+
+            Ok((remainder, Identifier(self.intern_term(name.to_owned()))))
+        })
     }
 
     /// Parse a ground term.
@@ -261,9 +279,7 @@ impl<'a> RuleParser<'a> {
         traced(
             "parse_ground_term",
             alt((
-                map(self.parse_iri(), |iri| {
-                    Term::Constant(Identifier(self.intern_term(iri.to_owned())))
-                }),
+                map(self.parse_iri(), Term::Constant),
                 map(turtle::numeric_literal, Term::NumericLiteral),
                 map(turtle::rdf_literal, move |literal| {
                     Term::RdfLiteral(self.intern_rdf_literal(literal))
@@ -295,15 +311,17 @@ impl<'a> RuleParser<'a> {
     /// Parse an atom.
     pub fn parse_atom(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Atom> {
         traced("parse_atom", move |input| {
-            let (remainder, predicate_name) = self.parse_predicate_name()(input)?;
+            let (remainder, predicate) = self.parse_predicate_name()(input)?;
             let (remainder, terms) = delimited(
                 self.parse_open_parenthesis(),
                 separated_list1(self.parse_comma(), self.parse_term()),
                 self.parse_close_parenthesis(),
             )(remainder)?;
 
+            let predicate_name = self
+                .resolve_term(predicate.0)
+                .expect("term should have been interned during parsing");
             log::trace!(target: "parser", "found atom {predicate_name}({terms:?})");
-            let predicate = Identifier(self.intern_term(predicate_name.to_owned()));
 
             Ok((remainder, Atom::new(predicate, terms)))
         })
@@ -424,16 +442,23 @@ impl<'a> RuleParser<'a> {
 
     /// Expand a prefix.
     #[must_use]
-    pub fn resolve_prefix(&self, prefix: &str) -> Option<&'a str> {
-        self.prefixes.borrow().get(prefix).copied()
+    pub fn resolve_prefix(&self, prefix: &str) -> Result<&'a str, ParseError> {
+        self.prefixes
+            .borrow()
+            .get(prefix)
+            .copied()
+            .ok_or(ParseError::UndeclaredPrefix(prefix.to_owned()))
     }
 
     /// Expand a prefixed name.
     #[must_use]
-    pub fn resolve_prefixed_name(&self, name: &str) -> Option<String> {
-        let (prefix, suffix) = name.split_once(':')?;
-        self.resolve_prefix(prefix)
-            .map(|iri| format!("{iri}{suffix}"))
+    pub fn resolve_prefixed_name(&self, name: sparql::Name) -> Result<String, ParseError> {
+        match name {
+            sparql::Name::IriReference(iri) => Ok(iri.to_owned()),
+            sparql::Name::PrefixedName { prefix, local } => self
+                .resolve_prefix(prefix)
+                .map(|iri| format!("{iri}{local}")),
+        }
     }
 
     /// Try to expand an IRI into an absolute IRI.
@@ -481,7 +506,10 @@ impl<'a> RuleParser<'a> {
             },
             turtle::RdfLiteral::DatatypeValue { value, datatype } => RdfLiteral::DatatypeValue {
                 value: self.intern_term(value.to_owned()),
-                datatype: self.intern_term(datatype.to_owned()),
+                datatype: self.intern_term(
+                    self.resolve_prefixed_name(datatype)
+                        .expect("prefix should have been registered during parsing"),
+                ),
             },
         }
     }
@@ -517,8 +545,9 @@ mod test {
         let base = "http://example.org/foo";
         let input = format!("@base <{base}> .");
         let parser = RuleParser::new();
+        let b = Identifier(parser.intern_term(base.to_owned()));
         assert!(parser.base().is_none());
-        assert_parse!(parser.parse_base(), input.as_str(), base);
+        assert_parse!(parser.parse_base(), input.as_str(), b);
         assert_eq!(parser.base(), Some(base));
     }
 
@@ -528,9 +557,9 @@ mod test {
         let iri = "http://example.org/foo";
         let input = format!("@prefix {prefix}: <{iri}> .");
         let parser = RuleParser::new();
-        assert!(parser.resolve_prefix(prefix).is_none());
+        assert!(parser.resolve_prefix(prefix).is_err());
         assert_parse!(parser.parse_prefix(), input.as_str(), prefix);
-        assert_eq!(parser.resolve_prefix(prefix), Some(iri));
+        assert_eq!(parser.resolve_prefix(prefix), Ok(iri));
     }
 
     #[test]

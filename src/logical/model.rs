@@ -31,7 +31,7 @@ impl Identifier {
         'a: 'b,
     {
         PrintableIdentifier {
-            identifier: self,
+            identifier: *self,
             dictionary,
         }
     }
@@ -40,7 +40,7 @@ impl Identifier {
 /// A pretty-printable identifier that can be resolved using the dictionary.
 #[derive(Debug)]
 pub struct PrintableIdentifier<'a> {
-    identifier: &'a Identifier,
+    identifier: Identifier,
     dictionary: &'a PrefixedStringDictionary,
 }
 
