@@ -504,7 +504,9 @@ mod test {
     macro_rules! assert_parse {
         ($parser:expr, $left:expr, $right:expr $(,) ?) => {
             assert_eq!(
-                all($parser)($left).expect("should not be a parse error"),
+                all($parser)($left).expect(
+                    format!("failed to parse `{:?}`\nexpected `{:?}`", $left, $right).as_str()
+                ),
                 $right
             );
         };
