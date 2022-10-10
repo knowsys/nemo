@@ -223,7 +223,7 @@ impl<'a> RuleParser<'a> {
                     self.parse_predicate_name(),
                     delimited(
                         tag("("),
-                        separated_list1(tag(","), self.parse_ground_term()),
+                        separated_list1(self.parse_comma(), self.parse_ground_term()),
                         tag(")"),
                     ),
                 ),
