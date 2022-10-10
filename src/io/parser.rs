@@ -247,6 +247,7 @@ impl<'a> RuleParser<'a> {
                 alt((
                     map(sparql::iriref, sparql::Name::IriReference),
                     sparql::prefixed_name,
+                    sparql::blank_node_label,
                 )),
             )(input)?;
 
@@ -458,6 +459,7 @@ impl<'a> RuleParser<'a> {
             sparql::Name::PrefixedName { prefix, local } => self
                 .resolve_prefix(prefix)
                 .map(|iri| format!("{iri}{local}")),
+            sparql::Name::BlankNode(label) => Ok(format!("_:{label}")),
         }
     }
 
@@ -587,7 +589,7 @@ mod test {
     }
 
     #[test]
-    fn fact_namespace() {
+    fn fact_namespaced() {
         let parser = RuleParser::new();
         let predicate = "p";
         let name = "foo";
@@ -600,6 +602,26 @@ mod test {
         let fact = format!(r#"{predicate}({pn}) ."#);
 
         assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
+
+        assert_parse!(
+            parser.parse_fact(),
+            &fact,
+            Fact(Atom::new(
+                Identifier(p),
+                vec![Term::Constant(Identifier(v))]
+            ))
+        );
+    }
+
+    #[test]
+    fn fact_bnode() {
+        let parser = RuleParser::new();
+        let predicate = "p";
+        let name = "foo";
+        let p = parser.intern_term(predicate.to_owned());
+        let pn = format!("_:{name}");
+        let fact = format!(r#"{predicate}({pn}) ."#);
+        let v = parser.intern_term(pn);
 
         assert_parse!(
             parser.parse_fact(),
