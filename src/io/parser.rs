@@ -121,7 +121,7 @@ impl<'a> RuleParser<'a> {
             )(input)?;
 
             log::debug!(target: "parser", r#"parse_base: set new base: "{base}""#);
-            *self.base.borrow_mut() = Some(&base);
+            *self.base.borrow_mut() = Some(base);
 
             Ok((remainder, Identifier(self.intern_term(base.to_owned()))))
         })
@@ -324,7 +324,7 @@ impl<'a> RuleParser<'a> {
             let filters = body
                 .iter()
                 .filter_map(|expr| match expr {
-                    BodyExpression::Filter(f) => Some(f.clone()),
+                    BodyExpression::Filter(f) => Some(*f),
                     _ => None,
                 })
                 .collect();
@@ -480,10 +480,8 @@ impl<'a> RuleParser<'a> {
         traced(
             "parse_body_expression",
             alt((
-                map(self.parse_literal(), |l| BodyExpression::Literal(l)),
-                map(self.parse_filter_expression(), |f| {
-                    BodyExpression::Filter(f)
-                }),
+                map(self.parse_literal(), BodyExpression::Literal),
+                map(self.parse_filter_expression(), BodyExpression::Filter),
             )),
         )
     }
@@ -525,17 +523,15 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Expand a prefix.
-    #[must_use]
     pub fn resolve_prefix(&self, prefix: &str) -> Result<&'a str, ParseError> {
         self.prefixes
             .borrow()
             .get(prefix)
             .copied()
-            .ok_or(ParseError::UndeclaredPrefix(prefix.to_owned()))
+            .ok_or_else(|| ParseError::UndeclaredPrefix(prefix.to_owned()))
     }
 
     /// Expand a prefixed name.
-    #[must_use]
     pub fn resolve_prefixed_name(&self, name: sparql::Name) -> Result<String, ParseError> {
         match name {
             sparql::Name::IriReference(iri) => Ok(iri.to_owned()),
