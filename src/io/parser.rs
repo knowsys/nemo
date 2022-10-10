@@ -6,7 +6,7 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric0, digit1, multispace0, multispace1},
-    combinator::{map, map_res, opt, recognize},
+    combinator::{map, map_res, opt, recognize, value},
     multi::{many0, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
@@ -438,117 +438,23 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parse an equal sign (=), optionally surrounded by spaces.
-    pub fn parse_equals_sign(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced(
-            "parse_equals_sign",
-            delimited(multispace0, tag("="), multispace0),
-        )
-    }
-
-    /// Parse a less than sign (<), optionally surrounded by spaces.
-    pub fn parse_lessthan_sign(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced(
-            "parse_lessthan_sign",
-            delimited(multispace0, tag("<"), multispace0),
-        )
-    }
-
-    /// Parse a greater than sign (>), optionally surrounded by spaces.
-    pub fn parse_greaterthan_sign(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced(
-            "parse_greaterthan_sign",
-            delimited(multispace0, tag(">"), multispace0),
-        )
-    }
-
-    /// Parse a less than or equals (<=) sign, optionally surrounded by spaces.
-    pub fn parse_lessthaneq_sign(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced(
-            "parse_lessthaneq_sign",
-            delimited(multispace0, tag("<="), multispace0),
-        )
-    }
-
-    /// Parse a greater than or equals (>=) sign, optionally surrounded by spaces.
-    pub fn parse_greaterthaneq_sign(
-        &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced(
-            "parse_greaterthaneq_sign",
-            delimited(multispace0, tag(">="), multispace0),
-        )
-    }
-
-    /// Parse filter operation equals
-    pub fn parse_filter_equals(
-        &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<FilterOperation> {
-        traced(
-            "parse_filter_equals",
-            map(self.parse_equals_sign(), |_| FilterOperation::Equals),
-        )
-    }
-
-    /// Parse filter operation less than
-    pub fn parse_filter_lessthan(
-        &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<FilterOperation> {
-        traced(
-            "parse_filter_lessthan",
-            map(self.parse_lessthan_sign(), |_| FilterOperation::LessThan),
-        )
-    }
-
-    /// Parse filter operation greater than
-    pub fn parse_filter_greaterthan(
-        &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<FilterOperation> {
-        traced(
-            "parse_filter_greaterthan",
-            map(self.parse_greaterthan_sign(), |_| {
-                FilterOperation::GreaterThan
-            }),
-        )
-    }
-
-    /// Parse filter operation less than or equals
-    pub fn parse_filter_lessthaneq(
-        &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<FilterOperation> {
-        traced(
-            "parse_filter_lessthaneq",
-            map(self.parse_lessthaneq_sign(), |_| {
-                FilterOperation::LessThanEq
-            }),
-        )
-    }
-
-    /// Parse filter operation greater than or equals
-    pub fn parse_filter_greaterthaneq(
-        &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<FilterOperation> {
-        traced(
-            "parse_filter_greaterthaneq",
-            map(self.parse_greaterthaneq_sign(), |_| {
-                FilterOperation::GreaterThanEq
-            }),
-        )
-    }
-
     /// Parse operation that is filters a variable
-    pub fn parse_filter_operation(
+    pub fn parse_filter_operator(
         &'a self,
     ) -> impl FnMut(&'a str) -> IntermediateResult<FilterOperation> {
         traced(
-            "parse_filter_operation",
-            alt((
-                self.parse_filter_lessthan(),
-                self.parse_filter_lessthaneq(),
-                self.parse_filter_greaterthan(),
-                self.parse_filter_greaterthaneq(),
-                self.parse_filter_equals(),
-            )),
+            "parse_filter_operator",
+            delimited(
+                multispace0,
+                alt((
+                    value(FilterOperation::LessThanEq, tag("<=")),
+                    value(FilterOperation::LessThan, tag("<")),
+                    value(FilterOperation::Equals, tag("=")),
+                    value(FilterOperation::GreaterThanEq, tag(">=")),
+                    value(FilterOperation::GreaterThan, tag(">")),
+                )),
+                multispace0,
+            ),
         )
     }
 
@@ -559,7 +465,7 @@ impl<'a> RuleParser<'a> {
             map(
                 tuple((
                     self.parse_universal_variable(),
-                    self.parse_filter_operation(),
+                    self.parse_filter_operator(),
                     self.parse_term(),
                 )),
                 |(left, operation, right)| Filter::new(operation, left, right),
@@ -853,7 +759,7 @@ mod test {
         let z = parser.intern_term(zz.to_owned());
 
         let rule = format!(
-            "{pp}(?{xx}) :- {aa}(?{xx}, ?{yy}), ?{yy} > ?{xx}, {bb}(?{zz}), ?{xx} = 3, ?{zz} < 7 ."
+            "{pp}(?{xx}) :- {aa}(?{xx}, ?{yy}), ?{yy} > ?{xx}, {bb}(?{zz}), ?{xx} = 3, ?{zz} < 7, ?{xx} <= ?{zz}, ?{zz} >= ?{yy} ."
         );
 
         assert_parse!(
@@ -892,7 +798,17 @@ mod test {
                         FilterOperation::LessThan,
                         Variable::Universal(Identifier(z)),
                         Term::NumericLiteral(NumericLiteral::Integer(7))
-                    )
+                    ),
+                    Filter::new(
+                        FilterOperation::LessThanEq,
+                        Variable::Universal(Identifier(x)),
+                        Term::Variable(Variable::Universal(Identifier(z))),
+                    ),
+                    Filter::new(
+                        FilterOperation::GreaterThanEq,
+                        Variable::Universal(Identifier(z)),
+                        Term::Variable(Variable::Universal(Identifier(y))),
+                    ),
                 ]
             )
         );
