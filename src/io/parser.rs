@@ -585,4 +585,29 @@ mod test {
             ))
         );
     }
+
+    #[test]
+    fn fact_namespace() {
+        let parser = RuleParser::new();
+        let predicate = "p";
+        let name = "foo";
+        let prefix = "eg";
+        let iri = "http://example.org/foo";
+        let prefix_declaration = format!("@prefix {prefix}: <{iri}> .");
+        let p = parser.intern_term(predicate.to_owned());
+        let pn = format!("{prefix}:{name}");
+        let v = parser.intern_term(format!("{iri}{name}"));
+        let fact = format!(r#"{predicate}({pn}) ."#);
+
+        assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
+
+        assert_parse!(
+            parser.parse_fact(),
+            &fact,
+            Fact(Atom::new(
+                Identifier(p),
+                vec![Term::Constant(Identifier(v))]
+            ))
+        );
+    }
 }
