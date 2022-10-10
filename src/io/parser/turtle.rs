@@ -146,7 +146,7 @@ pub fn double(input: &str) -> IntermediateResult<NumericLiteral> {
 
 #[traced("parser::turtle")]
 pub fn numeric_literal(input: &str) -> IntermediateResult<NumericLiteral> {
-    alt((integer, decimal, double))(input)
+    alt((double, decimal, integer))(input)
 }
 
 #[derive(Debug)]

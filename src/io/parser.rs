@@ -522,6 +522,8 @@ mod test {
     use nom::combinator::all_consuming;
     use test_log::test;
 
+    use crate::physical::datatypes::Double;
+
     use super::*;
 
     fn all<'a, T>(
@@ -629,6 +631,30 @@ mod test {
             Fact(Atom::new(
                 Identifier(p),
                 vec![Term::Constant(Identifier(v))]
+            ))
+        );
+    }
+
+    #[test]
+    fn fact_numbers() {
+        let parser = RuleParser::new();
+        let predicate = "p";
+        let p = parser.intern_term(predicate.to_owned());
+        let int = 23_i64;
+        let dbl = Double::new(42.0).expect("is not NaN");
+        let dec = 13.37;
+        let fact = format!(r#"{predicate}({int}, {dbl:.1}E0, {dec:.2}) ."#);
+
+        assert_parse!(
+            parser.parse_fact(),
+            &fact,
+            Fact(Atom::new(
+                Identifier(p),
+                vec![
+                    Term::NumericLiteral(NumericLiteral::Integer(int)),
+                    Term::NumericLiteral(NumericLiteral::Double(dbl)),
+                    Term::NumericLiteral(NumericLiteral::Decimal(13, 37)),
+                ]
             ))
         );
     }
