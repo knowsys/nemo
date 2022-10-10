@@ -71,7 +71,7 @@ impl IterationOrder {
 }
 
 fn column_order_for(lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
-    var_order
+    let mut partial_col_order: ColumnOrder = var_order
         .iter()
         .flat_map(|var| {
             lit.variables()
@@ -79,7 +79,18 @@ fn column_order_for(lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
                 .filter(move |(_, lit_var)| lit_var == var)
                 .map(|(i, _)| i)
         })
-        .collect()
+        .collect();
+
+    let mut remaining_vars: ColumnOrder = lit
+        .variables()
+        .enumerate()
+        .map(|(i, _)| i)
+        .filter(|i| !partial_col_order.contains(i))
+        .collect();
+
+    partial_col_order.append(&mut remaining_vars);
+
+    partial_col_order
 }
 
 trait RuleVariableList {
@@ -144,8 +155,10 @@ impl RuleVariableList for Vec<Variable> {
                     .filter(|lit| predicate_filter(&lit.predicate()))
                     .filter(|lit| lit.variables().any(|lit_var| lit_var == *var));
 
-                let (total_literals, literals_requiring_new_orders) =
+                let (literals_requiring_new_orders, total_literals) =
                     literals.fold((0, 0), |acc, lit| {
+                        eprintln!("{:?}", column_order_for(lit, &extended_var_order));
+                        eprintln!("{:?}", required_trie_column_orders);
                         let fitting_column_order_exists: bool = required_trie_column_orders
                             .get(&lit.predicate())
                             .map(|set| set.contains(&column_order_for(lit, &extended_var_order)))
@@ -153,13 +166,15 @@ impl RuleVariableList for Vec<Variable> {
 
                         let new_col_order_required = !fitting_column_order_exists;
 
-                        (acc.0 + 1, acc.1 + usize::from(new_col_order_required))
+                        (acc.0 + usize::from(new_col_order_required), acc.1 + 1)
                         // bool is coverted to 1 for true and 0 for false
                     });
 
                 (literals_requiring_new_orders, total_literals)
             })
             .collect();
+
+        eprintln!("{:?}", ratios);
 
         let min_ratio: Option<(usize, usize)> = ratios
             .iter()
@@ -171,6 +186,9 @@ impl RuleVariableList for Vec<Variable> {
                 }
             })
             .copied();
+
+        eprintln!("{:?}", min_ratio);
+
         self.into_iter()
             .zip(ratios.into_iter())
             .filter(move |(_, ratio)| {
@@ -192,11 +210,12 @@ impl<'a> VariableOrderBuilder<'a> {
     fn build_for(
         program: &Program,
         iteration_order_within_rule: IterationOrder,
+        initial_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>,
     ) -> Vec<VariableOrder> {
         let mut builder = VariableOrderBuilder {
             program,
             iteration_order_within_rule,
-            required_trie_column_orders: HashMap::new(),
+            required_trie_column_orders: initial_column_orders,
             idb_preds: program.idb_predicates(),
         };
 
@@ -246,6 +265,7 @@ impl<'a> VariableOrderBuilder<'a> {
                 .expect("the remaining rules are never empty here");
 
             let next_index = *next_index;
+            eprintln!("{:?}", next_index);
             let var_order = self.generate_variable_order_for_rule(next_rule);
             remaining_rules.remove(&next_index);
             result.push((next_index, var_order));
@@ -276,16 +296,25 @@ impl<'a> VariableOrderBuilder<'a> {
         };
 
         while !remaining_vars.is_empty() {
+            eprintln!("{:?}", remaining_vars);
+            eprintln!("{:?}", self.required_trie_column_orders);
             let next_var = {
-                remaining_vars
+                let after_cart = remaining_vars
                     .clone()
-                    .filter_cartesian_product(&variable_order, rule)
-                    .filter_tries(
-                        &variable_order,
-                        rule,
-                        &self.required_trie_column_orders,
-                        |pred| self.idb_preds.contains(pred),
-                    )
+                    .filter_cartesian_product(&variable_order, rule);
+
+                eprintln!("{:?}", after_cart);
+
+                let after_trie_idb = after_cart.filter_tries(
+                    &variable_order,
+                    rule,
+                    &self.required_trie_column_orders,
+                    |pred| self.idb_preds.contains(pred),
+                );
+
+                eprintln!("{:?}", after_trie_idb);
+
+                after_trie_idb
                     .filter_tries(
                         &variable_order,
                         rule,
@@ -330,17 +359,43 @@ impl<'a> VariableOrderBuilder<'a> {
     }
 }
 
-pub(super) fn build_preferable_variable_orders(program: &Program) -> Vec<Vec<VariableOrder>> {
-    let orders = [
+pub(super) fn build_preferable_variable_orders(
+    program: &Program,
+    initial_column_orders: Option<HashMap<Identifier, HashSet<ColumnOrder>>>,
+) -> Vec<Vec<VariableOrder>> {
+    let iteration_orders = [
         IterationOrder::Forward,
         IterationOrder::Backward,
         IterationOrder::InsideOut,
     ];
 
-    orders
+    let initial_column_orders = initial_column_orders.unwrap_or_else(|| {
+        let fact_preds: HashSet<(Identifier, usize)> = program
+            .facts()
+            .map(|f| (f.0.predicate(), f.0.terms.len()))
+            .collect();
+        let source_preds: HashSet<(Identifier, usize)> =
+            program.sources().map(|((p, a), _)| (p, a)).collect();
+
+        let preds = fact_preds.union(&source_preds);
+
+        eprintln!("{:?} {:?} {:?}", fact_preds, source_preds, preds);
+
+        preds
+            .map(|(p, a)| {
+                let mut set = HashSet::new();
+                set.insert((0..*a).collect());
+                (*p, set)
+            })
+            .collect()
+    });
+
+    eprintln!("{:?}", initial_column_orders);
+
+    iteration_orders
         .into_iter()
         .map(|iter_ord| {
-            VariableOrderBuilder::build_for(program, iter_ord)
+            VariableOrderBuilder::build_for(program, iter_ord, initial_column_orders.clone())
                 .into_iter()
                 .map(|var_ord| vec![var_ord])
                 .collect()
@@ -366,7 +421,10 @@ pub(super) fn build_preferable_variable_orders(program: &Program) -> Vec<Vec<Var
 mod test {
     use super::{
         super::super::{
-            model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
+            model::{
+                Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Program, Rule, Term,
+                Variable,
+            },
             table_manager::ColumnOrder,
         },
         IterationOrder, RuleVariableList, VariableOrder,
@@ -583,7 +641,7 @@ mod test {
 
         assert_eq!(
             vec![rule_var_orders],
-            super::build_preferable_variable_orders(&program),
+            super::build_preferable_variable_orders(&program, None),
         );
     }
 
@@ -604,7 +662,7 @@ mod test {
 
         assert_eq!(
             vec![rule_var_orders],
-            super::build_preferable_variable_orders(&program),
+            super::build_preferable_variable_orders(&program, None),
         );
     }
 
@@ -621,7 +679,8 @@ mod test {
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_1_vars[2], rule_1_vars[1], rule_1_vars[0]]), // z is always first here since it occurs only in edb predicate; x and y occur in A(...) which is idb by rule 2
+            VariableOrder::from_vec(vec![rule_1_vars[0], rule_1_vars[1], rule_1_vars[2]]),
+            VariableOrder::from_vec(vec![rule_1_vars[1], rule_1_vars[0], rule_1_vars[2]]),
         ];
         let rule_2_vars = &var_lists[1];
         let rule_2_var_orders: Vec<VariableOrder> = vec![
@@ -631,11 +690,12 @@ mod test {
 
         assert_eq!(
             vec![rule_1_var_orders, rule_2_var_orders],
-            super::build_preferable_variable_orders(&program),
+            super::build_preferable_variable_orders(&program, None),
         );
     }
 
-    fn get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant() -> (Vec<Rule>, Vec<Vec<Variable>>) {
+    fn get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant(
+    ) -> (Vec<Rule>, Vec<Vec<Variable>>, Vec<(Identifier, usize)>) {
         let init = Identifier(11);
         let sub_class_of = Identifier(12);
         let is_main_class = Identifier(13);
@@ -643,6 +703,16 @@ mod test {
         let is_sub_class = Identifier(15);
         let xe = Identifier(16);
         let exists = Identifier(17);
+
+        let predicates = vec![
+            (init, 1),
+            (sub_class_of, 2),
+            (is_main_class, 1),
+            (conj, 3),
+            (is_sub_class, 1),
+            (xe, 3),
+            (exists, 3),
+        ];
 
         let c = Variable::Universal(Identifier(21));
         let d1 = Variable::Universal(Identifier(22));
@@ -658,13 +728,11 @@ mod test {
         let tr = Term::Variable(r);
         let te = Term::Variable(e);
 
-        [
+        let (rules, variables) = [
             (
                 Rule::new(
                     vec![Atom::new(init, vec![tc])],
-                    vec![
-                        Literal::Positive(Atom::new(is_main_class, vec![tc])),
-                    ],
+                    vec![Literal::Positive(Atom::new(is_main_class, vec![tc]))],
                     vec![],
                 ),
                 vec![c],
@@ -672,9 +740,7 @@ mod test {
             (
                 Rule::new(
                     vec![Atom::new(sub_class_of, vec![tc, tc])],
-                    vec![
-                        Literal::Positive(Atom::new(init, vec![tc])),
-                    ],
+                    vec![Literal::Positive(Atom::new(init, vec![tc]))],
                     vec![],
                 ),
                 vec![c],
@@ -695,9 +761,7 @@ mod test {
             ),
             (
                 Rule::new(
-                    vec![
-                        Atom::new(sub_class_of, vec![tc, ty]),
-                    ],
+                    vec![Atom::new(sub_class_of, vec![tc, ty])],
                     vec![
                         Literal::Positive(Atom::new(sub_class_of, vec![tc, td1])),
                         Literal::Positive(Atom::new(sub_class_of, vec![tc, td2])),
@@ -710,9 +774,7 @@ mod test {
             ),
             (
                 Rule::new(
-                    vec![
-                        Atom::new(xe, vec![tc, tr, te]),
-                    ],
+                    vec![Atom::new(xe, vec![tc, tr, te])],
                     vec![
                         Literal::Positive(Atom::new(sub_class_of, vec![te, ty])),
                         Literal::Positive(Atom::new(exists, vec![ty, tr, tc])),
@@ -721,39 +783,98 @@ mod test {
                 ),
                 vec![e, y, r, c],
             ),
-        ].into_iter().unzip()
+        ]
+        .into_iter()
+        .unzip();
+
+        (rules, variables, predicates)
     }
 
     #[test]
     fn build_preferable_variable_orders_with_galen_el_part_ie_5_rules_without_constant() {
-        let (rules, var_lists) = get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant();
+        let (rules, var_lists, predicates) =
+            get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant();
 
-        let program = Program::new(None, HashMap::new(), vec![], rules, vec![]);
+        let program = Program::new(
+            None,
+            HashMap::new(),
+            vec![
+                DataSourceDeclaration::new(
+                    predicates[1].0,
+                    predicates[1].1,
+                    DataSource::csv_file("").unwrap(),
+                ),
+                DataSourceDeclaration::new(
+                    predicates[2].0,
+                    predicates[2].1,
+                    DataSource::csv_file("").unwrap(),
+                ),
+                DataSourceDeclaration::new(
+                    predicates[3].0,
+                    predicates[3].1,
+                    DataSource::csv_file("").unwrap(),
+                ),
+                DataSourceDeclaration::new(
+                    predicates[4].0,
+                    predicates[4].1,
+                    DataSource::csv_file("").unwrap(),
+                ),
+                DataSourceDeclaration::new(
+                    predicates[6].0,
+                    predicates[6].1,
+                    DataSource::csv_file("").unwrap(),
+                ),
+            ],
+            rules,
+            vec![],
+        );
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![
             VariableOrder::from_vec(vec![rule_1_vars[0]]), // z is always first here since it occurs only in edb predicate; x and y occur in A(...) which is idb by rule 2
         ];
         let rule_2_vars = &var_lists[1];
-        let rule_2_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_2_vars[0]]),
-        ];
+        let rule_2_var_orders: Vec<VariableOrder> =
+            vec![VariableOrder::from_vec(vec![rule_2_vars[0]])];
         let rule_3_vars = &var_lists[2];
-        let rule_3_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_3_vars[0], rule_3_vars[1], rule_3_vars[2], rule_3_vars[3]]),
-        ];
+        let rule_3_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+            rule_3_vars[0],
+            rule_3_vars[1],
+            rule_3_vars[2],
+            rule_3_vars[3],
+        ])];
         let rule_4_vars = &var_lists[3];
         let rule_4_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_4_vars[0], rule_4_vars[1], rule_4_vars[2], rule_4_vars[3]]),
+            VariableOrder::from_vec(vec![
+                rule_4_vars[0],
+                rule_4_vars[1],
+                rule_4_vars[2],
+                rule_4_vars[3],
+            ]),
+            VariableOrder::from_vec(vec![
+                rule_4_vars[0],
+                rule_4_vars[2],
+                rule_4_vars[1],
+                rule_4_vars[3],
+            ]),
         ];
         let rule_5_vars = &var_lists[4];
-        let rule_5_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_5_vars[0], rule_5_vars[1], rule_5_vars[2], rule_5_vars[3]]),
-        ];
+        let rule_5_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+            rule_5_vars[0],
+            rule_5_vars[1],
+            rule_5_vars[2],
+            rule_5_vars[3],
+        ])];
 
         assert_eq!(
-            vec![rule_1_var_orders, rule_2_var_orders, rule_3_var_orders, rule_4_var_orders, rule_5_var_orders],
-            super::build_preferable_variable_orders(&program),
+            vec![
+                rule_1_var_orders,
+                rule_2_var_orders,
+                rule_3_var_orders,
+                rule_4_var_orders,
+                rule_5_var_orders
+            ],
+            super::build_preferable_variable_orders(&program, None),
         );
     }
 }
