@@ -13,7 +13,10 @@ use nom::{
 
 use crate::{logical::model::NumericLiteral, physical::datatypes::Double};
 
-use super::{sparql::iri, types::IntermediateResult};
+use super::{
+    sparql::{iri, Name},
+    types::IntermediateResult,
+};
 
 /// Characters requiring escape sequences in single-line string literals.
 const REQUIRES_ESCAPE: &str = "\u{22}\u{5C}\u{0A}\u{0D}";
@@ -149,7 +152,7 @@ pub fn numeric_literal(input: &str) -> IntermediateResult<NumericLiteral> {
 #[derive(Debug)]
 pub(super) enum RdfLiteral<'a> {
     LanguageString { value: &'a str, tag: &'a str },
-    DatatypeValue { value: &'a str, datatype: &'a str },
+    DatatypeValue { value: &'a str, datatype: Name<'a> },
 }
 
 #[traced("parser::turtle")]

@@ -1,15 +1,44 @@
 //! Parsers for productions from the SPARQL 1.1 grammar.
+use std::fmt::Display;
+
 use macros::traced;
 use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{one_of, satisfy},
-    combinator::{opt, recognize},
+    combinator::{map, opt, recognize},
     multi::{many0, many1, separated_list0},
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
 
 use super::{iri, rfc5234::digit, turtle::hex, types::IntermediateResult};
+
+#[derive(Debug)]
+pub enum Name<'a> {
+    IriReference(&'a str),
+    PrefixedName { prefix: &'a str, local: &'a str },
+}
+
+impl<'a> Name<'a> {
+    pub fn as_iri_reference(&'a self) -> Option<&'a str> {
+        match *self {
+            Name::IriReference(iri) => Some(iri),
+            Name::PrefixedName {
+                prefix: _,
+                local: _,
+            } => None,
+        }
+    }
+}
+
+impl Display for Name<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Name::IriReference(iri) => write!(f, "{iri}"),
+            Name::PrefixedName { prefix, local } => write!(f, "{prefix}:{local}"),
+        }
+    }
+}
 
 /// Parse an IRI reference, i.e., an IRI (relative or absolute)
 /// wrapped in angle brackets. Roughly equivalent to the
@@ -18,13 +47,13 @@ use super::{iri, rfc5234::digit, turtle::hex, types::IntermediateResult};
 /// 3987](https://www.ietf.org/rfc/rfc3987.txt) grammar to verify
 /// the actual IRI.
 #[traced("parser::sparql")]
-pub fn iriref(input: &str) -> IntermediateResult<&str> {
+pub fn iriref<'a>(input: &'a str) -> IntermediateResult<&'a str> {
     delimited(tag("<"), iri::iri_reference, tag(">"))(input)
 }
 
 #[traced("parser::sparql")]
-pub fn iri(input: &str) -> IntermediateResult<&str> {
-    alt((iriref, prefixed_name))(input)
+pub fn iri(input: &str) -> IntermediateResult<Name> {
+    alt((map(iriref, Name::IriReference), prefixed_name))(input)
 }
 
 #[traced("parser::sparql")]
@@ -113,11 +142,16 @@ pub fn pname_local(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::sparql")]
-pub fn pname_ln(input: &str) -> IntermediateResult<&str> {
-    recognize(pair(pname_ns, pname_local))(input)
+pub fn pname_ln(input: &str) -> IntermediateResult<Name> {
+    map(pair(pname_ns, pname_local), |(prefix, local)| {
+        Name::PrefixedName { prefix, local }
+    })(input)
 }
 
 #[traced("parser::sparql")]
-pub fn prefixed_name(input: &str) -> IntermediateResult<&str> {
-    alt((pname_ln, pname_ns))(input)
+pub fn prefixed_name(input: &str) -> IntermediateResult<Name> {
+    alt((
+        pname_ln,
+        map(pname_ns, |prefix| Name::PrefixedName { prefix, local: "" }),
+    ))(input)
 }
