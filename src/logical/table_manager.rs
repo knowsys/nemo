@@ -662,8 +662,11 @@ impl TableManager {
                     .get_table(*predicate, absolute_step_range, column_order)
                     .ok()?];
                 if let TableStatus::InMemory(trie) = &table_info.status {
-                    let interval_trie_scan = IntervalTrieScan::new(trie);
+                    if trie.row_num() == 0 {
+                        return None;
+                    }
 
+                    let interval_trie_scan = IntervalTrieScan::new(trie);
                     Some(TrieScanEnum::IntervalTrieScan(interval_trie_scan))
                 } else {
                     panic!("Base tables are supposed to be materialized");
