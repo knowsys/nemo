@@ -53,7 +53,7 @@ impl RuleExecutionEngine {
             .for_each(|r| RuleExecutionEngine::normalize_rule(r));
 
         // NOTE: indices are the ids of the rules and the rule order in variable_orders is the same as in program
-        let variable_orders = build_preferable_variable_orders(&program);
+        let variable_orders = build_preferable_variable_orders(&program, None);
         let rule_infos = variable_orders
             .into_iter()
             .map(|var_ord| RuleInfo {
