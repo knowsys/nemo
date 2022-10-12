@@ -634,6 +634,7 @@ impl TableManager {
             let iter_option = self.get_iterator_node(&plan.root, &temp_tries);
             if let Some(mut iter) = iter_option {
                 // TODO: Materializig should check memory and so on...
+                log::info!("materialising {:?}", plan.result);
                 let new_trie = materialize(&mut iter);
                 match plan.result {
                     ExecutionResult::Temp(id) => {
