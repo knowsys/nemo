@@ -75,6 +75,9 @@ fn main() {
                                 }
                                 _ => unimplemented!(),
                             },
+                            Term::Constant(identifier) => {
+                                DataValueT::U64(identifier.to_constant_u64())
+                            }
                             _ => unimplemented!(),
                         })
                         .collect()
@@ -108,7 +111,7 @@ fn main() {
         let trie_option = exec_engine.get_final_table(pred, (0..arity).collect());
 
         if let Some(trie) = trie_option {
-            println!("{}", trie.row_num());
+            println!("{} rows", trie.row_num());
         }
     }
 }
