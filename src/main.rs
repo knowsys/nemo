@@ -118,6 +118,13 @@ fn main() {
 
         if let Some(trie) = trie_option {
             log::info!("{} rows", trie.row_num());
+            if parser
+                .resolve_identifier(&pred)
+                .expect("should have been interned")
+                == "http://rulewerk.semantic-web.org/inferred/xe"
+            {
+                trie.debug(&parser);
+            }
         }
     }
 }

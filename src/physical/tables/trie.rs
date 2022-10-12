@@ -1,4 +1,5 @@
 use super::{Table, TableSchema};
+use crate::io::parser::RuleParser;
 use crate::logical::Permutator;
 use crate::physical::columns::{
     AdaptiveColumnBuilder, AdaptiveColumnBuilderT, Column, ColumnBuilder, GenericIntervalColumn,
@@ -88,8 +89,78 @@ impl Trie {
     pub fn get_column(&self, index: usize) -> &IntervalColumnT {
         &self.columns[index]
     }
+
+    // TODO: unify this with Display Trait implementation
+    pub fn debug(&self, parser: &RuleParser) {
+        if self.columns.is_empty() {
+            eprintln!();
+            return;
+        }
+
+        // outer vecs are build in reverse order
+        let mut last_interval_lengths: Vec<usize> = self
+            .columns
+            .last()
+            .expect("we return early if columns are empty")
+            .iter()
+            .map(|_| 1)
+            .collect();
+        let mut str_cols: Vec<Vec<String>> = vec![self
+            .columns
+            .last()
+            .expect("we return early if columns are empty")
+            .iter()
+            .map(|val| match val {
+                DataValueT::U64(constant) => parser
+                    .resolve_constant(constant)
+                    .expect("should have been interned"),
+                _ => val.to_string(),
+            })
+            .collect()];
+        for column_index in (0..(self.columns.len() - 1)).rev() {
+            let current_column = &self.columns[column_index];
+            let last_column = &self.columns[column_index + 1];
+
+            let current_interval_lengths: Vec<usize> = (0..current_column.len())
+                .map(|element_index_in_current_column| {
+                    last_column
+                        .int_bounds(element_index_in_current_column)
+                        .map(|index_in_interval| last_interval_lengths[index_in_interval])
+                        .sum()
+                })
+                .collect();
+
+            let padding_lengths = current_interval_lengths.iter().map(|length| length - 1);
+
+            str_cols.push(
+                current_column
+                    .iter()
+                    .zip(padding_lengths)
+                    .flat_map(|(val, pl)| {
+                        iter::once(match val {
+                            DataValueT::U64(constant) => parser
+                                .resolve_constant(constant)
+                                .expect("should have been interned"),
+                            _ => val.to_string(),
+                        })
+                        .chain(iter::repeat(" ".to_string()).take(pl))
+                    })
+                    .collect(),
+            );
+
+            last_interval_lengths = current_interval_lengths;
+        }
+
+        for row_index in 0..str_cols[0].len() {
+            for col_index in (0..str_cols.len()).rev() {
+                eprint!("{} ", str_cols[col_index][row_index]);
+            }
+            eprintln!();
+        }
+    }
 }
 
+// TODO: unify this with debug above
 impl fmt::Display for Trie {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.columns.is_empty() {
