@@ -578,6 +578,12 @@ impl<'a> RuleParser<'a> {
         self.resolve_term(identifier.0)
     }
 
+    /// Resolve an interned [Identifier].
+    #[must_use]
+    pub fn resolve_constant(&self, constant: u64) -> Option<String> {
+        self.resolve_term(((1 << 63) ^ constant) as usize)
+    }
+
     /// Resolve an interned term.
     #[must_use]
     pub fn resolve_term(&self, term: usize) -> Option<String> {
