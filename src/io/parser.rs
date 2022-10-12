@@ -571,6 +571,12 @@ impl<'a> RuleParser<'a> {
         result
     }
 
+    /// Resolve an interned [Identifier].
+    #[must_use]
+    pub fn resolve_identifier(&self, identifier: &Identifier) -> Option<String> {
+        self.resolve_term(identifier.0)
+    }
+
     /// Resolve an interned term.
     #[must_use]
     pub fn resolve_term(&self, term: usize) -> Option<String> {
