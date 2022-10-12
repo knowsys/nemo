@@ -105,13 +105,19 @@ fn main() {
 
     exec_engine.execute();
 
-    println!("Results:");
+    log::info!("Results:");
     for (pred, arity) in all_preds {
-        println!("{:?}", pred);
+        log::info!(
+            "{:?}: {}[{arity}]",
+            pred,
+            parser
+                .resolve_identifier(&pred)
+                .expect("should have been interned")
+        );
         let trie_option = exec_engine.get_final_table(pred, (0..arity).collect());
 
         if let Some(trie) = trie_option {
-            println!("{} rows", trie.row_num());
+            log::info!("{} rows", trie.row_num());
         }
     }
 }
