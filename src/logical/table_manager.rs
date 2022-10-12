@@ -272,6 +272,10 @@ impl TableManager {
             if let TableStatus::Derived = info.status {
                 let base_id = self.find_materialized_table(&info.key, table_id).unwrap();
                 let base_order = &self.tables[base_id].column_order.clone(); // TODO: Clones because of borrow checker
+                                                                             // TODO(mx): drop this to debug level
+                log::info!(
+                    "deriving table {table_id} from table {base_id} with order {base_order:?}"
+                );
                 let base_trie = if let TableStatus::InMemory(trie) = &self.tables[base_id].status {
                     trie
                 } else if let TableStatus::OnDisk(source) = &self.tables[base_id].status {
