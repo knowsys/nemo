@@ -209,6 +209,7 @@ impl TableManager {
     fn materialize_on_disk(source: &DataSource, order: &ColumnOrder) -> Trie {
         match source {
             DataSource::CsvFile(file) => {
+                log::info!("loading CSV file {file:?}");
                 // TODO: not everything is u64 :D
                 let datatypes: Vec<Option<DataTypeName>> = (0..order.len()).map(|_| None).collect();
 
@@ -300,6 +301,10 @@ impl TableManager {
                 let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
                 self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
             } else if let TableStatus::OnDisk(source) = &info.status {
+                log::info!(
+                    "materialising table {table_id} from disk for order {:?}",
+                    info.column_order
+                );
                 let trie = TableManager::materialize_on_disk(source, &info.column_order);
                 self.tables[table_id].status = TableStatus::InMemory(trie);
             }
