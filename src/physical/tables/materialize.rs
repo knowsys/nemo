@@ -1,6 +1,6 @@
 use super::{TableSchema, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry};
 use crate::physical::columns::{
-    AdaptiveColumnBuilder, AdaptiveColumnBuilderT, ColumnBuilder, ColumnScan,
+    AdaptiveColumnBuilder, AdaptiveColumnBuilderT, Column, ColumnBuilder, ColumnScan,
     GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT,
 };
 use crate::physical::datatypes::DataTypeName;
@@ -112,6 +112,13 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
 
         result_columns.push(next_interval_column);
     }
+
+    // TODO(mx): downgrade this to debug level
+    log::info!(
+        "materialised trie with {} columns and {} rows",
+        result_columns.len(),
+        result_columns.first().map_or(0, |col| col.len())
+    );
 
     // Finally, return finished trie
     Trie::new(target_schema, result_columns)
