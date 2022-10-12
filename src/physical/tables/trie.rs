@@ -142,7 +142,15 @@ impl Trie {
                                 .expect("should have been interned"),
                             _ => val.to_string(),
                         })
-                        .chain(iter::repeat(" ".to_string()).take(pl))
+                        .chain(
+                            iter::repeat(match val {
+                                DataValueT::U64(constant) => parser
+                                    .resolve_constant(constant)
+                                    .expect("should have been interned"),
+                                _ => val.to_string(),
+                            })
+                            .take(pl),
+                        )
                     })
                     .collect(),
             );
