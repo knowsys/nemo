@@ -347,12 +347,6 @@ pub struct Rule {
     pub body: Vec<Literal>,
     /// Filters applied to the body
     pub filters: Vec<Filter>,
-    /// Head atoms of the rule
-    pub head: Vec<Atom>,
-    /// Body atoms of the rule
-    pub body: Vec<Literal>,
-    /// Filters applied to the body
-    pub filters: Vec<Filter>,
 }
 
 impl Rule {

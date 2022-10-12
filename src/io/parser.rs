@@ -383,18 +383,6 @@ impl<'a> RuleParser<'a> {
     ) -> impl FnMut(&'a str) -> IntermediateResult<Variable> {
         traced(
             "parse_universal_variable",
-            map(preceded(tag("?"), self.parse_variable_name()), |var| {
-                Variable::Universal(var)
-            }),
-        )
-    }
-
-    /// Parse a universally quantified variable.
-    pub fn parse_universal_variable(
-        &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<Variable> {
-        traced(
-            "parse_universal_variable",
             map(
                 preceded(tag("?"), self.parse_variable_name()),
                 Variable::Universal,
