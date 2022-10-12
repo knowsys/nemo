@@ -18,7 +18,8 @@ fn main() {
     let mut parser_function = parser.parse_program();
     let program = parser_function(&input).unwrap().1;
 
-    eprintln!("{:?}", program);
+    log::info!("parsed program");
+    log::debug!("{:?}", program);
 
     let facts: Vec<&Fact> = program.facts().collect();
     let fact_preds: HashSet<(Identifier, usize)> = facts
@@ -30,6 +31,8 @@ fn main() {
         .flat_map(|rule| rule.head().map(|atom| (atom.predicate(), atom.terms.len())))
         .collect();
     let all_preds: HashSet<(Identifier, usize)> = fact_preds.union(&head_preds).copied().collect();
+
+    log::info!("collected predicates");
 
     let tries: Vec<(Identifier, Trie)> = fact_preds
         .iter()
@@ -74,6 +77,8 @@ fn main() {
         })
         .collect();
 
+    log::info!("assembled tries");
+
     let mut exec_engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
 
     // for (pred, trie) in &tries {
@@ -84,6 +89,8 @@ fn main() {
     for (pred, trie) in tries {
         exec_engine.add_trie(pred, 0..1, (0..trie.schema().arity()).collect(), 0, trie);
     }
+
+    log::info!("executing …");
 
     exec_engine.execute();
 
