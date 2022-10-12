@@ -13,7 +13,7 @@ fn main() {
 
     // let mut input: String = "".to_string();
     // stdin().read_to_string(&mut input).unwrap();
-    let input = read_to_string("test-files/snomed-el-noconst.rls").unwrap();
+    let input = read_to_string("test-files/snomed-el-noconst-with-facts.rls").unwrap();
     let parser = RuleParser::new();
     let mut parser_function = parser.parse_program();
     let program = parser_function(&input).unwrap().1;
@@ -104,6 +104,7 @@ fn main() {
     log::info!("executing …");
 
     exec_engine.execute();
+    let dict = exec_engine.table_manager.dictionary.clone();
 
     log::info!("Results:");
     for (pred, arity) in all_preds {
@@ -123,7 +124,7 @@ fn main() {
                 .expect("should have been interned")
                 == "http://rulewerk.semantic-web.org/inferred/xe"
             {
-                trie.debug(&parser);
+                trie.debug(dict.clone());
             }
         }
     }
