@@ -35,6 +35,11 @@ impl Identifier {
             dictionary,
         }
     }
+
+    pub fn to_constant_u64(self) -> u64 {
+        // TODO(mx): ugly hack, this needs to go.
+        (1 << 63) | (self.0 as u64)
+    }
 }
 
 /// A pretty-printable identifier that can be resolved using the dictionary.
