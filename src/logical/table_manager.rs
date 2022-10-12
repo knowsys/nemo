@@ -291,6 +291,8 @@ impl TableManager {
                     TableManager::translate_order(base_order, &info_order),
                 );
 
+                // TODO(mx): drop this to debug level
+                log::info!("materialising table {table_id} for order {info_order:?}");
                 let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
                 self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
             } else if let TableStatus::OnDisk(source) = &info.status {
