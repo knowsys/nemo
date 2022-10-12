@@ -33,6 +33,14 @@ fn main() {
     let all_preds: HashSet<(Identifier, usize)> = fact_preds.union(&head_preds).copied().collect();
 
     log::info!("collected predicates");
+    all_preds.iter().for_each(|(identifier, arity)| {
+        log::info!(
+            "predicate {identifier:?}: {}[{arity}]",
+            parser
+                .resolve_identifier(identifier)
+                .expect("should have been interned")
+        )
+    });
 
     let tries: Vec<(Identifier, Trie)> = fact_preds
         .iter()
