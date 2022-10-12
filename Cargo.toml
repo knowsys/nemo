@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 env_logger = "*"
-log = "0.4"
+log = { version = "0.4", features = [ "max_level_trace", "release_max_level_info" ] }
 csv = "1.1.6"
 thiserror = "1.0"
 num = "0.4.0"
@@ -16,7 +16,6 @@ superslice = "1"
 macros = { path = "libs/macros" }
 
 [dev-dependencies]
-env_logger = "*"
 test-log = "0.2"
 criterion = {version = "0.3", features = [ "html_reports" ] }
 rand = "0.8"
