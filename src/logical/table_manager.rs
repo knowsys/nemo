@@ -608,7 +608,9 @@ impl TableManager {
                 {
                     match self.get_table(*predicate, absolute_step_range, column_order) {
                         Err(error) => match error {
-                            GetTableError::NoTable => {}
+                            GetTableError::NoTable => {
+                                log::warn!("expected a table for predicate {predicate:?} with range {absolute_step_range:?} and order {column_order:?}");
+                            }
                             GetTableError::WrongOrder => {
                                 table_ids.insert(self.add_derived(
                                     *predicate,

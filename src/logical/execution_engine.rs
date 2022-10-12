@@ -142,7 +142,7 @@ impl RuleExecutionEngine {
 
         // TODO: This is horrible and should obviously not work that way,
         // but implementing this properly would need some discussions first
-        const FRESH_ID: usize = 10000;
+        const FRESH_ID: usize = usize::MAX - 10000;
         let mut current_id = FRESH_ID;
 
         for body_literal in &mut rule.body {
