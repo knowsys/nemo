@@ -6,6 +6,7 @@ use crate::physical::columns::{
     IntervalColumn, IntervalColumnEnum, IntervalColumnT,
 };
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
+use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use std::fmt;
 use std::fmt::Debug;
 use std::iter;
@@ -59,7 +60,7 @@ impl TableSchema for TrieSchema {
 
 /// Implementation of a trie data structure.
 /// The underlying data is oragnized in IntervalColumns.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Trie {
     // TODO: could be generic in column type (one of accepted types still is IntervalColumnT)
     schema: TrieSchema,
@@ -90,7 +91,7 @@ impl Trie {
         &self.columns[index]
     }
 
-    pub fn debug(&self, parser: &RuleParser) {
+    pub fn debug(&self, dict: PrefixedStringDictionary) {
         if self.columns.is_empty() {
             eprintln!();
             return;
@@ -110,8 +111,8 @@ impl Trie {
             .expect("we return early if columns are empty")
             .iter()
             .map(|val| match val {
-                DataValueT::U64(constant) => parser
-                    .resolve_constant(constant)
+                DataValueT::U64(constant) => dict
+                    .entry(constant.try_into().unwrap())
                     .expect("should have been interned"),
                 _ => val.to_string(),
             })
@@ -137,15 +138,15 @@ impl Trie {
                     .zip(padding_lengths)
                     .flat_map(|(val, pl)| {
                         iter::once(match val {
-                            DataValueT::U64(constant) => parser
-                                .resolve_constant(constant)
+                            DataValueT::U64(constant) => dict
+                                .entry(constant.try_into().unwrap())
                                 .expect("should have been interned"),
                             _ => val.to_string(),
                         })
                         .chain(
                             iter::repeat(match val {
-                                DataValueT::U64(constant) => parser
-                                    .resolve_constant(constant)
+                                DataValueT::U64(constant) => dict
+                                    .entry(constant.try_into().unwrap())
                                     .expect("should have been interned"),
                                 _ => val.to_string(),
                             })

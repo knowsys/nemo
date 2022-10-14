@@ -10,11 +10,12 @@ use csv::Reader;
 pub fn read<T>(
     datatypes: &[Option<DataTypeName>],
     csv_reader: &mut Reader<T>,
+    dictionary: &mut PrefixedStringDictionary,
 ) -> Result<Vec<VecT>, Error>
 where
     T: std::io::Read,
 {
-    let mut dictionary = PrefixedStringDictionary::init();
+    //let mut dictionary = dictionary.unwrap_or(PrefixedStringDictionary::init());
     let mut result: Vec<Option<VecT>> = Vec::new();
 
     datatypes.iter().for_each(|dtype| {

@@ -6,6 +6,7 @@ use super::ExecutionSeries;
 
 use crate::io::csv::read;
 use crate::physical::datatypes::DataTypeName;
+use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use crate::physical::tables::{
     materialize, IntervalTrieScan, Table, Trie, TrieDifference, TrieJoin, TrieProject, TrieScan,
     TrieScanEnum, TrieSchema, TrieSchemaEntry, TrieSelectEqual, TrieSelectValue, TrieUnion,
@@ -35,7 +36,7 @@ pub struct TableKey {
 }
 
 /// Represents the storage status of a table
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum TableStatus {
     /// Table is not materialized and has to be generated from another table through reordering
     Derived,
@@ -103,6 +104,8 @@ pub struct TableManager {
 
     #[allow(dead_code)]
     space_consumed: u64,
+
+    pub dictionary: PrefixedStringDictionary,
 }
 
 /// Encodes the things that can go wrong while asking for a table
@@ -125,6 +128,7 @@ impl TableManager {
             predicate_to_steps: HashMap::new(),
             space_consumed: 0,
             current_id: 0,
+            dictionary: PrefixedStringDictionary::init(),
         }
     }
 
@@ -206,7 +210,7 @@ impl TableManager {
         result
     }
 
-    fn materialize_on_disk(source: &DataSource, order: &ColumnOrder) -> Trie {
+    fn materialize_on_disk(&mut self, source: &DataSource, order: &ColumnOrder) -> Trie {
         match source {
             DataSource::CsvFile(file) => {
                 log::info!("loading CSV file {file:?}");
@@ -219,7 +223,7 @@ impl TableManager {
                     .has_headers(false)
                     .from_reader(File::open(file.as_path()).unwrap());
 
-                let col_table = read(&datatypes, &mut reader).unwrap();
+                let col_table = read(&datatypes, &mut reader, &mut self.dictionary).unwrap();
 
                 let schema = TrieSchema::new(
                     (0..col_table.len())
@@ -279,8 +283,8 @@ impl TableManager {
                 );
                 let base_trie = if let TableStatus::InMemory(trie) = &self.tables[base_id].status {
                     trie
-                } else if let TableStatus::OnDisk(source) = &self.tables[base_id].status {
-                    let trie = TableManager::materialize_on_disk(source, &info.column_order);
+                } else if let TableStatus::OnDisk(source) = self.tables[base_id].status.clone() {
+                    let trie = self.materialize_on_disk(&source, &info_order);
                     self.tables[table_id].status = TableStatus::InMemory(trie);
                     if let TableStatus::InMemory(trie) = &self.tables[table_id].status {
                         trie
@@ -300,12 +304,12 @@ impl TableManager {
                 log::info!("materialising table {table_id} for order {info_order:?}");
                 let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
                 self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
-            } else if let TableStatus::OnDisk(source) = &info.status {
+            } else if let TableStatus::OnDisk(source) = info.status.clone() {
                 log::info!(
                     "materialising table {table_id} from disk for order {:?}",
                     info.column_order
                 );
-                let trie = TableManager::materialize_on_disk(source, &info.column_order);
+                let trie = self.materialize_on_disk(&source, &info_order);
                 self.tables[table_id].status = TableStatus::InMemory(trie);
             }
         }
@@ -434,7 +438,7 @@ impl TableManager {
             step_range: (0..1),
         };
 
-        let trie = TableManager::materialize_on_disk(&data_source, &column_order);
+        let trie = self.materialize_on_disk(&data_source, &column_order);
         self.tables.push(TableInfo {
             status: TableStatus::InMemory(trie),
             column_order: column_order.clone(),

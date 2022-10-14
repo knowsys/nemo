@@ -250,7 +250,7 @@ impl TrieNode {
 }
 
 /// Newtype to represent a pair of a [TreeNode] (i.e. a path in the Tree) and a [String]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct TrieNodeStringPair(Rc<RefCell<TrieNode>>, Rc<String>);
 
 impl Hash for TrieNodeStringPair {
@@ -270,7 +270,7 @@ impl Eq for TrieNodeStringPair {}
 
 /// The [PrefixedStringDictionary] allows to store (and own) a couple of prefixed [String]s.
 /// Prefixes will be stored in a Triestructure and each chain of prefixes is therefore only stored once.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PrefixedStringDictionary {
     ordering: Vec<TrieNodeStringPair>,
     mapping: HashMap<TrieNodeStringPair, usize>,
