@@ -91,10 +91,17 @@ impl Trie {
         &self.columns[index]
     }
 
-    pub fn debug(&self, dict: PrefixedStringDictionary) {
+    pub fn debug<'a>(&'a self, dict: &'a PrefixedStringDictionary) -> DebugTrie<'a> {
+        DebugTrie { trie: self, dict }
+    }
+
+    pub(crate) fn format_as_csv(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        dict: &PrefixedStringDictionary,
+    ) -> fmt::Result {
         if self.columns.is_empty() {
-            eprintln!();
-            return;
+            return writeln!(f);
         }
 
         // outer vecs are build in reverse order
@@ -161,10 +168,24 @@ impl Trie {
 
         for row_index in 0..str_cols[0].len() {
             for col_index in (0..str_cols.len()).rev() {
-                eprint!("{} ", str_cols[col_index][row_index]);
+                write!(f, "{}, ", str_cols[col_index][row_index])?;
             }
-            eprintln!();
+            writeln!(f,)?;
         }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct DebugTrie<'a> {
+    trie: &'a Trie,
+    dict: &'a PrefixedStringDictionary,
+}
+
+impl fmt::Display for DebugTrie<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.trie.format_as_csv(f, self.dict)
     }
 }
 

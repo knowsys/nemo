@@ -5,8 +5,10 @@ use stage2::logical::table_manager::TableManagerStrategy;
 use stage2::physical::datatypes::{DataTypeName, DataValueT};
 use stage2::physical::tables::{Table, TableSchema, Trie, TrieSchema, TrieSchemaEntry};
 use std::collections::HashSet;
-use std::fs::read_to_string;
-use std::io::{stdin, Read};
+use std::fmt::write;
+use std::fs::{read_to_string, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
 
 fn main() {
     env_logger::init();
@@ -90,7 +92,11 @@ fn main() {
 
     log::info!("assembled tries");
 
-    let mut exec_engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
+    let mut exec_engine = RuleExecutionEngine::new(
+        TableManagerStrategy::Unlimited,
+        program,
+        parser.clone_dict(),
+    );
 
     // for (pred, trie) in &tries {
     //     eprintln!("{:?}", pred);
@@ -118,14 +124,24 @@ fn main() {
         let trie_option = exec_engine.get_final_table(pred, (0..arity).collect());
 
         if let Some(trie) = trie_option {
-            log::info!("{} rows", trie.row_num());
-            if parser
+            let predicate = parser
                 .resolve_identifier(&pred)
-                .expect("should have been interned")
-                == "http://rulewerk.semantic-web.org/inferred/xe"
+                .expect("should have been interned");
+            let sanitised = predicate.replace("/", "_").replace(":", "_");
+            log::info!("{predicate}: {} rows", trie.row_num());
+            let path = PathBuf::from(format!("out/{sanitised}.csv"));
+            match OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(path.clone())
             {
-                trie.debug(dict.clone());
+                Ok(mut file) => write!(file, "{}", trie.debug(&dict)).expect("should succeed"),
+                Err(e) => log::warn!("error writing: {e:?}"),
             }
+            log::info!("writing to {path:?}");
+
+            log::info!("wrote {path:?}");
         }
     }
 }

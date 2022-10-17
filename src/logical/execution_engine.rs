@@ -6,7 +6,10 @@ use std::{
 
 use crate::{
     logical::model::{Filter, FilterOperation, Variable},
-    physical::tables::{Trie, ValueAssignment},
+    physical::{
+        dictionary::PrefixedStringDictionary,
+        tables::{Trie, ValueAssignment},
+    },
 };
 
 use super::{
@@ -38,8 +41,12 @@ pub struct RuleExecutionEngine {
 
 impl RuleExecutionEngine {
     /// Create new [`RuleExecutionEngine`]
-    pub fn new(memory_strategy: TableManagerStrategy, mut program: Program) -> Self {
-        let mut table_manager = TableManager::new(memory_strategy);
+    pub fn new(
+        memory_strategy: TableManagerStrategy,
+        mut program: Program,
+        dictionary: PrefixedStringDictionary,
+    ) -> Self {
+        let mut table_manager = TableManager::new(memory_strategy, dictionary);
 
         // Handle all datasource declaratiokns
         for ((predicate, arity), source) in program.sources() {

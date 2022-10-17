@@ -72,6 +72,10 @@ impl<'a> RuleParser<'a> {
         Default::default()
     }
 
+    pub fn clone_dict(&self) -> PrefixedStringDictionary {
+        self.names.replace_with(|dict| dict.clone())
+    }
+
     /// Parse the dot that ends declarations, optionally surrounded by spaces.
     fn parse_dot(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
         traced("parse_dot", delimited(multispace0, tag("."), multispace0))
@@ -581,7 +585,7 @@ impl<'a> RuleParser<'a> {
     /// Resolve an interned [Identifier].
     #[must_use]
     pub fn resolve_constant(&self, constant: u64) -> Option<String> {
-        self.resolve_term(((1 << 63) ^ constant) as usize)
+        self.resolve_term(constant as usize)
     }
 
     /// Resolve an interned term.
