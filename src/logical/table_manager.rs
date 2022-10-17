@@ -119,7 +119,7 @@ pub enum GetTableError {
 
 impl TableManager {
     /// Create new [`TableManager`]
-    pub fn new(strategy: TableManagerStrategy) -> Self {
+    pub fn new(strategy: TableManagerStrategy, dictionary: PrefixedStringDictionary) -> Self {
         Self {
             strategy,
             tables: Vec::new(),
@@ -128,7 +128,7 @@ impl TableManager {
             predicate_to_steps: HashMap::new(),
             space_consumed: 0,
             current_id: 0,
-            dictionary: PrefixedStringDictionary::init(),
+            dictionary,
         }
     }
 
