@@ -6,7 +6,7 @@ use super::ExecutionSeries;
 
 use crate::io::csv::read;
 use crate::physical::datatypes::DataTypeName;
-use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
+use crate::physical::dictionary::PrefixedStringDictionary;
 use crate::physical::tables::{
     materialize, IntervalTrieScan, Table, Trie, TrieDifference, TrieJoin, TrieProject, TrieScan,
     TrieScanEnum, TrieSchema, TrieSchemaEntry, TrieSelectEqual, TrieSelectValue, TrieUnion,
@@ -108,6 +108,7 @@ pub struct TableManager {
     space_consumed: u64,
 
     pub dictionary: PrefixedStringDictionary,
+    pub counter: usize,
 }
 
 /// Encodes the things that can go wrong while asking for a table
@@ -131,6 +132,7 @@ impl TableManager {
             space_consumed: 0,
             current_id: 0,
             dictionary,
+            counter: 0,
         }
     }
 
@@ -309,13 +311,16 @@ impl TableManager {
                     .write(true)
                     .create(true)
                     .truncate(true)
-                    .open(PathBuf::from(format!("out/materialise_{table_id}.csv")))
-                {
+                    .open(PathBuf::from(format!(
+                        "out/{:05}materialise_{table_id}.csv",
+                        self.counter
+                    ))) {
                     Ok(mut file) => write!(file, "{}", reordered_trie.debug(&self.dictionary))
                         .expect("should succeed"),
                     Err(e) => log::warn!("error writing: {e:?}"),
                 }
                 self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
+                self.counter += 1;
             } else if let TableStatus::OnDisk(source) = info.status.clone() {
                 log::info!(
                     "materialising table {table_id} from disk for order {:?}",
@@ -659,13 +664,14 @@ impl TableManager {
                     .create(true)
                     .truncate(true)
                     .open(PathBuf::from(format!(
-                        "out/materialise_{:?}.csv",
-                        plan.result
+                        "out/{:05}_materialise_{:?}.csv",
+                        self.counter, plan.result
                     ))) {
                     Ok(mut file) => write!(file, "{}", new_trie.debug(&self.dictionary))
                         .expect("should succeed"),
                     Err(e) => log::warn!("error writing: {e:?}"),
                 }
+                self.counter += 1;
 
                 match plan.result {
                     ExecutionResult::Temp(id) => {
