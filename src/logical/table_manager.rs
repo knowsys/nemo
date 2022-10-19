@@ -687,7 +687,8 @@ impl TableManager {
                             new_table = true;
                             log::info!("materialised {:05}: {pred:?} ({}) for range {range:?} and order {order:?} with priority {priority}", self.counter, self.dictionary.entry(pred.0).expect("should have been interned"));
 
-                            self.add_trie(pred, range, order, priority, new_trie);
+                            let table_id = self.add_trie(pred, range, order, priority, new_trie);
+                            log::info!("new table id: {table_id:?}");
                         }
                     }
                 }
