@@ -14,8 +14,10 @@ use crate::physical::tables::{
 use csv::ReaderBuilder;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
 use std::ops::Range;
+use std::path::PathBuf;
 use superslice::*;
 
 /// Type which represents a variable ordering
@@ -303,6 +305,16 @@ impl TableManager {
                 // TODO(mx): drop this to debug level
                 log::info!("materialising table {table_id} for order {info_order:?}");
                 let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+                match OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(PathBuf::from(format!("out/materialise_{table_id}.csv")))
+                {
+                    Ok(mut file) => write!(file, "{}", reordered_trie.debug(&self.dictionary))
+                        .expect("should succeed"),
+                    Err(e) => log::warn!("error writing: {e:?}"),
+                }
                 self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
             } else if let TableStatus::OnDisk(source) = info.status.clone() {
                 log::info!(
@@ -642,6 +654,19 @@ impl TableManager {
                 // TODO: Materializig should check memory and so on...
                 log::info!("materialising {:?}", plan.result);
                 let new_trie = materialize(&mut iter);
+                match OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(PathBuf::from(format!(
+                        "out/materialise_{:?}.csv",
+                        plan.result
+                    ))) {
+                    Ok(mut file) => write!(file, "{}", new_trie.debug(&self.dictionary))
+                        .expect("should succeed"),
+                    Err(e) => log::warn!("error writing: {e:?}"),
+                }
+
                 match plan.result {
                     ExecutionResult::Temp(id) => {
                         if new_trie.row_num() > 0 {
