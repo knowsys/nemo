@@ -6,7 +6,7 @@ use super::ExecutionSeries;
 
 use crate::io::csv::read;
 use crate::physical::datatypes::DataTypeName;
-use crate::physical::dictionary::PrefixedStringDictionary;
+use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use crate::physical::tables::{
     materialize, IntervalTrieScan, Table, Trie, TrieDifference, TrieJoin, TrieProject, TrieScan,
     TrieScanEnum, TrieSchema, TrieSchemaEntry, TrieSelectEqual, TrieSelectValue, TrieUnion,
@@ -312,7 +312,7 @@ impl TableManager {
                     .create(true)
                     .truncate(true)
                     .open(PathBuf::from(format!(
-                        "out/{:05}materialise_{table_id}.csv",
+                        "out/{:05}_materialise_{table_id}.csv",
                         self.counter
                     ))) {
                     Ok(mut file) => write!(file, "{}", reordered_trie.debug(&self.dictionary))
@@ -622,6 +622,7 @@ impl TableManager {
         let mut temp_tries = HashMap::<TableId, Option<Trie>>::new();
 
         for plan in series.plans {
+            log::info!("executing plan:\n{plan:#?}");
             let mut table_ids = HashSet::new();
             for leave_node in plan.leaves {
                 if let ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) =
@@ -684,6 +685,7 @@ impl TableManager {
                     ExecutionResult::Save(pred, range, order, priority) => {
                         if new_trie.row_num() > 0 {
                             new_table = true;
+                            log::info!("materialised {:05}: {pred:?} ({}) for range {range:?} and order {order:?} with priority {priority}", self.counter, self.dictionary.entry(pred.0).expect("should have been interned"));
 
                             self.add_trie(pred, range, order, priority, new_trie);
                         }
