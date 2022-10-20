@@ -5,6 +5,7 @@ use super::model::{DataSource, Identifier};
 use super::ExecutionSeries;
 
 use crate::io::csv::read;
+use crate::meta::TimedCode;
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use crate::physical::tables::{
@@ -633,6 +634,8 @@ impl TableManager {
     /// Executes an [`ExecutionSeries`] and adds the resulting tables
     /// Returns true if a non-empty table was added, false otherwise
     pub fn execute_series(&mut self, series: ExecutionSeries) -> bool {
+        TimedCode::instance().sub("Reasoning/Materialize").start();
+
         let mut new_table = false;
         let mut temp_tries = HashMap::<TableId, Option<Trie>>::new();
 
@@ -667,8 +670,20 @@ impl TableManager {
                 }
             }
 
+            TimedCode::instance()
+                .sub("Reasoning/Materialize/Reorder")
+                .start();
+
             // TODO: Materializig should check memory and so on...
             self.materialize_required_tables(&table_ids);
+
+            TimedCode::instance()
+                .sub("Reasoning/Materialize/Reorder")
+                .stop();
+
+            TimedCode::instance()
+                .sub("Reasoning/Materialize/Iterator")
+                .start();
 
             let iter_option = self.get_iterator_node(&plan.root, &temp_tries);
             if let Some(mut iter) = iter_option {
@@ -713,7 +728,13 @@ impl TableManager {
                     }
                 }
             }
+
+            TimedCode::instance()
+                .sub("Reasoning/Materialize/Iterator")
+                .stop();
         }
+
+        TimedCode::instance().sub("Reasoning/Materialize").stop();
 
         new_table
     }

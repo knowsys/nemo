@@ -6,6 +6,7 @@ use std::{
 
 use crate::{
     logical::model::{Filter, FilterOperation, Variable},
+    meta::TimedCode,
     physical::{
         dictionary::PrefixedStringDictionary,
         tables::{Trie, ValueAssignment},
@@ -202,8 +203,21 @@ impl RuleExecutionEngine {
     pub fn execute(&mut self) {
         let mut without_derivation: usize = 0;
         let mut current_rule_index: usize = 0;
+
+        TimedCode::instance().sub("Reasoning/Rules").start();
+
         while without_derivation < self.program.rules.len() {
             println!("Step: {}, Rule: {}", self.current_step, current_rule_index);
+            let rule_string = format!("Rule: {}", current_rule_index);
+
+            TimedCode::instance()
+                .sub("Reasoning/Rules")
+                .sub(&rule_string)
+                .start();
+
+            TimedCode::instance()
+                .sub("Reasoning/Rules/ExecutionPlan")
+                .start();
 
             let promising_orders = &self.rule_infos[current_rule_index].promising_orders;
 
@@ -222,6 +236,10 @@ impl RuleExecutionEngine {
                 .map(|(index, _)| index)
                 .unwrap();
 
+            TimedCode::instance()
+                .sub("Reasoning/Rules/ExecutionPlan")
+                .stop();
+
             // Hopefully, optimizer recognizes that plan is destroyed in this scope anyway and it does not need to do the shifting
             let best_plan = plans.remove(best_plan_index);
             let no_derivation = !self.table_manager.execute_series(best_plan);
@@ -235,7 +253,14 @@ impl RuleExecutionEngine {
 
             current_rule_index = (current_rule_index + 1) % self.program.rules.len();
             self.current_step += 1;
+
+            TimedCode::instance()
+                .sub("Reasoning/Rules")
+                .sub(&rule_string)
+                .stop();
         }
+
+        TimedCode::instance().sub("Reasoning/Rules").stop();
     }
 
     fn create_subplan_union(

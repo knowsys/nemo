@@ -2,10 +2,11 @@ use stage2::io::parser::RuleParser;
 use stage2::logical::execution_engine::RuleExecutionEngine;
 use stage2::logical::model::{Fact, Identifier, NumericLiteral, Term};
 use stage2::logical::table_manager::TableManagerStrategy;
+use stage2::meta::timing::TimedDisplay;
+use stage2::meta::TimedCode;
 use stage2::physical::datatypes::{DataTypeName, DataValueT};
 use stage2::physical::tables::{Table, TableSchema, Trie, TrieSchema, TrieSchemaEntry};
 use std::collections::HashSet;
-use std::fmt::write;
 use std::fs::{read_to_string, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
@@ -13,9 +14,15 @@ use std::path::PathBuf;
 fn main() {
     env_logger::init();
 
+    TimedCode::instance().start();
+
+    TimedCode::instance().sub("Reading & Parsing").start();
+
     // let mut input: String = "".to_string();
     // stdin().read_to_string(&mut input).unwrap();
-    let input = read_to_string("test-files/snomed-el-noconst-with-facts.rls").unwrap();
+    // let input = read_to_string("test-files/snomed-el-noconst.rls").unwrap();
+    let input = read_to_string("test-files/galen-el-without-constants.rls").unwrap();
+
     let parser = RuleParser::new();
     let mut parser_function = parser.parse_program();
     let program = parser_function(&input).unwrap().1;
@@ -107,6 +114,9 @@ fn main() {
         exec_engine.add_trie(pred, 0..1, (0..trie.schema().arity()).collect(), 0, trie);
     }
 
+    TimedCode::instance().sub("Reading & Parsing").stop();
+    TimedCode::instance().sub("Reasoning").start();
+
     log::info!("executing …");
 
     exec_engine.execute();
@@ -144,4 +154,19 @@ fn main() {
             log::info!("wrote {path:?}");
         }
     }
+
+    TimedCode::instance().sub("Reasoning").stop();
+    TimedCode::instance().stop();
+
+    log::info!(
+        "\n{}",
+        TimedCode::instance().create_tree_string(
+            "stage2",
+            &[
+                TimedDisplay::default(),
+                TimedDisplay::default(),
+                TimedDisplay::new(stage2::meta::timing::TimedSorting::LongestTime, 0)
+            ]
+        )
+    );
 }
