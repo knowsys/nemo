@@ -71,7 +71,7 @@ where
     /// Constructs a new [`GenericColumnScan`] for a Column, narrowed
     /// to the given interval.
     pub fn narrowed(column: &'a Col, interval: Range<usize>) -> Self {
-        debug_assert!(interval.end > interval.start);
+        debug_assert!(interval.end >= interval.start);
 
         let result = Self {
             _t: PhantomData,
@@ -194,7 +194,7 @@ where
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        debug_assert!(interval.end > interval.start);
+        debug_assert!(interval.end >= interval.start);
 
         self.interval = interval;
         self.pos = None;

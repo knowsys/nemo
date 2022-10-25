@@ -826,449 +826,447 @@ mod test {
 
     use super::RuleExecutionEngine;
 
-    #[test]
-    fn test_trans_closure() {
-        let trans_rule = Rule::new(
-            vec![Atom::new(
-                Identifier(0),
-                vec![
-                    Term::Variable(Variable::Universal(Identifier(0))),
-                    Term::Variable(Variable::Universal(Identifier(2))),
-                ],
-            )],
-            vec![
-                Literal::Positive(Atom::new(
-                    Identifier(0),
-                    vec![
-                        Term::Variable(Variable::Universal(Identifier(0))),
-                        Term::Variable(Variable::Universal(Identifier(1))),
-                    ],
-                )),
-                Literal::Positive(Atom::new(
-                    Identifier(0),
-                    vec![
-                        Term::Variable(Variable::Universal(Identifier(1))),
-                        Term::Variable(Variable::Universal(Identifier(2))),
-                    ],
-                )),
-            ],
-            vec![],
-        );
+    // #[test]
+    // fn test_trans_closure() {
+    //     let trans_rule = Rule::new(
+    //         vec![Atom::new(
+    //             Identifier(0),
+    //             vec![
+    //                 Term::Variable(Variable::Universal(Identifier(0))),
+    //                 Term::Variable(Variable::Universal(Identifier(2))),
+    //             ],
+    //         )],
+    //         vec![
+    //             Literal::Positive(Atom::new(
+    //                 Identifier(0),
+    //                 vec![
+    //                     Term::Variable(Variable::Universal(Identifier(0))),
+    //                     Term::Variable(Variable::Universal(Identifier(1))),
+    //                 ],
+    //             )),
+    //             Literal::Positive(Atom::new(
+    //                 Identifier(0),
+    //                 vec![
+    //                     Term::Variable(Variable::Universal(Identifier(1))),
+    //                     Term::Variable(Variable::Universal(Identifier(2))),
+    //                 ],
+    //             )),
+    //         ],
+    //         vec![],
+    //     );
 
-        let program = Program::new(
-            None,
-            HashMap::new(),
-            Vec::new(),
-            vec![trans_rule],
-            Vec::new(),
-        );
+    //     let program = Program::new(
+    //         None,
+    //         HashMap::new(),
+    //         Vec::new(),
+    //         vec![trans_rule],
+    //         Vec::new(),
+    //     );
 
-        let mut engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
+    //     let column_x = make_gict(&[1, 2, 5, 7], &[0]);
+    //     let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
 
-        let column_x = make_gict(&[1, 2, 5, 7], &[0]);
-        let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
+    //     let schema = TrieSchema::new(vec![
+    //         TrieSchemaEntry {
+    //             label: 10,
+    //             datatype: DataTypeName::U64,
+    //         },
+    //         TrieSchemaEntry {
+    //             label: 11,
+    //             datatype: DataTypeName::U64,
+    //         },
+    //     ]);
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 10,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 11,
-                datatype: DataTypeName::U64,
-            },
-        ]);
+    //     let trie = Trie::new(schema, vec![column_x, column_y]);
+    //     engine.add_trie(Identifier(0), 0..1, vec![0, 1], 0, trie);
 
-        let trie = Trie::new(schema, vec![column_x, column_y]);
-        engine.add_trie(Identifier(0), 0..1, vec![0, 1], 0, trie);
+    //     engine.execute();
 
-        engine.execute();
+    //     let no_three = std::panic::catch_unwind(|| engine.table_manager.get_info(3));
+    //     assert!(no_three.is_err());
 
-        let no_three = std::panic::catch_unwind(|| engine.table_manager.get_info(3));
-        assert!(no_three.is_err());
+    //     if let TableStatus::InMemory(zeroth_table) = &engine.table_manager.get_info(0).status {
+    //         let first_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(0) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-        if let TableStatus::InMemory(zeroth_table) = &engine.table_manager.get_info(0).status {
-            let first_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             first_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![1, 2, 5, 7]
+    //         );
+    //         assert_eq!(
+    //             first_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0]
+    //         );
 
-            assert_eq!(
-                first_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![1, 2, 5, 7]
-            );
-            assert_eq!(
-                first_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0]
-            );
+    //         let second_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(1) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            let second_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             second_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10]
+    //         );
+    //         assert_eq!(
+    //             second_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0, 4, 7, 8]
+    //         );
+    //     } else {
+    //         unreachable!()
+    //     }
+    //     if let TableStatus::InMemory(first_table) = &engine.table_manager.get_info(1).status {
+    //         let first_col = if let IntervalColumnT::U64(col) = first_table.get_column(0) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            assert_eq!(
-                second_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10]
-            );
-            assert_eq!(
-                second_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0, 4, 7, 8]
-            );
-        } else {
-            unreachable!()
-        }
-        if let TableStatus::InMemory(first_table) = &engine.table_manager.get_info(1).status {
-            let first_col = if let IntervalColumnT::U64(col) = first_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             first_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![1, 2]
+    //         );
+    //         assert_eq!(
+    //             first_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0]
+    //         );
 
-            assert_eq!(
-                first_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![1, 2]
-            );
-            assert_eq!(
-                first_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0]
-            );
+    //         let second_col = if let IntervalColumnT::U64(col) = first_table.get_column(1) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            let second_col = if let IntervalColumnT::U64(col) = first_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             second_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![4, 7, 9, 8, 9]
+    //         );
+    //         assert_eq!(
+    //             second_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0, 3]
+    //         );
+    //     } else {
+    //         unreachable!()
+    //     }
+    //     if let TableStatus::InMemory(second_table) = &engine.table_manager.get_info(2).status {
+    //         let first_col = if let IntervalColumnT::U64(col) = second_table.get_column(0) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            assert_eq!(
-                second_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![4, 7, 9, 8, 9]
-            );
-            assert_eq!(
-                second_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0, 3]
-            );
-        } else {
-            unreachable!()
-        }
-        if let TableStatus::InMemory(second_table) = &engine.table_manager.get_info(2).status {
-            let first_col = if let IntervalColumnT::U64(col) = second_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             first_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![1]
+    //         );
+    //         assert_eq!(
+    //             first_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0]
+    //         );
 
-            assert_eq!(
-                first_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![1]
-            );
-            assert_eq!(
-                first_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0]
-            );
+    //         let second_col = if let IntervalColumnT::U64(col) = second_table.get_column(1) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            let second_col = if let IntervalColumnT::U64(col) = second_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             second_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![8]
+    //         );
+    //         assert_eq!(
+    //             second_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0]
+    //         );
+    //     } else {
+    //         unreachable!()
+    //     }
+    // }
 
-            assert_eq!(
-                second_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![8]
-            );
-            assert_eq!(
-                second_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0]
-            );
-        } else {
-            unreachable!()
-        }
-    }
+    // #[test]
+    // fn test_trans_closure_multihead() {
+    //     let trans_rule = Rule::new(
+    //         vec![
+    //             Atom::new(
+    //                 Identifier(0),
+    //                 vec![
+    //                     Term::Variable(Variable::Universal(Identifier(0))),
+    //                     Term::Variable(Variable::Universal(Identifier(2))),
+    //                 ],
+    //             ),
+    //             Atom::new(
+    //                 Identifier(0),
+    //                 vec![
+    //                     Term::Variable(Variable::Universal(Identifier(2))),
+    //                     Term::Variable(Variable::Universal(Identifier(0))),
+    //                 ],
+    //             ),
+    //         ],
+    //         vec![
+    //             Literal::Positive(Atom::new(
+    //                 Identifier(0),
+    //                 vec![
+    //                     Term::Variable(Variable::Universal(Identifier(0))),
+    //                     Term::Variable(Variable::Universal(Identifier(1))),
+    //                 ],
+    //             )),
+    //             Literal::Positive(Atom::new(
+    //                 Identifier(0),
+    //                 vec![
+    //                     Term::Variable(Variable::Universal(Identifier(1))),
+    //                     Term::Variable(Variable::Universal(Identifier(2))),
+    //                 ],
+    //             )),
+    //         ],
+    //         vec![],
+    //     );
 
-    #[test]
-    fn test_trans_closure_multihead() {
-        let trans_rule = Rule::new(
-            vec![
-                Atom::new(
-                    Identifier(0),
-                    vec![
-                        Term::Variable(Variable::Universal(Identifier(0))),
-                        Term::Variable(Variable::Universal(Identifier(2))),
-                    ],
-                ),
-                Atom::new(
-                    Identifier(0),
-                    vec![
-                        Term::Variable(Variable::Universal(Identifier(2))),
-                        Term::Variable(Variable::Universal(Identifier(0))),
-                    ],
-                ),
-            ],
-            vec![
-                Literal::Positive(Atom::new(
-                    Identifier(0),
-                    vec![
-                        Term::Variable(Variable::Universal(Identifier(0))),
-                        Term::Variable(Variable::Universal(Identifier(1))),
-                    ],
-                )),
-                Literal::Positive(Atom::new(
-                    Identifier(0),
-                    vec![
-                        Term::Variable(Variable::Universal(Identifier(1))),
-                        Term::Variable(Variable::Universal(Identifier(2))),
-                    ],
-                )),
-            ],
-            vec![],
-        );
+    //     let program = Program::new(
+    //         None,
+    //         HashMap::new(),
+    //         Vec::new(),
+    //         vec![trans_rule],
+    //         Vec::new(),
+    //     );
 
-        let program = Program::new(
-            None,
-            HashMap::new(),
-            Vec::new(),
-            vec![trans_rule],
-            Vec::new(),
-        );
+    //     let mut engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
 
-        let mut engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
+    //     let column_x = make_gict(&[1, 2, 5, 7], &[0]);
+    //     let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
 
-        let column_x = make_gict(&[1, 2, 5, 7], &[0]);
-        let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
+    //     let schema = TrieSchema::new(vec![
+    //         TrieSchemaEntry {
+    //             label: 10,
+    //             datatype: DataTypeName::U64,
+    //         },
+    //         TrieSchemaEntry {
+    //             label: 11,
+    //             datatype: DataTypeName::U64,
+    //         },
+    //     ]);
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 10,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 11,
-                datatype: DataTypeName::U64,
-            },
-        ]);
+    //     let trie = Trie::new(schema, vec![column_x, column_y]);
+    //     engine.add_trie(Identifier(0), 0..1, vec![0, 1], 0, trie);
 
-        let trie = Trie::new(schema, vec![column_x, column_y]);
-        engine.add_trie(Identifier(0), 0..1, vec![0, 1], 0, trie);
+    //     engine.execute();
 
-        engine.execute();
+    //     let no_four = std::panic::catch_unwind(|| engine.table_manager.get_info(4));
+    //     assert!(no_four.is_err());
 
-        let no_four = std::panic::catch_unwind(|| engine.table_manager.get_info(4));
-        assert!(no_four.is_err());
+    //     if let TableStatus::InMemory(zeroth_table) = &engine.table_manager.get_info(0).status {
+    //         let first_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(0) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-        if let TableStatus::InMemory(zeroth_table) = &engine.table_manager.get_info(0).status {
-            let first_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             first_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![1, 2, 5, 7]
+    //         );
+    //         assert_eq!(
+    //             first_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0]
+    //         );
 
-            assert_eq!(
-                first_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![1, 2, 5, 7]
-            );
-            assert_eq!(
-                first_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0]
-            );
+    //         let second_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(1) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            let second_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             second_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10]
+    //         );
+    //         assert_eq!(
+    //             second_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0, 4, 7, 8]
+    //         );
+    //     } else {
+    //         unreachable!()
+    //     }
+    //     if let TableStatus::InMemory(first_table) = &engine.table_manager.get_info(1).status {
+    //         let first_col = if let IntervalColumnT::U64(col) = first_table.get_column(0) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            assert_eq!(
-                second_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10]
-            );
-            assert_eq!(
-                second_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0, 4, 7, 8]
-            );
-        } else {
-            unreachable!()
-        }
-        if let TableStatus::InMemory(first_table) = &engine.table_manager.get_info(1).status {
-            let first_col = if let IntervalColumnT::U64(col) = first_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             first_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![1, 2, 4, 7, 8, 9, 10]
+    //         );
+    //         assert_eq!(
+    //             first_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0]
+    //         );
 
-            assert_eq!(
-                first_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![1, 2, 4, 7, 8, 9, 10]
-            );
-            assert_eq!(
-                first_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0]
-            );
+    //         let second_col = if let IntervalColumnT::U64(col) = first_table.get_column(1) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            let second_col = if let IntervalColumnT::U64(col) = first_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             second_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![4, 7, 9, 8, 9, 1, 1, 2, 1, 2, 1, 2]
+    //         );
+    //         assert_eq!(
+    //             second_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0, 3, 5, 6, 7, 8, 10]
+    //         );
+    //     } else {
+    //         unreachable!()
+    //     }
+    //     if let TableStatus::InMemory(second_table) = &engine.table_manager.get_info(2).status {
+    //         let first_col = if let IntervalColumnT::U64(col) = second_table.get_column(0) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            assert_eq!(
-                second_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![4, 7, 9, 8, 9, 1, 1, 2, 1, 2, 1, 2]
-            );
-            assert_eq!(
-                second_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0, 3, 5, 6, 7, 8, 10]
-            );
-        } else {
-            unreachable!()
-        }
-        if let TableStatus::InMemory(second_table) = &engine.table_manager.get_info(2).status {
-            let first_col = if let IntervalColumnT::U64(col) = second_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             first_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![1, 2, 3, 4, 5, 7, 8, 9, 10]
+    //         );
+    //         assert_eq!(
+    //             first_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0]
+    //         );
 
-            assert_eq!(
-                first_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![1, 2, 3, 4, 5, 7, 8, 9, 10]
-            );
-            assert_eq!(
-                first_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0]
-            );
+    //         let second_col = if let IntervalColumnT::U64(col) = second_table.get_column(1) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            let second_col = if let IntervalColumnT::U64(col) = second_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             second_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![
+    //                 1, 8, 1, 2, 5, 4, 7, 9, 10, 2, 3, 4, 5, 7, 8, 9, 10, 1, 2, 4, 7, 10, 2, 3, 4,
+    //                 5, 7, 1, 4, 7, 8, 9, 10, 3, 4, 5, 7, 8, 9, 10, 3, 4, 5, 7, 8, 9, 10
+    //             ]
+    //         );
+    //         assert_eq!(
+    //             second_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0, 2, 5, 9, 17, 22, 27, 33, 40]
+    //         );
+    //     } else {
+    //         unreachable!()
+    //     }
+    //     if let TableStatus::InMemory(third_table) = &engine.table_manager.get_info(3).status {
+    //         let first_col = if let IntervalColumnT::U64(col) = third_table.get_column(0) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            assert_eq!(
-                second_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![
-                    1, 8, 1, 2, 5, 4, 7, 9, 10, 2, 3, 4, 5, 7, 8, 9, 10, 1, 2, 4, 7, 10, 2, 3, 4,
-                    5, 7, 1, 4, 7, 8, 9, 10, 3, 4, 5, 7, 8, 9, 10, 3, 4, 5, 7, 8, 9, 10
-                ]
-            );
-            assert_eq!(
-                second_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0, 2, 5, 9, 17, 22, 27, 33, 40]
-            );
-        } else {
-            unreachable!()
-        }
-        if let TableStatus::InMemory(third_table) = &engine.table_manager.get_info(3).status {
-            let first_col = if let IntervalColumnT::U64(col) = third_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             first_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![2, 3, 5, 8]
+    //         );
+    //         assert_eq!(
+    //             first_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0]
+    //         );
 
-            assert_eq!(
-                first_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![2, 3, 5, 8]
-            );
-            assert_eq!(
-                first_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0]
-            );
+    //         let second_col = if let IntervalColumnT::U64(col) = third_table.get_column(1) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-            let second_col = if let IntervalColumnT::U64(col) = third_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+    //         assert_eq!(
+    //             second_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![3, 1, 2, 3, 5, 8, 3, 5, 8, 3, 5]
+    //         );
+    //         assert_eq!(
+    //             second_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0, 1, 6, 9]
+    //         );
+    //     } else {
+    //         unreachable!()
+    //     }
+    // }
 
-            assert_eq!(
-                second_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![3, 1, 2, 3, 5, 8, 3, 5, 8, 3, 5]
-            );
-            assert_eq!(
-                second_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0, 1, 6, 9]
-            );
-        } else {
-            unreachable!()
-        }
-    }
+    // #[test]
+    // fn body_constants_repeated_vars() {
+    //     let rule = Rule::new(
+    //         vec![Atom::new(
+    //             Identifier(1),
+    //             vec![Term::Variable(Variable::Universal(Identifier(0)))],
+    //         )],
+    //         vec![
+    //             Literal::Positive(Atom::new(
+    //                 Identifier(2),
+    //                 vec![
+    //                     Term::Variable(Variable::Universal(Identifier(0))),
+    //                     Term::Variable(Variable::Universal(Identifier(0))),
+    //                 ],
+    //             )),
+    //             Literal::Positive(Atom::new(
+    //                 Identifier(3),
+    //                 vec![
+    //                     Term::Variable(Variable::Universal(Identifier(0))),
+    //                     Term::NumericLiteral(NumericLiteral::Integer(3)),
+    //                 ],
+    //             )),
+    //         ],
+    //         vec![],
+    //     );
 
-    #[test]
-    fn body_constants_repeated_vars() {
-        let rule = Rule::new(
-            vec![Atom::new(
-                Identifier(1),
-                vec![Term::Variable(Variable::Universal(Identifier(0)))],
-            )],
-            vec![
-                Literal::Positive(Atom::new(
-                    Identifier(2),
-                    vec![
-                        Term::Variable(Variable::Universal(Identifier(0))),
-                        Term::Variable(Variable::Universal(Identifier(0))),
-                    ],
-                )),
-                Literal::Positive(Atom::new(
-                    Identifier(3),
-                    vec![
-                        Term::Variable(Variable::Universal(Identifier(0))),
-                        Term::NumericLiteral(NumericLiteral::Integer(3)),
-                    ],
-                )),
-            ],
-            vec![],
-        );
+    //     let program = Program::new(None, HashMap::new(), Vec::new(), vec![rule], Vec::new());
 
-        let program = Program::new(None, HashMap::new(), Vec::new(), vec![rule], Vec::new());
+    //     let mut engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
 
-        let mut engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
+    //     let a_column_x = make_gict(&[1, 2, 3, 4, 5], &[0]);
+    //     let a_column_y = make_gict(&[2, 3, 1, 2, 4, 2, 3, 2, 4, 4], &[0, 2, 5, 7, 9]);
 
-        let a_column_x = make_gict(&[1, 2, 3, 4, 5], &[0]);
-        let a_column_y = make_gict(&[2, 3, 1, 2, 4, 2, 3, 2, 4, 4], &[0, 2, 5, 7, 9]);
+    //     let b_column_x = make_gict(&[1, 2, 3, 4], &[0]);
+    //     let b_column_y = make_gict(&[3, 2, 3, 2, 2, 3], &[0, 1, 3, 4]);
 
-        let b_column_x = make_gict(&[1, 2, 3, 4], &[0]);
-        let b_column_y = make_gict(&[3, 2, 3, 2, 2, 3], &[0, 1, 3, 4]);
+    //     let schema = TrieSchema::new(vec![
+    //         TrieSchemaEntry {
+    //             label: 10,
+    //             datatype: DataTypeName::U64,
+    //         },
+    //         TrieSchemaEntry {
+    //             label: 11,
+    //             datatype: DataTypeName::U64,
+    //         },
+    //     ]);
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 10,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 11,
-                datatype: DataTypeName::U64,
-            },
-        ]);
+    //     let trie_a = Trie::new(schema.clone(), vec![a_column_x, a_column_y]);
+    //     let trie_b = Trie::new(schema.clone(), vec![b_column_x, b_column_y]);
+    //     engine.add_trie(Identifier(2), 0..1, vec![0, 1], 0, trie_a);
+    //     engine.add_trie(Identifier(3), 0..1, vec![0, 1], 0, trie_b);
 
-        let trie_a = Trie::new(schema.clone(), vec![a_column_x, a_column_y]);
-        let trie_b = Trie::new(schema.clone(), vec![b_column_x, b_column_y]);
-        engine.add_trie(Identifier(2), 0..1, vec![0, 1], 0, trie_a);
-        engine.add_trie(Identifier(3), 0..1, vec![0, 1], 0, trie_b);
+    //     engine.execute();
 
-        engine.execute();
+    //     let no_five = std::panic::catch_unwind(|| engine.table_manager.get_info(5));
+    //     assert!(no_five.is_err());
 
-        let no_five = std::panic::catch_unwind(|| engine.table_manager.get_info(5));
-        assert!(no_five.is_err());
+    //     if let TableStatus::InMemory(result_table) = &engine.table_manager.get_info(3).status {
+    //         let first_col = if let IntervalColumnT::U64(col) = result_table.get_column(0) {
+    //             col
+    //         } else {
+    //             unreachable!()
+    //         };
 
-        if let TableStatus::InMemory(result_table) = &engine.table_manager.get_info(3).status {
-            let first_col = if let IntervalColumnT::U64(col) = result_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
-
-            assert_eq!(
-                first_col.get_data_column().iter().collect::<Vec<u64>>(),
-                vec![2, 4]
-            );
-            assert_eq!(
-                first_col.get_int_column().iter().collect::<Vec<usize>>(),
-                vec![0]
-            );
-        } else {
-            unreachable!()
-        }
-    }
+    //         assert_eq!(
+    //             first_col.get_data_column().iter().collect::<Vec<u64>>(),
+    //             vec![2, 4]
+    //         );
+    //         assert_eq!(
+    //             first_col.get_int_column().iter().collect::<Vec<usize>>(),
+    //             vec![0]
+    //         );
+    //     } else {
+    //         unreachable!()
+    //     }
+    // }
 }
