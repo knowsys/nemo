@@ -124,7 +124,7 @@ impl Trie {
             .map(|val| match val {
                 DataValueT::U64(constant) => dict
                     .entry(constant.try_into().unwrap())
-                    .expect("should have been interned"),
+                    .unwrap_or_else(|| format!("{constant} should have been interned")),
                 _ => val.to_string(),
             })
             .collect()];
@@ -149,16 +149,20 @@ impl Trie {
                     .zip(padding_lengths)
                     .flat_map(|(val, pl)| {
                         iter::once(match val {
-                            DataValueT::U64(constant) => dict
-                                .entry(constant.try_into().unwrap())
-                                .expect("should have been interned"),
+                            DataValueT::U64(constant) => {
+                                dict.entry(constant.try_into().unwrap()).unwrap_or_else(|| {
+                                    format!("<{constant} should have been interned>")
+                                })
+                            }
                             _ => val.to_string(),
                         })
                         .chain(
                             iter::repeat(match val {
-                                DataValueT::U64(constant) => dict
-                                    .entry(constant.try_into().unwrap())
-                                    .expect("should have been interned"),
+                                DataValueT::U64(constant) => {
+                                    dict.entry(constant.try_into().unwrap()).unwrap_or_else(|| {
+                                        format!("{constant} should have been interned")
+                                    })
+                                }
                                 _ => val.to_string(),
                             })
                             .take(pl),
