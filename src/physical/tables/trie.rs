@@ -125,7 +125,7 @@ impl Trie {
             .map(|val| match val {
                 DataValueT::U64(constant) => dict
                     .entry(constant.try_into().unwrap())
-                    .unwrap_or_else(|| format!("{constant} should have been interned")),
+                    .unwrap_or_else(|| format!("<{constant} should have been interned>")),
                 _ => val.to_string(),
             })
             .collect()];
@@ -161,7 +161,7 @@ impl Trie {
                             iter::repeat(match val {
                                 DataValueT::U64(constant) => {
                                     dict.entry(constant.try_into().unwrap()).unwrap_or_else(|| {
-                                        format!("{constant} should have been interned")
+                                        format!("<{constant} should have been interned>")
                                     })
                                 }
                                 _ => val.to_string(),

@@ -305,8 +305,23 @@ impl TableManager {
                 );
 
                 // TODO(mx): drop this to debug level
-                log::info!("materialising table {table_id} for order {info_order:?}");
+                log::info!(
+                    "materialising {:05} table {table_id} for order {info_order:?}\n{project_iter:?}",
+                    self.counter
+                );
                 let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+                match OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(PathBuf::from(format!(
+                        "out/{:05}_materialise_{table_id}_base.csv",
+                        self.counter
+                    ))) {
+                    Ok(mut file) => write!(file, "{}", base_trie.debug(&self.dictionary))
+                        .expect("should succeed"),
+                    Err(e) => log::warn!("error writing: {e:?}"),
+                }
                 match OpenOptions::new()
                     .write(true)
                     .create(true)
@@ -622,7 +637,7 @@ impl TableManager {
         let mut temp_tries = HashMap::<TableId, Option<Trie>>::new();
 
         for plan in series.plans {
-            log::info!("executing plan:\n{plan:#?}");
+            log::info!("executing plan for {:05}:\n{plan:#?}", self.counter);
             let mut table_ids = HashSet::new();
             for leave_node in plan.leaves {
                 if let ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) =
@@ -658,7 +673,7 @@ impl TableManager {
             let iter_option = self.get_iterator_node(&plan.root, &temp_tries);
             if let Some(mut iter) = iter_option {
                 // TODO: Materializig should check memory and so on...
-                log::info!("materialising {:?}", plan.result);
+                log::info!("materialising {:05} {:?}", self.counter, plan.result);
                 let new_trie = materialize(&mut iter);
                 match OpenOptions::new()
                     .write(true)
@@ -676,6 +691,11 @@ impl TableManager {
 
                 match plan.result {
                     ExecutionResult::Temp(id) => {
+                        log::info!(
+                            "materialised {:05}: Temp({id}) with {} rows",
+                            self.counter,
+                            new_trie.row_num()
+                        );
                         if new_trie.row_num() > 0 {
                             temp_tries.insert(id, Some(new_trie));
                         } else {
