@@ -18,6 +18,8 @@ pub fn expand_range(column: &IntervalColumnT, range: Range<usize>) -> Range<usiz
         column.int_bounds(range.end).start
     };
 
+    log::debug!("{range:?} {start}..{end}");
+
     start..end
 }
 
@@ -215,7 +217,10 @@ mod test {
     use super::TrieProject;
     use crate::physical::columns::{Column, IntervalColumnT};
     use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tables::{materialize, Trie, TrieScanEnum, TrieSchema, TrieSchemaEntry};
+    use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
+    use crate::physical::tables::{
+        materialize, Table, Trie, TrieScanEnum, TrieSchema, TrieSchemaEntry,
+    };
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
@@ -549,6 +554,14 @@ mod test {
             vec![2, 0, 1],
         )));
 
+        log::debug!(
+            "\n{}\n\n{}",
+            trie.debug(&PrefixedStringDictionary::default()),
+            trie_reordered.debug(&PrefixedStringDictionary::default())
+        );
+
+        assert_eq!(trie.row_num(), trie_reordered.row_num());
+
         let proj_column_upper = if let IntervalColumnT::U64(col) = trie_reordered.get_column(0) {
             col
         } else {
@@ -823,5 +836,59 @@ mod test {
                 .collect::<Vec<usize>>(),
             vec![0, 1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 14]
         );
+    }
+
+    /// This is a test case for a bug first encountered while
+    /// classifying `smallmed` using the EL calculus rules, where
+    /// reordering a table with 2 rows results in a table with 4 rows.
+    #[test]
+    fn spurious_tuples_in_reorder_bug() {
+        let schema_entry = TrieSchemaEntry {
+            label: 0,
+            datatype: DataTypeName::U64,
+        };
+        let schema = TrieSchema::new(vec![schema_entry, schema_entry, schema_entry]);
+
+        let mut dict = PrefixedStringDictionary::default();
+        let x = dict.add("72".to_owned()).try_into().unwrap();
+        let a = dict.add("139".to_owned()).try_into().unwrap();
+        let b = dict.add("141".to_owned()).try_into().unwrap();
+        let u = dict.add("140".to_owned()).try_into().unwrap();
+        let v = dict.add("134".to_owned()).try_into().unwrap();
+
+        let fst = vec![x];
+        let snd = vec![a, b];
+        let trd = vec![u, v];
+
+        let first = make_gict(&fst, &[0]);
+        let second = make_gict(&snd, &[0]);
+        let third = make_gict(&trd, &[0, 1]);
+
+        let columns = vec![first, second, third];
+
+        let picked_columns = vec![1, 0, 2];
+        let base_trie = Trie::new(schema, columns);
+        let mut project = TrieScanEnum::TrieProject(TrieProject::new(&base_trie, picked_columns));
+
+        let reordered_trie = materialize(&mut project);
+        log::debug!("{}", reordered_trie.debug(&dict));
+        log::debug!("{reordered_trie:#?}");
+
+        assert_eq!(base_trie.row_num(), reordered_trie.row_num());
+
+        // assert_eq!(
+        //     base_trie.get_column(0).iter().collect::<Vec<_>>(),
+        //     reordered_trie.get_column(1).iter().collect::<Vec<_>>()
+        // );
+
+        // assert_eq!(
+        //     base_trie.get_column(1).iter().collect::<Vec<_>>(),
+        //     reordered_trie.get_column(0).iter().collect::<Vec<_>>()
+        // );
+
+        // assert_eq!(
+        //     base_trie.get_column(2).iter().collect::<Vec<_>>(),
+        //     reordered_trie.get_column(2).iter().collect::<Vec<_>>()
+        // );
     }
 }
