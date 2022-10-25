@@ -863,8 +863,6 @@ mod test {
             Vec::new(),
         );
 
-        let mut engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
-
         let column_x = make_gict(&[1, 2, 5, 7], &[0]);
         let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
 

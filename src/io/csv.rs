@@ -88,14 +88,15 @@ mod test {
     #[test]
     fn csv_empty() {
         let data = "\
-city;country;pop
-Boston;United States;4628910
-";
+    city;country;pop
+    Boston;United States;4628910
+    ";
         let mut rdr = ReaderBuilder::new()
             .delimiter(b';')
             .from_reader(data.as_bytes());
 
-        let x = read(&[None, None, None], &mut rdr);
+        let mut dict = PrefixedStringDictionary::default();
+        let x = read(&[None, None, None], &mut rdr, &mut dict);
         assert!(x.is_ok());
         assert_eq!(x.unwrap().len(), 0);
     }
@@ -104,17 +105,18 @@ Boston;United States;4628910
     #[cfg_attr(miri, ignore)]
     fn csv_with_ignored_and_faulty() {
         let data = "\
-10;20;30;40;20;valid
-asdf;12.2;413;22.3;23;invalid
-node01;22;33.33;12.333332;10;valid
-node02;1312;12.33;313;1431;valid
-node03;123;123;13;55;123;invalid
-";
+    10;20;30;40;20;valid
+    asdf;12.2;413;22.3;23;invalid
+    node01;22;33.33;12.333332;10;valid
+    node02;1312;12.33;313;1431;valid
+    node03;123;123;13;55;123;invalid
+    ";
         let mut rdr = ReaderBuilder::new()
             .delimiter(b';')
             .has_headers(false)
             .from_reader(data.as_bytes());
 
+        let mut dict = PrefixedStringDictionary::default();
         let imported = read(
             &[
                 None,
@@ -125,6 +127,7 @@ node03;123;123;13;55;123;invalid
                 None,
             ],
             &mut rdr,
+            &mut dict,
         );
 
         assert!(imported.is_ok());
@@ -162,6 +165,7 @@ node03;123;123;13;55;123;invalid
             .delimiter(b',')
             .has_headers(false)
             .from_reader(csv.as_bytes());
+        let mut dict = PrefixedStringDictionary::default();
         let imported = read(
             &[
                 Some(DataTypeName::U64),
@@ -170,6 +174,7 @@ node03;123;123;13;55;123;invalid
                 Some(DataTypeName::Float),
             ],
             &mut rdr,
+            &mut dict,
         );
 
         assert!(imported.is_ok());
