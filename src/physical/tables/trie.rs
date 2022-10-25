@@ -101,7 +101,11 @@ impl Trie {
         f: &mut fmt::Formatter<'_>,
         dict: &PrefixedStringDictionary,
     ) -> fmt::Result {
-        if self.columns.is_empty() {
+        if self
+            .columns
+            .first()
+            .map_or(true, |column| column.is_empty())
+        {
             return writeln!(f);
         }
 
