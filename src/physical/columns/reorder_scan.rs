@@ -87,6 +87,7 @@ where
         }
 
         self.current_value = Some(next_value);
+        log::debug!("{self:#?}");
         self.current_value
     }
 }
