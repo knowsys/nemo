@@ -136,19 +136,34 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
                 let next_ranges = if self.current_layer.is_none() {
                     vec![0..next_column.len()]
                 } else {
-                    let current_cursors = self.reorder_scans[self.current_layer.unwrap()]
+                    let layer_for_comparison = self.picked_columns[0..self.current_layer.unwrap()]
+                        .iter()
+                        .copied()
+                        .enumerate()
+                        .filter(|(_, col_i)| *col_i >= self.picked_columns[self.current_layer.unwrap()]
+                        //        && *col_i <= self.picked_columns[next_layer]
+                        )
+                        .max_by_key(|(_, col_i)| *col_i)
+                        .map(|(i, _)| i)
+                        .unwrap_or(self.current_layer.unwrap());
+
+                    let current_cursors = self.reorder_scans[layer_for_comparison]
                         .get_mut()
                         .pos_multiple()
                         .expect("Should not call down when not on an element");
 
-                    if self.picked_columns[self.current_layer.unwrap()] < self.picked_columns[next_layer] {
+                    log::debug!("CURRENT_CURSORS {:?}", current_cursors);
+                    log::debug!("PICKED_COLUMNS {:?} {:?} {:?}", layer_for_comparison, next_layer, self.picked_columns);
+
+                    if self.picked_columns[layer_for_comparison] < self.picked_columns[next_layer] {
                         let mut ranges = Vec::<Range<usize>>::new();
                         for current_cursor in current_cursors {
                             let mut range = current_cursor..(current_cursor + 1);
 
-                            for expand_index in (self.picked_columns[self.current_layer.unwrap()] + 1)
+                            for expand_index in (self.picked_columns[layer_for_comparison] + 1)
                                 ..=self.picked_columns[next_layer]
                             {
+                                log::debug!("EXPAND_INDEX {:?}", expand_index);
                                 range = expand_range(self.trie.get_column(expand_index), range);
                             }
 
@@ -161,9 +176,11 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
                         for current_cursor in current_cursors {
                             let mut value = current_cursor;
                             for shrink_index in (self.picked_columns[next_layer] + 1
-                                ..=(self.picked_columns[self.current_layer.unwrap()]))
+                                ..=(self.picked_columns[layer_for_comparison]))
                                 .rev()
                             {
+                                log::debug!("VALUE {value:?}");
+
                                 value = shrink_position(self.trie.get_column(shrink_index), value);
                             }
 
@@ -181,6 +198,8 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
                         ranges
                     }
                 };
+
+                log::debug!("NEXT_RANGES {next_layer:?} {next_ranges:?}");
 
                 self.reorder_scans[next_layer]
                     .get_mut()
@@ -617,7 +636,7 @@ mod test {
                 .get_data_column()
                 .iter()
                 .collect::<Vec<u64>>(),
-            vec![2, 4, 2, 4, 2, 4, 3, 5, 2, 4, 3, 5, 3, 5, 3, 5]
+            vec![4, 4, 2, 5, 2, 3, 5, 3]
         );
 
         assert_eq!(
@@ -625,7 +644,7 @@ mod test {
                 .get_int_column()
                 .iter()
                 .collect::<Vec<usize>>(),
-            vec![0, 2, 4, 6, 8, 10, 12, 14]
+            vec![0, 1, 2, 3, 4, 5, 6, 7]
         );
     }
 
