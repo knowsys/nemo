@@ -49,6 +49,7 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
         let next_value = unsafe { (*trie_scan.current_scan().unwrap().get()).next() };
 
         if let Some(val) = current_value {
+            log::debug!("new value: {current_value:?}");
             if !current_row.last().unwrap() && is_last_layer {
                 current_row = vec![true; target_schema.arity()];
             }
@@ -117,8 +118,9 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
     log::info!(
         "materialised trie with {} columns and {} rows",
         result_columns.len(),
-        result_columns.first().map_or(0, |col| col.len())
+        result_columns.last().map_or(0, |col| col.len())
     );
+    log::debug!("\n{result_columns:#?}");
 
     // Finally, return finished trie
     Trie::new(target_schema, result_columns)
