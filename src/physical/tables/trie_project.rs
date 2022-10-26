@@ -235,7 +235,7 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
 mod test {
     use super::TrieProject;
     use crate::physical::columns::{Column, IntervalColumnT};
-    use crate::physical::datatypes::DataTypeName;
+    use crate::physical::datatypes::{DataTypeName, DataValueT};
     use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
     use crate::physical::tables::{
         materialize, Table, Trie, TrieScanEnum, TrieSchema, TrieSchemaEntry,
@@ -909,5 +909,58 @@ mod test {
         //     base_trie.get_column(2).iter().collect::<Vec<_>>(),
         //     reordered_trie.get_column(2).iter().collect::<Vec<_>>()
         // );
+    }
+
+    /// This is another test case for a bug first encountered while
+    /// classifying `smallmed` using the EL calculus rules, where
+    /// reordering a table with 10 rows results in a table with 30 rows.
+    #[test]
+    fn spurious_tuples_in_reorder_mk2_bug() {
+        let schema_entry = TrieSchemaEntry {
+            label: 0,
+            datatype: DataTypeName::U64,
+        };
+        let schema = TrieSchema::new(vec![schema_entry, schema_entry, schema_entry]);
+
+        let mut dict = PrefixedStringDictionary::default();
+        let mut intern =
+            |term: &str| DataValueT::U64(dict.add(term.to_owned()).try_into().unwrap());
+
+        let a = intern("genid:cc18ce3a-be8a-3445-8b68-2027a2e1b1be");
+        let b = intern("genid:0f18d187-7a4f-35c6-b645-c57ee51d277d");
+        let c = intern("genid:c43dcdc4-5c45-307f-b734-76485822be3a");
+        let d = intern("genid:8ab183c6-7491-3ae9-946c-f26084087292");
+        let e = intern("genid:31241d92-1fbf-3bac-8027-82e028b346a6");
+        let f = intern("i:RoleGroup");
+        let g = intern("genid:cbf5c5b6-f56e-362d-a793-bcfd30c264f4");
+        let h = intern("genid:6ecad60a-3cbd-3db0-b4c4-ee456ebcb64c");
+        let i = intern("genid:ce19480b-4d0d-3bb0-b2e5-8fd877f29514");
+        let j = intern("genid:69b6b533-19ac-35e1-9fe5-1fece1653d7b");
+        let k = intern("genid:4034e8ac-9994-35bb-9836-ea484a2cc3d9");
+        let l = intern("genid:7af2f7a6-3f3c-3694-83b8-b630f9e4c02a");
+
+        let rows = vec![
+            vec![a, f, g],
+            vec![b, f, h],
+            vec![b, f, i],
+            vec![c, f, h],
+            vec![c, f, i],
+            vec![d, f, j],
+            vec![d, f, h],
+            vec![d, f, i],
+            vec![d, f, k],
+            vec![e, f, l],
+        ];
+
+        let picked_columns = vec![1, 0, 2];
+        let base_trie = Trie::from_rows(schema, rows);
+        log::debug!("\n{}", base_trie.debug(&dict));
+        let mut project = TrieScanEnum::TrieProject(TrieProject::new(&base_trie, picked_columns));
+
+        let reordered_trie = materialize(&mut project);
+        log::debug!("\n{}", reordered_trie.debug(&dict));
+        log::debug!("{reordered_trie:#?}");
+
+        assert_eq!(base_trie.row_num(), reordered_trie.row_num());
     }
 }
