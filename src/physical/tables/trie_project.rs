@@ -140,9 +140,7 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
                         .iter()
                         .copied()
                         .enumerate()
-                        .filter(|(_, col_i)| *col_i >= self.picked_columns[self.current_layer.unwrap()]
-                        //        && *col_i <= self.picked_columns[next_layer]
-                        )
+                        .filter(|(_, col_i)| *col_i >= self.picked_columns[self.current_layer.unwrap()])
                         .max_by_key(|(_, col_i)| *col_i)
                         .map(|(i, _)| i)
                         .unwrap_or(self.current_layer.unwrap());
@@ -152,7 +150,28 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
                         .pos_multiple()
                         .expect("Should not call down when not on an element");
 
-                    log::debug!("CURRENT_CURSORS {:?}", current_cursors);
+                    log::debug!("CURRENT_CURSORS before filtering {:?}", current_cursors);
+
+                    // keep only cursor positions for the comparison layer that are in line with the positions in the current layer
+                    // we check this by "shrinking" the cursor positions from the comparison layer
+                    let current_cursors: Vec<usize> = current_cursors
+                        .into_iter()
+                        .filter(|c| {
+                            let mut cursor = *c;
+                            for shrink_index in ((self.picked_columns[self.current_layer.unwrap()] + 1)..=self.picked_columns[layer_for_comparison]).rev() {
+                                cursor = shrink_position(self.trie.get_column(shrink_index), cursor);
+                            }
+
+                            self.reorder_scans[self.current_layer.unwrap()]
+                                .get_mut()
+                                .pos_multiple()
+                                .expect("Should not call down when not on an element")
+                                .contains(&cursor)
+                        })
+                        .collect();
+
+
+                    log::debug!("CURRENT_CURSORS after filtering {:?}", current_cursors);
                     log::debug!("PICKED_COLUMNS {:?} {:?} {:?}", layer_for_comparison, next_layer, self.picked_columns);
 
                     if self.picked_columns[layer_for_comparison] < self.picked_columns[next_layer] {
@@ -996,5 +1015,67 @@ mod test {
         log::debug!("{reordered_trie:#?}");
 
         assert_eq!(base_trie.row_num(), reordered_trie.row_num());
+    }
+
+    #[test]
+    fn spurious_tuples_in_reorder_bug2() {
+        let schema_entry = TrieSchemaEntry {
+            label: 0,
+            datatype: DataTypeName::U64,
+        };
+        let schema = TrieSchema::new(vec![schema_entry, schema_entry, schema_entry]);
+
+        let mut dict = PrefixedStringDictionary::default();
+
+        let rg = dict.add("RoleGroup".to_owned()).try_into().unwrap();
+        let a = dict.add("4_1_6".to_owned()).try_into().unwrap();
+        let b = dict.add("4_1_21".to_owned()).try_into().unwrap();
+        let c = dict.add("4_1_22".to_owned()).try_into().unwrap();
+        //let d = dict.add("4_1_23".to_owned()).try_into().unwrap();
+        //let e = dict.add("32_1_14".to_owned()).try_into().unwrap();
+        let u = dict.add("32_1_58".to_owned()).try_into().unwrap();
+        let v = dict.add("32_1_72".to_owned()).try_into().unwrap();
+        let w = dict.add("32_1_81".to_owned()).try_into().unwrap();
+        let x = dict.add("32_1_74".to_owned()).try_into().unwrap();
+        let y = dict.add("32_1_83".to_owned()).try_into().unwrap();
+        let z = dict.add("32_1_60".to_owned()).try_into().unwrap();
+
+        //let fst = vec![a, b, c, d, e];
+        //let snd = vec![rg, rg, rg, rg, rg];
+        //let trd = vec![u, v, w, x, y, z, v, x, v, x];
+        let fst = vec![a, b, c];
+        let snd = vec![rg, rg, rg];
+        let trd = vec![u, v, w, x, y, z];
+
+        let first = make_gict(&fst, &[0]);
+        let second = make_gict(&snd, &[0, 1, 2]);
+        let third = make_gict(&trd, &[0, 4, 5]);
+
+        let columns = vec![first, second, third];
+
+        let picked_columns = vec![1, 0, 2];
+        let base_trie = Trie::new(schema, columns);
+        let mut project = TrieScanEnum::TrieProject(TrieProject::new(&base_trie, picked_columns));
+
+        let reordered_trie = materialize(&mut project);
+        log::debug!("{}", reordered_trie.debug(&dict));
+        log::debug!("{reordered_trie:#?}");
+
+        assert_eq!(base_trie.row_num(), reordered_trie.row_num());
+
+        // assert_eq!(
+        //     base_trie.get_column(0).iter().collect::<Vec<_>>(),
+        //     reordered_trie.get_column(1).iter().collect::<Vec<_>>()
+        // );
+
+        // assert_eq!(
+        //     base_trie.get_column(1).iter().collect::<Vec<_>>(),
+        //     reordered_trie.get_column(0).iter().collect::<Vec<_>>()
+        // );
+
+        // assert_eq!(
+        //     base_trie.get_column(2).iter().collect::<Vec<_>>(),
+        //     reordered_trie.get_column(2).iter().collect::<Vec<_>>()
+        // );
     }
 }
