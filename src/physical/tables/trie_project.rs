@@ -145,7 +145,7 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
                         .map(|(i, _)| i)
                         .unwrap_or(self.current_layer.unwrap());
 
-                    let current_cursors = self.reorder_scans[layer_for_comparison]
+                    let current_cursors = self.reorder_scans[self.current_layer.unwrap()]
                         .get_mut()
                         .pos_multiple()
                         .expect("Should not call down when not on an element");
@@ -154,21 +154,24 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
 
                     // keep only cursor positions for the comparison layer that are in line with the positions in the current layer
                     // we check this by "shrinking" the cursor positions from the comparison layer
-                    let current_cursors: Vec<usize> = current_cursors
-                        .into_iter()
-                        .filter(|c| {
-                            let mut cursor = *c;
-                            for shrink_index in ((self.picked_columns[self.current_layer.unwrap()] + 1)..=self.picked_columns[layer_for_comparison]).rev() {
-                                cursor = shrink_position(self.trie.get_column(shrink_index), cursor);
-                            }
+                    let current_cursors: Vec<usize> = if self.current_layer.unwrap() == layer_for_comparison { current_cursors } else {
+                        let comparison_cursors = self.reorder_scans[layer_for_comparison]
+                            .get_mut()
+                            .pos_multiple()
+                            .expect("Should not call down when not on an element");
 
-                            self.reorder_scans[self.current_layer.unwrap()]
-                                .get_mut()
-                                .pos_multiple()
-                                .expect("Should not call down when not on an element")
-                                .contains(&cursor)
-                        })
-                        .collect();
+                        current_cursors
+                            .into_iter()
+                            .flat_map(|c| {
+                                let mut cursor_range = c..(c+1);
+                                for expand_index in ((self.picked_columns[self.current_layer.unwrap()] + 1)..=self.picked_columns[layer_for_comparison]) {
+                                    cursor_range = expand_range(self.trie.get_column(expand_index), cursor_range);
+                                }
+
+                                comparison_cursors.iter().copied().filter(move |c| cursor_range.contains(c))
+                            })
+                            .collect()
+                    };
 
 
                     log::debug!("CURRENT_CURSORS after filtering {:?}", current_cursors);
