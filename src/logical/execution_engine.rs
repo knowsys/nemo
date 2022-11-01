@@ -2,6 +2,7 @@
 use std::{
     collections::{HashMap, HashSet},
     ops::Range,
+    thread::current,
 };
 
 use crate::{
@@ -468,7 +469,7 @@ impl RuleExecutionEngine {
             .iter()
             .map(|a| RuleExecutionEngine::order_atom(a, variable_order))
             .collect();
-        let join_binding = body_atoms
+        let join_binding: Vec<Vec<usize>> = body_atoms
             .iter()
             .enumerate()
             .map(|(i, a)| {
@@ -575,7 +576,99 @@ impl RuleExecutionEngine {
 
         // All the plans will be stored in this vector
         let mut plans = Vec::<ExecutionPlan>::new();
+        let mut current_temp_id = ID_NEW_TABLES;
 
+        // BEGIN: ALTERNATIVE APPROACH
+        // let last_rule_step = self.rule_infos[rule_id].step_last_applied;
+        // let mut join_ids = Vec::<usize>::new();
+
+        // for body_index in 0..rule.body.len() {
+        //     let union_temp_id = current_temp_id;
+
+        //     for (atom_index, atom) in body_atoms.iter().take(body_index).enumerate() {
+        //         let mut leaves = Vec::<ExecutionNode>::new();
+        //         let union_node = self.create_subplan_union(
+        //             atom.predicate(),
+        //             &(0..self.current_step + 1),
+        //             &atom_column_orders[atom_index],
+        //             &mut leaves,
+        //         );
+
+        //         plans.push(ExecutionPlan {
+        //             root: union_node,
+        //             leaves,
+        //             result: ExecutionResult::Temp(current_temp_id),
+        //         });
+        //         current_temp_id += 1;
+        //     }
+
+        //     {
+        //         let mut leaves = Vec::<ExecutionNode>::new();
+        //         let union_node = self.create_subplan_union(
+        //             body_atoms[body_index].predicate(),
+        //             &(last_rule_step..self.current_step + 1),
+        //             &atom_column_orders[body_index],
+        //             &mut leaves,
+        //         );
+
+        //         plans.push(ExecutionPlan {
+        //             root: union_node,
+        //             leaves,
+        //             result: ExecutionResult::Temp(current_temp_id),
+        //         });
+        //         current_temp_id += 1;
+        //     }
+
+        //     for (atom_index, atom) in body_atoms.iter().enumerate().skip(body_index + 1) {
+        //         let mut leaves = Vec::<ExecutionNode>::new();
+        //         let union_node = self.create_subplan_union(
+        //             atom.predicate(),
+        //             &(0..last_rule_step),
+        //             &atom_column_orders[atom_index],
+        //             &mut leaves,
+        //         );
+
+        //         plans.push(ExecutionPlan {
+        //             root: union_node,
+        //             leaves,
+        //             result: ExecutionResult::Temp(current_temp_id),
+        //         });
+        //         current_temp_id += 1;
+        //     }
+
+        //     let mut join_subnodes = Vec::<ExecutionNode>::new();
+        //     for id in union_temp_id..current_temp_id {
+        //         join_subnodes.push(ExecutionNode {
+        //             operation: ExecutionOperation::Temp(id),
+        //         });
+        //     }
+
+        //     plans.push(ExecutionPlan {
+        //         root: ExecutionNode {
+        //             operation: ExecutionOperation::Join(join_subnodes, join_binding.clone()),
+        //         },
+        //         leaves: vec![],
+        //         result: ExecutionResult::Temp(current_temp_id),
+        //     });
+        //     join_ids.push(current_temp_id);
+        //     current_temp_id += 1;
+        // }
+
+        // let mut join_subnodes = Vec::<ExecutionNode>::new();
+        // for id in join_ids {
+        //     join_subnodes.push(ExecutionNode {
+        //         operation: ExecutionOperation::Temp(id),
+        //     });
+        // }
+        // let mut body_node = ExecutionNode {
+        //     operation: ExecutionOperation::Union(join_subnodes),
+        // };
+
+        // let mut body_leaves = Vec::<ExecutionNode>::new();
+
+        // END: ALTERNATIVE APPROACH
+
+        // BEGIN: NORMAL APPROACH
         // First, compute the big join for the body
         let mut body_leaves = Vec::<ExecutionNode>::new();
 
@@ -598,6 +691,8 @@ impl RuleExecutionEngine {
         let mut body_node = ExecutionNode {
             operation: ExecutionOperation::Union(body_joins),
         };
+
+        // END: NORMAL APPROACH
 
         // If there are filters apply them
         if !filter_assignments.is_empty() {
@@ -723,8 +818,6 @@ impl RuleExecutionEngine {
             // TODO: ...
         }
 
-        let mut current_temp_id = ID_NEW_TABLES;
-
         for (predicate, (column_order, head_atoms)) in &head_map {
             // Calculate head tables by projecting/reordering the temporary table resulting from the body
 
@@ -844,6 +937,7 @@ mod test {
         physical::{
             columns::{Column, IntervalColumnT},
             datatypes::DataTypeName,
+            dictionary::PrefixedStringDictionary,
             tables::{Trie, TrieSchema, TrieSchemaEntry},
             util::make_gict,
         },

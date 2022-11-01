@@ -3,10 +3,10 @@ use crate::physical::datatypes::{ColumnDataType, DataTypeName, DataValueT, Doubl
 use std::fmt::Debug;
 
 // Number of rle elements in rle column builder after which to decide which column type to use.
-const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5;
+const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5; // 5
 
 // The average minimum length of the elements in the incremental RLE
-const TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS: usize = 3;
+const TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS: usize = 3; // 3
 
 #[derive(Debug, PartialEq)]
 enum ColumnBuilderType<T> {
