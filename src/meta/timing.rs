@@ -216,7 +216,10 @@ impl TimedCode {
 
     /// Creates an ASCII tree
     pub fn create_tree(&self, title: &str, options: &[TimedDisplay]) -> Tree {
-        let title_string = String::from_str(title).unwrap();
+        let mut title_string = String::from_str(title).unwrap();
+        title_string.push_str(" [");
+        title_string.push_str(&self.info.accumulated_time.as_millis().to_string());
+        title_string.push_str(" ms]");
 
         TimedCode::create_tree_recursive(0, &self, title_string, options)
     }
