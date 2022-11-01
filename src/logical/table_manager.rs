@@ -682,7 +682,31 @@ impl TableManager {
                 .stop();
 
             TimedCode::instance()
-                .sub("Reasoning/Materialize/Iterator")
+                .sub("Reasoning/Materialize/Pipeline")
+                .start();
+
+            const TMP_NAMES: &[&str] = &[
+                "BodyJoin",
+                "HeadJoin",
+                "BodyFrontier",
+                "HeadFrontier",
+                "ExistentialDiff",
+            ];
+
+            let code_string = match plan.result {
+                ExecutionResult::Temp(tmp_id) => {
+                    if tmp_id < TMP_NAMES.len() {
+                        TMP_NAMES[tmp_id]
+                    } else {
+                        "HeadProjection"
+                    }
+                }
+                ExecutionResult::Save(_, _, _, _) => "Duplicates & HeadUnion",
+            };
+
+            TimedCode::instance()
+                .sub("Reasoning/Materialize/Pipeline")
+                .sub(code_string)
                 .start();
 
             let iter_option = self.get_iterator_node(&plan.root, &temp_tries);
@@ -730,7 +754,11 @@ impl TableManager {
             }
 
             TimedCode::instance()
-                .sub("Reasoning/Materialize/Iterator")
+                .sub("Reasoning/Materialize/Pipeline")
+                .sub(code_string)
+                .stop();
+            TimedCode::instance()
+                .sub("Reasoning/Materialize/Pipeline")
                 .stop();
         }
 
