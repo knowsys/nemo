@@ -100,14 +100,14 @@ pub fn benchmark_join(c: &mut Criterion) {
                 )
             },
             |join_iter| {
-                materialize(&mut TrieScanEnum::TrieJoin(join_iter));
+                let _ = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
             },
         );
     });
     group_ours.finish();
 
     let file_a = File::open("out-galen/xe.csv").expect("could not open file");
-    let file_b = File::open("out-galen/aux.csv").expect("could not open file");
+    let file_b = File::open("outt-galen/aux.csv").expect("could not open file");
 
     let table_a_schema = Schema::new()
         .insert_index(0, "AX".to_string(), DataType::Utf8)
@@ -147,7 +147,7 @@ pub fn benchmark_join(c: &mut Criterion) {
         b.iter_with_setup(
             || {},
             |_| {
-                table_a
+                let _ = table_a
                     .join(
                         &table_b,
                         vec!["AX", "AY"],
