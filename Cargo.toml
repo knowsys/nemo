@@ -44,3 +44,7 @@ harness = false
 [[bench]]
 name = "seek_iai"
 harness = false
+
+[[bench]]
+name = "operations"
+harness = false
