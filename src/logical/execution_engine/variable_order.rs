@@ -2,7 +2,10 @@
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
-use crate::logical::Permutator;
+use crate::{
+    logical::Permutator,
+    physical::dictionary::{Dictionary, PrefixedStringDictionary},
+};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::super::{
@@ -11,7 +14,7 @@ use super::super::{
 };
 
 #[repr(transparent)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(super) struct VariableOrder(pub HashMap<Variable, usize>);
 
 impl VariableOrder {
@@ -19,7 +22,7 @@ impl VariableOrder {
         Self(HashMap::new())
     }
 
-    fn push(&mut self, variable: Variable) {
+    pub fn push(&mut self, variable: Variable) {
         let max_index = self.0.values().max();
         self.0.insert(variable, max_index.map_or(0, |i| i + 1));
     }
@@ -28,11 +31,11 @@ impl VariableOrder {
         self.0.get(variable)
     }
 
-    fn contains(&self, variable: &Variable) -> bool {
+    pub fn contains(&self, variable: &Variable) -> bool {
         self.0.contains_key(variable)
     }
 
-    fn iter(&self) -> impl Iterator<Item = &Variable> {
+    pub fn iter(&self) -> impl Iterator<Item = &Variable> {
         let mut vars: Vec<&Variable> = self.0.keys().collect();
         vars.sort_by_key(|var| {
             self.0
@@ -42,8 +45,38 @@ impl VariableOrder {
         vars.into_iter()
     }
 
-    fn clone(&self) -> Self {
+    pub fn clone(&self) -> Self {
         Self(self.0.clone())
+    }
+
+    pub fn to_string(&self, dict: &PrefixedStringDictionary) -> String {
+        let mut variable_vector = Vec::<Variable>::new();
+        variable_vector.resize_with(self.0.len(), || Variable::Universal(Identifier(0)));
+
+        for (variable, index) in &self.0 {
+            variable_vector[*index] = variable.clone();
+        }
+
+        let mut result = String::new();
+
+        result += "[";
+        for (index, variable) in variable_vector.iter().enumerate() {
+            let identifier = match variable {
+                Variable::Universal(id) => id,
+                Variable::Existential(id) => id,
+            };
+
+            result += &dict
+                .entry(identifier.0)
+                .expect("Variables in the vector come from the map");
+
+            if index < variable_vector.len() - 1 {
+                result += ", ";
+            }
+        }
+        result += "]";
+
+        result
     }
 }
 
