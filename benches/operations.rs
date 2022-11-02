@@ -4,7 +4,9 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use csv::ReaderBuilder;
 use polars::prelude::{CsvReader, DataType, JoinType, Schema, SerReader};
 use stage2::io::csv::read;
-use stage2::physical::tables::{materialize, IntervalTrieScan, TrieJoin, TrieScanEnum};
+use stage2::physical::tables::{
+    materialize, IntervalTrieScan, TrieJoin, TrieProject, TrieScanEnum,
+};
 use stage2::{
     logical::{model::DataSource, table_manager::ColumnOrder},
     physical::{
@@ -107,7 +109,7 @@ pub fn benchmark_join(c: &mut Criterion) {
     group_ours.finish();
 
     let file_a = File::open("out-galen/xe.csv").expect("could not open file");
-    let file_b = File::open("outt-galen/aux.csv").expect("could not open file");
+    let file_b = File::open("out-galen/aux.csv").expect("could not open file");
 
     let table_a_schema = Schema::new()
         .insert_index(0, "AX".to_string(), DataType::Utf8)
@@ -162,5 +164,100 @@ pub fn benchmark_join(c: &mut Criterion) {
     group_polar.finish();
 }
 
-criterion_group!(benches, benchmark_join);
+fn benchmark_project(c: &mut Criterion) {
+    let mut dict = PrefixedStringDictionary::default();
+
+    let table_a = DataSource::csv_file("out-galen/xe.csv").unwrap();
+    let table_a_order: ColumnOrder = vec![0, 1, 2];
+    let table_b = DataSource::csv_file("out-galen/aux.csv").unwrap();
+    let table_b_order: ColumnOrder = vec![0, 1, 2];
+
+    let trie_a = load_trie(&table_a, &table_a_order, &mut dict);
+    let trie_b = load_trie(&table_b, &table_b_order, &mut dict);
+
+    let schema_target = TrieSchema::new(vec![
+        TrieSchemaEntry {
+            label: 100,
+            datatype: DataTypeName::U64,
+        },
+        TrieSchemaEntry {
+            label: 101,
+            datatype: DataTypeName::U64,
+        },
+        TrieSchemaEntry {
+            label: 102,
+            datatype: DataTypeName::U64,
+        },
+        TrieSchemaEntry {
+            label: 103,
+            datatype: DataTypeName::U64,
+        },
+    ]);
+
+    let join_iter = TrieJoin::new(
+        vec![
+            TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
+            TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
+        ],
+        &[vec![0, 1, 2], vec![0, 1, 3]],
+        schema_target.clone(),
+    );
+
+    let join_trie = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
+
+    let mut group_ours = c.benchmark_group("trie_project");
+    group_ours.sample_size(10);
+    group_ours.bench_function("trie_project_hole", |b| {
+        b.iter_with_setup(
+            || TrieProject::new(&join_trie, vec![0, 3]),
+            |project_iter| {
+                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+            },
+        );
+    });
+    group_ours.bench_function("trie_project_beginning", |b| {
+        b.iter_with_setup(
+            || TrieProject::new(&join_trie, vec![0, 1]),
+            |project_iter| {
+                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+            },
+        );
+    });
+    group_ours.bench_function("trie_project_end", |b| {
+        b.iter_with_setup(
+            || TrieProject::new(&join_trie, vec![2, 3]),
+            |project_iter| {
+                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+            },
+        );
+    });
+
+    group_ours.bench_function("trie_reorder_1", |b| {
+        b.iter_with_setup(
+            || TrieProject::new(&trie_b, vec![0, 2, 1]),
+            |project_iter| {
+                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+            },
+        );
+    });
+    group_ours.bench_function("trie_reorder_2", |b| {
+        b.iter_with_setup(
+            || TrieProject::new(&trie_b, vec![1, 0, 2]),
+            |project_iter| {
+                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+            },
+        );
+    });
+    group_ours.bench_function("trie_reorder_3", |b| {
+        b.iter_with_setup(
+            || TrieProject::new(&trie_b, vec![2, 1, 0]),
+            |project_iter| {
+                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+            },
+        );
+    });
+    group_ours.finish();
+}
+
+criterion_group!(benches, benchmark_join, benchmark_project);
 criterion_main!(benches);
