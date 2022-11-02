@@ -307,34 +307,34 @@ impl TableManager {
 
                 // TODO(mx): drop this to debug level
                 log::info!(
-                    "materialising {:05} table {table_id} for order {info_order:?}\n{project_iter:?}",
+                    "materialising {:05} table {table_id} for order {info_order:?}",
                     self.counter
                 );
                 let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
-                match OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(PathBuf::from(format!(
-                        "out/{:05}_materialise_{table_id}_base.csv",
-                        self.counter
-                    ))) {
-                    Ok(mut file) => write!(file, "{}", base_trie.debug(&self.dictionary))
-                        .expect("should succeed"),
-                    Err(e) => log::warn!("error writing: {e:?}"),
-                }
-                match OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(PathBuf::from(format!(
-                        "out/{:05}_materialise_{table_id}.csv",
-                        self.counter
-                    ))) {
-                    Ok(mut file) => write!(file, "{}", reordered_trie.debug(&self.dictionary))
-                        .expect("should succeed"),
-                    Err(e) => log::warn!("error writing: {e:?}"),
-                }
+                // match OpenOptions::new()
+                //     .write(true)
+                //     .create(true)
+                //     .truncate(true)
+                //     .open(PathBuf::from(format!(
+                //         "out/{:05}_materialise_{table_id}_base.csv",
+                //         self.counter
+                //     ))) {
+                //     Ok(mut file) => write!(file, "{}", base_trie.debug(&self.dictionary))
+                //         .expect("should succeed"),
+                //     Err(e) => log::warn!("error writing: {e:?}"),
+                // }
+                // match OpenOptions::new()
+                //     .write(true)
+                //     .create(true)
+                //     .truncate(true)
+                //     .open(PathBuf::from(format!(
+                //         "out/{:05}_materialise_{table_id}.csv",
+                //         self.counter
+                //     ))) {
+                //     Ok(mut file) => write!(file, "{}", reordered_trie.debug(&self.dictionary))
+                //         .expect("should succeed"),
+                //     Err(e) => log::warn!("error writing: {e:?}"),
+                // }
                 self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
                 self.counter += 1;
             } else if let TableStatus::OnDisk(source) = info.status.clone() {
@@ -640,7 +640,7 @@ impl TableManager {
         let mut temp_tries = HashMap::<TableId, Option<Trie>>::new();
 
         for plan in series.plans {
-            log::info!("executing plan for {:05}:\n{plan:#?}", self.counter);
+            // log::info!("executing plan for {:05}:\n{plan:#?}", self.counter);
             let mut table_ids = HashSet::new();
             for leave_node in plan.leaves {
                 if let ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) =
@@ -714,18 +714,18 @@ impl TableManager {
                 // TODO: Materializig should check memory and so on...
                 log::info!("materialising {:05} {:?}", self.counter, plan.result);
                 let new_trie = materialize(&mut iter);
-                match OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(PathBuf::from(format!(
-                        "out/{:05}_materialise_{:?}.csv",
-                        self.counter, plan.result
-                    ))) {
-                    Ok(mut file) => write!(file, "{}", new_trie.debug(&self.dictionary))
-                        .expect("should succeed"),
-                    Err(e) => log::warn!("error writing: {e:?}"),
-                }
+                // match OpenOptions::new()
+                //     .write(true)
+                //     .create(true)
+                //     .truncate(true)
+                //     .open(PathBuf::from(format!(
+                //         "out/{:05}_materialise_{:?}.csv",
+                //         self.counter, plan.result
+                //     ))) {
+                //     Ok(mut file) => write!(file, "{}", new_trie.debug(&self.dictionary))
+                //         .expect("should succeed"),
+                //     Err(e) => log::warn!("error writing: {e:?}"),
+                // }
                 self.counter += 1;
 
                 match plan.result {
