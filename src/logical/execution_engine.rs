@@ -29,6 +29,7 @@ struct RuleInfo {
     step_last_applied: usize,
     // Maps variables used in the rule to an index
     promising_orders: Vec<VariableOrder>,
+    is_recursive: bool,
 }
 
 /// Object which handles the evaluation of the program
@@ -63,11 +64,13 @@ impl RuleExecutionEngine {
 
         // NOTE: indices are the ids of the rules and the rule order in variable_orders is the same as in program
         let variable_orders = build_preferable_variable_orders(&program, None);
-        let rule_infos = variable_orders
-            .into_iter()
-            .map(|var_ord| RuleInfo {
+        let rule_infos = program
+            .rules()
+            .enumerate()
+            .map(|(index, rule)| RuleInfo {
                 step_last_applied: 0,
-                promising_orders: var_ord,
+                promising_orders: variable_orders[index].clone(),
+                is_recursive: RuleExecutionEngine::is_rule_recursive(rule),
             })
             .collect();
 
@@ -77,6 +80,21 @@ impl RuleExecutionEngine {
             program,
             rule_infos,
         }
+    }
+
+    fn is_rule_recursive(rule: &Rule) -> bool {
+        for head_atom in rule.head() {
+            for body_literal in rule.body() {
+                // TODO: What if there are negative literals?
+                if let Literal::Positive(body_atom) = body_literal {
+                    if head_atom.predicate() == body_atom.predicate() {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     /// Collects all parts of a table and returns it
@@ -208,7 +226,6 @@ impl RuleExecutionEngine {
         TimedCode::instance().sub("Reasoning/Rules").start();
 
         while without_derivation < self.program.rules.len() {
-            println!("Step: {}, Rule: {}", self.current_step, current_rule_index);
             let rule_string = format!("Rule: {}", current_rule_index);
 
             TimedCode::instance()
@@ -220,7 +237,22 @@ impl RuleExecutionEngine {
                 .sub("Reasoning/Rules/ExecutionPlan")
                 .start();
 
-            let promising_orders = &self.rule_infos[current_rule_index].promising_orders;
+            let mut promising_orders = &self.rule_infos[current_rule_index].promising_orders;
+
+            // Hack to force a maybe better variable order
+            // TODO: Remove this
+            let mut rule_7_cheat = Vec::<VariableOrder>::new();
+            if current_rule_index == 7 {
+                let reorder_map = HashMap::from([(0, 1), (1, 2), (2, 0), (3, 3)]);
+
+                let mut new_map = HashMap::new();
+                for (variable, index) in &promising_orders[0].0 {
+                    new_map.insert(variable.clone(), *reorder_map.get(index).unwrap());
+                }
+
+                rule_7_cheat.push(VariableOrder(new_map));
+                promising_orders = &rule_7_cheat;
+            }
 
             // Compute all possible plans from orders
             let mut plans: Vec<ExecutionSeries> = promising_orders
@@ -245,6 +277,21 @@ impl RuleExecutionEngine {
             let best_plan = plans.remove(best_plan_index);
             let no_derivation = !self.table_manager.execute_series(best_plan);
 
+            log::info!(
+                "Step {}: Applying rule {} with order {}",
+                self.current_step,
+                current_rule_index,
+                promising_orders[best_plan_index].to_string(&self.table_manager.dictionary)
+            );
+
+            log::info!("Possible orders:");
+            for (index, order) in promising_orders.iter().enumerate() {
+                log::info!(
+                    "Order {index}: {}",
+                    order.to_string(&self.table_manager.dictionary)
+                );
+            }
+
             if no_derivation {
                 without_derivation += 1;
             } else {
@@ -252,7 +299,11 @@ impl RuleExecutionEngine {
                 self.rule_infos[current_rule_index].step_last_applied = self.current_step;
             }
 
-            current_rule_index = (current_rule_index + 1) % self.program.rules.len();
+            // If we have a derivation and the rule is recursive we want to stay on the same rule
+            if no_derivation || !self.rule_infos[current_rule_index].is_recursive {
+                current_rule_index = (current_rule_index + 1) % self.program.rules.len();
+            }
+
             self.current_step += 1;
 
             TimedCode::instance()
