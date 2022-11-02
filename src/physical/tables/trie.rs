@@ -176,7 +176,10 @@ impl Trie {
 
         for row_index in 0..str_cols[0].len() {
             for col_index in (0..str_cols.len()).rev() {
-                write!(f, "{}, ", str_cols[col_index][row_index])?;
+                write!(f, "{}", str_cols[col_index][row_index])?;
+                if col_index > 0 {
+                    write!(f, ",")?;
+                }
             }
             writeln!(f,)?;
         }
