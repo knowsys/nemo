@@ -115,11 +115,11 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
     }
 
     // TODO(mx): downgrade this to debug level
-    log::info!(
-        "materialised trie with {} columns and {} rows",
-        result_columns.len(),
-        result_columns.last().map_or(0, |col| col.len())
-    );
+    // log::info!(
+    //     "materialised trie with {} columns and {} rows",
+    //     result_columns.len(),
+    //     result_columns.last().map_or(0, |col| col.len())
+    // );
     log::debug!("\n{result_columns:#?}");
 
     // Finally, return finished trie
