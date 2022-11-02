@@ -241,17 +241,51 @@ impl RuleExecutionEngine {
 
             // Hack to force a maybe better variable order
             // TODO: Remove this
-            let mut rule_7_cheat = Vec::<VariableOrder>::new();
-            if current_rule_index == 7 {
-                let reorder_map = HashMap::from([(0, 1), (1, 2), (2, 0), (3, 3)]);
+            // let mut rule_7_cheat = Vec::<VariableOrder>::new();
+            // if current_rule_index == 7 {
+            //     let reorder_map = HashMap::from([(0, 1), (1, 2), (2, 0), (3, 3)]);
+
+            //     let mut new_map = HashMap::new();
+            //     for (variable, index) in &promising_orders[0].0 {
+            //         new_map.insert(variable.clone(), *reorder_map.get(index).unwrap());
+            //     }
+
+            //     rule_7_cheat.push(VariableOrder(new_map));
+            //     promising_orders = &rule_7_cheat;
+            // }
+            let mut rule_6_cheat = Vec::<VariableOrder>::new();
+            if current_rule_index == 6 {
+                let reorder_map = HashMap::from([(0, 1), (1, 3), (2, 0), (3, 4), (4, 2)]);
 
                 let mut new_map = HashMap::new();
                 for (variable, index) in &promising_orders[0].0 {
                     new_map.insert(variable.clone(), *reorder_map.get(index).unwrap());
                 }
 
-                rule_7_cheat.push(VariableOrder(new_map));
-                promising_orders = &rule_7_cheat;
+                rule_6_cheat.push(VariableOrder(new_map));
+                promising_orders = &rule_6_cheat;
+            }
+            let mut rule_9_cheat = Vec::<VariableOrder>::new();
+            // no aux
+            if current_rule_index == 8 {
+                let reorder_map = HashMap::from([
+                    (0, 5),
+                    (1, 6),
+                    (2, 7),
+                    (3, 1),
+                    (4, 2),
+                    (5, 3),
+                    (6, 4),
+                    (7, 0),
+                ]);
+
+                let mut new_map = HashMap::new();
+                for (variable, index) in &promising_orders[0].0 {
+                    new_map.insert(variable.clone(), *reorder_map.get(index).unwrap());
+                }
+
+                rule_9_cheat.push(VariableOrder(new_map));
+                promising_orders = &rule_9_cheat;
             }
 
             // Compute all possible plans from orders
