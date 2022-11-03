@@ -97,7 +97,7 @@ pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
 /// Append the duplicates of the columns in the ith vector at the ith gap in the original trie
 /// Example: Given a trie with schema: xyz and values [[], [1], [0, 2]]
 /// results in a trie with "schema" xyyzxz
-pub fn trie_add_duplicates(mut trie: Trie, indices: &[Vec<usize>]) -> Trie {
+pub fn trie_add_duplicates(trie: Trie, indices: &[Vec<usize>]) -> Trie {
     debug_assert!(indices.len() == trie.schema().arity());
 
     // Construct the new schema
@@ -120,12 +120,12 @@ pub fn trie_add_duplicates(mut trie: Trie, indices: &[Vec<usize>]) -> Trie {
     }
 
     // Add the new columns
-    let mut new_columns = VecDeque::<IntervalColumnT>::new();
+    let new_columns = VecDeque::<IntervalColumnT>::new();
     for gap_index in (0..=trie.schema().arity()).rev() {
         let current_indices = &indices[gap_index];
         for &index in current_indices.iter().rev() {
             if let IntervalColumnT::U64(reference_column) = trie.get_column(index) {
-                let reference_data = reference_column.get_data_column();
+                let _ = reference_column.get_data_column();
             }
         }
     }

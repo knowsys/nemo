@@ -1,5 +1,4 @@
 use super::{Table, TableSchema};
-use crate::io::parser::RuleParser;
 use crate::logical::Permutator;
 use crate::physical::columns::{
     AdaptiveColumnBuilder, AdaptiveColumnBuilderT, Column, ColumnBuilder, GenericIntervalColumn,
@@ -91,6 +90,7 @@ impl Trie {
         &self.columns[index]
     }
 
+    /// Return a [`DebugTrie`] from the [`Trie`]
     pub fn debug<'a>(&'a self, dict: &'a PrefixedStringDictionary) -> DebugTrie<'a> {
         DebugTrie { trie: self, dict }
     }
@@ -189,6 +189,7 @@ impl Trie {
     }
 }
 
+/// [`Trie`] which also contains an associated dictionary for displaying proper names
 #[derive(Debug)]
 pub struct DebugTrie<'a> {
     trie: &'a Trie,

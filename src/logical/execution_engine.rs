@@ -2,7 +2,6 @@
 use std::{
     collections::{HashMap, HashSet},
     ops::Range,
-    thread::current,
 };
 
 use crate::{
@@ -17,7 +16,7 @@ use crate::{
 use super::{
     execution_plan::{ExecutionNode, ExecutionOperation, ExecutionPlan, ExecutionResult},
     model::{Atom, Identifier, Literal, Program, Rule, Term},
-    table_manager::{self, ColumnOrder, TableManager, TableManagerStrategy, TableStatus},
+    table_manager::{ColumnOrder, TableManager, TableManagerStrategy, TableStatus},
     ExecutionSeries,
 };
 
@@ -35,8 +34,10 @@ struct RuleInfo {
 /// Object which handles the evaluation of the program
 #[derive(Debug)]
 pub struct RuleExecutionEngine {
-    current_step: usize,
+    /// Object which owns and controls the tables
     pub table_manager: TableManager,
+
+    current_step: usize,
     program: Program,
 
     rule_infos: Vec<RuleInfo>,
@@ -237,56 +238,7 @@ impl RuleExecutionEngine {
                 .sub("Reasoning/Rules/ExecutionPlan")
                 .start();
 
-            let mut promising_orders = &self.rule_infos[current_rule_index].promising_orders;
-
-            // Hack to force a maybe better variable order
-            // TODO: Remove this
-            // let mut rule_7_cheat = Vec::<VariableOrder>::new();
-            // if current_rule_index == 7 {
-            //     let reorder_map = HashMap::from([(0, 1), (1, 2), (2, 0), (3, 3)]);
-
-            //     let mut new_map = HashMap::new();
-            //     for (variable, index) in &promising_orders[0].0 {
-            //         new_map.insert(variable.clone(), *reorder_map.get(index).unwrap());
-            //     }
-
-            //     rule_7_cheat.push(VariableOrder(new_map));
-            //     promising_orders = &rule_7_cheat;
-            // }
-            let mut rule_6_cheat = Vec::<VariableOrder>::new();
-            if current_rule_index == 6 {
-                let reorder_map = HashMap::from([(0, 1), (1, 3), (2, 0), (3, 4), (4, 2)]);
-
-                let mut new_map = HashMap::new();
-                for (variable, index) in &promising_orders[0].0 {
-                    new_map.insert(variable.clone(), *reorder_map.get(index).unwrap());
-                }
-
-                rule_6_cheat.push(VariableOrder(new_map));
-                promising_orders = &rule_6_cheat;
-            }
-            let mut rule_9_cheat = Vec::<VariableOrder>::new();
-            // no aux
-            if current_rule_index == 8 {
-                let reorder_map = HashMap::from([
-                    (0, 5),
-                    (1, 6),
-                    (2, 7),
-                    (3, 1),
-                    (4, 2),
-                    (5, 3),
-                    (6, 4),
-                    (7, 0),
-                ]);
-
-                let mut new_map = HashMap::new();
-                for (variable, index) in &promising_orders[0].0 {
-                    new_map.insert(variable.clone(), *reorder_map.get(index).unwrap());
-                }
-
-                rule_9_cheat.push(VariableOrder(new_map));
-                promising_orders = &rule_9_cheat;
-            }
+            let promising_orders = &self.rule_infos[current_rule_index].promising_orders;
 
             // Compute all possible plans from orders
             let mut plans: Vec<ExecutionSeries> = promising_orders
@@ -309,7 +261,6 @@ impl RuleExecutionEngine {
 
             // Hopefully, optimizer recognizes that plan is destroyed in this scope anyway and it does not need to do the shifting
             let best_plan = plans.remove(best_plan_index);
-            let no_derivation = !self.table_manager.execute_series(best_plan);
 
             log::info!(
                 "Step {}: Applying rule {} with order {}",
@@ -318,13 +269,19 @@ impl RuleExecutionEngine {
                 promising_orders[best_plan_index].to_string(&self.table_manager.dictionary)
             );
 
-            log::info!("Possible orders:");
-            for (index, order) in promising_orders.iter().enumerate() {
-                log::info!(
-                    "Order {index}: {}",
-                    order.to_string(&self.table_manager.dictionary)
-                );
-            }
+            log::info!(
+                "Possible orders: {}",
+                promising_orders.iter().fold(String::new(), |acc, order| {
+                    let mut new = acc;
+
+                    new += &order.to_string(&self.table_manager.dictionary);
+                    new += " ";
+
+                    new
+                })
+            );
+
+            let no_derivation = !self.table_manager.execute_series(best_plan);
 
             if no_derivation {
                 without_derivation += 1;
@@ -1067,6 +1024,12 @@ mod test {
             Vec::new(),
         );
 
+        let mut engine = RuleExecutionEngine::new(
+            TableManagerStrategy::Unlimited,
+            program,
+            PrefixedStringDictionary::default(),
+        );
+
         let column_x = make_gict(&[1, 2, 5, 7], &[0]);
         let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
 
@@ -1085,9 +1048,6 @@ mod test {
         engine.add_trie(Identifier(0), 0..1, vec![0, 1], 0, trie);
 
         engine.execute();
-
-        let no_three = std::panic::catch_unwind(|| engine.table_manager.get_info(3));
-        assert!(no_three.is_err());
 
         if let TableStatus::InMemory(zeroth_table) = &engine.table_manager.get_info(0).status {
             let first_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(0) {
@@ -1236,7 +1196,11 @@ mod test {
             Vec::new(),
         );
 
-        let mut engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
+        let mut engine = RuleExecutionEngine::new(
+            TableManagerStrategy::Unlimited,
+            program,
+            PrefixedStringDictionary::default(),
+        );
 
         let column_x = make_gict(&[1, 2, 5, 7], &[0]);
         let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
@@ -1256,9 +1220,6 @@ mod test {
         engine.add_trie(Identifier(0), 0..1, vec![0, 1], 0, trie);
 
         engine.execute();
-
-        let no_four = std::panic::catch_unwind(|| engine.table_manager.get_info(4));
-        assert!(no_four.is_err());
 
         if let TableStatus::InMemory(zeroth_table) = &engine.table_manager.get_info(0).status {
             let first_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(0) {
@@ -1425,7 +1386,11 @@ mod test {
 
         let program = Program::new(None, HashMap::new(), Vec::new(), vec![rule], Vec::new());
 
-        let mut engine = RuleExecutionEngine::new(TableManagerStrategy::Unlimited, program);
+        let mut engine = RuleExecutionEngine::new(
+            TableManagerStrategy::Unlimited,
+            program,
+            PrefixedStringDictionary::default(),
+        );
 
         let a_column_x = make_gict(&[1, 2, 3, 4, 5], &[0]);
         let a_column_y = make_gict(&[2, 3, 1, 2, 4, 2, 3, 2, 4, 4], &[0, 2, 5, 7, 9]);
@@ -1450,9 +1415,6 @@ mod test {
         engine.add_trie(Identifier(3), 0..1, vec![0, 1], 0, trie_b);
 
         engine.execute();
-
-        let no_five = std::panic::catch_unwind(|| engine.table_manager.get_info(5));
-        assert!(no_five.is_err());
 
         if let TableStatus::InMemory(result_table) = &engine.table_manager.get_info(3).status {
             let first_col = if let IntervalColumnT::U64(col) = result_table.get_column(0) {

@@ -15,10 +15,8 @@ use crate::physical::tables::{
 use csv::ReaderBuilder;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
-use std::fs::{File, OpenOptions};
-use std::io::Write;
+use std::fs::File;
 use std::ops::Range;
-use std::path::PathBuf;
 use superslice::*;
 
 /// Type which represents a variable ordering
@@ -108,8 +106,8 @@ pub struct TableManager {
     #[allow(dead_code)]
     space_consumed: u64,
 
+    /// Dictionary containing all the relevant strings
     pub dictionary: PrefixedStringDictionary,
-    pub counter: usize,
 }
 
 /// Encodes the things that can go wrong while asking for a table
@@ -133,7 +131,6 @@ impl TableManager {
             space_consumed: 0,
             current_id: 0,
             dictionary,
-            counter: 0,
         }
     }
 
@@ -216,9 +213,8 @@ impl TableManager {
     }
 
     fn materialize_on_disk(&mut self, source: &DataSource, order: &ColumnOrder) -> Trie {
-        match source {
+        let (trie, name) = match source {
             DataSource::CsvFile(file) => {
-                log::info!("loading CSV file {file:?}");
                 // TODO: not everything is u64 :D
                 let datatypes: Vec<Option<DataTypeName>> = (0..order.len()).map(|_| None).collect();
 
@@ -240,21 +236,26 @@ impl TableManager {
                 );
 
                 let trie = Trie::from_cols(schema, col_table);
-                return trie;
-                // TODO: is the reordering necessary here?
-                // (I tried this because of a runtime error but it still does not work)
-                // let project_iter = TrieProject::new(
-                //     &trie,
-                //     info.column_order.clone(),
-                // );
-
-                // let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
-
-                // self.tables[table_id].status = TableStatus::InMemory(trie);
+                (
+                    trie,
+                    file.file_name()
+                        .expect("Filename should be valid")
+                        .to_str()
+                        .unwrap(),
+                )
             }
             DataSource::RdfFile(_) => todo!(),
             DataSource::SparqlQuery(_) => todo!(),
-        }
+        };
+
+        log::info!(
+            "Loaded table {} from disk in order {:?} ({} elements)",
+            name,
+            &order,
+            trie.row_num()
+        );
+
+        trie
     }
 
     fn find_materialized_table(&self, key: &TableKey, id: TableId) -> Option<TableId> {
@@ -279,13 +280,15 @@ impl TableManager {
         for &table_id in tables {
             let info = &self.tables[table_id];
             let info_order = info.column_order.clone(); // TODO: Clones because of borrow checker
+            let table_name = self
+                .dictionary
+                .entry(info.key.predicate_id.0)
+                .unwrap_or("<Unkown table>".to_string());
+
             if let TableStatus::Derived = info.status {
                 let base_id = self.find_materialized_table(&info.key, table_id).unwrap();
                 let base_order = &self.tables[base_id].column_order.clone(); // TODO: Clones because of borrow checker
-                                                                             // TODO(mx): drop this to debug level
-                log::info!(
-                    "deriving table {table_id} from table {base_id} with order {base_order:?}"
-                );
+
                 let base_trie = if let TableStatus::InMemory(trie) = &self.tables[base_id].status {
                     trie
                 } else if let TableStatus::OnDisk(source) = self.tables[base_id].status.clone() {
@@ -305,43 +308,16 @@ impl TableManager {
                     TableManager::translate_order(base_order, &info_order),
                 );
 
-                // TODO(mx): drop this to debug level
-                log::info!(
-                    "materialising {:05} table {table_id} for order {info_order:?}",
-                    self.counter
-                );
                 let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
-                // match OpenOptions::new()
-                //     .write(true)
-                //     .create(true)
-                //     .truncate(true)
-                //     .open(PathBuf::from(format!(
-                //         "out/{:05}_materialise_{table_id}_base.csv",
-                //         self.counter
-                //     ))) {
-                //     Ok(mut file) => write!(file, "{}", base_trie.debug(&self.dictionary))
-                //         .expect("should succeed"),
-                //     Err(e) => log::warn!("error writing: {e:?}"),
-                // }
-                // match OpenOptions::new()
-                //     .write(true)
-                //     .create(true)
-                //     .truncate(true)
-                //     .open(PathBuf::from(format!(
-                //         "out/{:05}_materialise_{table_id}.csv",
-                //         self.counter
-                //     ))) {
-                //     Ok(mut file) => write!(file, "{}", reordered_trie.debug(&self.dictionary))
-                //         .expect("should succeed"),
-                //     Err(e) => log::warn!("error writing: {e:?}"),
-                // }
                 self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
-                self.counter += 1;
-            } else if let TableStatus::OnDisk(source) = info.status.clone() {
+
                 log::info!(
-                    "materialising table {table_id} from disk for order {:?}",
-                    info.column_order
+                    "Materializing required table {} by reordering {:?} -> {:?}",
+                    table_name,
+                    info_order,
+                    base_order
                 );
+            } else if let TableStatus::OnDisk(source) = info.status.clone() {
                 let trie = self.materialize_on_disk(&source, &info_order);
                 self.tables[table_id].status = TableStatus::InMemory(trie);
             }
@@ -640,7 +616,6 @@ impl TableManager {
         let mut temp_tries = HashMap::<TableId, Option<Trie>>::new();
 
         for plan in series.plans {
-            // log::info!("executing plan for {:05}:\n{plan:#?}", self.counter);
             let mut table_ids = HashSet::new();
             for leave_node in plan.leaves {
                 if let ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) =
@@ -712,45 +687,39 @@ impl TableManager {
             let iter_option = self.get_iterator_node(&plan.root, &temp_tries);
             if let Some(mut iter) = iter_option {
                 // TODO: Materializig should check memory and so on...
-                log::info!("materialising {:05} {:?}", self.counter, plan.result);
                 let new_trie = materialize(&mut iter);
-                // match OpenOptions::new()
-                //     .write(true)
-                //     .create(true)
-                //     .truncate(true)
-                //     .open(PathBuf::from(format!(
-                //         "out/{:05}_materialise_{:?}.csv",
-                //         self.counter, plan.result
-                //     ))) {
-                //     Ok(mut file) => write!(file, "{}", new_trie.debug(&self.dictionary))
-                //         .expect("should succeed"),
-                //     Err(e) => log::warn!("error writing: {e:?}"),
-                // }
-                self.counter += 1;
+                let new_trie_len = new_trie.row_num();
 
                 match plan.result {
                     ExecutionResult::Temp(id) => {
-                        log::info!(
-                            "materialised {:05}: Temp({id}) with {} rows",
-                            self.counter,
-                            new_trie.row_num()
-                        );
-                        if new_trie.row_num() > 0 {
+                        if new_trie_len > 0 {
                             temp_tries.insert(id, Some(new_trie));
                         } else {
                             temp_tries.insert(id, None);
                         }
+
+                        log::info!("Temporary table {} ({} entries)", code_string, new_trie_len);
                     }
                     ExecutionResult::Save(pred, range, order, priority) => {
-                        if new_trie.row_num() > 0 {
-                            new_table = true;
-                            log::info!("materialised {:05}: {pred:?} ({}) for range {range:?} and order {order:?} with priority {priority}", self.counter, self.dictionary.entry(pred.0).expect("should have been interned"));
+                        let pred_string = self
+                            .dictionary
+                            .entry(pred.0)
+                            .unwrap_or("<Unknown predicate>".to_string());
+                        log::info!(
+                            "Permament table {} with order {:?} ({} entries)",
+                            pred_string,
+                            order,
+                            new_trie_len
+                        );
 
-                            let table_id = self.add_trie(pred, range, order, priority, new_trie);
-                            log::info!("new table id: {table_id:?}");
+                        if new_trie_len > 0 {
+                            new_table = true;
+                            self.add_trie(pred, range, order, priority, new_trie);
                         }
                     }
                 }
+            } else {
+                log::info!("Trie iterator is empty");
             }
 
             TimedCode::instance()
