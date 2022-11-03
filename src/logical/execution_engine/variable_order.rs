@@ -66,9 +66,7 @@ impl VariableOrder {
                 Variable::Existential(id) => id,
             };
 
-            result += &dict
-                .entry(identifier.0)
-                .expect("Variables in the vector come from the map");
+            result += &dict.entry(identifier.0).unwrap_or("?".to_string());
 
             if index < variable_vector.len() - 1 {
                 result += ", ";

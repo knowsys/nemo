@@ -94,6 +94,10 @@ impl TimedCode {
 
     /// Navigate to a subblock (use forward slash to go multiple layers at once)
     pub fn sub(&mut self, name: &str) -> &mut TimedCode {
+        if cfg!(test) {
+            return self;
+        }
+
         let name_parts: Vec<&str> = name.split("/").collect();
 
         let mut current_block = self;
@@ -110,6 +114,10 @@ impl TimedCode {
 
     /// Start the next measurement
     pub fn start(&mut self) {
+        if cfg!(test) {
+            return;
+        }
+
         debug_assert!(self.info.start_time.is_none());
 
         self.info.start_time = Some(Instant::now());
@@ -117,6 +125,10 @@ impl TimedCode {
 
     /// Stop the current measurement and save the times
     pub fn stop(&mut self) {
+        if cfg!(test) {
+            return;
+        }
+
         debug_assert!(self.info.start_time.is_some());
 
         let start = self

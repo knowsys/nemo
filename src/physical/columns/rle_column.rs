@@ -15,9 +15,9 @@ pub enum Step<T> {
     Increment(T),
     /// Step in negative direction
     Decrement(T),
-    // the following two are used as alternative to multiplication
-    // when multiplication would overflow T
+    /// Used as alternative to multiplication when multiplication would overflow T
     RepeatedIncrement(T, usize),
+    /// Used as alternative to multiplication when multiplication would overflow T
     RepeatedDecrement(T, usize),
 }
 

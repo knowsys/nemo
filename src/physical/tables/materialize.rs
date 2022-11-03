@@ -1,6 +1,6 @@
 use super::{TableSchema, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry};
 use crate::physical::columns::{
-    AdaptiveColumnBuilder, AdaptiveColumnBuilderT, Column, ColumnBuilder, ColumnScan,
+    AdaptiveColumnBuilder, AdaptiveColumnBuilderT, ColumnBuilder, ColumnScan,
     GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT,
 };
 use crate::physical::datatypes::DataTypeName;

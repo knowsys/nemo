@@ -72,6 +72,7 @@ impl<'a> RuleParser<'a> {
         Default::default()
     }
 
+    /// Return a clone of the internal dictionary
     pub fn clone_dict(&self) -> PrefixedStringDictionary {
         self.names.replace_with(|dict| dict.clone())
     }
