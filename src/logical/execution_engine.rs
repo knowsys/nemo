@@ -985,7 +985,7 @@ mod test {
         },
     };
 
-    use super::RuleExecutionEngine;
+    use super::{variable_order::VariableOrder, RuleExecutionEngine};
 
     #[test]
     fn test_trans_closure() {
@@ -1029,6 +1029,12 @@ mod test {
             program,
             PrefixedStringDictionary::default(),
         );
+
+        engine.rule_infos[0].promising_orders = vec![VariableOrder(HashMap::from([
+            (Variable::Universal(Identifier(0)), 0),
+            (Variable::Universal(Identifier(1)), 1),
+            (Variable::Universal(Identifier(2)), 2),
+        ]))];
 
         let column_x = make_gict(&[1, 2, 5, 7], &[0]);
         let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
@@ -1201,6 +1207,12 @@ mod test {
             program,
             PrefixedStringDictionary::default(),
         );
+
+        engine.rule_infos[0].promising_orders = vec![VariableOrder(HashMap::from([
+            (Variable::Universal(Identifier(0)), 0),
+            (Variable::Universal(Identifier(1)), 1),
+            (Variable::Universal(Identifier(2)), 2),
+        ]))];
 
         let column_x = make_gict(&[1, 2, 5, 7], &[0]);
         let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
@@ -1416,7 +1428,7 @@ mod test {
 
         engine.execute();
 
-        if let TableStatus::InMemory(result_table) = &engine.table_manager.get_info(3).status {
+        if let TableStatus::InMemory(result_table) = &engine.table_manager.get_info(2).status {
             let first_col = if let IntervalColumnT::U64(col) = result_table.get_column(0) {
                 col
             } else {
