@@ -388,10 +388,7 @@ mod test {
     #[cfg_attr(miri, ignore)]
     fn from_rnd_column(vec: Vec<u32>) -> bool {
         log::debug!("used vector: {:?}", vec);
-        if vec.is_empty() {
-            // TODO: Remove if corresponding bug is fixed
-            return true;
-        }
+
         let mut builder: AdaptiveColumnBuilder<u32> = AdaptiveColumnBuilder::new();
         let mut vec_cpy = vec.clone();
         vec_cpy.sort_unstable();
