@@ -386,7 +386,6 @@ impl RuleExecutionEngine {
         let mapped_variables: Vec<usize> = atom
             .terms()
             .map(|t| {
-                // TODO: What about constants?
                 if let Term::Variable(variable) = t {
                     *variable_order.get(variable).unwrap()
                 } else {
@@ -408,7 +407,6 @@ impl RuleExecutionEngine {
         column_order
             .iter()
             .map(|&i| {
-                // TODO: For now this should at least also cover constants
                 if let Term::Variable(variable) = &atom.terms[i] {
                     *variable_order.get(variable).unwrap()
                 } else {

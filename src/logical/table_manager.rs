@@ -418,7 +418,6 @@ impl TableManager {
         }
 
         // For debugging, check if arity is equal
-        // TODO: Remove this
         if table_list.len() > 0 {
             debug_assert!(table_list[0].0.len() == order.len());
         }
@@ -737,8 +736,7 @@ impl TableManager {
     }
 
     /// Returns None if the TrieScan would be empty
-    // TODO: Remove pub
-    pub fn get_iterator_node<'a>(
+    fn get_iterator_node<'a>(
         &'a self,
         node: &'a ExecutionNode,
         temp_tries: &'a HashMap<TableId, Option<Trie>>,
