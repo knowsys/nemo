@@ -2,10 +2,10 @@ use std::fs::File;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use csv::ReaderBuilder;
-use polars::prelude::{CsvReader, DataType, JoinType, Schema, SerReader};
+use polars::prelude::{CsvReader, DataFrame, DataType, JoinType, Schema, SerReader};
 use stage2::io::csv::read;
 use stage2::physical::tables::{
-    materialize, IntervalTrieScan, TrieJoin, TrieProject, TrieScanEnum,
+    materialize, IntervalTrieScan, TrieJoin, TrieProject, TrieScanEnum, TrieUnion,
 };
 use stage2::{
     logical::{model::DataSource, table_manager::ColumnOrder},
@@ -60,9 +60,9 @@ fn load_trie(
 pub fn benchmark_join(c: &mut Criterion) {
     let mut dict = PrefixedStringDictionary::default();
 
-    let table_a = DataSource::csv_file("out-galen/xe.csv").unwrap();
+    let table_a = DataSource::csv_file("test-files/bench/xe.csv").unwrap();
     let table_a_order: ColumnOrder = vec![0, 1, 2];
-    let table_b = DataSource::csv_file("out-galen/aux.csv").unwrap();
+    let table_b = DataSource::csv_file("test-files/bench/aux.csv").unwrap();
     let table_b_order: ColumnOrder = vec![0, 1, 2];
 
     let trie_a = load_trie(&table_a, &table_a_order, &mut dict);
@@ -108,8 +108,8 @@ pub fn benchmark_join(c: &mut Criterion) {
     });
     group_ours.finish();
 
-    let file_a = File::open("out-galen/xe.csv").expect("could not open file");
-    let file_b = File::open("out-galen/aux.csv").expect("could not open file");
+    let file_a = File::open("test-files/bench/xe.csv").expect("could not open file");
+    let file_b = File::open("test-files/bench/aux.csv").expect("could not open file");
 
     let table_a_schema = Schema::new()
         .insert_index(0, "AX".to_string(), DataType::Utf8)
@@ -167,9 +167,9 @@ pub fn benchmark_join(c: &mut Criterion) {
 fn benchmark_project(c: &mut Criterion) {
     let mut dict = PrefixedStringDictionary::default();
 
-    let table_a = DataSource::csv_file("out-galen/xe.csv").unwrap();
+    let table_a = DataSource::csv_file("test-files/bench/xe.csv").unwrap();
     let table_a_order: ColumnOrder = vec![0, 1, 2];
-    let table_b = DataSource::csv_file("out-galen/aux.csv").unwrap();
+    let table_b = DataSource::csv_file("test-files/bench/aux.csv").unwrap();
     let table_b_order: ColumnOrder = vec![0, 1, 2];
 
     let trie_a = load_trie(&table_a, &table_a_order, &mut dict);
@@ -259,5 +259,86 @@ fn benchmark_project(c: &mut Criterion) {
     group_ours.finish();
 }
 
-criterion_group!(benches, benchmark_join, benchmark_project);
+fn benchmark_union(c: &mut Criterion) {
+    const FILE_NAME: &str = "test-files/bench/aux-split/aux";
+    const NUM_PARTS: usize = 10;
+
+    let mut dict = PrefixedStringDictionary::default();
+
+    let mut tries = Vec::<Trie>::new();
+    let mut frames = Vec::<DataFrame>::new();
+    for trie_index in 0..NUM_PARTS {
+        let mut filename = FILE_NAME.to_string();
+        filename += "-";
+        filename += &trie_index.to_string();
+        filename += ".csv";
+
+        let table_source = DataSource::csv_file(&filename).unwrap();
+        let table_order: ColumnOrder = vec![0, 1, 2];
+
+        tries.push(load_trie(&table_source, &table_order, &mut dict));
+
+        let file = File::open(filename).expect("could not open file");
+        let table_schema = Schema::new()
+            .insert_index(0, "X".to_string(), DataType::Utf8)
+            .unwrap()
+            .insert_index(0, "Y".to_string(), DataType::Utf8)
+            .unwrap()
+            .insert_index(0, "Z".to_string(), DataType::Utf8)
+            .unwrap();
+
+        let frame = CsvReader::new(file)
+            .with_schema(&table_schema)
+            .has_header(false)
+            .finish()
+            .unwrap()
+            .sort(&["X", "Y", "Z"], vec![false, false, false])
+            .unwrap();
+
+        frames.push(frame);
+    }
+
+    let mut group_ours = c.benchmark_group("trie_union");
+    group_ours.sample_size(10);
+    group_ours.bench_function("trie_union", |b| {
+        b.iter_with_setup(
+            || {
+                TrieUnion::new(
+                    tries
+                        .iter()
+                        .map(|trie| TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(trie)))
+                        .collect(),
+                )
+            },
+            |union_iter| {
+                let _ = materialize(&mut TrieScanEnum::TrieUnion(union_iter));
+            },
+        );
+    });
+    group_ours.finish();
+
+    let last_frame = frames.pop().unwrap();
+
+    let mut group_polar = c.benchmark_group("polar_union");
+    group_polar.sample_size(10);
+    group_polar.bench_function("polar_union", |b| {
+        b.iter_with_setup(
+            || {},
+            |_| {
+                let mut union_frame = last_frame.clone();
+                for frame in &frames {
+                    union_frame.vstack_mut(frame).unwrap();
+                }
+
+                union_frame
+                    .unique(None, polars::prelude::UniqueKeepStrategy::First)
+                    .unwrap();
+            },
+        );
+    });
+    group_polar.finish();
+}
+
+// criterion_group!(benches, benchmark_join, benchmark_project, benchmark_union);
+criterion_group!(benches, benchmark_union);
 criterion_main!(benches);
