@@ -104,12 +104,10 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
                 continue;
             }
 
-            //TODO: Don't use contains here
             if previous_layer.is_none()
                 || self.union_scans[previous_layer.unwrap()]
                     .get_mut()
-                    .get_smallest_scans()
-                    .contains(&scan_index)
+                    .get_smallest_scans()[scan_index]
             {
                 active_scans.push(scan_index);
 
