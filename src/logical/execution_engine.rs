@@ -350,7 +350,7 @@ impl RuleExecutionEngine {
         for (atom_index, atom) in atoms.iter().take(mid).enumerate() {
             subplans.push(self.create_subplan_union(
                 atom.predicate(),
-                &(0..self.current_step + 1),
+                &(0..self.current_step),
                 &atom_column_orders[atom_index],
                 leaves,
             ))
@@ -358,7 +358,7 @@ impl RuleExecutionEngine {
 
         subplans.push(self.create_subplan_union(
             atoms[mid].predicate(),
-            &(last_rule_step..self.current_step + 1),
+            &(last_rule_step..self.current_step),
             &atom_column_orders[mid],
             leaves,
         ));
