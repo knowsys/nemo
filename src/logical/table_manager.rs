@@ -12,6 +12,7 @@ use crate::physical::tables::{
     materialize, IntervalTrieScan, Table, Trie, TrieDifference, TrieJoin, TrieProject, TrieScan,
     TrieScanEnum, TrieSchema, TrieSchemaEntry, TrieSelectEqual, TrieSelectValue, TrieUnion,
 };
+use crate::physical::util::cover_interval;
 use csv::ReaderBuilder;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -99,7 +100,13 @@ pub struct TableManager {
     tables: Vec<TableInfo>,
     entries: HashMap<TableKey, Vec<(ColumnOrder, TableId)>>,
 
+    // The vector is assumed to be sorted, because of the order data is put in here
     predicate_to_steps: HashMap<Identifier, Vec<usize>>,
+    // Ranges need to be sorted by their first entry when inserting
+    predicate_to_ranges: HashMap<Identifier, Vec<Range<usize>>>,
+    // What step the last big table has been computed in
+    predicate_to_bigtable_step: HashMap<Identifier, usize>,
+
     priority_heap: BinaryHeap<TablePriority>,
     current_id: TableId,
 
@@ -128,6 +135,8 @@ impl TableManager {
             entries: HashMap::new(),
             priority_heap: BinaryHeap::new(),
             predicate_to_steps: HashMap::new(),
+            predicate_to_ranges: HashMap::new(),
+            predicate_to_bigtable_step: HashMap::new(),
             space_consumed: 0,
             current_id: 0,
             dictionary,
@@ -145,15 +154,33 @@ impl TableManager {
         Some(left..right)
     }
 
+    /// Returns the step, in wich the last big table was computed
+    pub fn get_bigtable_step(&self, predicate: &Identifier) -> usize {
+        *self.predicate_to_bigtable_step.get(predicate).unwrap_or(&0)
+    }
+
+    /// Set the step number in which a big table for a given predicate has been computed
+    pub fn set_bigtable_step(&mut self, predicate: &Identifier, step: usize) {
+        self.predicate_to_bigtable_step.insert(*predicate, step);
+    }
+
     /// Given a range, returns all the block-numbers available for a predicate
-    pub fn get_blocks_within_range(&self, predicate: Identifier, range: &Range<usize>) -> &[usize] {
-        match self.predicate_to_steps.get(&predicate) {
-            Some(vec) => {
-                &vec[self
-                    .normalize_range(predicate, range)
-                    .expect("We are in the some case")]
-            }
-            None => &[],
+    pub fn get_blocks_within_range(
+        &self,
+        predicate: Identifier,
+        range: &Range<usize>,
+    ) -> Vec<Range<usize>> {
+        let absolute_steps = match self.predicate_to_steps.get(&predicate) {
+            Some(s) => s,
+            None => return Vec::new(),
+        };
+
+        match self.predicate_to_ranges.get(&predicate) {
+            Some(vec) => cover_interval(vec, &self.normalize_range(predicate, range).unwrap())
+                .iter()
+                .map(|r| absolute_steps[r.start]..(absolute_steps[r.end - 1] + 1))
+                .collect(),
+            None => Vec::new(),
         }
     }
 
@@ -392,11 +419,47 @@ impl TableManager {
         }
     } */
 
-    fn add_table_helper(&mut self, key: TableKey, order: ColumnOrder, priority: u64) -> TableId {
+    fn add_table_helper(
+        &mut self,
+        predicate: Identifier,
+        absolute_range: Range<usize>,
+        order: ColumnOrder,
+        priority: u64,
+        derived: bool,
+    ) -> Option<TableId> {
         let new_id = self.current_id;
         self.current_id += 1;
 
-        let table_list = self.entries.entry(key).or_insert_with(Vec::new);
+        if !derived && absolute_range.len() == 1 {
+            let step_list = self
+                .predicate_to_steps
+                .entry(predicate)
+                .or_insert_with(Vec::new);
+            step_list.push(absolute_range.start);
+        }
+
+        let normalized_range = self.normalize_range(predicate, &absolute_range)?;
+
+        if !derived {
+            let range_list = self
+                .predicate_to_ranges
+                .entry(predicate)
+                .or_insert_with(Vec::new);
+            range_list.push(normalized_range.clone());
+            range_list.sort_by(|a, b| match a.start.cmp(&b.start) {
+                Ordering::Less => Ordering::Less,
+                Ordering::Equal => a.end.cmp(&b.end),
+                Ordering::Greater => Ordering::Greater,
+            });
+        }
+
+        let table_list = self
+            .entries
+            .entry(TableKey {
+                predicate_id: predicate,
+                step_range: normalized_range,
+            })
+            .or_insert_with(Vec::new);
 
         // If the table list contained only one table then this means it couldnt have been deleted until now
         // and therefore wasnt in the priority queue before, so we add it now
@@ -424,7 +487,7 @@ impl TableManager {
 
         table_list.push((order, new_id));
 
-        new_id
+        Some(new_id)
     }
 
     /// Add a table that is stored on disk to the manager
@@ -435,12 +498,6 @@ impl TableManager {
         column_order: ColumnOrder,
         priority: u64,
     ) -> TableId {
-        let table_list = self
-            .predicate_to_steps
-            .entry(predicate)
-            .or_insert_with(Vec::new);
-        table_list.push(0);
-
         let key = TableKey {
             predicate_id: predicate,
             step_range: (0..1),
@@ -450,35 +507,14 @@ impl TableManager {
         self.tables.push(TableInfo {
             status: TableStatus::InMemory(trie),
             column_order: column_order.clone(),
-            key: key.clone(),
+            key,
             priority,
             space: 0, //TODO: How to do this
         });
 
-        // self.tables.push(TableInfo {
-        //     status: TableStatus::OnDisk(data_source),
-        //     column_order: column_order.clone(),
-        //     key: key.clone(),
-        //     priority,
-        //     space: 0, //TODO: How to do this
-        // });
-
-        self.add_table_helper(key, column_order, priority)
+        self.add_table_helper(predicate, 0..1, column_order, priority, false)
+            .unwrap()
     }
-
-    /// Add a computed table to the manager
-    // pub fn add_idb(
-    //     &mut self,
-    //     predicate: Identifier,
-    //     absolute_step_range: Range<usize>,
-    //     column_order: ColumnOrder,
-    //     priority: u64,
-    //     plan: ExecutionPlan,
-    // ) -> Option<TableId> {
-    //     let trie = self.execute_plan(plan)?;
-
-    //     self.add_trie(predicate, absolute_step_range, column_order, priority, trie)
-    // }
 
     /// Add trie to the table manager
     pub fn add_trie(
@@ -493,28 +529,28 @@ impl TableManager {
             return None;
         }
 
-        // Tables only covers a single step
-        if absolute_step_range.end - absolute_step_range.start == 1 {
-            let table_list = self
-                .predicate_to_steps
-                .entry(predicate)
-                .or_insert_with(Vec::new);
-            table_list.push(absolute_step_range.start);
-        }
+        let new_id = self.add_table_helper(
+            predicate,
+            absolute_step_range.clone(),
+            column_order.clone(),
+            priority,
+            false,
+        )?;
 
         let key = TableKey {
             predicate_id: predicate,
             step_range: self.normalize_range(predicate, &absolute_step_range)?,
         };
+
         self.tables.push(TableInfo {
             status: TableStatus::InMemory(trie),
-            column_order: column_order.clone(),
-            key: key.clone(),
+            column_order: column_order,
+            key,
             priority,
             space: 0, //TODO: How to do this
         });
 
-        Some(self.add_table_helper(key, column_order, priority))
+        Some(new_id)
     }
 
     fn orders_equal(order_left: &ColumnOrder, order_right: &ColumnOrder) -> bool {
@@ -588,22 +624,32 @@ impl TableManager {
         column_order: ColumnOrder,
         priority: u64,
     ) -> TableId {
+        let new_id = self
+            .add_table_helper(
+                predicate,
+                absolute_step_range.clone(),
+                column_order.clone(),
+                priority,
+                true,
+            )
+            .unwrap();
+
         let key = TableKey {
             predicate_id: predicate,
             step_range: self
                 .normalize_range(predicate, &absolute_step_range)
-                .expect("If its derived then there must already exist one"),
+                .unwrap(),
         };
 
         self.tables.push(TableInfo {
             status: TableStatus::Derived,
             column_order: column_order.clone(),
-            key: key.clone(),
+            key,
             priority,
             space: 0, //TODO: How to do this
         });
 
-        self.add_table_helper(key, column_order, priority)
+        new_id
     }
 
     /// Executes an [`ExecutionSeries`] and adds the resulting tables
@@ -623,7 +669,7 @@ impl TableManager {
                     match self.get_table(*predicate, absolute_step_range, column_order) {
                         Err(error) => match error {
                             GetTableError::NoTable => {
-                                log::warn!("expected a table for predicate {predicate:?} with range {absolute_step_range:?} and order {column_order:?}");
+                                log::warn!("expected a table for predicate {:?} with range {absolute_step_range:?} and order {column_order:?}", self.dictionary.entry(predicate.0).unwrap_or(String::from("<Unkown predicate>")));
                             }
                             GetTableError::WrongOrder => {
                                 table_ids.insert(self.add_derived(
@@ -660,28 +706,39 @@ impl TableManager {
                 .start();
 
             const TMP_NAMES: &[&str] = &[
-                "BodyJoin",
-                "HeadJoin",
-                "BodyFrontier",
-                "HeadFrontier",
-                "ExistentialDiff",
+                "Body Join",
+                "Head Join",
+                "Body Frontier",
+                "Head Frontier",
+                "Existential Diff",
             ];
 
-            let code_string = match plan.result {
+            let code_string = match &plan.result {
                 ExecutionResult::Temp(tmp_id) => {
-                    if tmp_id < TMP_NAMES.len() {
-                        TMP_NAMES[tmp_id]
+                    if *tmp_id < TMP_NAMES.len() {
+                        TMP_NAMES[*tmp_id]
                     } else {
-                        "HeadProjection"
+                        "Head Projection"
                     }
                 }
-                ExecutionResult::Save(_, _, _, _) => "Duplicates & HeadUnion",
+                ExecutionResult::Save(_, range, _, _) => {
+                    if range.len() == 1 {
+                        "Duplicates & Head Union"
+                    } else {
+                        "Big union"
+                    }
+                }
             };
 
             TimedCode::instance()
                 .sub("Reasoning/Materialize/Pipeline")
                 .sub(code_string)
                 .start();
+
+            log::info!(
+                "Plan: {}",
+                self.get_iterator_string(&plan.root, &temp_tries)
+            );
 
             let iter_option = self.get_iterator_node(&plan.root, &temp_tries);
             if let Some(mut iter) = iter_option {
@@ -712,7 +769,10 @@ impl TableManager {
                         );
 
                         if new_trie_len > 0 {
-                            new_table = true;
+                            if range.len() == 1 {
+                                new_table = true;
+                            }
+
                             self.add_trie(pred, range, order, priority, new_trie);
                         }
                     }
@@ -721,10 +781,13 @@ impl TableManager {
                 log::info!("Trie iterator is empty");
             }
 
-            TimedCode::instance()
+            let duration = TimedCode::instance()
                 .sub("Reasoning/Materialize/Pipeline")
                 .sub(code_string)
                 .stop();
+
+            log::info!("{code_string}: {} ms", duration.as_millis());
+
             TimedCode::instance()
                 .sub("Reasoning/Materialize/Pipeline")
                 .stop();
@@ -733,6 +796,90 @@ impl TableManager {
         TimedCode::instance().sub("Reasoning/Materialize").stop();
 
         new_table
+    }
+
+    fn get_iterator_string_sub<'a>(
+        &'a self,
+        operation: &str,
+        subnodes: &Vec<&ExecutionNode>,
+        temp_tries: &'a HashMap<TableId, Option<Trie>>,
+    ) -> String {
+        let mut result = String::from(operation);
+        result += "(";
+
+        for (index, sub) in subnodes.iter().enumerate() {
+            result += &self.get_iterator_string(sub, temp_tries);
+
+            if index < subnodes.len() - 1 {
+                result += ", ";
+            }
+        }
+
+        result += ")";
+
+        result
+    }
+
+    fn get_iterator_string<'a>(
+        &'a self,
+        node: &'a ExecutionNode,
+        temp_tries: &'a HashMap<TableId, Option<Trie>>,
+    ) -> String {
+        match &node.operation {
+            ExecutionOperation::Temp(id) => {
+                if let Some(tmp_trie_option) = temp_tries.get(id) {
+                    if let Some(tmp_trie) = tmp_trie_option {
+                        return tmp_trie.row_num().to_string();
+                    } else {
+                        return "0".to_string();
+                    }
+                }
+
+                "Temp(Unknown id)".to_string()
+            }
+            ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) => {
+                if let Some(table_id) = self
+                    .get_table(*predicate, absolute_step_range, column_order)
+                    .ok()
+                {
+                    let table_info = &self.tables[table_id];
+
+                    if let TableStatus::InMemory(trie) = &table_info.status {
+                        trie.row_num().to_string()
+                    } else {
+                        panic!("Base tables are supposed to be materialized");
+                    }
+                } else {
+                    "Unknown table".to_string()
+                }
+            }
+            ExecutionOperation::Join(sub, _) => {
+                self.get_iterator_string_sub("Join", &sub.iter().map(|s| s).collect(), temp_tries)
+            }
+            ExecutionOperation::Union(sub) => {
+                self.get_iterator_string_sub("Union", &sub.iter().map(|s| s).collect(), temp_tries)
+            }
+            ExecutionOperation::Minus(left, right) => {
+                self.get_iterator_string_sub("Minus", &vec![&left, &right], temp_tries)
+            }
+            ExecutionOperation::Project(id, _) => {
+                if let Some(tmp_trie_option) = temp_tries.get(id) {
+                    if let Some(tmp_trie) = tmp_trie_option {
+                        return format!("Project({})", tmp_trie.num_elements());
+                    } else {
+                        return "Project(0)".to_string();
+                    }
+                }
+
+                "Project(Unknown id)".to_string()
+            }
+            ExecutionOperation::SelectValue(sub, _) => {
+                self.get_iterator_string_sub("SelectValue", &vec![&sub], temp_tries)
+            }
+            ExecutionOperation::SelectEqual(sub, _) => {
+                self.get_iterator_string_sub("SelectEqual", &vec![&sub], temp_tries)
+            }
+        }
     }
 
     /// Returns None if the TrieScan would be empty
@@ -761,15 +908,21 @@ impl TableManager {
                 }
             }
             ExecutionOperation::Join(subtables, bindings) => {
-                let subiterators: Vec<TrieScanEnum> = subtables
+                let mut subiterators: Vec<TrieScanEnum> = subtables
                     .iter()
                     .map(|s| self.get_iterator_node(s, temp_tries))
                     .filter(|s| s.is_some())
                     .flatten()
                     .collect();
 
+                // If subtables contain an empty table, then the join is empty
                 if subiterators.len() != subtables.len() {
                     return None;
+                }
+
+                // If it only contains one table, then we dont need the join
+                if subiterators.len() == 1 {
+                    return Some(subiterators.remove(0));
                 }
 
                 let mut datatype_map = HashMap::<usize, DataTypeName>::new();
@@ -801,18 +954,24 @@ impl TableManager {
                 )))
             }
             ExecutionOperation::Union(subtables) => {
-                let subtables: Vec<TrieScanEnum> = subtables
+                let mut subiterators: Vec<TrieScanEnum> = subtables
                     .iter()
                     .map(|s| self.get_iterator_node(s, temp_tries))
                     .filter(|s| s.is_some())
                     .flatten()
                     .collect();
 
-                if subtables.is_empty() {
+                // The union of empty tables is empty
+                if subiterators.is_empty() {
                     return None;
                 }
 
-                let union_scan = TrieUnion::new(subtables);
+                // If it only contains one table, then we dont need the join
+                if subiterators.len() == 1 {
+                    return Some(subiterators.remove(0));
+                }
+
+                let union_scan = TrieUnion::new(subiterators);
 
                 Some(TrieScanEnum::TrieUnion(union_scan))
             }
@@ -825,9 +984,11 @@ impl TableManager {
                         let difference_scan = TrieDifference::new(left, right);
                         Some(TrieScanEnum::TrieDifference(difference_scan))
                     } else {
+                        // Subtracting an empty table from anything does not make a difference
                         Some(left)
                     }
                 } else {
+                    // Subtracting anything from an empty table leaves an empty table
                     None
                 }
             }

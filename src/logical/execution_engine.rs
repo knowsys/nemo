@@ -103,23 +103,24 @@ impl RuleExecutionEngine {
         let mut union_leaves = Vec::<ExecutionNode>::new();
         let union_node = self.create_subplan_union(
             predicate,
-            &(0..self.current_step),
+            &(0..(self.current_step + 1)),
             &order,
             &mut union_leaves,
         );
         let union_plan = ExecutionPlan {
             root: union_node,
             leaves: union_leaves,
-            result: ExecutionResult::Save(predicate, 0..self.current_step, order.clone(), 0),
+            result: ExecutionResult::Save(predicate, 0..(self.current_step + 1), order.clone(), 0),
         };
 
         self.table_manager.execute_series(ExecutionSeries {
             plans: vec![union_plan],
+            big_table: vec![],
         });
 
         let new_id = self
             .table_manager
-            .get_table(predicate, &(0..self.current_step), &order)
+            .get_table(predicate, &(0..(self.current_step + 1)), &order)
             .ok()?;
 
         if let TableStatus::InMemory(trie) = &self.table_manager.get_info(new_id).status {
@@ -281,14 +282,20 @@ impl RuleExecutionEngine {
                 })
             );
 
+            for big_predicate in &best_plan.big_table {
+                self.table_manager
+                    .set_bigtable_step(big_predicate, self.current_step)
+            }
+
             let no_derivation = !self.table_manager.execute_series(best_plan);
 
             if no_derivation {
                 without_derivation += 1;
             } else {
                 without_derivation = 0;
-                self.rule_infos[current_rule_index].step_last_applied = self.current_step;
             }
+
+            self.rule_infos[current_rule_index].step_last_applied = self.current_step;
 
             // If we have a derivation and the rule is recursive we want to stay on the same rule
             if no_derivation || !self.rule_infos[current_rule_index].is_recursive {
@@ -314,13 +321,9 @@ impl RuleExecutionEngine {
         leaves: &mut Vec<ExecutionNode>,
     ) -> ExecutionNode {
         let mut subnodes = Vec::<ExecutionNode>::new();
-        for &block_number in self.table_manager.get_blocks_within_range(predicate, range) {
+        for block in self.table_manager.get_blocks_within_range(predicate, range) {
             let new_node = ExecutionNode {
-                operation: ExecutionOperation::Fetch(
-                    predicate,
-                    block_number..(block_number + 1),
-                    order.clone(),
-                ),
+                operation: ExecutionOperation::Fetch(predicate, block.clone(), order.clone()),
             };
 
             leaves.push(new_node.clone());
@@ -493,6 +496,7 @@ impl RuleExecutionEngine {
         const ID_NEW_TABLES: usize = 5; // Must be one greater than the last constant
 
         let rule = &self.program.rules[rule_id];
+        let rule_info = &self.rule_infos[rule_id];
 
         // Some preliminary calculations...
 
@@ -718,7 +722,7 @@ impl RuleExecutionEngine {
             let subplan = self.create_subplan_join(
                 &body_atoms,
                 &atom_column_orders,
-                self.rule_infos[rule_id].step_last_applied,
+                rule_info.step_last_applied,
                 body_index,
                 &join_binding,
                 &mut body_leaves,
@@ -858,6 +862,8 @@ impl RuleExecutionEngine {
             // TODO: ...
         }
 
+        let mut new_big_tables = Vec::<Identifier>::new();
+
         for (predicate, (column_order, head_atoms)) in &head_map {
             // Calculate head tables by projecting/reordering the temporary table resulting from the body
 
@@ -877,9 +883,11 @@ impl RuleExecutionEngine {
                 0,
             );
 
+            let mut tmp_tables = Vec::<usize>::new(); // For testing
+
             let mut head_nodes = Vec::new();
             let mut head_leaves = Vec::new();
-            for head_atom in head_atoms {
+            for &head_atom in head_atoms {
                 let atom_existential = RuleExecutionEngine::contains_existential(head_atom);
 
                 let head_binding =
@@ -912,6 +920,7 @@ impl RuleExecutionEngine {
                     let projected_temp = ExecutionNode {
                         operation: ExecutionOperation::Temp(current_temp_id),
                     };
+                    tmp_tables.push(current_temp_id);
                     current_temp_id += 1;
 
                     // Collect the results of previous iterations and...
@@ -959,9 +968,55 @@ impl RuleExecutionEngine {
                     result: execution_result,
                 })
             }
+
+            // Prevent fragmentation by periodically consolidating the tables
+            let step_last_bigtable = self.table_manager.get_bigtable_step(predicate);
+            let mut big_table_leaves = Vec::new();
+            let mut big_table_subnodes: Vec<ExecutionNode> = tmp_tables
+                .iter()
+                .map(|id| ExecutionNode::new(ExecutionOperation::Temp(*id)))
+                .collect();
+            let mut head_subtables = self.create_subplan_union(
+                *predicate,
+                &((step_last_bigtable + 1)..self.current_step),
+                column_order,
+                &mut big_table_leaves,
+            );
+
+            let mut make_big_table = false;
+
+            match &mut head_subtables.operation {
+                ExecutionOperation::Union(subnodes) => {
+                    if subnodes.len() > 16 {
+                        big_table_subnodes.append(subnodes);
+                        make_big_table = true;
+                    }
+                }
+                _ => {}
+            }
+
+            if make_big_table {
+                new_big_tables.push(*predicate);
+
+                let big_table_plan = ExecutionPlan {
+                    root: ExecutionNode::new(ExecutionOperation::Union(big_table_subnodes)),
+                    leaves: big_table_leaves,
+                    result: ExecutionResult::Save(
+                        *predicate,
+                        (step_last_bigtable + 1)..(self.current_step + 1),
+                        column_order.clone(),
+                        0, // TODO: Priority
+                    ),
+                };
+
+                plans.push(big_table_plan);
+            }
         }
 
-        ExecutionSeries { plans }
+        ExecutionSeries {
+            plans,
+            big_table: new_big_tables,
+        }
     }
 }
 

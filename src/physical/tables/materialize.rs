@@ -1,3 +1,5 @@
+use num::ToPrimitive;
+
 use super::{TableSchema, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry};
 use crate::physical::columns::{
     AdaptiveColumnBuilder, AdaptiveColumnBuilderT, ColumnBuilder, ColumnScan,
@@ -8,6 +10,8 @@ use crate::physical::datatypes::DataTypeName;
 /// Given a TrieScan iterator, materialize its content into a trie
 /// If not_empty is provided, the function will search for the first entry
 pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bool>) -> Trie {
+    let mut next_count: usize = 0;
+
     // Compute target schema (which is the same as the input schema...)
     // TODO: There should be a better way to clone something like this...
     let input_schema = trie_scan.get_schema();
@@ -47,6 +51,7 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
         let is_last_layer = current_layer >= target_schema.arity() - 1;
         let current_value = unsafe { (*trie_scan.current_scan().unwrap().get()).current() };
         let next_value = unsafe { (*trie_scan.current_scan().unwrap().get()).next() };
+        next_count += 1;
 
         if let Some(val) = current_value {
             log::debug!("new value: {current_value:?}");
@@ -114,16 +119,14 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
         result_columns.push(next_interval_column);
     }
 
-    // TODO(mx): downgrade this to debug level
-    // log::info!(
-    //     "materialised trie with {} columns and {} rows",
-    //     result_columns.len(),
-    //     result_columns.last().map_or(0, |col| col.len())
-    // );
-    log::debug!("\n{result_columns:#?}");
+    let result = Trie::new(target_schema, result_columns);
+    log::info!(
+        "Materialize: Next: {next_count}, Elements: {}, Quotient: {}",
+        result.num_elements(),
+        next_count.to_f64().unwrap() / result.num_elements().to_f64().unwrap()
+    );
 
-    // Finally, return finished trie
-    Trie::new(target_schema, result_columns)
+    result
 }
 
 /// Given a TrieScan iterator, materialize its content into a trie

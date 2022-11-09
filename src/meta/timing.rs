@@ -124,9 +124,9 @@ impl TimedCode {
     }
 
     /// Stop the current measurement and save the times
-    pub fn stop(&mut self) {
+    pub fn stop(&mut self) -> Duration {
         if cfg!(test) {
-            return;
+            return Duration::ZERO;
         }
 
         debug_assert!(self.info.start_time.is_some());
@@ -142,6 +142,8 @@ impl TimedCode {
         self.info.accumulated_time += duration;
         self.info.individual_times.push(duration);
         self.info.start_time = None;
+
+        duration
     }
 
     fn apply_display_option<'a>(
