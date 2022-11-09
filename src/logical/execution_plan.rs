@@ -36,6 +36,13 @@ pub struct ExecutionNode {
     pub operation: ExecutionOperation,
 }
 
+impl ExecutionNode {
+    /// Create new [`ExecutionNode`]
+    pub fn new(operation: ExecutionOperation) -> Self {
+        Self { operation }
+    }
+}
+
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
 #[derive(Debug, Clone)]
 pub enum ExecutionResult {
@@ -62,6 +69,9 @@ pub struct ExecutionPlan {
 pub struct ExecutionSeries {
     /// The individual plans in the series
     pub plans: Vec<ExecutionPlan>,
+
+    /// Tables for which to update big table step
+    pub big_table: Vec<Identifier>,
 }
 
 #[cfg(test)]

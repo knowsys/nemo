@@ -95,6 +95,17 @@ impl Trie {
         DebugTrie { trie: self, dict }
     }
 
+    /// Returns the sum of the lengths of each column
+    pub fn num_elements(&self) -> usize {
+        let mut result = 0;
+
+        for column in &self.columns {
+            result += column.len();
+        }
+
+        result
+    }
+
     pub(crate) fn format_as_csv(
         &self,
         f: &mut fmt::Formatter<'_>,
