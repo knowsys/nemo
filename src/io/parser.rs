@@ -737,7 +737,6 @@ mod test {
         );
     }
 
-    // TODO: <= and >= dont work for some reason
     #[test]
     fn filter() {
         let parser = RuleParser::new();
