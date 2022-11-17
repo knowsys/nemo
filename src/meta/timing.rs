@@ -16,7 +16,7 @@ pub static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
 });
 
 /// Represents a block of code that is timed
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct TimedCodeInfo {
     accumulated_time: Duration,
     individual_times: Vec<Duration>,
@@ -46,8 +46,14 @@ pub enum TimedSorting {
     LongestTime,
 }
 
+impl Default for TimedSorting {
+    fn default() -> Self {
+        Self::Default
+    }
+}
+
 /// How to display a layer of a [`TimedCode`] object
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct TimedDisplay {
     sorting: TimedSorting,
     num_elements: usize,
@@ -61,18 +67,10 @@ impl TimedDisplay {
             num_elements,
         }
     }
-
-    /// Create default display option
-    pub fn default() -> Self {
-        Self {
-            sorting: TimedSorting::Default,
-            num_elements: 0,
-        }
-    }
 }
 
 /// Represents a block of code that is timed
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct TimedCode {
     info: TimedCodeInfo,
     subblocks: LinkedHashMap<String, TimedCode>,
@@ -98,7 +96,7 @@ impl TimedCode {
             return self;
         }
 
-        let name_parts: Vec<&str> = name.split("/").collect();
+        let name_parts: Vec<&str> = name.split('/').collect();
 
         let mut current_block = self;
         for part in name_parts {
@@ -106,7 +104,7 @@ impl TimedCode {
             current_block = current_block
                 .subblocks
                 .entry(part_string)
-                .or_insert_with(|| TimedCode::new())
+                .or_insert_with(TimedCode::new)
         }
 
         current_block
@@ -221,7 +219,7 @@ impl TimedCode {
             ));
         }
 
-        if subnodes.len() == 0 {
+        if subnodes.is_empty() {
             Tree::Leaf(vec![title])
         } else {
             Tree::Node(title, subnodes)
@@ -235,7 +233,7 @@ impl TimedCode {
         title_string.push_str(&self.info.accumulated_time.as_millis().to_string());
         title_string.push_str(" ms]");
 
-        TimedCode::create_tree_recursive(0, &self, title_string, options)
+        TimedCode::create_tree_recursive(0, self, title_string, options)
     }
 
     /// Creates an ASCII tree and converts it to a string representation

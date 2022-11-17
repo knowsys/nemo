@@ -32,14 +32,19 @@ fn main() {
     log::info!("parsed program");
     log::debug!("{:?}", program);
 
-    let facts: Vec<&Fact> = program.facts().collect();
+    let facts: &Vec<Fact> = program.facts();
     let fact_preds: HashSet<(Identifier, usize)> = facts
         .iter()
-        .map(|f| (f.0.predicate(), f.0.terms.len()))
+        .map(|f| (f.0.predicate(), f.0.terms().len()))
         .collect();
     let head_preds: HashSet<(Identifier, usize)> = program
         .rules()
-        .flat_map(|rule| rule.head().map(|atom| (atom.predicate(), atom.terms.len())))
+        .iter()
+        .flat_map(|rule| {
+            rule.head()
+                .iter()
+                .map(|atom| (atom.predicate(), atom.terms().len()))
+        })
         .collect();
     let all_preds: HashSet<(Identifier, usize)> = fact_preds.union(&head_preds).copied().collect();
 
@@ -56,14 +61,11 @@ fn main() {
     let tries: Vec<(Identifier, Trie)> = fact_preds
         .iter()
         .map(|(p, _)| {
-            let pred_facts: Vec<&Fact> = facts
-                .iter()
-                .copied()
-                .filter(|f| f.0.predicate() == *p)
-                .collect();
+            let pred_facts: Vec<&Fact> = facts.iter().filter(|f| f.0.predicate() == *p).collect();
             let datatypes: Vec<DataTypeName> = pred_facts[0]
                 .0
                 .terms()
+                .iter()
                 .map(|_t| DataTypeName::U64)
                 .collect(); // TODO: should depend on type but for now we only consider numeric literal integers that we case to u64
 
@@ -79,6 +81,7 @@ fn main() {
                 .iter()
                 .map(|f| {
                     f.0.terms()
+                        .iter()
                         .map(|t| match t {
                             Term::NumericLiteral(nl) => match nl {
                                 NumericLiteral::Integer(i) => {
@@ -139,7 +142,7 @@ fn main() {
             let predicate = parser
                 .resolve_identifier(&pred)
                 .expect("should have been interned");
-            let sanitised = predicate.replace("/", "_").replace(":", "_");
+            let sanitised = predicate.replace(['/', ':'], "_");
             log::info!("{predicate}: {} rows", trie.row_num());
             let path = PathBuf::from(format!("out/{sanitised}.csv"));
             match OpenOptions::new()

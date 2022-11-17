@@ -600,7 +600,7 @@ mod test {
         let trie_b = Trie::new(schema.clone(), vec![column_b_y, column_b_z]);
 
         let trie_c = Trie::new(schema.clone(), vec![column_c_x, column_c_y]);
-        let trie_d = Trie::new(schema.clone(), vec![column_d_y, column_d_z]);
+        let trie_d = Trie::new(schema, vec![column_d_y, column_d_z]);
 
         let join_ab_iter = TrieScanEnum::TrieJoin(TrieJoin::new(
             vec![
@@ -617,7 +617,7 @@ mod test {
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_d)),
             ],
             &[vec![0, 1], vec![1, 2]],
-            schema_target.clone(),
+            schema_target,
         ));
 
         let mut union_iter = TrieUnion::new(vec![join_ab_iter, join_cd_iter]);

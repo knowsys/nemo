@@ -3,6 +3,7 @@
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
 use crate::logical::Permutator;
+use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::super::{
@@ -11,15 +12,15 @@ use super::super::{
 };
 
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct VariableOrder(HashMap<Variable, usize>);
 
 impl VariableOrder {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self(HashMap::new())
     }
 
-    fn push(&mut self, variable: Variable) {
+    pub(super) fn push(&mut self, variable: Variable) {
         let max_index = self.0.values().max();
         self.0.insert(variable, max_index.map_or(0, |i| i + 1));
     }
@@ -28,11 +29,11 @@ impl VariableOrder {
         self.0.get(variable)
     }
 
-    fn contains(&self, variable: &Variable) -> bool {
+    pub(super) fn contains(&self, variable: &Variable) -> bool {
         self.0.contains_key(variable)
     }
 
-    fn iter(&self) -> impl Iterator<Item = &Variable> {
+    pub(super) fn iter(&self) -> impl Iterator<Item = &Variable> {
         let mut vars: Vec<&Variable> = self.0.keys().collect();
         vars.sort_by_key(|var| {
             self.0
@@ -41,9 +42,35 @@ impl VariableOrder {
         });
         vars.into_iter()
     }
+}
 
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
+impl VariableOrder {
+    pub(super) fn debug(&self, dict: &PrefixedStringDictionary) -> String {
+        let mut variable_vector = Vec::<Variable>::new();
+        variable_vector.resize_with(self.0.len(), || Variable::Universal(Identifier(0)));
+
+        for (variable, index) in &self.0 {
+            variable_vector[*index] = *variable;
+        }
+
+        let mut result = String::new();
+
+        result += "[";
+        for (index, variable) in variable_vector.iter().enumerate() {
+            let identifier = match variable {
+                Variable::Universal(id) => id,
+                Variable::Existential(id) => id,
+            };
+
+            result += &dict.entry(identifier.0).unwrap_or_else(|| "?".to_string());
+
+            if index < variable_vector.len() - 1 {
+                result += ", ";
+            }
+        }
+        result += "]";
+
+        result
     }
 }
 
@@ -118,7 +145,7 @@ impl RuleVariableList for Vec<Variable> {
         let result: Vec<Variable> = self
             .iter()
             .filter(|var| {
-                rule.body().any(|lit| {
+                rule.body().iter().any(|lit| {
                     let predicate_vars: Vec<Variable> = lit.atom().variables().collect();
 
                     predicate_vars.iter().any(|pred_var| pred_var == *var)
@@ -152,6 +179,7 @@ impl RuleVariableList for Vec<Variable> {
 
                 let literals = rule
                     .body()
+                    .iter()
                     .filter(|lit| predicate_filter(&lit.predicate()))
                     .filter(|lit| lit.variables().any(|lit_var| lit_var == *var));
 
@@ -219,7 +247,7 @@ impl<'a> VariableOrderBuilder<'a> {
     }
 
     fn get_already_present_idb_edb_count_for_rule_in_tries(&self, rule: &Rule) -> (usize, usize) {
-        let preds_with_tries = rule.body().filter_map(|lit| {
+        let preds_with_tries = rule.body().iter().filter_map(|lit| {
             let pred = lit.predicate();
             self.required_trie_column_orders
                 .get(&pred)
@@ -241,9 +269,10 @@ impl<'a> VariableOrderBuilder<'a> {
     fn generate_variable_orders(&mut self) -> Vec<VariableOrder> {
         // NOTE: We use a BTreeMap to determinise the iteration order for easier debugging; this should not be performance critical
         let mut remaining_rules: BTreeMap<usize, &Rule> =
-            self.program.rules.iter().enumerate().collect();
+            self.program.rules().iter().enumerate().collect();
 
-        let mut result: Vec<(usize, VariableOrder)> = Vec::with_capacity(self.program.rules.len());
+        let mut result: Vec<(usize, VariableOrder)> =
+            Vec::with_capacity(self.program.rules().len());
 
         while !remaining_rules.is_empty() {
             let (next_index, next_rule) = remaining_rules
@@ -275,6 +304,7 @@ impl<'a> VariableOrderBuilder<'a> {
         let mut remaining_vars = {
             let remaining_vars_unpermutated: Vec<Variable> = rule
                 .body()
+                .iter()
                 .flat_map(|lit| lit.variables())
                 .fold(vec![], |mut acc, var| {
                     if !acc.contains(&var) {
@@ -329,7 +359,7 @@ impl<'a> VariableOrderBuilder<'a> {
         must_contain: HashSet<Variable>,
         rule: &Rule,
     ) {
-        let literals = rule.body().filter(|lit| {
+        let literals = rule.body().iter().filter(|lit| {
             let vars: Vec<Variable> = lit.variables().collect();
             must_contain.iter().all(|var| vars.contains(var))
                 && vars.iter().all(|var| variable_order.contains(var))
@@ -361,7 +391,8 @@ pub(super) fn build_preferable_variable_orders(
     let initial_column_orders = initial_column_orders.unwrap_or_else(|| {
         let fact_preds: HashSet<(Identifier, usize)> = program
             .facts()
-            .map(|f| (f.0.predicate(), f.0.terms.len()))
+            .iter()
+            .map(|f| (f.0.predicate(), f.0.terms().len()))
             .collect();
         let source_preds: HashSet<(Identifier, usize)> =
             program.sources().map(|((p, a), _)| (p, a)).collect();
@@ -415,6 +446,8 @@ mod test {
         IterationOrder, RuleVariableList, VariableOrder,
     };
     use std::collections::{HashMap, HashSet};
+
+    type TestRuleSetWithAdditionalInfo = (Vec<Rule>, Vec<Vec<Variable>>, Vec<(Identifier, usize)>);
 
     impl VariableOrder {
         fn from_vec(vec: Vec<Variable>) -> Self {
@@ -679,7 +712,7 @@ mod test {
     }
 
     fn get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant(
-    ) -> (Vec<Rule>, Vec<Vec<Variable>>, Vec<(Identifier, usize)>) {
+    ) -> TestRuleSetWithAdditionalInfo {
         let init = Identifier(11);
         let sub_class_of = Identifier(12);
         let is_main_class = Identifier(13);
@@ -862,8 +895,7 @@ mod test {
         );
     }
 
-    fn get_el_test_ruleset_without_constants(
-    ) -> (Vec<Rule>, Vec<Vec<Variable>>, Vec<(Identifier, usize)>) {
+    fn get_el_test_ruleset_without_constants() -> TestRuleSetWithAdditionalInfo {
         let init = Identifier(101);
         let sub_class_of = Identifier(102);
         let is_main_class = Identifier(103);

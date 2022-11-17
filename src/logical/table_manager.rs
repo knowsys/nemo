@@ -310,7 +310,7 @@ impl TableManager {
             let table_name = self
                 .dictionary
                 .entry(info.key.predicate_id.0)
-                .unwrap_or("<Unkown table>".to_string());
+                .unwrap_or_else(|| "<Unkown table>".to_string());
 
             if let TableStatus::Derived = info.status {
                 let base_id = self.find_materialized_table(&info.key, table_id).unwrap();
@@ -481,7 +481,7 @@ impl TableManager {
         }
 
         // For debugging, check if arity is equal
-        if table_list.len() > 0 {
+        if !table_list.is_empty() {
             debug_assert!(table_list[0].0.len() == order.len());
         }
 
@@ -544,7 +544,7 @@ impl TableManager {
 
         self.tables.push(TableInfo {
             status: TableStatus::InMemory(trie),
-            column_order: column_order,
+            column_order,
             key,
             priority,
             space: 0, //TODO: How to do this
@@ -605,7 +605,7 @@ impl TableManager {
             ExecutionOperation::Union(subtables) => {
                 subtables.iter().map(Self::estimate_space).sum()
             }
-            ExecutionOperation::Minus(left, _right) => Self::estimate_space(&left),
+            ExecutionOperation::Minus(left, _right) => Self::estimate_space(left),
             ExecutionOperation::Project(_id, _sorting) => {
                 // Should be easy to calculate
                 0
@@ -643,7 +643,7 @@ impl TableManager {
 
         self.tables.push(TableInfo {
             status: TableStatus::Derived,
-            column_order: column_order.clone(),
+            column_order,
             key,
             priority,
             space: 0, //TODO: How to do this
@@ -669,7 +669,7 @@ impl TableManager {
                     match self.get_table(*predicate, absolute_step_range, column_order) {
                         Err(error) => match error {
                             GetTableError::NoTable => {
-                                log::warn!("expected a table for predicate {:?} with range {absolute_step_range:?} and order {column_order:?}", self.dictionary.entry(predicate.0).unwrap_or(String::from("<Unkown predicate>")));
+                                log::warn!("expected a table for predicate {:?} with range {absolute_step_range:?} and order {column_order:?}", self.dictionary.entry(predicate.0).unwrap_or_else(|| "<Unkown predicate>".to_string()));
                             }
                             GetTableError::WrongOrder => {
                                 table_ids.insert(self.add_derived(
@@ -760,7 +760,7 @@ impl TableManager {
                         let pred_string = self
                             .dictionary
                             .entry(pred.0)
-                            .unwrap_or("<Unknown predicate>".to_string());
+                            .unwrap_or_else(|| "<Unknown predicate>".to_string());
                         log::info!(
                             "Permament table {} with order {:?} ({} entries)",
                             pred_string,
@@ -838,9 +838,7 @@ impl TableManager {
                 "Temp(Unknown id)".to_string()
             }
             ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) => {
-                if let Some(table_id) = self
-                    .get_table(*predicate, absolute_step_range, column_order)
-                    .ok()
+                if let Ok(table_id) = self.get_table(*predicate, absolute_step_range, column_order)
                 {
                     let table_info = &self.tables[table_id];
 
@@ -854,13 +852,13 @@ impl TableManager {
                 }
             }
             ExecutionOperation::Join(sub, _) => {
-                self.get_iterator_string_sub("Join", &sub.iter().map(|s| s).collect(), temp_tries)
+                self.get_iterator_string_sub("Join", &sub.iter().collect(), temp_tries)
             }
             ExecutionOperation::Union(sub) => {
-                self.get_iterator_string_sub("Union", &sub.iter().map(|s| s).collect(), temp_tries)
+                self.get_iterator_string_sub("Union", &sub.iter().collect(), temp_tries)
             }
             ExecutionOperation::Minus(left, right) => {
-                self.get_iterator_string_sub("Minus", &vec![&left, &right], temp_tries)
+                self.get_iterator_string_sub("Minus", &vec![left, right], temp_tries)
             }
             ExecutionOperation::Project(id, _) => {
                 if let Some(tmp_trie_option) = temp_tries.get(id) {
@@ -874,10 +872,10 @@ impl TableManager {
                 "Project(Unknown id)".to_string()
             }
             ExecutionOperation::SelectValue(sub, _) => {
-                self.get_iterator_string_sub("SelectValue", &vec![&sub], temp_tries)
+                self.get_iterator_string_sub("SelectValue", &vec![sub], temp_tries)
             }
             ExecutionOperation::SelectEqual(sub, _) => {
-                self.get_iterator_string_sub("SelectEqual", &vec![&sub], temp_tries)
+                self.get_iterator_string_sub("SelectEqual", &vec![sub], temp_tries)
             }
         }
     }
@@ -976,21 +974,13 @@ impl TableManager {
                 Some(TrieScanEnum::TrieUnion(union_scan))
             }
             ExecutionOperation::Minus(subtable_left, subtable_right) => {
-                let left_scan = self.get_iterator_node(&subtable_left, temp_tries);
-                let right_scan = self.get_iterator_node(&subtable_right, temp_tries);
+                let left_scan = self.get_iterator_node(subtable_left, temp_tries);
+                let right_scan = self.get_iterator_node(subtable_right, temp_tries);
 
-                if let Some(left) = left_scan {
-                    if let Some(right) = right_scan {
-                        let difference_scan = TrieDifference::new(left, right);
-                        Some(TrieScanEnum::TrieDifference(difference_scan))
-                    } else {
-                        // Subtracting an empty table from anything does not make a difference
-                        Some(left)
-                    }
-                } else {
-                    // Subtracting anything from an empty table leaves an empty table
-                    None
-                }
+                left_scan.map(|ls| match right_scan {
+                    Some(rs) => TrieScanEnum::TrieDifference(TrieDifference::new(ls, rs)),
+                    None => ls,
+                })
             }
             ExecutionOperation::Project(id, sorting) => {
                 let tmp_trie = temp_tries.get(id)?.as_ref()?;

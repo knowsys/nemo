@@ -105,7 +105,7 @@ macro_rules! generate_datatype_forwarder {
 pub fn cover_interval<'a>(vec: &'a [Range<usize>], target: &Range<usize>) -> Vec<&'a Range<usize>> {
     let mut result = Vec::<&Range<usize>>::new();
 
-    if vec.len() == 0 || vec[0].start > target.start {
+    if vec.is_empty() || vec[0].start > target.start {
         return result;
     }
 

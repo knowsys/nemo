@@ -49,7 +49,7 @@ fn load_trie(
             assert!(trie.row_num() > 0);
             println!("{}", trie.row_num());
 
-            return trie;
+            trie
         }
         _ => {
             unreachable!()
@@ -124,7 +124,7 @@ pub fn benchmark_join(c: &mut Criterion) {
         .has_header(false)
         .finish()
         .unwrap()
-        .sort(&["AX", "AY"], vec![false, false])
+        .sort(["AX", "AY"], vec![false, false])
         .unwrap();
 
     let table_b_schema = Schema::new()
@@ -140,7 +140,7 @@ pub fn benchmark_join(c: &mut Criterion) {
         .has_header(false)
         .finish()
         .unwrap()
-        .sort(&["BX", "BY"], vec![false, false])
+        .sort(["BX", "BY"], vec![false, false])
         .unwrap();
 
     let mut group_polar = c.benchmark_group("polar_join");
@@ -200,7 +200,7 @@ fn benchmark_project(c: &mut Criterion) {
             TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
         ],
         &[vec![0, 1, 2], vec![0, 1, 3]],
-        schema_target.clone(),
+        schema_target,
     );
 
     let join_trie = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
@@ -292,7 +292,7 @@ fn benchmark_union(c: &mut Criterion) {
             .has_header(false)
             .finish()
             .unwrap()
-            .sort(&["X", "Y", "Z"], vec![false, false, false])
+            .sort(["X", "Y", "Z"], vec![false, false, false])
             .unwrap();
 
         frames.push(frame);
@@ -339,6 +339,5 @@ fn benchmark_union(c: &mut Criterion) {
     group_polar.finish();
 }
 
-// criterion_group!(benches, benchmark_join, benchmark_project, benchmark_union);
-criterion_group!(benches, benchmark_union);
+criterion_group!(benches, benchmark_join, benchmark_project, benchmark_union);
 criterion_main!(benches);

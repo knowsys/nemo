@@ -86,11 +86,11 @@ mod test {
     use test_log::test;
 
     #[test]
-    fn csv_empty() {
+    fn csv_one_line() {
         let data = "\
-    city;country;pop
-    Boston;United States;4628910
-    ";
+city;country;pop
+Boston;United States;4628910
+";
         let mut rdr = ReaderBuilder::new()
             .delimiter(b';')
             .from_reader(data.as_bytes());
@@ -98,19 +98,48 @@ mod test {
         let mut dict = PrefixedStringDictionary::default();
         let x = read(&[None, None, None], &mut rdr, &mut dict);
         assert!(x.is_ok());
-        assert_eq!(x.unwrap().len(), 0);
+
+        let x = x.unwrap();
+
+        assert_eq!(x.len(), 3);
+        assert!(x.iter().all(|vect| vect.len() == 1));
+
+        assert_eq!(
+            x[0].get(0)
+                .and_then(|dvt| dvt.as_u64())
+                .and_then(|u64| usize::try_from(u64).ok())
+                .and_then(|usize| dict.entry(usize))
+                .unwrap(),
+            "Boston"
+        );
+        assert_eq!(
+            x[1].get(0)
+                .and_then(|dvt| dvt.as_u64())
+                .and_then(|u64| usize::try_from(u64).ok())
+                .and_then(|usize| dict.entry(usize))
+                .unwrap(),
+            "United States"
+        );
+        assert_eq!(
+            x[2].get(0)
+                .and_then(|dvt| dvt.as_u64())
+                .and_then(|u64| usize::try_from(u64).ok())
+                .and_then(|usize| dict.entry(usize))
+                .unwrap(),
+            "4628910"
+        );
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn csv_with_ignored_and_faulty() {
         let data = "\
-    10;20;30;40;20;valid
-    asdf;12.2;413;22.3;23;invalid
-    node01;22;33.33;12.333332;10;valid
-    node02;1312;12.33;313;1431;valid
-    node03;123;123;13;55;123;invalid
-    ";
+10;20;30;40;20;valid
+asdf;12.2;413;22.3;23;invalid
+node01;22;33.33;12.333332;10;valid
+node02;1312;12.33;313;1431;valid
+node03;123;123;13;55;123;invalid
+";
         let mut rdr = ReaderBuilder::new()
             .delimiter(b';')
             .has_headers(false)
@@ -131,8 +160,8 @@ mod test {
         );
 
         assert!(imported.is_ok());
-        assert_eq!(imported.as_ref().unwrap().len(), 4);
-        assert_eq!(imported.as_ref().unwrap()[0].len(), 3);
+        assert_eq!(imported.as_ref().unwrap().len(), 6);
+        assert_eq!(imported.as_ref().unwrap()[1].len(), 3);
     }
 
     #[quickcheck]

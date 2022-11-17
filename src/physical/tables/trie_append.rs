@@ -1,9 +1,9 @@
-use std::{collections::VecDeque, num::NonZeroUsize};
+use std::collections::VecDeque;
 
 use crate::physical::{
     columns::{
-        Column, ColumnBuilder, GenericIntervalColumn, IntervalColumnEnum,
-        IntervalColumnT, AdaptiveColumnBuilder
+        AdaptiveColumnBuilder, Column, ColumnBuilder, GenericIntervalColumn, IntervalColumnEnum,
+        IntervalColumnT,
     },
     datatypes::{DataTypeName, DataValueT, Double, Float},
     tables::TrieSchema,
@@ -22,8 +22,7 @@ pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
 
     // Construct the new schema
     let mut new_schema = Vec::<TrieSchemaEntry>::new();
-    for gap_index in 0..=trie.schema().arity() {
-        let current_values = &values[gap_index];
+    for (gap_index, current_values) in values.iter().enumerate() {
         for value in current_values.iter() {
             let datatype = match value {
                 DataValueT::U64(_) => DataTypeName::U64,
@@ -102,7 +101,7 @@ pub fn trie_add_duplicates(trie: Trie, indices: &[Vec<usize>]) -> Trie {
 
     // Construct the new schema
     let mut new_schema = Vec::<TrieSchemaEntry>::new();
-    for gap_index in 0..=trie.schema().arity() {
+    for (gap_index, current_indices) in indices.iter().enumerate() {
         if gap_index < trie.schema().arity() {
             new_schema.push(TrieSchemaEntry {
                 label: trie.schema().get_label(gap_index),
@@ -110,8 +109,7 @@ pub fn trie_add_duplicates(trie: Trie, indices: &[Vec<usize>]) -> Trie {
             })
         }
 
-        let current_indeces = &indices[gap_index];
-        for &index in current_indeces {
+        for &index in current_indices {
             let datatype = trie.schema().get_type(index);
 
             // TODO: Label

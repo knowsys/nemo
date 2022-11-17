@@ -59,14 +59,15 @@ impl RuleExecutionEngine {
 
         // First, normalize all the rules in the program
         program
-            .rules
+            .rules_mut()
             .iter_mut()
-            .for_each(|r| RuleExecutionEngine::normalize_rule(r));
+            .for_each(RuleExecutionEngine::normalize_rule);
 
         // NOTE: indices are the ids of the rules and the rule order in variable_orders is the same as in program
         let variable_orders = build_preferable_variable_orders(&program, None);
         let rule_infos = program
             .rules()
+            .iter()
             .enumerate()
             .map(|(index, rule)| RuleInfo {
                 step_last_applied: 0,
@@ -84,18 +85,12 @@ impl RuleExecutionEngine {
     }
 
     fn is_rule_recursive(rule: &Rule) -> bool {
-        for head_atom in rule.head() {
-            for body_literal in rule.body() {
-                // TODO: What if there are negative literals?
-                if let Literal::Positive(body_atom) = body_literal {
-                    if head_atom.predicate() == body_atom.predicate() {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
+        rule.head().iter().any(|h| {
+            rule.body()
+                .iter()
+                .filter(|b| b.is_positive())
+                .any(|b| h.predicate() == b.predicate())
+        })
     }
 
     /// Collects all parts of a table and returns it
@@ -124,9 +119,9 @@ impl RuleExecutionEngine {
             .ok()?;
 
         if let TableStatus::InMemory(trie) = &self.table_manager.get_info(new_id).status {
-            return Some(trie);
+            Some(trie)
         } else {
-            return None;
+            None
         }
     }
 
@@ -138,18 +133,18 @@ impl RuleExecutionEngine {
         // We'll just remove everything from rules.filters and put stuff we want to keep here,
         // so we don't have to delete elements in the vector while iterating on it
         let mut new_filters = Vec::<Filter>::new();
-        while !rule.filters.is_empty() {
-            let filter = rule.filters.pop().expect("Vector is not empty");
+        while !rule.filters().is_empty() {
+            let filter = rule.filters_mut().pop().expect("Vector is not empty");
 
             if filter.operation == FilterOperation::Equals {
                 if let Term::Variable(right_variable) = filter.right {
-                    for body_literal in &mut rule.body {
+                    for body_literal in rule.body_mut() {
                         // TODO: We dont support negation yet
                         if let Literal::Positive(body_atom) = body_literal {
-                            for term in &mut body_atom.terms {
+                            for term in body_atom.terms_mut() {
                                 if let Term::Variable(current_variable) = term {
                                     if *current_variable == filter.left {
-                                        *current_variable = right_variable.clone();
+                                        *current_variable = right_variable;
                                     }
                                 }
                             }
@@ -164,9 +159,6 @@ impl RuleExecutionEngine {
             new_filters.push(filter);
         }
 
-        // Don't forget to assign the new filters
-        rule.filters = new_filters;
-
         // Create new filters for handling constants or duplicate variables within one atom
 
         // TODO: This is horrible and should obviously not work that way,
@@ -174,14 +166,14 @@ impl RuleExecutionEngine {
         const FRESH_ID: usize = usize::MAX - 10000;
         let mut current_id = FRESH_ID;
 
-        for body_literal in &mut rule.body {
+        for body_literal in rule.body_mut() {
             // TODO: We dont support negation yet
             if let Literal::Positive(body_atom) = body_literal {
                 let mut atom_variables = HashSet::new();
-                for term in &mut body_atom.terms {
+                for term in body_atom.terms_mut() {
                     let add_filter = if let Term::Variable(variable) = term {
                         // If term is a variable we add a filter iff it has already occured
-                        !atom_variables.insert(variable.clone())
+                        !atom_variables.insert(*variable)
                     } else {
                         // If term is not a variable then we need to add a filter
                         true
@@ -193,11 +185,7 @@ impl RuleExecutionEngine {
                         current_id += 1;
 
                         // Add new filter expression
-                        rule.filters.push(Filter::new(
-                            FilterOperation::Equals,
-                            new_variable.clone(),
-                            term.clone(),
-                        ));
+                        new_filters.push(Filter::new(FilterOperation::Equals, new_variable, *term));
 
                         // Replace current term with the new variable
                         *term = Term::Variable(new_variable);
@@ -205,6 +193,9 @@ impl RuleExecutionEngine {
                 }
             }
         }
+
+        // Don't forget to assign the new filters
+        *rule.filters_mut() = new_filters;
     }
 
     /// Add trie to the table manager
@@ -227,7 +218,7 @@ impl RuleExecutionEngine {
 
         TimedCode::instance().sub("Reasoning/Rules").start();
 
-        while without_derivation < self.program.rules.len() {
+        while without_derivation < self.program.rules().len() {
             let rule_string = format!("Rule: {}", current_rule_index);
 
             TimedCode::instance()
@@ -267,7 +258,7 @@ impl RuleExecutionEngine {
                 "Step {}: Applying rule {} with order {}",
                 self.current_step,
                 current_rule_index,
-                promising_orders[best_plan_index].to_string(&self.table_manager.dictionary)
+                promising_orders[best_plan_index].debug(&self.table_manager.dictionary)
             );
 
             log::info!(
@@ -275,7 +266,7 @@ impl RuleExecutionEngine {
                 promising_orders.iter().fold(String::new(), |acc, order| {
                     let mut new = acc;
 
-                    new += &order.to_string(&self.table_manager.dictionary);
+                    new += &order.debug(&self.table_manager.dictionary);
                     new += " ";
 
                     new
@@ -299,7 +290,7 @@ impl RuleExecutionEngine {
 
             // If we have a derivation and the rule is recursive we want to stay on the same rule
             if no_derivation || !self.rule_infos[current_rule_index].is_recursive {
-                current_rule_index = (current_rule_index + 1) % self.program.rules.len();
+                current_rule_index = (current_rule_index + 1) % self.program.rules().len();
             }
 
             self.current_step += 1;
@@ -346,7 +337,7 @@ impl RuleExecutionEngine {
         atom_column_orders: &[ColumnOrder],
         last_rule_step: usize,
         mid: usize,
-        join_binding: &Vec<Vec<usize>>,
+        join_binding: &[Vec<usize>],
         leaves: &mut Vec<ExecutionNode>,
     ) -> ExecutionNode {
         let mut subplans = Vec::<ExecutionNode>::new();
@@ -380,7 +371,7 @@ impl RuleExecutionEngine {
             subplans.remove(0)
         } else {
             ExecutionNode {
-                operation: ExecutionOperation::Join(subplans, join_binding.clone()),
+                operation: ExecutionOperation::Join(subplans, join_binding.to_vec()),
             }
         }
     }
@@ -388,6 +379,7 @@ impl RuleExecutionEngine {
     fn order_atom(atom: &Atom, variable_order: &VariableOrder) -> ColumnOrder {
         let mapped_variables: Vec<usize> = atom
             .terms()
+            .iter()
             .map(|t| {
                 if let Term::Variable(variable) = t {
                     *variable_order.get(variable).unwrap()
@@ -410,7 +402,7 @@ impl RuleExecutionEngine {
         column_order
             .iter()
             .map(|&i| {
-                if let Term::Variable(variable) = &atom.terms[i] {
+                if let Term::Variable(variable) = &atom.terms()[i] {
                     *variable_order.get(variable).unwrap()
                 } else {
                     panic!("Only universal variables are supported.");
@@ -455,11 +447,11 @@ impl RuleExecutionEngine {
 
         let mut categories = vec![VariableCategory::Other; vars_initial.len()];
 
-        for (variable, position) in &variable_order.0 {
+        for (position, variable) in variable_order.iter().enumerate() {
             let in_initial = vars_initial.contains(variable);
             let in_other = vars_other.contains(variable);
 
-            categories[*position] = if in_initial && in_other {
+            categories[position] = if in_initial && in_other {
                 VariableCategory::Both
             } else if in_initial {
                 VariableCategory::Initial
@@ -495,7 +487,7 @@ impl RuleExecutionEngine {
         const ID_EXISTENTIAL_DIFF: usize = 4;
         const ID_NEW_TABLES: usize = 5; // Must be one greater than the last constant
 
-        let rule = &self.program.rules[rule_id];
+        let rule = &self.program.rules()[rule_id];
         let rule_info = &self.rule_infos[rule_id];
 
         // Some preliminary calculations...
@@ -503,8 +495,8 @@ impl RuleExecutionEngine {
         // Since we don't support negation yet,
         // we can just turn the literals into atoms
         // TODO: When adding support for negation, change this
-        let body_atoms: Vec<&Atom> = rule.body().map(|l| l.atom()).collect();
-        let head_atoms: Vec<&Atom> = rule.head().map(|a| a).collect();
+        let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
+        let head_atoms: Vec<&Atom> = rule.head().iter().collect();
 
         let body_variables = RuleExecutionEngine::get_variables(&body_atoms);
         let head_variables = RuleExecutionEngine::get_variables(&head_atoms);
@@ -535,17 +527,11 @@ impl RuleExecutionEngine {
         }
 
         // Existential rules require a lot more computation
-        let is_existential = rule
-            .head()
-            .map(|a| {
-                for t in a.terms() {
-                    if let Term::Variable(Variable::Existential(_)) = t {
-                        return true;
-                    }
-                }
-                return false;
-            })
-            .fold(false, |acc, b| acc || b);
+        let is_existential = rule.head().iter().any(|a| {
+            a.terms()
+                .iter()
+                .any(|t| matches!(t, Term::Variable(Variable::Existential(_))))
+        });
 
         // Calculate the filters
         let mut body_variables_sorted = body_variables.iter().collect::<Vec<_>>();
@@ -562,7 +548,7 @@ impl RuleExecutionEngine {
 
         let mut filter_assignments = Vec::<ValueAssignment>::new();
         let mut filter_classes = Vec::<HashSet<&Variable>>::new();
-        for filter in &rule.filters {
+        for filter in rule.filters() {
             match &filter.right {
                 Term::Variable(right_variable) => {
                     let left_variable = &filter.left;
@@ -574,24 +560,33 @@ impl RuleExecutionEngine {
                         .iter()
                         .position(|s| s.contains(right_variable));
 
-                    if left_index.is_some() && right_index.is_some() {
-                        if right_index.unwrap() > left_index.unwrap() {
-                            let other_set = filter_classes.remove(right_index.unwrap());
-                            filter_classes[left_index.unwrap()].extend(other_set);
-                        } else {
-                            let other_set = filter_classes.remove(left_index.unwrap());
-                            filter_classes[right_index.unwrap()].extend(other_set);
-                        }
-                    } else if left_index.is_some() {
-                        filter_classes[left_index.unwrap()].insert(right_variable);
-                    } else if right_index.is_some() {
-                        filter_classes[right_index.unwrap()].insert(left_variable);
-                    } else {
-                        let mut new_set = HashSet::new();
-                        new_set.insert(left_variable);
-                        new_set.insert(right_variable);
+                    match left_index {
+                        Some(li) => match right_index {
+                            Some(ri) => {
+                                if ri > li {
+                                    let other_set = filter_classes.remove(ri);
+                                    filter_classes[li].extend(other_set);
+                                } else {
+                                    let other_set = filter_classes.remove(li);
+                                    filter_classes[ri].extend(other_set);
+                                }
+                            }
+                            None => {
+                                filter_classes[li].insert(right_variable);
+                            }
+                        },
+                        None => match right_index {
+                            Some(ri) => {
+                                filter_classes[ri].insert(right_variable);
+                            }
+                            None => {
+                                let mut new_set = HashSet::new();
+                                new_set.insert(left_variable);
+                                new_set.insert(right_variable);
 
-                        filter_classes.push(new_set);
+                                filter_classes.push(new_set);
+                            }
+                        },
                     }
                 }
                 _ => {
@@ -718,7 +713,7 @@ impl RuleExecutionEngine {
 
         // In the seminative evaluation, we need to perform one join per body atom
         let mut body_joins = Vec::<ExecutionNode>::new();
-        for body_index in 0..rule.body.len() {
+        for body_index in 0..rule.body().len() {
             let subplan = self.create_subplan_join(
                 &body_atoms,
                 &atom_column_orders,
@@ -803,7 +798,7 @@ impl RuleExecutionEngine {
                 let body_projected_columns = RuleExecutionEngine::get_frontier_projection(
                     &body_variables,
                     &head_variables,
-                    &variable_order,
+                    variable_order,
                 );
                 let body_project_node = ExecutionNode {
                     operation: ExecutionOperation::Project(ID_BODY_JOIN, body_projected_columns),
@@ -820,7 +815,7 @@ impl RuleExecutionEngine {
             let head_projected_columns = RuleExecutionEngine::get_frontier_projection(
                 &head_variables,
                 &body_variables,
-                &variable_order,
+                variable_order,
             );
             let head_project_node = ExecutionNode {
                 operation: ExecutionOperation::Project(ID_BODY_JOIN, head_projected_columns),
@@ -985,14 +980,11 @@ impl RuleExecutionEngine {
 
             let mut make_big_table = false;
 
-            match &mut head_subtables.operation {
-                ExecutionOperation::Union(subnodes) => {
-                    if subnodes.len() > 16 {
-                        big_table_subnodes.append(subnodes);
-                        make_big_table = true;
-                    }
+            if let ExecutionOperation::Union(subnodes) = &mut head_subtables.operation {
+                if subnodes.len() > 16 {
+                    big_table_subnodes.append(subnodes);
+                    make_big_table = true;
                 }
-                _ => {}
             }
 
             if make_big_table {
@@ -1083,11 +1075,11 @@ mod test {
             PrefixedStringDictionary::default(),
         );
 
-        engine.rule_infos[0].promising_orders = vec![VariableOrder(HashMap::from([
-            (Variable::Universal(Identifier(0)), 0),
-            (Variable::Universal(Identifier(1)), 1),
-            (Variable::Universal(Identifier(2)), 2),
-        ]))];
+        let mut var_order = VariableOrder::new();
+        var_order.push(Variable::Universal(Identifier(0)));
+        var_order.push(Variable::Universal(Identifier(1)));
+        var_order.push(Variable::Universal(Identifier(2)));
+        engine.rule_infos[0].promising_orders = vec![var_order];
 
         let column_x = make_gict(&[1, 2, 5, 7], &[0]);
         let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
@@ -1261,11 +1253,11 @@ mod test {
             PrefixedStringDictionary::default(),
         );
 
-        engine.rule_infos[0].promising_orders = vec![VariableOrder(HashMap::from([
-            (Variable::Universal(Identifier(0)), 0),
-            (Variable::Universal(Identifier(1)), 1),
-            (Variable::Universal(Identifier(2)), 2),
-        ]))];
+        let mut var_order = VariableOrder::new();
+        var_order.push(Variable::Universal(Identifier(0)));
+        var_order.push(Variable::Universal(Identifier(1)));
+        var_order.push(Variable::Universal(Identifier(2)));
+        engine.rule_infos[0].promising_orders = vec![var_order];
 
         let column_x = make_gict(&[1, 2, 5, 7], &[0]);
         let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
@@ -1475,7 +1467,7 @@ mod test {
         ]);
 
         let trie_a = Trie::new(schema.clone(), vec![a_column_x, a_column_y]);
-        let trie_b = Trie::new(schema.clone(), vec![b_column_x, b_column_y]);
+        let trie_b = Trie::new(schema, vec![b_column_x, b_column_y]);
         engine.add_trie(Identifier(2), 0..1, vec![0, 1], 0, trie_a);
         engine.add_trie(Identifier(3), 0..1, vec![0, 1], 0, trie_b);
 
