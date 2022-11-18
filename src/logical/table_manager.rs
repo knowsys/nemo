@@ -242,10 +242,9 @@ impl TableManager {
     fn materialize_on_disk(&mut self, source: &DataSource, order: &ColumnOrder) -> Trie {
         let (trie, name) = match source {
             DataSource::CsvFile(file) => {
-                // TODO: not everything is u64 :D
+                // Using fallback solution to treat eveything as string for now (storing as u64 internally)
                 let datatypes: Vec<Option<DataTypeName>> = (0..order.len()).map(|_| None).collect();
 
-                // let mut csv_reader = csv::Reader::from_path(file.as_path()).unwrap();
                 let mut reader = ReaderBuilder::new()
                     .delimiter(b',')
                     .has_headers(false)

@@ -206,7 +206,6 @@ impl TimedCode {
                 100.0
                     * (block.1.info.accumulated_time.as_secs_f64()
                         / current_node.info.accumulated_time.as_secs_f64())
-                // block.1.info.accumulated_time.as_secs_f64()
             } else {
                 0.0
             };
