@@ -23,7 +23,7 @@ pub enum DataValueT {
 }
 
 impl DataValueT {
-    /// Returns either `Option<u64>` or `None`
+    /// Returns either [`Option<u64>`], answering whether the [`DataValueT`] is of this datatype
     pub fn as_u64(&self) -> Option<u64> {
         match *self {
             DataValueT::U64(val) => Some(val),
@@ -31,7 +31,7 @@ impl DataValueT {
         }
     }
 
-    /// Returns either `Option<Float>` or `None`
+    /// Returns either [`Option<Float>`], answering whether [`DataValueT`] is of this datatype
     pub fn as_float(&self) -> Option<Float> {
         match *self {
             DataValueT::Float(val) => Some(val),
@@ -39,7 +39,7 @@ impl DataValueT {
         }
     }
 
-    /// Returns either `Option<Double>` or `None`
+    /// Returns either [`Option<Double>`], answering whether the [`DataValueT`] is of this datatype
     pub fn as_double(&self) -> Option<Double> {
         match *self {
             DataValueT::Double(val) => Some(val),
@@ -47,7 +47,7 @@ impl DataValueT {
         }
     }
 
-    /// Returns either `Option<usize>` or `None`
+    /// Returns an [`Option<usize>`] , answering whetherthe [`DataValueT`] is of this datatype
     pub fn as_string(&self) -> Option<usize> {
         match *self {
             DataValueT::String(val) => Some(val),
@@ -142,26 +142,20 @@ impl VecT {
     /// Note that it is not checked if the [DataValueT] has the right enum-variant
     pub(crate) fn push(&mut self, value: &DataValueT) {
         match self {
-            VecT::U64(vec) => vec.push(
-                value
-                    .as_u64()
-                    .expect("VecT and DataValueT should match VecT"),
-            ),
-            VecT::Float(vec) => vec.push(
-                value
-                    .as_float()
-                    .expect("VecT and DataValueT should match VecT"),
-            ),
-            VecT::Double(vec) => vec.push(
-                value
-                    .as_double()
-                    .expect("VecT and DataValueT should match VecT"),
-            ),
-            VecT::String(vec) => vec.push(
-                value
-                    .as_string()
-                    .expect("VecT and DataValueT should match VecT"),
-            ),
+            VecT::U64(vec) => {
+                vec.push(value.as_u64().expect(
+                    "expecting VecT::U64 and DataValueT::U64, but DataValueT does not match",
+                ))
+            }
+            VecT::Float(vec) => vec.push(value.as_float().expect(
+                "expecting VecT::Float and DataValueT::Float, but DataValueT does not match",
+            )),
+            VecT::Double(vec) => vec.push(value.as_double().expect(
+                "expecting VecT::Double and DataValueT::Double, but DataValueT does not match",
+            )),
+            VecT::String(vec) => vec.push(value.as_string().expect(
+                "expecting VecT::String and DataValueT::String, but DataValueT does not match",
+            )),
         };
     }
 

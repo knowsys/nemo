@@ -12,8 +12,8 @@ pub use string_dictionary::StringDictionary;
 
 /// This Dictionary Trait defines dictionaries, which keep ownership of the inserted elements.
 pub trait Dictionary {
-    /// Initialize a new Dictionary
-    fn init() -> Self
+    /// Construct a new and empty [`Dictionary`]
+    fn new() -> Self
     where
         Self: Sized + Default,
     {

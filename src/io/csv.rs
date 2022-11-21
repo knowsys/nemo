@@ -7,7 +7,11 @@ use csv::Reader;
 
 /// Imports a csv file
 /// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
-/// If the Option is [None], then the column will be ignored
+/// # Parameters
+/// * `datatypes` this is a list of [`DataTypeName`] options, which needs to match the number of fields in the csv-file.
+///   If the Option is [`None`] the field will be ignored. [`Some(DataTypeName)`] describes the datatype of the field in the csv-file.
+/// # Behaviour
+/// If a given datatype from `datatypes` is not matching the value in the field (i.e. it cannot be parsed into such a value), the whole line will be ignored and an error massage is emitted to the log.
 pub fn read<T>(
     datatypes: &[Option<DataTypeName>],
     csv_reader: &mut Reader<T>,
@@ -84,7 +88,7 @@ Boston;United States;4628910
         let x = read(
             &[None, None, None],
             &mut rdr,
-            &mut PrefixedStringDictionary::init(),
+            &mut PrefixedStringDictionary::new(),
         );
         assert!(x.is_ok());
         assert_eq!(x.unwrap().len(), 0);
@@ -115,7 +119,7 @@ node03;123;123;13;55;123;invalid
                 Some(DataTypeName::String),
             ],
             &mut rdr,
-            &mut PrefixedStringDictionary::init(),
+            &mut PrefixedStringDictionary::new(),
         );
 
         assert!(imported.is_ok());
@@ -186,7 +190,7 @@ node03;123;123;13;55;123;invalid
                 Some(DataTypeName::Float),
             ],
             &mut rdr,
-            &mut PrefixedStringDictionary::init(),
+            &mut PrefixedStringDictionary::new(),
         );
 
         assert!(imported.is_ok());
