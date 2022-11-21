@@ -96,7 +96,7 @@ Boston;United States;4628910
         let data = "\
 10;20;30;40;20;valid
 asdf;12.2;413;22.3;23;invalid
-node01;22;33.33;12.333332;10;valid
+node01;22;33.33;12.333332;10;valid again
 node02;1312;12.33;313;1431;valid
 node03;123;123;13;55;123;invalid
 ";
@@ -112,15 +112,40 @@ node03;123;123;13;55;123;invalid
                 Some(DataTypeName::Double),
                 Some(DataTypeName::Float),
                 Some(DataTypeName::U64),
-                None,
+                Some(DataTypeName::String),
             ],
             &mut rdr,
             &mut PrefixedStringDictionary::init(),
         );
 
         assert!(imported.is_ok());
-        assert_eq!(imported.as_ref().unwrap().len(), 4);
+        assert_eq!(imported.as_ref().unwrap().len(), 5);
         assert_eq!(imported.as_ref().unwrap()[0].len(), 3);
+        log::debug!("imported: {:?}", imported);
+        assert_eq!(
+            imported.as_ref().unwrap()[4]
+                .get(0)
+                .map(|v| v.as_string().unwrap()),
+            Some(0usize)
+        );
+        assert_eq!(
+            imported.as_ref().unwrap()[4]
+                .get(1)
+                .map(|v| v.as_string().unwrap()),
+            Some(1usize)
+        );
+        assert_eq!(
+            imported.as_ref().unwrap()[4]
+                .get(2)
+                .map(|v| v.as_string().unwrap()),
+            Some(0usize)
+        );
+        assert_eq!(
+            imported.as_ref().unwrap()[4]
+                .get(3)
+                .map(|v| v.as_string().unwrap()),
+            None
+        );
     }
 
     #[quickcheck]
