@@ -15,7 +15,10 @@ pub trait Dictionary {
     /// Initialize a new Dictionary
     fn init() -> Self
     where
-        Self: Sized;
+        Self: Sized + Default,
+    {
+        Self::default()
+    }
     /// Add a new string to the dictionary
     /// and returns the associated [usize] value to the added string
     /// Note that duplicates will not be added and the existing [usize] will be returned
