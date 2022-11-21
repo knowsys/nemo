@@ -2,13 +2,16 @@
 
 use crate::error::Error;
 use crate::physical::datatypes::{data_value::VecT, DataTypeName};
+use crate::physical::dictionary::Dictionary;
 use csv::Reader;
 
 /// Imports a csv file
-/// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference
+/// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
+/// If the Option is [None], then the column will be ignored
 pub fn read<T>(
     datatypes: &[Option<DataTypeName>],
     csv_reader: &mut Reader<T>,
+    dict: &mut dyn Dictionary,
 ) -> Result<Vec<VecT>, Error>
 where
     T: std::io::Read,
@@ -21,6 +24,7 @@ where
                 DataTypeName::U64 => VecT::U64(Vec::new()),
                 DataTypeName::Float => VecT::Float(Vec::new()),
                 DataTypeName::Double => VecT::Double(Vec::new()),
+                DataTypeName::String => VecT::String(Vec::new()),
             })
         }));
     });
@@ -30,7 +34,7 @@ where
             if let Err(Error::RollBack(rollback)) =
                 row.iter().enumerate().try_for_each(|(idx, item)| {
                     if let Some(datatype) = datatypes[idx] {
-                        match datatype.parse(item) {
+                        match datatype.parse(item, dict) {
                             Ok(val) => {
                                 result[idx].as_mut().map(|vect| {
                                     vect.push(&val);
@@ -62,6 +66,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::physical::dictionary::PrefixedStringDictionary;
     use csv::ReaderBuilder;
     use quickcheck_macros::quickcheck;
     use test_log::test;
@@ -76,7 +81,11 @@ Boston;United States;4628910
             .delimiter(b';')
             .from_reader(data.as_bytes());
 
-        let x = read(&[None, None, None], &mut rdr);
+        let x = read(
+            &[None, None, None],
+            &mut rdr,
+            &mut PrefixedStringDictionary::init(),
+        );
         assert!(x.is_ok());
         assert_eq!(x.unwrap().len(), 0);
     }
@@ -106,6 +115,7 @@ node03;123;123;13;55;123;invalid
                 None,
             ],
             &mut rdr,
+            &mut PrefixedStringDictionary::init(),
         );
 
         assert!(imported.is_ok());
@@ -151,6 +161,7 @@ node03;123;123;13;55;123;invalid
                 Some(DataTypeName::Float),
             ],
             &mut rdr,
+            &mut PrefixedStringDictionary::init(),
         );
 
         assert!(imported.is_ok());

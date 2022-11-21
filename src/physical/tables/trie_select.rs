@@ -46,6 +46,7 @@ impl<'a> TrieSelectEqual<'a> {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
+                DataTypeName::String => init_scans_for_datatype!(String),
             };
         }
 
@@ -87,6 +88,7 @@ impl<'a> TrieSelectEqual<'a> {
                     DataTypeName::U64 => init_scans_for_datatype!(U64),
                     DataTypeName::Float => init_scans_for_datatype!(Float),
                     DataTypeName::Double => init_scans_for_datatype!(Double),
+                    DataTypeName::String => init_scans_for_datatype!(String),
                 }
             }
         }
@@ -182,6 +184,7 @@ impl<'a> TrieSelectValue<'a> {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
+                DataTypeName::String => init_scans_for_datatype!(String),
             }
         }
 
@@ -217,6 +220,7 @@ impl<'a> TrieSelectValue<'a> {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
+                DataTypeName::String => init_scans_for_datatype!(String),
             }
         }
 

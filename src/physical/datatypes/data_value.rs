@@ -18,6 +18,8 @@ pub enum DataValueT {
     Float(Float),
     /// Case Double
     Double(Double),
+    /// Case String
+    String(usize),
 }
 
 impl DataValueT {
@@ -45,12 +47,21 @@ impl DataValueT {
         }
     }
 
+    /// Returns either `Option<usize>` or `None`
+    pub fn as_string(&self) -> Option<usize> {
+        match *self {
+            DataValueT::String(val) => Some(val),
+            _ => None,
+        }
+    }
+
     /// Compares its value with another given [`DataValueT`]
     pub fn compare(&self, other: &Self) -> Option<Ordering> {
         match self {
             DataValueT::U64(val) => other.as_u64().map(|otherval| val.cmp(&otherval)),
             DataValueT::Float(val) => other.as_float().map(|otherval| val.cmp(&otherval)),
             DataValueT::Double(val) => other.as_double().map(|otherval| val.cmp(&otherval)),
+            DataValueT::String(val) => other.as_string().map(|otherval| val.cmp(&otherval)),
         }
     }
 
@@ -60,6 +71,7 @@ impl DataValueT {
             Self::U64(_) => DataTypeName::U64,
             Self::Float(_) => DataTypeName::Float,
             Self::Double(_) => DataTypeName::Double,
+            Self::String(_) => DataTypeName::String,
         }
     }
 }
@@ -70,6 +82,7 @@ impl std::fmt::Display for DataValueT {
             Self::U64(val) => write!(f, "{}", val),
             Self::Float(val) => write!(f, "{}", val),
             Self::Double(val) => write!(f, "{}", val),
+            Self::String(val) => write!(f, "str{}", val),
         }
     }
 }
@@ -83,6 +96,8 @@ pub enum VecT {
     Float(Vec<Float>),
     /// Case Vec<Double>
     Double(Vec<Double>),
+    /// Case Vec<String>
+    String(Vec<usize>),
 }
 
 generate_datatype_forwarder!(forward_to_vec);
@@ -94,6 +109,7 @@ impl VecT {
             DataTypeName::U64 => Self::U64(Vec::new()),
             DataTypeName::Float => Self::Float(Vec::new()),
             DataTypeName::Double => Self::Double(Vec::new()),
+            DataTypeName::String => Self::String(Vec::new()),
         }
     }
 
@@ -103,6 +119,7 @@ impl VecT {
             Self::U64(_) => DataTypeName::U64,
             Self::Float(_) => DataTypeName::Float,
             Self::Double(_) => DataTypeName::Double,
+            Self::String(_) => DataTypeName::String,
         }
     }
 
@@ -117,6 +134,7 @@ impl VecT {
             VecT::U64(vec) => vec.get(index).copied().map(DataValueT::U64),
             VecT::Float(vec) => vec.get(index).copied().map(DataValueT::Float),
             VecT::Double(vec) => vec.get(index).copied().map(DataValueT::Double),
+            VecT::String(vec) => vec.get(index).copied().map(DataValueT::String),
         }
     }
 
@@ -124,9 +142,26 @@ impl VecT {
     /// Note that it is not checked if the [DataValueT] has the right enum-variant
     pub(crate) fn push(&mut self, value: &DataValueT) {
         match self {
-            VecT::U64(vec) => vec.push(value.as_u64().unwrap()),
-            VecT::Float(vec) => vec.push(value.as_float().unwrap()),
-            VecT::Double(vec) => vec.push(value.as_double().unwrap()),
+            VecT::U64(vec) => vec.push(
+                value
+                    .as_u64()
+                    .expect("VecT and DataValueT should match VecT"),
+            ),
+            VecT::Float(vec) => vec.push(
+                value
+                    .as_float()
+                    .expect("VecT and DataValueT should match VecT"),
+            ),
+            VecT::Double(vec) => vec.push(
+                value
+                    .as_double()
+                    .expect("VecT and DataValueT should match VecT"),
+            ),
+            VecT::String(vec) => vec.push(
+                value
+                    .as_string()
+                    .expect("VecT and DataValueT should match VecT"),
+            ),
         };
     }
 
@@ -151,6 +186,9 @@ impl VecT {
                 .get(idx_a)
                 .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
             VecT::Double(vec) => vec
+                .get(idx_a)
+                .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
+            VecT::String(vec) => vec
                 .get(idx_a)
                 .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
         }

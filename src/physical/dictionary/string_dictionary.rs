@@ -10,6 +10,10 @@ pub struct StringDictionary {
 }
 
 impl Dictionary for StringDictionary {
+    fn init() -> Self {
+        Self::default()
+    }
+
     fn add(&mut self, entry: String) -> usize {
         match self.mapping.get(&entry) {
             Some(idx) => *idx,

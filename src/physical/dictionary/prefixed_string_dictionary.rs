@@ -290,6 +290,10 @@ impl Default for PrefixedStringDictionary {
 }
 
 impl Dictionary for PrefixedStringDictionary {
+    fn init() -> Self {
+        Self::default()
+    }
+
     fn add(&mut self, entry: String) -> usize {
         log::trace!("add {entry:?} to {self:?}");
         let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).into_iter().collect();

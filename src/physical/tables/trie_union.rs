@@ -58,6 +58,7 @@ impl<'a> TrieUnion<'a> {
                 DataTypeName::U64 => init_scans_for_datatype!(U64, u64),
                 DataTypeName::Float => init_scans_for_datatype!(Float, Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double, Double),
+                DataTypeName::String => init_scans_for_datatype!(String, usize),
             };
         }
 

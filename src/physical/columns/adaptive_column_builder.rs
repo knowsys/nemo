@@ -132,6 +132,8 @@ pub enum AdaptiveColumnBuilderT {
     Float(AdaptiveColumnBuilder<Float>),
     /// Case Double
     Double(AdaptiveColumnBuilder<Double>),
+    /// Case String
+    String(AdaptiveColumnBuilder<usize>),
 }
 
 impl AdaptiveColumnBuilderT {
@@ -141,6 +143,7 @@ impl AdaptiveColumnBuilderT {
             DataTypeName::U64 => Self::U64(AdaptiveColumnBuilder::new()),
             DataTypeName::Float => Self::Float(AdaptiveColumnBuilder::new()),
             DataTypeName::Double => Self::Double(AdaptiveColumnBuilder::new()),
+            DataTypeName::String => Self::String(AdaptiveColumnBuilder::new()),
         }
     }
 
@@ -168,6 +171,13 @@ impl AdaptiveColumnBuilderT {
                     panic!("value does not match AdaptiveColumn type");
                 }
             }
+            Self::String(cb) => {
+                cb.add(
+                    value
+                        .as_string()
+                        .expect("Value does not match AdaptiveColumn type"),
+                );
+            }
         }
     }
 
@@ -177,6 +187,7 @@ impl AdaptiveColumnBuilderT {
             Self::U64(cb) => cb.count(),
             Self::Float(cb) => cb.count(),
             Self::Double(cb) => cb.count(),
+            Self::String(cb) => cb.count(),
         }
     }
 }
