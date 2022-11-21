@@ -11,7 +11,7 @@ use csv::Reader;
 /// * `datatypes` this is a list of [`DataTypeName`] options, which needs to match the number of fields in the csv-file.
 ///   If the Option is [`None`] the field will be ignored. [`Some(DataTypeName)`] describes the datatype of the field in the csv-file.
 /// # Behaviour
-/// If a given datatype from `datatypes` is not matching the value in the field (i.e. it cannot be parsed into such a value), the whole line will be ignored and an error massage is emitted to the log.
+/// If a given datatype from `datatypes` is not matching the value in the field (i.e. it cannot be parsed into such a value), the whole line will be ignored and an error message is emitted to the log.
 pub fn read<T>(
     datatypes: &[Option<DataTypeName>],
     csv_reader: &mut Reader<T>,

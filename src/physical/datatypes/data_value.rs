@@ -47,7 +47,7 @@ impl DataValueT {
         }
     }
 
-    /// Returns an [`Option<usize>`] , answering whetherthe [`DataValueT`] is of this datatype
+    /// Returns an [`Option<usize>`] , answering whether the [`DataValueT`] is of this datatype
     pub fn as_string(&self) -> Option<usize> {
         match *self {
             DataValueT::String(val) => Some(val),
