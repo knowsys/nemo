@@ -2,13 +2,20 @@
 
 use crate::error::Error;
 use crate::physical::datatypes::{data_value::VecT, DataTypeName};
+use crate::physical::dictionary::Dictionary;
 use csv::Reader;
 
 /// Imports a csv file
-/// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference
+/// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
+/// # Parameters
+/// * `datatypes` this is a list of [`DataTypeName`] options, which needs to match the number of fields in the csv-file.
+///   If the Option is [`None`] the field will be ignored. [`Some(DataTypeName)`] describes the datatype of the field in the csv-file.
+/// # Behaviour
+/// If a given datatype from `datatypes` is not matching the value in the field (i.e. it cannot be parsed into such a value), the whole line will be ignored and an error message is emitted to the log.
 pub fn read<T>(
     datatypes: &[Option<DataTypeName>],
     csv_reader: &mut Reader<T>,
+    dict: &mut dyn Dictionary,
 ) -> Result<Vec<VecT>, Error>
 where
     T: std::io::Read,
@@ -21,6 +28,7 @@ where
                 DataTypeName::U64 => VecT::U64(Vec::new()),
                 DataTypeName::Float => VecT::Float(Vec::new()),
                 DataTypeName::Double => VecT::Double(Vec::new()),
+                DataTypeName::String => VecT::String(Vec::new()),
             })
         }));
     });
@@ -30,7 +38,7 @@ where
             if let Err(Error::RollBack(rollback)) =
                 row.iter().enumerate().try_for_each(|(idx, item)| {
                     if let Some(datatype) = datatypes[idx] {
-                        match datatype.parse(item) {
+                        match datatype.parse(item, dict) {
                             Ok(val) => {
                                 result[idx].as_mut().map(|vect| {
                                     vect.push(&val);
@@ -62,6 +70,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::physical::dictionary::PrefixedStringDictionary;
     use csv::ReaderBuilder;
     use quickcheck_macros::quickcheck;
     use test_log::test;
@@ -76,7 +85,11 @@ Boston;United States;4628910
             .delimiter(b';')
             .from_reader(data.as_bytes());
 
-        let x = read(&[None, None, None], &mut rdr);
+        let x = read(
+            &[None, None, None],
+            &mut rdr,
+            &mut PrefixedStringDictionary::new(),
+        );
         assert!(x.is_ok());
         assert_eq!(x.unwrap().len(), 0);
     }
@@ -87,7 +100,7 @@ Boston;United States;4628910
         let data = "\
 10;20;30;40;20;valid
 asdf;12.2;413;22.3;23;invalid
-node01;22;33.33;12.333332;10;valid
+node01;22;33.33;12.333332;10;valid again
 node02;1312;12.33;313;1431;valid
 node03;123;123;13;55;123;invalid
 ";
@@ -103,14 +116,40 @@ node03;123;123;13;55;123;invalid
                 Some(DataTypeName::Double),
                 Some(DataTypeName::Float),
                 Some(DataTypeName::U64),
-                None,
+                Some(DataTypeName::String),
             ],
             &mut rdr,
+            &mut PrefixedStringDictionary::new(),
         );
 
         assert!(imported.is_ok());
-        assert_eq!(imported.as_ref().unwrap().len(), 4);
+        assert_eq!(imported.as_ref().unwrap().len(), 5);
         assert_eq!(imported.as_ref().unwrap()[0].len(), 3);
+        log::debug!("imported: {:?}", imported);
+        assert_eq!(
+            imported.as_ref().unwrap()[4]
+                .get(0)
+                .map(|v| v.as_string().unwrap()),
+            Some(0usize)
+        );
+        assert_eq!(
+            imported.as_ref().unwrap()[4]
+                .get(1)
+                .map(|v| v.as_string().unwrap()),
+            Some(1usize)
+        );
+        assert_eq!(
+            imported.as_ref().unwrap()[4]
+                .get(2)
+                .map(|v| v.as_string().unwrap()),
+            Some(0usize)
+        );
+        assert_eq!(
+            imported.as_ref().unwrap()[4]
+                .get(3)
+                .map(|v| v.as_string().unwrap()),
+            None
+        );
     }
 
     #[quickcheck]
@@ -151,6 +190,7 @@ node03;123;123;13;55;123;invalid
                 Some(DataTypeName::Float),
             ],
             &mut rdr,
+            &mut PrefixedStringDictionary::new(),
         );
 
         assert!(imported.is_ok());

@@ -11,9 +11,12 @@ pub mod string_dictionary;
 pub use string_dictionary::StringDictionary;
 
 /// This Dictionary Trait defines dictionaries, which keep ownership of the inserted elements.
-pub trait Dictionary: Default {
-    /// Initialize a new Dictionary
-    fn init() -> Self {
+pub trait Dictionary {
+    /// Construct a new and empty [`Dictionary`]
+    fn new() -> Self
+    where
+        Self: Sized + Default,
+    {
         Self::default()
     }
     /// Add a new string to the dictionary

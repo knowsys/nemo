@@ -92,6 +92,7 @@ macro_rules! generate_datatype_forwarder {
         $crate::generate_forwarder!($name;
                                     U64,
                                     Float,
-                                    Double);
+                                    Double,
+				    String);
     }
 }
