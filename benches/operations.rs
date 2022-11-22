@@ -59,9 +59,9 @@ fn load_trie(
 pub fn benchmark_join(c: &mut Criterion) {
     let mut dict = PrefixedStringDictionary::default();
 
-    let table_a = DataSource::csv_file("test-files/bench/xe.csv").unwrap();
+    let table_a = DataSource::csv_file("test-files/bench-data/xe.csv").unwrap();
     let table_a_order: ColumnOrder = vec![0, 1, 2];
-    let table_b = DataSource::csv_file("test-files/bench/aux.csv").unwrap();
+    let table_b = DataSource::csv_file("test-files/bench-data/aux.csv").unwrap();
     let table_b_order: ColumnOrder = vec![0, 1, 2];
 
     let trie_a = load_trie(&table_a, &table_a_order, &mut dict);
@@ -107,8 +107,8 @@ pub fn benchmark_join(c: &mut Criterion) {
     });
     group_ours.finish();
 
-    let file_a = File::open("test-files/bench/xe.csv").expect("could not open file");
-    let file_b = File::open("test-files/bench/aux.csv").expect("could not open file");
+    let file_a = File::open("test-files/bench-data/xe.csv").expect("could not open file");
+    let file_b = File::open("test-files/bench-data/aux.csv").expect("could not open file");
 
     let table_a_schema = Schema::new()
         .insert_index(0, "AX".to_string(), DataType::Utf8)
@@ -166,9 +166,9 @@ pub fn benchmark_join(c: &mut Criterion) {
 fn benchmark_project(c: &mut Criterion) {
     let mut dict = PrefixedStringDictionary::default();
 
-    let table_a = DataSource::csv_file("test-files/bench/xe.csv").unwrap();
+    let table_a = DataSource::csv_file("test-files/bench-data/xe.csv").unwrap();
     let table_a_order: ColumnOrder = vec![0, 1, 2];
-    let table_b = DataSource::csv_file("test-files/bench/aux.csv").unwrap();
+    let table_b = DataSource::csv_file("test-files/bench-data/aux.csv").unwrap();
     let table_b_order: ColumnOrder = vec![0, 1, 2];
 
     let trie_a = load_trie(&table_a, &table_a_order, &mut dict);
@@ -259,7 +259,7 @@ fn benchmark_project(c: &mut Criterion) {
 }
 
 fn benchmark_union(c: &mut Criterion) {
-    const FILE_NAME: &str = "test-files/bench/aux-split/aux";
+    const FILE_NAME: &str = "test-files/bench-data/aux-split/aux";
     const NUM_PARTS: usize = 10;
 
     let mut dict = PrefixedStringDictionary::default();
