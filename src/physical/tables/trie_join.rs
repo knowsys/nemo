@@ -523,23 +523,11 @@ mod test {
 
         let join_trie = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
 
-        let join_col_fst = if let IntervalColumnT::U64(col) = join_trie.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
+        let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 
-        let join_col_snd = if let IntervalColumnT::U64(col) = join_trie.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
+        let join_col_snd = join_trie.get_column(1).as_u64().unwrap();
 
-        let join_col_trd = if let IntervalColumnT::U64(col) = join_trie.get_column(2) {
-            col
-        } else {
-            panic!("...")
-        };
+        let join_col_trd = join_trie.get_column(2).as_u64().unwrap();
 
         assert_eq!(
             join_col_fst.get_data_column().iter().collect::<Vec<u64>>(),
@@ -625,23 +613,11 @@ mod test {
 
         let join_trie = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
 
-        let join_col_fst = if let IntervalColumnT::U64(col) = join_trie.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
+        let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 
-        let join_col_snd = if let IntervalColumnT::U64(col) = join_trie.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
+        let join_col_snd = join_trie.get_column(1).as_u64().unwrap();
 
-        let join_col_trd = if let IntervalColumnT::U64(col) = join_trie.get_column(2) {
-            col
-        } else {
-            panic!("...")
-        };
+        let join_col_trd = join_trie.get_column(2).as_u64().unwrap();
 
         assert_eq!(
             join_col_fst.get_data_column().iter().collect::<Vec<u64>>(),
@@ -734,23 +710,11 @@ mod test {
 
         let join_trie = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
 
-        let join_col_fst = if let IntervalColumnT::U64(col) = join_trie.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
+        let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 
-        let join_col_snd = if let IntervalColumnT::U64(col) = join_trie.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
+        let join_col_snd = join_trie.get_column(1).as_u64().unwrap();
 
-        let join_col_trd = if let IntervalColumnT::U64(col) = join_trie.get_column(2) {
-            col
-        } else {
-            panic!("...")
-        };
+        let join_col_trd = join_trie.get_column(2).as_u64().unwrap();
 
         assert_eq!(
             join_col_fst.get_data_column().iter().collect::<Vec<u64>>(),

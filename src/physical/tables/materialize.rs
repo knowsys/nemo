@@ -145,7 +145,7 @@ pub fn scan_is_empty(trie_scan: &mut TrieScanEnum) -> bool {
 #[cfg(test)]
 mod test {
     use super::materialize;
-    use crate::physical::columns::{Column, IntervalColumnT};
+    use crate::physical::columns::Column;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::{
         IntervalTrieScan, Trie, TrieJoin, TrieScanEnum, TrieSchema, TrieSchemaEntry,
@@ -188,21 +188,9 @@ mod test {
 
         let materialized_trie = materialize(&mut trie_iter);
 
-        let mat_in_col_fst = if let IntervalColumnT::U64(col) = materialized_trie.get_column(0) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
-        let mat_in_col_snd = if let IntervalColumnT::U64(col) = materialized_trie.get_column(1) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
-        let mat_in_col_trd = if let IntervalColumnT::U64(col) = materialized_trie.get_column(2) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
+        let mat_in_col_fst = materialized_trie.get_column(0).as_u64().unwrap();
+        let mat_in_col_snd = materialized_trie.get_column(1).as_u64().unwrap();
+        let mat_in_col_trd = materialized_trie.get_column(2).as_u64().unwrap();
 
         assert_eq!(
             mat_in_col_fst
@@ -306,21 +294,9 @@ mod test {
 
         let materialized_join = materialize(&mut join_iter);
 
-        let mat_in_col_fst = if let IntervalColumnT::U64(col) = materialized_join.get_column(0) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
-        let mat_in_col_snd = if let IntervalColumnT::U64(col) = materialized_join.get_column(1) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
-        let mat_in_col_trd = if let IntervalColumnT::U64(col) = materialized_join.get_column(2) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
+        let mat_in_col_fst = materialized_join.get_column(0).as_u64().unwrap();
+        let mat_in_col_snd = materialized_join.get_column(1).as_u64().unwrap();
+        let mat_in_col_trd = materialized_join.get_column(2).as_u64().unwrap();
 
         assert_eq!(
             mat_in_col_fst

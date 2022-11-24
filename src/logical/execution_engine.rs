@@ -1022,7 +1022,7 @@ mod test {
             table_manager::{TableManagerStrategy, TableStatus},
         },
         physical::{
-            columns::{Column, IntervalColumnT},
+            columns::Column,
             datatypes::DataTypeName,
             dictionary::PrefixedStringDictionary,
             tables::{Trie, TrieSchema, TrieSchemaEntry},
@@ -1101,11 +1101,7 @@ mod test {
         engine.execute();
 
         if let TableStatus::InMemory(zeroth_table) = &engine.table_manager.get_info(0).status {
-            let first_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+            let first_col = zeroth_table.get_column(0).as_u64().unwrap();
 
             assert_eq!(
                 first_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1116,11 +1112,7 @@ mod test {
                 vec![0]
             );
 
-            let second_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+            let second_col = zeroth_table.get_column(1).as_u64().unwrap();
 
             assert_eq!(
                 second_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1134,11 +1126,7 @@ mod test {
             unreachable!()
         }
         if let TableStatus::InMemory(first_table) = &engine.table_manager.get_info(1).status {
-            let first_col = if let IntervalColumnT::U64(col) = first_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+            let first_col = first_table.get_column(0).as_u64().unwrap();
 
             assert_eq!(
                 first_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1149,11 +1137,7 @@ mod test {
                 vec![0]
             );
 
-            let second_col = if let IntervalColumnT::U64(col) = first_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+            let second_col = first_table.get_column(1).as_u64().unwrap();
 
             assert_eq!(
                 second_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1167,11 +1151,7 @@ mod test {
             unreachable!()
         }
         if let TableStatus::InMemory(second_table) = &engine.table_manager.get_info(2).status {
-            let first_col = if let IntervalColumnT::U64(col) = second_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+            let first_col = second_table.get_column(0).as_u64().unwrap();
 
             assert_eq!(
                 first_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1182,11 +1162,7 @@ mod test {
                 vec![0]
             );
 
-            let second_col = if let IntervalColumnT::U64(col) = second_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+            let second_col = second_table.get_column(1).as_u64().unwrap();
 
             assert_eq!(
                 second_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1279,11 +1255,7 @@ mod test {
         engine.execute();
 
         if let TableStatus::InMemory(zeroth_table) = &engine.table_manager.get_info(0).status {
-            let first_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+            let first_col = zeroth_table.get_column(0).as_u64().unwrap();
 
             assert_eq!(
                 first_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1294,11 +1266,7 @@ mod test {
                 vec![0]
             );
 
-            let second_col = if let IntervalColumnT::U64(col) = zeroth_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+            let second_col = zeroth_table.get_column(1).as_u64().unwrap();
 
             assert_eq!(
                 second_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1312,11 +1280,7 @@ mod test {
             unreachable!()
         }
         if let TableStatus::InMemory(first_table) = &engine.table_manager.get_info(1).status {
-            let first_col = if let IntervalColumnT::U64(col) = first_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+            let first_col = first_table.get_column(0).as_u64().unwrap();
 
             assert_eq!(
                 first_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1327,11 +1291,7 @@ mod test {
                 vec![0]
             );
 
-            let second_col = if let IntervalColumnT::U64(col) = first_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+            let second_col = first_table.get_column(1).as_u64().unwrap();
 
             assert_eq!(
                 second_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1345,11 +1305,7 @@ mod test {
             unreachable!()
         }
         if let TableStatus::InMemory(second_table) = &engine.table_manager.get_info(2).status {
-            let first_col = if let IntervalColumnT::U64(col) = second_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+            let first_col = second_table.get_column(0).as_u64().unwrap();
 
             assert_eq!(
                 first_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1360,11 +1316,7 @@ mod test {
                 vec![0]
             );
 
-            let second_col = if let IntervalColumnT::U64(col) = second_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+            let second_col = second_table.get_column(1).as_u64().unwrap();
 
             assert_eq!(
                 second_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1381,11 +1333,7 @@ mod test {
             unreachable!()
         }
         if let TableStatus::InMemory(third_table) = &engine.table_manager.get_info(3).status {
-            let first_col = if let IntervalColumnT::U64(col) = third_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+            let first_col = third_table.get_column(0).as_u64().unwrap();
 
             assert_eq!(
                 first_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1396,11 +1344,7 @@ mod test {
                 vec![0]
             );
 
-            let second_col = if let IntervalColumnT::U64(col) = third_table.get_column(1) {
-                col
-            } else {
-                unreachable!()
-            };
+            let second_col = third_table.get_column(1).as_u64().unwrap();
 
             assert_eq!(
                 second_col.get_data_column().iter().collect::<Vec<u64>>(),
@@ -1474,11 +1418,7 @@ mod test {
         engine.execute();
 
         if let TableStatus::InMemory(result_table) = &engine.table_manager.get_info(2).status {
-            let first_col = if let IntervalColumnT::U64(col) = result_table.get_column(0) {
-                col
-            } else {
-                unreachable!()
-            };
+            let first_col = result_table.get_column(0).as_u64().unwrap();
 
             assert_eq!(
                 first_col.get_data_column().iter().collect::<Vec<u64>>(),

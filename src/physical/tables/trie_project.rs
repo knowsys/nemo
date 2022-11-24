@@ -256,7 +256,7 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieProject;
-    use crate::physical::columns::{Column, IntervalColumnT};
+    use crate::physical::columns::Column;
     use crate::physical::datatypes::{DataTypeName, DataValueT};
     use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
     use crate::physical::tables::{
@@ -303,18 +303,8 @@ mod test {
             vec![0, 1],
         )));
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_no_first.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_no_first.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_no_first.get_column(0).as_u64().unwrap();
+        let proj_column_lower = trie_no_first.get_column(1).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -347,18 +337,8 @@ mod test {
             vec![0, 2, 4, 6]
         );
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_no_middle.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_no_middle.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_no_middle.get_column(0).as_u64().unwrap();
+        let proj_column_lower = trie_no_middle.get_column(1).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -391,18 +371,8 @@ mod test {
             vec![0, 4]
         );
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_no_last.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_no_last.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_no_last.get_column(0).as_u64().unwrap();
+        let proj_column_lower = trie_no_last.get_column(1).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -498,24 +468,9 @@ mod test {
             vec![0, 3, 5],
         )));
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_projected.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_middle = if let IntervalColumnT::U64(col) = trie_projected.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_projected.get_column(2) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_projected.get_column(0).as_u64().unwrap();
+        let proj_column_middle = trie_projected.get_column(1).as_u64().unwrap();
+        let proj_column_lower = trie_projected.get_column(2).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -603,24 +558,9 @@ mod test {
 
         assert_eq!(trie.row_num(), trie_reordered.row_num());
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_reordered.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_middle = if let IntervalColumnT::U64(col) = trie_reordered.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_reordered.get_column(2) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_reordered.get_column(0).as_u64().unwrap();
+        let proj_column_middle = trie_reordered.get_column(1).as_u64().unwrap();
+        let proj_column_lower = trie_reordered.get_column(2).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -700,18 +640,8 @@ mod test {
             vec![2, 0],
         )));
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_reordered.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_reordered.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_reordered.get_column(0).as_u64().unwrap();
+        let proj_column_lower = trie_reordered.get_column(1).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -790,30 +720,10 @@ mod test {
             vec![0, 2, 4, 1],
         )));
 
-        let proj_column_fst = if let IntervalColumnT::U64(col) = trie_projected.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_snd = if let IntervalColumnT::U64(col) = trie_projected.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_trd = if let IntervalColumnT::U64(col) = trie_projected.get_column(2) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_fth = if let IntervalColumnT::U64(col) = trie_projected.get_column(3) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_fst = trie_projected.get_column(0).as_u64().unwrap();
+        let proj_column_snd = trie_projected.get_column(1).as_u64().unwrap();
+        let proj_column_trd = trie_projected.get_column(2).as_u64().unwrap();
+        let proj_column_fth = trie_projected.get_column(3).as_u64().unwrap();
         assert_eq!(
             proj_column_fst
                 .get_data_column()
