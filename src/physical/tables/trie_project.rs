@@ -944,8 +944,7 @@ mod test {
         let a = dict.add("4_1_6".to_owned()).try_into().unwrap();
         let b = dict.add("4_1_21".to_owned()).try_into().unwrap();
         let c = dict.add("4_1_22".to_owned()).try_into().unwrap();
-        //let d = dict.add("4_1_23".to_owned()).try_into().unwrap();
-        //let e = dict.add("32_1_14".to_owned()).try_into().unwrap();
+
         let u = dict.add("32_1_58".to_owned()).try_into().unwrap();
         let v = dict.add("32_1_72".to_owned()).try_into().unwrap();
         let w = dict.add("32_1_81".to_owned()).try_into().unwrap();
@@ -953,9 +952,6 @@ mod test {
         let y = dict.add("32_1_83".to_owned()).try_into().unwrap();
         let z = dict.add("32_1_60".to_owned()).try_into().unwrap();
 
-        //let fst = vec![a, b, c, d, e];
-        //let snd = vec![rg, rg, rg, rg, rg];
-        //let trd = vec![u, v, w, x, y, z, v, x, v, x];
         let fst = vec![a, b, c];
         let snd = vec![rg, rg, rg];
         let trd = vec![u, v, w, x, y, z];
@@ -975,20 +971,5 @@ mod test {
         log::debug!("{reordered_trie:#?}");
 
         assert_eq!(base_trie.row_num(), reordered_trie.row_num());
-
-        // assert_eq!(
-        //     base_trie.get_column(0).iter().collect::<Vec<_>>(),
-        //     reordered_trie.get_column(1).iter().collect::<Vec<_>>()
-        // );
-
-        // assert_eq!(
-        //     base_trie.get_column(1).iter().collect::<Vec<_>>(),
-        //     reordered_trie.get_column(0).iter().collect::<Vec<_>>()
-        // );
-
-        // assert_eq!(
-        //     base_trie.get_column(2).iter().collect::<Vec<_>>(),
-        //     reordered_trie.get_column(2).iter().collect::<Vec<_>>()
-        // );
     }
 }
