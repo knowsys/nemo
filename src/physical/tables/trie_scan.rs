@@ -3,7 +3,9 @@ use super::{
     TrieSelectValue, TrieUnion,
 };
 use crate::generate_forwarder;
-use crate::physical::columns::{Column, IntervalColumn, RangedColumnScan, RangedColumnScanT};
+use crate::physical::columns::{
+    Column, ColumnScan, IntervalColumn, RangedColumnScan, RangedColumnScanT,
+};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
@@ -53,8 +55,6 @@ impl<'a> IntervalTrieScan<'a> {
     }
 }
 
-#[allow(clippy::unnecessary_lazy_evaluations)] // not actually
-                                               // unnecessary, as the subtraction might underflow
 impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
     fn up(&mut self) {
         self.current_layer = self.current_layer.and_then(|index| index.checked_sub(1));
@@ -62,14 +62,20 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
 
     fn down(&mut self) {
         match self.current_layer {
-            None => self.current_layer = Some(0),
+            None => {
+                self.layers[0].get_mut().reset();
+                self.current_layer = Some(0);
+            }
             Some(index) => {
                 debug_assert!(
                     index < self.layers.len(),
                     "Called down while on the last layer"
                 );
 
-                let current_position = self.layers[index].get_mut().pos().unwrap();
+                let current_position = self.layers[index]
+                    .get_mut()
+                    .pos()
+                    .expect("Going down is only allowed when on an element.");
 
                 let next_index = index + 1;
                 let next_layer_range = self
@@ -207,7 +213,14 @@ mod test {
         assert!(scan_current(&mut trie_iter).is_none());
 
         trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(1));
+        assert_eq!(scan_current(&mut trie_iter), Some(1));
 
+        trie_iter.up();
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.down();
         assert!(scan_current(&mut trie_iter).is_none());
         assert_eq!(scan_next(&mut trie_iter), Some(1));
         assert_eq!(scan_current(&mut trie_iter), Some(1));

@@ -1,7 +1,8 @@
 //! Represents different data-import methods
 
 use crate::error::Error;
-use crate::physical::datatypes::{data_value::VecT, DataTypeName};
+use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
+use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use csv::Reader;
 
 /// Imports a csv file
@@ -12,8 +13,9 @@ use csv::Reader;
 /// # Behaviour
 /// If a given datatype from `datatypes` is not matching the value in the field (i.e. it cannot be parsed into such a value), the whole line will be ignored and an error message is emitted to the log.
 pub fn read<T>(
-    datatypes: &[Option<DataTypeName>],
+    datatypes: &[Option<DataTypeName>], // If no datatype (i.e. None) is specified, we treat the column as string (for now); TODO: discuss this
     csv_reader: &mut Reader<T>,
+    dictionary: &mut PrefixedStringDictionary,
 ) -> Result<Vec<VecT>, Error>
 where
     T: std::io::Read,
@@ -21,13 +23,20 @@ where
     let mut result: Vec<Option<VecT>> = Vec::new();
 
     datatypes.iter().for_each(|dtype| {
-        result.push(dtype.and_then(|dt| {
-            Some(match dt {
-                DataTypeName::U64 => VecT::U64(Vec::new()),
-                DataTypeName::Float => VecT::Float(Vec::new()),
-                DataTypeName::Double => VecT::Double(Vec::new()),
-            })
-        }));
+        result.push(
+            dtype
+                .map(|dt| match dt {
+                    DataTypeName::U64 => VecT::U64(Vec::new()),
+                    DataTypeName::Float => VecT::Float(Vec::new()),
+                    DataTypeName::Double => VecT::Double(Vec::new()),
+                })
+                .or_else(|| {
+                    // TODO: not sure if we actually want to handle everything as string which is not specified
+                    // but let's just do this on for now
+                    // (we use u64 with a dictionary for strings)
+                    Some(VecT::U64(Vec::new()))
+                }),
+        );
     });
     csv_reader.records().for_each(|rec| {
         if let Ok(row) = rec {
@@ -49,6 +58,16 @@ where
                             }
                         }
                     } else {
+                        // TODO: not sure if we actually want to handle everything as string which is not specified
+                        // but let's just do this for now
+                        // (we use u64 with a dictionary for strings)
+
+                        let u64_equivalent =
+                            DataValueT::U64(dictionary.add(item.to_string()).try_into().unwrap());
+                        if let Some(result_col) = result[idx].as_mut() {
+                            result_col.push(&u64_equivalent);
+                        }
+
                         Ok(())
                     }
                 })
@@ -72,7 +91,7 @@ mod test {
     use test_log::test;
 
     #[test]
-    fn csv_empty() {
+    fn csv_one_line() {
         let data = "\
 city;country;pop
 Boston;United States;4628910
@@ -81,9 +100,39 @@ Boston;United States;4628910
             .delimiter(b';')
             .from_reader(data.as_bytes());
 
-        let x = read(&[None, None, None], &mut rdr);
+        let mut dict = PrefixedStringDictionary::default();
+        let x = read(&[None, None, None], &mut rdr, &mut dict);
         assert!(x.is_ok());
-        assert_eq!(x.unwrap().len(), 0);
+
+        let x = x.unwrap();
+
+        assert_eq!(x.len(), 3);
+        assert!(x.iter().all(|vect| vect.len() == 1));
+
+        assert_eq!(
+            x[0].get(0)
+                .and_then(|dvt| dvt.as_u64())
+                .and_then(|u64| usize::try_from(u64).ok())
+                .and_then(|usize| dict.entry(usize))
+                .unwrap(),
+            "Boston"
+        );
+        assert_eq!(
+            x[1].get(0)
+                .and_then(|dvt| dvt.as_u64())
+                .and_then(|u64| usize::try_from(u64).ok())
+                .and_then(|usize| dict.entry(usize))
+                .unwrap(),
+            "United States"
+        );
+        assert_eq!(
+            x[2].get(0)
+                .and_then(|dvt| dvt.as_u64())
+                .and_then(|u64| usize::try_from(u64).ok())
+                .and_then(|usize| dict.entry(usize))
+                .unwrap(),
+            "4628910"
+        );
     }
 
     #[test]
@@ -101,6 +150,7 @@ node03;123;123;13;55;123;invalid
             .has_headers(false)
             .from_reader(data.as_bytes());
 
+        let mut dict = PrefixedStringDictionary::default();
         let imported = read(
             &[
                 None,
@@ -111,11 +161,12 @@ node03;123;123;13;55;123;invalid
                 None,
             ],
             &mut rdr,
+            &mut dict,
         );
 
         assert!(imported.is_ok());
-        assert_eq!(imported.as_ref().unwrap().len(), 4);
-        assert_eq!(imported.as_ref().unwrap()[0].len(), 3);
+        assert_eq!(imported.as_ref().unwrap().len(), 6);
+        assert_eq!(imported.as_ref().unwrap()[1].len(), 3);
     }
 
     #[quickcheck]
@@ -148,6 +199,7 @@ node03;123;123;13;55;123;invalid
             .delimiter(b',')
             .has_headers(false)
             .from_reader(csv.as_bytes());
+        let mut dict = PrefixedStringDictionary::default();
         let imported = read(
             &[
                 Some(DataTypeName::U64),
@@ -156,6 +208,7 @@ node03;123;123;13;55;123;invalid
                 Some(DataTypeName::Float),
             ],
             &mut rdr,
+            &mut dict,
         );
 
         assert!(imported.is_ok());

@@ -104,12 +104,10 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
                 continue;
             }
 
-            //TODO: Don't use contains here
             if previous_layer.is_none()
                 || self.union_scans[previous_layer.unwrap()]
                     .get_mut()
-                    .get_smallest_scans()
-                    .contains(&scan_index)
+                    .get_smallest_scans()[scan_index]
             {
                 active_scans.push(scan_index);
 
@@ -143,7 +141,7 @@ mod test {
     use crate::physical::columns::RangedColumnScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::{
-        IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
+        IntervalTrieScan, Trie, TrieJoin, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
     };
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
@@ -279,12 +277,15 @@ mod test {
         let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y]);
         let trie_iter_fst = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_fst));
         let trie_iter_snd = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_snd));
+
         let mut union_iter = TrieUnion::new(vec![trie_iter_fst, trie_iter_snd]);
         assert_eq!(union_current(&mut union_iter), None);
+
         union_iter.down();
         assert_eq!(union_current(&mut union_iter), None);
         assert_eq!(union_next(&mut union_iter), Some(1));
         assert_eq!(union_current(&mut union_iter), Some(1));
+
         union_iter.down();
         assert_eq!(union_current(&mut union_iter), None);
         assert_eq!(union_next(&mut union_iter), Some(3));
@@ -293,9 +294,11 @@ mod test {
         assert_eq!(union_current(&mut union_iter), Some(4));
         assert_eq!(union_next(&mut union_iter), None);
         assert_eq!(union_current(&mut union_iter), None);
+
         union_iter.up();
         assert_eq!(union_next(&mut union_iter), Some(2));
         assert_eq!(union_current(&mut union_iter), Some(2));
+
         union_iter.down();
         assert_eq!(union_current(&mut union_iter), None);
         assert_eq!(union_next(&mut union_iter), Some(5));
@@ -304,8 +307,388 @@ mod test {
         assert_eq!(union_current(&mut union_iter), Some(6));
         assert_eq!(union_next(&mut union_iter), None);
         assert_eq!(union_current(&mut union_iter), None);
+
         union_iter.up();
         assert_eq!(union_next(&mut union_iter), None);
         assert_eq!(union_current(&mut union_iter), None);
+    }
+
+    #[test]
+    fn another_test() {
+        let column_fst_x = make_gict(&[1, 2, 5, 7], &[0]);
+        let column_fst_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
+        let column_snd_x = make_gict(&[4, 7, 8, 9, 10], &[0]);
+        let column_snd_y = make_gict(&[1, 1, 2, 1, 2, 1, 2], &[0, 1, 2, 3, 5]);
+        let schema_fst = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let schema_snd = schema_fst.clone();
+
+        let trie_fst = Trie::new(schema_fst, vec![column_fst_x, column_fst_y]);
+        let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y]);
+        let trie_iter_fst = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_fst));
+        let trie_iter_snd = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_snd));
+
+        let mut union_iter = TrieUnion::new(vec![trie_iter_fst, trie_iter_snd]);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(2));
+        assert_eq!(union_current(&mut union_iter), Some(2));
+        assert_eq!(union_next(&mut union_iter), Some(3));
+        assert_eq!(union_current(&mut union_iter), Some(3));
+        assert_eq!(union_next(&mut union_iter), Some(5));
+        assert_eq!(union_current(&mut union_iter), Some(5));
+        assert_eq!(union_next(&mut union_iter), Some(10));
+        assert_eq!(union_current(&mut union_iter), Some(10));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(2));
+        assert_eq!(union_current(&mut union_iter), Some(2));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(4));
+        assert_eq!(union_current(&mut union_iter), Some(4));
+        assert_eq!(union_next(&mut union_iter), Some(7));
+        assert_eq!(union_current(&mut union_iter), Some(7));
+        assert_eq!(union_next(&mut union_iter), Some(10));
+        assert_eq!(union_current(&mut union_iter), Some(10));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(4));
+        assert_eq!(union_current(&mut union_iter), Some(4));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(5));
+        assert_eq!(union_current(&mut union_iter), Some(5));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(9));
+        assert_eq!(union_current(&mut union_iter), Some(9));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(7));
+        assert_eq!(union_current(&mut union_iter), Some(7));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+        assert_eq!(union_next(&mut union_iter), Some(8));
+        assert_eq!(union_current(&mut union_iter), Some(8));
+        assert_eq!(union_next(&mut union_iter), Some(9));
+        assert_eq!(union_current(&mut union_iter), Some(9));
+        assert_eq!(union_next(&mut union_iter), Some(10));
+        assert_eq!(union_current(&mut union_iter), Some(10));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(8));
+        assert_eq!(union_current(&mut union_iter), Some(8));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(2));
+        assert_eq!(union_current(&mut union_iter), Some(2));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(9));
+        assert_eq!(union_current(&mut union_iter), Some(9));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+        assert_eq!(union_next(&mut union_iter), Some(2));
+        assert_eq!(union_current(&mut union_iter), Some(2));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(10));
+        assert_eq!(union_current(&mut union_iter), Some(10));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+        assert_eq!(union_next(&mut union_iter), Some(2));
+        assert_eq!(union_current(&mut union_iter), Some(2));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
+    }
+
+    #[test]
+    fn another_test_2() {
+        let column_fst_x = make_gict(&[4], &[0]);
+        let column_fst_y = make_gict(&[1], &[0]);
+        let column_fst_z = make_gict(&[2], &[0]);
+
+        let column_snd_x = make_gict(&[1, 2, 4], &[0]);
+        let column_snd_y = make_gict(&[4, 4, 1], &[0, 1, 2]);
+        let column_snd_z = make_gict(&[1, 1, 4], &[0, 1, 2]);
+        let schema_fst = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let schema_snd = schema_fst.clone();
+
+        let trie_fst = Trie::new(schema_fst, vec![column_fst_x, column_fst_y, column_fst_z]);
+        let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y, column_snd_z]);
+        let trie_iter_fst = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_fst));
+        let trie_iter_snd = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_snd));
+
+        let mut union_iter = TrieUnion::new(vec![trie_iter_fst, trie_iter_snd]);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(4));
+        assert_eq!(union_current(&mut union_iter), Some(4));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(2));
+        assert_eq!(union_current(&mut union_iter), Some(2));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(4));
+        assert_eq!(union_current(&mut union_iter), Some(4));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(4));
+        assert_eq!(union_current(&mut union_iter), Some(4));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(2));
+        assert_eq!(union_current(&mut union_iter), Some(2));
+        assert_eq!(union_next(&mut union_iter), Some(4));
+        assert_eq!(union_current(&mut union_iter), Some(4));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
+    }
+
+    #[test]
+    fn union_of_joins() {
+        let column_a_x = make_gict(&[1, 4], &[0]);
+        let column_a_y = make_gict(&[4, 1], &[0, 1]);
+        let column_b_y = make_gict(&[1, 2], &[0]);
+        let column_b_z = make_gict(&[2, 4], &[0, 1]);
+
+        let column_c_x = make_gict(&[1, 2, 4], &[0]);
+        let column_c_y = make_gict(&[2, 4, 4, 1], &[0, 2, 3]);
+        let column_d_y = make_gict(&[1, 4], &[0]);
+        let column_d_z = make_gict(&[4, 1], &[0, 1]);
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 10,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 11,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let schema_target = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 100,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 101,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 102,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+        let trie_a = Trie::new(schema.clone(), vec![column_a_x, column_a_y]);
+        let trie_b = Trie::new(schema.clone(), vec![column_b_y, column_b_z]);
+
+        let trie_c = Trie::new(schema.clone(), vec![column_c_x, column_c_y]);
+        let trie_d = Trie::new(schema, vec![column_d_y, column_d_z]);
+
+        let join_ab_iter = TrieScanEnum::TrieJoin(TrieJoin::new(
+            vec![
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
+            ],
+            &[vec![0, 1], vec![1, 2]],
+            schema_target.clone(),
+        ));
+
+        let join_cd_iter = TrieScanEnum::TrieJoin(TrieJoin::new(
+            vec![
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_c)),
+                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_d)),
+            ],
+            &[vec![0, 1], vec![1, 2]],
+            schema_target,
+        ));
+
+        let mut union_iter = TrieUnion::new(vec![join_ab_iter, join_cd_iter]);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(4));
+        assert_eq!(union_current(&mut union_iter), Some(4));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(2));
+        assert_eq!(union_current(&mut union_iter), Some(2));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(4));
+        assert_eq!(union_current(&mut union_iter), Some(4));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), Some(4));
+        assert_eq!(union_current(&mut union_iter), Some(4));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(1));
+        assert_eq!(union_current(&mut union_iter), Some(1));
+
+        union_iter.down();
+        assert_eq!(union_current(&mut union_iter), None);
+        assert_eq!(union_next(&mut union_iter), Some(2));
+        assert_eq!(union_current(&mut union_iter), Some(2));
+        assert_eq!(union_next(&mut union_iter), Some(4));
+        assert_eq!(union_current(&mut union_iter), Some(4));
+        assert_eq!(union_next(&mut union_iter), None);
+        assert_eq!(union_current(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
+
+        union_iter.up();
+        assert_eq!(union_next(&mut union_iter), None);
     }
 }

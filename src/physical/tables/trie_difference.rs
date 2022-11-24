@@ -7,7 +7,7 @@ use crate::physical::datatypes::DataTypeName;
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
-/// Trie iterator representing a union between other trie iterators
+/// Trie iterator representing the difference between other trie iterators
 #[derive(Debug)]
 pub struct TrieDifference<'a> {
     trie_left: Box<TrieScanEnum<'a>>,
@@ -208,7 +208,7 @@ mod test {
         let column_left_x = make_gict(&[1, 2, 3], &[0]);
         let column_left_y = make_gict(&[3, 6, 8, 2, 7, 5], &[0, 3, 5]);
         let column_right_x = make_gict(&[1, 3, 4], &[0]);
-        let column_right_y = make_gict(&[2, 6, 9, 2, 5, 8], &[0, 3]);
+        let column_right_y = make_gict(&[2, 6, 9, 2, 5, 8], &[0, 3, 5]);
 
         let schema_left = TrieSchema::new(vec![
             TrieSchemaEntry {
@@ -231,10 +231,12 @@ mod test {
 
         let mut diff_iter = TrieDifference::new(trie_left_iter, trie_right_iter);
         assert!(diff_iter.current_scan().is_none());
+
         diff_iter.down();
         assert_eq!(diff_current(&mut diff_iter), None);
         assert_eq!(diff_next(&mut diff_iter), Some(1));
         assert_eq!(diff_current(&mut diff_iter), Some(1));
+
         diff_iter.down();
         assert_eq!(diff_current(&mut diff_iter), None);
         assert_eq!(diff_next(&mut diff_iter), Some(3));
@@ -243,9 +245,11 @@ mod test {
         assert_eq!(diff_current(&mut diff_iter), Some(8));
         assert_eq!(diff_next(&mut diff_iter), None);
         assert_eq!(diff_current(&mut diff_iter), None);
+
         diff_iter.up();
         assert_eq!(diff_next(&mut diff_iter), Some(2));
         assert_eq!(diff_current(&mut diff_iter), Some(2));
+
         diff_iter.down();
         assert_eq!(diff_current(&mut diff_iter), None);
         assert_eq!(diff_next(&mut diff_iter), Some(2));
@@ -254,11 +258,107 @@ mod test {
         assert_eq!(diff_current(&mut diff_iter), Some(7));
         assert_eq!(diff_next(&mut diff_iter), None);
         assert_eq!(diff_current(&mut diff_iter), None);
+
         diff_iter.up();
         assert_eq!(diff_next(&mut diff_iter), Some(3));
         assert_eq!(diff_current(&mut diff_iter), Some(3));
+
         diff_iter.down();
         assert_eq!(diff_current(&mut diff_iter), None);
+        assert_eq!(diff_next(&mut diff_iter), None);
+        assert_eq!(diff_current(&mut diff_iter), None);
+    }
+
+    #[test]
+    fn test_trie_difference_2() {
+        let column_left_x = make_gict(&[4, 7, 8, 9, 10], &[0]);
+        let column_left_y = make_gict(&[1, 1, 2, 1, 2, 1, 2], &[0, 1, 2, 3, 5]);
+
+        let column_right_x = make_gict(&[2, 3, 4, 5, 7, 8, 9, 10], &[0]);
+        let column_right_y = make_gict(
+            &[1, 1, 2, 1, 2, 7, 5, 7, 1, 2, 7],
+            &[0, 1, 2, 3, 4, 5, 6, 8],
+        );
+
+        let schema_left = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let schema_right = schema_left.clone();
+
+        let trie_left = Trie::new(schema_left, vec![column_left_x, column_left_y]);
+        let trie_right = Trie::new(schema_right, vec![column_right_x, column_right_y]);
+
+        let trie_left_iter = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_left));
+        let trie_right_iter = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_right));
+
+        let mut diff_iter = TrieDifference::new(trie_left_iter, trie_right_iter);
+        assert!(diff_iter.current_scan().is_none());
+
+        diff_iter.down();
+        assert_eq!(diff_current(&mut diff_iter), None);
+        assert_eq!(diff_next(&mut diff_iter), Some(4));
+        assert_eq!(diff_current(&mut diff_iter), Some(4));
+
+        diff_iter.down();
+        assert_eq!(diff_current(&mut diff_iter), None);
+        assert_eq!(diff_next(&mut diff_iter), Some(1));
+        assert_eq!(diff_current(&mut diff_iter), Some(1));
+        assert_eq!(diff_next(&mut diff_iter), None);
+        assert_eq!(diff_current(&mut diff_iter), None);
+
+        diff_iter.up();
+        assert_eq!(diff_next(&mut diff_iter), Some(7));
+        assert_eq!(diff_current(&mut diff_iter), Some(7));
+
+        diff_iter.down();
+        assert_eq!(diff_current(&mut diff_iter), None);
+        assert_eq!(diff_next(&mut diff_iter), Some(1));
+        assert_eq!(diff_current(&mut diff_iter), Some(1));
+        assert_eq!(diff_next(&mut diff_iter), None);
+        assert_eq!(diff_current(&mut diff_iter), None);
+
+        diff_iter.up();
+        assert_eq!(diff_next(&mut diff_iter), Some(8));
+        assert_eq!(diff_current(&mut diff_iter), Some(8));
+
+        diff_iter.down();
+        assert_eq!(diff_current(&mut diff_iter), None);
+        assert_eq!(diff_next(&mut diff_iter), Some(2));
+        assert_eq!(diff_current(&mut diff_iter), Some(2));
+        assert_eq!(diff_next(&mut diff_iter), None);
+        assert_eq!(diff_current(&mut diff_iter), None);
+
+        diff_iter.up();
+        assert_eq!(diff_next(&mut diff_iter), Some(9));
+        assert_eq!(diff_current(&mut diff_iter), Some(9));
+
+        diff_iter.down();
+        assert_eq!(diff_current(&mut diff_iter), None);
+        assert_eq!(diff_next(&mut diff_iter), Some(1));
+        assert_eq!(diff_current(&mut diff_iter), Some(1));
+        assert_eq!(diff_next(&mut diff_iter), Some(2));
+        assert_eq!(diff_current(&mut diff_iter), Some(2));
+        assert_eq!(diff_next(&mut diff_iter), None);
+        assert_eq!(diff_current(&mut diff_iter), None);
+
+        diff_iter.up();
+        assert_eq!(diff_next(&mut diff_iter), Some(10));
+        assert_eq!(diff_current(&mut diff_iter), Some(10));
+
+        diff_iter.down();
+        assert_eq!(diff_current(&mut diff_iter), None);
+        assert_eq!(diff_next(&mut diff_iter), None);
+        assert_eq!(diff_current(&mut diff_iter), None);
+
+        diff_iter.up();
         assert_eq!(diff_next(&mut diff_iter), None);
         assert_eq!(diff_current(&mut diff_iter), None);
     }

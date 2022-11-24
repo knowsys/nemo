@@ -10,11 +10,13 @@ use std::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step<T> {
+    /// Step in positive direction
     Increment(T),
+    /// Step in negative direction
     Decrement(T),
-    // the following two are used as alternative to multiplication
-    // when multiplication would overflow T
+    /// Used as alternative to multiplication when multiplication would overflow T
     RepeatedIncrement(T, usize),
+    /// Used as alternative to multiplication when multiplication would overflow T
     RepeatedDecrement(T, usize),
 }
 

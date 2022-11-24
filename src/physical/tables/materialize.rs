@@ -1,3 +1,5 @@
+use num::ToPrimitive;
+
 use super::{TableSchema, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry};
 use crate::physical::columns::{
     AdaptiveColumnBuilder, AdaptiveColumnBuilderT, ColumnBuilder, ColumnScan,
@@ -6,7 +8,10 @@ use crate::physical::columns::{
 use crate::physical::datatypes::DataTypeName;
 
 /// Given a TrieScan iterator, materialize its content into a trie
-pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
+/// If not_empty is provided, the function will search for the first entry
+pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bool>) -> Trie {
+    let mut next_count: usize = 0;
+
     // Compute target schema (which is the same as the input schema...)
     // TODO: There should be a better way to clone something like this...
     let input_schema = trie_scan.get_schema();
@@ -46,14 +51,19 @@ pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
         let is_last_layer = current_layer >= target_schema.arity() - 1;
         let current_value = unsafe { (*trie_scan.current_scan().unwrap().get()).current() };
         let next_value = unsafe { (*trie_scan.current_scan().unwrap().get()).next() };
-
-        if !current_row.last().unwrap() && is_last_layer {
-            current_row = vec![true; target_schema.arity()];
-        }
+        next_count += 1;
 
         if let Some(val) = current_value {
+            log::debug!("new value: {current_value:?}");
+            if !current_row.last().unwrap() && is_last_layer {
+                current_row = vec![true; target_schema.arity()];
+            }
+
             if current_row[current_layer] {
                 data_column_builders[current_layer].add(val);
+                if let Some(not_empty_bool) = not_empty.as_mut() {
+                    *not_empty_bool = true;
+                }
 
                 if !is_last_layer {
                     current_row[current_layer] = false;
@@ -109,14 +119,33 @@ pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
         result_columns.push(next_interval_column);
     }
 
-    // Finally, return finished trie
-    Trie::new(target_schema, result_columns)
+    let result = Trie::new(target_schema, result_columns);
+    log::info!(
+        "Materialize: Next: {next_count}, Elements: {}, Quotient: {}",
+        result.num_elements(),
+        next_count.to_f64().unwrap() / result.num_elements().to_f64().unwrap()
+    );
+
+    result
+}
+
+/// Given a TrieScan iterator, materialize its content into a trie
+pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
+    materialize_inner(trie_scan, &mut None)
+}
+
+/// Tests whether an iterator is empty by materializing it until the first element
+pub fn scan_is_empty(trie_scan: &mut TrieScanEnum) -> bool {
+    let mut result = Some(false);
+    materialize_inner(trie_scan, &mut result);
+
+    result.unwrap()
 }
 
 #[cfg(test)]
 mod test {
     use super::materialize;
-    use crate::physical::columns::{Column, IntervalColumnT};
+    use crate::physical::columns::Column;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::{
         IntervalTrieScan, Trie, TrieJoin, TrieScanEnum, TrieSchema, TrieSchemaEntry,
@@ -159,21 +188,9 @@ mod test {
 
         let materialized_trie = materialize(&mut trie_iter);
 
-        let mat_in_col_fst = if let IntervalColumnT::U64(col) = materialized_trie.get_column(0) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
-        let mat_in_col_snd = if let IntervalColumnT::U64(col) = materialized_trie.get_column(1) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
-        let mat_in_col_trd = if let IntervalColumnT::U64(col) = materialized_trie.get_column(2) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
+        let mat_in_col_fst = materialized_trie.get_column(0).as_u64().unwrap();
+        let mat_in_col_snd = materialized_trie.get_column(1).as_u64().unwrap();
+        let mat_in_col_trd = materialized_trie.get_column(2).as_u64().unwrap();
 
         assert_eq!(
             mat_in_col_fst
@@ -271,26 +288,15 @@ mod test {
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
                 TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
             ],
+            &[vec![0, 1], vec![1, 2]],
             schema_target,
         ));
 
         let materialized_join = materialize(&mut join_iter);
 
-        let mat_in_col_fst = if let IntervalColumnT::U64(col) = materialized_join.get_column(0) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
-        let mat_in_col_snd = if let IntervalColumnT::U64(col) = materialized_join.get_column(1) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
-        let mat_in_col_trd = if let IntervalColumnT::U64(col) = materialized_join.get_column(2) {
-            col
-        } else {
-            panic!("Should be U64");
-        };
+        let mat_in_col_fst = materialized_join.get_column(0).as_u64().unwrap();
+        let mat_in_col_snd = materialized_join.get_column(1).as_u64().unwrap();
+        let mat_in_col_trd = materialized_join.get_column(2).as_u64().unwrap();
 
         assert_eq!(
             mat_in_col_fst
@@ -335,4 +341,6 @@ mod test {
             vec![0, 2, 3]
         );
     }
+
+    // TODO: Tets scan_is_empty
 }

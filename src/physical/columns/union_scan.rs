@@ -10,10 +10,11 @@ where
     T: 'a + ColumnDataType,
 {
     column_scans: Vec<&'a RangedColumnScanCell<'a, T>>,
-    smallest_scans: Vec<usize>,
+    smallest_scans: Vec<bool>,
     smallest_value: Option<T>,
 
     active_scans: Vec<usize>,
+    active_values: Vec<Option<T>>,
 }
 
 impl<'a, T> UnionScan<'a, T>
@@ -25,14 +26,15 @@ where
         let scans_len = column_scans.len();
         UnionScan {
             column_scans,
-            smallest_scans: vec![],
+            smallest_scans: vec![true; scans_len],
             smallest_value: None,
             active_scans: (0..scans_len).collect(),
+            active_values: vec![None; scans_len],
         }
     }
 
     /// Returns vector contianing the indices of those scans which point to the currently smallest values
-    pub fn get_smallest_scans(&self) -> &Vec<usize> {
+    pub fn get_smallest_scans(&self) -> &Vec<bool> {
         &self.smallest_scans
     }
 
@@ -49,63 +51,37 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut next_smallest_scans = Vec::<usize>::with_capacity(self.column_scans.len());
         let mut next_smallest: Option<T> = None;
-        let mut smallest_scans_pointer = 0;
 
-        if self.smallest_value.is_none() {
-            for &index in &self.active_scans {
-                let scan = &mut self.column_scans[index];
-                let current_element = scan.next();
+        for &index in &self.active_scans {
+            let current_element = if self.smallest_scans[index] {
+                let next_value = self.column_scans[index].next();
+                self.active_values[index] = next_value;
 
-                if next_smallest.is_none() {
-                    next_smallest = current_element;
-                } else if current_element.is_some()
-                    && current_element.unwrap() < next_smallest.unwrap()
-                {
-                    next_smallest = current_element;
-                    next_smallest_scans.clear();
-                }
+                next_value
+            } else {
+                self.active_values[index]
+            };
 
-                if next_smallest == current_element {
-                    next_smallest_scans.push(index);
+            self.smallest_scans[index] = false;
+
+            if next_smallest.is_none() {
+                next_smallest = current_element;
+            } else if current_element.is_some() && current_element.unwrap() < next_smallest.unwrap()
+            {
+                next_smallest = current_element;
+
+                for value in self.smallest_scans.iter_mut().take(index) {
+                    *value = false;
                 }
             }
-        } else {
-            for &index in &self.active_scans {
-                let scan = &mut self.column_scans[index];
-                let current_smallest = if smallest_scans_pointer < self.smallest_scans.len() {
-                    Some(self.smallest_scans[smallest_scans_pointer])
-                } else {
-                    None
-                };
 
-                let current_element =
-                    if current_smallest.is_some() && index == current_smallest.unwrap() {
-                        smallest_scans_pointer += 1;
-                        scan.next()
-                    } else {
-                        scan.current()
-                    };
-
-                if next_smallest.is_none() {
-                    next_smallest = current_element;
-                } else if current_element.is_some()
-                    && current_element.unwrap() < next_smallest.unwrap()
-                {
-                    next_smallest = current_element;
-                    next_smallest_scans.clear();
-                    smallest_scans_pointer = 0;
-                }
-
-                if next_smallest.is_some() && next_smallest == current_element {
-                    next_smallest_scans.push(index);
-                }
+            if next_smallest.is_some() && next_smallest == current_element {
+                self.smallest_scans[index] = true;
             }
         }
 
         self.smallest_value = next_smallest;
-        self.smallest_scans = next_smallest_scans;
 
         next_smallest
     }
@@ -116,11 +92,12 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        let mut next_smallest_scans = Vec::<usize>::with_capacity(self.column_scans.len());
+        self.smallest_scans = vec![false; self.smallest_scans.len()];
         let mut next_smallest: Option<T> = None;
+
         for &index in &self.active_scans {
-            let scan = &mut self.column_scans[index];
-            let current_element = scan.seek(value);
+            let current_element = self.column_scans[index].seek(value);
+            self.active_values[index] = current_element;
 
             if next_smallest.is_none() {
                 next_smallest = current_element;
@@ -128,16 +105,17 @@ where
             {
                 next_smallest = current_element;
 
-                next_smallest_scans.clear();
+                for value in self.smallest_scans.iter_mut().take(index) {
+                    *value = false;
+                }
             }
 
-            if next_smallest == current_element {
-                next_smallest_scans.push(index);
+            if next_smallest.is_some() && next_smallest == current_element {
+                self.smallest_scans[index] = true;
             }
         }
 
         self.smallest_value = next_smallest;
-        self.smallest_scans = next_smallest_scans;
 
         next_smallest
     }
@@ -147,7 +125,7 @@ where
     }
 
     fn reset(&mut self) {
-        self.smallest_scans.clear();
+        self.smallest_scans = vec![true; self.smallest_scans.len()];
         self.smallest_value = None;
     }
 }

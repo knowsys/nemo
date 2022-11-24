@@ -100,6 +100,17 @@ pub enum IntervalColumnT {
     Double(IntervalColumnEnum<Double>),
 }
 
+impl IntervalColumnT {
+    /// Return the u64 version of the column
+    pub fn as_u64(&self) -> Option<&IntervalColumnEnum<u64>> {
+        if let IntervalColumnT::U64(col) = self {
+            return Some(col);
+        }
+
+        None
+    }
+}
+
 generate_datatype_forwarder!(forward_to_interval_column_enum);
 
 impl<'a> Column<'a, DataValueT> for IntervalColumnT {

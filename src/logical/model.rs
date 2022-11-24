@@ -11,7 +11,7 @@ use crate::{
     generate_forwarder,
     io::parser::{ParseError, RuleParser},
     physical::{
-        datatypes::Double,
+        datatypes::{DataValueT, Double},
         dictionary::{Dictionary, PrefixedStringDictionary},
     },
 };
@@ -35,6 +35,11 @@ impl Identifier {
             dictionary,
         }
     }
+
+    /// TODO(mx): ugly hack, this needs to go.
+    pub fn to_constant_u64(self) -> u64 {
+        self.0 as u64
+    }
 }
 
 /// A pretty-printable identifier that can be resolved using the dictionary.
@@ -57,8 +62,8 @@ impl Display for PrintableIdentifier<'_> {
     }
 }
 
+/// Variable occuring in a rule
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
-/// A Variable.
 pub enum Variable {
     /// A universally quantified variable.
     Universal(Identifier),
@@ -86,6 +91,21 @@ impl Term {
             self,
             Self::Constant(_) | Self::NumericLiteral(_) | Self::RdfLiteral(_)
         )
+    }
+
+    // TODO: Not sure if this is a sane way to do it, some discussion needed
+    /// Coverts term to DataValueT
+    pub fn to_datavalue_t(&self) -> Option<DataValueT> {
+        match self {
+            Self::Constant(Identifier(i)) => Some(DataValueT::U64((*i).try_into().ok()?)),
+            Self::Variable(_) => unreachable!(),
+            Self::NumericLiteral(n) => match n {
+                NumericLiteral::Integer(i) => Some(DataValueT::U64((*i).try_into().ok()?)),
+                NumericLiteral::Decimal(_, _) => todo!(),
+                NumericLiteral::Double(d) => Some(DataValueT::Double(*d)),
+            },
+            Self::RdfLiteral(_) => todo!(),
+        }
     }
 }
 
@@ -140,20 +160,27 @@ impl Atom {
         self.predicate
     }
 
-    /// Iterate over the terms in the atom.
-    pub fn terms(&self) -> impl Iterator<Item = &Term> {
-        self.terms.iter()
+    /// Return the terms in the atom - immutable.
+    #[must_use]
+    pub fn terms(&self) -> &Vec<Term> {
+        &self.terms
     }
 
-    /// Iterate over all variables in the atom.
+    /// Return the terms in the atom - mutable.
+    #[must_use]
+    pub fn terms_mut(&mut self) -> &mut Vec<Term> {
+        &mut self.terms
+    }
+
+    /// Return all variables in the atom.
     pub fn variables(&self) -> impl Iterator<Item = Variable> + '_ {
-        self.terms().filter_map(|&term| match term {
+        self.terms().iter().filter_map(|&term| match term {
             Term::Variable(var) => Some(var),
             _ => None,
         })
     }
 
-    /// Iterate over all universally quantified variables in the atom.
+    /// Return all universally quantified variables in the atom.
     pub fn universal_variables(&self) -> impl Iterator<Item = Identifier> + '_ {
         self.variables().filter_map(|var| match var {
             Variable::Universal(identifier) => Some(identifier),
@@ -161,7 +188,7 @@ impl Atom {
         })
     }
 
-    /// Iterate over all existentially quantified variables in the atom.
+    /// Return all existentially quantified variables in the atom.
     pub fn existential_variables(&self) -> impl Iterator<Item = Identifier> + '_ {
         self.variables().filter_map(|var| match var {
             Variable::Existential(identifier) => Some(identifier),
@@ -189,6 +216,14 @@ impl Literal {
     pub fn is_negative(&self) -> bool {
         matches!(self, Self::Negative(_))
     }
+
+    /// Returns the underlying atom
+    pub fn atom(&self) -> &Atom {
+        match self {
+            Self::Positive(atom) => atom,
+            Self::Negative(atom) => atom,
+        }
+    }
 }
 
 impl Neg for Literal {
@@ -211,22 +246,23 @@ impl Literal {
         forward_to_atom!(self, predicate)
     }
 
-    /// Iterate over the terms in the literal.
-    pub fn terms(&self) -> impl Iterator<Item = &Term> {
+    /// Return the terms in the literal.
+    #[must_use]
+    pub fn terms(&self) -> &Vec<Term> {
         forward_to_atom!(self, terms)
     }
 
-    /// Iterate over the variables in the literal.
+    /// Return the variables in the literal.
     pub fn variables(&self) -> impl Iterator<Item = Variable> + '_ {
         forward_to_atom!(self, variables)
     }
 
-    /// Iterate over the universally quantified variables in the literal.
+    /// Return the universally quantified variables in the literal.
     pub fn universal_variables(&self) -> impl Iterator<Item = Identifier> + '_ {
         forward_to_atom!(self, universal_variables)
     }
 
-    /// Iterate over the existentially quantified variables in the literal.
+    /// Return the existentially quantified variables in the literal.
     pub fn existential_variables(&self) -> impl Iterator<Item = Identifier> + '_ {
         forward_to_atom!(self, existential_variables)
     }
@@ -273,11 +309,11 @@ impl Filter {
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct Rule {
     /// Head atoms of the rule
-    pub head: Vec<Atom>,
+    head: Vec<Atom>,
     /// Body literals of the rule
-    pub body: Vec<Literal>,
+    body: Vec<Literal>,
     /// Filters applied to the body
-    pub filters: Vec<Filter>,
+    filters: Vec<Filter>,
 }
 
 impl Rule {
@@ -367,20 +403,46 @@ impl Rule {
         })
     }
 
-    /// Iterate over the head atoms of the rule.
-    pub fn head(&self) -> impl Iterator<Item = &Atom> {
-        self.head.iter()
+    /// Return the head atoms of the rule - immutable.
+    #[must_use]
+    pub fn head(&self) -> &Vec<Atom> {
+        &self.head
     }
 
-    /// Iterate over the body literals of the rule.
-    pub fn body(&self) -> impl Iterator<Item = &Literal> {
-        self.body.iter()
+    /// Return the head atoms of the rule - mutable.
+    #[must_use]
+    pub fn head_mut(&mut self) -> &mut Vec<Atom> {
+        &mut self.head
+    }
+
+    /// Return the body literals of the rule - immutable.
+    #[must_use]
+    pub fn body(&self) -> &Vec<Literal> {
+        &self.body
+    }
+
+    /// Return the body literals of the rule - mutable.
+    #[must_use]
+    pub fn body_mut(&mut self) -> &mut Vec<Literal> {
+        &mut self.body
+    }
+
+    /// Return the filters of the rule - immutable.
+    #[must_use]
+    pub fn filters(&self) -> &Vec<Filter> {
+        &self.filters
+    }
+
+    /// Return the filters of the rule - mutable.
+    #[must_use]
+    pub fn filters_mut(&mut self) -> &mut Vec<Filter> {
+        &mut self.filters
     }
 }
 
 /// A (ground) fact.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
-pub struct Fact(pub(crate) Atom);
+pub struct Fact(pub Atom);
 
 /// A statement that can occur in the program.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
@@ -425,22 +487,65 @@ impl Program {
         self.base
     }
 
-    /// Iterate over all rules in the program.
-    pub fn rules(&self) -> impl Iterator<Item = &Rule> {
-        self.rules.iter()
+    /// Return all rules in the program - immutable.
+    #[must_use]
+    pub fn rules(&self) -> &Vec<Rule> {
+        &self.rules
     }
 
-    /// Iterate over all facts in the program.
-    pub fn facts(&self) -> impl Iterator<Item = &Fact> {
-        self.facts.iter()
+    /// Return all rules in the program - mutable.
+    #[must_use]
+    pub fn rules_mut(&mut self) -> &mut Vec<Rule> {
+        &mut self.rules
     }
 
-    /// Iterate over all prefixes in the program.
-    pub fn prefixes(&self) -> impl Iterator<Item = (&String, &usize)> {
-        self.prefixes.iter()
+    /// Return all facts in the program.
+    #[must_use]
+    pub fn facts(&self) -> &Vec<Fact> {
+        &self.facts
     }
 
-    /// Iterate over all data sources in the program.
+    /// Return a HashSet of all predicates in the program (in rules and facts).
+    #[must_use]
+    pub fn predicates(&self) -> HashSet<Identifier> {
+        self.rules()
+            .iter()
+            .flat_map(|rule| {
+                rule.head()
+                    .iter()
+                    .map(|atom| atom.predicate())
+                    .chain(rule.body().iter().map(|literal| literal.predicate()))
+            })
+            .chain(self.facts().iter().map(|atom| atom.0.predicate()))
+            .collect()
+    }
+
+    /// Return a HashSet of all idb predicates (predicates occuring rule heads) in the program.
+    #[must_use]
+    pub fn idb_predicates(&self) -> HashSet<Identifier> {
+        self.rules()
+            .iter()
+            .flat_map(|rule| rule.head())
+            .map(|atom| atom.predicate())
+            .collect()
+    }
+
+    /// Return a HashSet of all edb predicates (all predicates minus idb predicates) in the program.
+    #[must_use]
+    pub fn edb_predicates(&self) -> HashSet<Identifier> {
+        self.predicates()
+            .difference(&self.idb_predicates())
+            .copied()
+            .collect()
+    }
+
+    /// Return all prefixes in the program.
+    #[must_use]
+    pub fn prefixes(&self) -> &HashMap<String, usize> {
+        &self.prefixes
+    }
+
+    /// Return all data sources in the program.
     pub fn sources(&self) -> impl Iterator<Item = ((Identifier, usize), &DataSource)> {
         self.sources
             .iter()
@@ -448,6 +553,7 @@ impl Program {
     }
 
     /// Look up a given prefix.
+    #[must_use]
     pub fn resolve_prefix(&self, tag: &str) -> Option<usize> {
         self.prefixes.get(tag).copied()
     }

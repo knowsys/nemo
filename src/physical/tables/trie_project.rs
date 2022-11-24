@@ -8,13 +8,17 @@ use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
 
-fn expand_range(column: &IntervalColumnT, range: Range<usize>) -> Range<usize> {
+/// Helper function which, given a continous range, expands it in such a way
+/// that all of the child nodes are covered as well
+pub fn expand_range(column: &IntervalColumnT, range: Range<usize>) -> Range<usize> {
     let start = column.int_bounds(range.start).start;
     let end = if range.end >= column.int_len() {
         column.len()
     } else {
         column.int_bounds(range.end).start
     };
+
+    log::debug!("{range:?} {start}..{end}");
 
     start..end
 }
@@ -132,19 +136,56 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
                 let next_ranges = if self.current_layer.is_none() {
                     vec![0..next_column.len()]
                 } else {
+                    let layer_for_comparison = self.picked_columns[0..self.current_layer.unwrap()]
+                        .iter()
+                        .copied()
+                        .enumerate()
+                        .filter(|(_, col_i)| *col_i >= self.picked_columns[self.current_layer.unwrap()])
+                        .max_by_key(|(_, col_i)| *col_i)
+                        .map(|(i, _)| i)
+                        .unwrap_or(self.current_layer.unwrap());
+
                     let current_cursors = self.reorder_scans[self.current_layer.unwrap()]
                         .get_mut()
                         .pos_multiple()
                         .expect("Should not call down when not on an element");
 
-                    if self.picked_columns[self.current_layer.unwrap()] < self.picked_columns[next_layer] {
+                    log::debug!("CURRENT_CURSORS before filtering {:?}", current_cursors);
+
+                    // keep only cursor positions for the comparison layer that are in line with the positions in the current layer
+                    // we check this by "shrinking" the cursor positions from the comparison layer
+                    let current_cursors: Vec<usize> = if self.current_layer.unwrap() == layer_for_comparison { current_cursors } else {
+                        let comparison_cursors = self.reorder_scans[layer_for_comparison]
+                            .get_mut()
+                            .pos_multiple()
+                            .expect("Should not call down when not on an element");
+
+                        current_cursors
+                            .into_iter()
+                            .flat_map(|c| {
+                                let mut cursor_range = c..(c+1);
+                                for expand_index in ((self.picked_columns[self.current_layer.unwrap()] + 1)..=self.picked_columns[layer_for_comparison]) {
+                                    cursor_range = expand_range(self.trie.get_column(expand_index), cursor_range);
+                                }
+
+                                comparison_cursors.iter().copied().filter(move |c| cursor_range.contains(c))
+                            })
+                            .collect()
+                    };
+
+
+                    log::debug!("CURRENT_CURSORS after filtering {:?}", current_cursors);
+                    log::debug!("PICKED_COLUMNS {:?} {:?} {:?}", layer_for_comparison, next_layer, self.picked_columns);
+
+                    if self.picked_columns[layer_for_comparison] < self.picked_columns[next_layer] {
                         let mut ranges = Vec::<Range<usize>>::new();
                         for current_cursor in current_cursors {
                             let mut range = current_cursor..(current_cursor + 1);
 
-                            for expand_index in (self.picked_columns[self.current_layer.unwrap()] + 1)
+                            for expand_index in (self.picked_columns[layer_for_comparison] + 1)
                                 ..=self.picked_columns[next_layer]
                             {
+                                log::debug!("EXPAND_INDEX {:?}", expand_index);
                                 range = expand_range(self.trie.get_column(expand_index), range);
                             }
 
@@ -157,9 +198,11 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
                         for current_cursor in current_cursors {
                             let mut value = current_cursor;
                             for shrink_index in (self.picked_columns[next_layer] + 1
-                                ..=(self.picked_columns[self.current_layer.unwrap()]))
+                                ..=(self.picked_columns[layer_for_comparison]))
                                 .rev()
                             {
+                                log::debug!("VALUE {value:?}");
+
                                 value = shrink_position(self.trie.get_column(shrink_index), value);
                             }
 
@@ -177,6 +220,8 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
                         ranges
                     }
                 };
+
+                log::debug!("NEXT_RANGES {next_layer:?} {next_ranges:?}");
 
                 self.reorder_scans[next_layer]
                     .get_mut()
@@ -211,9 +256,12 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieProject;
-    use crate::physical::columns::{Column, IntervalColumnT};
-    use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tables::{materialize, Trie, TrieScanEnum, TrieSchema, TrieSchemaEntry};
+    use crate::physical::columns::Column;
+    use crate::physical::datatypes::{DataTypeName, DataValueT};
+    use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
+    use crate::physical::tables::{
+        materialize, Table, Trie, TrieScanEnum, TrieSchema, TrieSchemaEntry,
+    };
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
@@ -255,18 +303,8 @@ mod test {
             vec![0, 1],
         )));
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_no_first.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_no_first.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_no_first.get_column(0).as_u64().unwrap();
+        let proj_column_lower = trie_no_first.get_column(1).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -299,18 +337,8 @@ mod test {
             vec![0, 2, 4, 6]
         );
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_no_middle.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_no_middle.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_no_middle.get_column(0).as_u64().unwrap();
+        let proj_column_lower = trie_no_middle.get_column(1).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -343,18 +371,8 @@ mod test {
             vec![0, 4]
         );
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_no_last.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_no_last.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_no_last.get_column(0).as_u64().unwrap();
+        let proj_column_lower = trie_no_last.get_column(1).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -450,24 +468,9 @@ mod test {
             vec![0, 3, 5],
         )));
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_projected.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_middle = if let IntervalColumnT::U64(col) = trie_projected.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_projected.get_column(2) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_projected.get_column(0).as_u64().unwrap();
+        let proj_column_middle = trie_projected.get_column(1).as_u64().unwrap();
+        let proj_column_lower = trie_projected.get_column(2).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -547,24 +550,17 @@ mod test {
             vec![2, 0, 1],
         )));
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_reordered.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
+        log::debug!(
+            "\n{}\n\n{}",
+            trie.debug(&PrefixedStringDictionary::default()),
+            trie_reordered.debug(&PrefixedStringDictionary::default())
+        );
 
-        let proj_column_middle = if let IntervalColumnT::U64(col) = trie_reordered.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
+        assert_eq!(trie.row_num(), trie_reordered.row_num());
 
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_reordered.get_column(2) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_reordered.get_column(0).as_u64().unwrap();
+        let proj_column_middle = trie_reordered.get_column(1).as_u64().unwrap();
+        let proj_column_lower = trie_reordered.get_column(2).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -602,7 +598,7 @@ mod test {
                 .get_data_column()
                 .iter()
                 .collect::<Vec<u64>>(),
-            vec![2, 4, 2, 4, 2, 4, 3, 5, 2, 4, 3, 5, 3, 5, 3, 5]
+            vec![4, 4, 2, 5, 2, 3, 5, 3]
         );
 
         assert_eq!(
@@ -610,7 +606,7 @@ mod test {
                 .get_int_column()
                 .iter()
                 .collect::<Vec<usize>>(),
-            vec![0, 2, 4, 6, 8, 10, 12, 14]
+            vec![0, 1, 2, 3, 4, 5, 6, 7]
         );
     }
 
@@ -644,18 +640,8 @@ mod test {
             vec![2, 0],
         )));
 
-        let proj_column_upper = if let IntervalColumnT::U64(col) = trie_reordered.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_lower = if let IntervalColumnT::U64(col) = trie_reordered.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_upper = trie_reordered.get_column(0).as_u64().unwrap();
+        let proj_column_lower = trie_reordered.get_column(1).as_u64().unwrap();
         assert_eq!(
             proj_column_upper
                 .get_data_column()
@@ -734,30 +720,10 @@ mod test {
             vec![0, 2, 4, 1],
         )));
 
-        let proj_column_fst = if let IntervalColumnT::U64(col) = trie_projected.get_column(0) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_snd = if let IntervalColumnT::U64(col) = trie_projected.get_column(1) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_trd = if let IntervalColumnT::U64(col) = trie_projected.get_column(2) {
-            col
-        } else {
-            panic!("...")
-        };
-
-        let proj_column_fth = if let IntervalColumnT::U64(col) = trie_projected.get_column(3) {
-            col
-        } else {
-            panic!("...")
-        };
-
+        let proj_column_fst = trie_projected.get_column(0).as_u64().unwrap();
+        let proj_column_snd = trie_projected.get_column(1).as_u64().unwrap();
+        let proj_column_trd = trie_projected.get_column(2).as_u64().unwrap();
+        let proj_column_fth = trie_projected.get_column(3).as_u64().unwrap();
         assert_eq!(
             proj_column_fst
                 .get_data_column()
@@ -821,5 +787,189 @@ mod test {
                 .collect::<Vec<usize>>(),
             vec![0, 1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 14]
         );
+    }
+
+    /// This is a test case for a bug first encountered while
+    /// classifying `smallmed` using the EL calculus rules, where
+    /// reordering a table with 2 rows results in a table with 4 rows.
+    #[test]
+    fn spurious_tuples_in_reorder_bug() {
+        let schema_entry = TrieSchemaEntry {
+            label: 0,
+            datatype: DataTypeName::U64,
+        };
+        let schema = TrieSchema::new(vec![schema_entry, schema_entry, schema_entry]);
+
+        let mut dict = PrefixedStringDictionary::default();
+        let x = dict.add("72".to_owned()).try_into().unwrap();
+        let a = dict.add("139".to_owned()).try_into().unwrap();
+        let b = dict.add("141".to_owned()).try_into().unwrap();
+        let u = dict.add("140".to_owned()).try_into().unwrap();
+        let v = dict.add("134".to_owned()).try_into().unwrap();
+
+        let fst = vec![x];
+        let snd = vec![a, b];
+        let trd = vec![u, v];
+
+        let first = make_gict(&fst, &[0]);
+        let second = make_gict(&snd, &[0]);
+        let third = make_gict(&trd, &[0, 1]);
+
+        let columns = vec![first, second, third];
+
+        let picked_columns = vec![1, 0, 2];
+        let base_trie = Trie::new(schema, columns);
+        let mut project = TrieScanEnum::TrieProject(TrieProject::new(&base_trie, picked_columns));
+
+        let reordered_trie = materialize(&mut project);
+        log::debug!("{}", reordered_trie.debug(&dict));
+        log::debug!("{reordered_trie:#?}");
+
+        assert_eq!(base_trie.row_num(), reordered_trie.row_num());
+
+        // assert_eq!(
+        //     base_trie.get_column(0).iter().collect::<Vec<_>>(),
+        //     reordered_trie.get_column(1).iter().collect::<Vec<_>>()
+        // );
+
+        // assert_eq!(
+        //     base_trie.get_column(1).iter().collect::<Vec<_>>(),
+        //     reordered_trie.get_column(0).iter().collect::<Vec<_>>()
+        // );
+
+        // assert_eq!(
+        //     base_trie.get_column(2).iter().collect::<Vec<_>>(),
+        //     reordered_trie.get_column(2).iter().collect::<Vec<_>>()
+        // );
+    }
+
+    /// This is another test case for a bug first encountered while
+    /// classifying `smallmed` using the EL calculus rules, where
+    /// reordering a table with 10 rows results in a table with 30 rows.
+    #[test]
+    fn spurious_tuples_in_reorder_mk2_bug() {
+        let schema_entry = TrieSchemaEntry {
+            label: 0,
+            datatype: DataTypeName::U64,
+        };
+        let schema = TrieSchema::new(vec![schema_entry, schema_entry, schema_entry]);
+
+        let mut dict = PrefixedStringDictionary::default();
+        let mut intern =
+            |term: &str| DataValueT::U64(dict.add(term.to_owned()).try_into().unwrap());
+
+        let a = intern("genid:cc18ce3a-be8a-3445-8b68-2027a2e1b1be");
+        let b = intern("genid:0f18d187-7a4f-35c6-b645-c57ee51d277d");
+        let c = intern("genid:c43dcdc4-5c45-307f-b734-76485822be3a");
+        let d = intern("genid:8ab183c6-7491-3ae9-946c-f26084087292");
+        let e = intern("genid:31241d92-1fbf-3bac-8027-82e028b346a6");
+        let r = intern("i:RoleGroup");
+        let u = intern("genid:cbf5c5b6-f56e-362d-a793-bcfd30c264f4");
+        let v = intern("genid:6ecad60a-3cbd-3db0-b4c4-ee456ebcb64c");
+        let w = intern("genid:ce19480b-4d0d-3bb0-b2e5-8fd877f29514");
+        let x = intern("genid:69b6b533-19ac-35e1-9fe5-1fece1653d7b");
+        let y = intern("genid:4034e8ac-9994-35bb-9836-ea484a2cc3d9");
+        let z = intern("genid:7af2f7a6-3f3c-3694-83b8-b630f9e4c02a");
+
+        let rows = vec![
+            vec![a, r, u],
+            vec![b, r, v],
+            vec![b, r, w],
+            vec![c, r, v],
+            vec![c, r, w],
+            vec![d, r, x],
+            vec![d, r, v],
+            vec![d, r, w],
+            vec![d, r, y],
+            vec![e, r, z],
+        ];
+
+        let picked_columns = vec![1, 0, 2];
+        let base_trie = Trie::from_rows(schema, rows);
+        log::debug!("\n{}", base_trie.debug(&dict));
+        let mut project = TrieScanEnum::TrieProject(TrieProject::new(&base_trie, picked_columns));
+
+        let reordered_trie = materialize(&mut project);
+        log::debug!("\n{}", reordered_trie.debug(&dict));
+        log::debug!("{reordered_trie:#?}");
+
+        assert_eq!(base_trie.row_num(), reordered_trie.row_num());
+    }
+
+    /// This is derived from [`spurious_tuples_in_reorder_mk2_bug`],
+    /// but minimised to a table of 2 rows resulting in four rows.
+    #[test]
+    fn spurious_tuples_in_reorder_mk2_minimised_bug() {
+        let schema_entry = TrieSchemaEntry {
+            label: 0,
+            datatype: DataTypeName::U64,
+        };
+        let schema = TrieSchema::new(vec![schema_entry, schema_entry, schema_entry]);
+
+        let mut dict = PrefixedStringDictionary::default();
+        let mut intern =
+            |term: &str| DataValueT::U64(dict.add(term.to_owned()).try_into().unwrap());
+
+        let a = intern("genid:cc18ce3a-be8a-3445-8b68-2027a2e1b1be");
+        let b = intern("genid:0f18d187-7a4f-35c6-b645-c57ee51d277d");
+        let r = intern("i:RoleGroup");
+        let x = intern("genid:cbf5c5b6-f56e-362d-a793-bcfd30c264f4");
+        let y = intern("genid:6ecad60a-3cbd-3db0-b4c4-ee456ebcb64c");
+
+        let rows = vec![vec![a, r, x], vec![b, r, y]];
+
+        let picked_columns = vec![1, 0, 2];
+        let base_trie = Trie::from_rows(schema, rows);
+        log::debug!("\n{}", base_trie.debug(&dict));
+        let mut project = TrieScanEnum::TrieProject(TrieProject::new(&base_trie, picked_columns));
+
+        let reordered_trie = materialize(&mut project);
+        log::debug!("\n{}", reordered_trie.debug(&dict));
+        log::debug!("{reordered_trie:#?}");
+
+        assert_eq!(base_trie.row_num(), reordered_trie.row_num());
+    }
+
+    #[test]
+    fn spurious_tuples_in_reorder_bug2() {
+        let schema_entry = TrieSchemaEntry {
+            label: 0,
+            datatype: DataTypeName::U64,
+        };
+        let schema = TrieSchema::new(vec![schema_entry, schema_entry, schema_entry]);
+
+        let mut dict = PrefixedStringDictionary::default();
+
+        let rg = dict.add("RoleGroup".to_owned()).try_into().unwrap();
+        let a = dict.add("4_1_6".to_owned()).try_into().unwrap();
+        let b = dict.add("4_1_21".to_owned()).try_into().unwrap();
+        let c = dict.add("4_1_22".to_owned()).try_into().unwrap();
+
+        let u = dict.add("32_1_58".to_owned()).try_into().unwrap();
+        let v = dict.add("32_1_72".to_owned()).try_into().unwrap();
+        let w = dict.add("32_1_81".to_owned()).try_into().unwrap();
+        let x = dict.add("32_1_74".to_owned()).try_into().unwrap();
+        let y = dict.add("32_1_83".to_owned()).try_into().unwrap();
+        let z = dict.add("32_1_60".to_owned()).try_into().unwrap();
+
+        let fst = vec![a, b, c];
+        let snd = vec![rg, rg, rg];
+        let trd = vec![u, v, w, x, y, z];
+
+        let first = make_gict(&fst, &[0]);
+        let second = make_gict(&snd, &[0, 1, 2]);
+        let third = make_gict(&trd, &[0, 4, 5]);
+
+        let columns = vec![first, second, third];
+
+        let picked_columns = vec![1, 0, 2];
+        let base_trie = Trie::new(schema, columns);
+        let mut project = TrieScanEnum::TrieProject(TrieProject::new(&base_trie, picked_columns));
+
+        let reordered_trie = materialize(&mut project);
+        log::debug!("{}", reordered_trie.debug(&dict));
+        log::debug!("{reordered_trie:#?}");
+
+        assert_eq!(base_trie.row_num(), reordered_trie.row_num());
     }
 }

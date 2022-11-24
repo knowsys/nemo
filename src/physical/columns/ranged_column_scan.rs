@@ -183,7 +183,7 @@ where
 
     /// Assumes that column scan is a union scan
     /// and returns a vector containing the positions of the scans with the smallest values
-    pub fn get_smallest_scans(&self) -> &Vec<usize> {
+    pub fn get_smallest_scans(&self) -> &Vec<bool> {
         match self {
             Self::UnionScan(cs) => cs.get_smallest_scans(),
             _ => {
@@ -325,7 +325,7 @@ where
     }
 
     /// Forward `get_smallest_scans` to the underlying [`RangedColumnScanEnum`].
-    pub fn get_smallest_scans(&self) -> &Vec<usize> {
+    pub fn get_smallest_scans(&self) -> &Vec<bool> {
         unsafe { &mut *self.0.get() }.get_smallest_scans()
     }
 
@@ -375,7 +375,7 @@ impl<'a> RangedColumnScanT<'a> {
 
     /// Assumes that column scan is a union scan
     /// and returns a vector containing the positions of the scans with the smallest values
-    pub fn get_smallest_scans(&self) -> &Vec<usize> {
+    pub fn get_smallest_scans(&self) -> &Vec<bool> {
         forward_to_ranged_column_scan_cell!(self, get_smallest_scans)
     }
 

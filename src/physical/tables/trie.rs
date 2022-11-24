@@ -5,6 +5,7 @@ use crate::physical::columns::{
     IntervalColumn, IntervalColumnEnum, IntervalColumnT,
 };
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
+use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use std::fmt;
 use std::fmt::Debug;
 use std::iter;
@@ -58,7 +59,7 @@ impl TableSchema for TrieSchema {
 
 /// Implementation of a trie data structure.
 /// The underlying data is oragnized in IntervalColumns.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Trie {
     // TODO: could be generic in column type (one of accepted types still is IntervalColumnT)
     schema: TrieSchema,
@@ -76,6 +77,11 @@ impl Trie {
         &self.columns
     }
 
+    /// Return mutable reference to all columns.
+    pub fn columns_mut(&mut self) -> &mut Vec<IntervalColumnT> {
+        &mut self.columns
+    }
+
     /// Return reference to a column given an index.
     ///
     /// # Panics
@@ -83,8 +89,131 @@ impl Trie {
     pub fn get_column(&self, index: usize) -> &IntervalColumnT {
         &self.columns[index]
     }
+
+    /// Return a [`DebugTrie`] from the [`Trie`]
+    pub fn debug<'a>(&'a self, dict: &'a PrefixedStringDictionary) -> DebugTrie<'a> {
+        DebugTrie { trie: self, dict }
+    }
+
+    /// Returns the sum of the lengths of each column
+    pub fn num_elements(&self) -> usize {
+        let mut result = 0;
+
+        for column in &self.columns {
+            result += column.len();
+        }
+
+        result
+    }
+
+    // TODO: unify this with Display Trait implementation
+    pub(crate) fn format_as_csv(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        dict: &PrefixedStringDictionary,
+    ) -> fmt::Result {
+        if self
+            .columns
+            .first()
+            .map_or(true, |column| column.is_empty())
+        {
+            return writeln!(f);
+        }
+
+        // outer vecs are build in reverse order
+        let mut last_interval_lengths: Vec<usize> = self
+            .columns
+            .last()
+            .expect("we return early if columns are empty")
+            .iter()
+            .map(|_| 1)
+            .collect();
+        let mut str_cols: Vec<Vec<String>> = vec![self
+            .columns
+            .last()
+            .expect("we return early if columns are empty")
+            .iter()
+            .map(|val| match val {
+                DataValueT::U64(constant) => dict
+                    .entry(constant.try_into().unwrap())
+                    .unwrap_or_else(|| format!("<{constant} should have been interned>")),
+                _ => val.to_string(),
+            })
+            .collect()];
+        for column_index in (0..(self.columns.len() - 1)).rev() {
+            let current_column = &self.columns[column_index];
+            let last_column = &self.columns[column_index + 1];
+
+            let current_interval_lengths: Vec<usize> = (0..current_column.len())
+                .map(|element_index_in_current_column| {
+                    last_column
+                        .int_bounds(element_index_in_current_column)
+                        .map(|index_in_interval| last_interval_lengths[index_in_interval])
+                        .sum()
+                })
+                .collect();
+
+            let padding_lengths = current_interval_lengths.iter().map(|length| length - 1);
+
+            str_cols.push(
+                current_column
+                    .iter()
+                    .zip(padding_lengths)
+                    .flat_map(|(val, pl)| {
+                        iter::once(match val {
+                            DataValueT::U64(constant) => {
+                                dict.entry(constant.try_into().unwrap()).unwrap_or_else(|| {
+                                    format!("<{constant} should have been interned>")
+                                })
+                            }
+                            _ => val.to_string(),
+                        })
+                        .chain(
+                            iter::repeat(match val {
+                                DataValueT::U64(constant) => {
+                                    dict.entry(constant.try_into().unwrap()).unwrap_or_else(|| {
+                                        format!("<{constant} should have been interned>")
+                                    })
+                                }
+                                _ => val.to_string(),
+                            })
+                            .take(pl),
+                        )
+                    })
+                    .collect(),
+            );
+
+            last_interval_lengths = current_interval_lengths;
+        }
+
+        for row_index in 0..str_cols[0].len() {
+            for col_index in (0..str_cols.len()).rev() {
+                write!(f, "{}", str_cols[col_index][row_index])?;
+                if col_index > 0 {
+                    write!(f, ",")?;
+                }
+            }
+            writeln!(f,)?;
+        }
+
+        Ok(())
+    }
 }
 
+/// [`Trie`] which also contains an associated dictionary for displaying proper names
+#[derive(Debug)]
+pub struct DebugTrie<'a> {
+    trie: &'a Trie,
+    dict: &'a PrefixedStringDictionary,
+}
+
+impl fmt::Display for DebugTrie<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.trie.format_as_csv(f, self.dict)
+    }
+}
+
+// TODO: unify this with debug above
 impl fmt::Display for Trie {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.columns.is_empty() {

@@ -53,3 +53,7 @@ pub use trie_union::TrieUnion;
 /// Module for defining [`TrieJoin`]
 pub mod trie_join;
 pub use trie_join::TrieJoin;
+
+/// Module for defining append functionality
+pub mod trie_append;
+pub use trie_append::trie_add_constant;
