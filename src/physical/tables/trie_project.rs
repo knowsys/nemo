@@ -35,7 +35,6 @@ fn shrink_position(column: &IntervalColumnT, pos: usize) -> usize {
         IntervalColumnT::U64(col) => shrink_position_t(col, pos),
         IntervalColumnT::Float(col) => shrink_position_t(col, pos),
         IntervalColumnT::Double(col) => shrink_position_t(col, pos),
-        IntervalColumnT::String(col) => shrink_position_t(col, pos),
     }
 }
 
@@ -88,7 +87,6 @@ impl<'a> TrieProject<'a> {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
-                DataTypeName::String => init_scans_for_datatype!(String),
             }
         }
         let target_schema = TrieSchema::new(target_attributes);
@@ -190,7 +188,6 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
             IntervalColumnT::U64(_) => down_for_datatype!(U64),
             IntervalColumnT::Float(_) => down_for_datatype!(Float),
             IntervalColumnT::Double(_) => down_for_datatype!(Double),
-            IntervalColumnT::String(_) => down_for_datatype!(String),
         }
 
         self.current_layer = Some(next_layer);

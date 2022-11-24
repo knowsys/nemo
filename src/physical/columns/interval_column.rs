@@ -98,8 +98,6 @@ pub enum IntervalColumnT {
     Float(IntervalColumnEnum<Float>),
     /// Case Double
     Double(IntervalColumnEnum<Double>),
-    /// Case String
-    String(IntervalColumnEnum<usize>),
 }
 
 generate_datatype_forwarder!(forward_to_interval_column_enum);

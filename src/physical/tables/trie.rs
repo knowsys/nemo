@@ -181,7 +181,7 @@ impl Table for Trie {
                     .map(|_| {
                         let empty_data_col = AdaptiveColumnBuilderT::new(DataTypeName::U64);
                         let empty_interval_col = AdaptiveColumnBuilder::<usize>::new();
-                        build_interval_column!(empty_data_col, empty_interval_col; U64; Float; Double; String)
+                        build_interval_column!(empty_data_col, empty_interval_col; U64; Float; Double)
                     })
                     .collect(),
             );
@@ -200,9 +200,6 @@ impl Table for Trie {
                     )),
                     VecT::Double(vec) => VecT::Double(permutator.permutate(vec).expect(
                         "length matches since permutator is constructed from these vectores",
-                    )),
-                    VecT::String(vec) => VecT::String(permutator.permutate(vec).expect(
-                        "length matches since permutator is constructed from these vectors",
                     )),
                 })
                 .collect();
@@ -294,7 +291,7 @@ impl Table for Trie {
             condensed_data_builders
                 .into_iter()
                 .zip(condensed_interval_starts_builders)
-                .map(|(col, iv)| build_interval_column!(col, iv; U64; Float; Double; String))
+                .map(|(col, iv)| build_interval_column!(col, iv; U64; Float; Double))
                 .collect(),
         )
     }

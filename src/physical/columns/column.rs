@@ -80,8 +80,6 @@ pub enum ColumnT {
     Float(ColumnEnum<Float>),
     /// Case ColumnEnum<Double>
     Double(ColumnEnum<Double>),
-    /// Case ColumnEnum<String>
-    String(ColumnEnum<usize>),
 }
 
 generate_datatype_forwarder!(forward_to_column_enum);

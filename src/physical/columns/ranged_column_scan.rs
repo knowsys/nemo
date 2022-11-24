@@ -354,8 +354,6 @@ pub enum RangedColumnScanT<'a> {
     Float(RangedColumnScanCell<'a, Float>),
     /// Case Double
     Double(RangedColumnScanCell<'a, Double>),
-    /// Case String
-    String(RangedColumnScanCell<'a, usize>),
 }
 
 generate_datatype_forwarder!(forward_to_ranged_column_scan_cell);
@@ -401,25 +399,15 @@ impl<'a> ColumnScan for RangedColumnScanT<'a> {
         match self {
             Self::U64(cs) => match value {
                 Self::Item::U64(val) => cs.seek(val).map(DataValueT::U64),
-                Self::Item::Float(_) => None,
-                Self::Item::Double(_) => None,
-                Self::Item::String(_) => None,
+                Self::Item::Float(_) | Self::Item::Double(_) => None,
             },
             Self::Float(cs) => match value {
-                Self::Item::U64(_) => None,
+                Self::Item::U64(_) | Self::Item::Double(_) => None,
                 Self::Item::Float(val) => cs.seek(val).map(DataValueT::Float),
-                Self::Item::Double(_) => None,
-                Self::Item::String(_) => None,
             },
             Self::Double(cs) => match value {
-                Self::Item::U64(_) => None,
-                Self::Item::Float(_) => None,
+                Self::Item::U64(_) | Self::Item::Float(_) => None,
                 Self::Item::Double(val) => cs.seek(val).map(DataValueT::Double),
-                Self::Item::String(_) => None,
-            },
-            Self::String(cs) => match value {
-                Self::Item::String(val) => cs.seek(val).map(DataValueT::String),
-                _ => None, // no type mixing allowed, so in any other case it should be [None]
             },
         }
     }

@@ -34,8 +34,6 @@ pub fn materialize(trie_scan: &mut TrieScanEnum) -> Trie {
                 .push(AdaptiveColumnBuilderT::Float(AdaptiveColumnBuilder::new())),
             DataTypeName::Double => data_column_builders
                 .push(AdaptiveColumnBuilderT::Double(AdaptiveColumnBuilder::new())),
-            DataTypeName::String => data_column_builders
-                .push(AdaptiveColumnBuilderT::String(AdaptiveColumnBuilder::new())),
         }
     }
 

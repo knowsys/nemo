@@ -88,7 +88,6 @@ impl<'a> TrieJoin<'a> {
                 DataTypeName::U64 => merge_join_for_datatype!(U64, u64),
                 DataTypeName::Float => merge_join_for_datatype!(Float, Float),
                 DataTypeName::Double => merge_join_for_datatype!(Double, Double),
-                DataTypeName::String => merge_join_for_datatype!(String, usize),
             }
         }
 
@@ -138,10 +137,9 @@ impl<'a> TrieScan<'a> for TrieJoin<'a> {
         debug_assert!(self.current_variable.is_some());
 
         match self.target_schema.get_type(self.current_variable?) {
-            DataTypeName::U64
-            | DataTypeName::Float
-            | DataTypeName::Double
-            | DataTypeName::String => Some(&self.merge_joins[self.current_variable?]),
+            DataTypeName::U64 | DataTypeName::Float | DataTypeName::Double => {
+                Some(&self.merge_joins[self.current_variable?])
+            }
         }
     }
 

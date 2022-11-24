@@ -67,7 +67,6 @@ impl<'a> TrieDifference<'a> {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
-                DataTypeName::String => init_scans_for_datatype!(String),
             };
         }
 
@@ -158,7 +157,6 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
                 DataTypeName::U64 => down_for_datatype!(U64),
                 DataTypeName::Float => down_for_datatype!(Float),
                 DataTypeName::Double => down_for_datatype!(Double),
-                DataTypeName::String => down_for_datatype!(String),
             }
         } else {
             self.difference_scans[next_layer].get_mut().reset();
