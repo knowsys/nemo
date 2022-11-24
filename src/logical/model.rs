@@ -520,7 +520,7 @@ impl Program {
             .collect()
     }
 
-    /// Return a HashSet of all idb predicates (predicated occuring rule heads) in the program.
+    /// Return a HashSet of all idb predicates (predicates occuring rule heads) in the program.
     #[must_use]
     pub fn idb_predicates(&self) -> HashSet<Identifier> {
         self.rules()
