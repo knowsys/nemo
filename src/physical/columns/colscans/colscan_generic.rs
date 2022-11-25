@@ -1,8 +1,10 @@
-use super::{Column, ColumnScan, GenericIntervalColumn, RangedColumnScan, VectorColumn};
 use crate::generate_forwarder;
+use crate::physical::columns::columns::{Column, GenericIntervalColumn, VectorColumn};
 use crate::physical::datatypes::ColumnDataType;
 use std::marker::PhantomData;
 use std::{fmt::Debug, ops::Range};
+
+use super::colscan::ColScan;
 
 /// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
 #[derive(Debug)]
@@ -125,7 +127,7 @@ where
     }
 }
 
-impl<'a, T, Col> ColumnScan for GenericColumnScan<'a, T, Col>
+impl<'a, T, Col> ColScan for GenericColumnScan<'a, T, Col>
 where
     T: 'a + Debug + Copy + Ord,
     Col: Column<'a, T>,
@@ -181,13 +183,7 @@ where
     fn reset(&mut self) {
         self.pos = None;
     }
-}
 
-impl<'a, T, Col> RangedColumnScan for GenericColumnScan<'a, T, Col>
-where
-    T: 'a + Debug + Copy + Ord,
-    Col: Column<'a, T>,
-{
     fn pos(&self) -> Option<usize> {
         self.pos
             .and_then(|pos| (pos < self.interval.end).then_some(pos))
@@ -213,7 +209,7 @@ where
     }
 }
 
-impl<'a, T> ColumnScan for GenericColumnScanEnum<'a, T>
+impl<'a, T> ColScan for GenericColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -228,12 +224,7 @@ where
     fn reset(&mut self) {
         forward_to_column_scan!(self, reset)
     }
-}
 
-impl<'a, T> RangedColumnScan for GenericColumnScanEnum<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
     fn pos(&self) -> Option<usize> {
         forward_to_column_scan!(self, pos)
     }
@@ -245,9 +236,12 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::super::VectorColumn;
-    use super::{ColumnScan, GenericColumnScan, RangedColumnScan}; // < TODO: is this a nice way to write this use?
     use test_log::test;
+
+    use crate::physical::columns::{
+        colscans::{ColScan, GenericColumnScan},
+        columns::VectorColumn,
+    };
 
     fn get_test_column() -> VectorColumn<u64> {
         let data: Vec<u64> = vec![1, 2, 5];

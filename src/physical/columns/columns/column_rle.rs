@@ -1,5 +1,7 @@
-use super::{Column, ColumnBuilder, ColumnScan, RangedColumnScan};
-use crate::physical::datatypes::{ColumnDataType, Field, Ring};
+use crate::physical::{
+    columns::{builders::ColumnBuilder, colscans::colscan::ColScan},
+    datatypes::{ColumnDataType, Field, Ring},
+};
 use num::{CheckedMul, Zero};
 use std::{
     fmt::Debug,
@@ -7,6 +9,8 @@ use std::{
     num::NonZeroUsize,
     ops::{Add, Mul, Range},
 };
+
+use super::Column;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step<T> {
@@ -386,7 +390,7 @@ impl<'a, T> Column<'a, T> for RleColumn<T>
 where
     T: 'a + ColumnDataType,
 {
-    type ColScan = RleColumnScan<'a, T>;
+    type Scan = RleColumnScan<'a, T>;
 
     fn len(&self) -> usize {
         self.end_indices
@@ -406,7 +410,7 @@ where
         self.get_internal(element_index, increment_index)
     }
 
-    fn iter(&'a self) -> Self::ColScan {
+    fn iter(&'a self) -> Self::Scan {
         RleColumnScan::new(self)
     }
 }
@@ -511,7 +515,7 @@ where
     }
 }
 
-impl<'a, T> ColumnScan for RleColumnScan<'a, T>
+impl<'a, T> ColScan for RleColumnScan<'a, T>
 where
     T: ColumnDataType,
 {
@@ -624,12 +628,7 @@ where
         self.increment_index = None;
         self.current = None;
     }
-}
 
-impl<'a, T> RangedColumnScan for RleColumnScan<'a, T>
-where
-    T: ColumnDataType,
-{
     fn pos(&self) -> Option<usize> {
         self.pos_for_element_and_increment_index(self.element_index?, self.increment_index?)
     }
@@ -646,13 +645,17 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::{Column, ColumnScan, RangedColumnScan, RleColumn, Step};
-    use crate::physical::datatypes::{Double, Float};
+    use crate::physical::{
+        columns::{colscans::ColScan, columns::Column},
+        datatypes::{Double, Float},
+    };
     use num::Zero;
     use quickcheck_macros::quickcheck;
     use std::iter::repeat;
     use std::num::NonZeroUsize;
     use test_log::test;
+
+    use super::{RleColumn, Step};
 
     fn get_control_data() -> Vec<i64> {
         vec![2, 5, 6, 7, 8, 42, 4, 7, 10, 13, 16]

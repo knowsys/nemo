@@ -1,11 +1,15 @@
-use super::{TableSchema, TrieScan, TrieScanEnum};
-use crate::physical::columns::{
-    ColumnScan, EqualColumnScan, EqualValueScan, PassScan, RangedColumnScanCell,
-    RangedColumnScanEnum, RangedColumnScanT,
+use crate::physical::{
+    columns::colscans::{
+        ColScan, EqualColumnScan, EqualValueScan, PassScan, RangedColumnScanCell,
+        RangedColumnScanEnum, RangedColumnScanT,
+    },
+    datatypes::{DataTypeName, DataValueT},
+    tables::tables::TableSchema,
 };
-use crate::physical::datatypes::{DataTypeName, DataValueT};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
+
+use super::{TrieScan, TrieScanEnum};
 
 /// Trie iterator enforcing conditions which state that some columns should have the same value
 #[derive(Debug)]
@@ -265,13 +269,11 @@ impl<'a> TrieScan<'a> for TrieSelectValue<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::{TrieSelectEqual, ValueAssignment};
-    use crate::physical::columns::RangedColumnScanT;
+    use super::{TrieSelectEqual, TrieSelectValue, ValueAssignment};
+    use crate::physical::columns::colscans::RangedColumnScanT;
     use crate::physical::datatypes::{DataTypeName, DataValueT};
-    use crate::physical::tables::{
-        IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
-        TrieSelectValue,
-    };
+    use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tables::triescans::{IntervalTrieScan, TrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

@@ -1,12 +1,15 @@
-use super::{
-    Column, ColumnEnum, GenericColumnScanEnum, GenericIntervalColumn, RangedColumnScanCell,
-    RangedColumnScanEnum, RangedColumnScanT,
-};
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
-    physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
+    physical::{
+        columns::colscans::{
+            GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT,
+        },
+        datatypes::{ColumnDataType, DataValueT, Double, Float},
+    },
 };
 use std::{fmt::Debug, ops::Range};
+
+use super::{Column, ColumnEnum, GenericIntervalColumn};
 
 /// Column of values that are grouped into numbered intervals.
 pub trait IntervalColumn<'a, T>: Debug + Column<'a, T> {
@@ -53,7 +56,7 @@ impl<'a, T> Column<'a, T> for IntervalColumnEnum<T>
 where
     T: 'a + ColumnDataType,
 {
-    type ColScan = RangedColumnScanEnum<'a, T>;
+    type Scan = RangedColumnScanEnum<'a, T>;
 
     fn len(&self) -> usize {
         forward_to_interval_column!(self, len)
@@ -67,7 +70,7 @@ where
         forward_to_interval_column!(self, get(index))
     }
 
-    fn iter(&'a self) -> Self::ColScan {
+    fn iter(&'a self) -> Self::Scan {
         forward_to_interval_column!(
             self,
             iter.as_variant_of(GenericColumnScanEnum)
@@ -114,7 +117,7 @@ impl IntervalColumnT {
 generate_datatype_forwarder!(forward_to_interval_column_enum);
 
 impl<'a> Column<'a, DataValueT> for IntervalColumnT {
-    type ColScan = RangedColumnScanT<'a>;
+    type Scan = RangedColumnScanT<'a>;
 
     fn len(&self) -> usize {
         forward_to_interval_column_enum!(self, len)
@@ -128,7 +131,7 @@ impl<'a> Column<'a, DataValueT> for IntervalColumnT {
         forward_to_interval_column_enum!(self, get(index).as_variant_of(DataValueT))
     }
 
-    fn iter(&'a self) -> Self::ColScan {
+    fn iter(&'a self) -> Self::Scan {
         forward_to_interval_column_enum!(
             self,
             iter.wrap_with(RangedColumnScanCell::new)

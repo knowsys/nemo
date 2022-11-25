@@ -1,5 +1,8 @@
-use super::{Column, GenericColumnScan};
 use std::{fmt::Debug, ops::Index};
+
+use crate::physical::columns::colscans::GenericColumnScan;
+
+use super::Column;
 
 /// Simple implementation of [`Column`] that uses Vec to store data.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,7 +18,7 @@ impl<T: Debug + Copy + Ord> VectorColumn<T> {
 }
 
 impl<'a, T: 'a + Debug + Copy + Ord> Column<'a, T> for VectorColumn<T> {
-    type ColScan = GenericColumnScan<'a, T, VectorColumn<T>>;
+    type Scan = GenericColumnScan<'a, T, VectorColumn<T>>;
 
     fn len(&self) -> usize {
         self.data.len()
@@ -25,7 +28,7 @@ impl<'a, T: 'a + Debug + Copy + Ord> Column<'a, T> for VectorColumn<T> {
         self.data[index]
     }
 
-    fn iter(&'a self) -> Self::ColScan {
+    fn iter(&'a self) -> Self::Scan {
         GenericColumnScan::new(self)
     }
 }

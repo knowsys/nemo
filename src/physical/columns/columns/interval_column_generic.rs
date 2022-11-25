@@ -1,5 +1,5 @@
-use super::{Column, ColumnEnum, GenericColumnScan, IntervalColumn};
-use crate::physical::datatypes::ColumnDataType;
+use super::{Column, ColumnEnum, IntervalColumn};
+use crate::physical::{columns::colscans::GenericColumnScan, datatypes::ColumnDataType};
 use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`IntervalColumn`] that uses a second column to manage interval bounds.
@@ -30,7 +30,7 @@ impl<'a, T> Column<'a, T> for GenericIntervalColumn<T>
 where
     T: 'a + ColumnDataType,
 {
-    type ColScan = GenericColumnScan<'a, T, GenericIntervalColumn<T>>;
+    type Scan = GenericColumnScan<'a, T, GenericIntervalColumn<T>>;
 
     fn len(&self) -> usize {
         self.data.len()
@@ -44,7 +44,7 @@ where
         self.data.get(index)
     }
 
-    fn iter(&'a self) -> Self::ColScan {
+    fn iter(&'a self) -> Self::Scan {
         GenericColumnScan::new(self)
     }
 }

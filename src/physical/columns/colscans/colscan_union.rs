@@ -1,7 +1,9 @@
-use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
+
+use super::colscan::ColScan;
+use super::RangedColumnScanCell;
 
 /// Iterator representing a union of column iterators
 #[derive(Debug)]
@@ -87,7 +89,7 @@ where
     }
 }
 
-impl<'a, T: Ord + Copy + Debug + PartialOrd> ColumnScan for UnionScan<'a, T>
+impl<'a, T: Ord + Copy + Debug + PartialOrd> ColScan for UnionScan<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -128,31 +130,23 @@ where
         self.smallest_scans = vec![true; self.smallest_scans.len()];
         self.smallest_value = None;
     }
-}
 
-impl<'a, T: Ord + Copy + Debug> RangedColumnScan for UnionScan<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
     fn pos(&self) -> Option<usize> {
-        unimplemented!(
-            "This function only exists because RangedColumnScans cannnot be ColumnScans"
-        );
+        unimplemented!("This functions is not implemented for column operators");
     }
     fn narrow(&mut self, _interval: Range<usize>) {
-        unimplemented!(
-            "This function only exists because RangedColumnScans cannnot be ColumnScans"
-        );
+        unimplemented!("This functions is not implemented for column operators");
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::UnionScan;
     use crate::physical::columns::{
-        Column, ColumnScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum,
-        VectorColumn,
+        colscans::{ColScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum},
+        columns::{Column, VectorColumn},
     };
+
+    use super::UnionScan;
     use test_log::test;
 
     #[test]

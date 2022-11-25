@@ -1,11 +1,15 @@
-use super::{TableSchema, TrieScan, TrieScanEnum};
-use crate::physical::columns::{
-    ColumnScan, DifferenceScan, MinusScan, PassScan, RangedColumnScanCell, RangedColumnScanEnum,
-    RangedColumnScanT,
+use crate::physical::{
+    columns::colscans::{
+        ColScan, DifferenceScan, MinusScan, PassScan, RangedColumnScanCell, RangedColumnScanEnum,
+        RangedColumnScanT,
+    },
+    datatypes::DataTypeName,
+    tables::tables::TableSchema,
 };
-use crate::physical::datatypes::DataTypeName;
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
+
+use super::{TrieScan, TrieScanEnum};
 
 /// Trie iterator representing the difference between other trie iterators
 #[derive(Debug)]
@@ -179,11 +183,10 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieDifference;
-    use crate::physical::columns::RangedColumnScanT;
+    use crate::physical::columns::colscans::RangedColumnScanT;
     use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tables::{
-        IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
-    };
+    use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tables::triescans::{IntervalTrieScan, TrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

@@ -1,7 +1,9 @@
-use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
+
+use super::colscan::ColScan;
+use super::RangedColumnScanCell;
 
 /// Iterator used in the upper levels of the trie difference operator
 #[derive(Debug)]
@@ -58,7 +60,7 @@ where
     }
 }
 
-impl<'a, T> ColumnScan for DifferenceScan<'a, T>
+impl<'a, T> ColScan for DifferenceScan<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -78,21 +80,13 @@ where
         self.equal = true;
         self.current = None;
     }
-}
 
-impl<'a, T> RangedColumnScan for DifferenceScan<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
     fn pos(&self) -> Option<usize> {
-        unimplemented!(
-            "This function only exists because RangedColumnScans cannnot be ColumnScans"
-        );
+        unimplemented!("This functions is not implemented for column operators");
     }
+
     fn narrow(&mut self, _interval: Range<usize>) {
-        unimplemented!(
-            "This function only exists because RangedColumnScans cannnot be ColumnScans"
-        );
+        unimplemented!("This functions is not implemented for column operators");
     }
 }
 
@@ -151,7 +145,7 @@ where
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> ColumnScan for MinusScan<'a, T>
+impl<'a, T: Ord + Copy + Debug> ColScan for MinusScan<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -176,31 +170,24 @@ where
     fn reset(&mut self) {
         self.current = None;
     }
-}
 
-impl<'a, T: Ord + Copy + Debug> RangedColumnScan for MinusScan<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
     fn pos(&self) -> Option<usize> {
-        unimplemented!(
-            "This function only exists because RangedColumnScans cannnot be ColumnScans"
-        );
+        unimplemented!("This functions is not implemented for column operators");
     }
     fn narrow(&mut self, _interval: Range<usize>) {
-        unimplemented!(
-            "This function only exists because RangedColumnScans cannnot be ColumnScans"
-        );
+        unimplemented!("This functions is not implemented for column operators");
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{DifferenceScan, MinusScan};
     use crate::physical::columns::{
-        Column, ColumnScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum,
-        VectorColumn,
+        colscans::{ColScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum},
+        columns::{Column, VectorColumn},
     };
+
+    use super::{DifferenceScan, MinusScan};
+
     use test_log::test;
 
     #[test]

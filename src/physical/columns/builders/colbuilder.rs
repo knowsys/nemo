@@ -1,5 +1,6 @@
-use super::Column;
 use std::fmt::Debug;
+
+use crate::physical::columns::columns::Column;
 
 /// Type for constructing columns.
 pub trait ColumnBuilder<'a, T>: Debug {

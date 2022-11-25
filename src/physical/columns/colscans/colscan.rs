@@ -1,16 +1,18 @@
 use super::{
-    column_scan::ColumnScan, DifferenceScan, EqualColumnScan, EqualValueScan,
-    GenericColumnScanEnum, MinusScan, OrderedMergeJoin, PassScan, ReorderScan, RleColumnScan,
-    UnionScan,
+    DifferenceScan, EqualColumnScan, EqualValueScan, GenericColumnScanEnum, MinusScan,
+    OrderedMergeJoin, PassScan, ReorderScan, UnionScan,
 };
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
-    physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
+    physical::{
+        columns::columns::RleColumnScan,
+        datatypes::{ColumnDataType, DataValueT, Double, Float},
+    },
 };
 use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 /// Iterator for a sorted interval of values that also stores the current position
-pub trait ColumnScan: Debug + Iterator {
+pub trait ColScan: Debug + Iterator {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item>;
@@ -232,7 +234,7 @@ where
     }
 }
 
-impl<'a, T> ColumnScan for RangedColumnScanEnum<'a, T>
+impl<'a, T> ColScan for RangedColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -247,12 +249,7 @@ where
     fn reset(&mut self) {
         forward_to_column_scan!(self, reset)
     }
-}
 
-impl<'a, T> RangedColumnScan for RangedColumnScanEnum<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
     fn pos(&self) -> Option<usize> {
         forward_to_column_scan!(self, pos)
     }
@@ -362,7 +359,7 @@ where
     }
 }
 
-/// enum for RangedColumnScan for underlying data type
+/// enum for ColScan for underlying data type
 #[derive(Debug)]
 pub enum RangedColumnScanT<'a> {
     /// Case u64
@@ -411,7 +408,7 @@ impl<'a> Iterator for RangedColumnScanT<'a> {
     }
 }
 
-impl<'a> ColumnScan for RangedColumnScanT<'a> {
+impl<'a> ColScan for RangedColumnScanT<'a> {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
         match self {
             Self::U64(cs) => match value {
@@ -436,9 +433,7 @@ impl<'a> ColumnScan for RangedColumnScanT<'a> {
     fn reset(&mut self) {
         forward_to_ranged_column_scan_cell!(self, reset)
     }
-}
 
-impl<'a> RangedColumnScan for RangedColumnScanT<'a> {
     fn pos(&self) -> Option<usize> {
         forward_to_ranged_column_scan_cell!(self, pos)
     }

@@ -1,17 +1,17 @@
 //! Holds the [Permutator] struct, which allows one to define a logical permutation of the content of index-based data structures
 
-use crate::physical::datatypes::ColumnDataType;
+use crate::physical::{
+    columns::{
+        builders::ColumnBuilder,
+        columns::{Column, ColumnEnum, ColumnT},
+    },
+    datatypes::ColumnDataType,
+};
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::ops::Range;
 
-use crate::{
-    error::Error,
-    physical::{
-        columns::{Column, ColumnBuilder, ColumnEnum, ColumnT},
-        datatypes::data_value::VecT,
-    },
-};
+use crate::{error::Error, physical::datatypes::data_value::VecT};
 
 /// Allows one to define a logical permutation of content of index-based data structures
 #[derive(Debug, Clone)]
@@ -224,7 +224,7 @@ impl Permutator {
 mod test {
     use super::*;
     use crate::physical::{
-        columns::{AdaptiveColumnBuilder, ColumnBuilder, VectorColumn},
+        columns::{builders::AdaptiveColumnBuilder, columns::VectorColumn},
         datatypes::{Double, Float},
     };
     use quickcheck_macros::quickcheck;

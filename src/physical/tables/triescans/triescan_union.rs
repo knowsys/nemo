@@ -1,10 +1,14 @@
-use super::{TableSchema, TrieScan, TrieScanEnum};
-use crate::physical::columns::{
-    ColumnScan, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT, UnionScan,
+use crate::physical::{
+    columns::colscans::{
+        ColScan, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT, UnionScan,
+    },
+    datatypes::{DataTypeName, Double, Float},
+    tables::tables::TableSchema,
 };
-use crate::physical::datatypes::{DataTypeName, Double, Float};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
+
+use super::{TrieScan, TrieScanEnum};
 
 /// Trie iterator representing a union between other trie iterators
 #[derive(Debug)]
@@ -138,11 +142,10 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieUnion;
-    use crate::physical::columns::RangedColumnScanT;
+    use crate::physical::columns::colscans::RangedColumnScanT;
     use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tables::{
-        IntervalTrieScan, Trie, TrieJoin, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
-    };
+    use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tables::triescans::{IntervalTrieScan, TrieJoin, TrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

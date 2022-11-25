@@ -1,11 +1,20 @@
 use num::ToPrimitive;
 
-use super::{TableSchema, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry};
-use crate::physical::columns::{
-    AdaptiveColumnBuilder, AdaptiveColumnBuilderT, ColumnBuilder, ColumnScan,
-    GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT,
+use crate::physical::{
+    columns::{
+        builders::{AdaptiveColumnBuilder, AdaptiveColumnBuilderT, ColumnBuilder},
+        colscans::ColScan,
+        columns::{GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT},
+    },
+    datatypes::DataTypeName,
+    tables::{
+        tables::TableSchema,
+        tries::{Trie, TrieSchema, TrieSchemaEntry},
+        triescans::TrieScan,
+    },
 };
-use crate::physical::datatypes::DataTypeName;
+
+use super::TrieScanEnum;
 
 /// Given a TrieScan iterator, materialize its content into a trie
 /// If not_empty is provided, the function will search for the first entry
@@ -145,11 +154,10 @@ pub fn scan_is_empty(trie_scan: &mut TrieScanEnum) -> bool {
 #[cfg(test)]
 mod test {
     use super::materialize;
-    use crate::physical::columns::Column;
+    use crate::physical::columns::columns::Column;
     use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tables::{
-        IntervalTrieScan, Trie, TrieJoin, TrieScanEnum, TrieSchema, TrieSchemaEntry,
-    };
+    use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tables::triescans::{IntervalTrieScan, TrieJoin, TrieScanEnum};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

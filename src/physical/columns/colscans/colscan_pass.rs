@@ -1,6 +1,7 @@
-use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
+
+use super::{colscan::ColScan, RangedColumnScanCell};
 
 /// Dummy Iterator that defers everything to its sub iterator
 #[derive(Debug)]
@@ -31,7 +32,7 @@ where
     }
 }
 
-impl<'a, T> ColumnScan for PassScan<'a, T>
+impl<'a, T> ColScan for PassScan<'a, T>
 where
     T: 'a + ColumnDataType + PartialOrd + Eq,
 {
@@ -46,12 +47,7 @@ where
     fn reset(&mut self) {
         self.reference_scan.reset()
     }
-}
 
-impl<'a, T> RangedColumnScan for PassScan<'a, T>
-where
-    T: 'a + ColumnDataType + PartialOrd + Eq,
-{
     fn pos(&self) -> Option<usize> {
         self.reference_scan.pos()
     }
@@ -62,11 +58,12 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::PassScan;
     use crate::physical::columns::{
-        Column, ColumnScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum,
-        VectorColumn,
+        colscans::{ColScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum},
+        columns::{Column, VectorColumn},
     };
+
+    use super::PassScan;
     use test_log::test;
 
     #[test]

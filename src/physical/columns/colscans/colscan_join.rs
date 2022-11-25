@@ -1,8 +1,10 @@
 use crate::physical::datatypes::ColumnDataType;
 
-use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell};
 use std::fmt::Debug;
 use std::ops::Range;
+
+use super::colscan::ColScan;
+use super::RangedColumnScanCell;
 
 /// Implementation of [`ColumnScan`] for the result of joining a list of [`ColumnScan`] structs.
 #[derive(Debug)]
@@ -80,7 +82,7 @@ where
     }
 }
 
-impl<'a, T> ColumnScan for OrderedMergeJoin<'a, T>
+impl<'a, T> ColScan for OrderedMergeJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -110,36 +112,26 @@ where
         self.active_max = None;
         self.current = None;
     }
-}
 
-// We “implement” `RangedColumnScan` since we want to do
-// `OrderedMergeJoin`s over `OrderedMergeJoin`s, mut implementing
-// `pos` and `narrow` would require materialisation, which we want to
-// avoid. These panics could likely be avoided by restructuring the
-// trait hierarchy.
-impl<'a, T> RangedColumnScan for OrderedMergeJoin<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
     fn pos(&self) -> Option<usize> {
-        unimplemented!(
-            "This function only exists because RangedColumnScans cannnot be ColumnScans"
-        );
+        unimplemented!("This functions is not implemented for column operators");
     }
     fn narrow(&mut self, _interval: Range<usize>) {
-        unimplemented!(
-            "This function only exists because RangedColumnScans cannnot be ColumnScans"
-        );
+        unimplemented!("This functions is not implemented for column operators");
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::physical::columns::{GenericColumnScanEnum, RangedColumnScanEnum};
-
-    use super::super::{GenericColumnScan, VectorColumn};
-    use super::{ColumnScan, OrderedMergeJoin}; // < TODO: is this a nice way to write this use?
     use test_log::test;
+
+    use crate::physical::columns::{
+        colscans::{
+            ColScan, GenericColumnScan, GenericColumnScanEnum, OrderedMergeJoin,
+            RangedColumnScanEnum,
+        },
+        columns::VectorColumn,
+    };
 
     #[test]
     fn test_u64_simple_join<'a>() {

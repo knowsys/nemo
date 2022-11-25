@@ -2,7 +2,7 @@
 
 /// Module for defining [`ColumnScan`]
 pub mod colscan;
-pub use colscan::ColumnScan;
+pub use colscan::ColScan;
 pub use colscan::RangedColumnScanCell;
 pub use colscan::RangedColumnScanEnum;
 pub use colscan::RangedColumnScanT;

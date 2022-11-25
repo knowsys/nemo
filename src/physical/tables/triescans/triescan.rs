@@ -1,13 +1,12 @@
-use super::{
-    Table, TableSchema, Trie, TrieDifference, TrieJoin, TrieProject, TrieSelectEqual,
-    TrieSelectValue, TrieUnion,
-};
-use crate::generate_forwarder;
-use crate::physical::columns::{
-    Column, ColumnScan, IntervalColumn, RangedColumnScan, RangedColumnScanT,
-};
+use crate::physical::columns::colscans::{ColScan, RangedColumnScanT};
+use crate::physical::columns::columns::IntervalColumn;
+use crate::physical::tables::tables::{Table, TableSchema};
+use crate::physical::tables::tries::Trie;
+use crate::{generate_forwarder, physical::columns::columns::Column};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
+
+use super::{TrieDifference, TrieJoin, TrieProject, TrieSelectEqual, TrieSelectValue, TrieUnion};
 
 /// Iterator for a Trie datastructure.
 /// Allows for vertical traversal through the tree and can return
@@ -148,10 +147,10 @@ impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::super::trie::{Trie, TrieSchema, TrieSchemaEntry};
     use super::{IntervalTrieScan, TrieScan};
-    use crate::physical::columns::RangedColumnScanT;
+    use crate::physical::columns::colscans::RangedColumnScanT;
     use crate::physical::datatypes::DataTypeName;
+    use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

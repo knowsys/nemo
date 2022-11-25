@@ -1,15 +1,14 @@
 use std::collections::VecDeque;
 
 use crate::physical::{
-    columns::{
-        AdaptiveColumnBuilder, Column, ColumnBuilder, GenericIntervalColumn, IntervalColumnEnum,
-        IntervalColumnT,
-    },
+    columns::builders::{AdaptiveColumnBuilder, ColumnBuilder},
+    columns::columns::{Column, GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT},
     datatypes::{DataTypeName, DataValueT, Double, Float},
-    tables::TrieSchema,
+    tables::{
+        tables::{Table, TableSchema},
+        tries::{Trie, TrieSchema, TrieSchemaEntry},
+    },
 };
-
-use super::{Table, TableSchema, Trie, TrieSchemaEntry};
 
 /// Add columns consisting of only a constant to a trie
 /// Values are given as a slice of [`DataValueT`] vectors
@@ -136,10 +135,14 @@ pub fn trie_add_duplicates(trie: Trie, indices: &[Vec<usize>]) -> Trie {
 
 #[cfg(test)]
 mod test {
+
     use crate::physical::{
-        columns::RangedColumnScanT,
+        columns::colscans::RangedColumnScanT,
         datatypes::{DataTypeName, DataValueT},
-        tables::{IntervalTrieScan, Trie, TrieScan, TrieSchema, TrieSchemaEntry},
+        tables::{
+            tries::{Trie, TrieSchema, TrieSchemaEntry},
+            triescans::{IntervalTrieScan, TrieScan},
+        },
         util::make_gict,
     };
 

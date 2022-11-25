@@ -1,16 +1,18 @@
-use super::{
-    GenericColumnScanEnum, RangedColumnScan, RangedColumnScanEnum, RleColumn, VectorColumn,
-};
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
-    physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
+    physical::{
+        columns::colscans::{colscan::ColScan, RangedColumnScanEnum, GenericColumnScanEnum},
+        datatypes::{ColumnDataType, DataValueT, Double, Float},
+    },
 };
 use std::fmt::Debug;
+
+use super::{RleColumn, VectorColumn};
 
 /// Column of ordered values.
 pub trait Column<'a, T>: Debug + Clone {
     /// ColumnScan associated with the Column
-    type ColScan: 'a + RangedColumnScan<Item = T>;
+    type Scan: 'a + ColScan<Item = T>;
 
     /// Returns the number of entries in the column.
     fn len(&self) -> usize;
@@ -27,7 +29,7 @@ pub trait Column<'a, T>: Debug + Clone {
     fn get(&self, index: usize) -> T;
 
     /// Returns an iterator for this column.
-    fn iter(&'a self) -> Self::ColScan;
+    fn iter(&'a self) -> Self::Scan;
 }
 
 /// Enum for column implementations
@@ -47,7 +49,7 @@ impl<'a, T> Column<'a, T> for ColumnEnum<T>
 where
     T: 'a + ColumnDataType,
 {
-    type ColScan = RangedColumnScanEnum<'a, T>;
+    type Scan = RangedColumnScanEnum<'a, T>;
 
     fn len(&self) -> usize {
         forward_to_column!(self, len)
@@ -61,7 +63,7 @@ where
         forward_to_column!(self, get(index))
     }
 
-    fn iter(&'a self) -> Self::ColScan {
+    fn iter(&'a self) -> Self::Scan {
         match self {
             Self::VectorColumn(col) => RangedColumnScanEnum::GenericColumnScan(
                 GenericColumnScanEnum::VectorColumn(col.iter()),

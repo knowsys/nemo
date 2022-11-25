@@ -1,4 +1,4 @@
-use super::{ColumnScan, RangedColumnScan, RangedColumnScanCell};
+use super::{colscan::ColScan, RangedColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
@@ -56,7 +56,7 @@ where
     }
 }
 
-impl<'a, T> ColumnScan for EqualColumnScan<'a, T>
+impl<'a, T> ColScan for EqualColumnScan<'a, T>
 where
     T: 'a + ColumnDataType + Eq,
 {
@@ -77,31 +77,23 @@ where
     fn reset(&mut self) {
         self.current_value = None;
     }
-}
 
-impl<'a, T> RangedColumnScan for EqualColumnScan<'a, T>
-where
-    T: 'a + ColumnDataType + Eq,
-{
     fn pos(&self) -> Option<usize> {
-        unimplemented!(
-            "This function only exists because RangedColumnScans cannnot be ColumnScans"
-        );
+        unimplemented!("This functions is not implemented for column operators");
     }
     fn narrow(&mut self, _interval: Range<usize>) {
-        unimplemented!(
-            "This function only exists because RangedColumnScans cannnot be ColumnScans"
-        );
+        unimplemented!("This functions is not implemented for column operators");
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::EqualColumnScan;
     use crate::physical::columns::{
-        Column, ColumnScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum,
-        VectorColumn,
+        colscans::{ColScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum},
+        columns::{Column, VectorColumn},
     };
+
+    use super::EqualColumnScan;
     use test_log::test;
 
     #[test]

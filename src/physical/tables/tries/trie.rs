@@ -1,11 +1,13 @@
-use super::{Table, TableSchema};
 use crate::logical::Permutator;
-use crate::physical::columns::{
-    AdaptiveColumnBuilder, AdaptiveColumnBuilderT, Column, ColumnBuilder, GenericIntervalColumn,
-    IntervalColumn, IntervalColumnEnum, IntervalColumnT,
+use crate::physical::columns::builders::{
+    AdaptiveColumnBuilder, AdaptiveColumnBuilderT, ColumnBuilder,
+};
+use crate::physical::columns::columns::{
+    Column, GenericIntervalColumn, IntervalColumn, IntervalColumnEnum, IntervalColumnT,
 };
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
+use crate::physical::tables::tables::{Table, TableSchema};
 use std::fmt;
 use std::fmt::Debug;
 use std::iter;
@@ -452,7 +454,7 @@ impl Table for Trie {
 mod test {
     use super::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
-    use crate::physical::tables::table::Table;
+    use crate::physical::tables::tables::Table;
     use crate::physical::util::make_gict;
     use test_log::test;
 

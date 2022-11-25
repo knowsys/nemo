@@ -1,12 +1,20 @@
-use super::{Table, TableSchema, Trie, TrieScan, TrieSchema, TrieSchemaEntry};
-use crate::physical::columns::{
-    Column, ColumnScan, IntervalColumn, IntervalColumnEnum, IntervalColumnT, RangedColumnScan,
-    RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT, ReorderScan,
+use crate::physical::{
+    columns::{
+        colscans::{
+            ColScan, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT, ReorderScan,
+        },
+        columns::{Column, IntervalColumn, IntervalColumnEnum, IntervalColumnT},
+    },
+    datatypes::{ColumnDataType, DataTypeName},
+    tables::tables::{Table, TableSchema},
+    tables::tries::{Trie, TrieSchema, TrieSchemaEntry},
 };
-use crate::physical::datatypes::{ColumnDataType, DataTypeName};
+
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
+
+use super::TrieScan;
 
 /// Helper function which, given a continous range, expands it in such a way
 /// that all of the child nodes are covered as well
@@ -256,12 +264,12 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieProject;
-    use crate::physical::columns::Column;
+    use crate::physical::columns::columns::Column;
     use crate::physical::datatypes::{DataTypeName, DataValueT};
     use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
-    use crate::physical::tables::{
-        materialize, Table, Trie, TrieScanEnum, TrieSchema, TrieSchemaEntry,
-    };
+    use crate::physical::tables::tables::Table;
+    use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tables::triescans::{materialize, TrieScanEnum};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

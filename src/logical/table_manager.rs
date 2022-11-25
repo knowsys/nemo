@@ -8,9 +8,11 @@ use crate::io::csv::read;
 use crate::meta::TimedCode;
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
-use crate::physical::tables::{
-    materialize, IntervalTrieScan, Table, Trie, TrieDifference, TrieJoin, TrieProject, TrieScan,
-    TrieScanEnum, TrieSchema, TrieSchemaEntry, TrieSelectEqual, TrieSelectValue, TrieUnion,
+use crate::physical::tables::tables::Table;
+use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
+use crate::physical::tables::triescans::{
+    materialize, IntervalTrieScan, TrieDifference, TrieJoin, TrieProject, TrieScan, TrieScanEnum,
+    TrieSelectEqual, TrieSelectValue, TrieUnion,
 };
 use crate::physical::util::cover_interval;
 use csv::ReaderBuilder;

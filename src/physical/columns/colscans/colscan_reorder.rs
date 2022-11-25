@@ -1,8 +1,10 @@
-use super::{Column, ColumnEnum, ColumnScan, RangedColumnScan};
 use crate::logical::Permutator;
+use crate::physical::columns::columns::{Column, ColumnEnum};
 use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
+
+use super::colscan::ColScan;
 
 // TODO: Maybe this should only have Optional<Permutator>
 //       for cases where data happens to be sorted already
@@ -92,7 +94,7 @@ where
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> ColumnScan for ReorderScan<'a, T>
+impl<'a, T: Ord + Copy + Debug> ColScan for ReorderScan<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -114,12 +116,7 @@ where
         self.current_value = None;
         self.same_value_count = 0;
     }
-}
 
-impl<'a, T: Ord + Copy + Debug> RangedColumnScan for ReorderScan<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
     fn pos(&self) -> Option<usize> {
         unimplemented!("Because of possible duplicates, use pos_multiple");
     }
@@ -130,8 +127,12 @@ where
 
 #[cfg(test)]
 mod test {
+    use crate::physical::columns::{
+        colscans::ColScan,
+        columns::{ColumnEnum, VectorColumn},
+    };
+
     use super::ReorderScan;
-    use crate::physical::columns::{ColumnEnum, ColumnScan, VectorColumn};
     use test_log::test;
 
     #[test]

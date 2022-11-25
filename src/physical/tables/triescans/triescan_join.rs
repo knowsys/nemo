@@ -1,11 +1,17 @@
-use super::{TableSchema, TrieScan, TrieScanEnum, TrieSchema};
-use crate::physical::columns::{
-    ColumnScan, OrderedMergeJoin, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT,
+use crate::physical::{
+    columns::colscans::{
+        ColScan, OrderedMergeJoin, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT,
+    },
+    datatypes::{DataTypeName, Double, Float},
+    tables::tables::TableSchema,
+    tables::tries::TrieSchema,
 };
-use crate::physical::datatypes::{DataTypeName, Double, Float};
+
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::iter::repeat;
+
+use super::{TrieScan, TrieScanEnum};
 
 /// Structure resulting from joining a set of tries (given as TrieJoins),
 /// which itself is a TrieJoin that can be used in such a join
@@ -148,13 +154,17 @@ impl<'a> TrieScan<'a> for TrieJoin<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieJoin;
-    use crate::physical::columns::{
-        Column, ColumnEnum, GenericIntervalColumn, IntervalColumnEnum, RangedColumnScanT,
+    use crate::physical::columns::builders::{AdaptiveColumnBuilder, ColumnBuilder};
+    use crate::physical::columns::columns::{
+        Column, ColumnEnum, GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT,
+        VectorColumn,
     };
-    use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tables::{
-        materialize, IntervalTrieScan, Trie, TrieScan, TrieScanEnum, TrieSchema, TrieSchemaEntry,
+    use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tables::triescans::{
+        materialize, IntervalTrieScan, TrieScan, TrieScanEnum,
     };
+    use crate::physical::{columns::colscans::RangedColumnScanT, datatypes::DataTypeName};
+
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
@@ -743,10 +753,6 @@ mod test {
             vec![0, 3, 5, 7, 9, 12]
         );
     }
-
-    use crate::physical::columns::{
-        AdaptiveColumnBuilder, ColumnBuilder, IntervalColumnT, VectorColumn,
-    };
 
     #[test]
     fn test_dynamic() {
