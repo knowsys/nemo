@@ -11,10 +11,10 @@ use crate::{
 };
 use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
-/// Iterator for a sorted interval of values that also stores the current position
+/// Iterator for a sorted interval of values
 pub trait ColScan: Debug + Iterator {
     /// Find the next value that is at least as large as the given value,
-    /// advance the iterator to this position, and return the value.
+    /// advance the iterator to this position, and return the value if it exists.
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item>;
 
     /// Return the value at the current position, if any.
@@ -27,7 +27,6 @@ pub trait ColScan: Debug + Iterator {
     /// The intention of this function is to use it after the internal iterators have been reset from the outside
     /// (e.g. by calling down() on the TrieScan that owns the sub iterators).
     /// So this call should be present in every implementation of the down() method of a TrieScan.
-    /// TODO: Think about ways to avoid this
     fn reset(&mut self);
 
     /// Return the current position of this iterator, or None if the iterator is
@@ -65,6 +64,8 @@ where
     /// Case ColScanUnion
     ColScanUnion(ColScanUnion<'a, T>),
 }
+
+/// The following impl statements allow converting from a specific [`ColScan`] into a gerneral [`ColScanEnum`]
 
 impl<'a, T> From<ColScanGenericEnum<'a, T>> for ColScanEnum<'a, T>
 where
@@ -156,47 +157,36 @@ where
     }
 }
 
-generate_forwarder!(forward_to_column_scan;
-                    ColScanGeneric,
-                    ColumnRleScan,
-                    ColScanJoin,
-                    ColScanReorder, 
-                    ColScanEqualColumn, 
-                    ColScanEqualValue,
-                    ColScanPass,
-                    ColScanFollow,
-                    ColScanMinus,
-                    ColScanUnion);
-
+/// The following block makes functions which are specific to one variant of a [`ColScanEnum`]
+/// available on the whole [`ColScanEnum`]
 impl<'a, T> ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
     /// Return all positions in the underlying column the cursor is currently at
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
-        match self {
-            Self::ColScanReorder(cs) => cs.pos_multiple(),
-            _ => {
-                unimplemented!("pos_multiple is only available for ColScanReorder")
-            }
+        if let Self::ColScanReorder(cs) = self {
+            cs.pos_multiple()
+        } else {
+            unimplemented!("pos_multiple is only available for ColScanReorder")
         }
     }
 
     /// Set iterator to a set of possibly disjoint ranged
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
-        match self {
-            Self::ColScanReorder(cs) => cs.narrow_ranges(intervals),
-            _ => {
-                unimplemented!("narrow_ranges is only available for ColScanReorder")
-            }
+        if let Self::ColScanReorder(cs) = self {
+            cs.narrow_ranges(intervals)
+        } else {
+            unimplemented!("narrow_ranges is only available for ColScanReorder")
         }
     }
 
     /// For ColScanFollow, returns whether its scans point to the same value
     pub fn is_equal(&self) -> bool {
-        match self {
-            Self::ColScanFollow(cs) => cs.is_equal(),
-            _ => unimplemented!("is_equal is only available for ColScanFollow"),
+        if let Self::ColScanFollow(cs) = self {
+            cs.is_equal()
+        } else {
+            unimplemented!("is_equal is only available for ColScanFollow")
         }
     }
 
@@ -223,6 +213,22 @@ where
     }
 }
 
+// Generate a macro forward_to_colscan!, which takes a [`ColumnScanEnum`] and a function as arguments
+// and unfolds into a `match` statement that calls the variant specific version of that function.
+// Each new variant of a [`ColumnScanEnum`] must be added here.
+// See `physical/util.rs` for a more detailed description of this macro.
+generate_forwarder!(forward_to_colscan;
+    ColScanGeneric,
+    ColumnRleScan,
+    ColScanJoin,
+    ColScanReorder, 
+    ColScanEqualColumn, 
+    ColScanEqualValue,
+    ColScanPass,
+    ColScanFollow,
+    ColScanMinus,
+    ColScanUnion);
+
 impl<'a, T> Iterator for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
@@ -230,7 +236,7 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        forward_to_column_scan!(self, next)
+        forward_to_colscan!(self, next)
     }
 }
 
@@ -239,23 +245,23 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
-        forward_to_column_scan!(self, seek(value))
+        forward_to_colscan!(self, seek(value))
     }
 
     fn current(&mut self) -> Option<Self::Item> {
-        forward_to_column_scan!(self, current)
+        forward_to_colscan!(self, current)
     }
 
     fn reset(&mut self) {
-        forward_to_column_scan!(self, reset)
+        forward_to_colscan!(self, reset)
     }
 
     fn pos(&self) -> Option<usize> {
-        forward_to_column_scan!(self, pos)
+        forward_to_colscan!(self, pos)
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        forward_to_column_scan!(self, narrow(interval))
+        forward_to_colscan!(self, narrow(interval))
     }
 }
 
@@ -359,7 +365,7 @@ where
     }
 }
 
-/// enum for ColScan for underlying data type
+/// Enum for [`ColScan`] for underlying data type
 #[derive(Debug)]
 pub enum ColScanT<'a> {
     /// Case u64
@@ -370,33 +376,37 @@ pub enum ColScanT<'a> {
     Double(ColScanCell<'a, Double>),
 }
 
-generate_datatype_forwarder!(forward_to_ranged_column_scan_cell);
+// Generate a macro forward_to_colscan_cell!, which takes a [`ColScanT`] and a function as arguments
+// and unfolds into a `match` statement that calls the datatype specific variant that function.
+// See `physical/util.rs` for a more detailed description of this macro.
+generate_datatype_forwarder!(forward_to_colscan_cell);
+
 impl<'a> ColScanT<'a> {
     /// Return all positions in the underlying column the cursor is currently at
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
-        forward_to_ranged_column_scan_cell!(self, pos_multiple)
+        forward_to_colscan_cell!(self, pos_multiple)
     }
 
     /// Set iterator to a set of possibly disjoint ranged
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
-        forward_to_ranged_column_scan_cell!(self, narrow_ranges(intervals))
+        forward_to_colscan_cell!(self, narrow_ranges(intervals))
     }
 
     /// For ColScanFollow, returns whether its scans point to the same value
     pub fn is_equal(&self) -> bool {
-        forward_to_ranged_column_scan_cell!(self, is_equal)
+        forward_to_colscan_cell!(self, is_equal)
     }
 
     /// Assumes that column scan is a union scan
     /// and returns a vector containing the positions of the scans with the smallest values
     pub fn get_smallest_scans(&self) -> &Vec<bool> {
-        forward_to_ranged_column_scan_cell!(self, get_smallest_scans)
+        forward_to_colscan_cell!(self, get_smallest_scans)
     }
 
     /// Assumes that column scan is a union scan
     /// Set a vector that indicates which scans are currently active and should be considered
     pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
-        forward_to_ranged_column_scan_cell!(self, set_active_scans(active_scans))
+        forward_to_colscan_cell!(self, set_active_scans(active_scans))
     }
 }
 
@@ -404,7 +414,7 @@ impl<'a> Iterator for ColScanT<'a> {
     type Item = DataValueT;
 
     fn next(&mut self) -> Option<Self::Item> {
-        forward_to_ranged_column_scan_cell!(self, next.map_to(DataValueT))
+        forward_to_colscan_cell!(self, next.map_to(DataValueT))
     }
 }
 
@@ -427,18 +437,18 @@ impl<'a> ColScan for ColScanT<'a> {
     }
 
     fn current(&mut self) -> Option<Self::Item> {
-        forward_to_ranged_column_scan_cell!(self, current.map_to(DataValueT))
+        forward_to_colscan_cell!(self, current.map_to(DataValueT))
     }
 
     fn reset(&mut self) {
-        forward_to_ranged_column_scan_cell!(self, reset)
+        forward_to_colscan_cell!(self, reset)
     }
 
     fn pos(&self) -> Option<usize> {
-        forward_to_ranged_column_scan_cell!(self, pos)
+        forward_to_colscan_cell!(self, pos)
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        forward_to_ranged_column_scan_cell!(self, narrow(interval))
+        forward_to_colscan_cell!(self, narrow(interval))
     }
 }
