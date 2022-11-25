@@ -173,7 +173,7 @@ struct RleElement<T> {
     increment: Step<T>,
 }
 
-/// Implementation of [`ColumnBuilder`] that allows the use of incremental run length encoding.
+/// Implementation of [`ColBuilder`] that allows the use of incremental run length encoding.
 #[derive(Debug, Default, PartialEq)]
 pub struct ColumnBuilderRle<T> {
     elements: Vec<RleElement<T>>,
