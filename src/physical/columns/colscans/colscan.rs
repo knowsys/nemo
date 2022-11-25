@@ -5,7 +5,7 @@ use super::{
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::{
-        columns::columns::RleColumnScan,
+        columns::columns::ColumnRleScan,
         datatypes::{ColumnDataType, DataValueT, Double, Float},
     },
 };
@@ -46,8 +46,8 @@ where
 {
     /// Case ColScanGeneric
     ColScanGeneric(ColScanGenericEnum<'a, T>),
-    /// Case RleColumnScan
-    RleColumnScan(RleColumnScan<'a, T>),
+    /// Case ColumnRleScan
+    ColumnRleScan(ColumnRleScan<'a, T>),
     /// Case ColScanJoin
     ColScanJoin(ColScanJoin<'a, T>),
     /// Case ColScanReorder
@@ -75,12 +75,12 @@ where
     }
 }
 
-impl<'a, T> From<RleColumnScan<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColumnRleScan<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: RleColumnScan<'a, T>) -> Self {
-        Self::RleColumnScan(cs)
+    fn from(cs: ColumnRleScan<'a, T>) -> Self {
+        Self::ColumnRleScan(cs)
     }
 }
 
@@ -158,7 +158,7 @@ where
 
 generate_forwarder!(forward_to_column_scan;
                     ColScanGeneric,
-                    RleColumnScan,
+                    ColumnRleScan,
                     ColScanJoin,
                     ColScanReorder, 
                     ColScanEqualColumn, 
