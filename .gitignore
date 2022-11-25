@@ -20,3 +20,4 @@ flycheck_*.el
 # projectiles files
 .projectile
 /.direnv/
+/test-files
