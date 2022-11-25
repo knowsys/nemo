@@ -1,7 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
-use stage2::physical::columns::{Column, ColumnScan, GenericColumnScan, RleColumn, VectorColumn};
+use stage2::physical::columns::{
+    colscans::{ColScan, GenericColumnScan},
+    columns::{Column, RleColumn, VectorColumn},
+};
 
 pub fn benchmark_seek(c: &mut Criterion) {
     let mut rng = Pcg64::seed_from_u64(21564);

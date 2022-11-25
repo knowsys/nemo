@@ -1,6 +1,9 @@
 use rand::prelude::*;
 use rand_pcg::Pcg64;
-use stage2::physical::columns::{ColumnScan, GenericColumnScan, VectorColumn};
+use stage2::physical::columns::{
+    colscans::{ColScan, GenericColumnScan},
+    columns::VectorColumn,
+};
 
 pub fn bench() {
     let mut rng = Pcg64::seed_from_u64(21564);
