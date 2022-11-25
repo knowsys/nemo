@@ -212,8 +212,8 @@ where
         self.elements.len()
     }
 
-    fn finalize_raw(self) -> RleColumn<T> {
-        RleColumn::from_rle_elements(self.elements)
+    fn finalize_raw(self) -> ColumnRle<T> {
+        ColumnRle::from_rle_elements(self.elements)
     }
 }
 
@@ -221,7 +221,7 @@ impl<'a, T> ColBuilder<'a, T> for ColBuilderRle<T>
 where
     T: 'a + ColumnDataType + Default,
 {
-    type Col = RleColumn<T>;
+    type Col = ColumnRle<T>;
 
     fn add(&mut self, value: T) {
         self.count += 1;
@@ -297,18 +297,18 @@ where
 
 /// Implementation of [`Column`] that allows the use of incremental run length encoding.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct RleColumn<T> {
+pub struct ColumnRle<T> {
     values: Vec<T>,
     end_indices: Vec<NonZeroUsize>,
     increments: Vec<Step<T>>,
 }
 
-impl<T> RleColumn<T>
+impl<T> ColumnRle<T>
 where
     T: ColumnDataType + Default,
 {
-    /// Constructs a new RleColumn from a vector of RleElements.
-    fn from_rle_elements(elements: Vec<RleElement<T>>) -> RleColumn<T> {
+    /// Constructs a new ColumnRle from a vector of RleElements.
+    fn from_rle_elements(elements: Vec<RleElement<T>>) -> ColumnRle<T> {
         let mut values: Vec<T> = vec![];
         let mut end_indices: Vec<NonZeroUsize> = vec![];
         let mut increments: Vec<Step<T>> = vec![];
@@ -324,15 +324,15 @@ where
             increments.push(e.increment);
         });
 
-        RleColumn {
+        ColumnRle {
             values,
             end_indices,
             increments,
         }
     }
 
-    /// Constructs a new RleColumn from a vector of the suitable type.
-    pub fn new(data: Vec<T>) -> RleColumn<T> {
+    /// Constructs a new ColumnRle from a vector of the suitable type.
+    pub fn new(data: Vec<T>) -> ColumnRle<T> {
         let mut builder = ColBuilderRle::new();
         for value in data {
             builder.add(value);
@@ -342,7 +342,7 @@ where
     }
 }
 
-impl<T> RleColumn<T>
+impl<T> ColumnRle<T>
 where
     T: ColumnDataType,
 {
@@ -386,11 +386,11 @@ where
     }
 }
 
-impl<'a, T> Column<'a, T> for RleColumn<T>
+impl<'a, T> Column<'a, T> for ColumnRle<T>
 where
     T: 'a + ColumnDataType,
 {
-    type Scan = RleColumnScan<'a, T>;
+    type Scan = ColumnRleScan<'a, T>;
 
     fn len(&self) -> usize {
         self.end_indices
@@ -411,14 +411,14 @@ where
     }
 
     fn iter(&'a self) -> Self::Scan {
-        RleColumnScan::new(self)
+        ColumnRleScan::new(self)
     }
 }
 
-/// Column Scan tailored towards RleColumns
+/// Column Scan tailored towards ColumnRles
 #[derive(Debug)]
-pub struct RleColumnScan<'a, T> {
-    column: &'a RleColumn<T>,
+pub struct ColumnRleScan<'a, T> {
+    column: &'a ColumnRle<T>,
     element_index: Option<usize>,
     increment_index: Option<usize>,
     current: Option<T>,
@@ -426,13 +426,13 @@ pub struct RleColumnScan<'a, T> {
     upper_bound_exclusive: (usize, usize), // element_index and increment index
 }
 
-impl<'a, T> RleColumnScan<'a, T>
+impl<'a, T> ColumnRleScan<'a, T>
 where
     T: ColumnDataType,
 {
-    /// Constructor for RleColumnScan
-    pub fn new(column: &'a RleColumn<T>) -> RleColumnScan<'a, T> {
-        RleColumnScan {
+    /// Constructor for ColumnRleScan
+    pub fn new(column: &'a ColumnRle<T>) -> ColumnRleScan<'a, T> {
+        ColumnRleScan {
             column,
             element_index: None,
             increment_index: None,
@@ -474,7 +474,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for RleColumnScan<'a, T>
+impl<'a, T> Iterator for ColumnRleScan<'a, T>
 where
     T: ColumnDataType,
 {
@@ -515,7 +515,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for RleColumnScan<'a, T>
+impl<'a, T> ColScan for ColumnRleScan<'a, T>
 where
     T: ColumnDataType,
 {
@@ -655,14 +655,14 @@ mod test {
     use std::num::NonZeroUsize;
     use test_log::test;
 
-    use super::{RleColumn, Step};
+    use super::{ColumnRle, Step};
 
     fn get_control_data() -> Vec<i64> {
         vec![2, 5, 6, 7, 8, 42, 4, 7, 10, 13, 16]
     }
 
-    fn get_test_column_i64() -> RleColumn<i64> {
-        RleColumn {
+    fn get_test_column_i64() -> ColumnRle<i64> {
+        ColumnRle {
             values: vec![2, 6, 42, 7],
             end_indices: vec![
                 NonZeroUsize::new(2).unwrap(),
@@ -679,8 +679,8 @@ mod test {
         }
     }
 
-    fn get_test_column_u32() -> RleColumn<u32> {
-        RleColumn {
+    fn get_test_column_u32() -> ColumnRle<u32> {
+        ColumnRle {
             values: vec![2, 6, 42, 7],
             end_indices: vec![
                 NonZeroUsize::new(2).unwrap(),
@@ -701,8 +701,8 @@ mod test {
         repeat(1).take(1000000).collect()
     }
 
-    fn get_test_column_with_inc_zero() -> RleColumn<u8> {
-        RleColumn {
+    fn get_test_column_with_inc_zero() -> ColumnRle<u8> {
+        ColumnRle {
             values: vec![1],
             end_indices: vec![NonZeroUsize::new(1000000).unwrap()],
             increments: vec![Step::zero()],
@@ -712,18 +712,18 @@ mod test {
     #[test]
     fn i64_construction() {
         let raw_data = get_control_data();
-        let expected: RleColumn<i64> = get_test_column_i64();
+        let expected: ColumnRle<i64> = get_test_column_i64();
 
-        let constructed: RleColumn<i64> = RleColumn::new(raw_data);
+        let constructed: ColumnRle<i64> = ColumnRle::new(raw_data);
         assert_eq!(expected, constructed);
     }
 
     #[test]
     fn u32_construction() {
         let raw_data: Vec<u32> = get_control_data().iter().map(|x| *x as u32).collect();
-        let expected: RleColumn<u32> = get_test_column_u32();
+        let expected: ColumnRle<u32> = get_test_column_u32();
 
-        let constructed: RleColumn<u32> = RleColumn::new(raw_data);
+        let constructed: ColumnRle<u32> = ColumnRle::new(raw_data);
         assert_eq!(expected, constructed);
     }
 
@@ -731,18 +731,18 @@ mod test {
     #[cfg_attr(miri, ignore)]
     fn col_with_zero_increment_construction() {
         let raw_data: Vec<u8> = get_control_data_with_inc_zero();
-        let expected: RleColumn<u8> = get_test_column_with_inc_zero();
+        let expected: ColumnRle<u8> = get_test_column_with_inc_zero();
 
-        let constructed: RleColumn<u8> = RleColumn::new(raw_data);
+        let constructed: ColumnRle<u8> = ColumnRle::new(raw_data);
         assert_eq!(expected, constructed);
     }
 
     #[test]
     fn is_empty() {
-        let c: RleColumn<i64> = get_test_column_i64();
+        let c: ColumnRle<i64> = get_test_column_i64();
         assert!(!c.is_empty());
 
-        let c_empty: RleColumn<i64> = RleColumn {
+        let c_empty: ColumnRle<i64> = ColumnRle {
             values: vec![],
             end_indices: vec![],
             increments: vec![],
@@ -753,14 +753,14 @@ mod test {
     #[test]
     fn len() {
         let control_data = get_control_data();
-        let c: RleColumn<i64> = get_test_column_i64();
+        let c: ColumnRle<i64> = get_test_column_i64();
         assert_eq!(c.len(), control_data.len());
     }
 
     #[test]
     fn get() {
         let control_data = get_control_data();
-        let c: RleColumn<i64> = get_test_column_i64();
+        let c: ColumnRle<i64> = get_test_column_i64();
 
         control_data
             .iter()
@@ -772,7 +772,7 @@ mod test {
     #[cfg_attr(miri, ignore)]
     fn get_with_large_index_on_inc_zero() {
         let control_data = get_control_data_with_inc_zero();
-        let c: RleColumn<u8> = get_test_column_with_inc_zero();
+        let c: ColumnRle<u8> = get_test_column_with_inc_zero();
 
         control_data
             .iter()
@@ -783,7 +783,7 @@ mod test {
     #[test]
     fn get_large_increment_overflowing_value_space_i64() {
         let control_data = vec![-i64::MAX, 0, i64::MAX];
-        let c = RleColumn::new(control_data.clone());
+        let c = ColumnRle::new(control_data.clone());
         control_data
             .iter()
             .enumerate()
@@ -797,7 +797,7 @@ mod test {
             Float::new(0.0).unwrap(),
             Float::new(f32::MAX).unwrap(),
         ];
-        let c = RleColumn::new(control_data.clone());
+        let c = ColumnRle::new(control_data.clone());
         control_data
             .iter()
             .enumerate()
@@ -811,7 +811,7 @@ mod test {
             Double::new(0.0).unwrap(),
             Double::new(f64::MAX).unwrap(),
         ];
-        let c = RleColumn::new(control_data.clone());
+        let c = ColumnRle::new(control_data.clone());
         control_data
             .iter()
             .enumerate()
@@ -821,7 +821,7 @@ mod test {
     #[quickcheck]
     #[cfg_attr(miri, ignore)]
     fn get_quickcheck_u64(raw_data: Vec<u64>) -> bool {
-        let col = RleColumn::new(raw_data.clone());
+        let col = ColumnRle::new(raw_data.clone());
 
         raw_data
             .iter()
@@ -832,7 +832,7 @@ mod test {
     #[quickcheck]
     #[cfg_attr(miri, ignore)]
     fn get_quickcheck_float(raw_data: Vec<Float>) -> bool {
-        let col = RleColumn::new(raw_data.clone());
+        let col = ColumnRle::new(raw_data.clone());
 
         raw_data
             .iter()
@@ -843,7 +843,7 @@ mod test {
     #[quickcheck]
     #[cfg_attr(miri, ignore)]
     fn get_quickcheck_double(raw_data: Vec<Double>) -> bool {
-        let col = RleColumn::new(raw_data.clone());
+        let col = ColumnRle::new(raw_data.clone());
 
         raw_data
             .iter()
@@ -854,7 +854,7 @@ mod test {
     #[test]
     fn iter() {
         let control_data: Vec<i64> = get_control_data();
-        let c: RleColumn<i64> = get_test_column_i64();
+        let c: ColumnRle<i64> = get_test_column_i64();
 
         let iterated_c: Vec<i64> = c.iter().collect();
         assert_eq!(iterated_c, control_data);
@@ -863,7 +863,7 @@ mod test {
     #[quickcheck]
     #[cfg_attr(miri, ignore)]
     fn iter_quickcheck_u64(raw_data: Vec<u64>) -> bool {
-        let col = RleColumn::new(raw_data.clone());
+        let col = ColumnRle::new(raw_data.clone());
 
         let iterated_col: Vec<u64> = col.iter().collect();
         iterated_col == raw_data
@@ -872,7 +872,7 @@ mod test {
     #[quickcheck]
     #[cfg_attr(miri, ignore)]
     fn iter_quickcheck_float(raw_data: Vec<Float>) -> bool {
-        let col = RleColumn::new(raw_data.clone());
+        let col = ColumnRle::new(raw_data.clone());
 
         let iterated_col: Vec<Float> = col.iter().collect();
         iterated_col == raw_data
@@ -881,7 +881,7 @@ mod test {
     #[quickcheck]
     #[cfg_attr(miri, ignore)]
     fn iter_quickcheck_double(raw_data: Vec<Double>) -> bool {
-        let col = RleColumn::new(raw_data.clone());
+        let col = ColumnRle::new(raw_data.clone());
 
         let iterated_col: Vec<Double> = col.iter().collect();
         iterated_col == raw_data
@@ -889,7 +889,7 @@ mod test {
 
     #[test]
     fn seek_and_get_pos() {
-        let seek_test_col = RleColumn {
+        let seek_test_col = ColumnRle {
             values: vec![2, 22],
             end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
             increments: vec![Step::Increment(5), Step::Increment(1)],
@@ -923,7 +923,7 @@ mod test {
 
     #[test]
     fn next_and_seek_and_get_pos_on_narrowed_column() {
-        let seek_test_col = RleColumn {
+        let seek_test_col = ColumnRle {
             values: vec![2, 22],
             end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
             increments: vec![Step::Increment(5), Step::Increment(1)],
@@ -974,7 +974,7 @@ mod test {
             .get(raw_data.binary_search(&target).unwrap_or_else(|err| err))
             .copied();
 
-        let col = RleColumn::new(raw_data);
+        let col = ColumnRle::new(raw_data);
         let seek_result = col.iter().seek(target);
 
         seek_result == expected_output
@@ -989,7 +989,7 @@ mod test {
             .get(raw_data.binary_search(&target).unwrap_or_else(|err| err))
             .copied();
 
-        let col = RleColumn::new(raw_data);
+        let col = ColumnRle::new(raw_data);
         let seek_result = col.iter().seek(target);
 
         seek_result == expected_output
@@ -1004,7 +1004,7 @@ mod test {
             .get(raw_data.binary_search(&target).unwrap_or_else(|err| err))
             .copied();
 
-        let col = RleColumn::new(raw_data);
+        let col = ColumnRle::new(raw_data);
         let seek_result = col.iter().seek(target);
 
         seek_result == expected_output

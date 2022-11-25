@@ -152,8 +152,8 @@ mod test {
     use super::TrieJoin;
     use crate::physical::columns::builders::{ColBuilder, ColBuilderAdaptive};
     use crate::physical::columns::columns::{
-        Column, ColumnEnum, GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT,
-        VectorColumn,
+        Column, ColumnEnum, ColumnVector, IntervalColumnEnum, IntervalColumnGeneric,
+        IntervalColumnT,
     };
     use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::tables::triescans::{
@@ -767,15 +767,15 @@ mod test {
             datatype: DataTypeName::U64,
         }]);
 
-        let built_interval_col = GenericIntervalColumn::<u64>::new(
+        let built_interval_col = IntervalColumnGeneric::<u64>::new(
             builder.finalize(),
-            ColumnEnum::VectorColumn(VectorColumn::new(vec![0])),
+            ColumnEnum::ColumnVector(ColumnVector::new(vec![0])),
         );
 
         let my_trie = Trie::new(
             schema,
             vec![IntervalColumnT::U64(
-                IntervalColumnEnum::GenericIntervalColumn(built_interval_col),
+                IntervalColumnEnum::IntervalColumnGeneric(built_interval_col),
             )],
         );
 

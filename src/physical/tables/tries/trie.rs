@@ -1,7 +1,7 @@
 use crate::logical::Permutator;
 use crate::physical::columns::builders::{ColBuilder, ColBuilderAdaptive, ColBuilderAdaptiveT};
 use crate::physical::columns::columns::{
-    Column, GenericIntervalColumn, IntervalColumn, IntervalColumnEnum, IntervalColumnT,
+    Column, IntervalColumn, IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT,
 };
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
@@ -292,7 +292,7 @@ impl Table for Trie {
             ($col_builder:ident, $interval_builder:ident; $($variant:ident);+) => {
                 match $col_builder {
                     $(ColBuilderAdaptiveT::$variant(vec) => IntervalColumnT::$variant(
-                    IntervalColumnEnum::GenericIntervalColumn(GenericIntervalColumn::new(
+                    IntervalColumnEnum::IntervalColumnGeneric(IntervalColumnGeneric::new(
                         vec.finalize(),
                         $interval_builder.finalize(),
                     )),
@@ -406,7 +406,7 @@ impl Table for Trie {
             ($col_builder:ident, $interval_builder:ident; $($variant:ident);+) => {
                 match $col_builder {
                     $(ColBuilderAdaptiveT::$variant(data_col) => IntervalColumnT::$variant(
-                    IntervalColumnEnum::GenericIntervalColumn(GenericIntervalColumn::new(
+                    IntervalColumnEnum::IntervalColumnGeneric(IntervalColumnGeneric::new(
                         data_col.finalize(),
                         $interval_builder.finalize(),
                     )),

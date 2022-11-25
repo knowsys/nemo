@@ -6,15 +6,15 @@ pub use column::Column;
 pub use column::ColumnEnum;
 pub use column::ColumnT;
 
-/// Module for defining [`VectorColumn`]
+/// Module for defining [`ColumnVector`]
 pub mod column_vector;
-pub use column_vector::VectorColumn;
+pub use column_vector::ColumnVector;
 
-/// Module for defining [`RleColumn`]
+/// Module for defining [`ColumnRle`]
 pub mod column_rle;
 pub use column_rle::ColBuilderRle;
-pub use column_rle::RleColumn;
-pub use column_rle::RleColumnScan;
+pub use column_rle::ColumnRle;
+pub use column_rle::ColumnRleScan;
 
 /// Module for defining [`IntervalColumn`] and [`IntervalColumnT`]
 pub mod interval_column;
@@ -22,6 +22,6 @@ pub use interval_column::IntervalColumn;
 pub use interval_column::IntervalColumnEnum;
 pub use interval_column::IntervalColumnT;
 
-/// Module for defining [`GenericIntervalColumn`]
+/// Module for defining [`IntervalColumnGeneric`]
 pub mod interval_column_generic;
-pub use interval_column_generic::GenericIntervalColumn;
+pub use interval_column_generic::IntervalColumnGeneric;

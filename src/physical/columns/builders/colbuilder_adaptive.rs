@@ -1,5 +1,5 @@
 use crate::physical::{
-    columns::columns::{ColBuilderRle, Column, ColumnEnum, VectorColumn},
+    columns::columns::{ColBuilderRle, Column, ColumnEnum, ColumnVector},
     datatypes::{ColumnDataType, DataTypeName, DataValueT, Double, Float},
 };
 use std::fmt::Debug;
@@ -15,8 +15,8 @@ const TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS: usize = 3; // 3
 #[derive(Debug, PartialEq)]
 enum ColBuilderType<T> {
     Undecided(Option<ColBuilderRle<T>>), // by default we start building an rle column to evaluate memory consumption
-    VectorColumn(Vec<T>),
-    RleColumn(ColBuilderRle<T>),
+    ColumnVector(Vec<T>),
+    ColumnRle(ColBuilderRle<T>),
 }
 
 impl<T> Default for ColBuilderType<T> {
@@ -50,10 +50,10 @@ where
                 .expect("this is only None from this take() call until the end of this method");
 
             if rle_builder.avg_length_of_rle_elements() > TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS {
-                self.builder = ColBuilderType::RleColumn(rle_builder);
+                self.builder = ColBuilderType::ColumnRle(rle_builder);
             } else {
                 let rle_column = rle_builder.finalize();
-                self.builder = ColBuilderType::VectorColumn(rle_column.iter().collect());
+                self.builder = ColBuilderType::ColumnVector(rle_column.iter().collect());
             }
         }
     }
@@ -73,8 +73,8 @@ where
         }
 
         match &mut self.builder {
-            ColBuilderType::VectorColumn(vec) => vec.push(value),
-            ColBuilderType::RleColumn(rle_builder) => rle_builder.add(value),
+            ColBuilderType::ColumnVector(vec) => vec.push(value),
+            ColBuilderType::ColumnRle(rle_builder) => rle_builder.add(value),
 
             // we only build the rle if still undecided and then evaluate the compression ration by
             // the length of the rle elements
@@ -89,8 +89,8 @@ where
         self.decide_column_type();
 
         match self.builder {
-            ColBuilderType::VectorColumn(vec) => Self::Col::VectorColumn(VectorColumn::new(vec)),
-            ColBuilderType::RleColumn(rle_builder) => Self::Col::RleColumn(rle_builder.finalize()),
+            ColBuilderType::ColumnVector(vec) => Self::Col::ColumnVector(ColumnVector::new(vec)),
+            ColBuilderType::ColumnRle(rle_builder) => Self::Col::ColumnRle(rle_builder.finalize()),
             ColBuilderType::Undecided(_) => {
                 unreachable!("column type should have been decided here")
             }
@@ -99,8 +99,8 @@ where
 
     fn count(&self) -> usize {
         match &self.builder {
-            ColBuilderType::VectorColumn(vec) => vec.len(),
-            ColBuilderType::RleColumn(rle_builder) => rle_builder.count(),
+            ColBuilderType::ColumnVector(vec) => vec.len(),
+            ColBuilderType::ColumnRle(rle_builder) => rle_builder.count(),
             ColBuilderType::Undecided(builder) => builder
                 .as_ref()
                 .expect("Should never be None on the outside")
@@ -237,7 +237,7 @@ mod test {
         acb.decide_column_type();
         let builder = acb.builder;
 
-        assert!(matches!(builder, ColBuilderType::VectorColumn(_)));
+        assert!(matches!(builder, ColBuilderType::ColumnVector(_)));
     }
 
     #[test]
@@ -247,7 +247,7 @@ mod test {
         acb.decide_column_type();
         let builder = acb.builder;
 
-        assert!(matches!(builder, ColBuilderType::RleColumn(_)));
+        assert!(matches!(builder, ColBuilderType::ColumnRle(_)));
     }
 
     #[test]

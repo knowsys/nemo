@@ -129,7 +129,7 @@ where
 mod test {
     use crate::physical::columns::{
         colscans::ColScan,
-        columns::{ColumnEnum, VectorColumn},
+        columns::{ColumnEnum, ColumnVector},
     };
 
     use super::ColScanReorder;
@@ -138,7 +138,7 @@ mod test {
     #[test]
     fn test_single_range() {
         let values: Vec<u64> = vec![0, 2, 1, 7, 4, 9, 12, 8, 4, 7, 4, 14];
-        let column = ColumnEnum::VectorColumn(VectorColumn::new(values));
+        let column = ColumnEnum::ColumnVector(ColumnVector::new(values));
 
         let mut scan = ColScanReorder::narrowed(&column, vec![3..9]);
 
@@ -161,7 +161,7 @@ mod test {
     #[test]
     fn test_multiple_ranges() {
         let values: Vec<u64> = vec![0, 2, 1, 7, 4, 9, 12, 8, 4, 7, 4, 14];
-        let column = ColumnEnum::VectorColumn(VectorColumn::new(values));
+        let column = ColumnEnum::ColumnVector(ColumnVector::new(values));
 
         let mut scan = ColScanReorder::narrowed(&column, vec![1..5, 7..11]);
 

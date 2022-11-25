@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use crate::physical::{
     columns::builders::{ColBuilder, ColBuilderAdaptive},
-    columns::columns::{Column, GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT},
+    columns::columns::{Column, IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT},
     datatypes::{DataTypeName, DataValueT, Double, Float},
     tables::{
         tables::{Table, TableSchema},
@@ -50,12 +50,12 @@ pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
                 ($value:ident, $variant:ident, $type:ty, $zero:expr) => {{
                     let target_length = gap_index.checked_sub(1).map(|i| trie.get_column(i).len()).unwrap_or(1);
 
-                    // TODO: if this is performance critical, the RleColumn should get an extra constructor for sequences of fixed increments
+                    // TODO: if this is performance critical, the ColumnRle should get an extra constructor for sequences of fixed increments
                     let new_data_column = std::iter::repeat($value).take(target_length).collect::<ColBuilderAdaptive<$type>>().finalize();
                     let new_interval_column = (0..target_length).collect::<ColBuilderAdaptive<usize>>().finalize();
 
                     new_columns.push_front(IntervalColumnT::$variant(
-                        IntervalColumnEnum::GenericIntervalColumn(GenericIntervalColumn::new(
+                        IntervalColumnEnum::IntervalColumnGeneric(IntervalColumnGeneric::new(
                             new_data_column,
                             new_interval_column,
                         )),

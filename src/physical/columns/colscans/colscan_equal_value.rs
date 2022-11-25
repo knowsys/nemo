@@ -86,7 +86,7 @@ where
 mod test {
     use crate::physical::columns::{
         colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
-        columns::{Column, VectorColumn},
+        columns::{Column, ColumnVector},
     };
 
     use super::ColScanEqualValue;
@@ -95,9 +95,9 @@ mod test {
 
     #[test]
     fn test_u64() {
-        let col = VectorColumn::new(vec![1u64, 4, 8]);
+        let col = ColumnVector::new(vec![1u64, 4, 8]);
         let col_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(col.iter()),
+            ColScanGenericEnum::ColumnVector(col.iter()),
         ));
 
         let mut equal_scan = ColScanEqualValue::new(&col_iter, 4);
@@ -108,7 +108,7 @@ mod test {
         assert_eq!(equal_scan.current(), None);
 
         let col_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(col.iter()),
+            ColScanGenericEnum::ColumnVector(col.iter()),
         ));
         let mut equal_scan = ColScanEqualValue::new(&col_iter, 7);
         assert_eq!(equal_scan.current(), None);

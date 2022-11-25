@@ -6,19 +6,19 @@ use super::Column;
 
 /// Simple implementation of [`Column`] that uses Vec to store data.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VectorColumn<T> {
+pub struct ColumnVector<T> {
     data: Vec<T>,
 }
 
-impl<T: Debug + Copy + Ord> VectorColumn<T> {
-    /// Constructs a new VectorColumn from a vector of the suitable type.
-    pub fn new(data: Vec<T>) -> VectorColumn<T> {
-        VectorColumn { data }
+impl<T: Debug + Copy + Ord> ColumnVector<T> {
+    /// Constructs a new ColumnVector from a vector of the suitable type.
+    pub fn new(data: Vec<T>) -> ColumnVector<T> {
+        ColumnVector { data }
     }
 }
 
-impl<'a, T: 'a + Debug + Copy + Ord> Column<'a, T> for VectorColumn<T> {
-    type Scan = ColScanGeneric<'a, T, VectorColumn<T>>;
+impl<'a, T: 'a + Debug + Copy + Ord> Column<'a, T> for ColumnVector<T> {
+    type Scan = ColScanGeneric<'a, T, ColumnVector<T>>;
 
     fn len(&self) -> usize {
         self.data.len()
@@ -33,7 +33,7 @@ impl<'a, T: 'a + Debug + Copy + Ord> Column<'a, T> for VectorColumn<T> {
     }
 }
 
-impl<T: Debug + Copy + Ord> Index<usize> for VectorColumn<T> {
+impl<T: Debug + Copy + Ord> Index<usize> for ColumnVector<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -43,14 +43,14 @@ impl<T: Debug + Copy + Ord> Index<usize> for VectorColumn<T> {
 
 #[cfg(test)]
 mod test {
-    use super::{Column, VectorColumn};
+    use super::{Column, ColumnVector};
     use test_log::test;
 
     #[test]
     fn test_u64_column() {
         let data: Vec<u64> = vec![1, 2, 3];
 
-        let vc: VectorColumn<u64> = VectorColumn::new(data);
+        let vc: ColumnVector<u64> = ColumnVector::new(data);
         assert_eq!(vc.len(), 3);
         assert_eq!(vc[0], 1);
         assert_eq!(vc[1], 2);

@@ -90,7 +90,7 @@ where
 mod test {
     use crate::physical::columns::{
         colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
-        columns::{Column, VectorColumn},
+        columns::{Column, ColumnVector},
     };
 
     use super::ColScanEqualColumn;
@@ -98,14 +98,14 @@ mod test {
 
     #[test]
     fn test_u64() {
-        let ref_col = VectorColumn::new(vec![0u64, 4, 7]);
-        let val_col = VectorColumn::new(vec![1u64, 4, 8]);
+        let ref_col = ColumnVector::new(vec![0u64, 4, 7]);
+        let val_col = ColumnVector::new(vec![1u64, 4, 8]);
 
         let ref_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(ref_col.iter()),
+            ColScanGenericEnum::ColumnVector(ref_col.iter()),
         ));
         let val_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(val_col.iter()),
+            ColScanGenericEnum::ColumnVector(val_col.iter()),
         ));
 
         ref_iter.seek(4);
@@ -118,10 +118,10 @@ mod test {
         assert_eq!(equal_scan.current(), None);
 
         let ref_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(ref_col.iter()),
+            ColScanGenericEnum::ColumnVector(ref_col.iter()),
         ));
         let val_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(val_col.iter()),
+            ColScanGenericEnum::ColumnVector(val_col.iter()),
         ));
 
         ref_iter.seek(7);

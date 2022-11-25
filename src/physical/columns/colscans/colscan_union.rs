@@ -23,7 +23,7 @@ impl<'a, T> ColScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new VectorColumnScan for a Column.
+    /// Constructs a new ColumnVectorScan for a Column.
     pub fn new(column_scans: Vec<&'a ColScanCell<'a, T>>) -> ColScanUnion<'a, T> {
         let scans_len = column_scans.len();
         ColScanUnion {
@@ -143,7 +143,7 @@ where
 mod test {
     use crate::physical::columns::{
         colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
-        columns::{Column, VectorColumn},
+        columns::{Column, ColumnVector},
     };
 
     use super::ColScanUnion;
@@ -151,18 +151,18 @@ mod test {
 
     #[test]
     fn test_u64() {
-        let column_fst = VectorColumn::new(vec![0u64, 1, 3, 5, 15]);
-        let column_snd = VectorColumn::new(vec![0u64, 1, 2, 7, 9]);
-        let column_trd = VectorColumn::new(vec![0u64, 2, 4, 11]);
+        let column_fst = ColumnVector::new(vec![0u64, 1, 3, 5, 15]);
+        let column_snd = ColumnVector::new(vec![0u64, 1, 2, 7, 9]);
+        let column_trd = ColumnVector::new(vec![0u64, 2, 4, 11]);
 
         let mut iter_fst = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(column_fst.iter()),
+            ColScanGenericEnum::ColumnVector(column_fst.iter()),
         ));
         let mut iter_snd = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(column_snd.iter()),
+            ColScanGenericEnum::ColumnVector(column_snd.iter()),
         ));
         let mut iter_trd = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(column_trd.iter()),
+            ColScanGenericEnum::ColumnVector(column_trd.iter()),
         ));
 
         let mut union_iter = ColScanUnion::new(vec![&mut iter_fst, &mut iter_snd, &mut iter_trd]);

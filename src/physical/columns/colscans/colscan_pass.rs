@@ -60,7 +60,7 @@ where
 mod test {
     use crate::physical::columns::{
         colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
-        columns::{Column, VectorColumn},
+        columns::{Column, ColumnVector},
     };
 
     use super::ColScanPass;
@@ -68,9 +68,9 @@ mod test {
 
     #[test]
     fn test_u64() {
-        let ref_col = VectorColumn::new(vec![0, 4, 7]);
+        let ref_col = ColumnVector::new(vec![0, 4, 7]);
         let ref_col_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(ref_col.iter()),
+            ColScanGenericEnum::ColumnVector(ref_col.iter()),
         ));
 
         let mut pass_scan = ColScanPass::new(&ref_col_iter);

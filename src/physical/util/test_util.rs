@@ -1,5 +1,5 @@
 use crate::physical::columns::columns::{
-    Column, ColumnEnum, GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT, VectorColumn,
+    Column, ColumnEnum, ColumnVector, IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT,
 };
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
@@ -9,20 +9,20 @@ use std::cmp::Eq;
 use std::fmt::Debug;
 use std::ops::{Add, Sub};
 
-/// Constructs GenericIntervalColumn of U64 type from Slice
-pub fn make_gic<'a, T>(values: &'a [T], ints: &'a [usize]) -> GenericIntervalColumn<T>
+/// Constructs IntervalColumnGeneric of U64 type from Slice
+pub fn make_gic<'a, T>(values: &'a [T], ints: &'a [usize]) -> IntervalColumnGeneric<T>
 where
     T: Copy + Ord + Debug + 'static,
 {
-    GenericIntervalColumn::new(
-        ColumnEnum::VectorColumn(VectorColumn::new(values.to_vec())),
-        ColumnEnum::VectorColumn(VectorColumn::new(ints.to_vec())),
+    IntervalColumnGeneric::new(
+        ColumnEnum::ColumnVector(ColumnVector::new(values.to_vec())),
+        ColumnEnum::ColumnVector(ColumnVector::new(ints.to_vec())),
     )
 }
 
 /// Constructs IntervalColumnT (of U64 type) from Slice
 pub fn make_gict<'a>(values: &'a [u64], ints: &'a [usize]) -> IntervalColumnT {
-    IntervalColumnT::U64(IntervalColumnEnum::GenericIntervalColumn(make_gic(
+    IntervalColumnT::U64(IntervalColumnEnum::IntervalColumnGeneric(make_gic(
         values, ints,
     )))
 }
@@ -48,13 +48,13 @@ where
     }
 }
 
-/// Hepler function which creates an arbitrary GenericIntervalColumn
+/// Hepler function which creates an arbitrary IntervalColumnGeneric
 /// given a number of sections and a maximum for the number of enries per section
 fn arbitrary_gic<'a, T>(
     u: &mut Unstructured<'a>,
     sections: usize,
     avg_per_section: usize,
-) -> Result<GenericIntervalColumn<T>>
+) -> Result<IntervalColumnGeneric<T>>
 where
     T: Arbitrary<'a> + Debug + Copy + Ord + Add<T, Output = T> + One + Zero + 'static,
 {
@@ -95,7 +95,7 @@ where
     Ok(make_gic(&values, &intervals))
 }
 
-impl<'a, T> Arbitrary<'a> for GenericIntervalColumn<T>
+impl<'a, T> Arbitrary<'a> for IntervalColumnGeneric<T>
 where
     T: Arbitrary<'a> + Debug + Copy + Ord + Add<T, Output = T> + One + Zero + 'static,
 {
@@ -132,7 +132,7 @@ impl<'a> Arbitrary<'a> for Trie {
             };
 
             columns.push(IntervalColumnT::U64(
-                IntervalColumnEnum::GenericIntervalColumn(arbitrary_gic(
+                IntervalColumnEnum::IntervalColumnGeneric(arbitrary_gic(
                     u,
                     section_count,
                     AVG_BRANCHING,

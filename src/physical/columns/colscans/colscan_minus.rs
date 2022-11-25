@@ -21,7 +21,7 @@ impl<'a, T> ColScanFollow<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new VectorColumnScan for a Column.
+    /// Constructs a new ColumnVectorScan for a Column.
     pub fn new(
         scan_left: &'a ColScanCell<'a, T>,
         scan_right: &'a ColScanCell<'a, T>,
@@ -105,7 +105,7 @@ impl<'a, T> ColScanMinus<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new VectorColumnScan for a Column.
+    /// Constructs a new ColumnVectorScan for a Column.
     pub fn new(scan_left: &'a ColScanCell<'a, T>, scan_right: &'a ColScanCell<'a, T>) -> Self {
         Self {
             scan_left,
@@ -180,7 +180,7 @@ where
 mod test {
     use crate::physical::columns::{
         colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
-        columns::{Column, VectorColumn},
+        columns::{Column, ColumnVector},
     };
 
     use super::{ColScanFollow, ColScanMinus};
@@ -189,14 +189,14 @@ mod test {
 
     #[test]
     fn test_difference_scan() {
-        let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
-        let right_column = VectorColumn::new(vec![0u64, 1, 3, 7, 11]);
+        let left_column = ColumnVector::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
+        let right_column = ColumnVector::new(vec![0u64, 1, 3, 7, 11]);
 
         let left_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(left_column.iter()),
+            ColScanGenericEnum::ColumnVector(left_column.iter()),
         ));
         let right_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(right_column.iter()),
+            ColScanGenericEnum::ColumnVector(right_column.iter()),
         ));
 
         let mut diff_scan = ColScanFollow::new(&left_iter, &right_iter);
@@ -239,14 +239,14 @@ mod test {
 
     #[test]
     fn test_minus() {
-        let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
-        let right_column = VectorColumn::new(vec![0u64, 3, 7, 11]);
+        let left_column = ColumnVector::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
+        let right_column = ColumnVector::new(vec![0u64, 3, 7, 11]);
 
         let left_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(left_column.iter()),
+            ColScanGenericEnum::ColumnVector(left_column.iter()),
         ));
         let right_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::VectorColumn(right_column.iter()),
+            ColScanGenericEnum::ColumnVector(right_column.iter()),
         ));
 
         let mut diff_scan = ColScanMinus::new(&left_iter, &right_iter);

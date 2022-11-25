@@ -3,7 +3,7 @@ use rand::prelude::*;
 use rand_pcg::Pcg64;
 use stage2::physical::columns::{
     colscans::{ColScan, ColScanGeneric},
-    columns::{Column, RleColumn, VectorColumn},
+    columns::{Column, ColumnRle, ColumnVector},
 };
 
 pub fn benchmark_seek(c: &mut Criterion) {
@@ -16,8 +16,8 @@ pub fn benchmark_seek(c: &mut Criterion) {
     data.sort_unstable();
     let randa = data[rng.gen_range(0..10000000)];
 
-    let test_column = VectorColumn::new(data.clone());
-    let rle_test_column = RleColumn::new(data.clone());
+    let test_column = ColumnVector::new(data.clone());
+    let rle_test_column = ColumnRle::new(data.clone());
 
     let mut group = c.benchmark_group("seek");
     group.sample_size(200);
@@ -41,13 +41,13 @@ pub fn benchmark_seek(c: &mut Criterion) {
         )
     });
 
-    let vec_col_handcrafted = VectorColumn::new(
+    let vec_col_handcrafted = ColumnVector::new(
         (1..100000)
             .chain(200000..400000)
             .chain(600000..800000)
             .collect(),
     );
-    let rle_col_handcrafted = RleColumn::new(
+    let rle_col_handcrafted = ColumnRle::new(
         (1..100000)
             .chain(200000..400000)
             .chain(600000..800000)

@@ -22,7 +22,7 @@ impl<'a, T> ColScanJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new VectorColumnScan for a Column.
+    /// Constructs a new ColumnVectorScan for a Column.
     pub fn new(column_scans: Vec<&'a ColScanCell<'a, T>>) -> Self {
         ColScanJoin {
             column_scans,
@@ -127,27 +127,27 @@ mod test {
 
     use crate::physical::columns::{
         colscans::{ColScan, ColScanEnum, ColScanGeneric, ColScanGenericEnum, ColScanJoin},
-        columns::VectorColumn,
+        columns::ColumnVector,
     };
 
     #[test]
     fn test_u64_simple_join<'a>() {
         let data1: Vec<u64> = vec![1, 3, 5, 7, 9];
-        let vc1: VectorColumn<u64> = VectorColumn::new(data1);
-        let mut gcs1 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::VectorColumn(
+        let vc1: ColumnVector<u64> = ColumnVector::new(data1);
+        let mut gcs1 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
             ColScanGeneric::new(&vc1),
         ))
         .into();
 
         let data2: Vec<u64> = vec![1, 5, 6, 7, 9, 10];
-        let vc2: VectorColumn<u64> = VectorColumn::new(data2);
-        let mut gcs2 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::VectorColumn(
+        let vc2: ColumnVector<u64> = ColumnVector::new(data2);
+        let mut gcs2 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
             ColScanGeneric::new(&vc2),
         ))
         .into();
         let data3: Vec<u64> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let vc3: VectorColumn<u64> = VectorColumn::new(data3);
-        let mut gcs3 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::VectorColumn(
+        let vc3: ColumnVector<u64> = ColumnVector::new(data3);
+        let mut gcs3 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
             ColScanGeneric::new(&vc3),
         ))
         .into();
@@ -166,15 +166,15 @@ mod test {
         assert_eq!(omj.current(), None);
         assert_eq!(omj.next(), None);
 
-        let mut gcs1 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::VectorColumn(
+        let mut gcs1 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
             ColScanGeneric::new(&vc1),
         ))
         .into();
-        let mut gcs2 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::VectorColumn(
+        let mut gcs2 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
             ColScanGeneric::new(&vc2),
         ))
         .into();
-        let mut gcs3 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::VectorColumn(
+        let mut gcs3 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
             ColScanGeneric::new(&vc3),
         ))
         .into();

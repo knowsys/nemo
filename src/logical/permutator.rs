@@ -224,7 +224,7 @@ impl Permutator {
 mod test {
     use super::*;
     use crate::physical::{
-        columns::{builders::ColBuilderAdaptive, columns::VectorColumn},
+        columns::{builders::ColBuilderAdaptive, columns::ColumnVector},
         datatypes::{Double, Float},
     };
     use quickcheck_macros::quickcheck;
@@ -421,11 +421,11 @@ mod test {
         vec2.resize(len, Double::new(1.0).expect("1.0 is not NaN"));
         let mut vec1_cpy = vec1.clone();
         let vec1_to_sort = vec1.clone();
-        let column1: VectorColumn<Float> = VectorColumn::new(vec1);
-        let column2: VectorColumn<Double> = VectorColumn::new(vec2.clone());
+        let column1: ColumnVector<Float> = ColumnVector::new(vec1);
+        let column2: ColumnVector<Double> = ColumnVector::new(vec2.clone());
         let columnset: Vec<ColumnT> = vec![
-            ColumnT::Float(ColumnEnum::VectorColumn(column1)),
-            ColumnT::Double(ColumnEnum::VectorColumn(column2)),
+            ColumnT::Float(ColumnEnum::ColumnVector(column1)),
+            ColumnT::Double(ColumnEnum::ColumnVector(column2)),
         ];
         let permutator = Permutator::sort_from_columns(&columnset)
             .expect("Length has been adjusted when generating test-data");
@@ -437,9 +437,9 @@ mod test {
                 .expect("Test case should be sortable")
         );
 
-        let column2: VectorColumn<Double> = VectorColumn::new(vec2);
+        let column2: ColumnVector<Double> = ColumnVector::new(vec2);
         let column_sort = permutator.apply_column(
-            &ColumnEnum::VectorColumn(column2),
+            &ColumnEnum::ColumnVector(column2),
             ColBuilderAdaptive::new(),
         );
         assert!(column_sort.is_ok());

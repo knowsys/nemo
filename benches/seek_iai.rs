@@ -2,7 +2,7 @@ use rand::prelude::*;
 use rand_pcg::Pcg64;
 use stage2::physical::columns::{
     colscans::{ColScan, ColScanGeneric},
-    columns::VectorColumn,
+    columns::ColumnVector,
 };
 
 pub fn bench() {
@@ -20,7 +20,7 @@ pub fn bench() {
     } else {
         (values.1, values.0)
     };
-    let test_column = VectorColumn::new(data);
+    let test_column = ColumnVector::new(data);
     let mut gc = ColScanGeneric::new(&test_column);
     gc.seek(randa);
     gc.seek(randb);

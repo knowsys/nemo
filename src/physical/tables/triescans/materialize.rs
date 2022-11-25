@@ -4,7 +4,7 @@ use crate::physical::{
     columns::{
         builders::{ColBuilder, ColBuilderAdaptive, ColBuilderAdaptiveT},
         colscans::ColScan,
-        columns::{GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT},
+        columns::{IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT},
     },
     datatypes::DataTypeName,
     tables::{
@@ -120,8 +120,8 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
             };
         let current_interval_builder = intervals_column_builders.remove(0);
 
-        let next_interval_column = IntervalColumnT::U64(IntervalColumnEnum::GenericIntervalColumn(
-            GenericIntervalColumn::new(
+        let next_interval_column = IntervalColumnT::U64(IntervalColumnEnum::IntervalColumnGeneric(
+            IntervalColumnGeneric::new(
                 current_data_builder.finalize(),
                 current_interval_builder.finalize(),
             ),

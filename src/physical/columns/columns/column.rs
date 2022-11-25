@@ -7,7 +7,7 @@ use crate::{
 };
 use std::fmt::Debug;
 
-use super::{RleColumn, VectorColumn};
+use super::{ColumnRle, ColumnVector};
 
 /// Column of ordered values.
 pub trait Column<'a, T>: Debug + Clone {
@@ -35,15 +35,15 @@ pub trait Column<'a, T>: Debug + Clone {
 /// Enum for column implementations
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColumnEnum<T> {
-    /// Case VectorColumn
-    VectorColumn(VectorColumn<T>),
-    /// Case RleColumn
-    RleColumn(RleColumn<T>),
+    /// Case ColumnVector
+    ColumnVector(ColumnVector<T>),
+    /// Case ColumnRle
+    ColumnRle(ColumnRle<T>),
 }
 
 generate_forwarder!(forward_to_column;
-                    VectorColumn,
-                    RleColumn);
+                    ColumnVector,
+                    ColumnRle);
 
 impl<'a, T> Column<'a, T> for ColumnEnum<T>
 where
@@ -65,10 +65,10 @@ where
 
     fn iter(&'a self) -> Self::Scan {
         match self {
-            Self::VectorColumn(col) => {
-                ColScanEnum::ColScanGeneric(ColScanGenericEnum::VectorColumn(col.iter()))
+            Self::ColumnVector(col) => {
+                ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(col.iter()))
             }
-            Self::RleColumn(col) => ColScanEnum::RleColumnScan(col.iter()),
+            Self::ColumnRle(col) => ColScanEnum::ColumnRleScan(col.iter()),
         }
     }
 }

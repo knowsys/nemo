@@ -1,5 +1,5 @@
 use crate::generate_forwarder;
-use crate::physical::columns::columns::{Column, GenericIntervalColumn, VectorColumn};
+use crate::physical::columns::columns::{Column, ColumnVector, IntervalColumnGeneric};
 use crate::physical::datatypes::ColumnDataType;
 use std::marker::PhantomData;
 use std::{fmt::Debug, ops::Range};
@@ -21,31 +21,31 @@ pub enum ColScanGenericEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Case Scan with VectorColumn
-    VectorColumn(ColScanGeneric<'a, T, VectorColumn<T>>),
-    /// Case Scan with GenericIntervalColumn
-    GenericIntervalColumn(ColScanGeneric<'a, T, GenericIntervalColumn<T>>),
+    /// Case Scan with ColumnVector
+    ColumnVector(ColScanGeneric<'a, T, ColumnVector<T>>),
+    /// Case Scan with IntervalColumnGeneric
+    IntervalColumnGeneric(ColScanGeneric<'a, T, IntervalColumnGeneric<T>>),
 }
 
 generate_forwarder!(forward_to_column_scan;
-                    VectorColumn,
-                    GenericIntervalColumn);
+                    ColumnVector,
+                    IntervalColumnGeneric);
 
-impl<'a, T> From<ColScanGeneric<'a, T, VectorColumn<T>>> for ColScanGenericEnum<'a, T>
+impl<'a, T> From<ColScanGeneric<'a, T, ColumnVector<T>>> for ColScanGenericEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColScanGeneric<'a, T, VectorColumn<T>>) -> Self {
-        Self::VectorColumn(cs)
+    fn from(cs: ColScanGeneric<'a, T, ColumnVector<T>>) -> Self {
+        Self::ColumnVector(cs)
     }
 }
 
-impl<'a, T> From<ColScanGeneric<'a, T, GenericIntervalColumn<T>>> for ColScanGenericEnum<'a, T>
+impl<'a, T> From<ColScanGeneric<'a, T, IntervalColumnGeneric<T>>> for ColScanGenericEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColScanGeneric<'a, T, GenericIntervalColumn<T>>) -> Self {
-        Self::GenericIntervalColumn(cs)
+    fn from(cs: ColScanGeneric<'a, T, IntervalColumnGeneric<T>>) -> Self {
+        Self::IntervalColumnGeneric(cs)
     }
 }
 
@@ -239,25 +239,25 @@ mod test {
 
     use crate::physical::columns::{
         colscans::{ColScan, ColScanGeneric},
-        columns::VectorColumn,
+        columns::ColumnVector,
     };
 
-    fn get_test_column() -> VectorColumn<u64> {
+    fn get_test_column() -> ColumnVector<u64> {
         let data: Vec<u64> = vec![1, 2, 5];
-        VectorColumn::new(data)
+        ColumnVector::new(data)
     }
 
-    fn get_test_column_large() -> VectorColumn<u64> {
+    fn get_test_column_large() -> ColumnVector<u64> {
         let data: Vec<u64> = vec![
             1, 2, 5, 9, 12, 14, 16, 18, 21, 25, 28, 29, 30, 35, 37, 39, 40, 45, 47, 49,
         ];
-        VectorColumn::new(data)
+        ColumnVector::new(data)
     }
 
     #[test]
     fn u64_iterate_column() {
         let test_column = get_test_column();
-        let mut gcs: ColScanGeneric<u64, VectorColumn<u64>> = ColScanGeneric::new(&test_column);
+        let mut gcs: ColScanGeneric<u64, ColumnVector<u64>> = ColScanGeneric::new(&test_column);
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.current(), None);
         assert_eq!(gcs.next(), Some(1));
@@ -277,7 +277,7 @@ mod test {
     #[test]
     fn u64_seek_column() {
         let test_column = get_test_column();
-        let mut gcs: ColScanGeneric<u64, VectorColumn<u64>> = ColScanGeneric::new(&test_column);
+        let mut gcs: ColScanGeneric<u64, ColumnVector<u64>> = ColScanGeneric::new(&test_column);
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.seek(2), Some(2));
         assert_eq!(gcs.pos(), Some(1));
