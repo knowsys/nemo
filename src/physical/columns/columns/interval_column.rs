@@ -7,7 +7,7 @@ use crate::{
 };
 use std::{fmt::Debug, ops::Range};
 
-use super::{Column, ColumnEnum, GenericIntervalColumn};
+use super::{Column, ColumnEnum, IntervalColumnGeneric};
 
 /// Column of values that are grouped into numbered intervals.
 pub trait IntervalColumn<'a, T>: Debug + Column<'a, T> {
@@ -28,12 +28,12 @@ pub enum IntervalColumnEnum<T>
 where
     T: ColumnDataType,
 {
-    /// Case GenericIntervalColumn
-    GenericIntervalColumn(GenericIntervalColumn<T>),
+    /// Case IntervalColumnGeneric
+    IntervalColumnGeneric(IntervalColumnGeneric<T>),
 }
 
 generate_forwarder!(forward_to_interval_column;
-                    GenericIntervalColumn);
+                    IntervalColumnGeneric);
 
 impl<T> IntervalColumnEnum<T>
 where

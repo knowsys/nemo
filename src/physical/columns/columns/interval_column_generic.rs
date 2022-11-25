@@ -4,15 +4,15 @@ use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`IntervalColumn`] that uses a second column to manage interval bounds.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GenericIntervalColumn<T> {
+pub struct IntervalColumnGeneric<T> {
     data: ColumnEnum<T>,
     int_starts: ColumnEnum<usize>,
 }
 
-impl<T> GenericIntervalColumn<T> {
-    /// Constructs a new [`GenericIntervalColumn`] given data column and a column containing the intervals
-    pub fn new(data: ColumnEnum<T>, int_starts: ColumnEnum<usize>) -> GenericIntervalColumn<T> {
-        GenericIntervalColumn { data, int_starts }
+impl<T> IntervalColumnGeneric<T> {
+    /// Constructs a new [`IntervalColumnGeneric`] given data column and a column containing the intervals
+    pub fn new(data: ColumnEnum<T>, int_starts: ColumnEnum<usize>) -> IntervalColumnGeneric<T> {
+        IntervalColumnGeneric { data, int_starts }
     }
 
     /// Return data column
@@ -26,11 +26,11 @@ impl<T> GenericIntervalColumn<T> {
     }
 }
 
-impl<'a, T> Column<'a, T> for GenericIntervalColumn<T>
+impl<'a, T> Column<'a, T> for IntervalColumnGeneric<T>
 where
     T: 'a + ColumnDataType,
 {
-    type Scan = ColScanGeneric<'a, T, GenericIntervalColumn<T>>;
+    type Scan = ColScanGeneric<'a, T, IntervalColumnGeneric<T>>;
 
     fn len(&self) -> usize {
         self.data.len()
@@ -49,7 +49,7 @@ where
     }
 }
 
-impl<'a, T> IntervalColumn<'a, T> for GenericIntervalColumn<T>
+impl<'a, T> IntervalColumn<'a, T> for IntervalColumnGeneric<T>
 where
     T: 'a + ColumnDataType,
 {
@@ -69,8 +69,8 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::super::{Column, ColumnEnum, VectorColumn};
-    use super::{GenericIntervalColumn, IntervalColumn};
+    use super::super::{Column, ColumnEnum, ColumnVector};
+    use super::{IntervalColumn, IntervalColumnGeneric};
     use test_log::test;
 
     #[test]
@@ -78,9 +78,9 @@ mod test {
         let data: Vec<u64> = vec![1, 2, 3, 10, 11, 12, 20, 30, 31];
         let int_starts: Vec<usize> = vec![0, 3, 6, 7];
 
-        let v_data = ColumnEnum::VectorColumn(VectorColumn::new(data));
-        let v_int_starts = ColumnEnum::VectorColumn(VectorColumn::new(int_starts));
-        let gic = GenericIntervalColumn::new(v_data, v_int_starts);
+        let v_data = ColumnEnum::ColumnVector(ColumnVector::new(data));
+        let v_int_starts = ColumnEnum::ColumnVector(ColumnVector::new(int_starts));
+        let gic = IntervalColumnGeneric::new(v_data, v_int_starts);
         assert_eq!(gic.len(), 9);
         assert_eq!(gic.get(0), 1);
         assert_eq!(gic.get(1), 2);
