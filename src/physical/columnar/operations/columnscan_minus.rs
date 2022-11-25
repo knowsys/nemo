@@ -103,8 +103,13 @@ pub struct ColumnScanMinus<'a, T>
 where
     T: 'a + ColumnDataType,
 {
+    /// Scan from which the values are subtracted
     scan_left: &'a ColumnScanCell<'a, T>,
+
+    /// Scan containing the values which will be subtracted
     scan_right: &'a ColumnScanCell<'a, T>,
+
+    /// Current value of this scan
     current_value: Option<T>,
 }
 
