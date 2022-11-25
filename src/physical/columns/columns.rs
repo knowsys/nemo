@@ -12,8 +12,8 @@ pub use column_vector::VectorColumn;
 
 /// Module for defining [`RleColumn`]
 pub mod column_rle;
+pub use column_rle::ColBuilderRle;
 pub use column_rle::RleColumn;
-pub use column_rle::RleColumnBuilder;
 pub use column_rle::RleColumnScan;
 
 /// Module for defining [`IntervalColumn`] and [`IntervalColumnT`]

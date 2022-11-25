@@ -1,5 +1,5 @@
 use crate::physical::{
-    columns::{builders::ColumnBuilder, colscans::colscan::ColScan},
+    columns::{builders::ColBuilder, colscans::colscan::ColScan},
     datatypes::{ColumnDataType, Field, Ring},
 };
 use num::{CheckedMul, Zero};
@@ -175,18 +175,18 @@ struct RleElement<T> {
     increment: Step<T>,
 }
 
-/// Implementation of [`ColumnBuilder`] that allows the use of incremental run length encoding.
+/// Implementation of [`ColBuilder`] that allows the use of incremental run length encoding.
 #[derive(Debug, Default, PartialEq)]
-pub struct RleColumnBuilder<T> {
+pub struct ColBuilderRle<T> {
     elements: Vec<RleElement<T>>,
     previous_value_opt: Option<T>,
     count: usize,
 }
 
-impl<T> RleColumnBuilder<T> {
+impl<T> ColBuilderRle<T> {
     /// Constructor.
-    pub fn new() -> RleColumnBuilder<T> {
-        RleColumnBuilder {
+    pub fn new() -> ColBuilderRle<T> {
+        ColBuilderRle {
             elements: Vec::new(),
             previous_value_opt: None,
             count: 0,
@@ -194,7 +194,7 @@ impl<T> RleColumnBuilder<T> {
     }
 }
 
-impl<T> RleColumnBuilder<T>
+impl<T> ColBuilderRle<T>
 where
     T: ColumnDataType + Default,
 {
@@ -217,7 +217,7 @@ where
     }
 }
 
-impl<'a, T> ColumnBuilder<'a, T> for RleColumnBuilder<T>
+impl<'a, T> ColBuilder<'a, T> for ColBuilderRle<T>
 where
     T: 'a + ColumnDataType + Default,
 {
@@ -333,7 +333,7 @@ where
 
     /// Constructs a new RleColumn from a vector of the suitable type.
     pub fn new(data: Vec<T>) -> RleColumn<T> {
-        let mut builder = RleColumnBuilder::new();
+        let mut builder = ColBuilderRle::new();
         for value in data {
             builder.add(value);
         }

@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use crate::physical::columns::columns::Column;
 
 /// Type for constructing columns.
-pub trait ColumnBuilder<'a, T>: Debug {
+pub trait ColBuilder<'a, T>: Debug {
     /// Column Type that is produced by builder
     type Col: Column<'a, T>;
 

@@ -154,7 +154,7 @@ impl<'a> TrieScan<'a> for TrieJoin<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieJoin;
-    use crate::physical::columns::builders::{AdaptiveColumnBuilder, ColumnBuilder};
+    use crate::physical::columns::builders::{ColBuilder, ColBuilderAdaptive};
     use crate::physical::columns::columns::{
         Column, ColumnEnum, GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT,
         VectorColumn,
@@ -756,7 +756,7 @@ mod test {
 
     #[test]
     fn test_dynamic() {
-        let mut builder = AdaptiveColumnBuilder::<u64>::new();
+        let mut builder = ColBuilderAdaptive::<u64>::new();
         builder.add(2);
         builder.add(3);
         builder.add(4);

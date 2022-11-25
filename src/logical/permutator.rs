@@ -2,7 +2,7 @@
 
 use crate::physical::{
     columns::{
-        builders::ColumnBuilder,
+        builders::ColBuilder,
         columns::{Column, ColumnEnum, ColumnT},
     },
     datatypes::ColumnDataType,
@@ -190,7 +190,7 @@ impl Permutator {
         }
     }
 
-    /// Applies the permutator to a given column by using a provided [`ColumnBuilder`].
+    /// Applies the permutator to a given column by using a provided [`ColBuilder`].
     ///
     /// *Returns* either a ['Column'] or an [Error][Error::PermutationApplyWrongLen]
     pub fn apply_column<'a, T, U>(
@@ -200,7 +200,7 @@ impl Permutator {
     ) -> Result<ColumnEnum<T>, Error>
     where
         T: 'a + ColumnDataType,
-        U: ColumnBuilder<'a, T, Col = ColumnEnum<T>>,
+        U: ColBuilder<'a, T, Col = ColumnEnum<T>>,
     {
         if column.len() < (self.sort_vec.len() + self.offset) {
             Err(Error::PermutationApplyWrongLen(
@@ -224,7 +224,7 @@ impl Permutator {
 mod test {
     use super::*;
     use crate::physical::{
-        columns::{builders::AdaptiveColumnBuilder, columns::VectorColumn},
+        columns::{builders::ColBuilderAdaptive, columns::VectorColumn},
         datatypes::{Double, Float},
     };
     use quickcheck_macros::quickcheck;
@@ -389,7 +389,7 @@ mod test {
     fn from_rnd_column(vec: Vec<u32>) -> bool {
         log::debug!("used vector: {:?}", vec);
 
-        let mut builder: AdaptiveColumnBuilder<u32> = AdaptiveColumnBuilder::new();
+        let mut builder: ColBuilderAdaptive<u32> = ColBuilderAdaptive::new();
         let mut vec_cpy = vec.clone();
         vec_cpy.sort_unstable();
         vec.iter().for_each(|&elem| builder.add(elem));
@@ -440,7 +440,7 @@ mod test {
         let column2: VectorColumn<Double> = VectorColumn::new(vec2);
         let column_sort = permutator.apply_column(
             &ColumnEnum::VectorColumn(column2),
-            AdaptiveColumnBuilder::new(),
+            ColBuilderAdaptive::new(),
         );
         assert!(column_sort.is_ok());
         true
@@ -457,20 +457,20 @@ mod test {
             .map(|elem| Float::new(*elem).expect("value needs to be valid"))
             .collect::<Vec<Float>>();
 
-        let mut acb = AdaptiveColumnBuilder::new();
+        let mut acb = ColBuilderAdaptive::new();
         vec1.iter().for_each(|elem| acb.add(*elem));
         let column1 = acb.finalize();
-        let mut acb = AdaptiveColumnBuilder::new();
+        let mut acb = ColBuilderAdaptive::new();
         vec2.iter().for_each(|elem| acb.add(*elem));
         let column2 = acb.finalize();
-        let mut acb = AdaptiveColumnBuilder::new();
+        let mut acb = ColBuilderAdaptive::new();
         vec3.iter().for_each(|elem| acb.add(*elem));
         let column3 = acb.finalize();
 
         let columnset: Vec<ColumnT> = vec![ColumnT::U64(column1), ColumnT::Float(column2)];
         let permutator = Permutator::sort_from_columns(&columnset).expect("Sorting should work");
         let column_sort = permutator
-            .apply_column(&column3, AdaptiveColumnBuilder::new())
+            .apply_column(&column3, ColBuilderAdaptive::new())
             .expect("application of sorting should work");
         let column_sort_vec: Vec<u64> = column_sort.iter().collect();
         assert_eq!(column_sort_vec, vec![1, 0, 5, 4, 2, 3, 8, 9, 7, 6]);
