@@ -1,7 +1,6 @@
 use crate::physical::{
     columns::colscans::{
-        ColScan, DifferenceScan, MinusScan, PassScan, RangedColumnScanCell, RangedColumnScanEnum,
-        RangedColumnScanT,
+        ColScan, ColScanCell, ColScanEnum, ColScanT, DifferenceScan, MinusScan, PassScan,
     },
     datatypes::DataTypeName,
     tables::tables::TableSchema,
@@ -18,7 +17,7 @@ pub struct TrieDifference<'a> {
     trie_right: Box<TrieScanEnum<'a>>,
     layer_left: Option<usize>,
     layer_right: Option<usize>,
-    difference_scans: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
+    difference_scans: Vec<UnsafeCell<ColScanT<'a>>>,
 }
 
 impl<'a> TrieDifference<'a> {
@@ -27,36 +26,33 @@ impl<'a> TrieDifference<'a> {
         let target_schema = trie_left.get_schema();
         let layer_count = target_schema.arity();
 
-        let mut difference_scans =
-            Vec::<UnsafeCell<RangedColumnScanT<'a>>>::with_capacity(layer_count);
+        let mut difference_scans = Vec::<UnsafeCell<ColScanT<'a>>>::with_capacity(layer_count);
 
         for layer_index in 0..target_schema.arity() {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
                     unsafe {
-                        if let RangedColumnScanT::$variant(left_scan_enum) =
+                        if let ColScanT::$variant(left_scan_enum) =
                             &*trie_left.get_scan(layer_index).unwrap().get()
                         {
-                            if let RangedColumnScanT::$variant(right_scan_enum) =
+                            if let ColScanT::$variant(right_scan_enum) =
                                 &*trie_right.get_scan(layer_index).unwrap().get()
                             {
                                 let new_scan = if layer_index == target_schema.arity() - 1 {
-                                    RangedColumnScanEnum::MinusScan(MinusScan::new(
+                                    ColScanEnum::MinusScan(MinusScan::new(
                                         left_scan_enum,
                                         right_scan_enum,
                                     ))
                                 } else {
-                                    RangedColumnScanEnum::DifferenceScan(DifferenceScan::new(
+                                    ColScanEnum::DifferenceScan(DifferenceScan::new(
                                         left_scan_enum,
                                         right_scan_enum,
                                     ))
                                 };
 
-                                difference_scans.push(UnsafeCell::new(
-                                    RangedColumnScanT::$variant(RangedColumnScanCell::new(
-                                        new_scan,
-                                    )),
-                                ));
+                                difference_scans.push(UnsafeCell::new(ColScanT::$variant(
+                                    ColScanCell::new(new_scan),
+                                )));
                             } else {
                                 panic!("Expected a column scan of type {}", stringify!($variant));
                             }
@@ -127,29 +123,25 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
             macro_rules! down_for_datatype {
                 ($variant:ident) => {
                     unsafe {
-                        if let RangedColumnScanT::$variant(left_scan_enum) =
+                        if let ColScanT::$variant(left_scan_enum) =
                             &*self.trie_left.get_scan(next_layer).unwrap().get()
                         {
-                            if let RangedColumnScanT::$variant(right_scan_enum) =
+                            if let ColScanT::$variant(right_scan_enum) =
                                 &*self.trie_right.get_scan(next_layer).unwrap().get()
                             {
                                 if self.layer_left == self.layer_right {
-                                    self.difference_scans[next_layer] = UnsafeCell::new(
-                                        RangedColumnScanT::$variant(RangedColumnScanCell::new(
-                                            RangedColumnScanEnum::MinusScan(MinusScan::new(
+                                    self.difference_scans[next_layer] =
+                                        UnsafeCell::new(ColScanT::$variant(ColScanCell::new(
+                                            ColScanEnum::MinusScan(MinusScan::new(
                                                 left_scan_enum,
                                                 right_scan_enum,
                                             )),
-                                        )),
-                                    );
+                                        )));
                                 } else {
-                                    self.difference_scans[next_layer] = UnsafeCell::new(
-                                        RangedColumnScanT::$variant(RangedColumnScanCell::new(
-                                            RangedColumnScanEnum::PassScan(PassScan::new(
-                                                left_scan_enum,
-                                            )),
-                                        )),
-                                    );
+                                    self.difference_scans[next_layer] =
+                                        UnsafeCell::new(ColScanT::$variant(ColScanCell::new(
+                                            ColScanEnum::PassScan(PassScan::new(left_scan_enum)),
+                                        )));
                                 }
                             }
                         }
@@ -167,11 +159,11 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
         }
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn current_scan(&self) -> Option<&UnsafeCell<ColScanT<'a>>> {
         self.get_scan(self.layer_left?)
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColScanT<'a>>> {
         Some(&self.difference_scans[index])
     }
 
@@ -183,7 +175,7 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieDifference;
-    use crate::physical::columns::colscans::RangedColumnScanT;
+    use crate::physical::columns::colscans::ColScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::tables::triescans::{IntervalTrieScan, TrieScan, TrieScanEnum};
@@ -191,7 +183,7 @@ mod test {
     use test_log::test;
 
     fn diff_next(diff_scan: &mut TrieDifference) -> Option<u64> {
-        if let RangedColumnScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
+        if let ColScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -199,7 +191,7 @@ mod test {
     }
 
     fn diff_current(diff_scan: &mut TrieDifference) -> Option<u64> {
-        if let RangedColumnScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
+        if let ColScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
             rcs.current()
         } else {
             panic!("type should be u64");

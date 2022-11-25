@@ -1,7 +1,5 @@
 use crate::physical::{
-    columns::colscans::{
-        ColScan, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT, UnionScan,
-    },
+    columns::colscans::{ColScan, ColScanCell, ColScanEnum, ColScanT, UnionScan},
     datatypes::{DataTypeName, Double, Float},
     tables::tables::TableSchema,
 };
@@ -15,7 +13,7 @@ use super::{TrieScan, TrieScanEnum};
 pub struct TrieUnion<'a> {
     trie_scans: Vec<TrieScanEnum<'a>>,
     layers: Vec<Option<usize>>,
-    union_scans: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
+    union_scans: Vec<UnsafeCell<ColScanT<'a>>>,
     current_layer: Option<usize>,
 }
 
@@ -27,19 +25,17 @@ impl<'a> TrieUnion<'a> {
         // This assumes that every schema is the same
         // TODO: Perhaps debug_assert! this
         let target_schema = trie_scans[0].get_schema();
-        let mut union_scans =
-            Vec::<UnsafeCell<RangedColumnScanT<'a>>>::with_capacity(target_schema.arity());
+        let mut union_scans = Vec::<UnsafeCell<ColScanT<'a>>>::with_capacity(target_schema.arity());
 
         for layer_index in 0..target_schema.arity() {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident, $type:ty) => {{
-                    let mut column_scans = Vec::<&'a RangedColumnScanCell<$type>>::with_capacity(
-                        target_schema.arity(),
-                    );
+                    let mut column_scans =
+                        Vec::<&'a ColScanCell<$type>>::with_capacity(target_schema.arity());
 
                     for scan in &trie_scans {
                         unsafe {
-                            if let RangedColumnScanT::$variant(scan_enum) =
+                            if let ColScanT::$variant(scan_enum) =
                                 &*scan.get_scan(layer_index).unwrap().get()
                             {
                                 column_scans.push(scan_enum);
@@ -49,12 +45,11 @@ impl<'a> TrieUnion<'a> {
                         }
                     }
 
-                    let new_union_scan =
-                        RangedColumnScanEnum::UnionScan(UnionScan::new(column_scans));
+                    let new_union_scan = ColScanEnum::UnionScan(UnionScan::new(column_scans));
 
-                    union_scans.push(UnsafeCell::new(RangedColumnScanT::$variant(
-                        RangedColumnScanCell::new(new_union_scan),
-                    )));
+                    union_scans.push(UnsafeCell::new(ColScanT::$variant(ColScanCell::new(
+                        new_union_scan,
+                    ))));
                 }};
             }
 
@@ -126,11 +121,11 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
         self.union_scans[next_layer].get_mut().reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn current_scan(&self) -> Option<&UnsafeCell<ColScanT<'a>>> {
         self.get_scan(self.current_layer?)
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColScanT<'a>>> {
         Some(&self.union_scans[index])
     }
 
@@ -142,7 +137,7 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieUnion;
-    use crate::physical::columns::colscans::RangedColumnScanT;
+    use crate::physical::columns::colscans::ColScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::tables::triescans::{IntervalTrieScan, TrieJoin, TrieScan, TrieScanEnum};
@@ -150,7 +145,7 @@ mod test {
     use test_log::test;
 
     fn union_next(union_scan: &mut TrieUnion) -> Option<u64> {
-        if let RangedColumnScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
+        if let ColScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -158,7 +153,7 @@ mod test {
     }
 
     fn union_current(union_scan: &mut TrieUnion) -> Option<u64> {
-        if let RangedColumnScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
+        if let ColScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
             rcs.current()
         } else {
             panic!("type should be u64");

@@ -1,9 +1,7 @@
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::{
-        columns::colscans::{
-            GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT,
-        },
+        columns::colscans::{ColScanCell, ColScanEnum, ColScanT, GenericColumnScanEnum},
         datatypes::{ColumnDataType, DataValueT, Double, Float},
     },
 };
@@ -56,7 +54,7 @@ impl<'a, T> Column<'a, T> for IntervalColumnEnum<T>
 where
     T: 'a + ColumnDataType,
 {
-    type Scan = RangedColumnScanEnum<'a, T>;
+    type Scan = ColScanEnum<'a, T>;
 
     fn len(&self) -> usize {
         forward_to_interval_column!(self, len)
@@ -74,7 +72,7 @@ where
         forward_to_interval_column!(
             self,
             iter.as_variant_of(GenericColumnScanEnum)
-                .wrap_with(RangedColumnScanEnum::GenericColumnScan)
+                .wrap_with(ColScanEnum::GenericColumnScan)
         )
     }
 }
@@ -117,7 +115,7 @@ impl IntervalColumnT {
 generate_datatype_forwarder!(forward_to_interval_column_enum);
 
 impl<'a> Column<'a, DataValueT> for IntervalColumnT {
-    type Scan = RangedColumnScanT<'a>;
+    type Scan = ColScanT<'a>;
 
     fn len(&self) -> usize {
         forward_to_interval_column_enum!(self, len)
@@ -134,8 +132,7 @@ impl<'a> Column<'a, DataValueT> for IntervalColumnT {
     fn iter(&'a self) -> Self::Scan {
         forward_to_interval_column_enum!(
             self,
-            iter.wrap_with(RangedColumnScanCell::new)
-                .as_variant_of(RangedColumnScanT)
+            iter.wrap_with(ColScanCell::new).as_variant_of(ColScanT)
         )
     }
 }

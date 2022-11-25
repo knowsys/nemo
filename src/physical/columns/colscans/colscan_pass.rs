@@ -1,7 +1,7 @@
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
-use super::{colscan::ColScan, RangedColumnScanCell};
+use super::{colscan::ColScan, ColScanCell};
 
 /// Dummy Iterator that defers everything to its sub iterator
 #[derive(Debug)]
@@ -9,14 +9,14 @@ pub struct PassScan<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    reference_scan: &'a RangedColumnScanCell<'a, T>,
+    reference_scan: &'a ColScanCell<'a, T>,
 }
 impl<'a, T> PassScan<'a, T>
 where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new PassScan for a Column.
-    pub fn new(reference_scan: &'a RangedColumnScanCell<'a, T>) -> PassScan<'a, T> {
+    pub fn new(reference_scan: &'a ColScanCell<'a, T>) -> PassScan<'a, T> {
         PassScan { reference_scan }
     }
 }
@@ -59,7 +59,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columns::{
-        colscans::{ColScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum},
+        colscans::{ColScan, ColScanCell, ColScanEnum, GenericColumnScanEnum},
         columns::{Column, VectorColumn},
     };
 
@@ -69,7 +69,7 @@ mod test {
     #[test]
     fn test_u64() {
         let ref_col = VectorColumn::new(vec![0, 4, 7]);
-        let ref_col_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let ref_col_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(ref_col.iter()),
         ));
 

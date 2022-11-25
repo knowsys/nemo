@@ -1,4 +1,4 @@
-use super::{colscan::ColScan, RangedColumnScanCell};
+use super::{colscan::ColScan, ColScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
@@ -8,8 +8,8 @@ pub struct EqualColumnScan<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    reference_scan: &'a RangedColumnScanCell<'a, T>,
-    value_scan: &'a RangedColumnScanCell<'a, T>,
+    reference_scan: &'a ColScanCell<'a, T>,
+    value_scan: &'a ColScanCell<'a, T>,
     current_value: Option<T>,
 }
 impl<'a, T> EqualColumnScan<'a, T>
@@ -18,8 +18,8 @@ where
 {
     /// Constructs a new EqualColumnScan for a Column.
     pub fn new(
-        reference_scan: &'a RangedColumnScanCell<'a, T>,
-        value_scan: &'a RangedColumnScanCell<'a, T>,
+        reference_scan: &'a ColScanCell<'a, T>,
+        value_scan: &'a ColScanCell<'a, T>,
     ) -> EqualColumnScan<'a, T> {
         EqualColumnScan {
             reference_scan,
@@ -89,7 +89,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columns::{
-        colscans::{ColScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum},
+        colscans::{ColScan, ColScanCell, ColScanEnum, GenericColumnScanEnum},
         columns::{Column, VectorColumn},
     };
 
@@ -101,10 +101,10 @@ mod test {
         let ref_col = VectorColumn::new(vec![0u64, 4, 7]);
         let val_col = VectorColumn::new(vec![1u64, 4, 8]);
 
-        let ref_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let ref_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(ref_col.iter()),
         ));
-        let val_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let val_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(val_col.iter()),
         ));
 
@@ -117,10 +117,10 @@ mod test {
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);
 
-        let ref_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let ref_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(ref_col.iter()),
         ));
-        let val_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let val_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(val_col.iter()),
         ));
 

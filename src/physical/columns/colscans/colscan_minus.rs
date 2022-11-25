@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::ops::Range;
 
 use super::colscan::ColScan;
-use super::RangedColumnScanCell;
+use super::ColScanCell;
 
 /// Iterator used in the upper levels of the trie difference operator
 #[derive(Debug)]
@@ -11,8 +11,8 @@ pub struct DifferenceScan<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    scan_left: &'a RangedColumnScanCell<'a, T>,
-    scan_right: &'a RangedColumnScanCell<'a, T>,
+    scan_left: &'a ColScanCell<'a, T>,
+    scan_right: &'a ColScanCell<'a, T>,
     equal: bool,
     current: Option<T>,
 }
@@ -23,8 +23,8 @@ where
 {
     /// Constructs a new VectorColumnScan for a Column.
     pub fn new(
-        scan_left: &'a RangedColumnScanCell<'a, T>,
-        scan_right: &'a RangedColumnScanCell<'a, T>,
+        scan_left: &'a ColScanCell<'a, T>,
+        scan_right: &'a ColScanCell<'a, T>,
     ) -> DifferenceScan<'a, T> {
         DifferenceScan {
             scan_left,
@@ -96,8 +96,8 @@ pub struct MinusScan<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    scan_left: &'a RangedColumnScanCell<'a, T>,
-    scan_right: &'a RangedColumnScanCell<'a, T>,
+    scan_left: &'a ColScanCell<'a, T>,
+    scan_right: &'a ColScanCell<'a, T>,
     current: Option<T>,
 }
 
@@ -106,10 +106,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new VectorColumnScan for a Column.
-    pub fn new(
-        scan_left: &'a RangedColumnScanCell<'a, T>,
-        scan_right: &'a RangedColumnScanCell<'a, T>,
-    ) -> Self {
+    pub fn new(scan_left: &'a ColScanCell<'a, T>, scan_right: &'a ColScanCell<'a, T>) -> Self {
         Self {
             scan_left,
             scan_right,
@@ -182,7 +179,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columns::{
-        colscans::{ColScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum},
+        colscans::{ColScan, ColScanCell, ColScanEnum, GenericColumnScanEnum},
         columns::{Column, VectorColumn},
     };
 
@@ -195,10 +192,10 @@ mod test {
         let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = VectorColumn::new(vec![0u64, 1, 3, 7, 11]);
 
-        let left_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let left_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(left_column.iter()),
         ));
-        let right_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let right_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(right_column.iter()),
         ));
 
@@ -245,10 +242,10 @@ mod test {
         let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = VectorColumn::new(vec![0u64, 3, 7, 11]);
 
-        let left_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let left_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(left_column.iter()),
         ));
-        let right_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let right_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(right_column.iter()),
         ));
 

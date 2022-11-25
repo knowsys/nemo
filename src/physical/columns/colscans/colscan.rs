@@ -40,7 +40,7 @@ pub trait ColScan: Debug + Iterator {
 
 /// Enum for ranged column scans for all the supported types
 #[derive(Debug)]
-pub enum RangedColumnScanEnum<'a, T>
+pub enum ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -66,7 +66,7 @@ where
     UnionScan(UnionScan<'a, T>),
 }
 
-impl<'a, T> From<GenericColumnScanEnum<'a, T>> for RangedColumnScanEnum<'a, T>
+impl<'a, T> From<GenericColumnScanEnum<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -75,7 +75,7 @@ where
     }
 }
 
-impl<'a, T> From<RleColumnScan<'a, T>> for RangedColumnScanEnum<'a, T>
+impl<'a, T> From<RleColumnScan<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -84,7 +84,7 @@ where
     }
 }
 
-impl<'a, T> From<OrderedMergeJoin<'a, T>> for RangedColumnScanEnum<'a, T>
+impl<'a, T> From<OrderedMergeJoin<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -93,7 +93,7 @@ where
     }
 }
 
-impl<'a, T> From<ReorderScan<'a, T>> for RangedColumnScanEnum<'a, T>
+impl<'a, T> From<ReorderScan<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -102,7 +102,7 @@ where
     }
 }
 
-impl<'a, T> From<EqualColumnScan<'a, T>> for RangedColumnScanEnum<'a, T>
+impl<'a, T> From<EqualColumnScan<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -111,7 +111,7 @@ where
     }
 }
 
-impl<'a, T> From<EqualValueScan<'a, T>> for RangedColumnScanEnum<'a, T>
+impl<'a, T> From<EqualValueScan<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -120,7 +120,7 @@ where
     }
 }
 
-impl<'a, T> From<PassScan<'a, T>> for RangedColumnScanEnum<'a, T>
+impl<'a, T> From<PassScan<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -129,7 +129,7 @@ where
     }
 }
 
-impl<'a, T> From<MinusScan<'a, T>> for RangedColumnScanEnum<'a, T>
+impl<'a, T> From<MinusScan<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -138,7 +138,7 @@ where
     }
 }
 
-impl<'a, T> From<DifferenceScan<'a, T>> for RangedColumnScanEnum<'a, T>
+impl<'a, T> From<DifferenceScan<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -147,7 +147,7 @@ where
     }
 }
 
-impl<'a, T> From<UnionScan<'a, T>> for RangedColumnScanEnum<'a, T>
+impl<'a, T> From<UnionScan<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -168,7 +168,7 @@ generate_forwarder!(forward_to_column_scan;
                     MinusScan,
                     UnionScan);
 
-impl<'a, T> RangedColumnScanEnum<'a, T>
+impl<'a, T> ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -223,7 +223,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for RangedColumnScanEnum<'a, T>
+impl<'a, T> Iterator for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -234,7 +234,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for RangedColumnScanEnum<'a, T>
+impl<'a, T> ColScan for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -259,99 +259,99 @@ where
     }
 }
 
-/// A wrapper around a cell type holding a `RangedColumnScanEnum`.
+/// A wrapper around a cell type holding a `ColScanEnum`.
 #[repr(transparent)]
-pub struct RangedColumnScanCell<'a, T>(UnsafeCell<RangedColumnScanEnum<'a, T>>)
+pub struct ColScanCell<'a, T>(UnsafeCell<ColScanEnum<'a, T>>)
 where
     T: 'a + ColumnDataType;
 
-impl<T> Debug for RangedColumnScanCell<'_, T>
+impl<T> Debug for ColScanCell<'_, T>
 where
     T: ColumnDataType,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let rcs = unsafe { &*self.0.get() };
-        f.debug_tuple("RangedColumnScanCell").field(rcs).finish()
+        f.debug_tuple("ColScanCell").field(rcs).finish()
     }
 }
 
-impl<'a, T> RangedColumnScanCell<'a, T>
+impl<'a, T> ColScanCell<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Construct a new `RangedColumnScanCell` from the given [`RangedColumnScanEnum`].
-    pub fn new(cs: RangedColumnScanEnum<'a, T>) -> Self {
+    /// Construct a new `ColScanCell` from the given [`ColScanEnum`].
+    pub fn new(cs: ColScanEnum<'a, T>) -> Self {
         Self(UnsafeCell::new(cs))
     }
 
-    /// Forward `next` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `next` to the underlying [`ColScanEnum`].
     #[inline]
-    pub fn next(&self) -> Option<<RangedColumnScanEnum<'a, T> as Iterator>::Item> {
+    pub fn next(&self) -> Option<<ColScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.next()
     }
 
-    /// Forward `seek` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `seek` to the underlying [`ColScanEnum`].
     #[inline]
     pub fn seek(
         &self,
-        value: <RangedColumnScanEnum<'a, T> as Iterator>::Item,
-    ) -> Option<<RangedColumnScanEnum<'a, T> as Iterator>::Item> {
+        value: <ColScanEnum<'a, T> as Iterator>::Item,
+    ) -> Option<<ColScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.seek(value)
     }
 
-    /// Forward `current` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `current` to the underlying [`ColScanEnum`].
     #[inline]
-    pub fn current(&self) -> Option<<RangedColumnScanEnum<'a, T> as Iterator>::Item> {
+    pub fn current(&self) -> Option<<ColScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.current()
     }
 
-    /// Forward `reset` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `reset` to the underlying [`ColScanEnum`].
     #[inline]
     pub fn reset(&self) {
         unsafe { &mut *self.0.get() }.reset()
     }
 
-    /// Forward `pos` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `pos` to the underlying [`ColScanEnum`].
     #[inline]
     pub fn pos(&self) -> Option<usize> {
         unsafe { &(*self.0.get()) }.pos()
     }
 
-    /// Forward `narrow` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `narrow` to the underlying [`ColScanEnum`].
     #[inline]
     pub fn narrow(&self, interval: Range<usize>) {
         unsafe { &mut *self.0.get() }.narrow(interval)
     }
 
-    /// Forward `pos_multiple` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `pos_multiple` to the underlying [`ColScanEnum`].
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
         unsafe { &mut *self.0.get() }.pos_multiple()
     }
 
-    /// Forward `narrow_ranges` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `narrow_ranges` to the underlying [`ColScanEnum`].
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
         unsafe { &mut *self.0.get() }.narrow_ranges(intervals)
     }
 
-    /// Forward `is_equal` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `is_equal` to the underlying [`ColScanEnum`].
     pub fn is_equal(&self) -> bool {
         unsafe { &mut *self.0.get() }.is_equal()
     }
 
-    /// Forward `get_smallest_scans` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `get_smallest_scans` to the underlying [`ColScanEnum`].
     pub fn get_smallest_scans(&self) -> &Vec<bool> {
         unsafe { &mut *self.0.get() }.get_smallest_scans()
     }
 
-    /// Forward `get_smallest_scans` to the underlying [`RangedColumnScanEnum`].
+    /// Forward `get_smallest_scans` to the underlying [`ColScanEnum`].
     pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
         unsafe { &mut *self.0.get() }.set_active_scans(active_scans);
     }
 }
 
-impl<'a, S, T> From<S> for RangedColumnScanCell<'a, T>
+impl<'a, S, T> From<S> for ColScanCell<'a, T>
 where
-    S: Into<RangedColumnScanEnum<'a, T>>,
+    S: Into<ColScanEnum<'a, T>>,
     T: 'a + ColumnDataType,
 {
     fn from(cs: S) -> Self {
@@ -361,17 +361,17 @@ where
 
 /// enum for ColScan for underlying data type
 #[derive(Debug)]
-pub enum RangedColumnScanT<'a> {
+pub enum ColScanT<'a> {
     /// Case u64
-    U64(RangedColumnScanCell<'a, u64>),
+    U64(ColScanCell<'a, u64>),
     /// Case Float
-    Float(RangedColumnScanCell<'a, Float>),
+    Float(ColScanCell<'a, Float>),
     /// Case Double
-    Double(RangedColumnScanCell<'a, Double>),
+    Double(ColScanCell<'a, Double>),
 }
 
 generate_datatype_forwarder!(forward_to_ranged_column_scan_cell);
-impl<'a> RangedColumnScanT<'a> {
+impl<'a> ColScanT<'a> {
     /// Return all positions in the underlying column the cursor is currently at
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
         forward_to_ranged_column_scan_cell!(self, pos_multiple)
@@ -400,7 +400,7 @@ impl<'a> RangedColumnScanT<'a> {
     }
 }
 
-impl<'a> Iterator for RangedColumnScanT<'a> {
+impl<'a> Iterator for ColScanT<'a> {
     type Item = DataValueT;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -408,7 +408,7 @@ impl<'a> Iterator for RangedColumnScanT<'a> {
     }
 }
 
-impl<'a> ColScan for RangedColumnScanT<'a> {
+impl<'a> ColScan for ColScanT<'a> {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
         match self {
             Self::U64(cs) => match value {

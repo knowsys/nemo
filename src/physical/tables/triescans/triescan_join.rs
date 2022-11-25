@@ -1,7 +1,5 @@
 use crate::physical::{
-    columns::colscans::{
-        ColScan, OrderedMergeJoin, RangedColumnScanCell, RangedColumnScanEnum, RangedColumnScanT,
-    },
+    columns::colscans::{ColScan, ColScanCell, ColScanEnum, ColScanT, OrderedMergeJoin},
     datatypes::{DataTypeName, Double, Float},
     tables::tables::TableSchema,
     tables::tries::TrieSchema,
@@ -25,13 +23,13 @@ pub struct TrieJoin<'a> {
     variable_to_scan: Vec<Vec<usize>>,
 
     /// We're keeping an [`UnsafeCell`] here since the
-    /// [`RangedColumnScanT`] are actually borrowed from within
+    /// [`ColScanT`] are actually borrowed from within
     /// `trie_scans`. We're not actually modifying through these
     /// references (since there's another layer of Cells hidden in
-    /// [`RangedColumnScanT`], we're just using this satisfy the
+    /// [`ColScanT`], we're just using this satisfy the
     /// borrow checker.  TODO: find a nicer solution for this that
     /// doesn't expose [`UnsafeCell`] as part of the API.
-    merge_joins: Vec<UnsafeCell<RangedColumnScanT<'a>>>,
+    merge_joins: Vec<UnsafeCell<ColScanT<'a>>>,
 }
 
 impl<'a> TrieJoin<'a> {
@@ -48,7 +46,7 @@ impl<'a> TrieJoin<'a> {
             .take(target_schema.arity())
             .collect::<Vec<_>>();
 
-        let mut merge_joins: Vec<UnsafeCell<RangedColumnScanT<'a>>> = Vec::new();
+        let mut merge_joins: Vec<UnsafeCell<ColScanT<'a>>> = Vec::new();
 
         for (scan_index, binding) in bindings.iter().enumerate() {
             for (col_index, &var) in binding.iter().enumerate() {
@@ -60,14 +58,14 @@ impl<'a> TrieJoin<'a> {
         for (variable, scan_indices) in variable_to_scan.iter().enumerate() {
             macro_rules! merge_join_for_datatype {
                 ($variant:ident, $type:ty) => {{
-                    let mut scans = Vec::<&RangedColumnScanCell<$type>>::new();
+                    let mut scans = Vec::<&ColScanCell<$type>>::new();
                     for (index, &scan_index) in scan_indices.iter().enumerate() {
                         let column_index = merge_join_indices[variable][index];
                         unsafe {
                             let column_scan =
                                 &*trie_scans[scan_index].get_scan(column_index).unwrap().get();
 
-                            if let RangedColumnScanT::$variant(cs) = column_scan {
+                            if let ColScanT::$variant(cs) = column_scan {
                                 scans.push(cs);
                             } else {
                                 panic!("expected a column scan of type {}", stringify!($type));
@@ -75,11 +73,9 @@ impl<'a> TrieJoin<'a> {
                         }
                     }
 
-                    merge_joins.push(UnsafeCell::new(RangedColumnScanT::$variant(
-                        RangedColumnScanCell::new(RangedColumnScanEnum::OrderedMergeJoin(
-                            OrderedMergeJoin::new(scans),
-                        )),
-                    )))
+                    merge_joins.push(UnsafeCell::new(ColScanT::$variant(ColScanCell::new(
+                        ColScanEnum::OrderedMergeJoin(OrderedMergeJoin::new(scans)),
+                    ))))
                 }};
             }
 
@@ -132,7 +128,7 @@ impl<'a> TrieScan<'a> for TrieJoin<'a> {
         self.merge_joins[current_variable].get_mut().reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn current_scan(&self) -> Option<&UnsafeCell<ColScanT<'a>>> {
         debug_assert!(self.current_variable.is_some());
 
         match self.target_schema.get_type(self.current_variable?) {
@@ -142,7 +138,7 @@ impl<'a> TrieScan<'a> for TrieJoin<'a> {
         }
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<RangedColumnScanT<'a>>> {
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColScanT<'a>>> {
         Some(&self.merge_joins[index])
     }
 
@@ -163,14 +159,14 @@ mod test {
     use crate::physical::tables::triescans::{
         materialize, IntervalTrieScan, TrieScan, TrieScanEnum,
     };
-    use crate::physical::{columns::colscans::RangedColumnScanT, datatypes::DataTypeName};
+    use crate::physical::{columns::colscans::ColScanT, datatypes::DataTypeName};
 
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
     fn join_next(join_scan: &mut TrieJoin) -> Option<u64> {
         unsafe {
-            if let RangedColumnScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
+            if let ColScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
                 rcs.next()
             } else {
                 panic!("type should be u64");
@@ -180,7 +176,7 @@ mod test {
 
     fn join_current(join_scan: &mut TrieJoin) -> Option<u64> {
         unsafe {
-            if let RangedColumnScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
+            if let ColScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
                 rcs.current()
             } else {
                 panic!("type should be u64");

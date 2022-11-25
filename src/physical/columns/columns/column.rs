@@ -1,7 +1,7 @@
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::{
-        columns::colscans::{colscan::ColScan, RangedColumnScanEnum, GenericColumnScanEnum},
+        columns::colscans::{colscan::ColScan, ColScanEnum, GenericColumnScanEnum},
         datatypes::{ColumnDataType, DataValueT, Double, Float},
     },
 };
@@ -49,7 +49,7 @@ impl<'a, T> Column<'a, T> for ColumnEnum<T>
 where
     T: 'a + ColumnDataType,
 {
-    type Scan = RangedColumnScanEnum<'a, T>;
+    type Scan = ColScanEnum<'a, T>;
 
     fn len(&self) -> usize {
         forward_to_column!(self, len)
@@ -65,10 +65,10 @@ where
 
     fn iter(&'a self) -> Self::Scan {
         match self {
-            Self::VectorColumn(col) => RangedColumnScanEnum::GenericColumnScan(
-                GenericColumnScanEnum::VectorColumn(col.iter()),
-            ),
-            Self::RleColumn(col) => RangedColumnScanEnum::RleColumnScan(col.iter()),
+            Self::VectorColumn(col) => {
+                ColScanEnum::GenericColumnScan(GenericColumnScanEnum::VectorColumn(col.iter()))
+            }
+            Self::RleColumn(col) => ColScanEnum::RleColumnScan(col.iter()),
         }
     }
 }

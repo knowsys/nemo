@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::ops::Range;
 
 use super::colscan::ColScan;
-use super::RangedColumnScanCell;
+use super::ColScanCell;
 
 /// Iterator representing a union of column iterators
 #[derive(Debug)]
@@ -11,7 +11,7 @@ pub struct UnionScan<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    column_scans: Vec<&'a RangedColumnScanCell<'a, T>>,
+    column_scans: Vec<&'a ColScanCell<'a, T>>,
     smallest_scans: Vec<bool>,
     smallest_value: Option<T>,
 
@@ -24,7 +24,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new VectorColumnScan for a Column.
-    pub fn new(column_scans: Vec<&'a RangedColumnScanCell<'a, T>>) -> UnionScan<'a, T> {
+    pub fn new(column_scans: Vec<&'a ColScanCell<'a, T>>) -> UnionScan<'a, T> {
         let scans_len = column_scans.len();
         UnionScan {
             column_scans,
@@ -142,7 +142,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columns::{
-        colscans::{ColScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum},
+        colscans::{ColScan, ColScanCell, ColScanEnum, GenericColumnScanEnum},
         columns::{Column, VectorColumn},
     };
 
@@ -155,13 +155,13 @@ mod test {
         let column_snd = VectorColumn::new(vec![0u64, 1, 2, 7, 9]);
         let column_trd = VectorColumn::new(vec![0u64, 2, 4, 11]);
 
-        let mut iter_fst = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let mut iter_fst = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(column_fst.iter()),
         ));
-        let mut iter_snd = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let mut iter_snd = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(column_snd.iter()),
         ));
-        let mut iter_trd = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let mut iter_trd = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(column_trd.iter()),
         ));
 

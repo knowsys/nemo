@@ -137,7 +137,7 @@ pub fn trie_add_duplicates(trie: Trie, indices: &[Vec<usize>]) -> Trie {
 mod test {
 
     use crate::physical::{
-        columns::colscans::RangedColumnScanT,
+        columns::colscans::ColScanT,
         datatypes::{DataTypeName, DataValueT},
         tables::{
             tries::{Trie, TrieSchema, TrieSchemaEntry},
@@ -149,7 +149,7 @@ mod test {
     use super::trie_add_constant;
 
     fn scan_next(int_scan: &mut IntervalTrieScan) -> Option<u64> {
-        if let RangedColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
+        if let ColScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -158,7 +158,7 @@ mod test {
 
     fn scan_current(int_scan: &mut IntervalTrieScan) -> Option<u64> {
         unsafe {
-            if let RangedColumnScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
+            if let ColScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
                 rcs.current()
             } else {
                 panic!("type should be u64");

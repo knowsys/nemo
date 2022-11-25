@@ -1,4 +1,4 @@
-use super::{colscan::ColScan, RangedColumnScanCell};
+use super::{colscan::ColScan, ColScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
@@ -8,7 +8,7 @@ pub struct EqualValueScan<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    scan: &'a RangedColumnScanCell<'a, T>,
+    scan: &'a ColScanCell<'a, T>,
     value: T,
     current_value: Option<T>,
 }
@@ -17,7 +17,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new EqualValueScan for a Column.
-    pub fn new(scan: &'a RangedColumnScanCell<'a, T>, value: T) -> EqualValueScan<'a, T> {
+    pub fn new(scan: &'a ColScanCell<'a, T>, value: T) -> EqualValueScan<'a, T> {
         EqualValueScan {
             scan,
             value,
@@ -85,7 +85,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columns::{
-        colscans::{ColScan, GenericColumnScanEnum, RangedColumnScanCell, RangedColumnScanEnum},
+        colscans::{ColScan, ColScanCell, ColScanEnum, GenericColumnScanEnum},
         columns::{Column, VectorColumn},
     };
 
@@ -96,7 +96,7 @@ mod test {
     #[test]
     fn test_u64() {
         let col = VectorColumn::new(vec![1u64, 4, 8]);
-        let col_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let col_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(col.iter()),
         ));
 
@@ -107,7 +107,7 @@ mod test {
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);
 
-        let col_iter = RangedColumnScanCell::new(RangedColumnScanEnum::GenericColumnScan(
+        let col_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
             GenericColumnScanEnum::VectorColumn(col.iter()),
         ));
         let mut equal_scan = EqualValueScan::new(&col_iter, 7);

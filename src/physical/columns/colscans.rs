@@ -3,9 +3,9 @@
 /// Module for defining [`ColumnScan`]
 pub mod colscan;
 pub use colscan::ColScan;
-pub use colscan::RangedColumnScanCell;
-pub use colscan::RangedColumnScanEnum;
-pub use colscan::RangedColumnScanT;
+pub use colscan::ColScanCell;
+pub use colscan::ColScanEnum;
+pub use colscan::ColScanT;
 
 /// Module for defining [`GenericColumnScan`]
 pub mod colscan_generic;
