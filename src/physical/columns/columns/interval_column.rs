@@ -1,7 +1,7 @@
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::{
-        columns::colscans::{ColScanCell, ColScanEnum, ColScanT, GenericColumnScanEnum},
+        columns::colscans::{ColScanCell, ColScanEnum, ColScanGenericEnum, ColScanT},
         datatypes::{ColumnDataType, DataValueT, Double, Float},
     },
 };
@@ -71,8 +71,8 @@ where
     fn iter(&'a self) -> Self::Scan {
         forward_to_interval_column!(
             self,
-            iter.as_variant_of(GenericColumnScanEnum)
-                .wrap_with(ColScanEnum::GenericColumnScan)
+            iter.as_variant_of(ColScanGenericEnum)
+                .wrap_with(ColScanEnum::ColScanGeneric)
         )
     }
 }
