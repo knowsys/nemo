@@ -5,13 +5,8 @@ use stage2::logical::table_manager::TableManagerStrategy;
 use stage2::meta::timing::TimedDisplay;
 use stage2::meta::TimedCode;
 use stage2::physical::datatypes::{DataTypeName, DataValueT};
-<<<<<<< HEAD
 use stage2::physical::tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry};
 use stage2::physical::tabular::traits::{table::Table, table_schema::TableSchema};
-=======
-use stage2::physical::tables::tables::{Table, TableSchema};
-use stage2::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
->>>>>>> e0ea3f4 (Fix imports)
 use std::collections::HashSet;
 use std::fs::{read_to_string, OpenOptions};
 use std::io::Write;
