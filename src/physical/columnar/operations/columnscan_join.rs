@@ -5,16 +5,20 @@ use std::ops::Range;
 
 use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 
-/// Implementation of [`ColumnScan`] for the result of joining a list of [`ColumnScan`] structs.
+/// Implementation of [`ColScan`] for the result of joining a list of [`ColScan`] objects.
 #[derive(Debug)]
 pub struct ColumnScanJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
+    /// List of subiterators to be joined
     column_scans: Vec<&'a ColumnScanCell<'a, T>>,
-    active_scan: usize,
-    active_max: Option<T>,
-    current: Option<T>,
+
+    /// Index of the scan which is currently being advanced
+    active_index: usize,
+
+    /// Current value of the [`ColScanJoin`]; its also the value pointed to by each sub scan
+    current_value: Option<T>,
 }
 
 impl<'a, T> ColumnScanJoin<'a, T>
@@ -25,9 +29,8 @@ where
     pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> Self {
         ColumnScanJoin {
             column_scans,
-            active_scan: 0,
-            active_max: None,
-            current: None,
+            active_index: 0,
+            current_value: None,
         }
     }
 }
@@ -36,25 +39,35 @@ impl<'a, T> ColumnScanJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn next_loop(&mut self) -> Option<T> {
+    /// Sets each sub scan to the currently largest value until
+    /// either all sub scans point to the same value
+    /// or one sub scan reaches its end
+    fn next_loop(&mut self, mut current_max: T) -> Option<T> {
+        // Number of scans that point to the same value
         let mut matched_scans: usize = 1;
 
         loop {
-            self.active_scan = (self.active_scan + 1) % self.column_scans.len();
-            if self.active_max == self.column_scans[self.active_scan].seek(self.active_max.unwrap())
-            {
-                matched_scans += 1;
-                if matched_scans == self.column_scans.len() {
-                    self.current = self.active_max;
-                    return self.current;
+            // If all the sub scans point to the same value we found the next match
+            if matched_scans == self.column_scans.len() {
+                return Some(current_max);
+            }
+
+            // Select the next sub scan
+            self.active_index = (self.active_index + 1) % self.column_scans.len();
+            let active_scan = self.column_scans[self.active_index];
+
+            if let Some(active_value) = active_scan.seek(current_max) {
+                if active_value == current_max {
+                    // If the values are equal we increment the counter
+                    matched_scans += 1;
+                } else {
+                    // If the value of the current scan does not equal `current_max` then it must be larger
+                    current_max = active_value;
+                    matched_scans = 1;
                 }
             } else {
-                self.active_max = self.column_scans[self.active_scan].current();
-                matched_scans = 1;
-                if self.active_max.is_none() {
-                    self.current = None;
-                    return None;
-                }
+                // If we reach the end of one sub scan then we have reached the end of the join
+                return None;
             }
         }
     }
@@ -67,17 +80,14 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.active_max = self.column_scans[self.active_scan].next();
-        if self.active_max.is_none() {
-            self.current = None;
-            return None;
-        }
-        if self.column_scans.len() > 1 {
-            self.next_loop()
-        } else {
-            self.current = self.active_max;
-            self.active_max
-        }
+        self.current_value =
+            if let Some(next_active_value) = self.column_scans[self.active_index].next() {
+                self.next_loop(next_active_value)
+            } else {
+                None
+            };
+
+        self.current_value
     }
 }
 
@@ -86,30 +96,23 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        let seek_result = self.column_scans[self.active_scan].seek(value);
+        self.current_value =
+            if let Some(next_active_value) = self.column_scans[self.active_index].seek(value) {
+                self.next_loop(next_active_value)
+            } else {
+                None
+            };
 
-        if seek_result.is_none() {
-            self.current = None;
-        }
-
-        self.active_max = Some(seek_result?);
-
-        if self.column_scans.len() > 1 {
-            self.next_loop()
-        } else {
-            self.current = self.active_max;
-            self.active_max
-        }
+        self.current_value
     }
 
     fn current(&mut self) -> Option<T> {
-        self.current
+        self.current_value
     }
 
     fn reset(&mut self) {
-        self.active_scan = 0;
-        self.active_max = None;
-        self.current = None;
+        self.active_index = 0;
+        self.current_value = None;
     }
 
     fn pos(&self) -> Option<usize> {
