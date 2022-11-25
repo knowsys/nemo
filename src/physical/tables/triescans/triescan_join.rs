@@ -11,10 +11,10 @@ use std::iter::repeat;
 
 use super::{TrieScan, TrieScanEnum};
 
-/// Structure resulting from joining a set of tries (given as TrieJoins),
-/// which itself is a TrieJoin that can be used in such a join
+/// Structure resulting from joining a set of tries (given as TrieScanJoins),
+/// which itself is a TrieScanJoin that can be used in such a join
 #[derive(Debug)]
-pub struct TrieJoin<'a> {
+pub struct TrieScanJoin<'a> {
     trie_scans: Vec<TrieScanEnum<'a>>,
     target_schema: TrieSchema,
 
@@ -32,8 +32,8 @@ pub struct TrieJoin<'a> {
     merge_joins: Vec<UnsafeCell<ColScanT<'a>>>,
 }
 
-impl<'a> TrieJoin<'a> {
-    /// Construct new TrieJoin object.
+impl<'a> TrieScanJoin<'a> {
+    /// Construct new TrieScanJoin object.
     pub fn new(
         trie_scans: Vec<TrieScanEnum<'a>>,
         bindings: &[Vec<usize>],
@@ -96,7 +96,7 @@ impl<'a> TrieJoin<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieJoin<'a> {
+impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
     fn up(&mut self) {
         debug_assert!(self.current_variable.is_some());
         let current_variable = self.current_variable.unwrap();
@@ -149,7 +149,7 @@ impl<'a> TrieScan<'a> for TrieJoin<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::TrieJoin;
+    use super::TrieScanJoin;
     use crate::physical::columns::builders::{ColBuilder, ColBuilderAdaptive};
     use crate::physical::columns::columns::{
         Column, ColumnEnum, ColumnVector, IntervalColumnEnum, IntervalColumnGeneric,
@@ -157,14 +157,14 @@ mod test {
     };
     use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::tables::triescans::{
-        materialize, IntervalTrieScan, TrieScan, TrieScanEnum,
+        materialize, TrieScan, TrieScanEnum, TrieScanGeneric,
     };
     use crate::physical::{columns::colscans::ColScanT, datatypes::DataTypeName};
 
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
-    fn join_next(join_scan: &mut TrieJoin) -> Option<u64> {
+    fn join_next(join_scan: &mut TrieScanJoin) -> Option<u64> {
         unsafe {
             if let ColScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
                 rcs.next()
@@ -174,7 +174,7 @@ mod test {
         }
     }
 
-    fn join_current(join_scan: &mut TrieJoin) -> Option<u64> {
+    fn join_current(join_scan: &mut TrieScanJoin) -> Option<u64> {
         unsafe {
             if let ColScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
                 rcs.current()
@@ -233,10 +233,10 @@ mod test {
         let trie_a = Trie::new(schema_a, vec![column_a_x, column_a_y]);
         let trie_b = Trie::new(schema_b, vec![column_b_y, column_b_z]);
 
-        let mut join_iter = TrieJoin::new(
+        let mut join_iter = TrieScanJoin::new(
             vec![
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
             &[vec![0, 1], vec![1, 2]],
             schema_target,
@@ -317,19 +317,19 @@ mod test {
         ]);
 
         let trie_c = Trie::new(schema_c, vec![column_c_x, column_c_y]);
-        let join_iter_ab = TrieJoin::new(
+        let join_iter_ab = TrieScanJoin::new(
             vec![
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
             &[vec![0, 1], vec![1, 2]],
             schema_target_clone,
         );
 
-        let mut join_iter_abc = TrieJoin::new(
+        let mut join_iter_abc = TrieScanJoin::new(
             vec![
-                TrieScanEnum::TrieJoin(join_iter_ab),
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_c)),
+                TrieScanEnum::TrieScanJoin(join_iter_ab),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_c)),
             ],
             &[vec![0, 1, 2], vec![0, 1]],
             schema_target_clone_2,
@@ -405,10 +405,10 @@ mod test {
             },
         ]);
 
-        let mut join_iter = TrieJoin::new(
+        let mut join_iter = TrieScanJoin::new(
             vec![
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie)),
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie)),
             ],
             &[vec![0, 1], vec![1, 2]],
             schema_target,
@@ -518,16 +518,16 @@ mod test {
             },
         ]);
 
-        let join_iter = TrieJoin::new(
+        let join_iter = TrieScanJoin::new(
             vec![
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie)),
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_inv)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_inv)),
             ],
             &[vec![0, 2], vec![1, 2]],
             schema_target,
         );
 
-        let join_trie = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
+        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter));
 
         let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 
@@ -608,16 +608,16 @@ mod test {
             },
         ]);
 
-        let join_iter = TrieJoin::new(
+        let join_iter = TrieScanJoin::new(
             vec![
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_new)),
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_old)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_new)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_old)),
             ],
             &[vec![0, 1], vec![1, 2]],
             schema_target,
         );
 
-        let join_trie = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
+        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter));
 
         let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 
@@ -705,16 +705,16 @@ mod test {
             },
         ]);
 
-        let join_iter = TrieJoin::new(
+        let join_iter = TrieScanJoin::new(
             vec![
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
             &[vec![1, 2], vec![0, 1]],
             schema_target,
         );
 
-        let join_trie = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
+        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter));
 
         let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 
@@ -779,8 +779,8 @@ mod test {
             )],
         );
 
-        let mut my_join_iter = TrieJoin::new(
-            vec![TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(
+        let mut my_join_iter = TrieScanJoin::new(
+            vec![TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(
                 &my_trie,
             ))],
             &[vec![0]],

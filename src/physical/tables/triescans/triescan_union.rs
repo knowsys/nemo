@@ -10,16 +10,16 @@ use super::{TrieScan, TrieScanEnum};
 
 /// Trie iterator representing a union between other trie iterators
 #[derive(Debug)]
-pub struct TrieUnion<'a> {
+pub struct TrieScanUnion<'a> {
     trie_scans: Vec<TrieScanEnum<'a>>,
     layers: Vec<Option<usize>>,
     union_scans: Vec<UnsafeCell<ColScanT<'a>>>,
     current_layer: Option<usize>,
 }
 
-impl<'a> TrieUnion<'a> {
-    /// Construct new TrieUnion object.
-    pub fn new(trie_scans: Vec<TrieScanEnum<'a>>) -> TrieUnion<'a> {
+impl<'a> TrieScanUnion<'a> {
+    /// Construct new TrieScanUnion object.
+    pub fn new(trie_scans: Vec<TrieScanEnum<'a>>) -> TrieScanUnion<'a> {
         debug_assert!(!trie_scans.is_empty());
 
         // This assumes that every schema is the same
@@ -62,7 +62,7 @@ impl<'a> TrieUnion<'a> {
 
         let layers = vec![None; trie_scans.len()];
 
-        TrieUnion {
+        TrieScanUnion {
             trie_scans,
             layers,
             union_scans,
@@ -71,7 +71,7 @@ impl<'a> TrieUnion<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieUnion<'a> {
+impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
         let up_layer = if self.current_layer.unwrap() == 0 {
@@ -136,15 +136,17 @@ impl<'a> TrieScan<'a> for TrieUnion<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::TrieUnion;
+    use super::TrieScanUnion;
     use crate::physical::columns::colscans::ColScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tables::triescans::{IntervalTrieScan, TrieJoin, TrieScan, TrieScanEnum};
+    use crate::physical::tables::triescans::{
+        TrieScan, TrieScanEnum, TrieScanGeneric, TrieScanJoin,
+    };
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
-    fn union_next(union_scan: &mut TrieUnion) -> Option<u64> {
+    fn union_next(union_scan: &mut TrieScanUnion) -> Option<u64> {
         if let ColScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
             rcs.next()
         } else {
@@ -152,7 +154,7 @@ mod test {
         }
     }
 
-    fn union_current(union_scan: &mut TrieUnion) -> Option<u64> {
+    fn union_current(union_scan: &mut TrieScanUnion) -> Option<u64> {
         if let ColScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
             rcs.current()
         } else {
@@ -187,10 +189,10 @@ mod test {
         let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y]);
         let trie_trd = Trie::new(schema_trd, vec![column_trd_x, column_trd_y]);
 
-        let trie_iter_fst = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_fst));
-        let trie_iter_snd = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_snd));
-        let trie_iter_trd = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_trd));
-        let mut union_iter = TrieUnion::new(vec![trie_iter_fst, trie_iter_snd, trie_iter_trd]);
+        let trie_iter_fst = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_fst));
+        let trie_iter_snd = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_snd));
+        let trie_iter_trd = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_trd));
+        let mut union_iter = TrieScanUnion::new(vec![trie_iter_fst, trie_iter_snd, trie_iter_trd]);
         assert_eq!(union_current(&mut union_iter), None);
         union_iter.down();
         assert_eq!(union_current(&mut union_iter), None);
@@ -273,10 +275,10 @@ mod test {
 
         let trie_fst = Trie::new(schema_fst, vec![column_fst_x, column_fst_y]);
         let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y]);
-        let trie_iter_fst = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_fst));
-        let trie_iter_snd = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_snd));
+        let trie_iter_fst = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_fst));
+        let trie_iter_snd = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_snd));
 
-        let mut union_iter = TrieUnion::new(vec![trie_iter_fst, trie_iter_snd]);
+        let mut union_iter = TrieScanUnion::new(vec![trie_iter_fst, trie_iter_snd]);
         assert_eq!(union_current(&mut union_iter), None);
 
         union_iter.down();
@@ -332,10 +334,10 @@ mod test {
 
         let trie_fst = Trie::new(schema_fst, vec![column_fst_x, column_fst_y]);
         let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y]);
-        let trie_iter_fst = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_fst));
-        let trie_iter_snd = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_snd));
+        let trie_iter_fst = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_fst));
+        let trie_iter_snd = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_snd));
 
-        let mut union_iter = TrieUnion::new(vec![trie_iter_fst, trie_iter_snd]);
+        let mut union_iter = TrieScanUnion::new(vec![trie_iter_fst, trie_iter_snd]);
         assert_eq!(union_current(&mut union_iter), None);
 
         union_iter.down();
@@ -482,10 +484,10 @@ mod test {
 
         let trie_fst = Trie::new(schema_fst, vec![column_fst_x, column_fst_y, column_fst_z]);
         let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y, column_snd_z]);
-        let trie_iter_fst = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_fst));
-        let trie_iter_snd = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_snd));
+        let trie_iter_fst = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_fst));
+        let trie_iter_snd = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_snd));
 
-        let mut union_iter = TrieUnion::new(vec![trie_iter_fst, trie_iter_snd]);
+        let mut union_iter = TrieScanUnion::new(vec![trie_iter_fst, trie_iter_snd]);
         assert_eq!(union_current(&mut union_iter), None);
 
         union_iter.down();
@@ -600,25 +602,25 @@ mod test {
         let trie_c = Trie::new(schema.clone(), vec![column_c_x, column_c_y]);
         let trie_d = Trie::new(schema, vec![column_d_y, column_d_z]);
 
-        let join_ab_iter = TrieScanEnum::TrieJoin(TrieJoin::new(
+        let join_ab_iter = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
             vec![
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
             &[vec![0, 1], vec![1, 2]],
             schema_target.clone(),
         ));
 
-        let join_cd_iter = TrieScanEnum::TrieJoin(TrieJoin::new(
+        let join_cd_iter = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
             vec![
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_c)),
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_d)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_c)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_d)),
             ],
             &[vec![0, 1], vec![1, 2]],
             schema_target,
         ));
 
-        let mut union_iter = TrieUnion::new(vec![join_ab_iter, join_cd_iter]);
+        let mut union_iter = TrieScanUnion::new(vec![join_ab_iter, join_cd_iter]);
         assert_eq!(union_current(&mut union_iter), None);
 
         union_iter.down();

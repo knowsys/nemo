@@ -8,7 +8,7 @@ use stage2::io::csv::read;
 use stage2::physical::tables::tables::Table;
 use stage2::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
 use stage2::physical::tables::triescans::{
-    materialize, IntervalTrieScan, TrieJoin, TrieProject, TrieScanEnum, TrieUnion,
+    materialize, TrieScanEnum, TrieScanGeneric, TrieScanJoin, TrieScanProject, TrieScanUnion,
 };
 use stage2::{
     logical::{model::DataSource, table_manager::ColumnOrder},
@@ -90,17 +90,17 @@ pub fn benchmark_join(c: &mut Criterion) {
     group_ours.bench_function("trie_join", |b| {
         b.iter_with_setup(
             || {
-                TrieJoin::new(
+                TrieScanJoin::new(
                     vec![
-                        TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
-                        TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
+                        TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
+                        TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
                     ],
                     &[vec![0, 1, 2], vec![0, 1, 3]],
                     schema_target.clone(),
                 )
             },
             |join_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
+                let _ = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter));
             },
         );
     });
@@ -192,65 +192,65 @@ fn benchmark_project(c: &mut Criterion) {
         },
     ]);
 
-    let join_iter = TrieJoin::new(
+    let join_iter = TrieScanJoin::new(
         vec![
-            TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
-            TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
+            TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
+            TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
         ],
         &[vec![0, 1, 2], vec![0, 1, 3]],
         schema_target,
     );
 
-    let join_trie = materialize(&mut TrieScanEnum::TrieJoin(join_iter));
+    let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter));
 
     let mut group_ours = c.benchmark_group("trie_project");
     group_ours.sample_size(10);
     group_ours.bench_function("trie_project_hole", |b| {
         b.iter_with_setup(
-            || TrieProject::new(&join_trie, vec![0, 3]),
+            || TrieScanProject::new(&join_trie, vec![0, 3]),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
         );
     });
     group_ours.bench_function("trie_project_beginning", |b| {
         b.iter_with_setup(
-            || TrieProject::new(&join_trie, vec![0, 1]),
+            || TrieScanProject::new(&join_trie, vec![0, 1]),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
         );
     });
     group_ours.bench_function("trie_project_end", |b| {
         b.iter_with_setup(
-            || TrieProject::new(&join_trie, vec![2, 3]),
+            || TrieScanProject::new(&join_trie, vec![2, 3]),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
         );
     });
 
     group_ours.bench_function("trie_reorder_1", |b| {
         b.iter_with_setup(
-            || TrieProject::new(&trie_b, vec![0, 2, 1]),
+            || TrieScanProject::new(&trie_b, vec![0, 2, 1]),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
         );
     });
     group_ours.bench_function("trie_reorder_2", |b| {
         b.iter_with_setup(
-            || TrieProject::new(&trie_b, vec![1, 0, 2]),
+            || TrieScanProject::new(&trie_b, vec![1, 0, 2]),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
         );
     });
     group_ours.bench_function("trie_reorder_3", |b| {
         b.iter_with_setup(
-            || TrieProject::new(&trie_b, vec![2, 1, 0]),
+            || TrieScanProject::new(&trie_b, vec![2, 1, 0]),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
         );
     });
@@ -301,15 +301,15 @@ fn benchmark_union(c: &mut Criterion) {
     group_ours.bench_function("trie_union", |b| {
         b.iter_with_setup(
             || {
-                TrieUnion::new(
+                TrieScanUnion::new(
                     tries
                         .iter()
-                        .map(|trie| TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(trie)))
+                        .map(|trie| TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(trie)))
                         .collect(),
                 )
             },
             |union_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieUnion(union_iter));
+                let _ = materialize(&mut TrieScanEnum::TrieScanUnion(union_iter));
             },
         );
     });

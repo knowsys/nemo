@@ -11,8 +11,8 @@ use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use crate::physical::tables::tables::Table;
 use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
 use crate::physical::tables::triescans::{
-    materialize, IntervalTrieScan, TrieDifference, TrieJoin, TrieProject, TrieScan, TrieScanEnum,
-    TrieSelectEqual, TrieSelectValue, TrieUnion,
+    materialize, TrieScan, TrieScanEnum, TrieScanGeneric, TrieScanJoin, TrieScanMinus,
+    TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion,
 };
 use crate::physical::util::cover_interval;
 use csv::ReaderBuilder;
@@ -331,12 +331,12 @@ impl TableManager {
                     unreachable!()
                 };
 
-                let project_iter = TrieProject::new(
+                let project_iter = TrieScanProject::new(
                     base_trie,
                     TableManager::translate_order(base_order, &info_order),
                 );
 
-                let reordered_trie = materialize(&mut TrieScanEnum::TrieProject(project_iter));
+                let reordered_trie = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
                 self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
 
                 log::info!(
@@ -888,8 +888,8 @@ impl TableManager {
         temp_tries: &'a HashMap<TableId, Option<Trie>>,
     ) -> Option<TrieScanEnum> {
         match &node.operation {
-            ExecutionOperation::Temp(id) => Some(TrieScanEnum::IntervalTrieScan(
-                IntervalTrieScan::new(temp_tries.get(id)?.as_ref()?),
+            ExecutionOperation::Temp(id) => Some(TrieScanEnum::TrieScanGeneric(
+                TrieScanGeneric::new(temp_tries.get(id)?.as_ref()?),
             )),
             ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) => {
                 let table_info = &self.tables[self
@@ -900,8 +900,8 @@ impl TableManager {
                         return None;
                     }
 
-                    let interval_trie_scan = IntervalTrieScan::new(trie);
-                    Some(TrieScanEnum::IntervalTrieScan(interval_trie_scan))
+                    let interval_trie_scan = TrieScanGeneric::new(trie);
+                    Some(TrieScanEnum::TrieScanGeneric(interval_trie_scan))
                 } else {
                     panic!("Base tables are supposed to be materialized");
                 }
@@ -946,7 +946,7 @@ impl TableManager {
 
                 let schema = TrieSchema::new(attributes);
 
-                Some(TrieScanEnum::TrieJoin(TrieJoin::new(
+                Some(TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
                     subiterators,
                     bindings,
                     schema,
@@ -970,36 +970,36 @@ impl TableManager {
                     return Some(subiterators.remove(0));
                 }
 
-                let union_scan = TrieUnion::new(subiterators);
+                let union_scan = TrieScanUnion::new(subiterators);
 
-                Some(TrieScanEnum::TrieUnion(union_scan))
+                Some(TrieScanEnum::TrieScanUnion(union_scan))
             }
             ExecutionOperation::Minus(subtable_left, subtable_right) => {
                 let left_scan = self.get_iterator_node(subtable_left, temp_tries);
                 let right_scan = self.get_iterator_node(subtable_right, temp_tries);
 
                 left_scan.map(|ls| match right_scan {
-                    Some(rs) => TrieScanEnum::TrieDifference(TrieDifference::new(ls, rs)),
+                    Some(rs) => TrieScanEnum::TrieScanMinus(TrieScanMinus::new(ls, rs)),
                     None => ls,
                 })
             }
             ExecutionOperation::Project(id, sorting) => {
                 let tmp_trie = temp_tries.get(id)?.as_ref()?;
-                let project_scan = TrieProject::new(tmp_trie, sorting.clone());
+                let project_scan = TrieScanProject::new(tmp_trie, sorting.clone());
 
-                Some(TrieScanEnum::TrieProject(project_scan))
+                Some(TrieScanEnum::TrieScanProject(project_scan))
             }
             ExecutionOperation::SelectValue(subtable, assignments) => {
                 let subiterator = self.get_iterator_node(subtable, temp_tries)?;
-                let select_scan = TrieSelectValue::new(subiterator, assignments.clone());
+                let select_scan = TrieScanSelectValue::new(subiterator, assignments.clone());
 
-                Some(TrieScanEnum::TrieSelectValue(select_scan))
+                Some(TrieScanEnum::TrieScanSelectValue(select_scan))
             }
             ExecutionOperation::SelectEqual(subtable, classes) => {
                 let subiterator = self.get_iterator_node(subtable, temp_tries)?;
-                let select_scan = TrieSelectEqual::new(subiterator, classes.clone());
+                let select_scan = TrieScanSelectEqual::new(subiterator, classes.clone());
 
-                Some(TrieScanEnum::TrieSelectEqual(select_scan))
+                Some(TrieScanEnum::TrieScanSelectEqual(select_scan))
             }
         }
     }

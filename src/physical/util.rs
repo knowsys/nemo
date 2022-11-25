@@ -19,11 +19,11 @@ pub use test_util::make_gict;
 /// # Example
 ///
 /// ```ignore
-/// generate_forwarder!(forward_to_scan; IntervalTrieScan, TrieScanJoin);
+/// generate_forwarder!(forward_to_scan; TrieScanGeneric, TrieScanJoin);
 /// ```
 ///
 /// will generate a forwarder called `forward_to_scan` that dispatches
-/// to variants `Self::IntervalTrieScan` and `Self::TrieScanJoin`,
+/// to variants `Self::TrieScanGeneric` and `Self::TrieScanJoin`,
 /// which can be used as follows:
 ///
 /// ```ignore

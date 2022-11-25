@@ -159,7 +159,7 @@ mod test {
     use crate::physical::columns::columns::Column;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tables::triescans::{IntervalTrieScan, TrieJoin, TrieScanEnum};
+    use crate::physical::tables::triescans::{TrieScanEnum, TrieScanGeneric, TrieScanJoin};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
@@ -194,7 +194,7 @@ mod test {
         ]);
 
         let trie = Trie::new(schema, column_vec);
-        let mut trie_iter = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie));
+        let mut trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
         let materialized_trie = materialize(&mut trie_iter);
 
@@ -293,10 +293,10 @@ mod test {
         let trie_a = Trie::new(schema_a, vec![column_a_x, column_a_y]);
         let trie_b = Trie::new(schema_b, vec![column_b_y, column_b_z]);
 
-        let mut join_iter = TrieScanEnum::TrieJoin(TrieJoin::new(
+        let mut join_iter = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
             vec![
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_a)),
-                TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_b)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
             &[vec![0, 1], vec![1, 2]],
             schema_target,

@@ -141,14 +141,14 @@ mod test {
         datatypes::{DataTypeName, DataValueT},
         tables::{
             tries::{Trie, TrieSchema, TrieSchemaEntry},
-            triescans::{IntervalTrieScan, TrieScan},
+            triescans::{TrieScan, TrieScanGeneric},
         },
         util::make_gict,
     };
 
     use super::trie_add_constant;
 
-    fn scan_next(int_scan: &mut IntervalTrieScan) -> Option<u64> {
+    fn scan_next(int_scan: &mut TrieScanGeneric) -> Option<u64> {
         if let ColScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
             rcs.next()
         } else {
@@ -156,7 +156,7 @@ mod test {
         }
     }
 
-    fn scan_current(int_scan: &mut IntervalTrieScan) -> Option<u64> {
+    fn scan_current(int_scan: &mut TrieScanGeneric) -> Option<u64> {
         unsafe {
             if let ColScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
                 rcs.current()
@@ -198,7 +198,7 @@ mod test {
             ],
         );
 
-        let mut trie_iter = IntervalTrieScan::new(&trie_appended);
+        let mut trie_iter = TrieScanGeneric::new(&trie_appended);
 
         assert!(scan_current(&mut trie_iter).is_none());
 

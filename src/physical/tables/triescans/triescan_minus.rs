@@ -12,7 +12,7 @@ use super::{TrieScan, TrieScanEnum};
 
 /// Trie iterator representing the difference between other trie iterators
 #[derive(Debug)]
-pub struct TrieDifference<'a> {
+pub struct TrieScanMinus<'a> {
     trie_left: Box<TrieScanEnum<'a>>,
     trie_right: Box<TrieScanEnum<'a>>,
     layer_left: Option<usize>,
@@ -20,9 +20,9 @@ pub struct TrieDifference<'a> {
     difference_scans: Vec<UnsafeCell<ColScanT<'a>>>,
 }
 
-impl<'a> TrieDifference<'a> {
-    /// Construct new TrieDifference object.
-    pub fn new(trie_left: TrieScanEnum<'a>, trie_right: TrieScanEnum<'a>) -> TrieDifference<'a> {
+impl<'a> TrieScanMinus<'a> {
+    /// Construct new TrieScanMinus object.
+    pub fn new(trie_left: TrieScanEnum<'a>, trie_right: TrieScanEnum<'a>) -> TrieScanMinus<'a> {
         let target_schema = trie_left.get_schema();
         let layer_count = target_schema.arity();
 
@@ -70,7 +70,7 @@ impl<'a> TrieDifference<'a> {
             };
         }
 
-        TrieDifference {
+        TrieScanMinus {
             trie_left: Box::new(trie_left),
             trie_right: Box::new(trie_right),
             layer_left: None,
@@ -80,7 +80,7 @@ impl<'a> TrieDifference<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieDifference<'a> {
+impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
     fn up(&mut self) {
         debug_assert!(self.layer_left.is_some());
 
@@ -176,15 +176,15 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::TrieDifference;
+    use super::TrieScanMinus;
     use crate::physical::columns::colscans::ColScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tables::triescans::{IntervalTrieScan, TrieScan, TrieScanEnum};
+    use crate::physical::tables::triescans::{TrieScan, TrieScanEnum, TrieScanGeneric};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
-    fn diff_next(diff_scan: &mut TrieDifference) -> Option<u64> {
+    fn diff_next(diff_scan: &mut TrieScanMinus) -> Option<u64> {
         if let ColScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
             rcs.next()
         } else {
@@ -192,7 +192,7 @@ mod test {
         }
     }
 
-    fn diff_current(diff_scan: &mut TrieDifference) -> Option<u64> {
+    fn diff_current(diff_scan: &mut TrieScanMinus) -> Option<u64> {
         if let ColScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
             rcs.current()
         } else {
@@ -223,10 +223,10 @@ mod test {
         let trie_left = Trie::new(schema_left, vec![column_left_x, column_left_y]);
         let trie_right = Trie::new(schema_right, vec![column_right_x, column_right_y]);
 
-        let trie_left_iter = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_left));
-        let trie_right_iter = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_right));
+        let trie_left_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_left));
+        let trie_right_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_right));
 
-        let mut diff_iter = TrieDifference::new(trie_left_iter, trie_right_iter);
+        let mut diff_iter = TrieScanMinus::new(trie_left_iter, trie_right_iter);
         assert!(diff_iter.current_scan().is_none());
 
         diff_iter.down();
@@ -293,10 +293,10 @@ mod test {
         let trie_left = Trie::new(schema_left, vec![column_left_x, column_left_y]);
         let trie_right = Trie::new(schema_right, vec![column_right_x, column_right_y]);
 
-        let trie_left_iter = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_left));
-        let trie_right_iter = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie_right));
+        let trie_left_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_left));
+        let trie_right_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_right));
 
-        let mut diff_iter = TrieDifference::new(trie_left_iter, trie_right_iter);
+        let mut diff_iter = TrieScanMinus::new(trie_left_iter, trie_right_iter);
         assert!(diff_iter.current_scan().is_none());
 
         diff_iter.down();

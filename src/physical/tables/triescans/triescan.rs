@@ -6,7 +6,10 @@ use crate::{generate_forwarder, physical::columns::columns::Column};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
-use super::{TrieDifference, TrieJoin, TrieProject, TrieSelectEqual, TrieSelectValue, TrieUnion};
+use super::{
+    TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
+    TrieScanUnion,
+};
 
 /// Iterator for a Trie datastructure.
 /// Allows for vertical traversal through the tree and can return
@@ -30,13 +33,13 @@ pub trait TrieScan<'a>: Debug {
 
 /// Implementation of TrieScan for Trie with IntervalColumns
 #[derive(Debug)]
-pub struct IntervalTrieScan<'a> {
+pub struct TrieScanGeneric<'a> {
     trie: &'a Trie,
     layers: Vec<UnsafeCell<ColScanT<'a>>>,
     current_layer: Option<usize>,
 }
 
-impl<'a> IntervalTrieScan<'a> {
+impl<'a> TrieScanGeneric<'a> {
     /// Construct Trie iterator.
     pub fn new(trie: &'a Trie) -> Self {
         let mut layers = Vec::<UnsafeCell<ColScanT<'a>>>::new();
@@ -54,7 +57,7 @@ impl<'a> IntervalTrieScan<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
+impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
     fn up(&mut self) {
         self.current_layer = self.current_layer.and_then(|index| index.checked_sub(1));
     }
@@ -105,23 +108,23 @@ impl<'a> TrieScan<'a> for IntervalTrieScan<'a> {
 /// Enum for TrieScan Variants
 #[derive(Debug)]
 pub enum TrieScanEnum<'a> {
-    /// Case IntervalTrieScan
-    IntervalTrieScan(IntervalTrieScan<'a>),
-    /// Case TrieJoin
-    TrieJoin(TrieJoin<'a>),
-    /// Case TrieProject
-    TrieProject(TrieProject<'a>),
-    /// Case TrieDifference
-    TrieDifference(TrieDifference<'a>),
-    /// Case TrieUnion
-    TrieUnion(TrieUnion<'a>),
-    /// Case TrieSelectEqual
-    TrieSelectEqual(TrieSelectEqual<'a>),
-    /// Case TrieSelectValue
-    TrieSelectValue(TrieSelectValue<'a>),
+    /// Case TrieScanGeneric
+    TrieScanGeneric(TrieScanGeneric<'a>),
+    /// Case TrieScanJoin
+    TrieScanJoin(TrieScanJoin<'a>),
+    /// Case TrieScanProject
+    TrieScanProject(TrieScanProject<'a>),
+    /// Case TrieScanMinus
+    TrieScanMinus(TrieScanMinus<'a>),
+    /// Case TrieScanUnion
+    TrieScanUnion(TrieScanUnion<'a>),
+    /// Case TrieScanSelectEqual
+    TrieScanSelectEqual(TrieScanSelectEqual<'a>),
+    /// Case TrieScanSelectValue
+    TrieScanSelectValue(TrieScanSelectValue<'a>),
 }
 
-generate_forwarder!(forward_to_scan; IntervalTrieScan, TrieJoin, TrieProject, TrieDifference, TrieSelectEqual, TrieSelectValue, TrieUnion);
+generate_forwarder!(forward_to_scan; TrieScanGeneric, TrieScanJoin, TrieScanProject, TrieScanMinus, TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion);
 
 impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
     fn up(&mut self) {
@@ -147,14 +150,14 @@ impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::{IntervalTrieScan, TrieScan};
+    use super::{TrieScan, TrieScanGeneric};
     use crate::physical::columns::colscans::ColScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
-    fn scan_seek(int_scan: &mut IntervalTrieScan, value: u64) -> Option<u64> {
+    fn scan_seek(int_scan: &mut TrieScanGeneric, value: u64) -> Option<u64> {
         if let ColScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
             rcs.seek(value)
         } else {
@@ -162,7 +165,7 @@ mod test {
         }
     }
 
-    fn scan_next(int_scan: &mut IntervalTrieScan) -> Option<u64> {
+    fn scan_next(int_scan: &mut TrieScanGeneric) -> Option<u64> {
         if let ColScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
             rcs.next()
         } else {
@@ -170,7 +173,7 @@ mod test {
         }
     }
 
-    fn scan_current(int_scan: &mut IntervalTrieScan) -> Option<u64> {
+    fn scan_current(int_scan: &mut TrieScanGeneric) -> Option<u64> {
         unsafe {
             if let ColScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
                 rcs.current()
@@ -204,7 +207,7 @@ mod test {
         ]);
 
         let trie = Trie::new(schema, column_vec);
-        let mut trie_iter = IntervalTrieScan::new(&trie);
+        let mut trie_iter = TrieScanGeneric::new(&trie);
 
         assert!(scan_current(&mut trie_iter).is_none());
 

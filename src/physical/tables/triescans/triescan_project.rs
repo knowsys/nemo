@@ -50,7 +50,7 @@ fn shrink_position(column: &IntervalColumnT, pos: usize) -> usize {
 
 /// Iterator which can reorder and project away colums of a trie
 #[derive(Debug)]
-pub struct TrieProject<'a> {
+pub struct TrieScanProject<'a> {
     trie: &'a Trie,
     current_layer: Option<usize>,
     target_schema: TrieSchema,
@@ -58,8 +58,8 @@ pub struct TrieProject<'a> {
     reorder_scans: Vec<UnsafeCell<ColScanT<'a>>>,
 }
 
-impl<'a> TrieProject<'a> {
-    /// Create new TrieProject object
+impl<'a> TrieScanProject<'a> {
+    /// Create new TrieScanProject object
     pub fn new(trie: &'a Trie, picked_columns: Vec<usize>) -> Self {
         let input_schema = trie.schema();
 
@@ -110,7 +110,7 @@ impl<'a> TrieProject<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieProject<'a> {
+impl<'a> TrieScan<'a> for TrieScanProject<'a> {
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
         let current_layer = self.current_layer.unwrap();
@@ -260,7 +260,7 @@ impl<'a> TrieScan<'a> for TrieProject<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::TrieProject;
+    use super::TrieScanProject;
     use crate::physical::columns::columns::Column;
     use crate::physical::datatypes::{DataTypeName, DataValueT};
     use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
@@ -295,15 +295,15 @@ mod test {
 
         let trie = Trie::new(schema, column_vec);
 
-        let trie_no_first = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+        let trie_no_first = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![1, 2],
         )));
-        let trie_no_middle = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+        let trie_no_middle = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![0, 2],
         )));
-        let trie_no_last = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+        let trie_no_last = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![0, 1],
         )));
@@ -468,7 +468,7 @@ mod test {
 
         let trie = Trie::new(schema, column_vec);
 
-        let trie_projected = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+        let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![0, 3, 5],
         )));
@@ -550,7 +550,7 @@ mod test {
 
         let trie = Trie::new(schema, column_vec);
 
-        let trie_reordered = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+        let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![2, 0, 1],
         )));
@@ -640,7 +640,7 @@ mod test {
 
         let trie = Trie::new(schema, column_vec);
 
-        let trie_reordered = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+        let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![2, 0],
         )));
@@ -720,7 +720,7 @@ mod test {
 
         let trie = Trie::new(schema, column_vec);
 
-        let trie_projected = materialize(&mut TrieScanEnum::TrieProject(TrieProject::new(
+        let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![0, 2, 4, 1],
         )));
@@ -824,7 +824,8 @@ mod test {
 
         let picked_columns = vec![1, 0, 2];
         let base_trie = Trie::new(schema, columns);
-        let mut project = TrieScanEnum::TrieProject(TrieProject::new(&base_trie, picked_columns));
+        let mut project =
+            TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
 
         let reordered_trie = materialize(&mut project);
         log::debug!("{}", reordered_trie.debug(&dict));
@@ -892,7 +893,8 @@ mod test {
         let picked_columns = vec![1, 0, 2];
         let base_trie = Trie::from_rows(schema, rows);
         log::debug!("\n{}", base_trie.debug(&dict));
-        let mut project = TrieScanEnum::TrieProject(TrieProject::new(&base_trie, picked_columns));
+        let mut project =
+            TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
 
         let reordered_trie = materialize(&mut project);
         log::debug!("\n{}", reordered_trie.debug(&dict));
@@ -926,7 +928,8 @@ mod test {
         let picked_columns = vec![1, 0, 2];
         let base_trie = Trie::from_rows(schema, rows);
         log::debug!("\n{}", base_trie.debug(&dict));
-        let mut project = TrieScanEnum::TrieProject(TrieProject::new(&base_trie, picked_columns));
+        let mut project =
+            TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
 
         let reordered_trie = materialize(&mut project);
         log::debug!("\n{}", reordered_trie.debug(&dict));
@@ -969,7 +972,8 @@ mod test {
 
         let picked_columns = vec![1, 0, 2];
         let base_trie = Trie::new(schema, columns);
-        let mut project = TrieScanEnum::TrieProject(TrieProject::new(&base_trie, picked_columns));
+        let mut project =
+            TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
 
         let reordered_trie = materialize(&mut project);
         log::debug!("{}", reordered_trie.debug(&dict));

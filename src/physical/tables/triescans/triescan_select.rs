@@ -13,14 +13,14 @@ use super::{TrieScan, TrieScanEnum};
 
 /// Trie iterator enforcing conditions which state that some columns should have the same value
 #[derive(Debug)]
-pub struct TrieSelectEqual<'a> {
+pub struct TrieScanSelectEqual<'a> {
     base_trie: Box<TrieScanEnum<'a>>,
     select_scans: Vec<UnsafeCell<ColScanT<'a>>>,
     current_layer: Option<usize>,
 }
 
-impl<'a> TrieSelectEqual<'a> {
-    /// Construct new TrieSelectEqual object.
+impl<'a> TrieScanSelectEqual<'a> {
+    /// Construct new TrieScanSelectEqual object.
     pub fn new(base_trie: TrieScanEnum<'a>, eq_classes: Vec<Vec<usize>>) -> Self {
         let target_schema = base_trie.get_schema();
         let arity = target_schema.arity();
@@ -102,7 +102,7 @@ impl<'a> TrieSelectEqual<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieSelectEqual<'a> {
+impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
     #[allow(clippy::unnecessary_lazy_evaluations)] // not actually
                                                    // unnecessary, as the subtraction might underflow
     fn up(&mut self) {
@@ -139,7 +139,7 @@ impl<'a> TrieScan<'a> for TrieSelectEqual<'a> {
 
 /// Trie iterator enforcing conditions which state that some columns should have the same value
 #[derive(Debug)]
-pub struct TrieSelectValue<'a> {
+pub struct TrieScanSelectValue<'a> {
     base_trie: Box<TrieScanEnum<'a>>,
     select_scans: Vec<UnsafeCell<ColScanT<'a>>>,
     current_layer: Option<usize>,
@@ -154,8 +154,8 @@ pub struct ValueAssignment {
     pub value: DataValueT,
 }
 
-impl<'a> TrieSelectValue<'a> {
-    /// Construct new TrieSelectValue object.
+impl<'a> TrieScanSelectValue<'a> {
+    /// Construct new TrieScanSelectValue object.
     pub fn new(base_trie: TrieScanEnum<'a>, assignemnts: Vec<ValueAssignment>) -> Self {
         let target_schema = base_trie.get_schema();
         let arity = target_schema.arity();
@@ -230,7 +230,7 @@ impl<'a> TrieSelectValue<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieSelectValue<'a> {
+impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
     #[allow(clippy::unnecessary_lazy_evaluations)] // not actually
                                                    // unnecessary, as the subtraction might underflow
     fn up(&mut self) {
@@ -267,15 +267,15 @@ impl<'a> TrieScan<'a> for TrieSelectValue<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::{TrieSelectEqual, TrieSelectValue, ValueAssignment};
+    use super::{TrieScanSelectEqual, TrieScanSelectValue, ValueAssignment};
     use crate::physical::columns::colscans::ColScanT;
     use crate::physical::datatypes::{DataTypeName, DataValueT};
     use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tables::triescans::{IntervalTrieScan, TrieScan, TrieScanEnum};
+    use crate::physical::tables::triescans::{TrieScan, TrieScanEnum, TrieScanGeneric};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
-    fn select_eq_next(scan: &mut TrieSelectEqual) -> Option<u64> {
+    fn select_eq_next(scan: &mut TrieScanSelectEqual) -> Option<u64> {
         if let ColScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
             rcs.next()
         } else {
@@ -283,7 +283,7 @@ mod test {
         }
     }
 
-    fn select_eq_current(scan: &mut TrieSelectEqual) -> Option<u64> {
+    fn select_eq_current(scan: &mut TrieScanSelectEqual) -> Option<u64> {
         if let ColScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
             rcs.current()
         } else {
@@ -291,7 +291,7 @@ mod test {
         }
     }
 
-    fn select_val_next(scan: &mut TrieSelectValue) -> Option<u64> {
+    fn select_val_next(scan: &mut TrieScanSelectValue) -> Option<u64> {
         if let ColScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
             rcs.next()
         } else {
@@ -299,7 +299,7 @@ mod test {
         }
     }
 
-    fn select_val_current(scan: &mut TrieSelectValue) -> Option<u64> {
+    fn select_val_current(scan: &mut TrieScanSelectValue) -> Option<u64> {
         if let ColScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
             rcs.current()
         } else {
@@ -333,9 +333,9 @@ mod test {
         ]);
 
         let trie = Trie::new(schema, vec![column_fst, column_snd, column_trd, column_fth]);
-        let trie_iter = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie));
+        let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let mut select_iter = TrieSelectEqual::new(trie_iter, vec![vec![0, 2], vec![1, 3]]);
+        let mut select_iter = TrieScanSelectEqual::new(trie_iter, vec![vec![0, 2], vec![1, 3]]);
         assert_eq!(select_eq_current(&mut select_iter), None);
         select_iter.down();
         assert_eq!(select_eq_current(&mut select_iter), None);
@@ -406,9 +406,9 @@ mod test {
         ]);
 
         let trie = Trie::new(schema, vec![column_fst, column_snd, column_trd, column_fth]);
-        let trie_iter = TrieScanEnum::IntervalTrieScan(IntervalTrieScan::new(&trie));
+        let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let mut select_iter = TrieSelectValue::new(
+        let mut select_iter = TrieScanSelectValue::new(
             trie_iter,
             vec![
                 ValueAssignment {

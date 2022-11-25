@@ -3,35 +3,35 @@
 
 /// Module for defining [`TrieScan`]
 pub mod triescan;
-pub use triescan::IntervalTrieScan;
 pub use triescan::TrieScan;
 pub use triescan::TrieScanEnum;
+pub use triescan::TrieScanGeneric;
 
-/// Module for defining [`TrieProject`]
+/// Module for defining [`TrieScanProject`]
 pub mod triescan_project;
-pub use triescan_project::TrieProject;
+pub use triescan_project::TrieScanProject;
 
 /// Module for materializing tries
 pub mod materialize;
 pub use materialize::materialize;
 
-/// Module for defining [`TrieSelectEqual`] and [`TrieSelectValue`]
+/// Module for defining [`TrieScanSelectEqual`] and [`TrieScanSelectValue`]
 pub mod triescan_select;
-pub use triescan_select::TrieSelectEqual;
-pub use triescan_select::TrieSelectValue;
+pub use triescan_select::TrieScanSelectEqual;
+pub use triescan_select::TrieScanSelectValue;
 pub use triescan_select::ValueAssignment;
 
-/// Module for defining [`TrieDifference`]
+/// Module for defining [`TrieScanMinus`]
 pub mod triescan_minus;
-pub use triescan_minus::TrieDifference;
+pub use triescan_minus::TrieScanMinus;
 
-/// Module for defining [`TrieUnion`]
+/// Module for defining [`TrieScanUnion`]
 pub mod triescan_union;
-pub use triescan_union::TrieUnion;
+pub use triescan_union::TrieScanUnion;
 
-/// Module for defining [`TrieJoin`]
+/// Module for defining [`TrieScanJoin`]
 pub mod triescan_join;
-pub use triescan_join::TrieJoin;
+pub use triescan_join::TrieScanJoin;
 
 /// Module for defining append functionality
 pub mod triescan_append;
