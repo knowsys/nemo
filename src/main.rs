@@ -63,16 +63,11 @@ fn main() {
         .iter()
         .map(|(p, _)| {
             let pred_facts: Vec<&Fact> = facts.iter().filter(|f| f.0.predicate() == *p).collect();
-            let datatypes: Vec<DataTypeName> = pred_facts[0]
-                .0
-                .terms()
-                .iter()
-                .map(|_t| DataTypeName::U64)
-                .collect(); // TODO: should depend on type but for now we only consider numeric literal integers that we case to u64
+            let datatypes_iter = pred_facts[0].0.terms().iter().map(|_t| DataTypeName::U64); // TODO: should depend on type but for now we only consider numeric literal integers that we case to u64
 
             let mut schema_entries = vec![];
 
-            for (label, datatype) in datatypes.into_iter().enumerate() {
+            for (label, datatype) in datatypes_iter.enumerate() {
                 schema_entries.push(TrieSchemaEntry { label, datatype });
             }
 
