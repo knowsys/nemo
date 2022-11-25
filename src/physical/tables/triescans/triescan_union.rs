@@ -1,5 +1,5 @@
 use crate::physical::{
-    columns::colscans::{ColScan, ColScanCell, ColScanEnum, ColScanT, UnionScan},
+    columns::colscans::{ColScan, ColScanCell, ColScanEnum, ColScanT, ColScanUnion},
     datatypes::{DataTypeName, Double, Float},
     tables::tables::TableSchema,
 };
@@ -45,7 +45,7 @@ impl<'a> TrieUnion<'a> {
                         }
                     }
 
-                    let new_union_scan = ColScanEnum::UnionScan(UnionScan::new(column_scans));
+                    let new_union_scan = ColScanEnum::ColScanUnion(ColScanUnion::new(column_scans));
 
                     union_scans.push(UnsafeCell::new(ColScanT::$variant(ColScanCell::new(
                         new_union_scan,

@@ -1,6 +1,6 @@
 use super::{
-    DifferenceScan, EqualColumnScan, EqualValueScan, GenericColumnScanEnum, MinusScan,
-    OrderedMergeJoin, PassScan, ReorderScan, UnionScan,
+    ColScanEqualColumn, ColScanEqualValue, ColScanFollow, ColScanGenericEnum, ColScanJoin,
+    ColScanMinus, ColScanPass, ColScanReorder, ColScanUnion,
 };
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
@@ -44,34 +44,34 @@ pub enum ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Case GenericColumnScan
-    GenericColumnScan(GenericColumnScanEnum<'a, T>),
+    /// Case ColScanGeneric
+    ColScanGeneric(ColScanGenericEnum<'a, T>),
     /// Case RleColumnScan
     RleColumnScan(RleColumnScan<'a, T>),
-    /// Case OrderedMergeJoin
-    OrderedMergeJoin(OrderedMergeJoin<'a, T>),
-    /// Case ReorderScan
-    ReorderScan(ReorderScan<'a, T>),
-    /// Case EqualColumnScan
-    EqualColumnScan(EqualColumnScan<'a, T>),
-    /// Case EqualValueScan
-    EqualValueScan(EqualValueScan<'a, T>),
-    /// Case OrderedMergeJoin
-    PassScan(PassScan<'a, T>),
-    /// Case DifferenceScan
-    DifferenceScan(DifferenceScan<'a, T>),
-    /// Case MinusScan
-    MinusScan(MinusScan<'a, T>),
-    /// Case UnionScan
-    UnionScan(UnionScan<'a, T>),
+    /// Case ColScanJoin
+    ColScanJoin(ColScanJoin<'a, T>),
+    /// Case ColScanReorder
+    ColScanReorder(ColScanReorder<'a, T>),
+    /// Case ColScanEqualColumn
+    ColScanEqualColumn(ColScanEqualColumn<'a, T>),
+    /// Case ColScanEqualValue
+    ColScanEqualValue(ColScanEqualValue<'a, T>),
+    /// Case ColScanJoin
+    ColScanPass(ColScanPass<'a, T>),
+    /// Case ColScanFollow
+    ColScanFollow(ColScanFollow<'a, T>),
+    /// Case ColScanMinus
+    ColScanMinus(ColScanMinus<'a, T>),
+    /// Case ColScanUnion
+    ColScanUnion(ColScanUnion<'a, T>),
 }
 
-impl<'a, T> From<GenericColumnScanEnum<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColScanGenericEnum<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: GenericColumnScanEnum<'a, T>) -> Self {
-        Self::GenericColumnScan(cs)
+    fn from(cs: ColScanGenericEnum<'a, T>) -> Self {
+        Self::ColScanGeneric(cs)
     }
 }
 
@@ -84,89 +84,89 @@ where
     }
 }
 
-impl<'a, T> From<OrderedMergeJoin<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColScanJoin<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: OrderedMergeJoin<'a, T>) -> Self {
-        Self::OrderedMergeJoin(cs)
+    fn from(cs: ColScanJoin<'a, T>) -> Self {
+        Self::ColScanJoin(cs)
     }
 }
 
-impl<'a, T> From<ReorderScan<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColScanReorder<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ReorderScan<'a, T>) -> Self {
-        Self::ReorderScan(cs)
+    fn from(cs: ColScanReorder<'a, T>) -> Self {
+        Self::ColScanReorder(cs)
     }
 }
 
-impl<'a, T> From<EqualColumnScan<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColScanEqualColumn<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: EqualColumnScan<'a, T>) -> Self {
-        Self::EqualColumnScan(cs)
+    fn from(cs: ColScanEqualColumn<'a, T>) -> Self {
+        Self::ColScanEqualColumn(cs)
     }
 }
 
-impl<'a, T> From<EqualValueScan<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColScanEqualValue<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: EqualValueScan<'a, T>) -> Self {
-        Self::EqualValueScan(cs)
+    fn from(cs: ColScanEqualValue<'a, T>) -> Self {
+        Self::ColScanEqualValue(cs)
     }
 }
 
-impl<'a, T> From<PassScan<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColScanPass<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: PassScan<'a, T>) -> Self {
-        Self::PassScan(cs)
+    fn from(cs: ColScanPass<'a, T>) -> Self {
+        Self::ColScanPass(cs)
     }
 }
 
-impl<'a, T> From<MinusScan<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColScanMinus<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: MinusScan<'a, T>) -> Self {
-        Self::MinusScan(cs)
+    fn from(cs: ColScanMinus<'a, T>) -> Self {
+        Self::ColScanMinus(cs)
     }
 }
 
-impl<'a, T> From<DifferenceScan<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColScanFollow<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: DifferenceScan<'a, T>) -> Self {
-        Self::DifferenceScan(cs)
+    fn from(cs: ColScanFollow<'a, T>) -> Self {
+        Self::ColScanFollow(cs)
     }
 }
 
-impl<'a, T> From<UnionScan<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColScanUnion<'a, T>> for ColScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: UnionScan<'a, T>) -> Self {
-        Self::UnionScan(cs)
+    fn from(cs: ColScanUnion<'a, T>) -> Self {
+        Self::ColScanUnion(cs)
     }
 }
 
 generate_forwarder!(forward_to_column_scan;
-                    GenericColumnScan,
+                    ColScanGeneric,
                     RleColumnScan,
-                    OrderedMergeJoin,
-                    ReorderScan, 
-                    EqualColumnScan, 
-                    EqualValueScan,
-                    PassScan,
-                    DifferenceScan,
-                    MinusScan,
-                    UnionScan);
+                    ColScanJoin,
+                    ColScanReorder, 
+                    ColScanEqualColumn, 
+                    ColScanEqualValue,
+                    ColScanPass,
+                    ColScanFollow,
+                    ColScanMinus,
+                    ColScanUnion);
 
 impl<'a, T> ColScanEnum<'a, T>
 where
@@ -175,9 +175,9 @@ where
     /// Return all positions in the underlying column the cursor is currently at
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
         match self {
-            Self::ReorderScan(cs) => cs.pos_multiple(),
+            Self::ColScanReorder(cs) => cs.pos_multiple(),
             _ => {
-                unimplemented!("pos_multiple is only available for ReorderScan")
+                unimplemented!("pos_multiple is only available for ColScanReorder")
             }
         }
     }
@@ -185,18 +185,18 @@ where
     /// Set iterator to a set of possibly disjoint ranged
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
         match self {
-            Self::ReorderScan(cs) => cs.narrow_ranges(intervals),
+            Self::ColScanReorder(cs) => cs.narrow_ranges(intervals),
             _ => {
-                unimplemented!("narrow_ranges is only available for ReorderScan")
+                unimplemented!("narrow_ranges is only available for ColScanReorder")
             }
         }
     }
 
-    /// For DifferenceScan, returns whether its scans point to the same value
+    /// For ColScanFollow, returns whether its scans point to the same value
     pub fn is_equal(&self) -> bool {
         match self {
-            Self::DifferenceScan(cs) => cs.is_equal(),
-            _ => unimplemented!("is_equal is only available for DifferenceScan"),
+            Self::ColScanFollow(cs) => cs.is_equal(),
+            _ => unimplemented!("is_equal is only available for ColScanFollow"),
         }
     }
 
@@ -204,7 +204,7 @@ where
     /// and returns a vector containing the positions of the scans with the smallest values
     pub fn get_smallest_scans(&self) -> &Vec<bool> {
         match self {
-            Self::UnionScan(cs) => cs.get_smallest_scans(),
+            Self::ColScanUnion(cs) => cs.get_smallest_scans(),
             _ => {
                 unimplemented!("get_smallest_scans is only available for union_scans")
             }
@@ -215,7 +215,7 @@ where
     /// Set a vector that indicates which scans are currently active and should be considered
     pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
         match self {
-            Self::UnionScan(cs) => cs.set_active_scans(active_scans),
+            Self::ColScanUnion(cs) => cs.set_active_scans(active_scans),
             _ => {
                 unimplemented!("set_active_scans is only available for union_scans")
             }
@@ -382,7 +382,7 @@ impl<'a> ColScanT<'a> {
         forward_to_ranged_column_scan_cell!(self, narrow_ranges(intervals))
     }
 
-    /// For DifferenceScan, returns whether its scans point to the same value
+    /// For ColScanFollow, returns whether its scans point to the same value
     pub fn is_equal(&self) -> bool {
         forward_to_ranged_column_scan_cell!(self, is_equal)
     }

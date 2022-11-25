@@ -5,23 +5,23 @@ use super::{colscan::ColScan, ColScanCell};
 
 /// Dummy Iterator that defers everything to its sub iterator
 #[derive(Debug)]
-pub struct PassScan<'a, T>
+pub struct ColScanPass<'a, T>
 where
     T: 'a + ColumnDataType,
 {
     reference_scan: &'a ColScanCell<'a, T>,
 }
-impl<'a, T> PassScan<'a, T>
+impl<'a, T> ColScanPass<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new PassScan for a Column.
-    pub fn new(reference_scan: &'a ColScanCell<'a, T>) -> PassScan<'a, T> {
-        PassScan { reference_scan }
+    /// Constructs a new ColScanPass for a Column.
+    pub fn new(reference_scan: &'a ColScanCell<'a, T>) -> ColScanPass<'a, T> {
+        ColScanPass { reference_scan }
     }
 }
 
-impl<'a, T> Iterator for PassScan<'a, T>
+impl<'a, T> Iterator for ColScanPass<'a, T>
 where
     T: 'a + ColumnDataType + PartialOrd + Eq,
 {
@@ -32,7 +32,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for PassScan<'a, T>
+impl<'a, T> ColScan for ColScanPass<'a, T>
 where
     T: 'a + ColumnDataType + PartialOrd + Eq,
 {
@@ -59,21 +59,21 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columns::{
-        colscans::{ColScan, ColScanCell, ColScanEnum, GenericColumnScanEnum},
+        colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
         columns::{Column, VectorColumn},
     };
 
-    use super::PassScan;
+    use super::ColScanPass;
     use test_log::test;
 
     #[test]
     fn test_u64() {
         let ref_col = VectorColumn::new(vec![0, 4, 7]);
-        let ref_col_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
-            GenericColumnScanEnum::VectorColumn(ref_col.iter()),
+        let ref_col_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
+            ColScanGenericEnum::VectorColumn(ref_col.iter()),
         ));
 
-        let mut pass_scan = PassScan::new(&ref_col_iter);
+        let mut pass_scan = ColScanPass::new(&ref_col_iter);
 
         assert_eq!(pass_scan.current(), None);
         assert_eq!(pass_scan.next(), Some(0));

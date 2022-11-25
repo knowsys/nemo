@@ -8,49 +8,48 @@ use super::colscan::ColScan;
 
 /// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
 #[derive(Debug)]
-pub struct GenericColumnScan<'a, T, Col: Column<'a, T>> {
+pub struct ColScanGeneric<'a, T, Col: Column<'a, T>> {
     _t: PhantomData<T>,
     column: &'a Col,
     pos: Option<usize>,
     interval: Range<usize>,
 }
 
-/// Enum encapsulating implementations of GenericColumnScans
+/// Enum encapsulating implementations of ColScanGenerics
 #[derive(Debug)]
-pub enum GenericColumnScanEnum<'a, T>
+pub enum ColScanGenericEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
     /// Case Scan with VectorColumn
-    VectorColumn(GenericColumnScan<'a, T, VectorColumn<T>>),
+    VectorColumn(ColScanGeneric<'a, T, VectorColumn<T>>),
     /// Case Scan with GenericIntervalColumn
-    GenericIntervalColumn(GenericColumnScan<'a, T, GenericIntervalColumn<T>>),
+    GenericIntervalColumn(ColScanGeneric<'a, T, GenericIntervalColumn<T>>),
 }
 
 generate_forwarder!(forward_to_column_scan;
                     VectorColumn,
                     GenericIntervalColumn);
 
-impl<'a, T> From<GenericColumnScan<'a, T, VectorColumn<T>>> for GenericColumnScanEnum<'a, T>
+impl<'a, T> From<ColScanGeneric<'a, T, VectorColumn<T>>> for ColScanGenericEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: GenericColumnScan<'a, T, VectorColumn<T>>) -> Self {
+    fn from(cs: ColScanGeneric<'a, T, VectorColumn<T>>) -> Self {
         Self::VectorColumn(cs)
     }
 }
 
-impl<'a, T> From<GenericColumnScan<'a, T, GenericIntervalColumn<T>>>
-    for GenericColumnScanEnum<'a, T>
+impl<'a, T> From<ColScanGeneric<'a, T, GenericIntervalColumn<T>>> for ColScanGenericEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: GenericColumnScan<'a, T, GenericIntervalColumn<T>>) -> Self {
+    fn from(cs: ColScanGeneric<'a, T, GenericIntervalColumn<T>>) -> Self {
         Self::GenericIntervalColumn(cs)
     }
 }
 
-impl<'a, T, Col> GenericColumnScan<'a, T, Col>
+impl<'a, T, Col> ColScanGeneric<'a, T, Col>
 where
     T: 'a + Debug + Copy + Ord,
     Col: Column<'a, T>,
@@ -58,7 +57,7 @@ where
     /// Defines the lower limit of elements in the interval where a binary search is used instead of a vector-scan
     const SEEK_BINARY_SEARCH: usize = 10;
 
-    /// Constructs a new [`GenericColumnScan`] for a Column.
+    /// Constructs a new [`ColScanGeneric`] for a Column.
     pub fn new(column: &'a Col) -> Self {
         debug_assert!(column.len() > 0);
 
@@ -70,7 +69,7 @@ where
         }
     }
 
-    /// Constructs a new [`GenericColumnScan`] for a Column, narrowed
+    /// Constructs a new [`ColScanGeneric`] for a Column, narrowed
     /// to the given interval.
     pub fn narrowed(column: &'a Col, interval: Range<usize>) -> Self {
         debug_assert!(interval.end >= interval.start);
@@ -113,7 +112,7 @@ where
     }
 }
 
-impl<'a, T, Col> Iterator for GenericColumnScan<'a, T, Col>
+impl<'a, T, Col> Iterator for ColScanGeneric<'a, T, Col>
 where
     T: 'a + Debug + Copy + Ord,
     Col: Column<'a, T>,
@@ -127,7 +126,7 @@ where
     }
 }
 
-impl<'a, T, Col> ColScan for GenericColumnScan<'a, T, Col>
+impl<'a, T, Col> ColScan for ColScanGeneric<'a, T, Col>
 where
     T: 'a + Debug + Copy + Ord,
     Col: Column<'a, T>,
@@ -198,7 +197,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for GenericColumnScanEnum<'a, T>
+impl<'a, T> Iterator for ColScanGenericEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -209,7 +208,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for GenericColumnScanEnum<'a, T>
+impl<'a, T> ColScan for ColScanGenericEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -239,7 +238,7 @@ mod test {
     use test_log::test;
 
     use crate::physical::columns::{
-        colscans::{ColScan, GenericColumnScan},
+        colscans::{ColScan, ColScanGeneric},
         columns::VectorColumn,
     };
 
@@ -258,8 +257,7 @@ mod test {
     #[test]
     fn u64_iterate_column() {
         let test_column = get_test_column();
-        let mut gcs: GenericColumnScan<u64, VectorColumn<u64>> =
-            GenericColumnScan::new(&test_column);
+        let mut gcs: ColScanGeneric<u64, VectorColumn<u64>> = ColScanGeneric::new(&test_column);
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.current(), None);
         assert_eq!(gcs.next(), Some(1));
@@ -279,8 +277,7 @@ mod test {
     #[test]
     fn u64_seek_column() {
         let test_column = get_test_column();
-        let mut gcs: GenericColumnScan<u64, VectorColumn<u64>> =
-            GenericColumnScan::new(&test_column);
+        let mut gcs: ColScanGeneric<u64, VectorColumn<u64>> = ColScanGeneric::new(&test_column);
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.seek(2), Some(2));
         assert_eq!(gcs.pos(), Some(1));
@@ -297,19 +294,19 @@ mod test {
     #[test]
     fn u64_narrow() {
         let test_column = get_test_column();
-        let mut gcs = GenericColumnScan::new(&test_column);
+        let mut gcs = ColScanGeneric::new(&test_column);
         gcs.narrow(0..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
-        let mut gcs = GenericColumnScan::new(&test_column);
+        let mut gcs = ColScanGeneric::new(&test_column);
         gcs.narrow(1..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
-        let mut gcs = GenericColumnScan::new(&test_column);
+        let mut gcs = ColScanGeneric::new(&test_column);
         gcs.narrow(1..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
-        let mut gcs = GenericColumnScan::new(&test_column);
+        let mut gcs = ColScanGeneric::new(&test_column);
         gcs.narrow(1..1);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![]);
-        let mut gcs = GenericColumnScan::new(&test_column);
+        let mut gcs = ColScanGeneric::new(&test_column);
         gcs.narrow(0..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
     }
@@ -317,26 +314,26 @@ mod test {
     #[test]
     fn u64_narrowed() {
         let test_column = get_test_column();
-        let gcs = GenericColumnScan::narrowed(&test_column, 0..2);
+        let gcs = ColScanGeneric::narrowed(&test_column, 0..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
-        let gcs = GenericColumnScan::narrowed(&test_column, 1..2);
+        let gcs = ColScanGeneric::narrowed(&test_column, 1..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
-        let gcs = GenericColumnScan::narrowed(&test_column, 1..3);
+        let gcs = ColScanGeneric::narrowed(&test_column, 1..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
-        let gcs = GenericColumnScan::narrowed(&test_column, 1..1);
+        let gcs = ColScanGeneric::narrowed(&test_column, 1..1);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![]);
-        let gcs = GenericColumnScan::narrowed(&test_column, 0..3);
+        let gcs = ColScanGeneric::narrowed(&test_column, 0..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
     }
 
     #[test]
     fn u64_narrow_and_widen() {
         let test_column = get_test_column();
-        let mut gcs = GenericColumnScan::new(&test_column);
+        let mut gcs = ColScanGeneric::new(&test_column);
         gcs.narrow(1..1);
         gcs.widen();
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
-        let mut gcs = GenericColumnScan::new(&test_column);
+        let mut gcs = ColScanGeneric::new(&test_column);
         gcs.widen().narrow(1..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
     }
@@ -345,7 +342,7 @@ mod test {
     #[should_panic(expected = "Cannot narrow to an interval larger than the column.")]
     fn u64_narrow_to_invalid() {
         let test_column = get_test_column();
-        let mut gcs = GenericColumnScan::new(&test_column);
+        let mut gcs = ColScanGeneric::new(&test_column);
         gcs.narrow(1..23);
     }
 
@@ -353,13 +350,13 @@ mod test {
     #[should_panic(expected = "Cannot narrow to an interval larger than the column.")]
     fn u64_narrowed_to_invalid() {
         let test_column = get_test_column();
-        let _ = GenericColumnScan::narrowed(&test_column, 1..23);
+        let _ = ColScanGeneric::narrowed(&test_column, 1..23);
     }
 
     #[test]
     fn u64_narrow_after_use() {
         let test_column = get_test_column();
-        let mut gcs = GenericColumnScan::new(&test_column);
+        let mut gcs = ColScanGeneric::new(&test_column);
         assert_eq!(gcs.next(), Some(1));
         gcs.narrow(0..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
@@ -368,7 +365,7 @@ mod test {
     #[test]
     fn u64_widen_after_use() {
         let test_column = get_test_column();
-        let mut gcs = GenericColumnScan::new(&test_column);
+        let mut gcs = ColScanGeneric::new(&test_column);
         gcs.narrow(1..2);
         assert_eq!(gcs.next(), Some(2));
         gcs.widen();
@@ -378,7 +375,7 @@ mod test {
     #[test]
     fn u64_seek_interval() {
         let test_column = get_test_column_large();
-        let mut gcs = GenericColumnScan::new(&test_column);
+        let mut gcs = ColScanGeneric::new(&test_column);
 
         gcs.narrow(4..16);
         assert_eq!(gcs.seek(2), Some(12));

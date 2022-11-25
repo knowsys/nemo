@@ -1,6 +1,6 @@
 use crate::physical::{
     columns::{
-        colscans::{ColScan, ColScanCell, ColScanEnum, ColScanT, ReorderScan},
+        colscans::{ColScan, ColScanCell, ColScanEnum, ColScanReorder, ColScanT},
         columns::{Column, IntervalColumn, IntervalColumnEnum, IntervalColumnT},
     },
     datatypes::{ColumnDataType, DataTypeName},
@@ -85,7 +85,7 @@ impl<'a> TrieProject<'a> {
                         };
 
                     reorder_scans.push(UnsafeCell::new(ColScanT::$variant(ColScanCell::new(
-                        ColScanEnum::ReorderScan(ReorderScan::new(
+                        ColScanEnum::ColScanReorder(ColScanReorder::new(
                             current_column.get_data_column(),
                         )),
                     ))));

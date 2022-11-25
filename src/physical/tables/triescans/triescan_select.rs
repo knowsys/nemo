@@ -1,6 +1,7 @@
 use crate::physical::{
     columns::colscans::{
-        ColScan, ColScanCell, ColScanEnum, ColScanT, EqualColumnScan, EqualValueScan, PassScan,
+        ColScan, ColScanCell, ColScanEnum, ColScanEqualColumn, ColScanEqualValue, ColScanPass,
+        ColScanT,
     },
     datatypes::{DataTypeName, DataValueT},
     tables::tables::TableSchema,
@@ -36,8 +37,9 @@ impl<'a> TrieSelectEqual<'a> {
                         } else {
                             panic!("Expected a column scan of type {}", stringify!($variant));
                         };
-                        let next_scan =
-                            ColScanCell::new(ColScanEnum::PassScan(PassScan::new(base_scan_cell)));
+                        let next_scan = ColScanCell::new(ColScanEnum::ColScanPass(
+                            ColScanPass::new(base_scan_cell),
+                        ));
 
                         select_scans.push(UnsafeCell::new(ColScanT::$variant(next_scan)));
                     }
@@ -74,8 +76,8 @@ impl<'a> TrieSelectEqual<'a> {
                                 panic!("Expected a column scan of type {}", stringify!($variant));
                             };
 
-                            let next_scan = ColScanCell::new(ColScanEnum::EqualColumnScan(
-                                EqualColumnScan::new(reference_scan_enum, value_scan_enum),
+                            let next_scan = ColScanCell::new(ColScanEnum::ColScanEqualColumn(
+                                ColScanEqualColumn::new(reference_scan_enum, value_scan_enum),
                             ));
 
                             select_scans[current_member_idx] =
@@ -170,8 +172,9 @@ impl<'a> TrieSelectValue<'a> {
                         } else {
                             panic!("Expected a column scan of type {}", stringify!($variant));
                         };
-                        let next_scan =
-                            ColScanCell::new(ColScanEnum::PassScan(PassScan::new(base_scan_enum)));
+                        let next_scan = ColScanCell::new(ColScanEnum::ColScanPass(
+                            ColScanPass::new(base_scan_enum),
+                        ));
 
                         select_scans.push(UnsafeCell::new(ColScanT::$variant(next_scan)));
                     }
@@ -203,8 +206,8 @@ impl<'a> TrieSelectValue<'a> {
                             panic!("Expected a column scan of type {}", stringify!($variant));
                         };
 
-                        let next_scan = ColScanCell::new(ColScanEnum::EqualValueScan(
-                            EqualValueScan::new(scan_enum, value),
+                        let next_scan = ColScanCell::new(ColScanEnum::ColScanEqualValue(
+                            ColScanEqualValue::new(scan_enum, value),
                         ));
 
                         select_scans[assignemnt.column_idx] =

@@ -4,7 +4,7 @@ use std::{fmt::Debug, ops::Range};
 
 /// Iterator which allows its sub iterator to only jump to the value pointed to by a reference iterator
 #[derive(Debug)]
-pub struct EqualColumnScan<'a, T>
+pub struct ColScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -12,16 +12,16 @@ where
     value_scan: &'a ColScanCell<'a, T>,
     current_value: Option<T>,
 }
-impl<'a, T> EqualColumnScan<'a, T>
+impl<'a, T> ColScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new EqualColumnScan for a Column.
+    /// Constructs a new ColScanEqualColumn for a Column.
     pub fn new(
         reference_scan: &'a ColScanCell<'a, T>,
         value_scan: &'a ColScanCell<'a, T>,
-    ) -> EqualColumnScan<'a, T> {
-        EqualColumnScan {
+    ) -> ColScanEqualColumn<'a, T> {
+        ColScanEqualColumn {
             reference_scan,
             value_scan,
             current_value: None,
@@ -29,7 +29,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for EqualColumnScan<'a, T>
+impl<'a, T> Iterator for ColScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType + Eq,
 {
@@ -56,7 +56,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for EqualColumnScan<'a, T>
+impl<'a, T> ColScan for ColScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType + Eq,
 {
@@ -89,11 +89,11 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columns::{
-        colscans::{ColScan, ColScanCell, ColScanEnum, GenericColumnScanEnum},
+        colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
         columns::{Column, VectorColumn},
     };
 
-    use super::EqualColumnScan;
+    use super::ColScanEqualColumn;
     use test_log::test;
 
     #[test]
@@ -101,32 +101,32 @@ mod test {
         let ref_col = VectorColumn::new(vec![0u64, 4, 7]);
         let val_col = VectorColumn::new(vec![1u64, 4, 8]);
 
-        let ref_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
-            GenericColumnScanEnum::VectorColumn(ref_col.iter()),
+        let ref_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
+            ColScanGenericEnum::VectorColumn(ref_col.iter()),
         ));
-        let val_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
-            GenericColumnScanEnum::VectorColumn(val_col.iter()),
+        let val_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
+            ColScanGenericEnum::VectorColumn(val_col.iter()),
         ));
 
         ref_iter.seek(4);
 
-        let mut equal_scan = EqualColumnScan::new(&ref_iter, &val_iter);
+        let mut equal_scan = ColScanEqualColumn::new(&ref_iter, &val_iter);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), Some(4));
         assert_eq!(equal_scan.current(), Some(4));
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);
 
-        let ref_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
-            GenericColumnScanEnum::VectorColumn(ref_col.iter()),
+        let ref_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
+            ColScanGenericEnum::VectorColumn(ref_col.iter()),
         ));
-        let val_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
-            GenericColumnScanEnum::VectorColumn(val_col.iter()),
+        let val_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
+            ColScanGenericEnum::VectorColumn(val_col.iter()),
         ));
 
         ref_iter.seek(7);
 
-        let mut equal_scan = EqualColumnScan::new(&ref_iter, &val_iter);
+        let mut equal_scan = ColScanEqualColumn::new(&ref_iter, &val_iter);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);

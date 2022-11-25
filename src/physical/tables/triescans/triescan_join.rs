@@ -1,5 +1,5 @@
 use crate::physical::{
-    columns::colscans::{ColScan, ColScanCell, ColScanEnum, ColScanT, OrderedMergeJoin},
+    columns::colscans::{ColScan, ColScanCell, ColScanEnum, ColScanJoin, ColScanT},
     datatypes::{DataTypeName, Double, Float},
     tables::tables::TableSchema,
     tables::tries::TrieSchema,
@@ -74,7 +74,7 @@ impl<'a> TrieJoin<'a> {
                     }
 
                     merge_joins.push(UnsafeCell::new(ColScanT::$variant(ColScanCell::new(
-                        ColScanEnum::OrderedMergeJoin(OrderedMergeJoin::new(scans)),
+                        ColScanEnum::ColScanJoin(ColScanJoin::new(scans)),
                     ))))
                 }};
             }

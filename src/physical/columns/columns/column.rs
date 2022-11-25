@@ -1,7 +1,7 @@
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::{
-        columns::colscans::{colscan::ColScan, ColScanEnum, GenericColumnScanEnum},
+        columns::colscans::{colscan::ColScan, ColScanEnum, ColScanGenericEnum},
         datatypes::{ColumnDataType, DataValueT, Double, Float},
     },
 };
@@ -66,7 +66,7 @@ where
     fn iter(&'a self) -> Self::Scan {
         match self {
             Self::VectorColumn(col) => {
-                ColScanEnum::GenericColumnScan(GenericColumnScanEnum::VectorColumn(col.iter()))
+                ColScanEnum::ColScanGeneric(ColScanGenericEnum::VectorColumn(col.iter()))
             }
             Self::RleColumn(col) => ColScanEnum::RleColumnScan(col.iter()),
         }

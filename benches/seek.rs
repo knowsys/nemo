@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
 use stage2::physical::columns::{
-    colscans::{ColScan, GenericColumnScan},
+    colscans::{ColScan, ColScanGeneric},
     columns::{Column, RleColumn, VectorColumn},
 };
 
@@ -23,7 +23,7 @@ pub fn benchmark_seek(c: &mut Criterion) {
     group.sample_size(200);
     group.bench_function("seek_generic_column_scan", |b| {
         b.iter_with_setup(
-            || GenericColumnScan::new(&test_column),
+            || ColScanGeneric::new(&test_column),
             |mut gcs| {
                 gcs.seek(randa);
             },

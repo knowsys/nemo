@@ -1,6 +1,6 @@
 use crate::physical::{
     columns::colscans::{
-        ColScan, ColScanCell, ColScanEnum, ColScanT, DifferenceScan, MinusScan, PassScan,
+        ColScan, ColScanCell, ColScanEnum, ColScanFollow, ColScanMinus, ColScanPass, ColScanT,
     },
     datatypes::DataTypeName,
     tables::tables::TableSchema,
@@ -39,12 +39,12 @@ impl<'a> TrieDifference<'a> {
                                 &*trie_right.get_scan(layer_index).unwrap().get()
                             {
                                 let new_scan = if layer_index == target_schema.arity() - 1 {
-                                    ColScanEnum::MinusScan(MinusScan::new(
+                                    ColScanEnum::ColScanMinus(ColScanMinus::new(
                                         left_scan_enum,
                                         right_scan_enum,
                                     ))
                                 } else {
-                                    ColScanEnum::DifferenceScan(DifferenceScan::new(
+                                    ColScanEnum::ColScanFollow(ColScanFollow::new(
                                         left_scan_enum,
                                         right_scan_enum,
                                     ))
@@ -132,7 +132,7 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
                                 if self.layer_left == self.layer_right {
                                     self.difference_scans[next_layer] =
                                         UnsafeCell::new(ColScanT::$variant(ColScanCell::new(
-                                            ColScanEnum::MinusScan(MinusScan::new(
+                                            ColScanEnum::ColScanMinus(ColScanMinus::new(
                                                 left_scan_enum,
                                                 right_scan_enum,
                                             )),
@@ -140,7 +140,9 @@ impl<'a> TrieScan<'a> for TrieDifference<'a> {
                                 } else {
                                     self.difference_scans[next_layer] =
                                         UnsafeCell::new(ColScanT::$variant(ColScanCell::new(
-                                            ColScanEnum::PassScan(PassScan::new(left_scan_enum)),
+                                            ColScanEnum::ColScanPass(ColScanPass::new(
+                                                left_scan_enum,
+                                            )),
                                         )));
                                 }
                             }

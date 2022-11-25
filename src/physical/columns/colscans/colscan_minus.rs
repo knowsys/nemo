@@ -7,7 +7,7 @@ use super::ColScanCell;
 
 /// Iterator used in the upper levels of the trie difference operator
 #[derive(Debug)]
-pub struct DifferenceScan<'a, T>
+pub struct ColScanFollow<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -17,7 +17,7 @@ where
     current: Option<T>,
 }
 
-impl<'a, T> DifferenceScan<'a, T>
+impl<'a, T> ColScanFollow<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -25,8 +25,8 @@ where
     pub fn new(
         scan_left: &'a ColScanCell<'a, T>,
         scan_right: &'a ColScanCell<'a, T>,
-    ) -> DifferenceScan<'a, T> {
-        DifferenceScan {
+    ) -> ColScanFollow<'a, T> {
+        ColScanFollow {
             scan_left,
             scan_right,
             equal: true,
@@ -40,7 +40,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for DifferenceScan<'a, T>
+impl<'a, T> Iterator for ColScanFollow<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -60,7 +60,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for DifferenceScan<'a, T>
+impl<'a, T> ColScan for ColScanFollow<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -92,7 +92,7 @@ where
 
 /// Iterator which computes the set difference between two scans
 #[derive(Debug)]
-pub struct MinusScan<'a, T>
+pub struct ColScanMinus<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -101,7 +101,7 @@ where
     current: Option<T>,
 }
 
-impl<'a, T> MinusScan<'a, T>
+impl<'a, T> ColScanMinus<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -115,7 +115,7 @@ where
     }
 }
 
-impl<'a, T: Eq + Debug + Copy> Iterator for MinusScan<'a, T>
+impl<'a, T: Eq + Debug + Copy> Iterator for ColScanMinus<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -142,7 +142,7 @@ where
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> ColScan for MinusScan<'a, T>
+impl<'a, T: Ord + Copy + Debug> ColScan for ColScanMinus<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -179,11 +179,11 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columns::{
-        colscans::{ColScan, ColScanCell, ColScanEnum, GenericColumnScanEnum},
+        colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
         columns::{Column, VectorColumn},
     };
 
-    use super::{DifferenceScan, MinusScan};
+    use super::{ColScanFollow, ColScanMinus};
 
     use test_log::test;
 
@@ -192,14 +192,14 @@ mod test {
         let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = VectorColumn::new(vec![0u64, 1, 3, 7, 11]);
 
-        let left_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
-            GenericColumnScanEnum::VectorColumn(left_column.iter()),
+        let left_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
+            ColScanGenericEnum::VectorColumn(left_column.iter()),
         ));
-        let right_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
-            GenericColumnScanEnum::VectorColumn(right_column.iter()),
+        let right_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
+            ColScanGenericEnum::VectorColumn(right_column.iter()),
         ));
 
-        let mut diff_scan = DifferenceScan::new(&left_iter, &right_iter);
+        let mut diff_scan = ColScanFollow::new(&left_iter, &right_iter);
 
         assert_eq!(diff_scan.current(), None);
         assert!(diff_scan.is_equal());
@@ -242,14 +242,14 @@ mod test {
         let left_column = VectorColumn::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = VectorColumn::new(vec![0u64, 3, 7, 11]);
 
-        let left_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
-            GenericColumnScanEnum::VectorColumn(left_column.iter()),
+        let left_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
+            ColScanGenericEnum::VectorColumn(left_column.iter()),
         ));
-        let right_iter = ColScanCell::new(ColScanEnum::GenericColumnScan(
-            GenericColumnScanEnum::VectorColumn(right_column.iter()),
+        let right_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
+            ColScanGenericEnum::VectorColumn(right_column.iter()),
         ));
 
-        let mut diff_scan = MinusScan::new(&left_iter, &right_iter);
+        let mut diff_scan = ColScanMinus::new(&left_iter, &right_iter);
 
         assert_eq!(diff_scan.current(), None);
         assert_eq!(diff_scan.next(), Some(2));
