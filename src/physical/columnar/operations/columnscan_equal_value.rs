@@ -2,14 +2,19 @@ use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
-/// Iterator which allows its sub iterator to only jump to a certain value
+/// [`ColScan`] which allows its sub scan to only jump to a certain value
 #[derive(Debug)]
 pub struct ColumnScanEqualValue<'a, T>
 where
     T: 'a + ColumnDataType,
 {
+    /// The sub scan
     scan: &'a ColumnScanCell<'a, T>,
+
+    /// The value the scan jumps to
     value: T,
+
+    /// Current value of this scan; can either be `Some(value)` or None
     current_value: Option<T>,
 }
 impl<'a, T> ColumnScanEqualValue<'a, T>
