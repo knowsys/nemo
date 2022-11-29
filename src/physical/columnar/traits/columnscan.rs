@@ -162,6 +162,7 @@ impl<'a, T> ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
+    /// Assumes that column scan is a [`ColScanReorder`]
     /// Return all positions in the underlying column the cursor is currently at
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
         if let Self::ColumnScanReorder(cs) = self {
@@ -171,6 +172,7 @@ where
         }
     }
 
+    /// Assumes that column scan is a [`ColumnScanReorder`]
     /// Set iterator to a set of possibly disjoint ranged
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
         if let Self::ColumnScanReorder(cs) = self {
@@ -180,7 +182,8 @@ where
         }
     }
 
-    /// For ColumnScanFollow, returns whether its scans point to the same value
+    /// Assumes that column scan is a [`ColumnScanFollow`]
+    /// Returns whether its scans point to the same value
     pub fn is_equal(&self) -> bool {
         if let Self::ColumnScanFollow(cs) = self {
             cs.is_equal()
@@ -189,25 +192,33 @@ where
         }
     }
 
-    /// Assumes that column scan is a union scan
+    /// Assumes that column scan is a [`ColumnScanUnion`]
     /// and returns a vector containing the positions of the scans with the smallest values
     pub fn get_smallest_scans(&self) -> &Vec<bool> {
-        match self {
-            Self::ColumnScanUnion(cs) => cs.get_smallest_scans(),
-            _ => {
-                unimplemented!("get_smallest_scans is only available for union_scans")
-            }
+        if let Self::ColumnScanUnion(cs) = self {
+            cs.get_smallest_scans()
+        } else {
+            unimplemented!("get_smallest_scans is only available for ColScanUnion")
         }
     }
 
-    /// Assumes that column scan is a union scan
+    /// Assumes that column scan is a [`ColumnScanUnion`]
     /// Set a vector that indicates which scans are currently active and should be considered
     pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
-        match self {
-            Self::ColumnScanUnion(cs) => cs.set_active_scans(active_scans),
-            _ => {
-                unimplemented!("set_active_scans is only available for union_scans")
-            }
+        if let Self::ColumnScanUnion(cs) = self {
+            cs.set_active_scans(active_scans)
+        } else {
+            unimplemented!("set_active_scans is only available for ColScanUnion")
+        }
+    }
+
+    /// Assumes that column scan is a [`ColumnScanMinus`]
+    /// Set a vector that indicates which scans are currently active and should be considered
+    pub fn minus_enable(&mut self, enabled: bool) {
+        if let Self::ColumnScanMinus(cs) = self {
+            cs.minus_enable(enabled)
+        } else {
+            unimplemented!("set_active_scans is only available for union_scans")
         }
     }
 }
@@ -352,6 +363,11 @@ where
     pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
         self.0.get_mut().set_active_scans(active_scans);
     }
+
+    /// Forward `minus_enable``to the underlying [`ColScanEnum`]
+    pub fn minus_enable(&mut self, enabled: bool) {
+        unsafe { &mut *self.0.get() }.minus_enable(enabled);
+    }
 }
 
 impl<'a, S, T> From<S> for ColumnScanCell<'a, T>
@@ -386,26 +402,34 @@ impl<'a> ColumnScanT<'a> {
         forward_to_columnscan_cell!(self, pos_multiple)
     }
 
+    /// Assumes that column scan is a [`ColScanReorder`]
     /// Set iterator to a set of possibly disjoint ranged
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
         forward_to_columnscan_cell!(self, narrow_ranges(intervals))
     }
 
-    /// For ColumnScanFollow, returns whether its scans point to the same value
+    /// Assumes that column scan is a [`ColumnScanFollow`]
+    /// Returns whether its scans point to the same value
     pub fn is_equal(&self) -> bool {
         forward_to_columnscan_cell!(self, is_equal)
     }
 
-    /// Assumes that column scan is a union scan
+    /// Assumes that column scan is a [`ColumnScanUnion`]
     /// and returns a vector containing the positions of the scans with the smallest values
     pub fn get_smallest_scans(&self) -> &Vec<bool> {
         forward_to_columnscan_cell!(self, get_smallest_scans)
     }
 
-    /// Assumes that column scan is a union scan
+    /// Assumes that column scan is a [`ColScanUnion`]
     /// Set a vector that indicates which scans are currently active and should be considered
     pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
         forward_to_columnscan_cell!(self, set_active_scans(active_scans))
+    }
+
+    /// Assumes that column scan is a [`ColumnScanMinus`]
+    /// Set a vector that indicates which scans are currently active and should be considered
+    pub fn minus_enable(&mut self, enabled: bool) {
+        forward_to_columnscan_cell!(self, minus_enable(enabled))
     }
 }
 

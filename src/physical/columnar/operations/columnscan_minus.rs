@@ -109,6 +109,9 @@ where
     /// Scan containing the values which will be subtracted
     scan_right: &'a ColumnScanCell<'a, T>,
 
+    /// Whether to subtract `scan_right` or not
+    enabled: bool,
+
     /// Current value of this scan
     current_value: Option<T>,
 }
@@ -125,8 +128,15 @@ where
         Self {
             scan_left,
             scan_right,
+            enabled: true,
             current_value: None,
         }
+    }
+
+    /// Enabled means that the minus operation is performed;
+    /// otherwise this scan acts like a [`PassScan`]
+    pub fn minus_enable(&mut self, enabled: bool) {
+        self.enabled = enabled;
     }
 }
 
@@ -137,6 +147,11 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if !self.enabled {
+            self.current_value = self.scan_left.next();
+            return self.current_value;
+        }
+
         // Call `next` on `scan_left` as long `scan_right` contains the same value
         loop {
             self.current_value = self.scan_left.next();
@@ -165,6 +180,10 @@ where
     fn seek(&mut self, value: T) -> Option<T> {
         self.current_value = self.scan_left.seek(value);
 
+        if !self.enabled {
+            return self.current_value;
+        }
+
         if let Some(current_left) = self.current_value {
             if let Some(current_right) = self.scan_right.seek(current_left) {
                 if current_left == current_right {
@@ -183,6 +202,7 @@ where
     }
 
     fn reset(&mut self) {
+        self.enabled = true;
         self.current_value = None;
     }
 
