@@ -15,19 +15,28 @@ use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::iter::repeat;
 
-/// Structure resulting from joining a set of tries (given as TrieScanJoins),
-/// which itself is a TrieScanJoin that can be used in such a join
+/// [`TrieScan`] which represents the result from joining a set of tries (given as [`TrieScan`]s),
 #[derive(Debug)]
 pub struct TrieScanJoin<'a> {
+    /// Trie scans of which the join is computed
     trie_scans: Vec<TrieScanEnum<'a>>,
+
+    /// Schema of the resulting trie
     target_schema: TrieSchema,
 
-    current_variable: Option<usize>,
+    /// Layer we are currently at in the resulting trie
+    current_layer: Option<usize>,
 
-    variable_to_scan: Vec<Vec<usize>>,
+    /// Indices of the sub tries which are assosiated with a given layer in the result
+    /// E.g., given the join R(a, b), S(b, c), T(a, c) with variable order a, b, c
+    /// we have layers_to_scans = [[R, T], [R, S], [S, T]]
+    /// or rather layers_to_scans = [[0, 2], [0, 1], [1, 2]] if trie_scans = [R, S, T]
+    layer_to_scans: Vec<Vec<usize>>,
 
-    /// We're keeping an [`UnsafeCell`] here since the
-    /// [`ColumnScanT`] are actually borrowed from within
+    /// For each layer in the resulting trie, contains a [`ColumnScan`] for the intersection
+    /// of the relevant scans in the sub tries.
+    /// Note: We're keeping an [`UnsafeCell`] here since the
+    /// [`ColScanT`] are actually borrowed from within
     /// `trie_scans`. We're not actually modifying through these
     /// references (since there's another layer of Cells hidden in
     /// [`ColumnScanT`], we're just using this satisfy the
@@ -37,34 +46,63 @@ pub struct TrieScanJoin<'a> {
 }
 
 impl<'a> TrieScanJoin<'a> {
-    /// Construct new TrieScanJoin object.
+    /// Construct new [`TrieScanJoin`] object.
+    /// `bindings` is a slice of `Vec<usize>` where binding[i]
+    /// contains which layer of the ith subscan is bound to which variable
+    /// (Variables are represented by their index in the variable order)
+    /// So the join R(a, b) S(b, c) T(a, c) with variable order [a, b, c] is represented
+    /// with the binding [[0, 1], [1, 2], [0, 2]] (assuming trie_scans = [R, S, T])
+    /// Assumes that each entry in `bindings``is sorted and does not contain duplicates
     pub fn new(
         trie_scans: Vec<TrieScanEnum<'a>>,
         bindings: &[Vec<usize>],
         target_schema: TrieSchema,
     ) -> Self {
-        let mut variable_to_scan = repeat(Vec::new())
+        debug_assert!(bindings.len() == trie_scans.len());
+
+        debug_assert!(
+            target_schema.arity() - 1 == bindings.iter().flatten().fold(0, |acc, v| acc.max(*v))
+        );
+
+        for (scan_index, scan_enum) in trie_scans.iter().enumerate() {
+            debug_assert!(bindings[scan_index].len() == scan_enum.get_schema().arity());
+        }
+
+        debug_assert!(bindings
+            .iter()
+            .fold(true, |acc, binding| acc && binding.is_sorted()));
+
+        // Indices of the sub tries which are assosiated with a given layer in the result
+        let mut layer_to_scans = repeat(Vec::new())
             .take(target_schema.arity())
             .collect::<Vec<_>>();
+
+        // For each layer in the result trie, contains
         let mut merge_join_indices: Vec<Vec<_>> = repeat(Vec::new())
             .take(target_schema.arity())
             .collect::<Vec<_>>();
 
         let mut merge_joins: Vec<UnsafeCell<ColumnScanT<'a>>> = Vec::new();
 
+        // Continuing the example from above we obtain
+        // layers_to_scans = [[0, 2], [0, 1], [1, 2]] and
+        // merge_join_indices = [[0, 0], [1, 0], [1, 1]]
+        // Combining this information gives you e.g. that for the second layer in the result
+        // you need to join the second column of the first scan with the first column of the second scan
         for (scan_index, binding) in bindings.iter().enumerate() {
-            for (col_index, &var) in binding.iter().enumerate() {
-                variable_to_scan[var].push(scan_index);
-                merge_join_indices[var].push(col_index);
+            for (col_index, &var_index) in binding.iter().enumerate() {
+                layer_to_scans[var_index].push(scan_index);
+                merge_join_indices[var_index].push(col_index);
             }
         }
 
-        for (variable, scan_indices) in variable_to_scan.iter().enumerate() {
+        // This loop builds the [`ColScanJoin`] as suggested above
+        for (var_index, scan_indices) in layer_to_scans.iter().enumerate() {
             macro_rules! merge_join_for_datatype {
                 ($variant:ident, $type:ty) => {{
                     let mut scans = Vec::<&ColumnScanCell<$type>>::new();
                     for (index, &scan_index) in scan_indices.iter().enumerate() {
-                        let column_index = merge_join_indices[variable][index];
+                        let column_index = merge_join_indices[var_index][index];
                         unsafe {
                             let column_scan =
                                 &*trie_scans[scan_index].get_scan(column_index).unwrap().get();
@@ -72,7 +110,7 @@ impl<'a> TrieScanJoin<'a> {
                             if let ColumnScanT::$variant(cs) = column_scan {
                                 scans.push(cs);
                             } else {
-                                panic!("expected a column scan of type {}", stringify!($type));
+                                panic!("Expected a column scan of type {}", stringify!($type));
                             }
                         }
                     }
@@ -83,7 +121,7 @@ impl<'a> TrieScanJoin<'a> {
                 }};
             }
 
-            match target_schema.get_type(variable) {
+            match target_schema.get_type(var_index) {
                 DataTypeName::U64 => merge_join_for_datatype!(U64, u64),
                 DataTypeName::Float => merge_join_for_datatype!(Float, Float),
                 DataTypeName::Double => merge_join_for_datatype!(Double, Double),
@@ -93,8 +131,8 @@ impl<'a> TrieScanJoin<'a> {
         Self {
             trie_scans,
             target_schema,
-            current_variable: None,
-            variable_to_scan,
+            current_layer: None,
+            layer_to_scans,
             merge_joins,
         }
     }
@@ -102,42 +140,44 @@ impl<'a> TrieScanJoin<'a> {
 
 impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
     fn up(&mut self) {
-        debug_assert!(self.current_variable.is_some());
-        let current_variable = self.current_variable.unwrap();
-        let current_scans = &self.variable_to_scan[current_variable];
+        debug_assert!(self.current_layer.is_some());
+        let current_layer = self.current_layer.unwrap();
+        let current_scans = &self.layer_to_scans[current_layer];
 
         for &scan_index in current_scans {
             self.trie_scans[scan_index].up();
         }
 
-        self.current_variable = if current_variable == 0 {
+        self.current_layer = if current_layer == 0 {
             None
         } else {
-            Some(current_variable - 1)
+            Some(current_layer - 1)
         };
     }
 
     fn down(&mut self) {
-        let current_variable = self.current_variable.map_or(0, |v| v + 1);
-        self.current_variable = Some(current_variable);
+        let current_layer = self.current_layer.map_or(0, |v| v + 1);
+        self.current_layer = Some(current_layer);
 
-        debug_assert!(current_variable < self.target_schema.arity());
+        debug_assert!(current_layer < self.target_schema.arity());
 
-        let current_scans = &self.variable_to_scan[current_variable];
+        let current_scans = &self.layer_to_scans[current_layer];
 
         for &scan_index in current_scans {
             self.trie_scans[scan_index].down();
         }
 
-        self.merge_joins[current_variable].get_mut().reset();
+        // The above down call has changed the sub scans of the current layer
+        // Hence, we need to reset its state
+        self.merge_joins[current_layer].get_mut().reset();
     }
 
     fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        debug_assert!(self.current_variable.is_some());
+        debug_assert!(self.current_layer.is_some());
 
-        match self.target_schema.get_type(self.current_variable?) {
+        match self.target_schema.get_type(self.current_layer?) {
             DataTypeName::U64 | DataTypeName::Float | DataTypeName::Double => {
-                Some(&self.merge_joins[self.current_variable?])
+                Some(&self.merge_joins[self.current_layer?])
             }
         }
     }
