@@ -17,6 +17,7 @@ use crate::physical::tabular::table_types::trie::{
 };
 use crate::physical::tabular::traits::{
     table::Table,
+    table_schema::TableSchema,
     triescan::{TrieScan, TrieScanEnum},
 };
 use crate::physical::util::cover_interval;

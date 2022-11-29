@@ -255,7 +255,7 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
         Some(&self.reorder_scans[index])
     }
 
-    fn get_schema(&self) -> &dyn TableSchema {
+    fn get_schema(&self) -> &TrieSchema {
         &self.target_schema
     }
 }

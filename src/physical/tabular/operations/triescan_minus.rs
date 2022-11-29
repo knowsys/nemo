@@ -4,6 +4,7 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::DataTypeName,
+    tabular::table_types::trie::TrieSchema,
     tabular::traits::{
         table_schema::TableSchema,
         triescan::{TrieScan, TrieScanEnum},
@@ -168,7 +169,7 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
         Some(&self.minus_scans[index])
     }
 
-    fn get_schema(&self) -> &dyn TableSchema {
+    fn get_schema(&self) -> &TrieSchema {
         self.trie_left.get_schema()
     }
 }

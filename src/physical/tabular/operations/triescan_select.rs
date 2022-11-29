@@ -4,6 +4,7 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{DataTypeName, DataValueT},
+    tabular::table_types::trie::TrieSchema,
     tabular::traits::{
         table_schema::TableSchema,
         triescan::{TrieScan, TrieScanEnum},
@@ -155,7 +156,7 @@ impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
         Some(&self.select_scans[index])
     }
 
-    fn get_schema(&self) -> &dyn TableSchema {
+    fn get_schema(&self) -> &TrieSchema {
         self.base_trie.get_schema()
     }
 }
@@ -289,7 +290,7 @@ impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
         Some(&self.select_scans[index])
     }
 
-    fn get_schema(&self) -> &dyn TableSchema {
+    fn get_schema(&self) -> &TrieSchema {
         self.base_trie.get_schema()
     }
 }
