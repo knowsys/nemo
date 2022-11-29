@@ -797,6 +797,96 @@ mod test {
         );
     }
 
+    #[test]
+    fn complex_reorder() {
+        let column_fst = make_gict(&[1, 2], &[0]);
+        let column_snd = make_gict(&[10, 11, 9, 10], &[0, 2]);
+        let column_trd = make_gict(&[4, 5, 5, 6, 3, 4, 4, 5], &[0, 2, 4, 6]);
+        let column_fth = make_gict(
+            &[6, 7, 6, 8, 7, 8, 6, 7, 7, 8, 6, 8, 5, 6, 7, 8],
+            &[0, 2, 4, 6, 8, 10, 12, 14],
+        );
+
+        let column_vec = vec![column_fst, column_snd, column_trd, column_fth];
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 3,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie = Trie::new(schema, column_vec);
+
+        let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
+            &trie,
+            vec![2, 0, 3],
+        )));
+
+        let proj_column_fst = trie_projected.get_column(0).as_u64().unwrap();
+        let proj_column_snd = trie_projected.get_column(1).as_u64().unwrap();
+        let proj_column_trd = trie_projected.get_column(2).as_u64().unwrap();
+        assert_eq!(
+            proj_column_fst
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![3, 4, 5, 6]
+        );
+
+        assert_eq!(
+            proj_column_fst
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0]
+        );
+
+        assert_eq!(
+            proj_column_snd
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![2, 1, 2, 1, 2, 1]
+        );
+
+        assert_eq!(
+            proj_column_snd
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 1, 3, 5]
+        );
+
+        assert_eq!(
+            proj_column_trd
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![7, 8, 6, 7, 5, 6, 8, 6, 7, 8, 7, 8, 6, 7]
+        );
+
+        assert_eq!(
+            proj_column_trd
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 2, 4, 7, 10, 12]
+        );
+    }
+
     /// This is a test case for a bug first encountered while
     /// classifying `smallmed` using the EL calculus rules, where
     /// reordering a table with 2 rows results in a table with 4 rows.
