@@ -5,9 +5,9 @@ use csv::ReaderBuilder;
 use polars::prelude::{CsvReader, DataFrame, DataType, JoinType, Schema, SerReader};
 use stage2::io::csv::read;
 
-use stage2::physical::tables::tables::Table;
-use stage2::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
-use stage2::physical::tables::triescans::{
+use stage2::physical::tabular::tables::Table;
+use stage2::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
+use stage2::physical::tabular::triescans::{
     materialize, TrieScanEnum, TrieScanGeneric, TrieScanJoin, TrieScanProject, TrieScanUnion,
 };
 use stage2::{

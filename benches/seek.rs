@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
-use stage2::physical::columns::{
+use stage2::physical::columnar::{
     colscans::{ColScan, ColScanGeneric},
     columns::{Column, ColumnRle, ColumnVector},
 };
