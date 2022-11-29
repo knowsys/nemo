@@ -1,6 +1,6 @@
 use crate::physical::{
     columnar::{
-        operations::ColumnScanJoin,
+        operations::{ColumnScanJoin, ColumnScanPass},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{DataTypeName, Double, Float},
@@ -82,8 +82,6 @@ impl<'a> TrieScanJoin<'a> {
             .take(target_schema.arity())
             .collect::<Vec<_>>();
 
-        let mut merge_joins: Vec<UnsafeCell<ColumnScanT<'a>>> = Vec::new();
-
         // Continuing the example from above we obtain
         // layers_to_scans = [[0, 2], [0, 1], [1, 2]] and
         // merge_join_indices = [[0, 0], [1, 0], [1, 1]]
@@ -96,28 +94,49 @@ impl<'a> TrieScanJoin<'a> {
             }
         }
 
+        let mut merge_joins: Vec<UnsafeCell<ColumnScanT<'a>>> = Vec::new();
+
         // This loop builds the [`ColScanJoin`] as suggested above
         for (var_index, scan_indices) in layer_to_scans.iter().enumerate() {
             macro_rules! merge_join_for_datatype {
                 ($variant:ident, $type:ty) => {{
-                    let mut scans = Vec::<&ColumnScanCell<$type>>::new();
-                    for (index, &scan_index) in scan_indices.iter().enumerate() {
-                        let column_index = merge_join_indices[var_index][index];
+                    if scan_indices.len() > 1 {
+                        let mut scans = Vec::<&ColumnScanCell<$type>>::new();
+                        for (index, &scan_index) in scan_indices.iter().enumerate() {
+                            let column_index = merge_join_indices[var_index][index];
+                            unsafe {
+                                let column_scan =
+                                    &*trie_scans[scan_index].get_scan(column_index).unwrap().get();
+
+                                if let ColumnScanT::$variant(cs) = column_scan {
+                                    scans.push(cs);
+                                } else {
+                                    panic!("Expected a column scan of type {}", stringify!($type));
+                                }
+                            }
+                        }
+
+                        merge_joins.push(UnsafeCell::new(ColumnScanT::$variant(ColumnScanCell::new(
+                            ColumnScanEnum::ColumnScanJoin(ColumnScanJoin::new(scans)),
+                        ))))
+                    } else {
+                        // If we have only one column then no join is neccessary and we use a [`PassScan`]
+                        let scan_index = scan_indices[0];
+                        let column_index = merge_join_indices[var_index][0];
+
                         unsafe {
                             let column_scan =
                                 &*trie_scans[scan_index].get_scan(column_index).unwrap().get();
 
                             if let ColumnScanT::$variant(cs) = column_scan {
-                                scans.push(cs);
+                                merge_joins.push(UnsafeCell::new(ColumnScanT::$variant(ColumnScanCell::new(
+                                    ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(cs))
+                                ))));
                             } else {
                                 panic!("Expected a column scan of type {}", stringify!($type));
                             }
                         }
                     }
-
-                    merge_joins.push(UnsafeCell::new(ColumnScanT::$variant(ColumnScanCell::new(
-                        ColumnScanEnum::ColumnScanJoin(ColumnScanJoin::new(scans)),
-                    ))))
                 }};
             }
 
