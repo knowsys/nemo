@@ -84,7 +84,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::physical::columns::{
+    use crate::physical::columnar::{
         colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
         columns::{Column, ColumnVector},
     };

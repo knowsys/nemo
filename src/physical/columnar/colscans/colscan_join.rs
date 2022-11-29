@@ -125,7 +125,7 @@ where
 mod test {
     use test_log::test;
 
-    use crate::physical::columns::{
+    use crate::physical::columnar::{
         colscans::{ColScan, ColScanEnum, ColScanGeneric, ColScanGenericEnum, ColScanJoin},
         columns::ColumnVector,
     };

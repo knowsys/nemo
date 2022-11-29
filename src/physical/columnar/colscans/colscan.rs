@@ -5,7 +5,7 @@ use super::{
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::{
-        columns::columns::ColumnRleScan,
+        columnar::columns::ColumnRleScan,
         datatypes::{ColumnDataType, DataValueT, Double, Float},
     },
 };

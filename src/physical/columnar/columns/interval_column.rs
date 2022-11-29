@@ -1,7 +1,7 @@
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::{
-        columns::colscans::{ColScanCell, ColScanEnum, ColScanGenericEnum, ColScanT},
+        columnar::colscans::{ColScanCell, ColScanEnum, ColScanGenericEnum, ColScanT},
         datatypes::{ColumnDataType, DataValueT, Double, Float},
     },
 };

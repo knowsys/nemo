@@ -1,9 +1,9 @@
 use crate::physical::{
-    columns::colscans::{
+    columnar::colscans::{
         ColScan, ColScanCell, ColScanEnum, ColScanFollow, ColScanMinus, ColScanPass, ColScanT,
     },
     datatypes::DataTypeName,
-    tables::tables::TableSchema,
+    tabular::tables::TableSchema,
 };
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
@@ -177,10 +177,10 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanMinus;
-    use crate::physical::columns::colscans::ColScanT;
+    use crate::physical::columnar::colscans::ColScanT;
     use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tables::triescans::{TrieScan, TrieScanEnum, TrieScanGeneric};
+    use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tabular::triescans::{TrieScan, TrieScanEnum, TrieScanGeneric};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

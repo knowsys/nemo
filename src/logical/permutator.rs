@@ -1,7 +1,7 @@
 //! Holds the [Permutator] struct, which allows one to define a logical permutation of the content of index-based data structures
 
 use crate::physical::{
-    columns::{
+    columnar::{
         builders::ColBuilder,
         columns::{Column, ColumnEnum, ColumnT},
     },
@@ -43,7 +43,7 @@ impl Permutator {
     }
 
     /// TODO: Test if this works
-    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
+    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columnar::column::Column]
     pub fn sort_from_column_range<T>(data: &ColumnEnum<T>, ranges: &[Range<usize>]) -> Permutator
     where
         T: ColumnDataType + Ord,
@@ -57,7 +57,7 @@ impl Permutator {
         }
     }
 
-    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
+    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columnar::column::Column]
     pub fn sort_from_column<T>(data: &ColumnEnum<T>) -> Permutator
     where
         T: ColumnDataType + Ord,
@@ -65,7 +65,7 @@ impl Permutator {
         Permutator::sort_from_column_range(data, &[(0..data.len())])
     }
 
-    /// Creates a [`Permutator`] based on a slice of [`ColumnT`][crate::physical::columns::column::ColumnT] elements.
+    /// Creates a [`Permutator`] based on a slice of [`ColumnT`][crate::physical::columnar::column::ColumnT] elements.
     pub fn sort_from_columns(data_vec: &[ColumnT]) -> Result<Permutator, Error> {
         let len = if !data_vec.is_empty() {
             let len = data_vec[0].len();
@@ -224,7 +224,7 @@ impl Permutator {
 mod test {
     use super::*;
     use crate::physical::{
-        columns::{builders::ColBuilderAdaptive, columns::ColumnVector},
+        columnar::{builders::ColBuilderAdaptive, columns::ColumnVector},
         datatypes::{Double, Float},
     };
     use quickcheck_macros::quickcheck;

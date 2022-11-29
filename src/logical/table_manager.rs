@@ -8,9 +8,9 @@ use crate::io::csv::read;
 use crate::meta::TimedCode;
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
-use crate::physical::tables::tables::Table;
-use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
-use crate::physical::tables::triescans::{
+use crate::physical::tabular::tables::Table;
+use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
+use crate::physical::tabular::triescans::{
     materialize, TrieScan, TrieScanEnum, TrieScanGeneric, TrieScanJoin, TrieScanMinus,
     TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion,
 };

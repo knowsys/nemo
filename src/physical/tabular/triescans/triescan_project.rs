@@ -1,11 +1,11 @@
 use crate::physical::{
-    columns::{
+    columnar::{
         colscans::{ColScan, ColScanCell, ColScanEnum, ColScanReorder, ColScanT},
         columns::{Column, IntervalColumn, IntervalColumnEnum, IntervalColumnT},
     },
     datatypes::{ColumnDataType, DataTypeName},
-    tables::tables::{Table, TableSchema},
-    tables::tries::{Trie, TrieSchema, TrieSchemaEntry},
+    tabular::tables::{Table, TableSchema},
+    tabular::tries::{Trie, TrieSchema, TrieSchemaEntry},
 };
 
 use std::cell::UnsafeCell;
@@ -261,12 +261,12 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanProject;
-    use crate::physical::columns::columns::Column;
+    use crate::physical::columnar::columns::Column;
     use crate::physical::datatypes::{DataTypeName, DataValueT};
     use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
-    use crate::physical::tables::tables::Table;
-    use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tables::triescans::{materialize, TrieScanEnum};
+    use crate::physical::tabular::tables::Table;
+    use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tabular::triescans::{materialize, TrieScanEnum};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

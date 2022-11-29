@@ -1,5 +1,5 @@
 use crate::logical::Permutator;
-use crate::physical::columns::columns::{Column, ColumnEnum};
+use crate::physical::columnar::columns::{Column, ColumnEnum};
 use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
@@ -127,7 +127,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::physical::columns::{
+    use crate::physical::columnar::{
         colscans::ColScan,
         columns::{ColumnEnum, ColumnVector},
     };

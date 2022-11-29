@@ -1,6 +1,6 @@
 use std::{fmt::Debug, ops::Index};
 
-use crate::physical::columns::colscans::ColScanGeneric;
+use crate::physical::columnar::colscans::ColScanGeneric;
 
 use super::Column;
 

@@ -1,5 +1,5 @@
 use super::{Column, ColumnEnum, IntervalColumn};
-use crate::physical::{columns::colscans::ColScanGeneric, datatypes::ColumnDataType};
+use crate::physical::{columnar::colscans::ColScanGeneric, datatypes::ColumnDataType};
 use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`IntervalColumn`] that uses a second column to manage interval bounds.

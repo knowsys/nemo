@@ -1,8 +1,8 @@
-use crate::physical::columns::columns::{
+use crate::physical::columnar::columns::{
     Column, ColumnEnum, ColumnVector, IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT,
 };
 use crate::physical::datatypes::DataTypeName;
-use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
+use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
 use arbitrary::{Arbitrary, Result, Unstructured};
 use num::{One, Zero};
 use std::cmp::Eq;

@@ -1,5 +1,5 @@
 use super::{FTableSchema, Table, TableSchema};
-use crate::physical::columns::IntervalColumnT;
+use crate::physical::columnar::IntervalColumnT;
 use std::fmt::Debug;
 
 /// Implementation of a factorized trie, which might be a subtrie of a larger strcuture.

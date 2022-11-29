@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
 
 use crate::physical::{
-    columns::builders::{ColBuilder, ColBuilderAdaptive},
-    columns::columns::{Column, IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT},
+    columnar::builders::{ColBuilder, ColBuilderAdaptive},
+    columnar::columns::{Column, IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT},
     datatypes::{DataTypeName, DataValueT, Double, Float},
-    tables::{
+    tabular::{
         tables::{Table, TableSchema},
         tries::{Trie, TrieSchema, TrieSchemaEntry},
     },
@@ -137,9 +137,9 @@ pub fn trie_add_duplicates(trie: Trie, indices: &[Vec<usize>]) -> Trie {
 mod test {
 
     use crate::physical::{
-        columns::colscans::ColScanT,
+        columnar::colscans::ColScanT,
         datatypes::{DataTypeName, DataValueT},
-        tables::{
+        tabular::{
             tries::{Trie, TrieSchema, TrieSchemaEntry},
             triescans::{TrieScan, TrieScanGeneric},
         },

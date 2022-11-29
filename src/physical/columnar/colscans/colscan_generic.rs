@@ -1,5 +1,5 @@
 use crate::generate_forwarder;
-use crate::physical::columns::columns::{Column, ColumnVector, IntervalColumnGeneric};
+use crate::physical::columnar::columns::{Column, ColumnVector, IntervalColumnGeneric};
 use crate::physical::datatypes::ColumnDataType;
 use std::marker::PhantomData;
 use std::{fmt::Debug, ops::Range};
@@ -237,7 +237,7 @@ where
 mod test {
     use test_log::test;
 
-    use crate::physical::columns::{
+    use crate::physical::columnar::{
         colscans::{ColScan, ColScanGeneric},
         columns::ColumnVector,
     };

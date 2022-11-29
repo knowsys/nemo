@@ -1,5 +1,5 @@
 use crate::physical::{
-    columns::{builders::ColBuilder, colscans::colscan::ColScan},
+    columnar::{builders::ColBuilder, colscans::colscan::ColScan},
     datatypes::{ColumnDataType, Field, Ring},
 };
 use num::{CheckedMul, Zero};
@@ -646,7 +646,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::{
-        columns::{colscans::ColScan, columns::Column},
+        columnar::{colscans::ColScan, columns::Column},
         datatypes::{Double, Float},
     };
     use num::Zero;

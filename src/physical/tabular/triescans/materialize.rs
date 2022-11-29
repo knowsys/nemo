@@ -1,13 +1,13 @@
 use num::ToPrimitive;
 
 use crate::physical::{
-    columns::{
+    columnar::{
         builders::{ColBuilder, ColBuilderAdaptive, ColBuilderAdaptiveT},
         colscans::ColScan,
         columns::{IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT},
     },
     datatypes::DataTypeName,
-    tables::{
+    tabular::{
         tables::TableSchema,
         tries::{Trie, TrieSchema, TrieSchemaEntry},
         triescans::TrieScan,
@@ -156,10 +156,10 @@ pub fn scan_is_empty(trie_scan: &mut TrieScanEnum) -> bool {
 #[cfg(test)]
 mod test {
     use super::materialize;
-    use crate::physical::columns::columns::Column;
+    use crate::physical::columnar::columns::Column;
     use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tables::triescans::{TrieScanEnum, TrieScanGeneric, TrieScanJoin};
+    use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tabular::triescans::{TrieScanEnum, TrieScanGeneric, TrieScanJoin};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

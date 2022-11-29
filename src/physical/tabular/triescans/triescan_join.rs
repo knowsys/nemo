@@ -1,8 +1,8 @@
 use crate::physical::{
-    columns::colscans::{ColScan, ColScanCell, ColScanEnum, ColScanJoin, ColScanT},
+    columnar::colscans::{ColScan, ColScanCell, ColScanEnum, ColScanJoin, ColScanT},
     datatypes::{DataTypeName, Double, Float},
-    tables::tables::TableSchema,
-    tables::tries::TrieSchema,
+    tabular::tables::TableSchema,
+    tabular::tries::TrieSchema,
 };
 
 use std::cell::UnsafeCell;
@@ -150,16 +150,16 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanJoin;
-    use crate::physical::columns::builders::{ColBuilder, ColBuilderAdaptive};
-    use crate::physical::columns::columns::{
+    use crate::physical::columnar::builders::{ColBuilder, ColBuilderAdaptive};
+    use crate::physical::columnar::columns::{
         Column, ColumnEnum, ColumnVector, IntervalColumnEnum, IntervalColumnGeneric,
         IntervalColumnT,
     };
-    use crate::physical::tables::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tables::triescans::{
+    use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tabular::triescans::{
         materialize, TrieScan, TrieScanEnum, TrieScanGeneric,
     };
-    use crate::physical::{columns::colscans::ColScanT, datatypes::DataTypeName};
+    use crate::physical::{columnar::colscans::ColScanT, datatypes::DataTypeName};
 
     use crate::physical::util::test_util::make_gict;
     use test_log::test;

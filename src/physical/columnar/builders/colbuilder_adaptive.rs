@@ -1,5 +1,5 @@
 use crate::physical::{
-    columns::columns::{ColBuilderRle, Column, ColumnEnum, ColumnVector},
+    columnar::columns::{ColBuilderRle, Column, ColumnEnum, ColumnVector},
     datatypes::{ColumnDataType, DataTypeName, DataValueT, Double, Float},
 };
 use std::fmt::Debug;
@@ -206,7 +206,7 @@ impl FromIterator<DataValueT> for ColBuilderAdaptiveT {
 mod test {
     use super::{ColBuilder, ColBuilderAdaptive, ColBuilderType};
     use crate::physical::{
-        columns::columns::Column,
+        columnar::columns::Column,
         datatypes::{Double, Float},
     };
     use test_log::test;
