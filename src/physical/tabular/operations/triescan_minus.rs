@@ -38,6 +38,8 @@ pub struct TrieScanMinus<'a> {
 impl<'a> TrieScanMinus<'a> {
     /// Construct new [`TrieScanMinus`] object.
     pub fn new(trie_left: TrieScanEnum<'a>, trie_right: TrieScanEnum<'a>) -> TrieScanMinus<'a> {
+        debug_assert!(trie_left.get_schema().arity() == trie_right.get_schema().arity());
+
         let target_schema = trie_left.get_schema();
         let layer_count = target_schema.arity();
 

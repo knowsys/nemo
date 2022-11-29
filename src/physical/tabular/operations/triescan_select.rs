@@ -15,19 +15,36 @@ use std::fmt::Debug;
 /// Trie iterator enforcing conditions which state that some columns should have the same value
 #[derive(Debug)]
 pub struct TrieScanSelectEqual<'a> {
+    /// Base trie on which the filter is applied
     base_trie: Box<TrieScanEnum<'a>>,
+
+    /// For each layer in the resulting trie, contains a [`ColumnScanEqualColumn`]
+    /// Note: Reason for using [`UnsafeCell`] is explained for [`TrieScanJoin`]
     select_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
+
+    /// Layer we are currently at in the resulting trie
     current_layer: Option<usize>,
 }
 
 impl<'a> TrieScanSelectEqual<'a> {
-    /// Construct new TrieScanSelectEqual object.
+    /// Construct new [`TrieScanSelectEqual`] object.
+    /// `eq_classes` contains a vectors that indicate which column indices should be forced to the same value
+    /// E.g. for R(a, a, b, c, d, c) eq_classes = [[0, 1], [3, 5]]
+    /// Assumes that the members in each class are sorted and contains at least two elements
     pub fn new(base_trie: TrieScanEnum<'a>, eq_classes: Vec<Vec<usize>>) -> Self {
+        debug_assert!(eq_classes
+            .iter()
+            .fold(true, |acc, class| acc && class.is_sorted()));
+        debug_assert!(eq_classes
+            .iter()
+            .fold(true, |acc, class| acc && (class.len() > 1)));
+
         let target_schema = base_trie.get_schema();
         let arity = target_schema.arity();
         let mut select_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
 
         for col_index in 0..arity {
+            // As a default fill everything with [`ColScanPass`]
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
                     unsafe {
@@ -55,6 +72,8 @@ impl<'a> TrieScanSelectEqual<'a> {
         }
 
         for class in eq_classes {
+            // Each member in a equivalency class exept the first one will be represented
+            // by a [`ColScanEqualColumn`] which references the previous column in that class
             for member_index in 1..class.len() {
                 let prev_member_idx = class[member_index - 1];
                 let current_member_idx = class[member_index];
@@ -144,8 +163,14 @@ impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
 /// Trie iterator enforcing conditions which state that some columns should have the same value
 #[derive(Debug)]
 pub struct TrieScanSelectValue<'a> {
+    /// Base trie on which the filter is applied
     base_trie: Box<TrieScanEnum<'a>>,
+
+    /// For each layer in the resulting trie, contains a [`ColumnScanEqualValue`]
+    /// Note: Reason for using [`UnsafeCell`] is explained for [`TrieScanJoin`]
     select_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
+
+    /// Layer we are currently at in the resulting trie
     current_layer: Option<usize>,
 }
 

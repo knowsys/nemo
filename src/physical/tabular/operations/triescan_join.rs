@@ -59,15 +59,15 @@ impl<'a> TrieScanJoin<'a> {
         target_schema: TrieSchema,
     ) -> Self {
         debug_assert!(bindings.len() == trie_scans.len());
-
         debug_assert!(
             target_schema.arity() - 1 == bindings.iter().flatten().fold(0, |acc, v| acc.max(*v))
         );
-
-        for (scan_index, scan_enum) in trie_scans.iter().enumerate() {
-            debug_assert!(bindings[scan_index].len() == scan_enum.get_schema().arity());
-        }
-
+        debug_assert!(trie_scans
+            .iter()
+            .enumerate()
+            .fold(true, |acc, (scan_index, scan_enum)| acc
+                && (bindings[scan_index].len()
+                    == scan_enum.get_schema().arity())));
         debug_assert!(bindings
             .iter()
             .fold(true, |acc, binding| acc && binding.is_sorted()));

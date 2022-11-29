@@ -12,12 +12,21 @@ use crate::physical::{
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
-/// Trie iterator representing a union between other trie iterators
+/// [`TrieScan`] representing a union of other trie iterators
 #[derive(Debug)]
 pub struct TrieScanUnion<'a> {
+    /// Trie scans for which the join is computed
     trie_scans: Vec<TrieScanEnum<'a>>,
+
+    /// For each trie scan contains its current layer
     layers: Vec<Option<usize>>,
+
+    /// For each layer in the resulting trie, contains a [`ColumnScanUnion`] for the union
+    /// of the relevant scans in the sub tries.
+    /// Note: Reason for using [`UnsafeCell`] is explained for [`TrieScanJoin`]
     union_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
+
+    /// Layer we are currently at in the resulting trie
     current_layer: Option<usize>,
 }
 
@@ -25,6 +34,8 @@ impl<'a> TrieScanUnion<'a> {
     /// Construct new TrieScanUnion object.
     pub fn new(trie_scans: Vec<TrieScanEnum<'a>>) -> TrieScanUnion<'a> {
         debug_assert!(!trie_scans.is_empty());
+        debug_assert!(trie_scans.iter().fold(true, |acc, scan| acc
+            && (scan.get_schema().arity() == trie_scans[0].get_schema().arity())));
 
         // This assumes that every schema is the same
         // TODO: Perhaps debug_assert! this
