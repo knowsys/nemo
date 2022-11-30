@@ -3,7 +3,7 @@ use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
 
-/// [`ColScan`] consisting of two sub scans (named main and follower)
+/// [`ColumnScan`] consisting of two sub scans (named main and follower)
 /// such that if main advances the follower seeks main's new value
 /// Used for computing the minus operation for tries
 #[derive(Debug)]
@@ -28,7 +28,7 @@ impl<'a, T> ColumnScanFollow<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Construcs a new [`ColScanFollow`].
+    /// Construcs a new [`ColumnScanFollow`].
     pub fn new(
         scan_main: &'a ColumnScanCell<'a, T>,
         scan_follower: &'a ColumnScanCell<'a, T>,
@@ -97,7 +97,7 @@ where
     }
 }
 
-/// [`ColScan`] that returns only values that are present in one sub scan ("left") and not in the other ("right")
+/// [`ColumnScan`] that returns only values that are present in one sub scan ("left") and not in the other ("right")
 #[derive(Debug)]
 pub struct ColumnScanMinus<'a, T>
 where

@@ -36,7 +36,7 @@ pub struct TrieScanJoin<'a> {
     /// For each layer in the resulting trie, contains a [`ColumnScan`] for the intersection
     /// of the relevant scans in the sub tries.
     /// Note: We're keeping an [`UnsafeCell`] here since the
-    /// [`ColScanT`] are actually borrowed from within
+    /// [`ColumnScanT`] are actually borrowed from within
     /// `trie_scans`. We're not actually modifying through these
     /// references (since there's another layer of Cells hidden in
     /// [`ColumnScanT`], we're just using this satisfy the
@@ -96,7 +96,7 @@ impl<'a> TrieScanJoin<'a> {
 
         let mut merge_joins: Vec<UnsafeCell<ColumnScanT<'a>>> = Vec::new();
 
-        // This loop builds the [`ColScanJoin`] as suggested above
+        // This loop builds the [`ColumnScanJoin`] as suggested above
         for (var_index, scan_indices) in layer_to_scans.iter().enumerate() {
             macro_rules! merge_join_for_datatype {
                 ($variant:ident, $type:ty) => {{

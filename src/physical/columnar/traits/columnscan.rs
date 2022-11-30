@@ -162,7 +162,7 @@ impl<'a, T> ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Assumes that column scan is a [`ColScanReorder`]
+    /// Assumes that column scan is a [`ColumnScanReorder`]
     /// Return all positions in the underlying column the cursor is currently at
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
         if let Self::ColumnScanReorder(cs) = self {
@@ -198,7 +198,7 @@ where
         if let Self::ColumnScanUnion(cs) = self {
             cs.get_smallest_scans()
         } else {
-            unimplemented!("get_smallest_scans is only available for ColScanUnion")
+            unimplemented!("get_smallest_scans is only available for ColumnScanUnion")
         }
     }
 
@@ -208,7 +208,7 @@ where
         if let Self::ColumnScanUnion(cs) = self {
             cs.set_active_scans(active_scans)
         } else {
-            unimplemented!("set_active_scans is only available for ColScanUnion")
+            unimplemented!("set_active_scans is only available for ColumnScanUnion")
         }
     }
 
@@ -364,7 +364,7 @@ where
         self.0.get_mut().set_active_scans(active_scans);
     }
 
-    /// Forward `minus_enable``to the underlying [`ColScanEnum`]
+    /// Forward `minus_enable``to the underlying [`ColumnScanEnum`]
     pub fn minus_enable(&mut self, enabled: bool) {
         unsafe { &mut *self.0.get() }.minus_enable(enabled);
     }
@@ -402,7 +402,7 @@ impl<'a> ColumnScanT<'a> {
         forward_to_columnscan_cell!(self, pos_multiple)
     }
 
-    /// Assumes that column scan is a [`ColScanReorder`]
+    /// Assumes that column scan is a [`ColumnScanReorder`]
     /// Set iterator to a set of possibly disjoint ranged
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
         forward_to_columnscan_cell!(self, narrow_ranges(intervals))
@@ -420,7 +420,7 @@ impl<'a> ColumnScanT<'a> {
         forward_to_columnscan_cell!(self, get_smallest_scans)
     }
 
-    /// Assumes that column scan is a [`ColScanUnion`]
+    /// Assumes that column scan is a [`ColumnScanUnion`]
     /// Set a vector that indicates which scans are currently active and should be considered
     pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
         forward_to_columnscan_cell!(self, set_active_scans(active_scans))

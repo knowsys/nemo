@@ -2,7 +2,7 @@ use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
-/// [`ColScan`] which allows its sub scan to only jump to a certain value
+/// [`ColumnScan`] which allows its sub scan to only jump to a certain value
 #[derive(Debug)]
 pub struct ColumnScanEqualValue<'a, T>
 where

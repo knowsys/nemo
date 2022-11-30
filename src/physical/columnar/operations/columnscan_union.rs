@@ -3,7 +3,7 @@ use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
 
-/// [`ColScan`] representing the union of its sub scans
+/// [`ColumnScan`] representing the union of its sub scans
 #[derive(Debug)]
 pub struct ColumnScanUnion<'a, T>
 where
@@ -29,7 +29,7 @@ impl<'a, T> ColumnScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new [`ColScanUnion`] for a Column.
+    /// Constructs a new [`ColumnScanUnion`] for a Column.
     pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> ColumnScanUnion<'a, T> {
         let scans_len = column_scans.len();
         ColumnScanUnion {

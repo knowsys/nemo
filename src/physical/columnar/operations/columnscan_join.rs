@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 
-/// Implementation of [`ColScan`] for the result of joining a list of [`ColScan`] objects.
+/// Implementation of [`ColumnScan`] for the result of joining a list of [`ColumnScan`] objects.
 #[derive(Debug)]
 pub struct ColumnScanJoin<'a, T>
 where
@@ -17,7 +17,7 @@ where
     /// Index of the scan which is currently being advanced
     active_index: usize,
 
-    /// Current value of the [`ColScanJoin`]; its also the value pointed to by each sub scan
+    /// Current value of the [`ColumnScanJoin`]; its also the value pointed to by each sub scan
     current_value: Option<T>,
 }
 

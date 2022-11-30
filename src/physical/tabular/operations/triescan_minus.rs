@@ -59,14 +59,14 @@ impl<'a> TrieScanMinus<'a> {
                                 // For the minus trie operator we need to check if a path contained
                                 // in the "left" trie is also present in the "right" trie
                                 let new_scan = if layer_index < target_schema.arity() - 1 {
-                                    // In the non-leaf layers, [`ColScanFollow`] is responsible
+                                    // In the non-leaf layers, [`ColumnScanFollow`] is responsible
                                     // for checking if the paths match up to the last layer
                                     ColumnScanEnum::ColumnScanFollow(ColumnScanFollow::new(
                                         left_scan_enum,
                                         right_scan_enum,
                                     ))
                                 } else {
-                                    // Only on the last layer the [`ColScanMinus`] object
+                                    // Only on the last layer the [`ColumnScanMinus`] object
                                     // returns the values contained in the left trie but not in the right
                                     // (assuming the paths match up to this point)
                                     ColumnScanEnum::ColumnScanMinus(ColumnScanMinus::new(
@@ -135,7 +135,7 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
             // We only call `down` on the right trie if the path matches with the left trie up to this point
             // and they both point to the same value
             // Note that `down` cannot be called on the last layer
-            // hence we know that `minus_scans[current_layer]` contains a [`ColScanFollow`] object
+            // hence we know that `minus_scans[current_layer]` contains a [`ColumnScanFollow`] object
             if self.layer_left == self.layer_right
                 && self.minus_scans[current_layer].get_mut().is_equal()
             {
