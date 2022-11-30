@@ -6,7 +6,7 @@ use crate::physical::{
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         traits::{columnbuilder::ColumnBuilder, columnscan::ColumnScan},
     },
-    datatypes::DataTypeName,
+    datatypes::{DataTypeName, Double, Float},
     tabular::{
         table_types::trie::Trie,
         traits::{
@@ -19,12 +19,13 @@ use crate::physical::{
 /// Given a TrieScan iterator, materialize its content into a trie
 /// If `picked_columns` is provided we will only store values for columns
 /// for which the resepective entry in this vector is set to true
-/// If `check_empty` is set to true it will ony try to find the first entry and then abort
+/// If `check_empty` is set to true it will only try to find the first entry and then abort
 pub fn materialize_inner(
     trie_scan: &mut TrieScanEnum,
     picked_columns: Option<Vec<bool>>,
     check_empty: bool,
 ) -> Option<Trie> {
+    // Keep track of the number of next calls; used for logging
     let mut next_count: usize = 0;
 
     // Clone the schema of the trie
@@ -38,15 +39,18 @@ pub fn materialize_inner(
     for var in 0..schema.arity() {
         intervals_column_builders.push(ColumnBuilderAdaptive::default());
 
+        macro_rules! init_builder_for_datatype {
+            ($variant:ident) => {{
+                data_column_builders.push(ColumnBuilderAdaptiveT::$variant(
+                    ColumnBuilderAdaptive::default(),
+                ))
+            }};
+        }
+
         match schema.get_type(var) {
-            DataTypeName::U64 => data_column_builders
-                .push(ColumnBuilderAdaptiveT::U64(ColumnBuilderAdaptive::default())),
-            DataTypeName::Float => data_column_builders.push(ColumnBuilderAdaptiveT::Float(
-                ColumnBuilderAdaptive::default(),
-            )),
-            DataTypeName::Double => data_column_builders.push(ColumnBuilderAdaptiveT::Double(
-                ColumnBuilderAdaptive::default(),
-            )),
+            DataTypeName::U64 => init_builder_for_datatype!(U64),
+            DataTypeName::Float => init_builder_for_datatype!(Float),
+            DataTypeName::Double => init_builder_for_datatype!(Double),
         }
     }
 
@@ -145,21 +149,33 @@ pub fn materialize_inner(
 
     if !is_empty {
         // Collect data from column builders
-        for _ in 0..schema.arity() {
-            let current_data_builder: ColumnBuilderAdaptive<u64> =
-                if let ColumnBuilderAdaptiveT::U64(cb) = data_column_builders.remove(0) {
-                    cb
-                } else {
-                    panic!("Only covering u64 for now");
-                };
-            let current_interval_builder = intervals_column_builders.remove(0);
+        for column_index in 0..schema.arity() {
+            macro_rules! finalize_for_datatype {
+                ($variant:ident, $type:ty) => {{
+                    let current_data_builder: ColumnBuilderAdaptive<$type> =
+                        if let ColumnBuilderAdaptiveT::$variant(cb) = data_column_builders.remove(0)
+                        {
+                            cb
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($type));
+                        };
+                    let current_interval_builder = intervals_column_builders.remove(0);
 
-            let next_interval_column = ColumnWithIntervalsT::U64(ColumnWithIntervals::new(
-                current_data_builder.finalize(),
-                current_interval_builder.finalize(),
-            ));
+                    let next_interval_column =
+                        ColumnWithIntervalsT::$variant(ColumnWithIntervals::new(
+                            current_data_builder.finalize(),
+                            current_interval_builder.finalize(),
+                        ));
 
-            result_columns.push(next_interval_column);
+                    result_columns.push(next_interval_column);
+                }};
+            }
+
+            match schema.get_type(column_index) {
+                DataTypeName::U64 => finalize_for_datatype!(U64, u64),
+                DataTypeName::Float => finalize_for_datatype!(Float, Float),
+                DataTypeName::Double => finalize_for_datatype!(Double, Double),
+            }
         }
 
         let result = Trie::new(schema, result_columns);
