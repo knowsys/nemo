@@ -104,16 +104,16 @@ pub fn materialize_inner(
                 }
             }
 
-            if !is_last_layer {
-                current_row[current_layer] = false;
-            }
-        } else if is_last_layer && next_value.is_some() {
-            current_row = vec![true; schema.arity() - 1];
-            is_empty = false;
+            if is_last_layer {
+                current_row = vec![true; schema.arity()];
+                is_empty = false;
 
-            // At this point we know that the result will contain at least one variable
-            if check_empty {
-                break;
+                // At this point we know that the result will contain at least one variable
+                if check_empty {
+                    break;
+                }
+            } else if current_row[current_layer] {
+                current_row[current_layer] = false;
             }
         }
 
