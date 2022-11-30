@@ -1,5 +1,7 @@
 use crate::logical::Permutator;
-use crate::physical::columnar::builders::{ColBuilder, ColBuilderAdaptive, ColBuilderAdaptiveT};
+use crate::physical::columnar::builders::{
+    ColumnBuilder, ColumnBuilderAdaptive, ColumnBuilderAdaptiveT,
+};
 use crate::physical::columnar::columns::{
     Column, IntervalColumn, IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT,
 };
@@ -291,7 +293,7 @@ impl Table for Trie {
         macro_rules! build_interval_column {
             ($col_builder:ident, $interval_builder:ident; $($variant:ident);+) => {
                 match $col_builder {
-                    $(ColBuilderAdaptiveT::$variant(vec) => IntervalColumnT::$variant(
+                    $(ColumnBuilderAdaptiveT::$variant(vec) => IntervalColumnT::$variant(
                     IntervalColumnEnum::IntervalColumnGeneric(IntervalColumnGeneric::new(
                         vec.finalize(),
                         $interval_builder.finalize(),
@@ -308,8 +310,8 @@ impl Table for Trie {
                 cols
                     .into_iter()
                     .map(|_| {
-                        let empty_data_col = ColBuilderAdaptiveT::new(DataTypeName::U64);
-                        let empty_interval_col = ColBuilderAdaptive::<usize>::new();
+                        let empty_data_col = ColumnBuilderAdaptiveT::new(DataTypeName::U64);
+                        let empty_interval_col = ColumnBuilderAdaptive::<usize>::new();
                         build_interval_column!(empty_data_col, empty_interval_col; U64; Float; Double)
                     })
                     .collect(),
@@ -338,15 +340,15 @@ impl Table for Trie {
         // "condensed" refers to the "cleaned up" version of the columns where duplicates have been removed (largely) and a trie structure is resembled
         // we name our variables accordingly to clarify which version a column vector or index corresponds to
         let mut last_uncondensed_interval_starts: Vec<usize> = vec![0];
-        let mut condensed_data_builders: Vec<ColBuilderAdaptiveT> = vec![];
-        let mut condensed_interval_starts_builders: Vec<ColBuilderAdaptive<usize>> = vec![];
+        let mut condensed_data_builders: Vec<ColumnBuilderAdaptiveT> = vec![];
+        let mut condensed_interval_starts_builders: Vec<ColumnBuilderAdaptive<usize>> = vec![];
 
         for sorted_col in sorted_cols.iter().take(sorted_cols.len() - 1) {
             let mut current_uncondensed_interval_starts = vec![0];
-            let mut current_condensed_data: ColBuilderAdaptiveT =
-                ColBuilderAdaptiveT::new(sorted_col.get_type());
-            let mut current_condensed_interval_starts_builder: ColBuilderAdaptive<usize> =
-                ColBuilderAdaptive::new();
+            let mut current_condensed_data: ColumnBuilderAdaptiveT =
+                ColumnBuilderAdaptiveT::new(sorted_col.get_type());
+            let mut current_condensed_interval_starts_builder: ColumnBuilderAdaptive<usize> =
+                ColumnBuilderAdaptive::new();
 
             let mut uncondensed_interval_ends =
                 last_uncondensed_interval_starts.iter().skip(1).copied();
@@ -393,19 +395,19 @@ impl Table for Trie {
                 (0..last_col.len())
                     .into_iter()
                     .map(|i| last_col.get(i).expect("index is guaranteed to be in range"))
-                    .collect::<ColBuilderAdaptiveT>(),
+                    .collect::<ColumnBuilderAdaptiveT>(),
             );
             condensed_interval_starts_builders.push(
                 last_uncondensed_interval_starts
                     .into_iter()
-                    .collect::<ColBuilderAdaptive<usize>>(),
+                    .collect::<ColumnBuilderAdaptive<usize>>(),
             );
         }
 
         macro_rules! build_interval_column {
             ($col_builder:ident, $interval_builder:ident; $($variant:ident);+) => {
                 match $col_builder {
-                    $(ColBuilderAdaptiveT::$variant(data_col) => IntervalColumnT::$variant(
+                    $(ColumnBuilderAdaptiveT::$variant(data_col) => IntervalColumnT::$variant(
                     IntervalColumnEnum::IntervalColumnGeneric(IntervalColumnGeneric::new(
                         data_col.finalize(),
                         $interval_builder.finalize(),

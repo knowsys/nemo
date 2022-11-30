@@ -1,10 +1,10 @@
 use crate::physical::{
-    columnar::columns::{ColBuilderRle, Column, ColumnEnum, ColumnVector},
+    columnar::columns::{Column, ColumnBuilderRle, ColumnEnum, ColumnVector},
     datatypes::{ColumnDataType, DataTypeName, DataValueT, Double, Float},
 };
 use std::fmt::Debug;
 
-use super::ColBuilder;
+use super::ColumnBuilder;
 
 // Number of rle elements in rle column builder after which to decide which column type to use.
 const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5; // 5
@@ -13,72 +13,72 @@ const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5; // 5
 const TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS: usize = 3; // 3
 
 #[derive(Debug, PartialEq)]
-enum ColBuilderType<T> {
-    Undecided(Option<ColBuilderRle<T>>), // by default we start building an rle column to evaluate memory consumption
+enum ColumnBuilderType<T> {
+    Undecided(Option<ColumnBuilderRle<T>>), // by default we start building an rle column to evaluate memory consumption
     ColumnVector(Vec<T>),
-    ColumnRle(ColBuilderRle<T>),
+    ColumnRle(ColumnBuilderRle<T>),
 }
 
-impl<T> Default for ColBuilderType<T> {
+impl<T> Default for ColumnBuilderType<T> {
     fn default() -> Self {
-        Self::Undecided(Some(ColBuilderRle::new()))
+        Self::Undecided(Some(ColumnBuilderRle::new()))
     }
 }
 
-/// Implementation of [`ColBuilder`] that may adaptively decide for the
+/// Implementation of [`ColumnBuilder`] that may adaptively decide for the
 /// best possible column implementation for the given data.
 #[derive(Debug, Default, PartialEq)]
-pub struct ColBuilderAdaptive<T> {
-    builder: ColBuilderType<T>,
+pub struct ColumnBuilderAdaptive<T> {
+    builder: ColumnBuilderType<T>,
 }
 
-impl<T> ColBuilderAdaptive<T>
+impl<T> ColumnBuilderAdaptive<T>
 where
     T: ColumnDataType + Default,
 {
     /// Constructor.
-    pub fn new() -> ColBuilderAdaptive<T> {
-        ColBuilderAdaptive {
-            builder: ColBuilderType::Undecided(Some(ColBuilderRle::new())),
+    pub fn new() -> ColumnBuilderAdaptive<T> {
+        ColumnBuilderAdaptive {
+            builder: ColumnBuilderType::Undecided(Some(ColumnBuilderRle::new())),
         }
     }
 
     fn decide_column_type(&mut self) {
-        if let ColBuilderType::Undecided(rle_builder_opt) = &mut self.builder {
+        if let ColumnBuilderType::Undecided(rle_builder_opt) = &mut self.builder {
             let rle_builder = rle_builder_opt
                 .take()
                 .expect("this is only None from this take() call until the end of this method");
 
             if rle_builder.avg_length_of_rle_elements() > TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS {
-                self.builder = ColBuilderType::ColumnRle(rle_builder);
+                self.builder = ColumnBuilderType::ColumnRle(rle_builder);
             } else {
                 let rle_column = rle_builder.finalize();
-                self.builder = ColBuilderType::ColumnVector(rle_column.iter().collect());
+                self.builder = ColumnBuilderType::ColumnVector(rle_column.iter().collect());
             }
         }
     }
 }
 
-impl<'a, T> ColBuilder<'a, T> for ColBuilderAdaptive<T>
+impl<'a, T> ColumnBuilder<'a, T> for ColumnBuilderAdaptive<T>
 where
     T: 'a + ColumnDataType + Default,
 {
     type Col = ColumnEnum<T>;
 
     fn add(&mut self, value: T) {
-        if let ColBuilderType::Undecided(Some(rle_builder)) = &self.builder {
+        if let ColumnBuilderType::Undecided(Some(rle_builder)) = &self.builder {
             if rle_builder.number_of_rle_elements() > COLUMN_IMPL_DECISION_THRESHOLD {
                 self.decide_column_type();
             }
         }
 
         match &mut self.builder {
-            ColBuilderType::ColumnVector(vec) => vec.push(value),
-            ColBuilderType::ColumnRle(rle_builder) => rle_builder.add(value),
+            ColumnBuilderType::ColumnVector(vec) => vec.push(value),
+            ColumnBuilderType::ColumnRle(rle_builder) => rle_builder.add(value),
 
             // we only build the rle if still undecided and then evaluate the compression ration by
             // the length of the rle elements
-            ColBuilderType::Undecided(builder) => builder
+            ColumnBuilderType::Undecided(builder) => builder
                 .as_mut()
                 .expect("In undecided case None should only briefly be used in decide_column_type.")
                 .add(value),
@@ -89,9 +89,11 @@ where
         self.decide_column_type();
 
         match self.builder {
-            ColBuilderType::ColumnVector(vec) => Self::Col::ColumnVector(ColumnVector::new(vec)),
-            ColBuilderType::ColumnRle(rle_builder) => Self::Col::ColumnRle(rle_builder.finalize()),
-            ColBuilderType::Undecided(_) => {
+            ColumnBuilderType::ColumnVector(vec) => Self::Col::ColumnVector(ColumnVector::new(vec)),
+            ColumnBuilderType::ColumnRle(rle_builder) => {
+                Self::Col::ColumnRle(rle_builder.finalize())
+            }
+            ColumnBuilderType::Undecided(_) => {
                 unreachable!("column type should have been decided here")
             }
         }
@@ -99,9 +101,9 @@ where
 
     fn count(&self) -> usize {
         match &self.builder {
-            ColBuilderType::ColumnVector(vec) => vec.len(),
-            ColBuilderType::ColumnRle(rle_builder) => rle_builder.count(),
-            ColBuilderType::Undecided(builder) => builder
+            ColumnBuilderType::ColumnVector(vec) => vec.len(),
+            ColumnBuilderType::ColumnRle(rle_builder) => rle_builder.count(),
+            ColumnBuilderType::Undecided(builder) => builder
                 .as_ref()
                 .expect("Should never be None on the outside")
                 .count(),
@@ -109,7 +111,7 @@ where
     }
 }
 
-impl<A> FromIterator<A> for ColBuilderAdaptive<A>
+impl<A> FromIterator<A> for ColumnBuilderAdaptive<A>
 where
     A: ColumnDataType + Default,
 {
@@ -125,24 +127,24 @@ where
     }
 }
 
-/// Enum for ColBuilderAdaptive with different underlying datatypes
+/// Enum for ColumnBuilderAdaptive with different underlying datatypes
 #[derive(Debug)]
-pub enum ColBuilderAdaptiveT {
+pub enum ColumnBuilderAdaptiveT {
     /// Case u64
-    U64(ColBuilderAdaptive<u64>),
+    U64(ColumnBuilderAdaptive<u64>),
     /// Case Float
-    Float(ColBuilderAdaptive<Float>),
+    Float(ColumnBuilderAdaptive<Float>),
     /// Case Double
-    Double(ColBuilderAdaptive<Double>),
+    Double(ColumnBuilderAdaptive<Double>),
 }
 
-impl ColBuilderAdaptiveT {
-    /// Creates a new empty ColBuilderAdaptiveT for the given DataTypeName
+impl ColumnBuilderAdaptiveT {
+    /// Creates a new empty ColumnBuilderAdaptiveT for the given DataTypeName
     pub fn new(dtn: DataTypeName) -> Self {
         match dtn {
-            DataTypeName::U64 => Self::U64(ColBuilderAdaptive::new()),
-            DataTypeName::Float => Self::Float(ColBuilderAdaptive::new()),
-            DataTypeName::Double => Self::Double(ColBuilderAdaptive::new()),
+            DataTypeName::U64 => Self::U64(ColumnBuilderAdaptive::new()),
+            DataTypeName::Float => Self::Float(ColumnBuilderAdaptive::new()),
+            DataTypeName::Double => Self::Double(ColumnBuilderAdaptive::new()),
         }
     }
 
@@ -183,7 +185,7 @@ impl ColBuilderAdaptiveT {
     }
 }
 
-impl FromIterator<DataValueT> for ColBuilderAdaptiveT {
+impl FromIterator<DataValueT> for ColumnBuilderAdaptiveT {
     fn from_iter<T>(iter: T) -> Self
     where
         T: IntoIterator<Item = DataValueT>,
@@ -204,15 +206,15 @@ impl FromIterator<DataValueT> for ColBuilderAdaptiveT {
 
 #[cfg(test)]
 mod test {
-    use super::{ColBuilder, ColBuilderAdaptive, ColBuilderType};
+    use super::{ColumnBuilder, ColumnBuilderAdaptive, ColumnBuilderType};
     use crate::physical::{
         columnar::columns::Column,
         datatypes::{Double, Float},
     };
     use test_log::test;
 
-    fn construct_presumable_vector_column() -> ColBuilderAdaptive<u32> {
-        let mut acb: ColBuilderAdaptive<u32> = ColBuilderAdaptive::new();
+    fn construct_presumable_vector_column() -> ColumnBuilderAdaptive<u32> {
+        let mut acb: ColumnBuilderAdaptive<u32> = ColumnBuilderAdaptive::new();
         acb.add(1);
         acb.add(2);
         acb.add(3);
@@ -220,8 +222,8 @@ mod test {
         acb
     }
 
-    fn construct_presumable_rle_column() -> ColBuilderAdaptive<u32> {
-        let mut acb: ColBuilderAdaptive<u32> = ColBuilderAdaptive::new();
+    fn construct_presumable_rle_column() -> ColumnBuilderAdaptive<u32> {
+        let mut acb: ColumnBuilderAdaptive<u32> = ColumnBuilderAdaptive::new();
         acb.add(1);
         acb.add(2);
         acb.add(3);
@@ -232,27 +234,27 @@ mod test {
 
     #[test]
     fn test_column_type_decision_for_vector_column() {
-        let mut acb: ColBuilderAdaptive<u32> = construct_presumable_vector_column();
+        let mut acb: ColumnBuilderAdaptive<u32> = construct_presumable_vector_column();
 
         acb.decide_column_type();
         let builder = acb.builder;
 
-        assert!(matches!(builder, ColBuilderType::ColumnVector(_)));
+        assert!(matches!(builder, ColumnBuilderType::ColumnVector(_)));
     }
 
     #[test]
     fn test_column_type_decision_for_rle_column() {
-        let mut acb: ColBuilderAdaptive<u32> = construct_presumable_rle_column();
+        let mut acb: ColumnBuilderAdaptive<u32> = construct_presumable_rle_column();
 
         acb.decide_column_type();
         let builder = acb.builder;
 
-        assert!(matches!(builder, ColBuilderType::ColumnRle(_)));
+        assert!(matches!(builder, ColumnBuilderType::ColumnRle(_)));
     }
 
     #[test]
     fn test_build_u32_vector_column() {
-        let acb: ColBuilderAdaptive<u32> = construct_presumable_vector_column();
+        let acb: ColumnBuilderAdaptive<u32> = construct_presumable_vector_column();
 
         let vc = acb.finalize();
         assert_eq!(vc.len(), 3);
@@ -263,7 +265,7 @@ mod test {
 
     #[test]
     fn test_build_u32_rle_column() {
-        let acb: ColBuilderAdaptive<u32> = construct_presumable_rle_column();
+        let acb: ColumnBuilderAdaptive<u32> = construct_presumable_rle_column();
 
         let rlec = acb.finalize();
         assert_eq!(rlec.len(), 4);
@@ -275,7 +277,7 @@ mod test {
 
     #[test]
     fn test_build_empty_u32_column() {
-        let acb: ColBuilderAdaptive<u32> = ColBuilderAdaptive::new();
+        let acb: ColumnBuilderAdaptive<u32> = ColumnBuilderAdaptive::new();
 
         let c = acb.finalize();
         assert!(c.is_empty());
@@ -283,7 +285,7 @@ mod test {
 
     #[test]
     fn test_build_u64_column() {
-        let mut acb: ColBuilderAdaptive<u64> = ColBuilderAdaptive::new();
+        let mut acb: ColumnBuilderAdaptive<u64> = ColumnBuilderAdaptive::new();
         acb.add(1);
         acb.add(2);
         acb.add(3);
@@ -299,7 +301,7 @@ mod test {
 
     #[test]
     fn test_build_float_column() {
-        let mut acb: ColBuilderAdaptive<Float> = ColBuilderAdaptive::new();
+        let mut acb: ColumnBuilderAdaptive<Float> = ColumnBuilderAdaptive::new();
         acb.add(Float::from_number(1.0));
         acb.add(Float::from_number(2.0));
         acb.add(Float::from_number(3.0));
@@ -315,7 +317,7 @@ mod test {
 
     #[test]
     fn test_build_double_column() {
-        let mut acb: ColBuilderAdaptive<Double> = ColBuilderAdaptive::new();
+        let mut acb: ColumnBuilderAdaptive<Double> = ColumnBuilderAdaptive::new();
         acb.add(Double::from_number(1.0));
         acb.add(Double::from_number(2.0));
         acb.add(Double::from_number(3.0));

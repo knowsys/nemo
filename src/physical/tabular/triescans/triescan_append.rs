@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::physical::{
-    columnar::builders::{ColBuilder, ColBuilderAdaptive},
+    columnar::builders::{ColumnBuilder, ColumnBuilderAdaptive},
     columnar::columns::{Column, IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT},
     datatypes::{DataTypeName, DataValueT, Double, Float},
     tabular::{
@@ -51,8 +51,8 @@ pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
                     let target_length = gap_index.checked_sub(1).map(|i| trie.get_column(i).len()).unwrap_or(1);
 
                     // TODO: if this is performance critical, the ColumnRle should get an extra constructor for sequences of fixed increments
-                    let new_data_column = std::iter::repeat($value).take(target_length).collect::<ColBuilderAdaptive<$type>>().finalize();
-                    let new_interval_column = (0..target_length).collect::<ColBuilderAdaptive<usize>>().finalize();
+                    let new_data_column = std::iter::repeat($value).take(target_length).collect::<ColumnBuilderAdaptive<$type>>().finalize();
+                    let new_interval_column = (0..target_length).collect::<ColumnBuilderAdaptive<usize>>().finalize();
 
                     new_columns.push_front(IntervalColumnT::$variant(
                         IntervalColumnEnum::IntervalColumnGeneric(IntervalColumnGeneric::new(

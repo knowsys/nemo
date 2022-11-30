@@ -12,7 +12,7 @@ pub use column_vector::ColumnVector;
 
 /// Module for defining [`ColumnRle`]
 pub mod column_rle;
-pub use column_rle::ColBuilderRle;
+pub use column_rle::ColumnBuilderRle;
 pub use column_rle::ColumnRle;
 pub use column_rle::ColumnRleScan;
 

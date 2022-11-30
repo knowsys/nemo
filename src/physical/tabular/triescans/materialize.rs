@@ -2,7 +2,7 @@ use num::ToPrimitive;
 
 use crate::physical::{
     columnar::{
-        builders::{ColBuilder, ColBuilderAdaptive, ColBuilderAdaptiveT},
+        builders::{ColumnBuilder, ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
         columns::{IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT},
         columnscans::ColumnScan,
     },
@@ -35,21 +35,19 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
 
     // Setup column builders
     let mut result_columns = Vec::<IntervalColumnT>::with_capacity(target_schema.arity());
-    let mut data_column_builders = Vec::<ColBuilderAdaptiveT>::new();
-    let mut intervals_column_builders = Vec::<ColBuilderAdaptive<usize>>::new();
+    let mut data_column_builders = Vec::<ColumnBuilderAdaptiveT>::new();
+    let mut intervals_column_builders = Vec::<ColumnBuilderAdaptive<usize>>::new();
 
     for var in 0..target_schema.arity() {
-        intervals_column_builders.push(ColBuilderAdaptive::new());
+        intervals_column_builders.push(ColumnBuilderAdaptive::new());
         match input_schema.get_type(var) {
             DataTypeName::U64 => {
-                data_column_builders.push(ColBuilderAdaptiveT::U64(ColBuilderAdaptive::new()))
+                data_column_builders.push(ColumnBuilderAdaptiveT::U64(ColumnBuilderAdaptive::new()))
             }
-            DataTypeName::Float => {
-                data_column_builders.push(ColBuilderAdaptiveT::Float(ColBuilderAdaptive::new()))
-            }
-            DataTypeName::Double => {
-                data_column_builders.push(ColBuilderAdaptiveT::Double(ColBuilderAdaptive::new()))
-            }
+            DataTypeName::Float => data_column_builders
+                .push(ColumnBuilderAdaptiveT::Float(ColumnBuilderAdaptive::new())),
+            DataTypeName::Double => data_column_builders
+                .push(ColumnBuilderAdaptiveT::Double(ColumnBuilderAdaptive::new())),
         }
     }
 
@@ -112,8 +110,8 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
 
     // Collect data from column builders
     for _ in 0..target_schema.arity() {
-        let current_data_builder: ColBuilderAdaptive<u64> =
-            if let ColBuilderAdaptiveT::U64(cb) = data_column_builders.remove(0) {
+        let current_data_builder: ColumnBuilderAdaptive<u64> =
+            if let ColumnBuilderAdaptiveT::U64(cb) = data_column_builders.remove(0) {
                 cb
             } else {
                 panic!("Only covering u64 for now");
