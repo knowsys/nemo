@@ -756,7 +756,7 @@ impl TableManager {
                 let new_trie_opt =
                     if let ExecutionResult::TempSubset(_, picked_columns) = &plan.result {
                         log::info!("Materializing subset {:?}", picked_columns);
-                        materialize_subset(&mut iter, Some(picked_columns.clone()))
+                        materialize_subset(&mut iter, picked_columns.clone())
                     } else {
                         materialize(&mut iter)
                     };
