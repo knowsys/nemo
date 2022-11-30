@@ -213,11 +213,11 @@ where
     }
 }
 
-// Generate a macro forward_to_colscan!, which takes a [`ColumnScanEnum`] and a function as arguments
+// Generate a macro forward_to_columnscan!, which takes a [`ColumnScanEnum`] and a function as arguments
 // and unfolds into a `match` statement that calls the variant specific version of that function.
 // Each new variant of a [`ColumnScanEnum`] must be added here.
 // See `physical/util.rs` for a more detailed description of this macro.
-generate_forwarder!(forward_to_colscan;
+generate_forwarder!(forward_to_columnscan;
     ColumnScanGeneric,
     ColumnRleScan,
     ColumnScanJoin,
@@ -236,7 +236,7 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        forward_to_colscan!(self, next)
+        forward_to_columnscan!(self, next)
     }
 }
 
@@ -245,23 +245,23 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
-        forward_to_colscan!(self, seek(value))
+        forward_to_columnscan!(self, seek(value))
     }
 
     fn current(&mut self) -> Option<Self::Item> {
-        forward_to_colscan!(self, current)
+        forward_to_columnscan!(self, current)
     }
 
     fn reset(&mut self) {
-        forward_to_colscan!(self, reset)
+        forward_to_columnscan!(self, reset)
     }
 
     fn pos(&self) -> Option<usize> {
-        forward_to_colscan!(self, pos)
+        forward_to_columnscan!(self, pos)
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        forward_to_colscan!(self, narrow(interval))
+        forward_to_columnscan!(self, narrow(interval))
     }
 }
 
