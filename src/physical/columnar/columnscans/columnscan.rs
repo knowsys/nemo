@@ -336,7 +336,7 @@ where
 
     /// Forward `narrow_ranges` to the underlying [`ColumnScanEnum`].
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
-        unsafe { &mut *self.0.get() }.narrow_ranges(intervals)
+        self.0.get_mut().narrow_ranges(intervals)
     }
 
     /// Forward `is_equal` to the underlying [`ColumnScanEnum`].
@@ -351,7 +351,7 @@ where
 
     /// Forward `get_smallest_scans` to the underlying [`ColumnScanEnum`].
     pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
-        unsafe { &mut *self.0.get() }.set_active_scans(active_scans);
+        self.0.get_mut().set_active_scans(active_scans);
     }
 }
 
