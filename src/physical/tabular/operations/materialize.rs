@@ -30,6 +30,7 @@ pub fn materialize_inner(
 
     // Clone the schema of the trie
     let schema = trie_scan.get_schema().clone();
+    debug_assert!(schema.arity() > 0);
 
     // Setup column builders
     let mut result_columns = Vec::<ColumnWithIntervalsT>::with_capacity(schema.arity());
@@ -103,16 +104,16 @@ pub fn materialize_inner(
                 }
             }
 
-            if is_last_layer {
-                current_row = vec![true; schema.arity()];
-                is_empty = false;
-
-                // At this point we know that the result will contain at least one variable
-                if check_empty {
-                    break;
-                }
-            } else if current_row[current_layer] {
+            if !is_last_layer {
                 current_row[current_layer] = false;
+            }
+        } else if is_last_layer && next_value.is_some() {
+            current_row = vec![true; schema.arity() - 1];
+            is_empty = false;
+
+            // At this point we know that the result will contain at least one variable
+            if check_empty {
+                break;
             }
         }
 
@@ -204,11 +205,8 @@ pub fn scan_is_empty(trie_scan: &mut TrieScanEnum) -> bool {
 /// Given a TrieScan iterator, materialize its content into a trie
 /// Setting picked_columns[i] to false means that the ith column will have an empty data vector
 /// Passing None is equivalent to passing a vector containing only true
-pub fn materialize_subset(
-    trie_scan: &mut TrieScanEnum,
-    picked_columns: Option<Vec<bool>>,
-) -> Option<Trie> {
-    materialize_inner(trie_scan, picked_columns, false)
+pub fn materialize_subset(trie_scan: &mut TrieScanEnum, picked_columns: Vec<bool>) -> Option<Trie> {
+    materialize_inner(trie_scan, Some(picked_columns), false)
 }
 
 #[cfg(test)]
