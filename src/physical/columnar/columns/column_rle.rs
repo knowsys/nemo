@@ -1,5 +1,5 @@
 use crate::physical::{
-    columnar::{builders::ColBuilder, colscans::colscan::ColScan},
+    columnar::{builders::ColBuilder, columnscans::columnscan::ColumnScan},
     datatypes::{ColumnDataType, Field, Ring},
 };
 use num::{CheckedMul, Zero};
@@ -515,7 +515,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for ColumnRleScan<'a, T>
+impl<'a, T> ColumnScan for ColumnRleScan<'a, T>
 where
     T: ColumnDataType,
 {
@@ -646,7 +646,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::{
-        columnar::{colscans::ColScan, columns::Column},
+        columnar::{columns::Column, columnscans::ColumnScan},
         datatypes::{Double, Float},
     };
     use num::Zero;

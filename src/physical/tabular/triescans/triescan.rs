@@ -1,5 +1,5 @@
-use crate::physical::columnar::colscans::{ColScan, ColScanT};
 use crate::physical::columnar::columns::IntervalColumn;
+use crate::physical::columnar::columnscans::{ColumnScan, ColumnScanT};
 use crate::physical::tabular::tables::{Table, TableSchema};
 use crate::physical::tabular::tries::Trie;
 use crate::{generate_forwarder, physical::columnar::columns::Column};
@@ -13,7 +13,7 @@ use super::{
 
 /// Iterator for a Trie datastructure.
 /// Allows for vertical traversal through the tree and can return
-/// its current position as a [`ColScanT`] object.
+/// its current position as a [`ColumnScanT`] object.
 pub trait TrieScan<'a>: Debug {
     /// Return to the upper layer.
     fn up(&mut self);
@@ -21,11 +21,11 @@ pub trait TrieScan<'a>: Debug {
     /// Enter the next layer based on the position of the iterator in the current layer.
     fn down(&mut self);
 
-    /// Return the current position of the scan as a [`ColScanT`].
-    fn current_scan(&self) -> Option<&UnsafeCell<ColScanT<'a>>>;
+    /// Return the current position of the scan as a [`ColumnScanT`].
+    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
 
-    /// Return the underlying [`ColScanT`] object given an index.
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColScanT<'a>>>;
+    /// Return the underlying [`ColumnScanT`] object given an index.
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
 
     /// Return the underlying [`TableSchema`].
     fn get_schema(&self) -> &dyn TableSchema;
@@ -35,14 +35,14 @@ pub trait TrieScan<'a>: Debug {
 #[derive(Debug)]
 pub struct TrieScanGeneric<'a> {
     trie: &'a Trie,
-    layers: Vec<UnsafeCell<ColScanT<'a>>>,
+    layers: Vec<UnsafeCell<ColumnScanT<'a>>>,
     current_layer: Option<usize>,
 }
 
 impl<'a> TrieScanGeneric<'a> {
     /// Construct Trie iterator.
     pub fn new(trie: &'a Trie) -> Self {
-        let mut layers = Vec::<UnsafeCell<ColScanT<'a>>>::new();
+        let mut layers = Vec::<UnsafeCell<ColumnScanT<'a>>>::new();
 
         for column_t in trie.columns() {
             let new_scan = column_t.iter();
@@ -92,11 +92,11 @@ impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
         }
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColScanT<'a>>> {
+    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         Some(&self.layers[self.current_layer?])
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColScanT<'a>>> {
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         Some(&self.layers[index])
     }
 
@@ -135,11 +135,11 @@ impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
         forward_to_scan!(self, down)
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColScanT<'a>>> {
+    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         forward_to_scan!(self, current_scan)
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColScanT<'a>>> {
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         forward_to_scan!(self, get_scan(index))
     }
 
@@ -151,14 +151,14 @@ impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
 #[cfg(test)]
 mod test {
     use super::{TrieScan, TrieScanGeneric};
-    use crate::physical::columnar::colscans::ColScanT;
+    use crate::physical::columnar::columnscans::ColumnScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 
     fn scan_seek(int_scan: &mut TrieScanGeneric, value: u64) -> Option<u64> {
-        if let ColScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
             rcs.seek(value)
         } else {
             panic!("type should be u64");
@@ -166,7 +166,7 @@ mod test {
     }
 
     fn scan_next(int_scan: &mut TrieScanGeneric) -> Option<u64> {
-        if let ColScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -175,7 +175,7 @@ mod test {
 
     fn scan_current(int_scan: &mut TrieScanGeneric) -> Option<u64> {
         unsafe {
-            if let ColScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
+            if let ColumnScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
                 rcs.current()
             } else {
                 panic!("type should be u64");

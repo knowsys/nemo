@@ -4,13 +4,13 @@ use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
 
-use super::colscan::ColScan;
+use super::columnscan::ColumnScan;
 
 // TODO: Maybe this should only have Optional<Permutator>
 //       for cases where data happens to be sorted already
 /// Scan which reorders its underlying [`ColumnEnum`] according to a permutator
 #[derive(Debug)]
-pub struct ColScanReorder<'a, T> {
+pub struct ColumnScanReorder<'a, T> {
     column: &'a ColumnEnum<T>,
     permutator: Permutator,
     current_value: Option<T>,
@@ -19,13 +19,13 @@ pub struct ColScanReorder<'a, T> {
     ranges: Vec<Range<usize>>,
 }
 
-impl<'a, T> ColScanReorder<'a, T>
+impl<'a, T> ColumnScanReorder<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Construct a new ColScanReorder for a Column.
+    /// Construct a new ColumnScanReorder for a Column.
     pub fn new(column: &'a ColumnEnum<T>) -> Self {
-        ColScanReorder::narrowed(column, vec![0..column.len()])
+        ColumnScanReorder::narrowed(column, vec![0..column.len()])
     }
 
     /// Construct a new ReorderedScan for a Column restricted to given range.
@@ -62,7 +62,7 @@ where
     }
 }
 
-impl<'a, T: Eq + Debug + Copy> Iterator for ColScanReorder<'a, T>
+impl<'a, T: Eq + Debug + Copy> Iterator for ColumnScanReorder<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -94,7 +94,7 @@ where
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> ColScan for ColScanReorder<'a, T>
+impl<'a, T: Ord + Copy + Debug> ColumnScan for ColumnScanReorder<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -128,11 +128,11 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columnar::{
-        colscans::ColScan,
         columns::{ColumnEnum, ColumnVector},
+        columnscans::ColumnScan,
     };
 
-    use super::ColScanReorder;
+    use super::ColumnScanReorder;
     use test_log::test;
 
     #[test]
@@ -140,7 +140,7 @@ mod test {
         let values: Vec<u64> = vec![0, 2, 1, 7, 4, 9, 12, 8, 4, 7, 4, 14];
         let column = ColumnEnum::ColumnVector(ColumnVector::new(values));
 
-        let mut scan = ColScanReorder::narrowed(&column, vec![3..9]);
+        let mut scan = ColumnScanReorder::narrowed(&column, vec![3..9]);
 
         assert_eq!(scan.current(), None);
         assert_eq!(scan.pos_multiple(), None);
@@ -163,7 +163,7 @@ mod test {
         let values: Vec<u64> = vec![0, 2, 1, 7, 4, 9, 12, 8, 4, 7, 4, 14];
         let column = ColumnEnum::ColumnVector(ColumnVector::new(values));
 
-        let mut scan = ColScanReorder::narrowed(&column, vec![1..5, 7..11]);
+        let mut scan = ColumnScanReorder::narrowed(&column, vec![1..5, 7..11]);
 
         assert_eq!(scan.current(), None);
         assert_eq!(scan.pos_multiple(), None);

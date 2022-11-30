@@ -1,27 +1,27 @@
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
-use super::{colscan::ColScan, ColScanCell};
+use super::{columnscan::ColumnScan, ColumnScanCell};
 
 /// Dummy Iterator that defers everything to its sub iterator
 #[derive(Debug)]
-pub struct ColScanPass<'a, T>
+pub struct ColumnScanPass<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    reference_scan: &'a ColScanCell<'a, T>,
+    reference_scan: &'a ColumnScanCell<'a, T>,
 }
-impl<'a, T> ColScanPass<'a, T>
+impl<'a, T> ColumnScanPass<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new ColScanPass for a Column.
-    pub fn new(reference_scan: &'a ColScanCell<'a, T>) -> ColScanPass<'a, T> {
-        ColScanPass { reference_scan }
+    /// Constructs a new ColumnScanPass for a Column.
+    pub fn new(reference_scan: &'a ColumnScanCell<'a, T>) -> ColumnScanPass<'a, T> {
+        ColumnScanPass { reference_scan }
     }
 }
 
-impl<'a, T> Iterator for ColScanPass<'a, T>
+impl<'a, T> Iterator for ColumnScanPass<'a, T>
 where
     T: 'a + ColumnDataType + PartialOrd + Eq,
 {
@@ -32,7 +32,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for ColScanPass<'a, T>
+impl<'a, T> ColumnScan for ColumnScanPass<'a, T>
 where
     T: 'a + ColumnDataType + PartialOrd + Eq,
 {
@@ -59,21 +59,21 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columnar::{
-        colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
         columns::{Column, ColumnVector},
+        columnscans::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanGenericEnum},
     };
 
-    use super::ColScanPass;
+    use super::ColumnScanPass;
     use test_log::test;
 
     #[test]
     fn test_u64() {
         let ref_col = ColumnVector::new(vec![0, 4, 7]);
-        let ref_col_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(ref_col.iter()),
+        let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(ref_col.iter()),
         ));
 
-        let mut pass_scan = ColScanPass::new(&ref_col_iter);
+        let mut pass_scan = ColumnScanPass::new(&ref_col_iter);
 
         assert_eq!(pass_scan.current(), None);
         assert_eq!(pass_scan.next(), Some(0));

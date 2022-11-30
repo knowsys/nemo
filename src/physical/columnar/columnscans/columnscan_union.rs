@@ -2,16 +2,16 @@ use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
 
-use super::colscan::ColScan;
-use super::ColScanCell;
+use super::columnscan::ColumnScan;
+use super::ColumnScanCell;
 
 /// Iterator representing a union of column iterators
 #[derive(Debug)]
-pub struct ColScanUnion<'a, T>
+pub struct ColumnScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    column_scans: Vec<&'a ColScanCell<'a, T>>,
+    column_scans: Vec<&'a ColumnScanCell<'a, T>>,
     smallest_scans: Vec<bool>,
     smallest_value: Option<T>,
 
@@ -19,14 +19,14 @@ where
     active_values: Vec<Option<T>>,
 }
 
-impl<'a, T> ColScanUnion<'a, T>
+impl<'a, T> ColumnScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new ColumnVectorScan for a Column.
-    pub fn new(column_scans: Vec<&'a ColScanCell<'a, T>>) -> ColScanUnion<'a, T> {
+    pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> ColumnScanUnion<'a, T> {
         let scans_len = column_scans.len();
-        ColScanUnion {
+        ColumnScanUnion {
             column_scans,
             smallest_scans: vec![true; scans_len],
             smallest_value: None,
@@ -46,7 +46,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for ColScanUnion<'a, T>
+impl<'a, T> Iterator for ColumnScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -89,7 +89,7 @@ where
     }
 }
 
-impl<'a, T: Ord + Copy + Debug + PartialOrd> ColScan for ColScanUnion<'a, T>
+impl<'a, T: Ord + Copy + Debug + PartialOrd> ColumnScan for ColumnScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -142,11 +142,11 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columnar::{
-        colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
         columns::{Column, ColumnVector},
+        columnscans::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanGenericEnum},
     };
 
-    use super::ColScanUnion;
+    use super::ColumnScanUnion;
     use test_log::test;
 
     #[test]
@@ -155,17 +155,18 @@ mod test {
         let column_snd = ColumnVector::new(vec![0u64, 1, 2, 7, 9]);
         let column_trd = ColumnVector::new(vec![0u64, 2, 4, 11]);
 
-        let mut iter_fst = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(column_fst.iter()),
+        let mut iter_fst = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(column_fst.iter()),
         ));
-        let mut iter_snd = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(column_snd.iter()),
+        let mut iter_snd = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(column_snd.iter()),
         ));
-        let mut iter_trd = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(column_trd.iter()),
+        let mut iter_trd = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(column_trd.iter()),
         ));
 
-        let mut union_iter = ColScanUnion::new(vec![&mut iter_fst, &mut iter_snd, &mut iter_trd]);
+        let mut union_iter =
+            ColumnScanUnion::new(vec![&mut iter_fst, &mut iter_snd, &mut iter_trd]);
         assert_eq!(union_iter.current(), None);
         assert_eq!(union_iter.next(), Some(0));
         assert_eq!(union_iter.current(), Some(0));

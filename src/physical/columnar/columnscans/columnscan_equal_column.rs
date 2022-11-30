@@ -1,27 +1,27 @@
-use super::{colscan::ColScan, ColScanCell};
+use super::{columnscan::ColumnScan, ColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
 /// Iterator which allows its sub iterator to only jump to the value pointed to by a reference iterator
 #[derive(Debug)]
-pub struct ColScanEqualColumn<'a, T>
+pub struct ColumnScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    reference_scan: &'a ColScanCell<'a, T>,
-    value_scan: &'a ColScanCell<'a, T>,
+    reference_scan: &'a ColumnScanCell<'a, T>,
+    value_scan: &'a ColumnScanCell<'a, T>,
     current_value: Option<T>,
 }
-impl<'a, T> ColScanEqualColumn<'a, T>
+impl<'a, T> ColumnScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new ColScanEqualColumn for a Column.
+    /// Constructs a new ColumnScanEqualColumn for a Column.
     pub fn new(
-        reference_scan: &'a ColScanCell<'a, T>,
-        value_scan: &'a ColScanCell<'a, T>,
-    ) -> ColScanEqualColumn<'a, T> {
-        ColScanEqualColumn {
+        reference_scan: &'a ColumnScanCell<'a, T>,
+        value_scan: &'a ColumnScanCell<'a, T>,
+    ) -> ColumnScanEqualColumn<'a, T> {
+        ColumnScanEqualColumn {
             reference_scan,
             value_scan,
             current_value: None,
@@ -29,7 +29,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for ColScanEqualColumn<'a, T>
+impl<'a, T> Iterator for ColumnScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType + Eq,
 {
@@ -56,7 +56,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for ColScanEqualColumn<'a, T>
+impl<'a, T> ColumnScan for ColumnScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType + Eq,
 {
@@ -89,11 +89,11 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columnar::{
-        colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
         columns::{Column, ColumnVector},
+        columnscans::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanGenericEnum},
     };
 
-    use super::ColScanEqualColumn;
+    use super::ColumnScanEqualColumn;
     use test_log::test;
 
     #[test]
@@ -101,32 +101,32 @@ mod test {
         let ref_col = ColumnVector::new(vec![0u64, 4, 7]);
         let val_col = ColumnVector::new(vec![1u64, 4, 8]);
 
-        let ref_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(ref_col.iter()),
+        let ref_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(ref_col.iter()),
         ));
-        let val_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(val_col.iter()),
+        let val_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(val_col.iter()),
         ));
 
         ref_iter.seek(4);
 
-        let mut equal_scan = ColScanEqualColumn::new(&ref_iter, &val_iter);
+        let mut equal_scan = ColumnScanEqualColumn::new(&ref_iter, &val_iter);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), Some(4));
         assert_eq!(equal_scan.current(), Some(4));
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);
 
-        let ref_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(ref_col.iter()),
+        let ref_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(ref_col.iter()),
         ));
-        let val_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(val_col.iter()),
+        let val_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(val_col.iter()),
         ));
 
         ref_iter.seek(7);
 
-        let mut equal_scan = ColScanEqualColumn::new(&ref_iter, &val_iter);
+        let mut equal_scan = ColumnScanEqualColumn::new(&ref_iter, &val_iter);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);

@@ -1,5 +1,7 @@
 use crate::physical::{
-    columnar::colscans::{ColScan, ColScanCell, ColScanEnum, ColScanT, ColScanUnion},
+    columnar::columnscans::{
+        ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT, ColumnScanUnion,
+    },
     datatypes::{DataTypeName, Double, Float},
     tabular::tables::TableSchema,
 };
@@ -13,7 +15,7 @@ use super::{TrieScan, TrieScanEnum};
 pub struct TrieScanUnion<'a> {
     trie_scans: Vec<TrieScanEnum<'a>>,
     layers: Vec<Option<usize>>,
-    union_scans: Vec<UnsafeCell<ColScanT<'a>>>,
+    union_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
     current_layer: Option<usize>,
 }
 
@@ -25,17 +27,18 @@ impl<'a> TrieScanUnion<'a> {
         // This assumes that every schema is the same
         // TODO: Perhaps debug_assert! this
         let target_schema = trie_scans[0].get_schema();
-        let mut union_scans = Vec::<UnsafeCell<ColScanT<'a>>>::with_capacity(target_schema.arity());
+        let mut union_scans =
+            Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(target_schema.arity());
 
         for layer_index in 0..target_schema.arity() {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident, $type:ty) => {{
                     let mut column_scans =
-                        Vec::<&'a ColScanCell<$type>>::with_capacity(target_schema.arity());
+                        Vec::<&'a ColumnScanCell<$type>>::with_capacity(target_schema.arity());
 
                     for scan in &trie_scans {
                         unsafe {
-                            if let ColScanT::$variant(scan_enum) =
+                            if let ColumnScanT::$variant(scan_enum) =
                                 &*scan.get_scan(layer_index).unwrap().get()
                             {
                                 column_scans.push(scan_enum);
@@ -45,9 +48,10 @@ impl<'a> TrieScanUnion<'a> {
                         }
                     }
 
-                    let new_union_scan = ColScanEnum::ColScanUnion(ColScanUnion::new(column_scans));
+                    let new_union_scan =
+                        ColumnScanEnum::ColumnScanUnion(ColumnScanUnion::new(column_scans));
 
-                    union_scans.push(UnsafeCell::new(ColScanT::$variant(ColScanCell::new(
+                    union_scans.push(UnsafeCell::new(ColumnScanT::$variant(ColumnScanCell::new(
                         new_union_scan,
                     ))));
                 }};
@@ -121,11 +125,11 @@ impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
         self.union_scans[next_layer].get_mut().reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColScanT<'a>>> {
+    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         self.get_scan(self.current_layer?)
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColScanT<'a>>> {
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         Some(&self.union_scans[index])
     }
 
@@ -137,7 +141,7 @@ impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanUnion;
-    use crate::physical::columnar::colscans::ColScanT;
+    use crate::physical::columnar::columnscans::ColumnScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::tabular::triescans::{
@@ -147,7 +151,7 @@ mod test {
     use test_log::test;
 
     fn union_next(union_scan: &mut TrieScanUnion) -> Option<u64> {
-        if let ColScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
+        if let ColumnScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -155,7 +159,7 @@ mod test {
     }
 
     fn union_current(union_scan: &mut TrieScanUnion) -> Option<u64> {
-        if let ColScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
+        if let ColumnScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
             rcs.current()
         } else {
             panic!("type should be u64");

@@ -1,6 +1,6 @@
 use std::{fmt::Debug, ops::Index};
 
-use crate::physical::columnar::colscans::ColScanGeneric;
+use crate::physical::columnar::columnscans::ColumnScanGeneric;
 
 use super::Column;
 
@@ -18,7 +18,7 @@ impl<T: Debug + Copy + Ord> ColumnVector<T> {
 }
 
 impl<'a, T: 'a + Debug + Copy + Ord> Column<'a, T> for ColumnVector<T> {
-    type Scan = ColScanGeneric<'a, T, ColumnVector<T>>;
+    type Scan = ColumnScanGeneric<'a, T, ColumnVector<T>>;
 
     fn len(&self) -> usize {
         self.data.len()
@@ -29,7 +29,7 @@ impl<'a, T: 'a + Debug + Copy + Ord> Column<'a, T> for ColumnVector<T> {
     }
 
     fn iter(&'a self) -> Self::Scan {
-        ColScanGeneric::new(self)
+        ColumnScanGeneric::new(self)
     }
 }
 

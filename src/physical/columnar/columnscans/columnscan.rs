@@ -1,6 +1,6 @@
 use super::{
-    ColScanEqualColumn, ColScanEqualValue, ColScanFollow, ColScanGenericEnum, ColScanJoin,
-    ColScanMinus, ColScanPass, ColScanReorder, ColScanUnion,
+    ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanFollow, ColumnScanGenericEnum,
+    ColumnScanJoin, ColumnScanMinus, ColumnScanPass, ColumnScanReorder, ColumnScanUnion,
 };
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
@@ -12,7 +12,7 @@ use crate::{
 use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 /// Iterator for a sorted interval of values
-pub trait ColScan: Debug + Iterator {
+pub trait ColumnScan: Debug + Iterator {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value if it exists.
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item>;
@@ -39,44 +39,44 @@ pub trait ColScan: Debug + Iterator {
 
 /// Enum for ranged column scans for all the supported types
 #[derive(Debug)]
-pub enum ColScanEnum<'a, T>
+pub enum ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Case ColScanGeneric
-    ColScanGeneric(ColScanGenericEnum<'a, T>),
+    /// Case ColumnScanGeneric
+    ColumnScanGeneric(ColumnScanGenericEnum<'a, T>),
     /// Case ColumnRleScan
     ColumnRleScan(ColumnRleScan<'a, T>),
-    /// Case ColScanJoin
-    ColScanJoin(ColScanJoin<'a, T>),
-    /// Case ColScanReorder
-    ColScanReorder(ColScanReorder<'a, T>),
-    /// Case ColScanEqualColumn
-    ColScanEqualColumn(ColScanEqualColumn<'a, T>),
-    /// Case ColScanEqualValue
-    ColScanEqualValue(ColScanEqualValue<'a, T>),
-    /// Case ColScanJoin
-    ColScanPass(ColScanPass<'a, T>),
-    /// Case ColScanFollow
-    ColScanFollow(ColScanFollow<'a, T>),
-    /// Case ColScanMinus
-    ColScanMinus(ColScanMinus<'a, T>),
-    /// Case ColScanUnion
-    ColScanUnion(ColScanUnion<'a, T>),
+    /// Case ColumnScanJoin
+    ColumnScanJoin(ColumnScanJoin<'a, T>),
+    /// Case ColumnScanReorder
+    ColumnScanReorder(ColumnScanReorder<'a, T>),
+    /// Case ColumnScanEqualColumn
+    ColumnScanEqualColumn(ColumnScanEqualColumn<'a, T>),
+    /// Case ColumnScanEqualValue
+    ColumnScanEqualValue(ColumnScanEqualValue<'a, T>),
+    /// Case ColumnScanJoin
+    ColumnScanPass(ColumnScanPass<'a, T>),
+    /// Case ColumnScanFollow
+    ColumnScanFollow(ColumnScanFollow<'a, T>),
+    /// Case ColumnScanMinus
+    ColumnScanMinus(ColumnScanMinus<'a, T>),
+    /// Case ColumnScanUnion
+    ColumnScanUnion(ColumnScanUnion<'a, T>),
 }
 
-/// The following impl statements allow converting from a specific [`ColScan`] into a gerneral [`ColScanEnum`]
+/// The following impl statements allow converting from a specific [`ColumnScan`] into a gerneral [`ColumnScanEnum`]
 
-impl<'a, T> From<ColScanGenericEnum<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColumnScanGenericEnum<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColScanGenericEnum<'a, T>) -> Self {
-        Self::ColScanGeneric(cs)
+    fn from(cs: ColumnScanGenericEnum<'a, T>) -> Self {
+        Self::ColumnScanGeneric(cs)
     }
 }
 
-impl<'a, T> From<ColumnRleScan<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColumnRleScan<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -85,108 +85,108 @@ where
     }
 }
 
-impl<'a, T> From<ColScanJoin<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColumnScanJoin<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColScanJoin<'a, T>) -> Self {
-        Self::ColScanJoin(cs)
+    fn from(cs: ColumnScanJoin<'a, T>) -> Self {
+        Self::ColumnScanJoin(cs)
     }
 }
 
-impl<'a, T> From<ColScanReorder<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColumnScanReorder<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColScanReorder<'a, T>) -> Self {
-        Self::ColScanReorder(cs)
+    fn from(cs: ColumnScanReorder<'a, T>) -> Self {
+        Self::ColumnScanReorder(cs)
     }
 }
 
-impl<'a, T> From<ColScanEqualColumn<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColumnScanEqualColumn<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColScanEqualColumn<'a, T>) -> Self {
-        Self::ColScanEqualColumn(cs)
+    fn from(cs: ColumnScanEqualColumn<'a, T>) -> Self {
+        Self::ColumnScanEqualColumn(cs)
     }
 }
 
-impl<'a, T> From<ColScanEqualValue<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColumnScanEqualValue<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColScanEqualValue<'a, T>) -> Self {
-        Self::ColScanEqualValue(cs)
+    fn from(cs: ColumnScanEqualValue<'a, T>) -> Self {
+        Self::ColumnScanEqualValue(cs)
     }
 }
 
-impl<'a, T> From<ColScanPass<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColumnScanPass<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColScanPass<'a, T>) -> Self {
-        Self::ColScanPass(cs)
+    fn from(cs: ColumnScanPass<'a, T>) -> Self {
+        Self::ColumnScanPass(cs)
     }
 }
 
-impl<'a, T> From<ColScanMinus<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColumnScanMinus<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColScanMinus<'a, T>) -> Self {
-        Self::ColScanMinus(cs)
+    fn from(cs: ColumnScanMinus<'a, T>) -> Self {
+        Self::ColumnScanMinus(cs)
     }
 }
 
-impl<'a, T> From<ColScanFollow<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColumnScanFollow<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColScanFollow<'a, T>) -> Self {
-        Self::ColScanFollow(cs)
+    fn from(cs: ColumnScanFollow<'a, T>) -> Self {
+        Self::ColumnScanFollow(cs)
     }
 }
 
-impl<'a, T> From<ColScanUnion<'a, T>> for ColScanEnum<'a, T>
+impl<'a, T> From<ColumnScanUnion<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColScanUnion<'a, T>) -> Self {
-        Self::ColScanUnion(cs)
+    fn from(cs: ColumnScanUnion<'a, T>) -> Self {
+        Self::ColumnScanUnion(cs)
     }
 }
 
-/// The following block makes functions which are specific to one variant of a [`ColScanEnum`]
-/// available on the whole [`ColScanEnum`]
-impl<'a, T> ColScanEnum<'a, T>
+/// The following block makes functions which are specific to one variant of a [`ColumnScanEnum`]
+/// available on the whole [`ColumnScanEnum`]
+impl<'a, T> ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
     /// Return all positions in the underlying column the cursor is currently at
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
-        if let Self::ColScanReorder(cs) = self {
+        if let Self::ColumnScanReorder(cs) = self {
             cs.pos_multiple()
         } else {
-            unimplemented!("pos_multiple is only available for ColScanReorder")
+            unimplemented!("pos_multiple is only available for ColumnScanReorder")
         }
     }
 
     /// Set iterator to a set of possibly disjoint ranged
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
-        if let Self::ColScanReorder(cs) = self {
+        if let Self::ColumnScanReorder(cs) = self {
             cs.narrow_ranges(intervals)
         } else {
-            unimplemented!("narrow_ranges is only available for ColScanReorder")
+            unimplemented!("narrow_ranges is only available for ColumnScanReorder")
         }
     }
 
-    /// For ColScanFollow, returns whether its scans point to the same value
+    /// For ColumnScanFollow, returns whether its scans point to the same value
     pub fn is_equal(&self) -> bool {
-        if let Self::ColScanFollow(cs) = self {
+        if let Self::ColumnScanFollow(cs) = self {
             cs.is_equal()
         } else {
-            unimplemented!("is_equal is only available for ColScanFollow")
+            unimplemented!("is_equal is only available for ColumnScanFollow")
         }
     }
 
@@ -194,7 +194,7 @@ where
     /// and returns a vector containing the positions of the scans with the smallest values
     pub fn get_smallest_scans(&self) -> &Vec<bool> {
         match self {
-            Self::ColScanUnion(cs) => cs.get_smallest_scans(),
+            Self::ColumnScanUnion(cs) => cs.get_smallest_scans(),
             _ => {
                 unimplemented!("get_smallest_scans is only available for union_scans")
             }
@@ -205,7 +205,7 @@ where
     /// Set a vector that indicates which scans are currently active and should be considered
     pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
         match self {
-            Self::ColScanUnion(cs) => cs.set_active_scans(active_scans),
+            Self::ColumnScanUnion(cs) => cs.set_active_scans(active_scans),
             _ => {
                 unimplemented!("set_active_scans is only available for union_scans")
             }
@@ -218,18 +218,18 @@ where
 // Each new variant of a [`ColumnScanEnum`] must be added here.
 // See `physical/util.rs` for a more detailed description of this macro.
 generate_forwarder!(forward_to_colscan;
-    ColScanGeneric,
+    ColumnScanGeneric,
     ColumnRleScan,
-    ColScanJoin,
-    ColScanReorder, 
-    ColScanEqualColumn, 
-    ColScanEqualValue,
-    ColScanPass,
-    ColScanFollow,
-    ColScanMinus,
-    ColScanUnion);
+    ColumnScanJoin,
+    ColumnScanReorder, 
+    ColumnScanEqualColumn, 
+    ColumnScanEqualValue,
+    ColumnScanPass,
+    ColumnScanFollow,
+    ColumnScanMinus,
+    ColumnScanUnion);
 
-impl<'a, T> Iterator for ColScanEnum<'a, T>
+impl<'a, T> Iterator for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -240,7 +240,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for ColScanEnum<'a, T>
+impl<'a, T> ColumnScan for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -265,99 +265,99 @@ where
     }
 }
 
-/// A wrapper around a cell type holding a `ColScanEnum`.
+/// A wrapper around a cell type holding a `ColumnScanEnum`.
 #[repr(transparent)]
-pub struct ColScanCell<'a, T>(UnsafeCell<ColScanEnum<'a, T>>)
+pub struct ColumnScanCell<'a, T>(UnsafeCell<ColumnScanEnum<'a, T>>)
 where
     T: 'a + ColumnDataType;
 
-impl<T> Debug for ColScanCell<'_, T>
+impl<T> Debug for ColumnScanCell<'_, T>
 where
     T: ColumnDataType,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let rcs = unsafe { &*self.0.get() };
-        f.debug_tuple("ColScanCell").field(rcs).finish()
+        f.debug_tuple("ColumnScanCell").field(rcs).finish()
     }
 }
 
-impl<'a, T> ColScanCell<'a, T>
+impl<'a, T> ColumnScanCell<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Construct a new `ColScanCell` from the given [`ColScanEnum`].
-    pub fn new(cs: ColScanEnum<'a, T>) -> Self {
+    /// Construct a new `ColumnScanCell` from the given [`ColumnScanEnum`].
+    pub fn new(cs: ColumnScanEnum<'a, T>) -> Self {
         Self(UnsafeCell::new(cs))
     }
 
-    /// Forward `next` to the underlying [`ColScanEnum`].
+    /// Forward `next` to the underlying [`ColumnScanEnum`].
     #[inline]
-    pub fn next(&self) -> Option<<ColScanEnum<'a, T> as Iterator>::Item> {
+    pub fn next(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.next()
     }
 
-    /// Forward `seek` to the underlying [`ColScanEnum`].
+    /// Forward `seek` to the underlying [`ColumnScanEnum`].
     #[inline]
     pub fn seek(
         &self,
-        value: <ColScanEnum<'a, T> as Iterator>::Item,
-    ) -> Option<<ColScanEnum<'a, T> as Iterator>::Item> {
+        value: <ColumnScanEnum<'a, T> as Iterator>::Item,
+    ) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.seek(value)
     }
 
-    /// Forward `current` to the underlying [`ColScanEnum`].
+    /// Forward `current` to the underlying [`ColumnScanEnum`].
     #[inline]
-    pub fn current(&self) -> Option<<ColScanEnum<'a, T> as Iterator>::Item> {
+    pub fn current(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.current()
     }
 
-    /// Forward `reset` to the underlying [`ColScanEnum`].
+    /// Forward `reset` to the underlying [`ColumnScanEnum`].
     #[inline]
     pub fn reset(&self) {
         unsafe { &mut *self.0.get() }.reset()
     }
 
-    /// Forward `pos` to the underlying [`ColScanEnum`].
+    /// Forward `pos` to the underlying [`ColumnScanEnum`].
     #[inline]
     pub fn pos(&self) -> Option<usize> {
         unsafe { &(*self.0.get()) }.pos()
     }
 
-    /// Forward `narrow` to the underlying [`ColScanEnum`].
+    /// Forward `narrow` to the underlying [`ColumnScanEnum`].
     #[inline]
     pub fn narrow(&self, interval: Range<usize>) {
         unsafe { &mut *self.0.get() }.narrow(interval)
     }
 
-    /// Forward `pos_multiple` to the underlying [`ColScanEnum`].
+    /// Forward `pos_multiple` to the underlying [`ColumnScanEnum`].
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
         unsafe { &mut *self.0.get() }.pos_multiple()
     }
 
-    /// Forward `narrow_ranges` to the underlying [`ColScanEnum`].
+    /// Forward `narrow_ranges` to the underlying [`ColumnScanEnum`].
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
         unsafe { &mut *self.0.get() }.narrow_ranges(intervals)
     }
 
-    /// Forward `is_equal` to the underlying [`ColScanEnum`].
+    /// Forward `is_equal` to the underlying [`ColumnScanEnum`].
     pub fn is_equal(&self) -> bool {
         unsafe { &mut *self.0.get() }.is_equal()
     }
 
-    /// Forward `get_smallest_scans` to the underlying [`ColScanEnum`].
+    /// Forward `get_smallest_scans` to the underlying [`ColumnScanEnum`].
     pub fn get_smallest_scans(&self) -> &Vec<bool> {
         unsafe { &mut *self.0.get() }.get_smallest_scans()
     }
 
-    /// Forward `get_smallest_scans` to the underlying [`ColScanEnum`].
+    /// Forward `get_smallest_scans` to the underlying [`ColumnScanEnum`].
     pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
         unsafe { &mut *self.0.get() }.set_active_scans(active_scans);
     }
 }
 
-impl<'a, S, T> From<S> for ColScanCell<'a, T>
+impl<'a, S, T> From<S> for ColumnScanCell<'a, T>
 where
-    S: Into<ColScanEnum<'a, T>>,
+    S: Into<ColumnScanEnum<'a, T>>,
     T: 'a + ColumnDataType,
 {
     fn from(cs: S) -> Self {
@@ -365,60 +365,60 @@ where
     }
 }
 
-/// Enum for [`ColScan`] for underlying data type
+/// Enum for [`ColumnScan`] for underlying data type
 #[derive(Debug)]
-pub enum ColScanT<'a> {
+pub enum ColumnScanT<'a> {
     /// Case u64
-    U64(ColScanCell<'a, u64>),
+    U64(ColumnScanCell<'a, u64>),
     /// Case Float
-    Float(ColScanCell<'a, Float>),
+    Float(ColumnScanCell<'a, Float>),
     /// Case Double
-    Double(ColScanCell<'a, Double>),
+    Double(ColumnScanCell<'a, Double>),
 }
 
-// Generate a macro forward_to_colscan_cell!, which takes a [`ColScanT`] and a function as arguments
+// Generate a macro forward_to_columnscan_cell!, which takes a [`ColumnScanT`] and a function as arguments
 // and unfolds into a `match` statement that calls the datatype specific variant that function.
 // See `physical/util.rs` for a more detailed description of this macro.
-generate_datatype_forwarder!(forward_to_colscan_cell);
+generate_datatype_forwarder!(forward_to_columnscan_cell);
 
-impl<'a> ColScanT<'a> {
+impl<'a> ColumnScanT<'a> {
     /// Return all positions in the underlying column the cursor is currently at
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
-        forward_to_colscan_cell!(self, pos_multiple)
+        forward_to_columnscan_cell!(self, pos_multiple)
     }
 
     /// Set iterator to a set of possibly disjoint ranged
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
-        forward_to_colscan_cell!(self, narrow_ranges(intervals))
+        forward_to_columnscan_cell!(self, narrow_ranges(intervals))
     }
 
-    /// For ColScanFollow, returns whether its scans point to the same value
+    /// For ColumnScanFollow, returns whether its scans point to the same value
     pub fn is_equal(&self) -> bool {
-        forward_to_colscan_cell!(self, is_equal)
+        forward_to_columnscan_cell!(self, is_equal)
     }
 
     /// Assumes that column scan is a union scan
     /// and returns a vector containing the positions of the scans with the smallest values
     pub fn get_smallest_scans(&self) -> &Vec<bool> {
-        forward_to_colscan_cell!(self, get_smallest_scans)
+        forward_to_columnscan_cell!(self, get_smallest_scans)
     }
 
     /// Assumes that column scan is a union scan
     /// Set a vector that indicates which scans are currently active and should be considered
     pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
-        forward_to_colscan_cell!(self, set_active_scans(active_scans))
+        forward_to_columnscan_cell!(self, set_active_scans(active_scans))
     }
 }
 
-impl<'a> Iterator for ColScanT<'a> {
+impl<'a> Iterator for ColumnScanT<'a> {
     type Item = DataValueT;
 
     fn next(&mut self) -> Option<Self::Item> {
-        forward_to_colscan_cell!(self, next.map_to(DataValueT))
+        forward_to_columnscan_cell!(self, next.map_to(DataValueT))
     }
 }
 
-impl<'a> ColScan for ColScanT<'a> {
+impl<'a> ColumnScan for ColumnScanT<'a> {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
         match self {
             Self::U64(cs) => match value {
@@ -437,18 +437,18 @@ impl<'a> ColScan for ColScanT<'a> {
     }
 
     fn current(&mut self) -> Option<Self::Item> {
-        forward_to_colscan_cell!(self, current.map_to(DataValueT))
+        forward_to_columnscan_cell!(self, current.map_to(DataValueT))
     }
 
     fn reset(&mut self) {
-        forward_to_colscan_cell!(self, reset)
+        forward_to_columnscan_cell!(self, reset)
     }
 
     fn pos(&self) -> Option<usize> {
-        forward_to_colscan_cell!(self, pos)
+        forward_to_columnscan_cell!(self, pos)
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        forward_to_colscan_cell!(self, narrow(interval))
+        forward_to_columnscan_cell!(self, narrow(interval))
     }
 }

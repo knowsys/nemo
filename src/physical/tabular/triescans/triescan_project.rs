@@ -1,7 +1,7 @@
 use crate::physical::{
     columnar::{
-        colscans::{ColScan, ColScanCell, ColScanEnum, ColScanReorder, ColScanT},
         columns::{Column, IntervalColumn, IntervalColumnEnum, IntervalColumnT},
+        columnscans::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanReorder, ColumnScanT},
     },
     datatypes::{ColumnDataType, DataTypeName},
     tabular::tables::{Table, TableSchema},
@@ -55,7 +55,7 @@ pub struct TrieScanProject<'a> {
     current_layer: Option<usize>,
     target_schema: TrieSchema,
     picked_columns: Vec<usize>,
-    reorder_scans: Vec<UnsafeCell<ColScanT<'a>>>,
+    reorder_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> TrieScanProject<'a> {
@@ -63,7 +63,7 @@ impl<'a> TrieScanProject<'a> {
     pub fn new(trie: &'a Trie, picked_columns: Vec<usize>) -> Self {
         let input_schema = trie.schema();
 
-        let mut reorder_scans = Vec::<UnsafeCell<ColScanT>>::with_capacity(picked_columns.len());
+        let mut reorder_scans = Vec::<UnsafeCell<ColumnScanT>>::with_capacity(picked_columns.len());
 
         let mut target_attributes = Vec::<TrieSchemaEntry>::with_capacity(picked_columns.len());
         for &col_index in &picked_columns {
@@ -84,11 +84,11 @@ impl<'a> TrieScanProject<'a> {
                             panic!("Do other cases later")
                         };
 
-                    reorder_scans.push(UnsafeCell::new(ColScanT::$variant(ColScanCell::new(
-                        ColScanEnum::ColScanReorder(ColScanReorder::new(
-                            current_column.get_data_column(),
+                    reorder_scans.push(UnsafeCell::new(ColumnScanT::$variant(
+                        ColumnScanCell::new(ColumnScanEnum::ColumnScanReorder(
+                            ColumnScanReorder::new(current_column.get_data_column()),
                         )),
-                    ))));
+                    )));
                 }};
             }
 
@@ -243,13 +243,13 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
         self.current_layer = Some(next_layer);
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColScanT<'a>>> {
+    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         debug_assert!(self.current_layer.is_some());
 
         Some(&self.reorder_scans[self.current_layer?])
     }
 
-    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColScanT<'a>>> {
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         Some(&self.reorder_scans[index])
     }
 

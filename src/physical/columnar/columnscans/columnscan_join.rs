@@ -3,28 +3,28 @@ use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
 
-use super::colscan::ColScan;
-use super::ColScanCell;
+use super::columnscan::ColumnScan;
+use super::ColumnScanCell;
 
 /// Implementation of [`ColumnScan`] for the result of joining a list of [`ColumnScan`] structs.
 #[derive(Debug)]
-pub struct ColScanJoin<'a, T>
+pub struct ColumnScanJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    column_scans: Vec<&'a ColScanCell<'a, T>>,
+    column_scans: Vec<&'a ColumnScanCell<'a, T>>,
     active_scan: usize,
     active_max: Option<T>,
     current: Option<T>,
 }
 
-impl<'a, T> ColScanJoin<'a, T>
+impl<'a, T> ColumnScanJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new ColumnVectorScan for a Column.
-    pub fn new(column_scans: Vec<&'a ColScanCell<'a, T>>) -> Self {
-        ColScanJoin {
+    pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> Self {
+        ColumnScanJoin {
             column_scans,
             active_scan: 0,
             active_max: None,
@@ -33,7 +33,7 @@ where
     }
 }
 
-impl<'a, T> ColScanJoin<'a, T>
+impl<'a, T> ColumnScanJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -61,7 +61,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for ColScanJoin<'a, T>
+impl<'a, T> Iterator for ColumnScanJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -82,7 +82,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for ColScanJoin<'a, T>
+impl<'a, T> ColumnScan for ColumnScanJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -126,33 +126,35 @@ mod test {
     use test_log::test;
 
     use crate::physical::columnar::{
-        colscans::{ColScan, ColScanEnum, ColScanGeneric, ColScanGenericEnum, ColScanJoin},
         columns::ColumnVector,
+        columnscans::{
+            ColumnScan, ColumnScanEnum, ColumnScanGeneric, ColumnScanGenericEnum, ColumnScanJoin,
+        },
     };
 
     #[test]
     fn test_u64_simple_join<'a>() {
         let data1: Vec<u64> = vec![1, 3, 5, 7, 9];
         let vc1: ColumnVector<u64> = ColumnVector::new(data1);
-        let mut gcs1 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
-            ColScanGeneric::new(&vc1),
+        let mut gcs1 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
+            ColumnScanGeneric::new(&vc1),
         ))
         .into();
 
         let data2: Vec<u64> = vec![1, 5, 6, 7, 9, 10];
         let vc2: ColumnVector<u64> = ColumnVector::new(data2);
-        let mut gcs2 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
-            ColScanGeneric::new(&vc2),
+        let mut gcs2 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
+            ColumnScanGeneric::new(&vc2),
         ))
         .into();
         let data3: Vec<u64> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
         let vc3: ColumnVector<u64> = ColumnVector::new(data3);
-        let mut gcs3 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
-            ColScanGeneric::new(&vc3),
+        let mut gcs3 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
+            ColumnScanGeneric::new(&vc3),
         ))
         .into();
 
-        let mut omj = ColScanJoin::new(vec![&mut gcs1, &mut gcs2, &mut gcs3]);
+        let mut omj = ColumnScanJoin::new(vec![&mut gcs1, &mut gcs2, &mut gcs3]);
 
         assert_eq!(omj.next(), Some(1));
         assert_eq!(omj.current(), Some(1));
@@ -166,19 +168,19 @@ mod test {
         assert_eq!(omj.current(), None);
         assert_eq!(omj.next(), None);
 
-        let mut gcs1 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
-            ColScanGeneric::new(&vc1),
+        let mut gcs1 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
+            ColumnScanGeneric::new(&vc1),
         ))
         .into();
-        let mut gcs2 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
-            ColScanGeneric::new(&vc2),
+        let mut gcs2 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
+            ColumnScanGeneric::new(&vc2),
         ))
         .into();
-        let mut gcs3 = ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(
-            ColScanGeneric::new(&vc3),
+        let mut gcs3 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
+            ColumnScanGeneric::new(&vc3),
         ))
         .into();
-        let mut omj = ColScanJoin::new(vec![&mut gcs1, &mut gcs2, &mut gcs3]);
+        let mut omj = ColumnScanJoin::new(vec![&mut gcs1, &mut gcs2, &mut gcs3]);
 
         assert_eq!(omj.seek(5), Some(5));
         assert_eq!(omj.current(), Some(5));

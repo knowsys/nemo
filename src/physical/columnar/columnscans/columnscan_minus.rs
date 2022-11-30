@@ -2,31 +2,31 @@ use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
 
-use super::colscan::ColScan;
-use super::ColScanCell;
+use super::columnscan::ColumnScan;
+use super::ColumnScanCell;
 
 /// Iterator used in the upper levels of the trie difference operator
 #[derive(Debug)]
-pub struct ColScanFollow<'a, T>
+pub struct ColumnScanFollow<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    scan_left: &'a ColScanCell<'a, T>,
-    scan_right: &'a ColScanCell<'a, T>,
+    scan_left: &'a ColumnScanCell<'a, T>,
+    scan_right: &'a ColumnScanCell<'a, T>,
     equal: bool,
     current: Option<T>,
 }
 
-impl<'a, T> ColScanFollow<'a, T>
+impl<'a, T> ColumnScanFollow<'a, T>
 where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new ColumnVectorScan for a Column.
     pub fn new(
-        scan_left: &'a ColScanCell<'a, T>,
-        scan_right: &'a ColScanCell<'a, T>,
-    ) -> ColScanFollow<'a, T> {
-        ColScanFollow {
+        scan_left: &'a ColumnScanCell<'a, T>,
+        scan_right: &'a ColumnScanCell<'a, T>,
+    ) -> ColumnScanFollow<'a, T> {
+        ColumnScanFollow {
             scan_left,
             scan_right,
             equal: true,
@@ -40,7 +40,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for ColScanFollow<'a, T>
+impl<'a, T> Iterator for ColumnScanFollow<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -60,7 +60,7 @@ where
     }
 }
 
-impl<'a, T> ColScan for ColScanFollow<'a, T>
+impl<'a, T> ColumnScan for ColumnScanFollow<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -92,21 +92,24 @@ where
 
 /// Iterator which computes the set difference between two scans
 #[derive(Debug)]
-pub struct ColScanMinus<'a, T>
+pub struct ColumnScanMinus<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    scan_left: &'a ColScanCell<'a, T>,
-    scan_right: &'a ColScanCell<'a, T>,
+    scan_left: &'a ColumnScanCell<'a, T>,
+    scan_right: &'a ColumnScanCell<'a, T>,
     current: Option<T>,
 }
 
-impl<'a, T> ColScanMinus<'a, T>
+impl<'a, T> ColumnScanMinus<'a, T>
 where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new ColumnVectorScan for a Column.
-    pub fn new(scan_left: &'a ColScanCell<'a, T>, scan_right: &'a ColScanCell<'a, T>) -> Self {
+    pub fn new(
+        scan_left: &'a ColumnScanCell<'a, T>,
+        scan_right: &'a ColumnScanCell<'a, T>,
+    ) -> Self {
         Self {
             scan_left,
             scan_right,
@@ -115,7 +118,7 @@ where
     }
 }
 
-impl<'a, T: Eq + Debug + Copy> Iterator for ColScanMinus<'a, T>
+impl<'a, T: Eq + Debug + Copy> Iterator for ColumnScanMinus<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -142,7 +145,7 @@ where
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> ColScan for ColScanMinus<'a, T>
+impl<'a, T: Ord + Copy + Debug> ColumnScan for ColumnScanMinus<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -179,11 +182,11 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columnar::{
-        colscans::{ColScan, ColScanCell, ColScanEnum, ColScanGenericEnum},
         columns::{Column, ColumnVector},
+        columnscans::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanGenericEnum},
     };
 
-    use super::{ColScanFollow, ColScanMinus};
+    use super::{ColumnScanFollow, ColumnScanMinus};
 
     use test_log::test;
 
@@ -192,14 +195,14 @@ mod test {
         let left_column = ColumnVector::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = ColumnVector::new(vec![0u64, 1, 3, 7, 11]);
 
-        let left_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(left_column.iter()),
+        let left_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(left_column.iter()),
         ));
-        let right_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(right_column.iter()),
+        let right_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(right_column.iter()),
         ));
 
-        let mut diff_scan = ColScanFollow::new(&left_iter, &right_iter);
+        let mut diff_scan = ColumnScanFollow::new(&left_iter, &right_iter);
 
         assert_eq!(diff_scan.current(), None);
         assert!(diff_scan.is_equal());
@@ -242,14 +245,14 @@ mod test {
         let left_column = ColumnVector::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = ColumnVector::new(vec![0u64, 3, 7, 11]);
 
-        let left_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(left_column.iter()),
+        let left_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(left_column.iter()),
         ));
-        let right_iter = ColScanCell::new(ColScanEnum::ColScanGeneric(
-            ColScanGenericEnum::ColumnVector(right_column.iter()),
+        let right_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
+            ColumnScanGenericEnum::ColumnVector(right_column.iter()),
         ));
 
-        let mut diff_scan = ColScanMinus::new(&left_iter, &right_iter);
+        let mut diff_scan = ColumnScanMinus::new(&left_iter, &right_iter);
 
         assert_eq!(diff_scan.current(), None);
         assert_eq!(diff_scan.next(), Some(2));

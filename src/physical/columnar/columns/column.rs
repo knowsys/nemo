@@ -1,7 +1,7 @@
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::{
-        columnar::colscans::{colscan::ColScan, ColScanEnum, ColScanGenericEnum},
+        columnar::columnscans::{columnscan::ColumnScan, ColumnScanEnum, ColumnScanGenericEnum},
         datatypes::{ColumnDataType, DataValueT, Double, Float},
     },
 };
@@ -12,7 +12,7 @@ use super::{ColumnRle, ColumnVector};
 /// Column of ordered values.
 pub trait Column<'a, T>: Debug + Clone {
     /// ColumnScan associated with the Column
-    type Scan: 'a + ColScan<Item = T>;
+    type Scan: 'a + ColumnScan<Item = T>;
 
     /// Returns the number of entries in the column.
     fn len(&self) -> usize;
@@ -49,7 +49,7 @@ impl<'a, T> Column<'a, T> for ColumnEnum<T>
 where
     T: 'a + ColumnDataType,
 {
-    type Scan = ColScanEnum<'a, T>;
+    type Scan = ColumnScanEnum<'a, T>;
 
     fn len(&self) -> usize {
         forward_to_column!(self, len)
@@ -66,9 +66,9 @@ where
     fn iter(&'a self) -> Self::Scan {
         match self {
             Self::ColumnVector(col) => {
-                ColScanEnum::ColScanGeneric(ColScanGenericEnum::ColumnVector(col.iter()))
+                ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(col.iter()))
             }
-            Self::ColumnRle(col) => ColScanEnum::ColumnRleScan(col.iter()),
+            Self::ColumnRle(col) => ColumnScanEnum::ColumnRleScan(col.iter()),
         }
     }
 }

@@ -3,8 +3,8 @@ use num::ToPrimitive;
 use crate::physical::{
     columnar::{
         builders::{ColBuilder, ColBuilderAdaptive, ColBuilderAdaptiveT},
-        colscans::ColScan,
         columns::{IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT},
+        columnscans::ColumnScan,
     },
     datatypes::DataTypeName,
     tabular::{
