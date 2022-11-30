@@ -48,6 +48,8 @@ impl ExecutionNode {
 pub enum ExecutionResult {
     /// Temporary table with the id
     Temp(TableId),
+    /// Temporary table that only uses a subset of the columns with the id
+    TempSubset(TableId, Vec<bool>),
     /// Permanent table with the following identifier, range, column order and priority
     Save(Identifier, Range<usize>, ColumnOrder, u64),
 }

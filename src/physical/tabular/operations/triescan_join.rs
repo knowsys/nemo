@@ -598,7 +598,7 @@ mod test {
             schema_target,
         );
 
-        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter));
+        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
 
         let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 
@@ -688,7 +688,7 @@ mod test {
             schema_target,
         );
 
-        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter));
+        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
 
         let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 
@@ -786,7 +786,7 @@ mod test {
             schema_target,
         );
 
-        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter));
+        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
 
         let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 

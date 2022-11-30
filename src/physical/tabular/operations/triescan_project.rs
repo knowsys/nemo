@@ -300,15 +300,18 @@ mod test {
         let trie_no_first = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![1, 2],
-        )));
+        )))
+        .unwrap();
         let trie_no_middle = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![0, 2],
-        )));
+        )))
+        .unwrap();
         let trie_no_last = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![0, 1],
-        )));
+        )))
+        .unwrap();
 
         let proj_column_upper = trie_no_first.get_column(0).as_u64().unwrap();
         let proj_column_lower = trie_no_first.get_column(1).as_u64().unwrap();
@@ -473,7 +476,8 @@ mod test {
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![0, 3, 5],
-        )));
+        )))
+        .unwrap();
 
         let proj_column_upper = trie_projected.get_column(0).as_u64().unwrap();
         let proj_column_middle = trie_projected.get_column(1).as_u64().unwrap();
@@ -555,7 +559,8 @@ mod test {
         let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![2, 0, 1],
-        )));
+        )))
+        .unwrap();
 
         log::debug!(
             "\n{}\n\n{}",
@@ -645,7 +650,8 @@ mod test {
         let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![2, 0],
-        )));
+        )))
+        .unwrap();
 
         let proj_column_upper = trie_reordered.get_column(0).as_u64().unwrap();
         let proj_column_lower = trie_reordered.get_column(1).as_u64().unwrap();
@@ -726,7 +732,8 @@ mod test {
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![0, 2, 4, 1],
-        )));
+        )))
+        .unwrap();
 
         let proj_column_fst = trie_projected.get_column(0).as_u64().unwrap();
         let proj_column_snd = trie_projected.get_column(1).as_u64().unwrap();
@@ -799,10 +806,10 @@ mod test {
 
     #[test]
     fn complex_reorder() {
-        let column_fst = make_gict(&[1, 2], &[0]);
-        let column_snd = make_gict(&[10, 11, 9, 10], &[0, 2]);
-        let column_trd = make_gict(&[4, 5, 5, 6, 3, 4, 4, 5], &[0, 2, 4, 6]);
-        let column_fth = make_gict(
+        let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_snd = make_column_with_intervals_t(&[10, 11, 9, 10], &[0, 2]);
+        let column_trd = make_column_with_intervals_t(&[4, 5, 5, 6, 3, 4, 4, 5], &[0, 2, 4, 6]);
+        let column_fth = make_column_with_intervals_t(
             &[6, 7, 6, 8, 7, 8, 6, 7, 7, 8, 6, 8, 5, 6, 7, 8],
             &[0, 2, 4, 6, 8, 10, 12, 14],
         );
@@ -833,7 +840,8 @@ mod test {
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
             vec![2, 0, 3],
-        )));
+        )))
+        .unwrap();
 
         let proj_column_fst = trie_projected.get_column(0).as_u64().unwrap();
         let proj_column_snd = trie_projected.get_column(1).as_u64().unwrap();
@@ -920,26 +928,9 @@ mod test {
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
 
-        let reordered_trie = materialize(&mut project);
-        log::debug!("{}", reordered_trie.debug(&dict));
-        log::debug!("{reordered_trie:#?}");
+        let reordered_trie = materialize(&mut project).unwrap();
 
         assert_eq!(base_trie.row_num(), reordered_trie.row_num());
-
-        // assert_eq!(
-        //     base_trie.get_column(0).iter().collect::<Vec<_>>(),
-        //     reordered_trie.get_column(1).iter().collect::<Vec<_>>()
-        // );
-
-        // assert_eq!(
-        //     base_trie.get_column(1).iter().collect::<Vec<_>>(),
-        //     reordered_trie.get_column(0).iter().collect::<Vec<_>>()
-        // );
-
-        // assert_eq!(
-        //     base_trie.get_column(2).iter().collect::<Vec<_>>(),
-        //     reordered_trie.get_column(2).iter().collect::<Vec<_>>()
-        // );
     }
 
     /// This is another test case for a bug first encountered while
@@ -985,13 +976,11 @@ mod test {
 
         let picked_columns = vec![1, 0, 2];
         let base_trie = Trie::from_rows(schema, rows);
-        log::debug!("\n{}", base_trie.debug(&dict));
+
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
 
-        let reordered_trie = materialize(&mut project);
-        log::debug!("\n{}", reordered_trie.debug(&dict));
-        log::debug!("{reordered_trie:#?}");
+        let reordered_trie = materialize(&mut project).unwrap();
 
         assert_eq!(base_trie.row_num(), reordered_trie.row_num());
     }
@@ -1020,13 +1009,11 @@ mod test {
 
         let picked_columns = vec![1, 0, 2];
         let base_trie = Trie::from_rows(schema, rows);
-        log::debug!("\n{}", base_trie.debug(&dict));
+
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
 
-        let reordered_trie = materialize(&mut project);
-        log::debug!("\n{}", reordered_trie.debug(&dict));
-        log::debug!("{reordered_trie:#?}");
+        let reordered_trie = materialize(&mut project).unwrap();
 
         assert_eq!(base_trie.row_num(), reordered_trie.row_num());
     }
@@ -1068,9 +1055,7 @@ mod test {
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
 
-        let reordered_trie = materialize(&mut project);
-        log::debug!("{}", reordered_trie.debug(&dict));
-        log::debug!("{reordered_trie:#?}");
+        let reordered_trie = materialize(&mut project).unwrap();
 
         assert_eq!(base_trie.row_num(), reordered_trie.row_num());
     }
