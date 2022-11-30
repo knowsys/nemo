@@ -1,27 +1,40 @@
 use core::hash::Hash;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 
-use crate::physical::tabular::tries::Trie;
+use bytesize::ByteSize;
+
+use crate::physical::tabular::table_types::trie::Trie;
+
+use super::ByteSized;
 
 /// Type which represents table id
 pub type TableId = usize;
+/// Traits which have to be satisfied by a TableKey type
+pub trait TableKeyType: Eq + Hash + Clone {}
 
 /// Represents a collection of tables
 #[derive(Debug)]
-pub struct DatabaseInstance<TableKey: Eq + Hash + Clone> {
+pub struct DatabaseInstance<TableKey: TableKeyType> {
+    /// Structure which owns all the tries; accessed through Id
     id_to_table: HashMap<TableId, (TableKey, Trie)>,
+    /// Alternative access scheme through a TableKey
     key_to_tableid: HashMap<TableKey, TableId>,
 
+    /// Lowest unused TableId
+    /// Will be incremented for each new table and will never be reused
     current_id: usize,
+    /// Memory currently consumed by all the tables
+    memory_consumption: ByteSize,
 }
 
-impl<TableKey: Eq + Hash + Clone> DatabaseInstance<TableKey> {
+impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
     /// Create new [`DatabaseInstance`]
     pub fn new() -> Self {
         Self {
             id_to_table: HashMap::new(),
             key_to_tableid: HashMap::new(),
             current_id: 0,
+            memory_consumption: ByteSize::b(0),
         }
     }
 
@@ -64,6 +77,8 @@ impl<TableKey: Eq + Hash + Clone> DatabaseInstance<TableKey> {
             return None;
         }
 
+        self.memory_consumption += trie.size_bytes();
+
         self.id_to_table
             .insert(self.current_id, (key.clone(), trie));
         self.key_to_tableid.insert(key, self.current_id);
@@ -101,31 +116,47 @@ impl<TableKey: Eq + Hash + Clone> DatabaseInstance<TableKey> {
 
     /// Delete a trie given its key
     /// Returns true if the key existed
-    pub fn delete_by_key(&mut self, key: &TableKey) -> bool {
-        let id = if let Some(some_id) = self.get_id(&key) {
-            some_id
+    pub fn delete_by_key(&mut self, key: TableKey) -> bool {
+        if let Entry::Occupied(key_entry) = self.key_to_tableid.entry(key) {
+            let id = *key_entry.get();
+            key_entry.remove();
+
+            if let Entry::Occupied(id_entry) = self.id_to_table.entry(id) {
+                self.memory_consumption = ByteSize(
+                    self.memory_consumption.as_u64() - id_entry.get().1.size_bytes().as_u64(),
+                );
+
+                id_entry.remove();
+            } else {
+                // Both HashMap should contain the table
+                unreachable!()
+            }
+
+            true
         } else {
-            return false;
-        };
-
-        self.id_to_table.remove(&id);
-        self.key_to_tableid.remove(key);
-
-        true
+            false
+        }
     }
 
     /// Delete a trie given its id
     /// Returns true if the id existed
     pub fn delete_by_id(&mut self, id: TableId) -> bool {
-        let key = if let Some(key_trie_pair) = self.id_to_table.get(&id) {
-            &key_trie_pair.0
+        if let Entry::Occupied(entry) = self.id_to_table.entry(id) {
+            self.memory_consumption =
+                ByteSize(self.memory_consumption.as_u64() - entry.get().1.size_bytes().as_u64());
+
+            self.key_to_tableid.remove(&entry.get().0);
+            entry.remove();
+
+            true
         } else {
-            return false;
-        };
+            false
+        }
+    }
+}
 
-        self.key_to_tableid.remove(key);
-        self.id_to_table.remove(&id);
-
-        true
+impl<TableKey: TableKeyType> ByteSized for DatabaseInstance<TableKey> {
+    fn size_bytes(&self) -> ByteSize {
+        self.memory_consumption
     }
 }

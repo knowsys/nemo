@@ -1,9 +1,15 @@
 use std::{
     fmt::Debug,
+    mem::size_of,
     ops::{Index, Range},
 };
 
-use crate::physical::columnar::traits::{column::Column, columnscan::ColumnScan};
+use bytesize::ByteSize;
+
+use crate::physical::{
+    columnar::traits::{column::Column, columnscan::ColumnScan},
+    management::ByteSized,
+};
 
 /// Simple implementation of [`Column`] that uses Vec to store data.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +45,13 @@ impl<T: Debug + Copy + Ord> Index<usize> for ColumnVector<T> {
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.data[index]
+    }
+}
+
+impl<T> ByteSized for ColumnVector<T> {
+    fn size_bytes(&self) -> ByteSize {
+        // We cast everything to u64 separately to avoid overflows
+        ByteSize::b(size_of::<Self>() as u64 + self.data.capacity() as u64 * size_of::<T>() as u64)
     }
 }
 

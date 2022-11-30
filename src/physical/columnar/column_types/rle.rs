@@ -1,11 +1,14 @@
 use crate::physical::{
     columnar::traits::{column::Column, columnbuilder::ColumnBuilder, columnscan::ColumnScan},
     datatypes::{ColumnDataType, Field, Ring},
+    management::ByteSized,
 };
+use bytesize::ByteSize;
 use num::{CheckedMul, Zero};
 use std::{
     fmt::Debug,
     iter::repeat,
+    mem::size_of,
     num::NonZeroUsize,
     ops::{Add, Mul, Range},
 };
@@ -410,6 +413,17 @@ where
 
     fn iter(&'a self) -> Self::Scan {
         ColumnScanRle::new(self)
+    }
+}
+
+impl<T> ByteSized for ColumnRle<T> {
+    fn size_bytes(&self) -> ByteSize {
+        let size_values = size_of::<T>() as u64 * self.values.capacity() as u64;
+        let size_end_indices =
+            size_of::<NonZeroUsize>() as u64 * self.end_indices.capacity() as u64;
+        let size_increments = size_of::<Step<T>>() as u64 * self.increments.capacity() as u64;
+
+        ByteSize::b(size_of::<Self>() as u64 + size_values + size_end_indices + size_increments)
     }
 }
 

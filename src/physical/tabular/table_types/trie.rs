@@ -1,3 +1,5 @@
+use bytesize::ByteSize;
+
 use crate::logical::Permutator;
 use crate::physical::columnar::{
     adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
@@ -10,6 +12,7 @@ use crate::physical::columnar::{
 };
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
+use crate::physical::management::ByteSized;
 use crate::physical::tabular::traits::{
     table::Table, table_schema::TableSchema, triescan::TrieScan,
 };
@@ -17,6 +20,7 @@ use std::cell::UnsafeCell;
 use std::fmt;
 use std::fmt::Debug;
 use std::iter;
+use std::mem::size_of;
 
 /// Represents one attribute in [`TrieSchema`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -205,6 +209,17 @@ impl Trie {
         }
 
         Ok(())
+    }
+}
+
+impl ByteSized for Trie {
+    fn size_bytes(&self) -> ByteSize {
+        // TODO: Think about including TrieSchema here, but maybe it will move anyways
+        ByteSize::b(size_of::<Self>() as u64)
+            + self
+                .columns
+                .iter()
+                .fold(ByteSize::b(0), |acc, column| acc + column.size_bytes())
     }
 }
 
