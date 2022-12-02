@@ -1,8 +1,7 @@
-use crate::physical::columnar::columns::IntervalColumn;
-use crate::physical::columnar::columnscans::{ColumnScan, ColumnScanT};
+use crate::physical::columnar::traits::columnscan::{ColumnScan, ColumnScanT};
 use crate::physical::tabular::tables::{Table, TableSchema};
 use crate::physical::tabular::tries::Trie;
-use crate::{generate_forwarder, physical::columnar::columns::Column};
+use crate::{generate_forwarder, physical::columnar::traits::column::Column};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
@@ -151,7 +150,7 @@ impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
 #[cfg(test)]
 mod test {
     use super::{TrieScan, TrieScanGeneric};
-    use crate::physical::columnar::columnscans::ColumnScanT;
+    use crate::physical::columnar::traits::columnscan::ColumnScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::util::test_util::make_gict;
