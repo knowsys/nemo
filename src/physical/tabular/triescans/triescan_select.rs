@@ -1,7 +1,7 @@
 use crate::physical::{
-    columnar::columnscans::{
-        ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanEqualColumn, ColumnScanEqualValue,
-        ColumnScanPass, ColumnScanT,
+    columnar::{
+        operations::{ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanPass},
+        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{DataTypeName, DataValueT},
     tabular::tables::TableSchema,
@@ -271,7 +271,7 @@ impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
 #[cfg(test)]
 mod test {
     use super::{TrieScanSelectEqual, TrieScanSelectValue, ValueAssignment};
-    use crate::physical::columnar::columnscans::ColumnScanT;
+    use crate::physical::columnar::traits::columnscan::ColumnScanT;
     use crate::physical::datatypes::{DataTypeName, DataValueT};
     use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::tabular::triescans::{TrieScan, TrieScanEnum, TrieScanGeneric};

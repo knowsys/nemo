@@ -1,8 +1,8 @@
 use rand::prelude::*;
 use rand_pcg::Pcg64;
 use stage2::physical::columnar::{
-    columns::ColumnVector,
-    columnscans::{ColumnScan, ColumnScanGeneric},
+    column_types::vector::ColumnVector,
+    traits::{column::Column, columnscan::ColumnScan},
 };
 
 pub fn bench() {
@@ -21,7 +21,7 @@ pub fn bench() {
         (values.1, values.0)
     };
     let test_column = ColumnVector::new(data);
-    let mut gc = ColumnScanGeneric::new(&test_column);
+    let mut gc = test_column.iter();
     gc.seek(randa);
     gc.seek(randb);
 }

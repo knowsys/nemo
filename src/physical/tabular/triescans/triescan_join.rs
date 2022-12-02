@@ -1,6 +1,7 @@
 use crate::physical::{
-    columnar::columnscans::{
-        ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanJoin, ColumnScanT,
+    columnar::{
+        operations::ColumnScanJoin,
+        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{DataTypeName, Double, Float},
     tabular::tables::TableSchema,
@@ -152,16 +153,21 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanJoin;
-    use crate::physical::columnar::builders::{ColumnBuilder, ColumnBuilderAdaptive};
-    use crate::physical::columnar::columns::{
-        Column, ColumnEnum, ColumnVector, IntervalColumnEnum, IntervalColumnGeneric,
-        IntervalColumnT,
+    use crate::physical::columnar::adaptive_column_builder::ColumnBuilderAdaptive;
+    use crate::physical::columnar::column_types::{
+        interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+        vector::ColumnVector,
     };
+    use crate::physical::columnar::traits::{
+        column::{Column, ColumnEnum},
+        columnbuilder::ColumnBuilder,
+        columnscan::ColumnScanT,
+    };
+    use crate::physical::datatypes::DataTypeName;
     use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::tabular::triescans::{
         materialize, TrieScan, TrieScanEnum, TrieScanGeneric,
     };
-    use crate::physical::{columnar::columnscans::ColumnScanT, datatypes::DataTypeName};
 
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
@@ -769,17 +775,12 @@ mod test {
             datatype: DataTypeName::U64,
         }]);
 
-        let built_interval_col = IntervalColumnGeneric::<u64>::new(
+        let built_interval_col = ColumnWithIntervals::<u64>::new(
             builder.finalize(),
             ColumnEnum::ColumnVector(ColumnVector::new(vec![0])),
         );
 
-        let my_trie = Trie::new(
-            schema,
-            vec![IntervalColumnT::U64(
-                IntervalColumnEnum::IntervalColumnGeneric(built_interval_col),
-            )],
-        );
+        let my_trie = Trie::new(schema, vec![ColumnWithIntervalsT::U64(built_interval_col)]);
 
         let mut my_join_iter = TrieScanJoin::new(
             vec![TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(

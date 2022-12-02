@@ -2,9 +2,9 @@ use num::ToPrimitive;
 
 use crate::physical::{
     columnar::{
-        builders::{ColumnBuilder, ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
-        columns::{IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT},
-        columnscans::ColumnScan,
+        adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
+        column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+        traits::{columnbuilder::ColumnBuilder, columnscan::ColumnScan},
     },
     datatypes::DataTypeName,
     tabular::{
@@ -34,7 +34,7 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
     let target_schema = TrieSchema::new(target_attributes);
 
     // Setup column builders
-    let mut result_columns = Vec::<IntervalColumnT>::with_capacity(target_schema.arity());
+    let mut result_columns = Vec::<ColumnWithIntervalsT>::with_capacity(target_schema.arity());
     let mut data_column_builders = Vec::<ColumnBuilderAdaptiveT>::new();
     let mut intervals_column_builders = Vec::<ColumnBuilderAdaptive<usize>>::new();
 
@@ -118,11 +118,9 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
             };
         let current_interval_builder = intervals_column_builders.remove(0);
 
-        let next_interval_column = IntervalColumnT::U64(IntervalColumnEnum::IntervalColumnGeneric(
-            IntervalColumnGeneric::new(
-                current_data_builder.finalize(),
-                current_interval_builder.finalize(),
-            ),
+        let next_interval_column = ColumnWithIntervalsT::U64(ColumnWithIntervals::new(
+            current_data_builder.finalize(),
+            current_interval_builder.finalize(),
         ));
 
         result_columns.push(next_interval_column);
@@ -154,7 +152,7 @@ pub fn scan_is_empty(trie_scan: &mut TrieScanEnum) -> bool {
 #[cfg(test)]
 mod test {
     use super::materialize;
-    use crate::physical::columnar::columns::Column;
+    use crate::physical::columnar::traits::column::Column;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::tabular::triescans::{TrieScanEnum, TrieScanGeneric, TrieScanJoin};

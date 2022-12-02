@@ -3,8 +3,7 @@ use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
 
-use super::columnscan::ColumnScan;
-use super::ColumnScanCell;
+use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 
 /// Implementation of [`ColumnScan`] for the result of joining a list of [`ColumnScan`] structs.
 #[derive(Debug)]
@@ -125,34 +124,25 @@ where
 mod test {
     use test_log::test;
 
+    use super::ColumnScanJoin;
     use crate::physical::columnar::{
-        columns::ColumnVector,
-        columnscans::{
-            ColumnScan, ColumnScanEnum, ColumnScanGeneric, ColumnScanGenericEnum, ColumnScanJoin,
-        },
+        column_types::vector::{ColumnScanVector, ColumnVector},
+        traits::columnscan::{ColumnScan, ColumnScanEnum},
     };
 
     #[test]
     fn test_u64_simple_join<'a>() {
         let data1: Vec<u64> = vec![1, 3, 5, 7, 9];
         let vc1: ColumnVector<u64> = ColumnVector::new(data1);
-        let mut gcs1 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
-            ColumnScanGeneric::new(&vc1),
-        ))
-        .into();
+        let mut gcs1 = ColumnScanEnum::ColumnScanVector(ColumnScanVector::new(&vc1)).into();
 
         let data2: Vec<u64> = vec![1, 5, 6, 7, 9, 10];
         let vc2: ColumnVector<u64> = ColumnVector::new(data2);
-        let mut gcs2 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
-            ColumnScanGeneric::new(&vc2),
-        ))
-        .into();
+        let mut gcs2 = ColumnScanEnum::ColumnScanVector(ColumnScanVector::new(&vc2)).into();
+
         let data3: Vec<u64> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
         let vc3: ColumnVector<u64> = ColumnVector::new(data3);
-        let mut gcs3 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
-            ColumnScanGeneric::new(&vc3),
-        ))
-        .into();
+        let mut gcs3 = ColumnScanEnum::ColumnScanVector(ColumnScanVector::new(&vc3)).into();
 
         let mut omj = ColumnScanJoin::new(vec![&mut gcs1, &mut gcs2, &mut gcs3]);
 
@@ -168,18 +158,10 @@ mod test {
         assert_eq!(omj.current(), None);
         assert_eq!(omj.next(), None);
 
-        let mut gcs1 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
-            ColumnScanGeneric::new(&vc1),
-        ))
-        .into();
-        let mut gcs2 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
-            ColumnScanGeneric::new(&vc2),
-        ))
-        .into();
-        let mut gcs3 = ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(
-            ColumnScanGeneric::new(&vc3),
-        ))
-        .into();
+        let mut gcs1 = ColumnScanEnum::ColumnScanVector(ColumnScanVector::new(&vc1)).into();
+        let mut gcs2 = ColumnScanEnum::ColumnScanVector(ColumnScanVector::new(&vc2)).into();
+        let mut gcs3 = ColumnScanEnum::ColumnScanVector(ColumnScanVector::new(&vc3)).into();
+
         let mut omj = ColumnScanJoin::new(vec![&mut gcs1, &mut gcs2, &mut gcs3]);
 
         assert_eq!(omj.seek(5), Some(5));

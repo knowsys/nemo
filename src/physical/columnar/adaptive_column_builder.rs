@@ -1,10 +1,11 @@
-use crate::physical::{
-    columnar::columns::{Column, ColumnBuilderRle, ColumnEnum, ColumnVector},
-    datatypes::{ColumnDataType, DataTypeName, DataValueT, Double, Float},
-};
+use crate::physical::datatypes::{ColumnDataType, DataTypeName, DataValueT, Double, Float};
 use std::fmt::Debug;
 
-use super::ColumnBuilder;
+use super::column_types::{rle::ColumnBuilderRle, vector::ColumnVector};
+use super::traits::{
+    column::{Column, ColumnEnum},
+    columnbuilder::ColumnBuilder,
+};
 
 // Number of rle elements in rle column builder after which to decide which column type to use.
 const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5; // 5
@@ -206,9 +207,9 @@ impl FromIterator<DataValueT> for ColumnBuilderAdaptiveT {
 
 #[cfg(test)]
 mod test {
-    use super::{ColumnBuilder, ColumnBuilderAdaptive, ColumnBuilderType};
+    use super::{ColumnBuilderAdaptive, ColumnBuilderType};
     use crate::physical::{
-        columnar::columns::Column,
+        columnar::traits::{column::Column, columnbuilder::ColumnBuilder},
         datatypes::{Double, Float},
     };
     use test_log::test;

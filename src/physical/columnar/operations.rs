@@ -1,16 +1,4 @@
-//! This module collects objects that represent an iterator over a column
-
-/// Module for defining [`ColumnScan`]
-pub mod columnscan;
-pub use columnscan::ColumnScan;
-pub use columnscan::ColumnScanCell;
-pub use columnscan::ColumnScanEnum;
-pub use columnscan::ColumnScanT;
-
-/// Module for defining [`ColumnScanGeneric`]
-pub mod columnscan_generic;
-pub use columnscan_generic::ColumnScanGeneric;
-pub use columnscan_generic::ColumnScanGenericEnum;
+//! This module collects operations over columns
 
 /// Module for defining [`ColumnScanJoin`]
 pub mod columnscan_join;
@@ -32,7 +20,7 @@ pub use columnscan_equal_value::ColumnScanEqualValue;
 pub mod columnscan_pass;
 pub use columnscan_pass::ColumnScanPass;
 
-/// Module for defining [`ColumnScanFollow`]
+/// Module for defining [`ColumnScanFollow`] and [`ColumnScanMinus`]
 pub mod columnscan_minus;
 pub use columnscan_minus::ColumnScanFollow;
 pub use columnscan_minus::ColumnScanMinus;

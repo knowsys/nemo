@@ -1,8 +1,11 @@
 use std::collections::VecDeque;
 
 use crate::physical::{
-    columnar::builders::{ColumnBuilder, ColumnBuilderAdaptive},
-    columnar::columns::{Column, IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT},
+    columnar::{
+        adaptive_column_builder::ColumnBuilderAdaptive,
+        column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+        traits::{column::Column, columnbuilder::ColumnBuilder},
+    },
     datatypes::{DataTypeName, DataValueT, Double, Float},
     tabular::{
         tables::{Table, TableSchema},
@@ -42,7 +45,7 @@ pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
     }
 
     // Add the new columns
-    let mut new_columns = VecDeque::<IntervalColumnT>::new();
+    let mut new_columns = VecDeque::<ColumnWithIntervalsT>::new();
     for gap_index in (0..=trie.schema().arity()).rev() {
         let current_values = &values[gap_index];
         for value_t in current_values.iter().rev() {
@@ -54,11 +57,11 @@ pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
                     let new_data_column = std::iter::repeat($value).take(target_length).collect::<ColumnBuilderAdaptive<$type>>().finalize();
                     let new_interval_column = (0..target_length).collect::<ColumnBuilderAdaptive<usize>>().finalize();
 
-                    new_columns.push_front(IntervalColumnT::$variant(
-                        IntervalColumnEnum::IntervalColumnGeneric(IntervalColumnGeneric::new(
+                    new_columns.push_front(ColumnWithIntervalsT::$variant(
+                        ColumnWithIntervals::new(
                             new_data_column,
                             new_interval_column,
-                        )),
+                        ),
                     ));
                 }};
             }
@@ -83,7 +86,7 @@ pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
 
     Trie::new(
         TrieSchema::new(new_schema),
-        Vec::<IntervalColumnT>::from(new_columns),
+        Vec::<ColumnWithIntervalsT>::from(new_columns),
     )
 }
 
@@ -117,11 +120,11 @@ pub fn trie_add_duplicates(trie: Trie, indices: &[Vec<usize>]) -> Trie {
     }
 
     // Add the new columns
-    let new_columns = VecDeque::<IntervalColumnT>::new();
+    let new_columns = VecDeque::<ColumnWithIntervalsT>::new();
     for gap_index in (0..=trie.schema().arity()).rev() {
         let current_indices = &indices[gap_index];
         for &index in current_indices.iter().rev() {
-            if let IntervalColumnT::U64(reference_column) = trie.get_column(index) {
+            if let ColumnWithIntervalsT::U64(reference_column) = trie.get_column(index) {
                 let _ = reference_column.get_data_column();
             }
         }
@@ -129,7 +132,7 @@ pub fn trie_add_duplicates(trie: Trie, indices: &[Vec<usize>]) -> Trie {
 
     Trie::new(
         TrieSchema::new(new_schema),
-        Vec::<IntervalColumnT>::from(new_columns),
+        Vec::<ColumnWithIntervalsT>::from(new_columns),
     )
 }
 
@@ -137,7 +140,7 @@ pub fn trie_add_duplicates(trie: Trie, indices: &[Vec<usize>]) -> Trie {
 mod test {
 
     use crate::physical::{
-        columnar::columnscans::ColumnScanT,
+        columnar::traits::columnscan::ColumnScanT,
         datatypes::{DataTypeName, DataValueT},
         tabular::{
             tries::{Trie, TrieSchema, TrieSchemaEntry},

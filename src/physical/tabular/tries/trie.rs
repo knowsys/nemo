@@ -1,9 +1,8 @@
 use crate::logical::Permutator;
-use crate::physical::columnar::builders::{
-    ColumnBuilder, ColumnBuilderAdaptive, ColumnBuilderAdaptiveT,
-};
-use crate::physical::columnar::columns::{
-    Column, IntervalColumn, IntervalColumnEnum, IntervalColumnGeneric, IntervalColumnT,
+use crate::physical::columnar::{
+    adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
+    column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+    traits::{column::Column, columnbuilder::ColumnBuilder},
 };
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
@@ -63,24 +62,24 @@ impl TableSchema for TrieSchema {
 /// The underlying data is oragnized in IntervalColumns.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Trie {
-    // TODO: could be generic in column type (one of accepted types still is IntervalColumnT)
+    // TODO: could be generic in column type (one of accepted types still is ColumnWithIntervalsT)
     schema: TrieSchema,
-    columns: Vec<IntervalColumnT>,
+    columns: Vec<ColumnWithIntervalsT>,
 }
 
 impl Trie {
     /// Construct a new Trie from a given schema and a vector of IntervalColumns.
-    pub fn new(schema: TrieSchema, columns: Vec<IntervalColumnT>) -> Self {
+    pub fn new(schema: TrieSchema, columns: Vec<ColumnWithIntervalsT>) -> Self {
         Self { schema, columns }
     }
 
     /// Return reference to all columns.
-    pub fn columns(&self) -> &Vec<IntervalColumnT> {
+    pub fn columns(&self) -> &Vec<ColumnWithIntervalsT> {
         &self.columns
     }
 
     /// Return mutable reference to all columns.
-    pub fn columns_mut(&mut self) -> &mut Vec<IntervalColumnT> {
+    pub fn columns_mut(&mut self) -> &mut Vec<ColumnWithIntervalsT> {
         &mut self.columns
     }
 
@@ -88,7 +87,7 @@ impl Trie {
     ///
     /// # Panics
     /// Panics if index is out of range
-    pub fn get_column(&self, index: usize) -> &IntervalColumnT {
+    pub fn get_column(&self, index: usize) -> &ColumnWithIntervalsT {
         &self.columns[index]
     }
 
@@ -293,12 +292,12 @@ impl Table for Trie {
         macro_rules! build_interval_column {
             ($col_builder:ident, $interval_builder:ident; $($variant:ident);+) => {
                 match $col_builder {
-                    $(ColumnBuilderAdaptiveT::$variant(vec) => IntervalColumnT::$variant(
-                    IntervalColumnEnum::IntervalColumnGeneric(IntervalColumnGeneric::new(
-                        vec.finalize(),
-                        $interval_builder.finalize(),
-                    )),
-                )),+
+                    $(ColumnBuilderAdaptiveT::$variant(vec) => ColumnWithIntervalsT::$variant(
+                        ColumnWithIntervals::new(
+                            vec.finalize(),
+                            $interval_builder.finalize(),
+                        ),
+                    )),+
                 }
             }
         }
@@ -407,12 +406,12 @@ impl Table for Trie {
         macro_rules! build_interval_column {
             ($col_builder:ident, $interval_builder:ident; $($variant:ident);+) => {
                 match $col_builder {
-                    $(ColumnBuilderAdaptiveT::$variant(data_col) => IntervalColumnT::$variant(
-                    IntervalColumnEnum::IntervalColumnGeneric(IntervalColumnGeneric::new(
-                        data_col.finalize(),
-                        $interval_builder.finalize(),
-                    )),
-                )),+
+                    $(ColumnBuilderAdaptiveT::$variant(data_col) => ColumnWithIntervalsT::$variant(
+                        ColumnWithIntervals::new(
+                            data_col.finalize(),
+                            $interval_builder.finalize(),
+                        ),
+                    )),+
                 }
             }
         }

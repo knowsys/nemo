@@ -1,6 +1,7 @@
 use crate::physical::{
-    columnar::columnscans::{
-        ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT, ColumnScanUnion,
+    columnar::{
+        operations::ColumnScanUnion,
+        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{DataTypeName, Double, Float},
     tabular::tables::TableSchema,
@@ -141,7 +142,7 @@ impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanUnion;
-    use crate::physical::columnar::columnscans::ColumnScanT;
+    use crate::physical::columnar::traits::columnscan::ColumnScanT;
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::tabular::triescans::{

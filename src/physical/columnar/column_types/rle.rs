@@ -1,5 +1,5 @@
 use crate::physical::{
-    columnar::{builders::ColumnBuilder, columnscans::columnscan::ColumnScan},
+    columnar::traits::{column::Column, columnbuilder::ColumnBuilder, columnscan::ColumnScan},
     datatypes::{ColumnDataType, Field, Ring},
 };
 use num::{CheckedMul, Zero};
@@ -9,8 +9,6 @@ use std::{
     num::NonZeroUsize,
     ops::{Add, Mul, Range},
 };
-
-use super::Column;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step<T> {
@@ -390,7 +388,7 @@ impl<'a, T> Column<'a, T> for ColumnRle<T>
 where
     T: 'a + ColumnDataType,
 {
-    type Scan = ColumnRleScan<'a, T>;
+    type Scan = ColumnScanRle<'a, T>;
 
     fn len(&self) -> usize {
         self.end_indices
@@ -411,13 +409,13 @@ where
     }
 
     fn iter(&'a self) -> Self::Scan {
-        ColumnRleScan::new(self)
+        ColumnScanRle::new(self)
     }
 }
 
 /// Column Scan tailored towards ColumnRles
 #[derive(Debug)]
-pub struct ColumnRleScan<'a, T> {
+pub struct ColumnScanRle<'a, T> {
     column: &'a ColumnRle<T>,
     element_index: Option<usize>,
     increment_index: Option<usize>,
@@ -426,13 +424,13 @@ pub struct ColumnRleScan<'a, T> {
     upper_bound_exclusive: (usize, usize), // element_index and increment index
 }
 
-impl<'a, T> ColumnRleScan<'a, T>
+impl<'a, T> ColumnScanRle<'a, T>
 where
     T: ColumnDataType,
 {
-    /// Constructor for ColumnRleScan
-    pub fn new(column: &'a ColumnRle<T>) -> ColumnRleScan<'a, T> {
-        ColumnRleScan {
+    /// Constructor for ColumnScanRle
+    pub fn new(column: &'a ColumnRle<T>) -> ColumnScanRle<'a, T> {
+        ColumnScanRle {
             column,
             element_index: None,
             increment_index: None,
@@ -474,7 +472,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for ColumnRleScan<'a, T>
+impl<'a, T> Iterator for ColumnScanRle<'a, T>
 where
     T: ColumnDataType,
 {
@@ -515,7 +513,7 @@ where
     }
 }
 
-impl<'a, T> ColumnScan for ColumnRleScan<'a, T>
+impl<'a, T> ColumnScan for ColumnScanRle<'a, T>
 where
     T: ColumnDataType,
 {
@@ -634,6 +632,8 @@ where
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
+        self.reset();
+
         self.lower_bound_inclusive = self
             .column
             .get_element_and_increment_index_from_global_index(interval.start);
@@ -646,7 +646,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::{
-        columnar::{columns::Column, columnscans::ColumnScan},
+        columnar::traits::{column::Column, columnscan::ColumnScan},
         datatypes::{Double, Float},
     };
     use num::Zero;
@@ -941,18 +941,18 @@ mod test {
 
         iter.next();
 
-        assert_eq!(iter.current().unwrap(), 7);
-        assert_eq!(iter.pos().unwrap(), 1);
+        assert_eq!(iter.current(), Some(7));
+        assert_eq!(iter.pos(), Some(1));
 
         iter.seek(10);
 
-        assert_eq!(iter.current().unwrap(), 12);
-        assert_eq!(iter.pos().unwrap(), 2);
+        assert_eq!(iter.current(), Some(12));
+        assert_eq!(iter.pos(), Some(2));
 
         iter.seek(22);
 
-        assert_eq!(iter.current().unwrap(), 22);
-        assert_eq!(iter.pos().unwrap(), 3);
+        assert_eq!(iter.current(), Some(22));
+        assert_eq!(iter.pos(), Some(3));
 
         iter.seek(25);
 
@@ -963,6 +963,18 @@ mod test {
 
         assert_eq!(iter.current(), None);
         assert_eq!(iter.pos(), None);
+
+        iter.narrow(2..4);
+        iter.next();
+
+        assert_eq!(iter.current(), Some(12));
+        assert_eq!(iter.pos(), Some(2));
+
+        iter.narrow(8..9);
+        iter.next();
+
+        assert_eq!(iter.current(), Some(27));
+        assert_eq!(iter.pos(), Some(8));
     }
 
     #[quickcheck]

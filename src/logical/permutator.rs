@@ -1,9 +1,9 @@
 //! Holds the [Permutator] struct, which allows one to define a logical permutation of the content of index-based data structures
 
 use crate::physical::{
-    columnar::{
-        builders::ColumnBuilder,
-        columns::{Column, ColumnEnum, ColumnT},
+    columnar::traits::{
+        column::{Column, ColumnEnum, ColumnT},
+        columnbuilder::ColumnBuilder,
     },
     datatypes::ColumnDataType,
 };
@@ -224,7 +224,9 @@ impl Permutator {
 mod test {
     use super::*;
     use crate::physical::{
-        columnar::{builders::ColumnBuilderAdaptive, columns::ColumnVector},
+        columnar::{
+            adaptive_column_builder::ColumnBuilderAdaptive, column_types::vector::ColumnVector,
+        },
         datatypes::{Double, Float},
     };
     use quickcheck_macros::quickcheck;

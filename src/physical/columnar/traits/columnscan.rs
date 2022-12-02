@@ -1,13 +1,11 @@
-use super::{
-    ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanFollow, ColumnScanGenericEnum,
-    ColumnScanJoin, ColumnScanMinus, ColumnScanPass, ColumnScanReorder, ColumnScanUnion,
+use super::super::column_types::{rle::ColumnScanRle, vector::ColumnScanVector};
+use super::super::operations::{
+    ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus,
+    ColumnScanPass, ColumnScanReorder, ColumnScanUnion,
 };
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
-    physical::{
-        columnar::columns::ColumnRleScan,
-        datatypes::{ColumnDataType, DataValueT, Double, Float},
-    },
+    physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
 };
 use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
@@ -34,6 +32,7 @@ pub trait ColumnScan: Debug + Iterator {
     fn pos(&self) -> Option<usize>;
 
     /// Restricts the iterator to the given `interval`.
+    /// Resets the iterator just before the start of the interval.
     fn narrow(&mut self, interval: Range<usize>);
 }
 
@@ -43,10 +42,10 @@ pub enum ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Case ColumnScanGeneric
-    ColumnScanGeneric(ColumnScanGenericEnum<'a, T>),
+    /// Case ColumnScanVector
+    ColumnScanVector(ColumnScanVector<'a, T>),
     /// Case ColumnRleScan
-    ColumnRleScan(ColumnRleScan<'a, T>),
+    ColumnScanRle(ColumnScanRle<'a, T>),
     /// Case ColumnScanJoin
     ColumnScanJoin(ColumnScanJoin<'a, T>),
     /// Case ColumnScanReorder
@@ -67,21 +66,21 @@ where
 
 /// The following impl statements allow converting from a specific [`ColumnScan`] into a gerneral [`ColumnScanEnum`]
 
-impl<'a, T> From<ColumnScanGenericEnum<'a, T>> for ColumnScanEnum<'a, T>
+impl<'a, T> From<ColumnScanVector<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColumnScanGenericEnum<'a, T>) -> Self {
-        Self::ColumnScanGeneric(cs)
+    fn from(cs: ColumnScanVector<'a, T>) -> Self {
+        Self::ColumnScanVector(cs)
     }
 }
 
-impl<'a, T> From<ColumnRleScan<'a, T>> for ColumnScanEnum<'a, T>
+impl<'a, T> From<ColumnScanRle<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColumnRleScan<'a, T>) -> Self {
-        Self::ColumnRleScan(cs)
+    fn from(cs: ColumnScanRle<'a, T>) -> Self {
+        Self::ColumnScanRle(cs)
     }
 }
 
@@ -218,8 +217,8 @@ where
 // Each new variant of a [`ColumnScanEnum`] must be added here.
 // See `physical/util.rs` for a more detailed description of this macro.
 generate_forwarder!(forward_to_columnscan;
-    ColumnScanGeneric,
-    ColumnRleScan,
+    ColumnScanVector,
+    ColumnScanRle,
     ColumnScanJoin,
     ColumnScanReorder, 
     ColumnScanEqualColumn, 

@@ -1022,7 +1022,7 @@ mod test {
             table_manager::{TableManagerStrategy, TableStatus},
         },
         physical::{
-            columnar::columns::Column,
+            columnar::traits::column::Column,
             datatypes::DataTypeName,
             dictionary::PrefixedStringDictionary,
             tabular::tries::{Trie, TrieSchema, TrieSchemaEntry},

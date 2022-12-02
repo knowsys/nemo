@@ -1,10 +1,11 @@
+use super::super::traits::{
+    column::{Column, ColumnEnum},
+    columnscan::ColumnScan,
+};
 use crate::logical::Permutator;
-use crate::physical::columnar::columns::{Column, ColumnEnum};
 use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
-
-use super::columnscan::ColumnScan;
 
 // TODO: Maybe this should only have Optional<Permutator>
 //       for cases where data happens to be sorted already
@@ -128,8 +129,8 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columnar::{
-        columns::{ColumnEnum, ColumnVector},
-        columnscans::ColumnScan,
+        column_types::vector::ColumnVector,
+        traits::{column::ColumnEnum, columnscan::ColumnScan},
     };
 
     use super::ColumnScanReorder;

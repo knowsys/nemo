@@ -1,7 +1,6 @@
+use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
-
-use super::{columnscan::ColumnScan, ColumnScanCell};
 
 /// Dummy Iterator that defers everything to its sub iterator
 #[derive(Debug)]
@@ -59,8 +58,11 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columnar::{
-        columns::{Column, ColumnVector},
-        columnscans::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanGenericEnum},
+        column_types::vector::ColumnVector,
+        traits::{
+            column::Column,
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
+        },
     };
 
     use super::ColumnScanPass;
@@ -69,9 +71,7 @@ mod test {
     #[test]
     fn test_u64() {
         let ref_col = ColumnVector::new(vec![0, 4, 7]);
-        let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
-            ColumnScanGenericEnum::ColumnVector(ref_col.iter()),
-        ));
+        let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
 
         let mut pass_scan = ColumnScanPass::new(&ref_col_iter);
 

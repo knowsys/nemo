@@ -1,9 +1,7 @@
+use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
-
-use super::columnscan::ColumnScan;
-use super::ColumnScanCell;
 
 /// Iterator representing a union of column iterators
 #[derive(Debug)]
@@ -142,8 +140,11 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columnar::{
-        columns::{Column, ColumnVector},
-        columnscans::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanGenericEnum},
+        column_types::vector::ColumnVector,
+        traits::{
+            column::Column,
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
+        },
     };
 
     use super::ColumnScanUnion;
@@ -155,15 +156,9 @@ mod test {
         let column_snd = ColumnVector::new(vec![0u64, 1, 2, 7, 9]);
         let column_trd = ColumnVector::new(vec![0u64, 2, 4, 11]);
 
-        let mut iter_fst = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
-            ColumnScanGenericEnum::ColumnVector(column_fst.iter()),
-        ));
-        let mut iter_snd = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
-            ColumnScanGenericEnum::ColumnVector(column_snd.iter()),
-        ));
-        let mut iter_trd = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
-            ColumnScanGenericEnum::ColumnVector(column_trd.iter()),
-        ));
+        let mut iter_fst = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_fst.iter()));
+        let mut iter_snd = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_snd.iter()));
+        let mut iter_trd = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_trd.iter()));
 
         let mut union_iter =
             ColumnScanUnion::new(vec![&mut iter_fst, &mut iter_snd, &mut iter_trd]);

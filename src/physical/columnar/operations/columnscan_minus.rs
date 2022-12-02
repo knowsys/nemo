@@ -1,9 +1,7 @@
+use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
-
-use super::columnscan::ColumnScan;
-use super::ColumnScanCell;
 
 /// Iterator used in the upper levels of the trie difference operator
 #[derive(Debug)]
@@ -182,8 +180,11 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columnar::{
-        columns::{Column, ColumnVector},
-        columnscans::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanGenericEnum},
+        column_types::vector::ColumnVector,
+        traits::{
+            column::Column,
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
+        },
     };
 
     use super::{ColumnScanFollow, ColumnScanMinus};
@@ -195,12 +196,8 @@ mod test {
         let left_column = ColumnVector::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = ColumnVector::new(vec![0u64, 1, 3, 7, 11]);
 
-        let left_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
-            ColumnScanGenericEnum::ColumnVector(left_column.iter()),
-        ));
-        let right_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
-            ColumnScanGenericEnum::ColumnVector(right_column.iter()),
-        ));
+        let left_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(left_column.iter()));
+        let right_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(right_column.iter()));
 
         let mut diff_scan = ColumnScanFollow::new(&left_iter, &right_iter);
 
@@ -245,12 +242,8 @@ mod test {
         let left_column = ColumnVector::new(vec![0u64, 2, 3, 5, 6, 8, 10, 11, 12]);
         let right_column = ColumnVector::new(vec![0u64, 3, 7, 11]);
 
-        let left_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
-            ColumnScanGenericEnum::ColumnVector(left_column.iter()),
-        ));
-        let right_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
-            ColumnScanGenericEnum::ColumnVector(right_column.iter()),
-        ));
+        let left_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(left_column.iter()));
+        let right_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(right_column.iter()));
 
         let mut diff_scan = ColumnScanMinus::new(&left_iter, &right_iter);
 

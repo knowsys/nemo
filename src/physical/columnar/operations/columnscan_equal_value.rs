@@ -1,4 +1,4 @@
-use super::{columnscan::ColumnScan, ColumnScanCell};
+use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
@@ -85,8 +85,11 @@ where
 #[cfg(test)]
 mod test {
     use crate::physical::columnar::{
-        columns::{Column, ColumnVector},
-        columnscans::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanGenericEnum},
+        column_types::vector::ColumnVector,
+        traits::{
+            column::Column,
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
+        },
     };
 
     use super::ColumnScanEqualValue;
@@ -96,9 +99,7 @@ mod test {
     #[test]
     fn test_u64() {
         let col = ColumnVector::new(vec![1u64, 4, 8]);
-        let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
-            ColumnScanGenericEnum::ColumnVector(col.iter()),
-        ));
+        let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(col.iter()));
 
         let mut equal_scan = ColumnScanEqualValue::new(&col_iter, 4);
         assert_eq!(equal_scan.current(), None);
@@ -107,9 +108,7 @@ mod test {
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);
 
-        let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanGeneric(
-            ColumnScanGenericEnum::ColumnVector(col.iter()),
-        ));
+        let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(col.iter()));
         let mut equal_scan = ColumnScanEqualValue::new(&col_iter, 7);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), None);

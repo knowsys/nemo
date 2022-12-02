@@ -1,82 +1,79 @@
-use crate::generate_forwarder;
-use crate::physical::columnar::columns::{Column, ColumnVector, IntervalColumnGeneric};
-use crate::physical::datatypes::ColumnDataType;
-use std::marker::PhantomData;
-use std::{fmt::Debug, ops::Range};
+use std::{
+    fmt::Debug,
+    ops::{Index, Range},
+};
 
-use super::columnscan::ColumnScan;
+use crate::physical::columnar::traits::{column::Column, columnscan::ColumnScan};
 
-/// Simple implementation of [`ColumnScan`] for an arbitrary [`Column`].
+/// Simple implementation of [`Column`] that uses Vec to store data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ColumnVector<T> {
+    data: Vec<T>,
+}
+
+impl<T: Debug + Copy + Ord> ColumnVector<T> {
+    /// Constructs a new ColumnVector from a vector of the suitable type.
+    pub fn new(data: Vec<T>) -> ColumnVector<T> {
+        ColumnVector { data }
+    }
+}
+
+impl<'a, T: 'a + Debug + Copy + Ord> Column<'a, T> for ColumnVector<T> {
+    type Scan = ColumnScanVector<'a, T>;
+
+    fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    fn get(&self, index: usize) -> T {
+        self.data[index]
+    }
+
+    fn iter(&'a self) -> Self::Scan {
+        ColumnScanVector::new(self)
+    }
+}
+
+impl<T: Debug + Copy + Ord> Index<usize> for ColumnVector<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.data[index]
+    }
+}
+
+/// Simple implementation of [`ColumnScan`] for a [`ColumnVector`].
 #[derive(Debug)]
-pub struct ColumnScanGeneric<'a, T, Col: Column<'a, T>> {
-    _t: PhantomData<T>,
-    column: &'a Col,
+pub struct ColumnScanVector<'a, T> {
+    column: &'a ColumnVector<T>,
     pos: Option<usize>,
     interval: Range<usize>,
 }
 
-/// Enum encapsulating implementations of ColumnScanGenerics
-#[derive(Debug)]
-pub enum ColumnScanGenericEnum<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
-    /// Case Scan with ColumnVector
-    ColumnVector(ColumnScanGeneric<'a, T, ColumnVector<T>>),
-    /// Case Scan with IntervalColumnGeneric
-    IntervalColumnGeneric(ColumnScanGeneric<'a, T, IntervalColumnGeneric<T>>),
-}
-
-generate_forwarder!(forward_to_column_scan;
-                    ColumnVector,
-                    IntervalColumnGeneric);
-
-impl<'a, T> From<ColumnScanGeneric<'a, T, ColumnVector<T>>> for ColumnScanGenericEnum<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
-    fn from(cs: ColumnScanGeneric<'a, T, ColumnVector<T>>) -> Self {
-        Self::ColumnVector(cs)
-    }
-}
-
-impl<'a, T> From<ColumnScanGeneric<'a, T, IntervalColumnGeneric<T>>>
-    for ColumnScanGenericEnum<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
-    fn from(cs: ColumnScanGeneric<'a, T, IntervalColumnGeneric<T>>) -> Self {
-        Self::IntervalColumnGeneric(cs)
-    }
-}
-
-impl<'a, T, Col> ColumnScanGeneric<'a, T, Col>
+impl<'a, T> ColumnScanVector<'a, T>
 where
     T: 'a + Debug + Copy + Ord,
-    Col: Column<'a, T>,
 {
     /// Defines the lower limit of elements in the interval where a binary search is used instead of a vector-scan
     const SEEK_BINARY_SEARCH: usize = 10;
 
-    /// Constructs a new [`ColumnScanGeneric`] for a Column.
-    pub fn new(column: &'a Col) -> Self {
+    /// Constructs a new [`ColumnScanVector`] for a Column.
+    pub fn new(column: &'a ColumnVector<T>) -> Self {
         debug_assert!(column.len() > 0);
 
         Self {
-            _t: PhantomData,
             column,
             pos: None,
             interval: 0..column.len(),
         }
     }
 
-    /// Constructs a new [`ColumnScanGeneric`] for a Column, narrowed
+    /// Constructs a new [`ColumnScanVector`] for a Column, narrowed
     /// to the given interval.
-    pub fn narrowed(column: &'a Col, interval: Range<usize>) -> Self {
+    pub fn narrowed(column: &'a ColumnVector<T>, interval: Range<usize>) -> Self {
         debug_assert!(interval.end >= interval.start);
 
         let result = Self {
-            _t: PhantomData,
             column,
             pos: None,
             interval,
@@ -113,10 +110,9 @@ where
     }
 }
 
-impl<'a, T, Col> Iterator for ColumnScanGeneric<'a, T, Col>
+impl<'a, T> Iterator for ColumnScanVector<'a, T>
 where
     T: 'a + Debug + Copy + Ord,
-    Col: Column<'a, T>,
 {
     type Item = T;
 
@@ -127,10 +123,9 @@ where
     }
 }
 
-impl<'a, T, Col> ColumnScan for ColumnScanGeneric<'a, T, Col>
+impl<'a, T> ColumnScan for ColumnScanVector<'a, T>
 where
     T: 'a + Debug + Copy + Ord,
-    Col: Column<'a, T>,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         let pos = self.pos.get_or_insert(self.interval.start);
@@ -198,50 +193,11 @@ where
     }
 }
 
-impl<'a, T> Iterator for ColumnScanGenericEnum<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        forward_to_column_scan!(self, next)
-    }
-}
-
-impl<'a, T> ColumnScan for ColumnScanGenericEnum<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
-    fn seek(&mut self, value: T) -> Option<T> {
-        forward_to_column_scan!(self, seek(value))
-    }
-
-    fn current(&mut self) -> Option<T> {
-        forward_to_column_scan!(self, current)
-    }
-
-    fn reset(&mut self) {
-        forward_to_column_scan!(self, reset)
-    }
-
-    fn pos(&self) -> Option<usize> {
-        forward_to_column_scan!(self, pos)
-    }
-
-    fn narrow(&mut self, interval: Range<usize>) {
-        forward_to_column_scan!(self, narrow(interval))
-    }
-}
-
 #[cfg(test)]
 mod test {
+    use super::{ColumnScanVector, ColumnVector};
+    use crate::physical::columnar::traits::{column::Column, columnscan::ColumnScan};
     use test_log::test;
-
-    use crate::physical::columnar::{
-        columns::ColumnVector,
-        columnscans::{ColumnScan, ColumnScanGeneric},
-    };
 
     fn get_test_column() -> ColumnVector<u64> {
         let data: Vec<u64> = vec![1, 2, 5];
@@ -256,10 +212,20 @@ mod test {
     }
 
     #[test]
+    fn test_u64_column() {
+        let data: Vec<u64> = vec![1, 2, 3];
+
+        let vc: ColumnVector<u64> = ColumnVector::new(data);
+        assert_eq!(vc.len(), 3);
+        assert_eq!(vc[0], 1);
+        assert_eq!(vc[1], 2);
+        assert_eq!(vc[2], 3);
+    }
+
+    #[test]
     fn u64_iterate_column() {
         let test_column = get_test_column();
-        let mut gcs: ColumnScanGeneric<u64, ColumnVector<u64>> =
-            ColumnScanGeneric::new(&test_column);
+        let mut gcs: ColumnScanVector<u64> = ColumnScanVector::new(&test_column);
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.current(), None);
         assert_eq!(gcs.next(), Some(1));
@@ -279,8 +245,7 @@ mod test {
     #[test]
     fn u64_seek_column() {
         let test_column = get_test_column();
-        let mut gcs: ColumnScanGeneric<u64, ColumnVector<u64>> =
-            ColumnScanGeneric::new(&test_column);
+        let mut gcs: ColumnScanVector<u64> = ColumnScanVector::new(&test_column);
         assert_eq!(gcs.pos(), None);
         assert_eq!(gcs.seek(2), Some(2));
         assert_eq!(gcs.pos(), Some(1));
@@ -297,19 +262,19 @@ mod test {
     #[test]
     fn u64_narrow() {
         let test_column = get_test_column();
-        let mut gcs = ColumnScanGeneric::new(&test_column);
+        let mut gcs = ColumnScanVector::new(&test_column);
         gcs.narrow(0..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
-        let mut gcs = ColumnScanGeneric::new(&test_column);
+        let mut gcs = ColumnScanVector::new(&test_column);
         gcs.narrow(1..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
-        let mut gcs = ColumnScanGeneric::new(&test_column);
+        let mut gcs = ColumnScanVector::new(&test_column);
         gcs.narrow(1..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
-        let mut gcs = ColumnScanGeneric::new(&test_column);
+        let mut gcs = ColumnScanVector::new(&test_column);
         gcs.narrow(1..1);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![]);
-        let mut gcs = ColumnScanGeneric::new(&test_column);
+        let mut gcs = ColumnScanVector::new(&test_column);
         gcs.narrow(0..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
     }
@@ -317,26 +282,26 @@ mod test {
     #[test]
     fn u64_narrowed() {
         let test_column = get_test_column();
-        let gcs = ColumnScanGeneric::narrowed(&test_column, 0..2);
+        let gcs = ColumnScanVector::narrowed(&test_column, 0..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
-        let gcs = ColumnScanGeneric::narrowed(&test_column, 1..2);
+        let gcs = ColumnScanVector::narrowed(&test_column, 1..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
-        let gcs = ColumnScanGeneric::narrowed(&test_column, 1..3);
+        let gcs = ColumnScanVector::narrowed(&test_column, 1..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
-        let gcs = ColumnScanGeneric::narrowed(&test_column, 1..1);
+        let gcs = ColumnScanVector::narrowed(&test_column, 1..1);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![]);
-        let gcs = ColumnScanGeneric::narrowed(&test_column, 0..3);
+        let gcs = ColumnScanVector::narrowed(&test_column, 0..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
     }
 
     #[test]
     fn u64_narrow_and_widen() {
         let test_column = get_test_column();
-        let mut gcs = ColumnScanGeneric::new(&test_column);
+        let mut gcs = ColumnScanVector::new(&test_column);
         gcs.narrow(1..1);
         gcs.widen();
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
-        let mut gcs = ColumnScanGeneric::new(&test_column);
+        let mut gcs = ColumnScanVector::new(&test_column);
         gcs.widen().narrow(1..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
     }
@@ -345,7 +310,7 @@ mod test {
     #[should_panic(expected = "Cannot narrow to an interval larger than the column.")]
     fn u64_narrow_to_invalid() {
         let test_column = get_test_column();
-        let mut gcs = ColumnScanGeneric::new(&test_column);
+        let mut gcs = ColumnScanVector::new(&test_column);
         gcs.narrow(1..23);
     }
 
@@ -353,13 +318,13 @@ mod test {
     #[should_panic(expected = "Cannot narrow to an interval larger than the column.")]
     fn u64_narrowed_to_invalid() {
         let test_column = get_test_column();
-        let _ = ColumnScanGeneric::narrowed(&test_column, 1..23);
+        let _ = ColumnScanVector::narrowed(&test_column, 1..23);
     }
 
     #[test]
     fn u64_narrow_after_use() {
         let test_column = get_test_column();
-        let mut gcs = ColumnScanGeneric::new(&test_column);
+        let mut gcs = ColumnScanVector::new(&test_column);
         assert_eq!(gcs.next(), Some(1));
         gcs.narrow(0..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
@@ -368,7 +333,7 @@ mod test {
     #[test]
     fn u64_widen_after_use() {
         let test_column = get_test_column();
-        let mut gcs = ColumnScanGeneric::new(&test_column);
+        let mut gcs = ColumnScanVector::new(&test_column);
         gcs.narrow(1..2);
         assert_eq!(gcs.next(), Some(2));
         gcs.widen();
@@ -378,7 +343,7 @@ mod test {
     #[test]
     fn u64_seek_interval() {
         let test_column = get_test_column_large();
-        let mut gcs = ColumnScanGeneric::new(&test_column);
+        let mut gcs = ColumnScanVector::new(&test_column);
 
         gcs.narrow(4..16);
         assert_eq!(gcs.seek(2), Some(12));

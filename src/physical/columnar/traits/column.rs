@@ -1,13 +1,11 @@
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
-    physical::{
-        columnar::columnscans::{columnscan::ColumnScan, ColumnScanEnum, ColumnScanGenericEnum},
-        datatypes::{ColumnDataType, DataValueT, Double, Float},
-    },
+    physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
 };
 use std::fmt::Debug;
 
-use super::{ColumnRle, ColumnVector};
+use super::super::column_types::{rle::ColumnRle, vector::ColumnVector};
+use super::columnscan::{ColumnScan, ColumnScanEnum};
 
 /// Column of ordered values.
 pub trait Column<'a, T>: Debug + Clone {
@@ -65,10 +63,8 @@ where
 
     fn iter(&'a self) -> Self::Scan {
         match self {
-            Self::ColumnVector(col) => {
-                ColumnScanEnum::ColumnScanGeneric(ColumnScanGenericEnum::ColumnVector(col.iter()))
-            }
-            Self::ColumnRle(col) => ColumnScanEnum::ColumnRleScan(col.iter()),
+            Self::ColumnVector(col) => ColumnScanEnum::ColumnScanVector(col.iter()),
+            Self::ColumnRle(col) => ColumnScanEnum::ColumnScanRle(col.iter()),
         }
     }
 }

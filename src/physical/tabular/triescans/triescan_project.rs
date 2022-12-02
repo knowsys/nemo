@@ -1,7 +1,11 @@
 use crate::physical::{
     columnar::{
-        columns::{Column, IntervalColumn, IntervalColumnEnum, IntervalColumnT},
-        columnscans::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanReorder, ColumnScanT},
+        column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+        operations::columnscan_reorder::ColumnScanReorder,
+        traits::{
+            column::Column,
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+        },
     },
     datatypes::{ColumnDataType, DataTypeName},
     tabular::tables::{Table, TableSchema},
@@ -16,7 +20,7 @@ use super::TrieScan;
 
 /// Helper function which, given a continous range, expands it in such a way
 /// that all of the child nodes are covered as well
-pub fn expand_range(column: &IntervalColumnT, range: Range<usize>) -> Range<usize> {
+pub fn expand_range(column: &ColumnWithIntervalsT, range: Range<usize>) -> Range<usize> {
     let start = column.int_bounds(range.start).start;
     let end = if range.end >= column.int_len() {
         column.len()
@@ -29,8 +33,8 @@ pub fn expand_range(column: &IntervalColumnT, range: Range<usize>) -> Range<usiz
     start..end
 }
 
-fn shrink_position(column: &IntervalColumnT, pos: usize) -> usize {
-    fn shrink_position_t<T>(column: &IntervalColumnEnum<T>, pos: usize) -> usize
+fn shrink_position(column: &ColumnWithIntervalsT, pos: usize) -> usize {
+    fn shrink_position_t<T>(column: &ColumnWithIntervals<T>, pos: usize) -> usize
     where
         T: ColumnDataType,
     {
@@ -42,9 +46,9 @@ fn shrink_position(column: &IntervalColumnT, pos: usize) -> usize {
     }
 
     match column {
-        IntervalColumnT::U64(col) => shrink_position_t(col, pos),
-        IntervalColumnT::Float(col) => shrink_position_t(col, pos),
-        IntervalColumnT::Double(col) => shrink_position_t(col, pos),
+        ColumnWithIntervalsT::U64(col) => shrink_position_t(col, pos),
+        ColumnWithIntervalsT::Float(col) => shrink_position_t(col, pos),
+        ColumnWithIntervalsT::Double(col) => shrink_position_t(col, pos),
     }
 }
 
@@ -78,7 +82,7 @@ impl<'a> TrieScanProject<'a> {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {{
                     let current_column =
-                        if let IntervalColumnT::$variant(col) = trie.get_column(col_index) {
+                        if let ColumnWithIntervalsT::$variant(col) = trie.get_column(col_index) {
                             col
                         } else {
                             panic!("Do other cases later")
@@ -131,7 +135,7 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
 
         macro_rules! down_for_datatype {
             ($variant:ident) => {{
-                let next_column = if let IntervalColumnT::U64(col) = next_column
+                let next_column = if let ColumnWithIntervalsT::U64(col) = next_column
                 {
                     col
                 } else {
@@ -235,9 +239,9 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
         }
 
         match next_column {
-            IntervalColumnT::U64(_) => down_for_datatype!(U64),
-            IntervalColumnT::Float(_) => down_for_datatype!(Float),
-            IntervalColumnT::Double(_) => down_for_datatype!(Double),
+            ColumnWithIntervalsT::U64(_) => down_for_datatype!(U64),
+            ColumnWithIntervalsT::Float(_) => down_for_datatype!(Float),
+            ColumnWithIntervalsT::Double(_) => down_for_datatype!(Double),
         }
 
         self.current_layer = Some(next_layer);
@@ -261,7 +265,7 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanProject;
-    use crate::physical::columnar::columns::Column;
+    use crate::physical::columnar::traits::column::Column;
     use crate::physical::datatypes::{DataTypeName, DataValueT};
     use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
     use crate::physical::tabular::tables::Table;
