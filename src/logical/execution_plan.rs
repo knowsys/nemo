@@ -1,7 +1,7 @@
 //! Structure that represents a series of database operations
 use std::ops::Range;
 
-use crate::physical::tabular::triescans::ValueAssignment;
+use crate::physical::tabular::operations::triescan_select::ValueAssignment;
 
 use super::{
     model::Identifier,

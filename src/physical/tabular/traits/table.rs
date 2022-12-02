@@ -1,4 +1,4 @@
-use super::TableSchema;
+use super::table_schema::TableSchema;
 use crate::physical::datatypes::{data_value::VecT, DataValueT};
 use std::fmt::Debug;
 

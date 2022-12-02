@@ -1,5 +1,5 @@
 use crate::physical::datatypes::DataTypeName;
-use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
+use crate::physical::tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry};
 use crate::physical::{
     columnar::{
         column_types::{

@@ -9,7 +9,7 @@ use crate::{
     meta::TimedCode,
     physical::{
         dictionary::PrefixedStringDictionary,
-        tabular::{tries::Trie, triescans::ValueAssignment},
+        tabular::{operations::triescan_select::ValueAssignment, table_types::trie::Trie},
     },
 };
 
@@ -1025,7 +1025,7 @@ mod test {
             columnar::traits::column::Column,
             datatypes::DataTypeName,
             dictionary::PrefixedStringDictionary,
-            tabular::tries::{Trie, TrieSchema, TrieSchemaEntry},
+            tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry},
             util::make_gict,
         },
     };

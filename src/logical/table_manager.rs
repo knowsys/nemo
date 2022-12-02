@@ -8,11 +8,16 @@ use crate::io::csv::read;
 use crate::meta::TimedCode;
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
-use crate::physical::tabular::tables::Table;
-use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
-use crate::physical::tabular::triescans::{
-    materialize, TrieScan, TrieScanEnum, TrieScanGeneric, TrieScanJoin, TrieScanMinus,
-    TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion,
+use crate::physical::tabular::operations::{
+    materialize, TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanSelectEqual,
+    TrieScanSelectValue, TrieScanUnion,
+};
+use crate::physical::tabular::table_types::trie::{
+    Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
+};
+use crate::physical::tabular::traits::{
+    table::Table,
+    triescan::{TrieScan, TrieScanEnum},
 };
 use crate::physical::util::cover_interval;
 use csv::ReaderBuilder;

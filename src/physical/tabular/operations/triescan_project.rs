@@ -8,15 +8,13 @@ use crate::physical::{
         },
     },
     datatypes::{ColumnDataType, DataTypeName},
-    tabular::tables::{Table, TableSchema},
-    tabular::tries::{Trie, TrieSchema, TrieSchemaEntry},
+    tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry},
+    tabular::traits::{table::Table, table_schema::TableSchema, triescan::TrieScan},
 };
 
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
-
-use super::TrieScan;
 
 /// Helper function which, given a continous range, expands it in such a way
 /// that all of the child nodes are covered as well
@@ -268,9 +266,9 @@ mod test {
     use crate::physical::columnar::traits::column::Column;
     use crate::physical::datatypes::{DataTypeName, DataValueT};
     use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
-    use crate::physical::tabular::tables::Table;
-    use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tabular::triescans::{materialize, TrieScanEnum};
+    use crate::physical::tabular::operations::materialize;
+    use crate::physical::tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

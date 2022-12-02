@@ -7,10 +7,8 @@ use crate::physical::{
         traits::{column::Column, columnbuilder::ColumnBuilder},
     },
     datatypes::{DataTypeName, DataValueT, Double, Float},
-    tabular::{
-        tables::{Table, TableSchema},
-        tries::{Trie, TrieSchema, TrieSchemaEntry},
-    },
+    tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry},
+    tabular::traits::{table::Table, table_schema::TableSchema},
 };
 
 /// Add columns consisting of only a constant to a trie
@@ -143,8 +141,8 @@ mod test {
         columnar::traits::columnscan::ColumnScanT,
         datatypes::{DataTypeName, DataValueT},
         tabular::{
-            tries::{Trie, TrieSchema, TrieSchemaEntry},
-            triescans::{TrieScan, TrieScanGeneric},
+            table_types::trie::{Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry},
+            traits::triescan::TrieScan,
         },
         util::make_gict,
     };

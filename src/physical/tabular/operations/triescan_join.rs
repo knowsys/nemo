@@ -4,15 +4,16 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{DataTypeName, Double, Float},
-    tabular::tables::TableSchema,
-    tabular::tries::TrieSchema,
+    tabular::table_types::trie::TrieSchema,
+    tabular::traits::{
+        table_schema::TableSchema,
+        triescan::{TrieScan, TrieScanEnum},
+    },
 };
 
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::iter::repeat;
-
-use super::{TrieScan, TrieScanEnum};
 
 /// Structure resulting from joining a set of tries (given as TrieScanJoins),
 /// which itself is a TrieScanJoin that can be used in such a join
@@ -164,10 +165,11 @@ mod test {
         columnscan::ColumnScanT,
     };
     use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tabular::triescans::{
-        materialize, TrieScan, TrieScanEnum, TrieScanGeneric,
+    use crate::physical::tabular::operations::materialize;
+    use crate::physical::tabular::table_types::trie::{
+        Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
     };
+    use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
 
     use crate::physical::util::test_util::make_gict;
     use test_log::test;

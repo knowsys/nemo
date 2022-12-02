@@ -8,13 +8,13 @@ use crate::physical::{
     },
     datatypes::DataTypeName,
     tabular::{
-        tables::TableSchema,
-        tries::{Trie, TrieSchema, TrieSchemaEntry},
-        triescans::TrieScan,
+        table_types::trie::{Trie, TrieSchema, TrieSchemaEntry},
+        traits::{
+            table_schema::TableSchema,
+            triescan::{TrieScan, TrieScanEnum},
+        },
     },
 };
-
-use super::TrieScanEnum;
 
 /// Given a TrieScan iterator, materialize its content into a trie
 /// If not_empty is provided, the function will search for the first entry
@@ -154,8 +154,11 @@ mod test {
     use super::materialize;
     use crate::physical::columnar::traits::column::Column;
     use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tabular::triescans::{TrieScanEnum, TrieScanGeneric, TrieScanJoin};
+    use crate::physical::tabular::operations::TrieScanJoin;
+    use crate::physical::tabular::table_types::trie::{
+        Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
+    };
+    use crate::physical::tabular::traits::triescan::TrieScanEnum;
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

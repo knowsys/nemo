@@ -4,12 +4,13 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::DataTypeName,
-    tabular::tables::TableSchema,
+    tabular::traits::{
+        table_schema::TableSchema,
+        triescan::{TrieScan, TrieScanEnum},
+    },
 };
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
-
-use super::{TrieScan, TrieScanEnum};
 
 /// Trie iterator representing the difference between other trie iterators
 #[derive(Debug)]
@@ -181,8 +182,10 @@ mod test {
     use super::TrieScanMinus;
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
     use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tabular::tries::{Trie, TrieSchema, TrieSchemaEntry};
-    use crate::physical::tabular::triescans::{TrieScan, TrieScanEnum, TrieScanGeneric};
+    use crate::physical::tabular::table_types::trie::{
+        Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
+    };
+    use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_gict;
     use test_log::test;
 

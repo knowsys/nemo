@@ -2,11 +2,18 @@ use crate::logical::Permutator;
 use crate::physical::columnar::{
     adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
     column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-    traits::{column::Column, columnbuilder::ColumnBuilder},
+    traits::{
+        column::Column,
+        columnbuilder::ColumnBuilder,
+        columnscan::{ColumnScan, ColumnScanT},
+    },
 };
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
-use crate::physical::tabular::tables::{Table, TableSchema};
+use crate::physical::tabular::traits::{
+    table::Table, table_schema::TableSchema, triescan::TrieScan,
+};
+use std::cell::UnsafeCell;
 use std::fmt;
 use std::fmt::Debug;
 use std::iter;
@@ -449,11 +456,86 @@ impl Table for Trie {
     }
 }
 
+/// Implementation of TrieScan for Trie with IntervalColumns
+#[derive(Debug)]
+pub struct TrieScanGeneric<'a> {
+    trie: &'a Trie,
+    layers: Vec<UnsafeCell<ColumnScanT<'a>>>,
+    current_layer: Option<usize>,
+}
+
+impl<'a> TrieScanGeneric<'a> {
+    /// Construct Trie iterator.
+    pub fn new(trie: &'a Trie) -> Self {
+        let mut layers = Vec::<UnsafeCell<ColumnScanT<'a>>>::new();
+
+        for column_t in trie.columns() {
+            let new_scan = column_t.iter();
+            layers.push(UnsafeCell::new(new_scan));
+        }
+
+        Self {
+            trie,
+            layers,
+            current_layer: None,
+        }
+    }
+}
+
+impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
+    fn up(&mut self) {
+        self.current_layer = self.current_layer.and_then(|index| index.checked_sub(1));
+    }
+
+    fn down(&mut self) {
+        match self.current_layer {
+            None => {
+                self.layers[0].get_mut().reset();
+                self.current_layer = Some(0);
+            }
+            Some(index) => {
+                debug_assert!(
+                    index < self.layers.len(),
+                    "Called down while on the last layer"
+                );
+
+                let current_position = self.layers[index]
+                    .get_mut()
+                    .pos()
+                    .expect("Going down is only allowed when on an element.");
+
+                let next_index = index + 1;
+                let next_layer_range = self
+                    .trie
+                    .get_column(next_index)
+                    .int_bounds(current_position);
+
+                self.layers[next_index].get_mut().narrow(next_layer_range);
+
+                self.current_layer = Some(next_index);
+            }
+        }
+    }
+
+    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+        Some(&self.layers[self.current_layer?])
+    }
+
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+        Some(&self.layers[index])
+    }
+
+    fn get_schema(&self) -> &dyn TableSchema {
+        self.trie.schema()
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::{Trie, TrieSchema, TrieSchemaEntry};
+    use super::{Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry};
+    use crate::physical::columnar::traits::columnscan::ColumnScanT;
     use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
-    use crate::physical::tabular::tables::Table;
+    use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
     use crate::physical::util::make_gict;
     use test_log::test;
 
@@ -581,5 +663,133 @@ mod test {
         let actual_output = format!("{}", trie);
 
         assert_eq!(expected_output, actual_output);
+    }
+
+    fn scan_seek(int_scan: &mut TrieScanGeneric, value: u64) -> Option<u64> {
+        if let ColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
+            rcs.seek(value)
+        } else {
+            panic!("type should be u64");
+        }
+    }
+
+    fn scan_next(int_scan: &mut TrieScanGeneric) -> Option<u64> {
+        if let ColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
+            rcs.next()
+        } else {
+            panic!("type should be u64");
+        }
+    }
+
+    fn scan_current(int_scan: &mut TrieScanGeneric) -> Option<u64> {
+        unsafe {
+            if let ColumnScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
+                rcs.current()
+            } else {
+                panic!("type should be u64");
+            }
+        }
+    }
+
+    #[test]
+    fn test_trie_iter() {
+        let column_fst = make_gict(&[1, 2, 3], &[0]);
+        let column_snd = make_gict(&[2, 3, 4, 1, 2], &[0, 2, 3]);
+        let column_trd = make_gict(&[3, 4, 5, 7, 8, 7, 2, 1], &[0, 2, 5, 6, 7]);
+
+        let column_vec = vec![column_fst, column_snd, column_trd];
+
+        let schema = TrieSchema::new(vec![
+            TrieSchemaEntry {
+                label: 0,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 1,
+                datatype: DataTypeName::U64,
+            },
+            TrieSchemaEntry {
+                label: 2,
+                datatype: DataTypeName::U64,
+            },
+        ]);
+
+        let trie = Trie::new(schema, column_vec);
+        let mut trie_iter = TrieScanGeneric::new(&trie);
+
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.up();
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(1));
+        assert_eq!(scan_current(&mut trie_iter), Some(1));
+
+        trie_iter.up();
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(1));
+        assert_eq!(scan_current(&mut trie_iter), Some(1));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_seek(&mut trie_iter, 3), Some(3));
+        assert_eq!(scan_current(&mut trie_iter), Some(3));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_seek(&mut trie_iter, 6), Some(7));
+        assert_eq!(scan_current(&mut trie_iter), Some(7));
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), Some(2));
+        assert_eq!(scan_current(&mut trie_iter), Some(2));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(4));
+        assert_eq!(scan_current(&mut trie_iter), Some(4));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(7));
+        assert_eq!(scan_current(&mut trie_iter), Some(7));
+        assert!(scan_next(&mut trie_iter).is_none());
+
+        trie_iter.up();
+        assert!(scan_next(&mut trie_iter).is_none());
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), Some(3));
+        assert_eq!(scan_current(&mut trie_iter), Some(3));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_seek(&mut trie_iter, 2), Some(2));
+        assert_eq!(scan_current(&mut trie_iter), Some(2));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(1));
+        assert_eq!(scan_current(&mut trie_iter), Some(1));
+        assert!(scan_next(&mut trie_iter).is_none());
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.up();
+        assert!(scan_next(&mut trie_iter).is_none());
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.up();
+        assert!(scan_next(&mut trie_iter).is_none());
+        assert!(scan_current(&mut trie_iter).is_none());
     }
 }
