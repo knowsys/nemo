@@ -170,7 +170,11 @@ mod test {
     use super::super::super::traits::{table::Table, table_schema::TableSchema};
     use super::{FTableSchema, Ftrie};
     use crate::physical::datatypes::DataTypeName;
+<<<<<<< HEAD
     use crate::physical::util::test_util::make_column_with_intervals_t;
+=======
+    use crate::physical::util::test_util::make_gict;
+>>>>>>> fc428ba (Restructure tabular files)
     use test_log::test;
 
     #[test]
@@ -180,9 +184,15 @@ mod test {
         fts.add_entry(11, DataTypeName::U64, 1);
         fts.add_entry(111, DataTypeName::U64, 11);
 
+<<<<<<< HEAD
         let gic1 = make_column_with_intervals_t(&[1, 2, 3], &[0]);
         let gic11 = make_column_with_intervals_t(&[11, 21, 31], &[0, 1, 2]);
         let gic111 = make_column_with_intervals_t(&[11, 21, 31], &[0, 1, 2]);
+=======
+        let gic1 = make_gict(&[1, 2, 3], &[0]);
+        let gic11 = make_gict(&[11, 21, 31], &[0, 1, 2]);
+        let gic111 = make_gict(&[11, 21, 31], &[0, 1, 2]);
+>>>>>>> fc428ba (Restructure tabular files)
 
         let columns = vec![gic1, gic11, gic111];
 
@@ -199,10 +209,17 @@ mod test {
         fts.add_entry(12, DataTypeName::U64, 1);
         fts.add_entry(121, DataTypeName::U64, 12);
 
+<<<<<<< HEAD
         let gic1 = make_column_with_intervals_t(&[1, 2, 3], &[0]);
         let gic11 = make_column_with_intervals_t(&[11, 21, 22, 31], &[0, 1, 3]);
         let gic12 = make_column_with_intervals_t(&[11, 21, 31], &[0, 1, 2]);
         let gic121 = make_column_with_intervals_t(&[11, 12, 21, 22, 23, 31], &[0, 2, 5]);
+=======
+        let gic1 = make_gict(&[1, 2, 3], &[0]);
+        let gic11 = make_gict(&[11, 21, 22, 31], &[0, 1, 3]);
+        let gic12 = make_gict(&[11, 21, 31], &[0, 1, 2]);
+        let gic121 = make_gict(&[11, 12, 21, 22, 23, 31], &[0, 2, 5]);
+>>>>>>> fc428ba (Restructure tabular files)
 
         let columns = vec![gic1, gic11, gic12, gic121];
 
@@ -219,10 +236,17 @@ mod test {
         fts.add_entry(11, DataTypeName::U64, 1);
         fts.add_entry(21, DataTypeName::U64, 2);
 
+<<<<<<< HEAD
         let gic1 = make_column_with_intervals_t(&[1, 2, 3], &[0]);
         let gic2 = make_column_with_intervals_t(&[1, 2], &[0]);
         let gic11 = make_column_with_intervals_t(&[11, 21, 31], &[0, 1, 2]);
         let gic21 = make_column_with_intervals_t(&[11, 12, 21, 22], &[0, 2]);
+=======
+        let gic1 = make_gict(&[1, 2, 3], &[0]);
+        let gic2 = make_gict(&[1, 2], &[0]);
+        let gic11 = make_gict(&[11, 21, 31], &[0, 1, 2]);
+        let gic21 = make_gict(&[11, 12, 21, 22], &[0, 2]);
+>>>>>>> fc428ba (Restructure tabular files)
 
         let columns = vec![gic1, gic2, gic11, gic21];
 
