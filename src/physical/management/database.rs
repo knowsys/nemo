@@ -27,24 +27,40 @@ use super::{
     ByteSized, ExecutionPlan,
 };
 
-/// Type which represents table id
+/// Type which represents table id.
 pub type TableId = usize;
-/// Traits which have to be satisfied by a TableKey type
+/// Traits which have to be satisfied by a TableKey type.
 pub trait TableKeyType: Eq + Hash + Clone {}
+
+/// Struct that contains useful information about a trie
+/// as well as the actual owner of the trie.
+#[derive(Debug)]
+pub struct TableInfo<TableKey: TableKeyType> {
+    /// The trie.
+    pub trie: Trie,
+
+    /// Associated key.
+    pub key: TableKey,
+}
+
+impl<TableKey: TableKeyType> TableInfo<TableKey> {
+    /// Create new [`TableInfo`].
+    pub fn new(trie: Trie, key: TableKey) -> Self {
+        Self { trie, key }
+    }
+}
 
 /// Represents a collection of tables
 #[derive(Debug)]
 pub struct DatabaseInstance<TableKey: TableKeyType> {
-    /// Structure which owns all the tries; accessed through Id
-    id_to_table: HashMap<TableId, (TableKey, Trie)>,
-    /// Alternative access scheme through a TableKey
+    /// Structure which owns all the tries; accessed through Id.
+    id_to_table: HashMap<TableId, TableInfo<TableKey>>,
+    /// Alternative access scheme through a TableKey.
     key_to_tableid: HashMap<TableKey, TableId>,
 
-    /// Lowest unused TableId
-    /// Will be incremented for each new table and will never be reused
+    /// The lowest unused TableId.
+    /// Will be incremented for each new table and will never be reused.
     current_id: usize,
-    /// Memory currently consumed by all the tables
-    memory_consumption: ByteSize,
 }
 
 impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
@@ -54,123 +70,112 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
             id_to_table: HashMap::new(),
             key_to_tableid: HashMap::new(),
             current_id: 0,
-            memory_consumption: ByteSize::b(0),
         }
     }
 
-    /// Return the id of a table given a key, if it exists
-    pub fn get_id(&self, key: &TableKey) -> Option<TableId> {
-        self.key_to_tableid.get(key).copied()
+    /// Return the current number of tables.
+    pub fn num_tables(&self) -> usize {
+        self.id_to_table.len()
     }
 
-    /// Return the key of a table given its id, if it exists
-    pub fn get_key(&self, id: TableId) -> Option<TableKey> {
-        Some(self.id_to_table.get(&id)?.0.clone())
+    /// Return the id of a table given a key.
+    /// Panics if the key does not exist.
+    pub fn get_id(&self, key: &TableKey) -> TableId {
+        self.key_to_tableid.get(key).copied().unwrap()
     }
 
-    /// Given a id return a reference to the corresponding trie, if it exists
-    pub fn get_by_id(&self, id: TableId) -> Option<&Trie> {
-        self.id_to_table.get(&id).map(|t| &t.1)
+    /// Return the key of a table given its id.
+    /// Panics if the id does not exist.
+    pub fn get_key(&self, id: TableId) -> TableKey {
+        self.id_to_table.get(&id).unwrap().key.clone()
     }
 
-    /// Given a id return a mutable reference to the corresponding trie, if it exists
-    pub fn get_by_id_mut(&mut self, id: TableId) -> Option<&mut Trie> {
-        self.id_to_table.get_mut(&id).map(|t| &mut t.1)
+    /// Given a id return a reference to the corresponding trie.
+    /// Panics if the id does not exist.
+    pub fn get_by_id(&self, id: TableId) -> &Trie {
+        self.id_to_table.get(&id).map(|t| &t.trie).unwrap()
     }
 
-    /// Given a [`TableKey`] return a reference to the corresponding trie, if it exists
-    pub fn get_by_key(&self, key: &TableKey) -> Option<&Trie> {
-        let id = self.get_id(key)?;
-        self.id_to_table.get(&id).map(|t| &t.1)
+    /// Given a id return a mutable reference to the corresponding trie.
+    /// Panics if the id does not exist.
+    pub fn get_by_id_mut(&mut self, id: TableId) -> &mut Trie {
+        self.id_to_table.get_mut(&id).map(|t| &mut t.trie).unwrap()
     }
 
-    /// Given a [`TableKey`] return a mutable reference to the corresponding trie, if it exists
-    pub fn get_by_key_mut(&mut self, key: &TableKey) -> Option<&mut Trie> {
-        let id = self.get_id(key)?;
-        self.id_to_table.get_mut(&id).map(|t| &mut t.1)
+    /// Given a [`TableKey`] return a reference to the corresponding trie.
+    /// Panics if the key does not exist.
+    pub fn get_by_key(&self, key: &TableKey) -> &Trie {
+        let id = self.get_id(key);
+        self.id_to_table.get(&id).map(|t| &t.trie).unwrap()
     }
 
-    /// Add the given trie to the instance under the given table key
-    /// Returns the id of the new table or None if a table with such a key was already present
-    pub fn add(&mut self, key: TableKey, trie: Trie) -> Option<TableId> {
-        if self.get_id(&key).is_some() {
-            return None;
+    /// Given a [`TableKey`] return a mutable reference to the corresponding trie.
+    /// Panics if the key does not exist.
+    pub fn get_by_key_mut(&mut self, key: &TableKey) -> &mut Trie {
+        let id = self.get_id(key);
+        self.id_to_table.get_mut(&id).map(|t| &mut t.trie).unwrap()
+    }
+
+    /// Add the given trie to the instance under the given table key.
+    /// Panics if the key is already used.
+    pub fn add(&mut self, key: TableKey, trie: Trie) -> TableId {
+        let used_id = self.current_id;
+
+        let insert_result = self
+            .id_to_table
+            .insert(self.current_id, TableInfo::new(trie, key.clone()));
+
+        if insert_result.is_some() {
+            panic!("A table key should not be used twice");
         }
 
-        self.memory_consumption += trie.size_bytes();
-
-        self.id_to_table
-            .insert(self.current_id, (key.clone(), trie));
         self.key_to_tableid.insert(key, self.current_id);
 
         self.current_id += 1;
-        Some(self.current_id)
+        used_id
     }
 
-    /// Replace a trie (searched by key) with another
-    /// Will add a new trie if the key does not exist
-    /// Returns true if the key existed
-    pub fn update_by_key(&mut self, key: TableKey, trie: Trie) -> bool {
-        let id = if let Some(some_id) = self.get_id(&key) {
-            some_id
-        } else {
-            return false;
-        };
-
-        self.id_to_table.get_mut(&id).unwrap().1 = trie;
-
-        true
+    /// Replace a trie (searched by key) with another.
+    /// Will add a new trie if the key does not exist.
+    /// Panics if the key is not already used.
+    pub fn update_by_key(&mut self, key: TableKey, trie: Trie) {
+        let id = self.get_id(&key);
+        self.id_to_table.get_mut(&id).unwrap().trie = trie;
     }
 
     /// Replace a trie (searched by id) with another
     /// Will add a new trie if the id does not exist
     /// Returns true if the id existed
-    pub fn update_by_id(&mut self, id: TableId, trie: Trie) -> bool {
-        if let Some(current_trie) = self.id_to_table.get_mut(&id) {
-            current_trie.1 = trie;
-            return true;
-        }
-
-        false
+    pub fn update_by_id(&mut self, id: TableId, trie: Trie) {
+        self.id_to_table.get_mut(&id).unwrap().trie = trie;
     }
 
-    /// Delete a trie given its key
-    /// Returns true if the key existed
-    pub fn delete_by_key(&mut self, key: TableKey) -> bool {
-        if let Entry::Occupied(key_entry) = self.key_to_tableid.entry(key) {
+    /// Delete a trie given its key.
+    /// Panics if the table does not exist.
+    pub fn delete_by_key(&mut self, key: &TableKey) {
+        if let Entry::Occupied(key_entry) = self.key_to_tableid.entry(key.clone()) {
             let id = *key_entry.get();
             key_entry.remove();
 
             if let Entry::Occupied(id_entry) = self.id_to_table.entry(id) {
-                self.memory_consumption = ByteSize(
-                    self.memory_consumption.as_u64() - id_entry.get().1.size_bytes().as_u64(),
-                );
-
                 id_entry.remove();
             } else {
                 // Both HashMap should contain the table
                 unreachable!()
             }
-
-            true
         } else {
-            false
+            panic!("Table to be deleted should exist.");
         }
     }
 
-    /// Delete a trie given its id
-    /// Returns true if the id existed
-    pub fn delete_by_id(&mut self, id: TableId) -> bool {
+    /// Delete a trie given its id.
+    /// Panics if the table does not exist.
+    pub fn delete_by_id(&mut self, id: TableId) {
         if let Entry::Occupied(entry) = self.id_to_table.entry(id) {
-            self.memory_consumption =
-                ByteSize(self.memory_consumption.as_u64() - entry.get().1.size_bytes().as_u64());
-
-            self.key_to_tableid.remove(&entry.get().0);
+            self.key_to_tableid.remove(&entry.get().key);
             entry.remove();
-
-            true
         } else {
-            false
+            panic!("Table to be deleted should exist.");
         }
     }
 
@@ -224,7 +229,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                     TrieScanGeneric::new(temp_tries.get(id)?.as_ref()?),
                 )),
                 ExecutionNode::FetchTable(id) => {
-                    let trie = self.get_by_id(*id)?;
+                    let trie = self.get_by_id(*id);
                     let interval_triescan = TrieScanGeneric::new(trie);
                     Some(TrieScanEnum::TrieScanGeneric(interval_triescan))
                 }
@@ -336,6 +341,71 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
 
 impl<TableKey: TableKeyType> ByteSized for DatabaseInstance<TableKey> {
     fn size_bytes(&self) -> ByteSize {
-        self.memory_consumption
+        self.id_to_table
+            .iter()
+            .fold(ByteSize(0), |acc, (_, info)| acc + info.trie.size_bytes())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::physical::{
+        datatypes::DataTypeName,
+        management::ByteSized,
+        tabular::{
+            tables::Table,
+            tries::{Trie, TrieSchema, TrieSchemaEntry},
+        },
+        util::make_gict,
+    };
+
+    use super::{DatabaseInstance, TableKeyType};
+
+    type StringKeyType = String;
+    impl TableKeyType for StringKeyType {}
+
+    #[test]
+    fn basic_add_delete() {
+        let column_a = make_gict(&[1, 2, 3], &[0]);
+        let column_b = make_gict(&[1, 2, 3, 4, 5, 6], &[0]);
+
+        let schema_a = TrieSchema::new(vec![TrieSchemaEntry {
+            label: 10,
+            datatype: DataTypeName::U64,
+        }]);
+        let schema_b = TrieSchema::new(vec![TrieSchemaEntry {
+            label: 10,
+            datatype: DataTypeName::U64,
+        }]);
+
+        let trie_a = Trie::new(schema_a, vec![column_a]);
+        let trie_b = Trie::new(schema_b, vec![column_b]);
+
+        let mut instance = DatabaseInstance::<StringKeyType>::new();
+
+        assert_eq!(instance.add(String::from("A"), trie_a.clone()), 0);
+        assert_eq!(instance.get_key(0), String::from("A"));
+        assert_eq!(instance.get_id(&String::from("A")), 0);
+        assert!(std::panic::catch_unwind(|| instance.get_key(1)).is_err());
+        assert!(std::panic::catch_unwind(|| instance.get_id(&String::from("C"))).is_err());
+        assert_eq!(instance.get_by_id(0).row_num(), 3);
+
+        let last_size = instance.size_bytes();
+
+        assert_eq!(instance.add(String::from("B"), trie_b), 1);
+        assert!(instance.size_bytes() > last_size);
+        assert_eq!(instance.get_by_key(&String::from("B")).row_num(), 6);
+
+        let last_size = instance.size_bytes();
+
+        instance.update_by_key(String::from("B"), trie_a);
+        assert_eq!(instance.get_by_key(&String::from("B")).row_num(), 3);
+        assert!(instance.size_bytes() < last_size);
+
+        let last_size = instance.size_bytes();
+
+        instance.delete_by_key(&String::from("A"));
+        assert!(std::panic::catch_unwind(|| instance.get_id(&String::from("A"))).is_err());
+        assert!(instance.size_bytes() < last_size);
     }
 }
