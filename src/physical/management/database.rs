@@ -353,10 +353,10 @@ mod test {
         datatypes::DataTypeName,
         management::ByteSized,
         tabular::{
-            tables::Table,
-            tries::{Trie, TrieSchema, TrieSchemaEntry},
+            table_types::trie::{Trie, TrieSchema, TrieSchemaEntry},
+            traits::table::Table,
         },
-        util::make_gict,
+        util::make_column_with_intervals_t,
     };
 
     use super::{DatabaseInstance, TableKeyType};
@@ -366,8 +366,8 @@ mod test {
 
     #[test]
     fn basic_add_delete() {
-        let column_a = make_gict(&[1, 2, 3], &[0]);
-        let column_b = make_gict(&[1, 2, 3, 4, 5, 6], &[0]);
+        let column_a = make_column_with_intervals_t(&[1, 2, 3], &[0]);
+        let column_b = make_column_with_intervals_t(&[1, 2, 3, 4, 5, 6], &[0]);
 
         let schema_a = TrieSchema::new(vec![TrieSchemaEntry {
             label: 10,
