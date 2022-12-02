@@ -8,3 +8,7 @@ pub use database::DatabaseInstance;
 /// Module for defining [`Sized`]
 pub mod bytesized;
 pub use bytesized::ByteSized;
+
+/// Module for defining [``]
+pub mod execution_plan;
+pub use execution_plan::ExecutionPlan;

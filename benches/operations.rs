@@ -97,7 +97,7 @@ pub fn benchmark_join(c: &mut Criterion) {
                         TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                         TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
                     ],
-                    &[vec![0, 1, 2], vec![0, 1, 3]],
+                    &vec![vec![0, 1, 2], vec![0, 1, 3]],
                     schema_target.clone(),
                 )
             },
@@ -199,7 +199,7 @@ fn benchmark_project(c: &mut Criterion) {
             TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
             TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
         ],
-        &[vec![0, 1, 2], vec![0, 1, 3]],
+        &vec![vec![0, 1, 2], vec![0, 1, 3]],
         schema_target,
     );
 

@@ -13,6 +13,11 @@ use crate::physical::{
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
+/// [`SelectEqualClasses`] contains a vectors that indicate which column indices should be forced to the same value
+/// E.g. for R(a, a, b, c, d, c) eq_classes = [[0, 1], [3, 5]]
+/// We don't put single elements in a class and assume that entries in each class are sorted
+pub type SelectEqualClasses = Vec<Vec<usize>>;
+
 /// Trie iterator enforcing conditions which state that some columns should have the same value
 #[derive(Debug)]
 pub struct TrieScanSelectEqual<'a> {
@@ -29,10 +34,8 @@ pub struct TrieScanSelectEqual<'a> {
 
 impl<'a> TrieScanSelectEqual<'a> {
     /// Construct new [`TrieScanSelectEqual`] object.
-    /// `eq_classes` contains a vectors that indicate which column indices should be forced to the same value
-    /// E.g. for R(a, a, b, c, d, c) eq_classes = [[0, 1], [3, 5]]
     /// Assumes that the members in each class are sorted and contains at least two elements
-    pub fn new(base_trie: TrieScanEnum<'a>, eq_classes: Vec<Vec<usize>>) -> Self {
+    pub fn new(base_trie: TrieScanEnum<'a>, eq_classes: &SelectEqualClasses) -> Self {
         debug_assert!(eq_classes.iter().all(|class| class.is_sorted()));
         debug_assert!(eq_classes.iter().all(|class| class.len() > 1));
 
@@ -182,7 +185,7 @@ pub struct ValueAssignment {
 
 impl<'a> TrieScanSelectValue<'a> {
     /// Construct new TrieScanSelectValue object.
-    pub fn new(base_trie: TrieScanEnum<'a>, assignemnts: Vec<ValueAssignment>) -> Self {
+    pub fn new(base_trie: TrieScanEnum<'a>, assignemnts: &[ValueAssignment]) -> Self {
         let target_schema = base_trie.get_schema();
         let arity = target_schema.arity();
         let mut select_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
@@ -363,7 +366,7 @@ mod test {
         let trie = Trie::new(schema, vec![column_fst, column_snd, column_trd, column_fth]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let mut select_iter = TrieScanSelectEqual::new(trie_iter, vec![vec![0, 2], vec![1, 3]]);
+        let mut select_iter = TrieScanSelectEqual::new(trie_iter, &vec![vec![0, 2], vec![1, 3]]);
         assert_eq!(select_eq_current(&mut select_iter), None);
         select_iter.down();
         assert_eq!(select_eq_current(&mut select_iter), None);
@@ -438,7 +441,7 @@ mod test {
 
         let mut select_iter = TrieScanSelectValue::new(
             trie_iter,
-            vec![
+            &vec![
                 ValueAssignment {
                     column_idx: 1,
                     value: DataValueT::U64(4),

@@ -16,6 +16,10 @@ use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
 
+/// Type that represents a reordering of columns
+/// So `perm[i]` is the new index of the ith column
+pub type ColumnPermutation = Vec<usize>;
+
 /// Helper function which, given a continous range, expands it in such a way
 /// that all of the child nodes are covered as well
 pub fn expand_range(column: &ColumnWithIntervalsT, range: Range<usize>) -> Range<usize> {
@@ -56,13 +60,13 @@ pub struct TrieScanProject<'a> {
     trie: &'a Trie,
     current_layer: Option<usize>,
     target_schema: TrieSchema,
-    picked_columns: Vec<usize>,
+    picked_columns: ColumnPermutation,
     reorder_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> TrieScanProject<'a> {
     /// Create new TrieScanProject object
-    pub fn new(trie: &'a Trie, picked_columns: Vec<usize>) -> Self {
+    pub fn new(trie: &'a Trie, picked_columns: ColumnPermutation) -> Self {
         let input_schema = trie.schema();
 
         let mut reorder_scans = Vec::<UnsafeCell<ColumnScanT>>::with_capacity(picked_columns.len());

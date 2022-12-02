@@ -13,6 +13,7 @@ pub use triescan_project::TrieScanProject;
 pub mod triescan_select;
 pub use triescan_select::TrieScanSelectEqual;
 pub use triescan_select::TrieScanSelectValue;
+pub use triescan_select::ValueAssignment;
 
 /// Module for defining [`TrieScanMinus`]
 pub mod triescan_minus;

@@ -1009,13 +1009,13 @@ impl TableManager {
             }
             ExecutionOperation::SelectValue(subtable, assignments) => {
                 let subiterator = self.get_iterator_node(subtable, temp_tries)?;
-                let select_scan = TrieScanSelectValue::new(subiterator, assignments.clone());
+                let select_scan = TrieScanSelectValue::new(subiterator, assignments);
 
                 Some(TrieScanEnum::TrieScanSelectValue(select_scan))
             }
             ExecutionOperation::SelectEqual(subtable, classes) => {
                 let subiterator = self.get_iterator_node(subtable, temp_tries)?;
-                let select_scan = TrieScanSelectEqual::new(subiterator, classes.clone());
+                let select_scan = TrieScanSelectEqual::new(subiterator, classes);
 
                 Some(TrieScanEnum::TrieScanSelectEqual(select_scan))
             }

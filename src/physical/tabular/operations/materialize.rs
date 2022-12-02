@@ -363,7 +363,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
-            &[vec![0, 1], vec![1, 2]],
+            &vec![vec![0, 1], vec![1, 2]],
             schema_target,
         ));
 

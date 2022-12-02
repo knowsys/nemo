@@ -15,6 +15,13 @@ use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::iter::repeat;
 
+/// A [`JoinBinding`] is a vector of `<Vec<usize>` where binding[i]
+/// contains which layer of the ith subscan is bound to which variable
+/// (Variables are represented by their index in the variable order)
+/// So the join R(a, b) S(b, c) T(a, c) with variable order [a, b, c] is represented
+/// with the binding [[0, 1], [1, 2], [0, 2]] (assuming trie_scans = [R, S, T])
+pub type JoinBinding = Vec<Vec<usize>>;
+
 /// [`TrieScan`] which represents the result from joining a set of tries (given as [`TrieScan`]s),
 #[derive(Debug)]
 pub struct TrieScanJoin<'a> {
@@ -47,15 +54,10 @@ pub struct TrieScanJoin<'a> {
 
 impl<'a> TrieScanJoin<'a> {
     /// Construct new [`TrieScanJoin`] object.
-    /// `bindings` is a slice of `Vec<usize>` where binding[i]
-    /// contains which layer of the ith subscan is bound to which variable
-    /// (Variables are represented by their index in the variable order)
-    /// So the join R(a, b) S(b, c) T(a, c) with variable order [a, b, c] is represented
-    /// with the binding [[0, 1], [1, 2], [0, 2]] (assuming trie_scans = [R, S, T])
     /// Assumes that each entry in `bindings``is sorted and does not contain duplicates
     pub fn new(
         trie_scans: Vec<TrieScanEnum<'a>>,
-        bindings: &[Vec<usize>],
+        bindings: &JoinBinding,
         target_schema: TrieSchema,
     ) -> Self {
         debug_assert!(bindings.len() == trie_scans.len());
@@ -300,7 +302,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
-            &[vec![0, 1], vec![1, 2]],
+            &vec![vec![0, 1], vec![1, 2]],
             schema_target,
         );
 
@@ -384,7 +386,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
-            &[vec![0, 1], vec![1, 2]],
+            &vec![vec![0, 1], vec![1, 2]],
             schema_target_clone,
         );
 
@@ -393,7 +395,7 @@ mod test {
                 TrieScanEnum::TrieScanJoin(join_iter_ab),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_c)),
             ],
-            &[vec![0, 1, 2], vec![0, 1]],
+            &vec![vec![0, 1, 2], vec![0, 1]],
             schema_target_clone_2,
         );
 
@@ -473,7 +475,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie)),
             ],
-            &[vec![0, 1], vec![1, 2]],
+            &vec![vec![0, 1], vec![1, 2]],
             schema_target,
         );
 
@@ -587,7 +589,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_inv)),
             ],
-            &[vec![0, 2], vec![1, 2]],
+            &vec![vec![0, 2], vec![1, 2]],
             schema_target,
         );
 
@@ -677,7 +679,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_new)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_old)),
             ],
-            &[vec![0, 1], vec![1, 2]],
+            &vec![vec![0, 1], vec![1, 2]],
             schema_target,
         );
 
@@ -775,7 +777,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
-            &[vec![1, 2], vec![0, 1]],
+            &vec![vec![1, 2], vec![0, 1]],
             schema_target,
         );
 
@@ -843,7 +845,7 @@ mod test {
             vec![TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(
                 &my_trie,
             ))],
-            &[vec![0]],
+            &vec![vec![0]],
             schema_target,
         );
 
