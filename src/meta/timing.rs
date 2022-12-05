@@ -170,7 +170,7 @@ impl TimedCode {
 
     /// Turns e.g. (Test, 0.642355) into "Test [64.2%]"
     fn format_title(title: &String, percentage: f64) -> String {
-        let percentage_string = format!("{:.1}", percentage);
+        let percentage_string = format!("{percentage:.1}");
 
         let mut result = String::clone(title);
         result.push_str(" [");

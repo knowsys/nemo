@@ -660,7 +660,7 @@ mod test {
            \n  6 9 \
            \n";
 
-        let actual_output = format!("{}", trie);
+        let actual_output = format!("{trie}");
 
         assert_eq!(expected_output, actual_output);
     }

@@ -219,7 +219,7 @@ impl RuleExecutionEngine {
         TimedCode::instance().sub("Reasoning/Rules").start();
 
         while without_derivation < self.program.rules().len() {
-            let rule_string = format!("Rule: {}", current_rule_index);
+            let rule_string = format!("Rule: {current_rule_index}");
 
             TimedCode::instance()
                 .sub("Reasoning/Rules")
