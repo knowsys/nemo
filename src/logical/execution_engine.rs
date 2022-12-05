@@ -1026,7 +1026,7 @@ mod test {
             datatypes::DataTypeName,
             dictionary::PrefixedStringDictionary,
             tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry},
-            util::make_gict,
+            util::make_column_with_intervals_t,
         },
     };
 
@@ -1081,8 +1081,9 @@ mod test {
         var_order.push(Variable::Universal(Identifier(2)));
         engine.rule_infos[0].promising_orders = vec![var_order];
 
-        let column_x = make_gict(&[1, 2, 5, 7], &[0]);
-        let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
+        let column_x = make_column_with_intervals_t(&[1, 2, 5, 7], &[0]);
+        let column_y =
+            make_column_with_intervals_t(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
 
         let schema = TrieSchema::new(vec![
             TrieSchemaEntry {
@@ -1235,8 +1236,9 @@ mod test {
         var_order.push(Variable::Universal(Identifier(2)));
         engine.rule_infos[0].promising_orders = vec![var_order];
 
-        let column_x = make_gict(&[1, 2, 5, 7], &[0]);
-        let column_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
+        let column_x = make_column_with_intervals_t(&[1, 2, 5, 7], &[0]);
+        let column_y =
+            make_column_with_intervals_t(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
 
         let schema = TrieSchema::new(vec![
             TrieSchemaEntry {
@@ -1393,11 +1395,12 @@ mod test {
             PrefixedStringDictionary::default(),
         );
 
-        let a_column_x = make_gict(&[1, 2, 3, 4, 5], &[0]);
-        let a_column_y = make_gict(&[2, 3, 1, 2, 4, 2, 3, 2, 4, 4], &[0, 2, 5, 7, 9]);
+        let a_column_x = make_column_with_intervals_t(&[1, 2, 3, 4, 5], &[0]);
+        let a_column_y =
+            make_column_with_intervals_t(&[2, 3, 1, 2, 4, 2, 3, 2, 4, 4], &[0, 2, 5, 7, 9]);
 
-        let b_column_x = make_gict(&[1, 2, 3, 4], &[0]);
-        let b_column_y = make_gict(&[3, 2, 3, 2, 2, 3], &[0, 1, 3, 4]);
+        let b_column_x = make_column_with_intervals_t(&[1, 2, 3, 4], &[0]);
+        let b_column_y = make_column_with_intervals_t(&[3, 2, 3, 2, 2, 3], &[0, 1, 3, 4]);
 
         let schema = TrieSchema::new(vec![
             TrieSchemaEntry {

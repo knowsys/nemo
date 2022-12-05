@@ -159,7 +159,7 @@ mod test {
         Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
     };
     use crate::physical::tabular::traits::triescan::TrieScanEnum;
-    use crate::physical::util::test_util::make_gict;
+    use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
     #[test]
@@ -171,9 +171,9 @@ mod test {
         let column_trd_data = [3, 4, 5, 7, 2, 1];
         let column_trd_int = [0, 2, 3, 4, 5];
 
-        let column_fst = make_gict(&column_fst_data, &column_fst_int);
-        let column_snd = make_gict(&column_snd_data, &column_snd_int);
-        let column_trd = make_gict(&column_trd_data, &column_trd_int);
+        let column_fst = make_column_with_intervals_t(&column_fst_data, &column_fst_int);
+        let column_snd = make_column_with_intervals_t(&column_snd_data, &column_snd_int);
+        let column_trd = make_column_with_intervals_t(&column_trd_data, &column_trd_int);
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
@@ -248,10 +248,10 @@ mod test {
     #[test]
     fn partial() {
         // Same setup as in test_trie_join
-        let column_a_x = make_gict(&[1, 2, 3], &[0]);
-        let column_a_y = make_gict(&[2, 3, 4, 5, 6, 7], &[0, 3, 4]);
-        let column_b_y = make_gict(&[1, 2, 3, 6], &[0]);
-        let column_b_z = make_gict(&[1, 8, 9, 10, 11, 12], &[0, 1, 3, 4]);
+        let column_a_x = make_column_with_intervals_t(&[1, 2, 3], &[0]);
+        let column_a_y = make_column_with_intervals_t(&[2, 3, 4, 5, 6, 7], &[0, 3, 4]);
+        let column_b_y = make_column_with_intervals_t(&[1, 2, 3, 6], &[0]);
+        let column_b_z = make_column_with_intervals_t(&[1, 8, 9, 10, 11, 12], &[0, 1, 3, 4]);
 
         let schema_a = TrieSchema::new(vec![
             TrieSchemaEntry {

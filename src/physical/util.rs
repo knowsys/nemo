@@ -6,9 +6,9 @@ pub mod test_util;
 use std::ops::Range;
 
 #[cfg(test)]
-pub use test_util::make_gic;
+pub use test_util::make_column_with_intervals;
 #[cfg(test)]
-pub use test_util::make_gict;
+pub use test_util::make_column_with_intervals_t;
 
 /// A macro that generates forwarding macros to dispatch along
 /// datatype-tagged enums.

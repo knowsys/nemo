@@ -144,7 +144,7 @@ mod test {
             table_types::trie::{Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry},
             traits::triescan::TrieScan,
         },
-        util::make_gict,
+        util::make_column_with_intervals_t,
     };
 
     use super::trie_add_constant;
@@ -169,9 +169,9 @@ mod test {
 
     #[test]
     fn test_constant() {
-        let column_x = make_gict(&[1, 2, 3], &[0]);
-        let column_y = make_gict(&[2, 4, 1, 5, 9], &[0, 2, 3]);
-        let column_z = make_gict(&[5, 1, 7, 9, 3, 2, 4, 8], &[0, 1, 4, 5, 7]);
+        let column_x = make_column_with_intervals_t(&[1, 2, 3], &[0]);
+        let column_y = make_column_with_intervals_t(&[2, 4, 1, 5, 9], &[0, 2, 3]);
+        let column_z = make_column_with_intervals_t(&[5, 1, 7, 9, 3, 2, 4, 8], &[0, 1, 4, 5, 7]);
 
         let schema = TrieSchema::new(vec![
             TrieSchemaEntry {

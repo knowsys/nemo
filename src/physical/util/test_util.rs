@@ -15,8 +15,11 @@ use num::{One, Zero};
 use std::cmp::Eq;
 use std::ops::{Add, Sub};
 
-/// Constructs IntervalColumnGeneric of U64 type from Slice
-pub fn make_gic<'a, T>(values: &'a [T], ints: &'a [usize]) -> ColumnWithIntervals<T>
+/// Constructs ColumnWithIntervals of U64 type from Slice
+pub fn make_column_with_intervals<'a, T>(
+    values: &'a [T],
+    ints: &'a [usize],
+) -> ColumnWithIntervals<T>
 where
     T: ColumnDataType,
 {
@@ -27,8 +30,11 @@ where
 }
 
 /// Constructs ColumnWithIntervalsT (of U64 type) from Slice
-pub fn make_gict<'a>(values: &'a [u64], ints: &'a [usize]) -> ColumnWithIntervalsT {
-    ColumnWithIntervalsT::U64(make_gic(values, ints))
+pub fn make_column_with_intervals_t<'a>(
+    values: &'a [u64],
+    ints: &'a [usize],
+) -> ColumnWithIntervalsT {
+    ColumnWithIntervalsT::U64(make_column_with_intervals(values, ints))
 }
 
 /// Helper function which, given a slice of sorted values,
@@ -54,7 +60,7 @@ where
 
 /// Hepler function which creates an arbitrary IntervalColumnGeneric
 /// given a number of sections and a maximum for the number of enries per section
-fn arbitrary_gic<'a, T>(
+fn arbitrary_column_with_intervals<'a, T>(
     u: &mut Unstructured<'a>,
     sections: usize,
     avg_per_section: usize,
@@ -96,7 +102,7 @@ where
         }
     }
 
-    Ok(make_gic(&values, &intervals))
+    Ok(make_column_with_intervals(&values, &intervals))
 }
 
 impl<'a, T> Arbitrary<'a> for ColumnWithIntervals<T>
@@ -106,7 +112,7 @@ where
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
         const NUMBER_OF_SECTIONS: usize = 8;
         const AVG_PER_SECTION: usize = 4;
-        arbitrary_gic(u, NUMBER_OF_SECTIONS, AVG_PER_SECTION)
+        arbitrary_column_with_intervals(u, NUMBER_OF_SECTIONS, AVG_PER_SECTION)
     }
 }
 
@@ -135,7 +141,7 @@ impl<'a> Arbitrary<'a> for Trie {
                 columns[depth_index - 1].len()
             };
 
-            columns.push(ColumnWithIntervalsT::U64(arbitrary_gic(
+            columns.push(ColumnWithIntervalsT::U64(arbitrary_column_with_intervals(
                 u,
                 section_count,
                 AVG_BRANCHING,

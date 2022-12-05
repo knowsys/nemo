@@ -186,7 +186,7 @@ mod test {
         Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
     };
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
-    use crate::physical::util::test_util::make_gict;
+    use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
     fn diff_next(diff_scan: &mut TrieScanMinus) -> Option<u64> {
@@ -207,10 +207,10 @@ mod test {
 
     #[test]
     fn test_trie_difference() {
-        let column_left_x = make_gict(&[1, 2, 3], &[0]);
-        let column_left_y = make_gict(&[3, 6, 8, 2, 7, 5], &[0, 3, 5]);
-        let column_right_x = make_gict(&[1, 3, 4], &[0]);
-        let column_right_y = make_gict(&[2, 6, 9, 2, 5, 8], &[0, 3, 5]);
+        let column_left_x = make_column_with_intervals_t(&[1, 2, 3], &[0]);
+        let column_left_y = make_column_with_intervals_t(&[3, 6, 8, 2, 7, 5], &[0, 3, 5]);
+        let column_right_x = make_column_with_intervals_t(&[1, 3, 4], &[0]);
+        let column_right_y = make_column_with_intervals_t(&[2, 6, 9, 2, 5, 8], &[0, 3, 5]);
 
         let schema_left = TrieSchema::new(vec![
             TrieSchemaEntry {
@@ -273,11 +273,11 @@ mod test {
 
     #[test]
     fn test_trie_difference_2() {
-        let column_left_x = make_gict(&[4, 7, 8, 9, 10], &[0]);
-        let column_left_y = make_gict(&[1, 1, 2, 1, 2, 1, 2], &[0, 1, 2, 3, 5]);
+        let column_left_x = make_column_with_intervals_t(&[4, 7, 8, 9, 10], &[0]);
+        let column_left_y = make_column_with_intervals_t(&[1, 1, 2, 1, 2, 1, 2], &[0, 1, 2, 3, 5]);
 
-        let column_right_x = make_gict(&[2, 3, 4, 5, 7, 8, 9, 10], &[0]);
-        let column_right_y = make_gict(
+        let column_right_x = make_column_with_intervals_t(&[2, 3, 4, 5, 7, 8, 9, 10], &[0]);
+        let column_right_y = make_column_with_intervals_t(
             &[1, 1, 2, 1, 2, 7, 5, 7, 1, 2, 7],
             &[0, 1, 2, 3, 4, 5, 6, 8],
         );

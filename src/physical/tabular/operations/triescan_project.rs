@@ -269,14 +269,14 @@ mod test {
     use crate::physical::tabular::operations::materialize;
     use crate::physical::tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry};
     use crate::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
-    use crate::physical::util::test_util::make_gict;
+    use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
     #[test]
     fn single_small_hole() {
-        let column_fst = make_gict(&[1, 2], &[0]);
-        let column_snd = make_gict(&[3, 5, 2, 4], &[0, 2]);
-        let column_trd = make_gict(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
+        let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_snd = make_column_with_intervals_t(&[3, 5, 2, 4], &[0, 2]);
+        let column_trd = make_column_with_intervals_t(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
@@ -415,20 +415,20 @@ mod test {
 
     #[test]
     fn multiple_big_holes() {
-        let column_fst = make_gict(&[1, 2], &[0]);
-        let column_snd = make_gict(&[3, 5, 2, 4], &[0, 2]);
-        let column_trd = make_gict(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
-        let column_fth = make_gict(
+        let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_snd = make_column_with_intervals_t(&[3, 5, 2, 4], &[0, 2]);
+        let column_trd = make_column_with_intervals_t(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
+        let column_fth = make_column_with_intervals_t(
             &[5, 10, 15, 2, 4, 6, 1, 3, 7, 9, 11, 13, 17],
             &[0, 3, 5, 6, 7, 8, 10, 11],
         );
-        let column_vth = make_gict(
+        let column_vth = make_column_with_intervals_t(
             &[
                 1, 2, 20, 3, 4, 21, 5, 6, 22, 7, 8, 23, 9, 10, 24, 11, 12, 25, 13, 14,
             ],
             &[0, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18],
         );
-        let column_sth = make_gict(
+        let column_sth = make_column_with_intervals_t(
             &[
                 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
             ],
@@ -529,9 +529,9 @@ mod test {
 
     #[test]
     fn reorder() {
-        let column_fst = make_gict(&[1, 2], &[0]);
-        let column_snd = make_gict(&[3, 5, 2, 4], &[0, 2]);
-        let column_trd = make_gict(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
+        let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_snd = make_column_with_intervals_t(&[3, 5, 2, 4], &[0, 2]);
+        let column_trd = make_column_with_intervals_t(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
@@ -619,9 +619,9 @@ mod test {
 
     #[test]
     fn reorder_and_project() {
-        let column_fst = make_gict(&[1, 2], &[0]);
-        let column_snd = make_gict(&[3, 5, 2, 4], &[0, 2]);
-        let column_trd = make_gict(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
+        let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_snd = make_column_with_intervals_t(&[3, 5, 2, 4], &[0, 2]);
+        let column_trd = make_column_with_intervals_t(&[7, 9, 5, 8, 4, 6, 2, 3], &[0, 2, 4, 6]);
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
@@ -684,11 +684,12 @@ mod test {
 
     #[test]
     fn test_duplicates() {
-        let column_fst = make_gict(&[1, 2], &[0]);
-        let column_snd = make_gict(&[3, 4, 4, 5], &[0, 2]);
-        let column_trd = make_gict(&[4, 6, 6, 7, 3, 4, 3, 4], &[0, 2, 4, 6]);
-        let column_fth = make_gict(&[0, 0, 0, 0, 0, 0, 0, 0], &[0, 1, 2, 3, 4, 5, 6, 7]);
-        let column_vth = make_gict(
+        let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_snd = make_column_with_intervals_t(&[3, 4, 4, 5], &[0, 2]);
+        let column_trd = make_column_with_intervals_t(&[4, 6, 6, 7, 3, 4, 3, 4], &[0, 2, 4, 6]);
+        let column_fth =
+            make_column_with_intervals_t(&[0, 0, 0, 0, 0, 0, 0, 0], &[0, 1, 2, 3, 4, 5, 6, 7]);
+        let column_vth = make_column_with_intervals_t(
             &[1, 2, 3, 4, 3, 4, 1, 2, 3, 4, 3, 4, 1, 2, 3, 4],
             &[
                 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32,
@@ -818,9 +819,9 @@ mod test {
         let snd = vec![a, b];
         let trd = vec![u, v];
 
-        let first = make_gict(&fst, &[0]);
-        let second = make_gict(&snd, &[0]);
-        let third = make_gict(&trd, &[0, 1]);
+        let first = make_column_with_intervals_t(&fst, &[0]);
+        let second = make_column_with_intervals_t(&snd, &[0]);
+        let third = make_column_with_intervals_t(&trd, &[0, 1]);
 
         let columns = vec![first, second, third];
 
@@ -966,9 +967,9 @@ mod test {
         let snd = vec![rg, rg, rg];
         let trd = vec![u, v, w, x, y, z];
 
-        let first = make_gict(&fst, &[0]);
-        let second = make_gict(&snd, &[0, 1, 2]);
-        let third = make_gict(&trd, &[0, 4, 5]);
+        let first = make_column_with_intervals_t(&fst, &[0]);
+        let second = make_column_with_intervals_t(&snd, &[0, 1, 2]);
+        let third = make_column_with_intervals_t(&trd, &[0, 4, 5]);
 
         let columns = vec![first, second, third];
 

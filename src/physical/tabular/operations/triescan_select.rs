@@ -278,7 +278,7 @@ mod test {
         Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
     };
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
-    use crate::physical::util::test_util::make_gict;
+    use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
     fn select_eq_next(scan: &mut TrieScanSelectEqual) -> Option<u64> {
@@ -315,10 +315,10 @@ mod test {
 
     #[test]
     fn test_select_equal() {
-        let column_fst = make_gict(&[1], &[0]);
-        let column_snd = make_gict(&[4, 5], &[0]);
-        let column_trd = make_gict(&[0, 1, 2, 1], &[0, 3]);
-        let column_fth = make_gict(&[0, 4, 5, 3, 4, 6], &[0, 1, 3, 5]);
+        let column_fst = make_column_with_intervals_t(&[1], &[0]);
+        let column_snd = make_column_with_intervals_t(&[4, 5], &[0]);
+        let column_trd = make_column_with_intervals_t(&[0, 1, 2, 1], &[0, 3]);
+        let column_fth = make_column_with_intervals_t(&[0, 4, 5, 3, 4, 6], &[0, 1, 3, 5]);
         let schema = TrieSchema::new(vec![
             TrieSchemaEntry {
                 label: 0,
@@ -388,10 +388,10 @@ mod test {
 
     #[test]
     fn test_select_value() {
-        let column_fst = make_gict(&[1], &[0]);
-        let column_snd = make_gict(&[4, 5], &[0]);
-        let column_trd = make_gict(&[0, 1, 2, 1], &[0, 3]);
-        let column_fth = make_gict(&[7, 5, 7, 3, 4, 6], &[0, 1, 3, 5]);
+        let column_fst = make_column_with_intervals_t(&[1], &[0]);
+        let column_snd = make_column_with_intervals_t(&[4, 5], &[0]);
+        let column_trd = make_column_with_intervals_t(&[0, 1, 2, 1], &[0, 3]);
+        let column_fth = make_column_with_intervals_t(&[7, 5, 7, 3, 4, 6], &[0, 1, 3, 5]);
         let schema = TrieSchema::new(vec![
             TrieSchemaEntry {
                 label: 0,

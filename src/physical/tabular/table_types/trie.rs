@@ -536,7 +536,7 @@ mod test {
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
     use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
     use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
-    use crate::physical::util::make_gict;
+    use crate::physical::util::make_column_with_intervals_t;
     use test_log::test;
 
     fn get_test_schema() -> TrieSchema {
@@ -561,9 +561,9 @@ mod test {
     ///     * Construction
     ///     * Getting row number
     fn test_trie() {
-        let column_fst = make_gict(&[1, 2, 3], &[0]);
-        let column_snd = make_gict(&[2, 3, 4, 1, 2], &[0, 2, 3]);
-        let column_trd = make_gict(&[3, 4, 5, 7, 2, 1], &[0, 2, 3, 4, 5]);
+        let column_fst = make_column_with_intervals_t(&[1, 2, 3], &[0]);
+        let column_snd = make_column_with_intervals_t(&[2, 3, 4, 1, 2], &[0, 2, 3]);
+        let column_trd = make_column_with_intervals_t(&[3, 4, 5, 7, 2, 1], &[0, 2, 3, 4, 5]);
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
@@ -621,9 +621,9 @@ mod test {
     fn get_test_table_as_trie() -> Trie {
         let schema = get_test_schema();
 
-        let column_fst = make_gict(&[1, 2], &[0]);
-        let column_snd = make_gict(&[2, 3, 3, 6], &[0, 2]);
-        let column_trd = make_gict(&[7, 8, 8, 9, 9], &[0, 2, 3, 4]);
+        let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_snd = make_column_with_intervals_t(&[2, 3, 3, 6], &[0, 2]);
+        let column_trd = make_column_with_intervals_t(&[7, 8, 8, 9, 9], &[0, 2, 3, 4]);
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
@@ -693,9 +693,9 @@ mod test {
 
     #[test]
     fn test_trie_iter() {
-        let column_fst = make_gict(&[1, 2, 3], &[0]);
-        let column_snd = make_gict(&[2, 3, 4, 1, 2], &[0, 2, 3]);
-        let column_trd = make_gict(&[3, 4, 5, 7, 8, 7, 2, 1], &[0, 2, 5, 6, 7]);
+        let column_fst = make_column_with_intervals_t(&[1, 2, 3], &[0]);
+        let column_snd = make_column_with_intervals_t(&[2, 3, 4, 1, 2], &[0, 2, 3]);
+        let column_trd = make_column_with_intervals_t(&[3, 4, 5, 7, 8, 7, 2, 1], &[0, 2, 5, 6, 7]);
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 

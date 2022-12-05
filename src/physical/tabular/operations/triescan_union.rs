@@ -150,7 +150,7 @@ mod test {
         Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
     };
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
-    use crate::physical::util::test_util::make_gict;
+    use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
     fn union_next(union_scan: &mut TrieScanUnion) -> Option<u64> {
@@ -171,12 +171,12 @@ mod test {
 
     #[test]
     fn test_union() {
-        let column_fst_x = make_gict(&[1, 2, 4], &[0]);
-        let column_fst_y = make_gict(&[2, 5, 4], &[0, 1, 2]);
-        let column_snd_x = make_gict(&[1, 2, 7], &[0]);
-        let column_snd_y = make_gict(&[2, 4, 4, 8, 9], &[0, 2, 3]);
-        let column_trd_x = make_gict(&[1, 3, 7], &[0]);
-        let column_trd_y = make_gict(&[1, 4, 6, 3, 7, 8], &[0, 3, 4]);
+        let column_fst_x = make_column_with_intervals_t(&[1, 2, 4], &[0]);
+        let column_fst_y = make_column_with_intervals_t(&[2, 5, 4], &[0, 1, 2]);
+        let column_snd_x = make_column_with_intervals_t(&[1, 2, 7], &[0]);
+        let column_snd_y = make_column_with_intervals_t(&[2, 4, 4, 8, 9], &[0, 2, 3]);
+        let column_trd_x = make_column_with_intervals_t(&[1, 3, 7], &[0]);
+        let column_trd_y = make_column_with_intervals_t(&[1, 4, 6, 3, 7, 8], &[0, 3, 4]);
 
         let schema_fst = TrieSchema::new(vec![
             TrieSchemaEntry {
@@ -263,10 +263,10 @@ mod test {
 
     #[test]
     fn test_union_close() {
-        let column_fst_x = make_gict(&[1, 2], &[0]);
-        let column_fst_y = make_gict(&[3, 4, 5], &[0, 2]);
-        let column_snd_x = make_gict(&[2], &[0]);
-        let column_snd_y = make_gict(&[5, 6], &[0]);
+        let column_fst_x = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_fst_y = make_column_with_intervals_t(&[3, 4, 5], &[0, 2]);
+        let column_snd_x = make_column_with_intervals_t(&[2], &[0]);
+        let column_snd_y = make_column_with_intervals_t(&[5, 6], &[0]);
         let schema_fst = TrieSchema::new(vec![
             TrieSchemaEntry {
                 label: 0,
@@ -322,10 +322,11 @@ mod test {
 
     #[test]
     fn another_test() {
-        let column_fst_x = make_gict(&[1, 2, 5, 7], &[0]);
-        let column_fst_y = make_gict(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
-        let column_snd_x = make_gict(&[4, 7, 8, 9, 10], &[0]);
-        let column_snd_y = make_gict(&[1, 1, 2, 1, 2, 1, 2], &[0, 1, 2, 3, 5]);
+        let column_fst_x = make_column_with_intervals_t(&[1, 2, 5, 7], &[0]);
+        let column_fst_y =
+            make_column_with_intervals_t(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
+        let column_snd_x = make_column_with_intervals_t(&[4, 7, 8, 9, 10], &[0]);
+        let column_snd_y = make_column_with_intervals_t(&[1, 1, 2, 1, 2, 1, 2], &[0, 1, 2, 3, 5]);
         let schema_fst = TrieSchema::new(vec![
             TrieSchemaEntry {
                 label: 0,
@@ -465,13 +466,13 @@ mod test {
 
     #[test]
     fn another_test_2() {
-        let column_fst_x = make_gict(&[4], &[0]);
-        let column_fst_y = make_gict(&[1], &[0]);
-        let column_fst_z = make_gict(&[2], &[0]);
+        let column_fst_x = make_column_with_intervals_t(&[4], &[0]);
+        let column_fst_y = make_column_with_intervals_t(&[1], &[0]);
+        let column_fst_z = make_column_with_intervals_t(&[2], &[0]);
 
-        let column_snd_x = make_gict(&[1, 2, 4], &[0]);
-        let column_snd_y = make_gict(&[4, 4, 1], &[0, 1, 2]);
-        let column_snd_z = make_gict(&[1, 1, 4], &[0, 1, 2]);
+        let column_snd_x = make_column_with_intervals_t(&[1, 2, 4], &[0]);
+        let column_snd_y = make_column_with_intervals_t(&[4, 4, 1], &[0, 1, 2]);
+        let column_snd_z = make_column_with_intervals_t(&[1, 1, 4], &[0, 1, 2]);
         let schema_fst = TrieSchema::new(vec![
             TrieSchemaEntry {
                 label: 0,
@@ -568,15 +569,15 @@ mod test {
 
     #[test]
     fn union_of_joins() {
-        let column_a_x = make_gict(&[1, 4], &[0]);
-        let column_a_y = make_gict(&[4, 1], &[0, 1]);
-        let column_b_y = make_gict(&[1, 2], &[0]);
-        let column_b_z = make_gict(&[2, 4], &[0, 1]);
+        let column_a_x = make_column_with_intervals_t(&[1, 4], &[0]);
+        let column_a_y = make_column_with_intervals_t(&[4, 1], &[0, 1]);
+        let column_b_y = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_b_z = make_column_with_intervals_t(&[2, 4], &[0, 1]);
 
-        let column_c_x = make_gict(&[1, 2, 4], &[0]);
-        let column_c_y = make_gict(&[2, 4, 4, 1], &[0, 2, 3]);
-        let column_d_y = make_gict(&[1, 4], &[0]);
-        let column_d_z = make_gict(&[4, 1], &[0, 1]);
+        let column_c_x = make_column_with_intervals_t(&[1, 2, 4], &[0]);
+        let column_c_y = make_column_with_intervals_t(&[2, 4, 4, 1], &[0, 2, 3]);
+        let column_d_y = make_column_with_intervals_t(&[1, 4], &[0]);
+        let column_d_z = make_column_with_intervals_t(&[4, 1], &[0, 1]);
 
         let schema = TrieSchema::new(vec![
             TrieSchemaEntry {
