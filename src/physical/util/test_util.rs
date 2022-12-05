@@ -1,30 +1,40 @@
-use crate::physical::columns::{
-    Column, ColumnEnum, GenericIntervalColumn, IntervalColumnEnum, IntervalColumnT, VectorColumn,
-};
 use crate::physical::datatypes::DataTypeName;
-use crate::physical::tables::{Trie, TrieSchema, TrieSchemaEntry};
+use crate::physical::tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry};
+use crate::physical::{
+    columnar::{
+        column_types::{
+            interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+            vector::ColumnVector,
+        },
+        traits::column::{Column, ColumnEnum},
+    },
+    datatypes::ColumnDataType,
+};
 use arbitrary::{Arbitrary, Result, Unstructured};
 use num::{One, Zero};
 use std::cmp::Eq;
-use std::fmt::Debug;
 use std::ops::{Add, Sub};
 
-/// Constructs GenericIntervalColumn of U64 type from Slice
-pub fn make_gic<'a, T>(values: &'a [T], ints: &'a [usize]) -> GenericIntervalColumn<T>
+/// Constructs ColumnWithIntervals of U64 type from Slice
+pub fn make_column_with_intervals<'a, T>(
+    values: &'a [T],
+    ints: &'a [usize],
+) -> ColumnWithIntervals<T>
 where
-    T: Copy + Ord + Debug + 'static,
+    T: ColumnDataType,
 {
-    GenericIntervalColumn::new(
-        ColumnEnum::VectorColumn(VectorColumn::new(values.to_vec())),
-        ColumnEnum::VectorColumn(VectorColumn::new(ints.to_vec())),
+    ColumnWithIntervals::new(
+        ColumnEnum::ColumnVector(ColumnVector::new(values.to_vec())),
+        ColumnEnum::ColumnVector(ColumnVector::new(ints.to_vec())),
     )
 }
 
-/// Constructs IntervalColumnT (of U64 type) from Slice
-pub fn make_gict<'a>(values: &'a [u64], ints: &'a [usize]) -> IntervalColumnT {
-    IntervalColumnT::U64(IntervalColumnEnum::GenericIntervalColumn(make_gic(
-        values, ints,
-    )))
+/// Constructs ColumnWithIntervalsT (of U64 type) from Slice
+pub fn make_column_with_intervals_t<'a>(
+    values: &'a [u64],
+    ints: &'a [usize],
+) -> ColumnWithIntervalsT {
+    ColumnWithIntervalsT::U64(make_column_with_intervals(values, ints))
 }
 
 /// Helper function which, given a slice of sorted values,
@@ -48,15 +58,15 @@ where
     }
 }
 
-/// Hepler function which creates an arbitrary GenericIntervalColumn
+/// Hepler function which creates an arbitrary IntervalColumnGeneric
 /// given a number of sections and a maximum for the number of enries per section
-fn arbitrary_gic<'a, T>(
+fn arbitrary_column_with_intervals<'a, T>(
     u: &mut Unstructured<'a>,
     sections: usize,
     avg_per_section: usize,
-) -> Result<GenericIntervalColumn<T>>
+) -> Result<ColumnWithIntervals<T>>
 where
-    T: Arbitrary<'a> + Debug + Copy + Ord + Add<T, Output = T> + One + Zero + 'static,
+    T: Arbitrary<'a> + ColumnDataType,
 {
     let max_index = sections * avg_per_section;
 
@@ -92,17 +102,17 @@ where
         }
     }
 
-    Ok(make_gic(&values, &intervals))
+    Ok(make_column_with_intervals(&values, &intervals))
 }
 
-impl<'a, T> Arbitrary<'a> for GenericIntervalColumn<T>
+impl<'a, T> Arbitrary<'a> for ColumnWithIntervals<T>
 where
-    T: Arbitrary<'a> + Debug + Copy + Ord + Add<T, Output = T> + One + Zero + 'static,
+    T: Arbitrary<'a> + ColumnDataType,
 {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
         const NUMBER_OF_SECTIONS: usize = 8;
         const AVG_PER_SECTION: usize = 4;
-        arbitrary_gic(u, NUMBER_OF_SECTIONS, AVG_PER_SECTION)
+        arbitrary_column_with_intervals(u, NUMBER_OF_SECTIONS, AVG_PER_SECTION)
     }
 }
 
@@ -123,7 +133,7 @@ impl<'a> Arbitrary<'a> for Trie {
 
         let schema = TrieSchema::new(entries);
 
-        let mut columns = Vec::<IntervalColumnT>::new();
+        let mut columns = Vec::<ColumnWithIntervalsT>::new();
         for depth_index in 0..depth {
             let section_count = if depth_index == 0 {
                 INITIAL_SECTIONS
@@ -131,13 +141,11 @@ impl<'a> Arbitrary<'a> for Trie {
                 columns[depth_index - 1].len()
             };
 
-            columns.push(IntervalColumnT::U64(
-                IntervalColumnEnum::GenericIntervalColumn(arbitrary_gic(
-                    u,
-                    section_count,
-                    AVG_BRANCHING,
-                )?),
-            ));
+            columns.push(ColumnWithIntervalsT::U64(arbitrary_column_with_intervals(
+                u,
+                section_count,
+                AVG_BRANCHING,
+            )?));
         }
 
         Ok(Trie::new(schema, columns))

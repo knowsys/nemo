@@ -3,8 +3,8 @@
 //! It uses simplified structures and primitive datatypes that may
 //! not correspond to the view at a higher (logical) level.
 
-pub mod columns;
+pub mod columnar;
 pub mod datatypes;
 pub mod dictionary;
-pub mod tables;
+pub mod tabular;
 pub mod util;

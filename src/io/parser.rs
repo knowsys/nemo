@@ -624,7 +624,7 @@ mod test {
     use super::*;
 
     fn all<'a, T>(
-        parser: impl FnMut(&'a str) -> IntermediateResult<T>,
+        parser: impl FnMut(&'a str) -> IntermediateResult<'a, T>,
     ) -> impl FnMut(&'a str) -> Option<T> {
         let mut p = all_consuming(parser);
         move |input| p(input).map(|(_, result)| result).ok()

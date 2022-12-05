@@ -1,6 +1,9 @@
 use rand::prelude::*;
 use rand_pcg::Pcg64;
-use stage2::physical::columns::{ColumnScan, GenericColumnScan, VectorColumn};
+use stage2::physical::columnar::{
+    column_types::vector::ColumnVector,
+    traits::{column::Column, columnscan::ColumnScan},
+};
 
 pub fn bench() {
     let mut rng = Pcg64::seed_from_u64(21564);
@@ -17,8 +20,8 @@ pub fn bench() {
     } else {
         (values.1, values.0)
     };
-    let test_column = VectorColumn::new(data);
-    let mut gc = GenericColumnScan::new(&test_column);
+    let test_column = ColumnVector::new(data);
+    let mut gc = test_column.iter();
     gc.seek(randa);
     gc.seek(randb);
 }

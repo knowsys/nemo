@@ -6,9 +6,9 @@ pub mod test_util;
 use std::ops::Range;
 
 #[cfg(test)]
-pub use test_util::make_gic;
+pub use test_util::make_column_with_intervals;
 #[cfg(test)]
-pub use test_util::make_gict;
+pub use test_util::make_column_with_intervals_t;
 
 /// A macro that generates forwarding macros to dispatch along
 /// datatype-tagged enums.
@@ -19,11 +19,11 @@ pub use test_util::make_gict;
 /// # Example
 ///
 /// ```ignore
-/// generate_forwarder!(forward_to_scan; IntervalTrieScan, TrieScanJoin);
+/// generate_forwarder!(forward_to_scan; TrieScanGeneric, TrieScanJoin);
 /// ```
 ///
 /// will generate a forwarder called `forward_to_scan` that dispatches
-/// to variants `Self::IntervalTrieScan` and `Self::TrieScanJoin`,
+/// to variants `Self::TrieScanGeneric` and `Self::TrieScanJoin`,
 /// which can be used as follows:
 ///
 /// ```ignore

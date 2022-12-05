@@ -1,17 +1,17 @@
 //! Holds the [Permutator] struct, which allows one to define a logical permutation of the content of index-based data structures
 
-use crate::physical::datatypes::ColumnDataType;
+use crate::physical::{
+    columnar::traits::{
+        column::{Column, ColumnEnum, ColumnT},
+        columnbuilder::ColumnBuilder,
+    },
+    datatypes::ColumnDataType,
+};
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::ops::Range;
 
-use crate::{
-    error::Error,
-    physical::{
-        columns::{Column, ColumnBuilder, ColumnEnum, ColumnT},
-        datatypes::data_value::VecT,
-    },
-};
+use crate::{error::Error, physical::datatypes::data_value::VecT};
 
 /// Allows one to define a logical permutation of content of index-based data structures
 #[derive(Debug, Clone)]
@@ -43,7 +43,7 @@ impl Permutator {
     }
 
     /// TODO: Test if this works
-    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
+    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columnar::column::Column]
     pub fn sort_from_column_range<T>(data: &ColumnEnum<T>, ranges: &[Range<usize>]) -> Permutator
     where
         T: ColumnDataType + Ord,
@@ -57,7 +57,7 @@ impl Permutator {
         }
     }
 
-    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columns::column::Column]
+    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columnar::column::Column]
     pub fn sort_from_column<T>(data: &ColumnEnum<T>) -> Permutator
     where
         T: ColumnDataType + Ord,
@@ -65,7 +65,7 @@ impl Permutator {
         Permutator::sort_from_column_range(data, &[(0..data.len())])
     }
 
-    /// Creates a [`Permutator`] based on a slice of [`ColumnT`][crate::physical::columns::column::ColumnT] elements.
+    /// Creates a [`Permutator`] based on a slice of [`ColumnT`][crate::physical::columnar::column::ColumnT] elements.
     pub fn sort_from_columns(data_vec: &[ColumnT]) -> Result<Permutator, Error> {
         let len = if !data_vec.is_empty() {
             let len = data_vec[0].len();
@@ -224,7 +224,9 @@ impl Permutator {
 mod test {
     use super::*;
     use crate::physical::{
-        columns::{AdaptiveColumnBuilder, ColumnBuilder, VectorColumn},
+        columnar::{
+            adaptive_column_builder::ColumnBuilderAdaptive, column_types::vector::ColumnVector,
+        },
         datatypes::{Double, Float},
     };
     use quickcheck_macros::quickcheck;
@@ -389,7 +391,7 @@ mod test {
     fn from_rnd_column(vec: Vec<u32>) -> bool {
         log::debug!("used vector: {:?}", vec);
 
-        let mut builder: AdaptiveColumnBuilder<u32> = AdaptiveColumnBuilder::new();
+        let mut builder: ColumnBuilderAdaptive<u32> = ColumnBuilderAdaptive::new();
         let mut vec_cpy = vec.clone();
         vec_cpy.sort_unstable();
         vec.iter().for_each(|&elem| builder.add(elem));
@@ -421,11 +423,11 @@ mod test {
         vec2.resize(len, Double::new(1.0).expect("1.0 is not NaN"));
         let mut vec1_cpy = vec1.clone();
         let vec1_to_sort = vec1.clone();
-        let column1: VectorColumn<Float> = VectorColumn::new(vec1);
-        let column2: VectorColumn<Double> = VectorColumn::new(vec2.clone());
+        let column1: ColumnVector<Float> = ColumnVector::new(vec1);
+        let column2: ColumnVector<Double> = ColumnVector::new(vec2.clone());
         let columnset: Vec<ColumnT> = vec![
-            ColumnT::Float(ColumnEnum::VectorColumn(column1)),
-            ColumnT::Double(ColumnEnum::VectorColumn(column2)),
+            ColumnT::Float(ColumnEnum::ColumnVector(column1)),
+            ColumnT::Double(ColumnEnum::ColumnVector(column2)),
         ];
         let permutator = Permutator::sort_from_columns(&columnset)
             .expect("Length has been adjusted when generating test-data");
@@ -437,10 +439,10 @@ mod test {
                 .expect("Test case should be sortable")
         );
 
-        let column2: VectorColumn<Double> = VectorColumn::new(vec2);
+        let column2: ColumnVector<Double> = ColumnVector::new(vec2);
         let column_sort = permutator.apply_column(
-            &ColumnEnum::VectorColumn(column2),
-            AdaptiveColumnBuilder::new(),
+            &ColumnEnum::ColumnVector(column2),
+            ColumnBuilderAdaptive::new(),
         );
         assert!(column_sort.is_ok());
         true
@@ -457,20 +459,20 @@ mod test {
             .map(|elem| Float::new(*elem).expect("value needs to be valid"))
             .collect::<Vec<Float>>();
 
-        let mut acb = AdaptiveColumnBuilder::new();
+        let mut acb = ColumnBuilderAdaptive::new();
         vec1.iter().for_each(|elem| acb.add(*elem));
         let column1 = acb.finalize();
-        let mut acb = AdaptiveColumnBuilder::new();
+        let mut acb = ColumnBuilderAdaptive::new();
         vec2.iter().for_each(|elem| acb.add(*elem));
         let column2 = acb.finalize();
-        let mut acb = AdaptiveColumnBuilder::new();
+        let mut acb = ColumnBuilderAdaptive::new();
         vec3.iter().for_each(|elem| acb.add(*elem));
         let column3 = acb.finalize();
 
         let columnset: Vec<ColumnT> = vec![ColumnT::U64(column1), ColumnT::Float(column2)];
         let permutator = Permutator::sort_from_columns(&columnset).expect("Sorting should work");
         let column_sort = permutator
-            .apply_column(&column3, AdaptiveColumnBuilder::new())
+            .apply_column(&column3, ColumnBuilderAdaptive::new())
             .expect("application of sorting should work");
         let column_sort_vec: Vec<u64> = column_sort.iter().collect();
         assert_eq!(column_sort_vec, vec![1, 0, 5, 4, 2, 3, 8, 9, 7, 6]);
