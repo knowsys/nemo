@@ -39,19 +39,16 @@ pub fn materialize_inner(trie_scan: &mut TrieScanEnum, not_empty: &mut Option<bo
     let mut intervals_column_builders = Vec::<ColumnBuilderAdaptive<usize>>::new();
 
     for var in 0..target_schema.arity() {
-        intervals_column_builders.push(ColumnBuilderAdaptive::new(
-            Default::default(),
-            Default::default(),
-        ));
+        intervals_column_builders.push(ColumnBuilderAdaptive::default());
+
         match input_schema.get_type(var) {
-            DataTypeName::U64 => data_column_builders.push(ColumnBuilderAdaptiveT::U64(
-                ColumnBuilderAdaptive::new(Default::default(), Default::default()),
-            )),
+            DataTypeName::U64 => data_column_builders
+                .push(ColumnBuilderAdaptiveT::U64(ColumnBuilderAdaptive::default())),
             DataTypeName::Float => data_column_builders.push(ColumnBuilderAdaptiveT::Float(
-                ColumnBuilderAdaptive::new(Default::default(), Default::default()),
+                ColumnBuilderAdaptive::default(),
             )),
             DataTypeName::Double => data_column_builders.push(ColumnBuilderAdaptiveT::Double(
-                ColumnBuilderAdaptive::new(Default::default(), Default::default()),
+                ColumnBuilderAdaptive::default(),
             )),
         }
     }

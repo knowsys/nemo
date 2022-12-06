@@ -765,7 +765,7 @@ mod test {
 
     #[test]
     fn test_dynamic() {
-        let mut builder = ColumnBuilderAdaptive::<u64>::new(Default::default(), Default::default());
+        let mut builder = ColumnBuilderAdaptive::<u64>::default();
         builder.add(2);
         builder.add(3);
         builder.add(4);

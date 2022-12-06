@@ -152,7 +152,7 @@ where
     where
         T: IntoIterator<Item = A>,
     {
-        let mut builder = Self::new(Default::default(), Default::default());
+        let mut builder = Self::default();
         for item in iter {
             builder.add(item);
         }
@@ -262,8 +262,7 @@ mod test {
     use test_log::test;
 
     fn construct_presumable_vector_column() -> ColumnBuilderAdaptive<u32> {
-        let mut acb: ColumnBuilderAdaptive<u32> =
-            ColumnBuilderAdaptive::new(Default::default(), Default::default());
+        let mut acb = ColumnBuilderAdaptive::<u32>::default();
         acb.add(1);
         acb.add(2);
         acb.add(3);
@@ -272,8 +271,7 @@ mod test {
     }
 
     fn construct_presumable_rle_column() -> ColumnBuilderAdaptive<u32> {
-        let mut acb: ColumnBuilderAdaptive<u32> =
-            ColumnBuilderAdaptive::new(Default::default(), Default::default());
+        let mut acb = ColumnBuilderAdaptive::<u32>::default();
         acb.add(1);
         acb.add(2);
         acb.add(3);
@@ -327,8 +325,7 @@ mod test {
 
     #[test]
     fn test_build_empty_u32_column() {
-        let acb: ColumnBuilderAdaptive<u32> =
-            ColumnBuilderAdaptive::new(Default::default(), Default::default());
+        let acb = ColumnBuilderAdaptive::<u32>::default();
 
         let c = acb.finalize();
         assert!(c.is_empty());
@@ -336,8 +333,7 @@ mod test {
 
     #[test]
     fn test_build_u64_column() {
-        let mut acb: ColumnBuilderAdaptive<u64> =
-            ColumnBuilderAdaptive::new(Default::default(), Default::default());
+        let mut acb = ColumnBuilderAdaptive::<u64>::default();
         acb.add(1);
         acb.add(2);
         acb.add(3);
@@ -353,8 +349,7 @@ mod test {
 
     #[test]
     fn test_build_float_column() {
-        let mut acb: ColumnBuilderAdaptive<Float> =
-            ColumnBuilderAdaptive::new(Default::default(), Default::default());
+        let mut acb = ColumnBuilderAdaptive::<Float>::default();
         acb.add(Float::from_number(1.0));
         acb.add(Float::from_number(2.0));
         acb.add(Float::from_number(3.0));
@@ -370,8 +365,7 @@ mod test {
 
     #[test]
     fn test_build_double_column() {
-        let mut acb: ColumnBuilderAdaptive<Double> =
-            ColumnBuilderAdaptive::new(Default::default(), Default::default());
+        let mut acb = ColumnBuilderAdaptive::<Double>::default();
         acb.add(Double::from_number(1.0));
         acb.add(Double::from_number(2.0));
         acb.add(Double::from_number(3.0));
