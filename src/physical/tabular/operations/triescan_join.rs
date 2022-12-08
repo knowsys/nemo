@@ -194,11 +194,7 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
     fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         debug_assert!(self.current_layer.is_some());
 
-        match self.target_schema.get_type(self.current_layer?) {
-            DataTypeName::U64 | DataTypeName::Float | DataTypeName::Double => {
-                Some(&self.merge_joins[self.current_layer?])
-            }
-        }
+        Some(&self.merge_joins[self.current_layer?])
     }
 
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
