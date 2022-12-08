@@ -39,7 +39,15 @@ where
     }
 
     /// Set a vector that indicates which scans are currently active and should be considered
-    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
+    pub fn set_active_scans(
+        &mut self,
+        active_scans: Vec<usize>,
+        scans_for_replacement: Vec<ColumnScanRc<'a, T>>,
+    ) {
+        for (scan_index, scan) in active_scans.iter().zip(scans_for_replacement.into_iter()) {
+            self.column_scans[*scan_index] = scan;
+        }
+
         self.active_scans = active_scans;
     }
 }

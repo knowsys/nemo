@@ -117,7 +117,18 @@ impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
             }
         }
 
-        self.union_scans[next_layer].set_active_scans(active_scans);
+        let scans_for_replacement: Vec<ColumnScanT> = active_scans
+            .iter()
+            .map(
+                |scan_index| match self.trie_scans[*scan_index].current_scan().unwrap() {
+                    ColumnScanT::U64(cs) => ColumnScanT::U64(cs.clone()),
+                    ColumnScanT::Float(cs) => ColumnScanT::Float(cs.clone()),
+                    ColumnScanT::Double(cs) => ColumnScanT::Double(cs.clone()),
+                },
+            )
+            .collect();
+
+        self.union_scans[next_layer].set_active_scans(active_scans, scans_for_replacement);
         self.union_scans[next_layer].reset();
     }
 

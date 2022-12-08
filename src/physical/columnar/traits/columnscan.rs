@@ -204,9 +204,13 @@ where
 
     /// Assumes that column scan is a union scan
     /// Set a vector that indicates which scans are currently active and should be considered
-    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
+    pub fn set_active_scans(
+        &mut self,
+        active_scans: Vec<usize>,
+        scans_for_replacement: Vec<ColumnScanRc<'a, T>>,
+    ) {
         match self {
-            Self::ColumnScanUnion(cs) => cs.set_active_scans(active_scans),
+            Self::ColumnScanUnion(cs) => cs.set_active_scans(active_scans, scans_for_replacement),
             _ => {
                 unimplemented!("set_active_scans is only available for union_scans")
             }
@@ -352,8 +356,12 @@ where
     }
 
     /// Forward `get_smallest_scans` to the underlying [`ColumnScanEnum`].
-    pub fn set_active_scans(&self, active_scans: Vec<usize>) {
-        unsafe { &mut *self.0.get() }.set_active_scans(active_scans);
+    pub fn set_active_scans(
+        &self,
+        active_scans: Vec<usize>,
+        scans_for_replacement: Vec<ColumnScanRc<'a, T>>,
+    ) {
+        unsafe { &mut *self.0.get() }.set_active_scans(active_scans, scans_for_replacement);
     }
 }
 
@@ -436,8 +444,12 @@ where
     }
 
     /// Forward `set_active_scans` to the underlying [`ColumnScanCell`].
-    pub fn set_active_scans(&self, active_scans: Vec<usize>) {
-        self.0.set_active_scans(active_scans);
+    pub fn set_active_scans(
+        &self,
+        active_scans: Vec<usize>,
+        scans_for_replacement: Vec<ColumnScanRc<'a, T>>,
+    ) {
+        self.0.set_active_scans(active_scans, scans_for_replacement);
     }
 }
 
@@ -500,8 +512,32 @@ impl<'a> ColumnScanT<'a> {
 
     /// Assumes that column scan is a union scan
     /// Set a vector that indicates which scans are currently active and should be considered
-    pub fn set_active_scans(&self, active_scans: Vec<usize>) {
-        forward_to_columnscan_rc!(self, set_active_scans(active_scans))
+    pub fn set_active_scans(
+        &self,
+        active_scans: Vec<usize>,
+        scans_for_replacement: Vec<ColumnScanT<'a>>,
+    ) {
+        macro_rules! forward_set_active_scans {
+            ($variant:ident, $type:ty, $cs:ident) => {{
+                let mut scans: Vec<ColumnScanRc<$type>> = vec![];
+
+                for scan in scans_for_replacement {
+                    if let ColumnScanT::$variant(scan_rc) = scan {
+                        scans.push(scan_rc);
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($type));
+                    }
+                }
+
+                $cs.set_active_scans(active_scans, scans);
+            }};
+        }
+
+        match self {
+            Self::U64(cs) => forward_set_active_scans!(U64, u64, cs),
+            Self::Float(cs) => forward_set_active_scans!(Float, Float, cs),
+            Self::Double(cs) => forward_set_active_scans!(Double, Double, cs),
+        }
     }
 }
 
