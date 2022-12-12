@@ -4,9 +4,8 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{DataTypeName, DataValueT},
-    tabular::table_types::trie::TrieSchema,
     tabular::traits::{
-        table_schema::TableSchema,
+        table_schema::TableColumnTypes,
         triescan::{TrieScan, TrieScanEnum},
     },
 };
@@ -39,8 +38,8 @@ impl<'a> TrieScanSelectEqual<'a> {
         debug_assert!(eq_classes.iter().all(|class| class.is_sorted()));
         debug_assert!(eq_classes.iter().all(|class| class.len() > 1));
 
-        let target_schema = base_trie.get_schema();
-        let arity = target_schema.arity();
+        let column_types = base_trie.get_types();
+        let arity = column_types.len();
         let mut select_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
 
         for col_index in 0..arity {
@@ -64,7 +63,7 @@ impl<'a> TrieScanSelectEqual<'a> {
                 };
             }
 
-            match target_schema.get_type(col_index) {
+            match column_types[col_index] {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -109,7 +108,7 @@ impl<'a> TrieScanSelectEqual<'a> {
                     };
                 }
 
-                match target_schema.get_type(current_member_idx) {
+                match column_types[current_member_idx] {
                     DataTypeName::U64 => init_scans_for_datatype!(U64),
                     DataTypeName::Float => init_scans_for_datatype!(Float),
                     DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -138,7 +137,7 @@ impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
 
     fn down(&mut self) {
         self.current_layer = Some(self.current_layer.map_or(0, |v| v + 1));
-        debug_assert!(self.current_layer.unwrap() < self.get_schema().arity());
+        debug_assert!(self.current_layer.unwrap() < self.get_types().len());
 
         self.base_trie.down();
 
@@ -155,8 +154,8 @@ impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
         Some(&self.select_scans[index])
     }
 
-    fn get_schema(&self) -> &TrieSchema {
-        self.base_trie.get_schema()
+    fn get_types(&self) -> &TableColumnTypes {
+        self.base_trie.get_types()
     }
 }
 
@@ -186,8 +185,8 @@ pub struct ValueAssignment {
 impl<'a> TrieScanSelectValue<'a> {
     /// Construct new TrieScanSelectValue object.
     pub fn new(base_trie: TrieScanEnum<'a>, assignemnts: &[ValueAssignment]) -> Self {
-        let target_schema = base_trie.get_schema();
-        let arity = target_schema.arity();
+        let column_types = base_trie.get_types();
+        let arity = column_types.len();
         let mut select_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
 
         for col_index in 0..arity {
@@ -210,7 +209,7 @@ impl<'a> TrieScanSelectValue<'a> {
                 };
             }
 
-            match target_schema.get_type(col_index) {
+            match column_types[col_index] {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -244,7 +243,7 @@ impl<'a> TrieScanSelectValue<'a> {
                     }
                 };
             }
-            match target_schema.get_type(assignemnt.column_idx) {
+            match column_types[assignemnt.column_idx] {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -272,7 +271,7 @@ impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
 
     fn down(&mut self) {
         self.current_layer = Some(self.current_layer.map_or(0, |v| v + 1));
-        debug_assert!(self.current_layer.unwrap() < self.get_schema().arity());
+        debug_assert!(self.current_layer.unwrap() < self.get_types().len());
 
         self.base_trie.down();
 
@@ -289,8 +288,8 @@ impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
         Some(&self.select_scans[index])
     }
 
-    fn get_schema(&self) -> &TrieSchema {
-        self.base_trie.get_schema()
+    fn get_types(&self) -> &TableColumnTypes {
+        self.base_trie.get_types()
     }
 }
 
@@ -298,10 +297,8 @@ impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
 mod test {
     use super::{TrieScanSelectEqual, TrieScanSelectValue, ValueAssignment};
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
-    use crate::physical::datatypes::{DataTypeName, DataValueT};
-    use crate::physical::tabular::table_types::trie::{
-        Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
-    };
+    use crate::physical::datatypes::DataValueT;
+    use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
@@ -344,26 +341,8 @@ mod test {
         let column_snd = make_column_with_intervals_t(&[4, 5], &[0]);
         let column_trd = make_column_with_intervals_t(&[0, 1, 2, 1], &[0, 3]);
         let column_fth = make_column_with_intervals_t(&[0, 4, 5, 3, 4, 6], &[0, 1, 3, 5]);
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 3,
-                datatype: DataTypeName::U64,
-            },
-        ]);
 
-        let trie = Trie::new(schema, vec![column_fst, column_snd, column_trd, column_fth]);
+        let trie = Trie::new(vec![column_fst, column_snd, column_trd, column_fth]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
         let mut select_iter = TrieScanSelectEqual::new(trie_iter, &vec![vec![0, 2], vec![1, 3]]);
@@ -417,26 +396,8 @@ mod test {
         let column_snd = make_column_with_intervals_t(&[4, 5], &[0]);
         let column_trd = make_column_with_intervals_t(&[0, 1, 2, 1], &[0, 3]);
         let column_fth = make_column_with_intervals_t(&[7, 5, 7, 3, 4, 6], &[0, 1, 3, 5]);
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 3,
-                datatype: DataTypeName::U64,
-            },
-        ]);
 
-        let trie = Trie::new(schema, vec![column_fst, column_snd, column_trd, column_fth]);
+        let trie = Trie::new(vec![column_fst, column_snd, column_trd, column_fth]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
         let mut select_iter = TrieScanSelectValue::new(

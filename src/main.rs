@@ -4,9 +4,9 @@ use stage2::logical::model::{Fact, Identifier, NumericLiteral, Term};
 use stage2::logical::table_manager::TableManagerStrategy;
 use stage2::meta::timing::TimedDisplay;
 use stage2::meta::TimedCode;
-use stage2::physical::datatypes::{DataTypeName, DataValueT};
-use stage2::physical::tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry};
-use stage2::physical::tabular::traits::{table::Table, table_schema::TableSchema};
+use stage2::physical::datatypes::DataValueT;
+use stage2::physical::tabular::table_types::trie::Trie;
+use stage2::physical::tabular::traits::table::Table;
 use std::collections::HashSet;
 use std::fs::{read_to_string, OpenOptions};
 use std::io::Write;
@@ -63,15 +63,6 @@ fn main() {
         .iter()
         .map(|(p, _)| {
             let pred_facts: Vec<&Fact> = facts.iter().filter(|f| f.0.predicate() == *p).collect();
-            let datatypes_iter = pred_facts[0].0.terms().iter().map(|_t| DataTypeName::U64); // TODO: should depend on type but for now we only consider numeric literal integers that we case to u64
-
-            let mut schema_entries = vec![];
-
-            for (label, datatype) in datatypes_iter.enumerate() {
-                schema_entries.push(TrieSchemaEntry { label, datatype });
-            }
-
-            let schema = TrieSchema::new(schema_entries);
 
             let contents: Vec<Vec<DataValueT>> = pred_facts
                 .iter()
@@ -94,7 +85,7 @@ fn main() {
                 })
                 .collect();
 
-            (*p, Trie::from_rows(schema, contents))
+            (*p, Trie::from_rows(contents))
         })
         .collect();
 
@@ -112,7 +103,7 @@ fn main() {
     // }
 
     for (pred, trie) in tries {
-        exec_engine.add_trie(pred, 0..1, (0..trie.schema().arity()).collect(), 0, trie);
+        exec_engine.add_trie(pred, 0..1, (0..trie.get_types().len()).collect(), 0, trie);
     }
 
     TimedCode::instance().sub("Reading & Parsing").stop();

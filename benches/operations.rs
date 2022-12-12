@@ -8,9 +8,7 @@ use stage2::io::csv::read;
 use stage2::physical::tabular::operations::{
     materialize, TrieScanJoin, TrieScanProject, TrieScanUnion,
 };
-use stage2::physical::tabular::table_types::trie::{
-    Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
-};
+use stage2::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
 use stage2::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
 use stage2::{
     logical::{model::DataSource, table_manager::ColumnOrder},
@@ -35,16 +33,7 @@ fn load_trie(
 
             let col_table = read(&datatypes, &mut reader, dict).unwrap();
 
-            let schema = TrieSchema::new(
-                (0..col_table.len())
-                    .map(|i| TrieSchemaEntry {
-                        label: i,
-                        datatype: DataTypeName::U64,
-                    })
-                    .collect(),
-            );
-
-            let trie = Trie::from_cols(schema, col_table);
+            let trie = Trie::from_cols(col_table);
 
             assert!(trie.row_num() > 0);
             println!("{}", trie.row_num());
@@ -68,25 +57,6 @@ pub fn benchmark_join(c: &mut Criterion) {
     let trie_a = load_trie(&table_a, &table_a_order, &mut dict);
     let trie_b = load_trie(&table_b, &table_b_order, &mut dict);
 
-    let schema_target = TrieSchema::new(vec![
-        TrieSchemaEntry {
-            label: 100,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 101,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 102,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 103,
-            datatype: DataTypeName::U64,
-        },
-    ]);
-
     let mut group_ours = c.benchmark_group("trie_join");
     group_ours.sample_size(10);
     group_ours.bench_function("trie_join", |b| {
@@ -98,7 +68,6 @@ pub fn benchmark_join(c: &mut Criterion) {
                         TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
                     ],
                     &vec![vec![0, 1, 2], vec![0, 1, 3]],
-                    schema_target.clone(),
                 )
             },
             |join_iter| {
@@ -175,32 +144,12 @@ fn benchmark_project(c: &mut Criterion) {
     let trie_a = load_trie(&table_a, &table_a_order, &mut dict);
     let trie_b = load_trie(&table_b, &table_b_order, &mut dict);
 
-    let schema_target = TrieSchema::new(vec![
-        TrieSchemaEntry {
-            label: 100,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 101,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 102,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 103,
-            datatype: DataTypeName::U64,
-        },
-    ]);
-
     let join_iter = TrieScanJoin::new(
         vec![
             TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
             TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
         ],
         &vec![vec![0, 1, 2], vec![0, 1, 3]],
-        schema_target,
     );
 
     let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();

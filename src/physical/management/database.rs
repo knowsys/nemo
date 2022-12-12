@@ -6,20 +6,14 @@ use std::{
 
 use bytesize::ByteSize;
 
-use crate::physical::{
-    datatypes::DataTypeName,
-    tabular::{
-        operations::{
-            materialize::{materialize, materialize_subset},
-            TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
-            TrieScanUnion,
-        },
-        table_types::trie::{Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry},
-        traits::{
-            table_schema::TableSchema,
-            triescan::{TrieScan, TrieScanEnum},
-        },
+use crate::physical::tabular::{
+    operations::{
+        materialize::{materialize, materialize_subset},
+        TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
+        TrieScanUnion,
     },
+    table_types::trie::{Trie, TrieScanGeneric},
+    traits::triescan::TrieScanEnum,
 };
 
 use super::{
@@ -251,32 +245,9 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                         return Some(subiterators.remove(0));
                     }
 
-                    let mut datatype_map = HashMap::<usize, DataTypeName>::new();
-                    for (atom_index, binding) in bindings.iter().enumerate() {
-                        for (term_index, variable) in binding.iter().enumerate() {
-                            datatype_map.insert(
-                                *variable,
-                                subiterators[atom_index].get_schema().get_type(term_index),
-                            );
-                        }
-                    }
-
-                    let mut attributes = Vec::new();
-                    let mut variable: usize = 0;
-                    while let Some(datatype) = datatype_map.get(&variable) {
-                        attributes.push(TrieSchemaEntry {
-                            label: 0, // TODO: This should get perhaps a new label
-                            datatype: *datatype,
-                        });
-                        variable += 1;
-                    }
-
-                    let schema = TrieSchema::new(attributes);
-
                     Some(TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
                         subiterators,
                         bindings,
-                        schema,
                     )))
                 }
                 ExecutionNode::Union(subtables) => {
@@ -350,12 +321,8 @@ impl<TableKey: TableKeyType> ByteSized for DatabaseInstance<TableKey> {
 #[cfg(test)]
 mod test {
     use crate::physical::{
-        datatypes::DataTypeName,
         management::ByteSized,
-        tabular::{
-            table_types::trie::{Trie, TrieSchema, TrieSchemaEntry},
-            traits::table::Table,
-        },
+        tabular::{table_types::trie::Trie, traits::table::Table},
         util::make_column_with_intervals_t,
     };
 
@@ -369,17 +336,8 @@ mod test {
         let column_a = make_column_with_intervals_t(&[1, 2, 3], &[0]);
         let column_b = make_column_with_intervals_t(&[1, 2, 3, 4, 5, 6], &[0]);
 
-        let schema_a = TrieSchema::new(vec![TrieSchemaEntry {
-            label: 10,
-            datatype: DataTypeName::U64,
-        }]);
-        let schema_b = TrieSchema::new(vec![TrieSchemaEntry {
-            label: 10,
-            datatype: DataTypeName::U64,
-        }]);
-
-        let trie_a = Trie::new(schema_a, vec![column_a]);
-        let trie_b = Trie::new(schema_b, vec![column_b]);
+        let trie_a = Trie::new(vec![column_a]);
+        let trie_b = Trie::new(vec![column_b]);
 
         let mut instance = DatabaseInstance::<StringKeyType>::new();
 

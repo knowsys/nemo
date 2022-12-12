@@ -13,75 +13,29 @@ use crate::physical::columnar::{
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use crate::physical::management::ByteSized;
-use crate::physical::tabular::traits::{
-    table::Table, table_schema::TableSchema, triescan::TrieScan,
-};
+use crate::physical::tabular::traits::table_schema::TableColumnTypes;
+use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
 use std::cell::UnsafeCell;
 use std::fmt;
 use std::fmt::Debug;
 use std::iter;
 use std::mem::size_of;
 
-/// Represents one attribute in [`TrieSchema`].
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct TrieSchemaEntry {
-    /// Label of the column
-    pub label: usize,
-
-    /// Datatype used in the column
-    pub datatype: DataTypeName,
-}
-
-/// Schema for [`Trie`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrieSchema {
-    attributes: Vec<TrieSchemaEntry>,
-}
-
-impl TrieSchema {
-    /// Contruct new schema from vector of entries.
-    pub fn new(attributes: Vec<TrieSchemaEntry>) -> Self {
-        Self { attributes }
-    }
-}
-
-impl TableSchema for TrieSchema {
-    fn arity(&self) -> usize {
-        self.attributes.len()
-    }
-
-    fn get_type(&self, index: usize) -> DataTypeName {
-        self.attributes[index].datatype
-    }
-
-    fn get_label(&self, index: usize) -> usize {
-        self.attributes[index].label
-    }
-
-    fn find_index(&self, label: usize) -> Option<usize> {
-        for (index, elem) in self.attributes.iter().enumerate() {
-            if elem.label == label {
-                return Some(index);
-            }
-        }
-
-        None
-    }
-}
-
 /// Implementation of a trie data structure.
 /// The underlying data is oragnized in IntervalColumns.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Trie {
-    // TODO: could be generic in column type (one of accepted types still is ColumnWithIntervalsT)
-    schema: TrieSchema,
+    types: TableColumnTypes,
     columns: Vec<ColumnWithIntervalsT>,
 }
 
 impl Trie {
     /// Construct a new Trie from a given schema and a vector of IntervalColumns.
-    pub fn new(schema: TrieSchema, columns: Vec<ColumnWithIntervalsT>) -> Self {
-        Self { schema, columns }
+    pub fn new(columns: Vec<ColumnWithIntervalsT>) -> Self {
+        debug_assert!(!columns.is_empty());
+
+        let types = columns.iter().map(|col| col.get_type()).collect();
+        Self { types, columns }
     }
 
     /// Return reference to all columns.
@@ -298,9 +252,7 @@ impl fmt::Display for Trie {
 }
 
 impl Table for Trie {
-    type Schema = TrieSchema;
-
-    fn from_cols(schema: Self::Schema, cols: Vec<VecT>) -> Self {
+    fn from_cols(cols: Vec<VecT>) -> Self {
         debug_assert!({
             // assert that columns have the same length
             cols.get(0)
@@ -327,7 +279,6 @@ impl Table for Trie {
         // if the first col is empty, then all of them are; we return early in this case
         if cols.get(0).map(|col| col.is_empty()).unwrap_or(true) {
             return Self::new(
-                schema,
                 cols
                     .into_iter()
                     .map(|_| {
@@ -442,7 +393,6 @@ impl Table for Trie {
         }
 
         Self::new(
-            schema,
             condensed_data_builders
                 .into_iter()
                 .zip(condensed_interval_starts_builders)
@@ -451,9 +401,13 @@ impl Table for Trie {
         )
     }
 
-    fn from_rows(schema: Self::Schema, rows: Vec<Vec<DataValueT>>) -> Self {
-        let mut cols: Vec<VecT> = (0..schema.arity())
-            .map(|i| VecT::new(schema.get_type(i)))
+    fn from_rows(rows: Vec<Vec<DataValueT>>) -> Self {
+        debug_assert!(!rows.is_empty());
+
+        let arity = rows[0].len();
+
+        let mut cols: Vec<VecT> = (0..arity)
+            .map(|i| VecT::new(rows[0][i].get_type()))
             .collect();
 
         for row in rows {
@@ -462,15 +416,15 @@ impl Table for Trie {
             }
         }
 
-        Self::from_cols(schema, cols)
+        Self::from_cols(cols)
     }
 
     fn row_num(&self) -> usize {
         self.columns.last().map_or(0, |c| c.len())
     }
 
-    fn schema(&self) -> &Self::Schema {
-        &self.schema
+    fn get_types(&self) -> &TableColumnTypes {
+        &self.types
     }
 }
 
@@ -543,36 +497,19 @@ impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
         Some(&self.layers[index])
     }
 
-    fn get_schema(&self) -> &TrieSchema {
-        self.trie.schema()
+    fn get_types(&self) -> &TableColumnTypes {
+        self.trie.get_types()
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry};
+    use super::{Trie, TrieScanGeneric};
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
-    use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
+    use crate::physical::datatypes::{data_value::VecT, DataValueT};
     use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
     use crate::physical::util::make_column_with_intervals_t;
     use test_log::test;
-
-    fn get_test_schema() -> TrieSchema {
-        TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-        ])
-    }
 
     #[test]
     /// Tests general functionality of trie, including:
@@ -585,13 +522,8 @@ mod test {
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
-        let schema = get_test_schema();
-
-        let trie = Trie::new(schema, column_vec);
+        let trie = Trie::new(column_vec);
         assert_eq!(trie.row_num(), 6);
-
-        let empty_trie = Trie::new(TrieSchema::new(vec![]), vec![]);
-        assert_eq!(empty_trie.row_num(), 0);
     }
 
     /// helper methods that returns the following table as columns
@@ -600,15 +532,12 @@ mod test {
     /// 2 3 9
     /// 1 2 8
     /// 2 6 9
-    fn get_test_table_as_cols() -> (TrieSchema, Vec<VecT>) {
-        (
-            get_test_schema(),
-            vec![
-                VecT::U64(vec![1, 1, 2, 1, 2]),
-                VecT::U64(vec![3, 2, 3, 2, 6]),
-                VecT::U64(vec![8, 7, 9, 8, 9]),
-            ],
-        )
+    fn get_test_table_as_cols() -> Vec<VecT> {
+        vec![
+            VecT::U64(vec![1, 1, 2, 1, 2]),
+            VecT::U64(vec![3, 2, 3, 2, 6]),
+            VecT::U64(vec![8, 7, 9, 8, 9]),
+        ]
     }
 
     /// helper methods that returns the following table as rows
@@ -617,17 +546,14 @@ mod test {
     /// 2 3 9
     /// 1 2 8
     /// 2 6 9
-    fn get_test_table_as_rows() -> (TrieSchema, Vec<Vec<DataValueT>>) {
-        (
-            get_test_schema(),
-            vec![
-                vec![DataValueT::U64(1), DataValueT::U64(3), DataValueT::U64(8)],
-                vec![DataValueT::U64(1), DataValueT::U64(2), DataValueT::U64(7)],
-                vec![DataValueT::U64(2), DataValueT::U64(3), DataValueT::U64(9)],
-                vec![DataValueT::U64(1), DataValueT::U64(2), DataValueT::U64(8)],
-                vec![DataValueT::U64(2), DataValueT::U64(6), DataValueT::U64(9)],
-            ],
-        )
+    fn get_test_table_as_rows() -> Vec<Vec<DataValueT>> {
+        vec![
+            vec![DataValueT::U64(1), DataValueT::U64(3), DataValueT::U64(8)],
+            vec![DataValueT::U64(1), DataValueT::U64(2), DataValueT::U64(7)],
+            vec![DataValueT::U64(2), DataValueT::U64(3), DataValueT::U64(9)],
+            vec![DataValueT::U64(1), DataValueT::U64(2), DataValueT::U64(8)],
+            vec![DataValueT::U64(2), DataValueT::U64(6), DataValueT::U64(9)],
+        ]
     }
 
     /// helper methods that returns the following table as the expected trie
@@ -637,33 +563,31 @@ mod test {
     /// 1 2 8
     /// 2 6 9
     fn get_test_table_as_trie() -> Trie {
-        let schema = get_test_schema();
-
         let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
         let column_snd = make_column_with_intervals_t(&[2, 3, 3, 6], &[0, 2]);
         let column_trd = make_column_with_intervals_t(&[7, 8, 8, 9, 9], &[0, 2, 3, 4]);
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
-        Trie::new(schema, column_vec)
+        Trie::new(column_vec)
     }
 
     #[test]
     fn construct_trie_from_cols() {
-        let (schema, cols) = get_test_table_as_cols();
+        let cols = get_test_table_as_cols();
         let expected_trie = get_test_table_as_trie();
 
-        let constructed_trie = Trie::from_cols(schema, cols);
+        let constructed_trie = Trie::from_cols(cols);
 
         assert_eq!(expected_trie, constructed_trie);
     }
 
     #[test]
     fn construct_trie_from_rows() {
-        let (schema, rows) = get_test_table_as_rows();
+        let rows = get_test_table_as_rows();
         let expected_trie = get_test_table_as_trie();
 
-        let constructed_trie = Trie::from_rows(schema, rows);
+        let constructed_trie = Trie::from_rows(rows);
 
         assert_eq!(expected_trie, constructed_trie);
     }
@@ -717,22 +641,7 @@ mod test {
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie = Trie::new(schema, column_vec);
+        let trie = Trie::new(column_vec);
         let mut trie_iter = TrieScanGeneric::new(&trie);
 
         assert!(scan_current(&mut trie_iter).is_none());

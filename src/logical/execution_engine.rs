@@ -1044,11 +1044,8 @@ mod test {
             table_manager::{TableManagerStrategy, TableStatus},
         },
         physical::{
-            columnar::traits::column::Column,
-            datatypes::DataTypeName,
-            dictionary::PrefixedStringDictionary,
-            tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry},
-            util::make_column_with_intervals_t,
+            columnar::traits::column::Column, dictionary::PrefixedStringDictionary,
+            tabular::table_types::trie::Trie, util::make_column_with_intervals_t,
         },
     };
 
@@ -1107,18 +1104,7 @@ mod test {
         let column_y =
             make_column_with_intervals_t(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 10,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 11,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie = Trie::new(schema, vec![column_x, column_y]);
+        let trie = Trie::new(vec![column_x, column_y]);
         engine.add_trie(Identifier(0), 0..1, vec![0, 1], 0, trie);
 
         engine.execute();
@@ -1262,18 +1248,7 @@ mod test {
         let column_y =
             make_column_with_intervals_t(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 10,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 11,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie = Trie::new(schema, vec![column_x, column_y]);
+        let trie = Trie::new(vec![column_x, column_y]);
         engine.add_trie(Identifier(0), 0..1, vec![0, 1], 0, trie);
 
         engine.execute();
@@ -1424,19 +1399,8 @@ mod test {
         let b_column_x = make_column_with_intervals_t(&[1, 2, 3, 4], &[0]);
         let b_column_y = make_column_with_intervals_t(&[3, 2, 3, 2, 2, 3], &[0, 1, 3, 4]);
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 10,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 11,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie_a = Trie::new(schema.clone(), vec![a_column_x, a_column_y]);
-        let trie_b = Trie::new(schema, vec![b_column_x, b_column_y]);
+        let trie_a = Trie::new(vec![a_column_x, a_column_y]);
+        let trie_b = Trie::new(vec![b_column_x, b_column_y]);
         engine.add_trie(Identifier(2), 0..1, vec![0, 1], 0, trie_a);
         engine.add_trie(Identifier(3), 0..1, vec![0, 1], 0, trie_b);
 

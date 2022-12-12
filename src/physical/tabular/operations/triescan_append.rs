@@ -6,9 +6,8 @@ use crate::physical::{
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         traits::{column::Column, columnbuilder::ColumnBuilder},
     },
-    datatypes::{DataTypeName, DataValueT, Double, Float},
-    tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry},
-    tabular::traits::{table::Table, table_schema::TableSchema},
+    datatypes::{DataValueT, Double, Float},
+    tabular::{table_types::trie::Trie, traits::table::Table},
 };
 
 /// Add columns consisting of only a constant to a trie
@@ -18,33 +17,11 @@ use crate::physical::{
 /// Example: Given a trie with schema: xyz and values [[2], [], [3, 4], [1]]
 /// results in a trie with "schema" 2xy34z1
 pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
-    debug_assert!(values.len() == trie.schema().arity() + 1);
-
-    // Construct the new schema
-    let mut new_schema = Vec::<TrieSchemaEntry>::new();
-    for (gap_index, current_values) in values.iter().enumerate() {
-        for value in current_values.iter() {
-            let datatype = match value {
-                DataValueT::U64(_) => DataTypeName::U64,
-                DataValueT::Float(_) => DataTypeName::Float,
-                DataValueT::Double(_) => DataTypeName::Double,
-            };
-
-            // TODO: Label
-            new_schema.push(TrieSchemaEntry { label: 0, datatype });
-        }
-
-        if gap_index < trie.schema().arity() {
-            new_schema.push(TrieSchemaEntry {
-                label: trie.schema().get_label(gap_index),
-                datatype: trie.schema().get_type(gap_index),
-            })
-        }
-    }
+    debug_assert!(values.len() == trie.get_types().len() + 1);
 
     // Add the new columns
     let mut new_columns = VecDeque::<ColumnWithIntervalsT>::new();
-    for gap_index in (0..=trie.schema().arity()).rev() {
+    for gap_index in (0..=trie.get_types().len()).rev() {
         let current_values = &values[gap_index];
         for value_t in current_values.iter().rev() {
             macro_rules! append_columns_for_datatype {
@@ -82,10 +59,7 @@ pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
         }
     }
 
-    Trie::new(
-        TrieSchema::new(new_schema),
-        Vec::<ColumnWithIntervalsT>::from(new_columns),
-    )
+    Trie::new(Vec::<ColumnWithIntervalsT>::from(new_columns))
 }
 
 /// Duplicates existing columns to new positions
@@ -97,29 +71,11 @@ pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
 /// Example: Given a trie with schema: xyz and values [[], [1], [0, 2]]
 /// results in a trie with "schema" xyyzxz
 pub fn trie_add_duplicates(trie: Trie, indices: &[Vec<usize>]) -> Trie {
-    debug_assert!(indices.len() == trie.schema().arity());
-
-    // Construct the new schema
-    let mut new_schema = Vec::<TrieSchemaEntry>::new();
-    for (gap_index, current_indices) in indices.iter().enumerate() {
-        if gap_index < trie.schema().arity() {
-            new_schema.push(TrieSchemaEntry {
-                label: trie.schema().get_label(gap_index),
-                datatype: trie.schema().get_type(gap_index),
-            })
-        }
-
-        for &index in current_indices {
-            let datatype = trie.schema().get_type(index);
-
-            // TODO: Label
-            new_schema.push(TrieSchemaEntry { label: 0, datatype });
-        }
-    }
+    debug_assert!(indices.len() == trie.get_types().len());
 
     // Add the new columns
     let new_columns = VecDeque::<ColumnWithIntervalsT>::new();
-    for gap_index in (0..=trie.schema().arity()).rev() {
+    for gap_index in (0..=trie.get_types().len()).rev() {
         let current_indices = &indices[gap_index];
         for &index in current_indices.iter().rev() {
             if let ColumnWithIntervalsT::U64(reference_column) = trie.get_column(index) {
@@ -128,10 +84,7 @@ pub fn trie_add_duplicates(trie: Trie, indices: &[Vec<usize>]) -> Trie {
         }
     }
 
-    Trie::new(
-        TrieSchema::new(new_schema),
-        Vec::<ColumnWithIntervalsT>::from(new_columns),
-    )
+    Trie::new(Vec::<ColumnWithIntervalsT>::from(new_columns))
 }
 
 #[cfg(test)]
@@ -139,9 +92,9 @@ mod test {
 
     use crate::physical::{
         columnar::traits::columnscan::ColumnScanT,
-        datatypes::{DataTypeName, DataValueT},
+        datatypes::DataValueT,
         tabular::{
-            table_types::trie::{Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry},
+            table_types::trie::{Trie, TrieScanGeneric},
             traits::triescan::TrieScan,
         },
         util::make_column_with_intervals_t,
@@ -173,22 +126,7 @@ mod test {
         let column_y = make_column_with_intervals_t(&[2, 4, 1, 5, 9], &[0, 2, 3]);
         let column_z = make_column_with_intervals_t(&[5, 1, 7, 9, 3, 2, 4, 8], &[0, 1, 4, 5, 7]);
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 10,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 11,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 12,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie = Trie::new(schema, vec![column_x, column_y, column_z]);
+        let trie = Trie::new(vec![column_x, column_y, column_z]);
         let trie_appended = trie_add_constant(
             trie,
             &[

@@ -12,14 +12,8 @@ use crate::physical::tabular::operations::{
     materialize, materialize_subset, TrieScanJoin, TrieScanMinus, TrieScanProject,
     TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion,
 };
-use crate::physical::tabular::table_types::trie::{
-    Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
-};
-use crate::physical::tabular::traits::{
-    table::Table,
-    table_schema::TableSchema,
-    triescan::{TrieScan, TrieScanEnum},
-};
+use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
+use crate::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
 use crate::physical::util::cover_interval;
 use csv::ReaderBuilder;
 use std::cmp::Ordering;
@@ -260,16 +254,7 @@ impl TableManager {
 
                 let col_table = read(&datatypes, &mut reader, &mut self.dictionary).unwrap();
 
-                let schema = TrieSchema::new(
-                    (0..col_table.len())
-                        .map(|i| TrieSchemaEntry {
-                            label: i,
-                            datatype: DataTypeName::U64,
-                        })
-                        .collect(),
-                );
-
-                let trie = Trie::from_cols(schema, col_table);
+                let trie = Trie::from_cols(col_table);
                 (
                     trie,
                     file.file_name()
@@ -942,32 +927,9 @@ impl TableManager {
                     return Some(subiterators.remove(0));
                 }
 
-                let mut datatype_map = HashMap::<usize, DataTypeName>::new();
-                for (atom_index, binding) in bindings.iter().enumerate() {
-                    for (term_index, variable) in binding.iter().enumerate() {
-                        datatype_map.insert(
-                            *variable,
-                            subiterators[atom_index].get_schema().get_type(term_index),
-                        );
-                    }
-                }
-
-                let mut attributes = Vec::new();
-                let mut variable: usize = 0;
-                while let Some(datatype) = datatype_map.get(&variable) {
-                    attributes.push(TrieSchemaEntry {
-                        label: 0, // TODO: This should get perhaps a new label
-                        datatype: *datatype,
-                    });
-                    variable += 1;
-                }
-
-                let schema = TrieSchema::new(attributes);
-
                 Some(TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
                     subiterators,
                     bindings,
-                    schema,
                 )))
             }
             ExecutionOperation::Union(subtables) => {

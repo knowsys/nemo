@@ -9,10 +9,7 @@ use crate::physical::{
     datatypes::{DataTypeName, Double, Float},
     tabular::{
         table_types::trie::Trie,
-        traits::{
-            table_schema::TableSchema,
-            triescan::{TrieScan, TrieScanEnum},
-        },
+        traits::triescan::{TrieScan, TrieScanEnum},
     },
 };
 
@@ -28,16 +25,16 @@ pub fn materialize_inner(
     // Keep track of the number of next calls; used for logging
     let mut next_count: usize = 0;
 
-    // Clone the schema of the trie
-    let schema = trie_scan.get_schema().clone();
-    debug_assert!(schema.arity() > 0);
+    // Used types will be the same as in the trie scan
+    let column_types = trie_scan.get_types().clone();
+    let arity = column_types.len();
 
     // Setup column builders
-    let mut result_columns = Vec::<ColumnWithIntervalsT>::with_capacity(schema.arity());
+    let mut result_columns = Vec::<ColumnWithIntervalsT>::with_capacity(arity);
     let mut data_column_builders = Vec::<ColumnBuilderAdaptiveT>::new();
     let mut intervals_column_builders = Vec::<ColumnBuilderAdaptive<usize>>::new();
 
-    for var in 0..schema.arity() {
+    for var in 0..arity {
         intervals_column_builders.push(ColumnBuilderAdaptive::default());
 
         macro_rules! init_builder_for_datatype {
@@ -48,7 +45,7 @@ pub fn materialize_inner(
             }};
         }
 
-        match schema.get_type(var) {
+        match column_types[var] {
             DataTypeName::U64 => init_builder_for_datatype!(U64),
             DataTypeName::Float => init_builder_for_datatype!(Float),
             DataTypeName::Double => init_builder_for_datatype!(Double),
@@ -59,13 +56,13 @@ pub fn materialize_inner(
     // current_row[i] = true means that for the ith value in the current path
     // we have already reached the bottom starting from that value (by an alternative path)
     // meaning that this value has to be added before leaving it
-    let mut current_row: Vec<bool> = vec![false; schema.arity() - 1];
+    let mut current_row: Vec<bool> = vec![false; arity - 1];
 
     // Contains for each layer the current number of entries in the data vector
-    let mut current_num_elements: Vec<usize> = vec![0usize; schema.arity()];
+    let mut current_num_elements: Vec<usize> = vec![0usize; arity];
 
     // Contains for each layer the number of entries in the data vector at the last time the interval column has been updated
-    let mut prev_num_elements: Vec<usize> = vec![0usize; schema.arity()];
+    let mut prev_num_elements: Vec<usize> = vec![0usize; arity];
 
     // Current layer in the depth-first search
     let mut current_layer: usize = 0;
@@ -77,7 +74,7 @@ pub fn materialize_inner(
     trie_scan.down();
     loop {
         // It is important to know when we reached the bottom as only those values will be added to the result
-        let is_last_layer = current_layer >= schema.arity() - 1;
+        let is_last_layer = current_layer >= arity - 1;
 
         // In each loop iteration we perform a sideways step, then if not on the last layer go down
         // (unless a sideways step is impossible in which case we go up)
@@ -104,16 +101,16 @@ pub fn materialize_inner(
                 }
             }
 
-            if is_last_layer {
-                current_row = vec![true; schema.arity()];
-                is_empty = false;
-
-                // At this point we know that the result will contain at least one variable
-                if check_empty {
-                    break;
-                }
-            } else if current_row[current_layer] {
+            if !is_last_layer {
                 current_row[current_layer] = false;
+            }
+        } else if is_last_layer && next_value.is_some() {
+            current_row = vec![true; arity - 1];
+            is_empty = false;
+
+            // At this point we know that the result will contain at least one variable
+            if check_empty {
+                break;
             }
         }
 
@@ -150,7 +147,7 @@ pub fn materialize_inner(
 
     if !is_empty {
         // Collect data from column builders
-        for column_index in 0..schema.arity() {
+        for column_index in 0..arity {
             macro_rules! finalize_for_datatype {
                 ($variant:ident, $type:ty) => {{
                     let current_data_builder: ColumnBuilderAdaptive<$type> =
@@ -172,14 +169,14 @@ pub fn materialize_inner(
                 }};
             }
 
-            match schema.get_type(column_index) {
+            match column_types[column_index] {
                 DataTypeName::U64 => finalize_for_datatype!(U64, u64),
                 DataTypeName::Float => finalize_for_datatype!(Float, Float),
                 DataTypeName::Double => finalize_for_datatype!(Double, Double),
             }
         }
 
-        let result = Trie::new(schema, result_columns);
+        let result = Trie::new(result_columns);
         log::info!(
             "Materialize: Next: {next_count}, Elements: {}, Quotient: {}",
             result.num_elements(),
@@ -219,11 +216,8 @@ pub fn materialize_subset(
 mod test {
     use super::materialize;
     use crate::physical::columnar::traits::column::Column;
-    use crate::physical::datatypes::DataTypeName;
     use crate::physical::tabular::operations::TrieScanJoin;
-    use crate::physical::tabular::table_types::trie::{
-        Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
-    };
+    use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::TrieScanEnum;
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
@@ -243,22 +237,7 @@ mod test {
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie = Trie::new(schema, column_vec);
+        let trie = Trie::new(column_vec);
         let mut trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
         let materialized_trie = materialize(&mut trie_iter).unwrap();
@@ -319,44 +298,8 @@ mod test {
         let column_b_y = make_column_with_intervals_t(&[1, 2, 3, 6], &[0]);
         let column_b_z = make_column_with_intervals_t(&[1, 8, 9, 10, 11, 12], &[0, 1, 3, 4]);
 
-        let schema_a = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-        let schema_b = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let schema_target = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie_a = Trie::new(schema_a, vec![column_a_x, column_a_y]);
-        let trie_b = Trie::new(schema_b, vec![column_b_y, column_b_z]);
+        let trie_a = Trie::new(vec![column_a_x, column_a_y]);
+        let trie_b = Trie::new(vec![column_b_y, column_b_z]);
 
         let mut join_iter = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
             vec![
@@ -364,7 +307,6 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
             &vec![vec![0, 1], vec![1, 2]],
-            schema_target,
         ));
 
         let materialized_join = materialize(&mut join_iter).unwrap();

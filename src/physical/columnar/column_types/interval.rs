@@ -1,6 +1,7 @@
 use bytesize::ByteSize;
 
 use crate::generate_datatype_forwarder;
+use crate::physical::datatypes::DataTypeName;
 use crate::physical::management::ByteSized;
 use crate::physical::{
     columnar::traits::{
@@ -123,6 +124,15 @@ impl ColumnWithIntervalsT {
     /// Panics if `int_idx` is out of bounds.
     pub fn int_bounds(&self, int_idx: usize) -> Range<usize> {
         forward_to_interval_column!(self, int_bounds(int_idx))
+    }
+
+    /// Return the data type name of the column.
+    pub fn get_type(&self) -> DataTypeName {
+        match self {
+            Self::U64(_) => DataTypeName::U64,
+            Self::Float(_) => DataTypeName::Float,
+            Self::Double(_) => DataTypeName::Double,
+        }
     }
 }
 

@@ -4,9 +4,8 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::DataTypeName,
-    tabular::table_types::trie::TrieSchema,
     tabular::traits::{
-        table_schema::TableSchema,
+        table_schema::TableColumnTypes,
         triescan::{TrieScan, TrieScanEnum},
     },
 };
@@ -39,14 +38,14 @@ pub struct TrieScanMinus<'a> {
 impl<'a> TrieScanMinus<'a> {
     /// Construct new [`TrieScanMinus`] object.
     pub fn new(trie_left: TrieScanEnum<'a>, trie_right: TrieScanEnum<'a>) -> TrieScanMinus<'a> {
-        debug_assert!(trie_left.get_schema().arity() == trie_right.get_schema().arity());
+        debug_assert!(trie_left.get_types().len() == trie_right.get_types().len());
 
-        let target_schema = trie_left.get_schema();
-        let layer_count = target_schema.arity();
+        let target_types = trie_left.get_types();
+        let layer_count = target_types.len();
 
         let mut minus_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(layer_count);
 
-        for layer_index in 0..target_schema.arity() {
+        for layer_index in 0..layer_count {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
                     unsafe {
@@ -58,7 +57,7 @@ impl<'a> TrieScanMinus<'a> {
                             {
                                 // For the minus trie operator we need to check if a path contained
                                 // in the "left" trie is also present in the "right" trie
-                                let new_scan = if layer_index < target_schema.arity() - 1 {
+                                let new_scan = if layer_index < layer_count - 1 {
                                     // In the non-leaf layers, [`ColumnScanFollow`] is responsible
                                     // for checking if the paths match up to the last layer
                                     ColumnScanEnum::ColumnScanFollow(ColumnScanFollow::new(
@@ -88,7 +87,7 @@ impl<'a> TrieScanMinus<'a> {
                 };
             }
 
-            match target_schema.get_type(layer_index) {
+            match target_types[layer_index] {
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -127,7 +126,7 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
 
     fn down(&mut self) {
         let next_layer = self.layer_left.map_or(0, |v| v + 1);
-        debug_assert!(next_layer < self.get_schema().arity());
+        debug_assert!(next_layer < self.get_types().len());
 
         if next_layer > 0 {
             let current_layer = next_layer - 1;
@@ -154,7 +153,7 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
         // Hence, we need to reset its state
         self.minus_scans[next_layer].get_mut().reset();
 
-        if next_layer == self.get_schema().arity() - 1 {
+        if next_layer == self.get_types().len() - 1 {
             self.minus_scans[next_layer]
                 .get_mut()
                 .minus_enable(self.layer_left == self.layer_right);
@@ -169,8 +168,8 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
         Some(&self.minus_scans[index])
     }
 
-    fn get_schema(&self) -> &TrieSchema {
-        self.trie_left.get_schema()
+    fn get_types(&self) -> &TableColumnTypes {
+        self.trie_left.get_types()
     }
 }
 
@@ -178,10 +177,7 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
 mod test {
     use super::TrieScanMinus;
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
-    use crate::physical::datatypes::DataTypeName;
-    use crate::physical::tabular::table_types::trie::{
-        Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
-    };
+    use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
@@ -209,21 +205,8 @@ mod test {
         let column_right_x = make_column_with_intervals_t(&[1, 3, 4], &[0]);
         let column_right_y = make_column_with_intervals_t(&[2, 6, 9, 2, 5, 8], &[0, 3, 5]);
 
-        let schema_left = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let schema_right = schema_left.clone();
-
-        let trie_left = Trie::new(schema_left, vec![column_left_x, column_left_y]);
-        let trie_right = Trie::new(schema_right, vec![column_right_x, column_right_y]);
+        let trie_left = Trie::new(vec![column_left_x, column_left_y]);
+        let trie_right = Trie::new(vec![column_right_x, column_right_y]);
 
         let trie_left_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_left));
         let trie_right_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_right));
@@ -279,21 +262,8 @@ mod test {
             &[0, 1, 2, 3, 4, 5, 6, 8],
         );
 
-        let schema_left = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let schema_right = schema_left.clone();
-
-        let trie_left = Trie::new(schema_left, vec![column_left_x, column_left_y]);
-        let trie_right = Trie::new(schema_right, vec![column_right_x, column_right_y]);
+        let trie_left = Trie::new(vec![column_left_x, column_left_y]);
+        let trie_right = Trie::new(vec![column_right_x, column_right_y]);
 
         let trie_left_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_left));
         let trie_right_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_right));

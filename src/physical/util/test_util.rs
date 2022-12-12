@@ -1,5 +1,4 @@
-use crate::physical::datatypes::DataTypeName;
-use crate::physical::tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry};
+use crate::physical::tabular::table_types::trie::Trie;
 use crate::physical::{
     columnar::{
         column_types::{
@@ -123,15 +122,6 @@ impl<'a> Arbitrary<'a> for Trie {
         const INITIAL_SECTIONS: usize = 4;
 
         let depth = usize::arbitrary(u)? % MAX_DEPTH;
-        let mut entries = Vec::<TrieSchemaEntry>::new();
-        for depth_index in 0..depth {
-            entries.push(TrieSchemaEntry {
-                label: depth_index,
-                datatype: DataTypeName::U64,
-            });
-        }
-
-        let schema = TrieSchema::new(entries);
 
         let mut columns = Vec::<ColumnWithIntervalsT>::new();
         for depth_index in 0..depth {
@@ -148,6 +138,6 @@ impl<'a> Arbitrary<'a> for Trie {
             )?));
         }
 
-        Ok(Trie::new(schema, columns))
+        Ok(Trie::new(columns))
     }
 }
