@@ -442,14 +442,21 @@ where
         }
     }
 
+    fn pos_for_element_and_increment_index_unchecked(
+        &self,
+        el_idx: usize,
+        inc_idx: usize,
+    ) -> usize {
+        el_idx
+            .checked_sub(1)
+            .map(|el_idx| self.column.end_indices[el_idx].get())
+            .unwrap_or(0)
+            + inc_idx
+    }
+
     fn pos_for_element_and_increment_index(&self, el_idx: usize, inc_idx: usize) -> Option<usize> {
-        self.are_indices_in_range(el_idx, inc_idx).then(|| {
-            el_idx
-                .checked_sub(1)
-                .map(|el_idx| self.column.end_indices[el_idx].get())
-                .unwrap_or(0)
-                + inc_idx
-        })
+        self.are_indices_in_range(el_idx, inc_idx)
+            .then(|| self.pos_for_element_and_increment_index_unchecked(el_idx, inc_idx))
     }
 
     fn are_indices_in_range(&self, el_idx: usize, inc_idx: usize) -> bool {
@@ -527,8 +534,30 @@ where
                 || self
                     .column
                     .iter()
-                    .take(self.column.len() - 1)
-                    .zip(self.column.iter().skip(1))
+                    .take(
+                        self.pos_for_element_and_increment_index_unchecked(
+                            self.upper_bound_exclusive.0,
+                            self.upper_bound_exclusive.1
+                        ) - 1
+                    )
+                    .skip(self.pos_for_element_and_increment_index_unchecked(
+                        self.lower_bound_inclusive.0,
+                        self.lower_bound_inclusive.1
+                    ))
+                    .zip(
+                        self.column
+                            .iter()
+                            .take(self.pos_for_element_and_increment_index_unchecked(
+                                self.upper_bound_exclusive.0,
+                                self.upper_bound_exclusive.1
+                            ))
+                            .skip(
+                                self.pos_for_element_and_increment_index_unchecked(
+                                    self.lower_bound_inclusive.0,
+                                    self.lower_bound_inclusive.1
+                                ) + 1
+                            )
+                    )
                     .all(|pair| pair.0 <= pair.1)
         );
 
@@ -536,8 +565,18 @@ where
             return None;
         }
 
-        let current_element_index = self.element_index.unwrap_or_default();
-        let current_increment_index = self.increment_index.unwrap_or_default();
+        let current_element_index = self
+            .element_index
+            .and_then(|el_idx| (el_idx >= self.lower_bound_inclusive.0).then_some(el_idx))
+            .unwrap_or(self.lower_bound_inclusive.0);
+        let current_increment_index = self.increment_index.unwrap_or(self.lower_bound_inclusive.1);
+
+        if current_element_index > self.upper_bound_exclusive.0
+            || (self.upper_bound_exclusive.1 == 0
+                && current_element_index >= self.upper_bound_exclusive.0)
+        {
+            return None;
+        }
 
         // it is possible that the last element of the matching_element_index - 1 -th element
         // holds the same value as the matching element; in this case, we want to position the
@@ -585,7 +624,12 @@ where
                 }
             }
         } else {
-            panic!("if the column is sorted all increments are positive")
+            // We might end up here if the intervals ends right after the first element in a decrementing RLE block
+            // or if an interval start in the given RLE block
+            // (or if there is an interval of length zero anywhere in a decrementing RLE block, which means that it also starts in the decrementing RLE block)
+            // then the increment index is either 0 or will be captured by the default of current_increment_index, which is set to self.lower_bound_inclusive.1
+            // either way, it is safe to set seek_increment_index to 0 here
+            seek_increment_index = 0;
         };
 
         if seek_element_index > current_element_index
@@ -972,6 +1016,63 @@ mod test {
 
         iter.narrow(8..9);
         iter.next();
+
+        assert_eq!(iter.current(), Some(27));
+        assert_eq!(iter.pos(), Some(8));
+    }
+
+    #[test]
+    fn seek_on_narrowed_column_with_decrement() {
+        // Imagine this as an interval column
+        // 2, 7, 12, 22
+        // 20,
+        // 18, 21, 24, 27, 30
+        let seek_test_col = ColumnRle {
+            values: vec![2, 22, 21],
+            end_indices: vec![
+                NonZeroUsize::new(3).unwrap(),
+                NonZeroUsize::new(6).unwrap(),
+                NonZeroUsize::new(10).unwrap(),
+            ],
+            increments: vec![Step::Increment(5), Step::Decrement(2), Step::Increment(3)],
+        };
+
+        let mut iter = seek_test_col.iter();
+
+        assert_eq!(iter.current(), None);
+        assert_eq!(iter.pos(), None);
+
+        iter.narrow(0..4);
+
+        assert_eq!(iter.current(), None);
+        assert_eq!(iter.pos(), None);
+
+        iter.seek(20);
+
+        assert_eq!(iter.current(), Some(22));
+        assert_eq!(iter.pos(), Some(3));
+
+        iter.narrow(4..5);
+
+        assert_eq!(iter.current(), None);
+        assert_eq!(iter.pos(), None);
+
+        iter.seek(20);
+
+        assert_eq!(iter.current(), Some(20));
+        assert_eq!(iter.pos(), Some(4));
+
+        iter.narrow(5..10);
+
+        assert_eq!(iter.current(), None);
+        assert_eq!(iter.pos(), None);
+
+        iter.seek(18);
+
+        assert_eq!(iter.current(), Some(18));
+        assert_eq!(iter.pos(), Some(5));
+
+        iter.seek(25);
 
         assert_eq!(iter.current(), Some(27));
         assert_eq!(iter.pos(), Some(8));
