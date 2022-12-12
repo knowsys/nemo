@@ -7,11 +7,31 @@ use super::traits::{
     columnbuilder::ColumnBuilder,
 };
 
-// Number of rle elements in rle column builder after which to decide which column type to use.
-const COLUMN_IMPL_DECISION_THRESHOLD: usize = 5; // 5
+/// Number of rle elements in rle column builder after which to decide which column type to use.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum ColumnImplDecisionThreshold {
+    /// Number of RleElements after that a decision shall be made
+    NumberOfRleElements(usize),
+    /// Decide only when builder is finalized
+    OnFinalize,
+}
 
-// The average minimum length of the elements in the incremental RLE
-const TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS: usize = 3; // 3
+impl Default for ColumnImplDecisionThreshold {
+    fn default() -> Self {
+        Self::NumberOfRleElements(5)
+    }
+}
+
+/// The average minimum length of the elements in the incremental RLE
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct TargetMinLengthForRleElements(usize);
+
+impl Default for TargetMinLengthForRleElements {
+    fn default() -> Self {
+        Self(3)
+    }
+}
 
 #[derive(Debug, PartialEq)]
 enum ColumnBuilderType<T> {
@@ -31,6 +51,8 @@ impl<T> Default for ColumnBuilderType<T> {
 #[derive(Debug, Default, PartialEq)]
 pub struct ColumnBuilderAdaptive<T> {
     builder: ColumnBuilderType<T>,
+    decision_threshold: ColumnImplDecisionThreshold,
+    target_min_length_for_rle_elements: TargetMinLengthForRleElements,
 }
 
 impl<T> ColumnBuilderAdaptive<T>
@@ -38,9 +60,14 @@ where
     T: ColumnDataType + Default,
 {
     /// Constructor.
-    pub fn new() -> ColumnBuilderAdaptive<T> {
+    pub fn new(
+        decision_threshold: ColumnImplDecisionThreshold,
+        target_min_length_for_rle_elements: TargetMinLengthForRleElements,
+    ) -> ColumnBuilderAdaptive<T> {
         ColumnBuilderAdaptive {
             builder: ColumnBuilderType::Undecided(Some(ColumnBuilderRle::new())),
+            decision_threshold,
+            target_min_length_for_rle_elements,
         }
     }
 
@@ -50,7 +77,8 @@ where
                 .take()
                 .expect("this is only None from this take() call until the end of this method");
 
-            if rle_builder.avg_length_of_rle_elements() > TARGET_MIN_LENGTH_FOR_RLE_ELEMENTS {
+            if rle_builder.avg_length_of_rle_elements() > self.target_min_length_for_rle_elements.0
+            {
                 self.builder = ColumnBuilderType::ColumnRle(rle_builder);
             } else {
                 let rle_column = rle_builder.finalize();
@@ -68,8 +96,12 @@ where
 
     fn add(&mut self, value: T) {
         if let ColumnBuilderType::Undecided(Some(rle_builder)) = &self.builder {
-            if rle_builder.number_of_rle_elements() > COLUMN_IMPL_DECISION_THRESHOLD {
-                self.decide_column_type();
+            if let ColumnImplDecisionThreshold::NumberOfRleElements(threshold) =
+                self.decision_threshold
+            {
+                if rle_builder.number_of_rle_elements() > threshold {
+                    self.decide_column_type();
+                }
             }
         }
 
@@ -120,7 +152,7 @@ where
     where
         T: IntoIterator<Item = A>,
     {
-        let mut builder = Self::new();
+        let mut builder = Self::default();
         for item in iter {
             builder.add(item);
         }
@@ -141,11 +173,24 @@ pub enum ColumnBuilderAdaptiveT {
 
 impl ColumnBuilderAdaptiveT {
     /// Creates a new empty ColumnBuilderAdaptiveT for the given DataTypeName
-    pub fn new(dtn: DataTypeName) -> Self {
+    pub fn new(
+        dtn: DataTypeName,
+        decision_threshold: ColumnImplDecisionThreshold,
+        target_min_length_for_rle_elements: TargetMinLengthForRleElements,
+    ) -> Self {
         match dtn {
-            DataTypeName::U64 => Self::U64(ColumnBuilderAdaptive::new()),
-            DataTypeName::Float => Self::Float(ColumnBuilderAdaptive::new()),
-            DataTypeName::Double => Self::Double(ColumnBuilderAdaptive::new()),
+            DataTypeName::U64 => Self::U64(ColumnBuilderAdaptive::new(
+                decision_threshold,
+                target_min_length_for_rle_elements,
+            )),
+            DataTypeName::Float => Self::Float(ColumnBuilderAdaptive::new(
+                decision_threshold,
+                target_min_length_for_rle_elements,
+            )),
+            DataTypeName::Double => Self::Double(ColumnBuilderAdaptive::new(
+                decision_threshold,
+                target_min_length_for_rle_elements,
+            )),
         }
     }
 
@@ -197,6 +242,8 @@ impl FromIterator<DataValueT> for ColumnBuilderAdaptiveT {
                 .peek()
                 .map(|dv| dv.get_type())
                 .unwrap_or(DataTypeName::U64),
+            Default::default(),
+            Default::default(),
         );
         for item in peekable {
             builder.add(item);
@@ -215,7 +262,7 @@ mod test {
     use test_log::test;
 
     fn construct_presumable_vector_column() -> ColumnBuilderAdaptive<u32> {
-        let mut acb: ColumnBuilderAdaptive<u32> = ColumnBuilderAdaptive::new();
+        let mut acb = ColumnBuilderAdaptive::<u32>::default();
         acb.add(1);
         acb.add(2);
         acb.add(3);
@@ -224,7 +271,7 @@ mod test {
     }
 
     fn construct_presumable_rle_column() -> ColumnBuilderAdaptive<u32> {
-        let mut acb: ColumnBuilderAdaptive<u32> = ColumnBuilderAdaptive::new();
+        let mut acb = ColumnBuilderAdaptive::<u32>::default();
         acb.add(1);
         acb.add(2);
         acb.add(3);
@@ -278,7 +325,7 @@ mod test {
 
     #[test]
     fn test_build_empty_u32_column() {
-        let acb: ColumnBuilderAdaptive<u32> = ColumnBuilderAdaptive::new();
+        let acb = ColumnBuilderAdaptive::<u32>::default();
 
         let c = acb.finalize();
         assert!(c.is_empty());
@@ -286,7 +333,7 @@ mod test {
 
     #[test]
     fn test_build_u64_column() {
-        let mut acb: ColumnBuilderAdaptive<u64> = ColumnBuilderAdaptive::new();
+        let mut acb = ColumnBuilderAdaptive::<u64>::default();
         acb.add(1);
         acb.add(2);
         acb.add(3);
@@ -302,7 +349,7 @@ mod test {
 
     #[test]
     fn test_build_float_column() {
-        let mut acb: ColumnBuilderAdaptive<Float> = ColumnBuilderAdaptive::new();
+        let mut acb = ColumnBuilderAdaptive::<Float>::default();
         acb.add(Float::from_number(1.0));
         acb.add(Float::from_number(2.0));
         acb.add(Float::from_number(3.0));
@@ -318,7 +365,7 @@ mod test {
 
     #[test]
     fn test_build_double_column() {
-        let mut acb: ColumnBuilderAdaptive<Double> = ColumnBuilderAdaptive::new();
+        let mut acb = ColumnBuilderAdaptive::<Double>::default();
         acb.add(Double::from_number(1.0));
         acb.add(Double::from_number(2.0));
         acb.add(Double::from_number(3.0));

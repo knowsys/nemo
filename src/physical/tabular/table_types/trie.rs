@@ -316,8 +316,8 @@ impl Table for Trie {
                 cols
                     .into_iter()
                     .map(|_| {
-                        let empty_data_col = ColumnBuilderAdaptiveT::new(DataTypeName::U64);
-                        let empty_interval_col = ColumnBuilderAdaptive::<usize>::new();
+                        let empty_data_col = ColumnBuilderAdaptiveT::new(DataTypeName::U64, Default::default(), Default::default());
+                        let empty_interval_col = ColumnBuilderAdaptive::<usize>::default();
                         build_interval_column!(empty_data_col, empty_interval_col; U64; Float; Double)
                     })
                     .collect(),
@@ -351,10 +351,13 @@ impl Table for Trie {
 
         for sorted_col in sorted_cols.iter().take(sorted_cols.len() - 1) {
             let mut current_uncondensed_interval_starts = vec![0];
-            let mut current_condensed_data: ColumnBuilderAdaptiveT =
-                ColumnBuilderAdaptiveT::new(sorted_col.get_type());
+            let mut current_condensed_data: ColumnBuilderAdaptiveT = ColumnBuilderAdaptiveT::new(
+                sorted_col.get_type(),
+                Default::default(),
+                Default::default(),
+            );
             let mut current_condensed_interval_starts_builder: ColumnBuilderAdaptive<usize> =
-                ColumnBuilderAdaptive::new();
+                ColumnBuilderAdaptive::default();
 
             let mut uncondensed_interval_ends =
                 last_uncondensed_interval_starts.iter().skip(1).copied();
