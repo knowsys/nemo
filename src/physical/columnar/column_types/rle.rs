@@ -417,11 +417,12 @@ where
 #[derive(Debug)]
 pub struct ColumnScanRle<'a, T> {
     column: &'a ColumnRle<T>,
-    element_index: Option<usize>,
-    increment_index: Option<usize>,
+    element_index: usize,
+    increment_index: usize,
     current: Option<T>,
     lower_bound_inclusive: (usize, usize), // element_index and increment index
     upper_bound_exclusive: (usize, usize), // element_index and increment index
+    indices_initialized: bool,
 }
 
 impl<'a, T> ColumnScanRle<'a, T>
@@ -432,14 +433,25 @@ where
     pub fn new(column: &'a ColumnRle<T>) -> ColumnScanRle<'a, T> {
         ColumnScanRle {
             column,
-            element_index: None,
-            increment_index: None,
+            element_index: Default::default(),
+            increment_index: Default::default(),
             current: None,
             lower_bound_inclusive: (0, 0),
             upper_bound_exclusive: column.get_element_and_increment_index_from_global_index(
                 column.end_indices.last().map(|nzu| nzu.get()).unwrap_or(0),
             ),
+            indices_initialized: false,
         }
+    }
+
+    fn initialize_indices(&mut self) {
+        if self.indices_initialized {
+            return;
+        }
+
+        self.element_index = self.lower_bound_inclusive.0;
+        self.increment_index = self.lower_bound_inclusive.1;
+        self.indices_initialized = true;
     }
 
     fn pos_for_element_and_increment_index_unchecked(
@@ -470,12 +482,8 @@ where
     }
 
     fn is_self_in_range(&self) -> bool {
-        self.element_index
-            .and_then(|el_idx| {
-                self.increment_index
-                    .map(|inc_idx| self.are_indices_in_range(el_idx, inc_idx))
-            })
-            .unwrap_or(false)
+        self.indices_initialized
+            && self.are_indices_in_range(self.element_index, self.increment_index)
     }
 }
 
@@ -486,33 +494,31 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut element_index = self.element_index.unwrap_or(self.lower_bound_inclusive.0);
-        let mut increment_index = self
-            .increment_index
-            .map_or(self.lower_bound_inclusive.1, |i| i + 1);
-
-        if self.are_indices_in_range(element_index, increment_index)
-            && increment_index
-                >= self.column.end_indices[element_index].get()
-                    - element_index
-                        .checked_sub(1)
-                        .map(|el_idx| self.column.end_indices[el_idx].get())
-                        .unwrap_or(0)
-        {
-            element_index += 1;
-            increment_index = 0;
+        if self.indices_initialized && self.is_self_in_range() {
+            self.increment_index += 1;
+            if self.increment_index
+                + self
+                    .element_index
+                    .checked_sub(1)
+                    .map(|ei| self.column.end_indices[ei].get())
+                    .unwrap_or(0)
+                >= self.column.end_indices[self.element_index].get()
+            {
+                self.element_index += 1;
+                self.increment_index = 0;
+            }
+        } else {
+            self.initialize_indices();
         }
 
-        self.element_index = Some(element_index);
-        self.increment_index = Some(increment_index);
-
         self.current = self.is_self_in_range().then(|| {
-            if increment_index == 0 {
-                self.column.values[element_index]
+            if self.increment_index == 0 {
+                self.column.values[self.element_index]
             } else if let Some(current) = self.current {
-                self.column.increments[element_index] + current
+                self.column.increments[self.element_index] + current
             } else {
-                self.column.get_internal(element_index, increment_index)
+                self.column
+                    .get_internal(self.element_index, self.increment_index)
             }
         });
 
@@ -565,63 +571,56 @@ where
             return None;
         }
 
-        let current_element_index = self
-            .element_index
-            .and_then(|el_idx| (el_idx >= self.lower_bound_inclusive.0).then_some(el_idx))
-            .unwrap_or(self.lower_bound_inclusive.0);
-        let current_increment_index = self.increment_index.unwrap_or(self.lower_bound_inclusive.1);
+        self.initialize_indices();
 
-        if current_element_index > self.upper_bound_exclusive.0
-            || (self.upper_bound_exclusive.1 == 0
-                && current_element_index >= self.upper_bound_exclusive.0)
-        {
+        if !self.is_self_in_range() {
             return None;
         }
+
+        let upper_element_bound_for_search = if self.upper_bound_exclusive.1 > 0 {
+            self.upper_bound_exclusive.0 + 1
+        } else {
+            self.upper_bound_exclusive.0
+        };
 
         // it is possible that the last element of the matching_element_index - 1 -th element
         // holds the same value as the matching element; in this case, we want to position the
         // iterator on that element;
         // hence we subtract 1 in any case
-        let bin_search_element_index = self.column.values[current_element_index
-            ..(if self.upper_bound_exclusive.1 > 0 {
-                self.upper_bound_exclusive.0 + 1
-            } else {
-                self.upper_bound_exclusive.0
-            })]
+        let bin_search_element_index = self.column.values
+            [self.element_index..upper_element_bound_for_search]
             .binary_search(&value)
             .unwrap_or_else(|err| err)
             .saturating_sub(1)
-            + current_element_index;
+            + self.element_index;
 
-        let mut seek_element_index: usize = bin_search_element_index;
+        let mut seek_element_index: usize;
         let mut seek_increment_index: usize;
 
         let start_value = self.column.values[bin_search_element_index];
         let inc = self.column.increments[bin_search_element_index];
 
-        if let Step::Increment(inc) = inc {
-            if value <= start_value {
-                seek_element_index = bin_search_element_index;
-                seek_increment_index = 0;
-            } else if inc.is_zero() {
-                seek_element_index = bin_search_element_index + 1;
-                seek_increment_index = 0;
-            } else {
-                seek_increment_index = ((value - start_value) / inc)
-                    .floor_to_usize()
-                    .unwrap_or_default();
+        if value <= start_value {
+            seek_element_index = bin_search_element_index;
+            seek_increment_index = 0;
+        } else if inc.is_zero() {
+            seek_element_index = bin_search_element_index + 1;
+            seek_increment_index = 0;
+        } else if let Step::Increment(inc) = inc {
+            seek_element_index = bin_search_element_index;
+            seek_increment_index = ((value - start_value) / inc)
+                .floor_to_usize()
+                .unwrap_or_default();
 
-                if self
-                    .pos_for_element_and_increment_index(
-                        bin_search_element_index,
-                        seek_increment_index,
-                    )
-                    .map(|pos| pos >= self.column.end_indices[bin_search_element_index].get())
-                    .unwrap_or(false)
-                {
-                    seek_element_index = bin_search_element_index + 1;
-                    seek_increment_index = 0;
-                }
+            if seek_increment_index
+                + seek_element_index
+                    .checked_sub(1)
+                    .map(|ei| self.column.end_indices[ei].get())
+                    .unwrap_or(0)
+                >= self.column.end_indices[seek_element_index].get()
+            {
+                seek_element_index += 1;
+                seek_increment_index = 0;
             }
         } else {
             // We might end up here if the intervals ends right after the first element in a decrementing RLE block
@@ -629,27 +628,21 @@ where
             // (or if there is an interval of length zero anywhere in a decrementing RLE block, which means that it also starts in the decrementing RLE block)
             // then the increment index is either 0 or will be captured by the default of current_increment_index, which is set to self.lower_bound_inclusive.1
             // either way, it is safe to set seek_increment_index to 0 here
+            seek_element_index = bin_search_element_index;
             seek_increment_index = 0;
-        };
+        }
 
-        if seek_element_index > current_element_index
-            || (seek_element_index == current_increment_index
-                && seek_increment_index > current_increment_index)
+        if seek_element_index > self.element_index
+            || (seek_element_index == self.element_index
+                && seek_increment_index > self.increment_index)
         {
-            self.element_index = Some(seek_element_index);
-            self.increment_index = Some(seek_increment_index);
-        } else {
-            self.element_index = Some(current_element_index);
-            self.increment_index = Some(current_increment_index);
+            self.element_index = seek_element_index;
+            self.increment_index = seek_increment_index;
         }
 
         self.current = self.is_self_in_range().then(|| {
-            self.column.get_internal(
-                self.element_index
-                    .expect("This is just set a few lines above."),
-                self.increment_index
-                    .expect("This is just set a few lines above."),
-            )
+            self.column
+                .get_internal(self.element_index, self.increment_index)
         });
 
         if let Some(cur) = self.current {
@@ -666,13 +659,17 @@ where
     }
 
     fn reset(&mut self) {
-        self.element_index = None;
-        self.increment_index = None;
+        self.element_index = Default::default();
+        self.increment_index = Default::default();
         self.current = None;
+        self.indices_initialized = false;
     }
 
     fn pos(&self) -> Option<usize> {
-        self.pos_for_element_and_increment_index(self.element_index?, self.increment_index?)
+        if !self.indices_initialized {
+            return None;
+        }
+        self.pos_for_element_and_increment_index(self.element_index, self.increment_index)
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
