@@ -34,8 +34,8 @@ where
     }
 
     /// Returns vector contianing the indices of those scans which point to the currently smallest values
-    pub fn get_smallest_scans(&self) -> &Vec<bool> {
-        &self.smallest_scans
+    pub fn get_smallest_scans(&self) -> Vec<bool> {
+        self.smallest_scans.clone()
     }
 
     /// Set a vector that indicates which scans are currently active and should be considered

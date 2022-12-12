@@ -1,6 +1,9 @@
-use super::super::traits::{
-    table_schema::TableSchema,
-    triescan::{TrieScan, TrieScanEnum},
+use super::super::{
+    table_types::trie::TrieSchema,
+    traits::{
+        table_schema::TableSchema,
+        triescan::{TrieScan, TrieScanEnum},
+    },
 };
 use crate::physical::columnar::operations::ColumnScanWithTrieLookahead;
 use crate::physical::columnar::traits::columnscan::{
@@ -8,13 +11,13 @@ use crate::physical::columnar::traits::columnscan::{
 };
 
 use crate::physical::datatypes::{DataTypeName, Double, Float};
-use std::{cell::UnsafeCell, fmt::Debug, rc::Rc};
+use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
 /// Iterator which turns an underlying 'partial' iterator into a full one,
 /// meaining that it only returns values that would be present were the iterator to be materialized
 #[derive(Debug)]
 pub struct TrieFull<'a> {
-    trie_scan: Rc<UnsafeCell<TrieScanEnum<'a>>>,
+    trie_scan: Rc<RefCell<TrieScanEnum<'a>>>,
     current_col_scan: Option<ColumnScanT<'a>>,
     current_layer: Option<usize>,
 }
@@ -23,7 +26,7 @@ impl<'a> TrieFull<'a> {
     /// Construct new TrieFull object.
     pub fn new(trie_scan: TrieScanEnum<'a>) -> TrieFull<'a> {
         TrieFull {
-            trie_scan: Rc::new(UnsafeCell::new(trie_scan)),
+            trie_scan: Rc::new(RefCell::new(trie_scan)),
             current_col_scan: None,
             current_layer: None,
         }
@@ -34,16 +37,16 @@ impl<'a> TrieFull<'a> {
             self.current_col_scan = None;
         } else {
             let current_layer = self.current_layer.unwrap();
-            let current_type = unsafe { &*self.trie_scan.get() }
+            let current_type = self
+                .trie_scan
+                .borrow()
                 .get_schema()
                 .get_type(self.current_layer.unwrap());
 
             macro_rules! init_scans_for_datatype {
                 ($variant:ident, $type:ty) => {{
                     let col_scan = if let ColumnScanT::$variant(cs) =
-                        unsafe { &mut *self.trie_scan.get() }
-                            .current_scan()
-                            .unwrap()
+                        self.trie_scan.borrow_mut().current_scan().unwrap()
                     {
                         cs.clone()
                     } else {
@@ -51,7 +54,7 @@ impl<'a> TrieFull<'a> {
                     };
 
                     let lookahead_scan = ColumnScanWithTrieLookahead::<$type>::new(
-                        Rc::clone(&self.trie_scan),
+                        self.trie_scan.clone(),
                         current_layer,
                         col_scan,
                     );
@@ -84,8 +87,7 @@ impl<'a> TrieScan<'a> for TrieFull<'a> {
 
         self.current_layer = up_layer;
 
-        let current_scan = unsafe { &mut *self.trie_scan.get() };
-        current_scan.up();
+        self.trie_scan.borrow_mut().up();
 
         self.set_current_col_scan();
     }
@@ -96,8 +98,7 @@ impl<'a> TrieScan<'a> for TrieFull<'a> {
 
         debug_assert!(self.current_layer.unwrap() < self.get_schema().arity());
 
-        let current_scan = unsafe { &mut *self.trie_scan.get() };
-        current_scan.down();
+        self.trie_scan.borrow_mut().down();
 
         self.set_current_col_scan();
     }
@@ -110,8 +111,8 @@ impl<'a> TrieScan<'a> for TrieFull<'a> {
         panic!("get_scan not possible for Full iterators.")
     }
 
-    fn get_schema(&self) -> &dyn TableSchema {
-        unsafe { &*self.trie_scan.get() }.get_schema()
+    fn get_schema(&self) -> TrieSchema {
+        self.trie_scan.borrow().get_schema()
     }
 }
 

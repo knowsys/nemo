@@ -453,8 +453,8 @@ impl Table for Trie {
         self.columns.last().map_or(0, |c| c.len())
     }
 
-    fn schema(&self) -> &Self::Schema {
-        &self.schema
+    fn schema(&self) -> Self::Schema {
+        self.schema.clone()
     }
 }
 
@@ -526,7 +526,7 @@ impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
         Some(&mut self.layers[index])
     }
 
-    fn get_schema(&self) -> &dyn TableSchema {
+    fn get_schema(&self) -> TrieSchema {
         self.trie.schema()
     }
 }

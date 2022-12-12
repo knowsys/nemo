@@ -6,9 +6,12 @@ use crate::physical::{
         },
     },
     datatypes::DataTypeName,
-    tabular::traits::{
-        table_schema::TableSchema,
-        triescan::{TrieScan, TrieScanEnum},
+    tabular::{
+        table_types::trie::TrieSchema,
+        traits::{
+            table_schema::TableSchema,
+            triescan::{TrieScan, TrieScanEnum},
+        },
     },
 };
 use std::fmt::Debug;
@@ -170,7 +173,7 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
         Some(&mut self.difference_scans[index])
     }
 
-    fn get_schema(&self) -> &dyn TableSchema {
+    fn get_schema(&self) -> TrieSchema {
         self.trie_left.get_schema()
     }
 }

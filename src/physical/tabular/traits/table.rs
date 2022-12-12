@@ -17,5 +17,5 @@ pub trait Table: Debug {
     fn row_num(&self) -> usize;
 
     /// Returns the schema of the table.
-    fn schema(&self) -> &Self::Schema;
+    fn schema(&self) -> Self::Schema;
 }

@@ -251,8 +251,8 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
         Some(&mut self.reorder_scans[index])
     }
 
-    fn get_schema(&self) -> &dyn TableSchema {
-        &self.target_schema
+    fn get_schema(&self) -> TrieSchema {
+        self.target_schema.clone()
     }
 }
 

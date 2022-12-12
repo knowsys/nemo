@@ -1,9 +1,12 @@
 use super::super::traits::columnscan::{ColumnScan, ColumnScanRc};
 use crate::physical::{
     datatypes::ColumnDataType,
-    tabular::traits::triescan::{TrieScan, TrieScanEnum},
+    tabular::traits::{
+        table_schema::TableSchema,
+        triescan::{TrieScan, TrieScanEnum},
+    },
 };
-use std::{cell::UnsafeCell, fmt::Debug, ops::Range, rc::Rc};
+use std::{cell::RefCell, fmt::Debug, ops::Range, rc::Rc};
 
 /// Column iterator for a column that represents a layer of partial trie iterator
 /// Only returns those values which would be included if the trie where to be materialized
@@ -12,8 +15,7 @@ pub struct ColumnScanWithTrieLookahead<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    // TODO: we could build something like RangedColumnScanRc and RangedColumnScanRc trie scans
-    trie_scan: Rc<UnsafeCell<TrieScanEnum<'a>>>,
+    trie_scan: Rc<RefCell<TrieScanEnum<'a>>>,
     current_layer: usize,
     col_scan: ColumnScanRc<'a, T>, // NOTE: this needs to be the current column scan from the trie_scan
 }
@@ -24,7 +26,7 @@ where
 {
     /// Constructs a new ColumnScanWithTrieLookahead for a Column.
     pub fn new(
-        trie_scan: Rc<UnsafeCell<TrieScanEnum<'a>>>,
+        trie_scan: Rc<RefCell<TrieScanEnum<'a>>>,
         current_layer: usize,
         col_scan: ColumnScanRc<'a, T>,
     ) -> ColumnScanWithTrieLookahead<'a, T> {
@@ -37,23 +39,19 @@ where
 
     // Check whether the current value of the given trie scan actually exists
     fn value_exists(&mut self) -> bool {
-        if self.current_layer == unsafe { &*self.trie_scan.get() }.get_schema().arity() - 1 {
+        if self.current_layer == self.trie_scan.borrow().get_schema().arity() - 1 {
             return true;
         }
 
         // Iterate through the trie_scan in a dfs manner
-        unsafe { &mut *self.trie_scan.get() }.down();
+        self.trie_scan.borrow_mut().down();
         let mut current_layer = self.current_layer + 1;
         loop {
-            let is_last_layer =
-                current_layer >= unsafe { &*self.trie_scan.get() }.get_schema().arity() - 1;
-            let next_value = unsafe { &mut *self.trie_scan.get() }
-                .current_scan()
-                .unwrap()
-                .next();
+            let is_last_layer = current_layer >= self.trie_scan.borrow().get_schema().arity() - 1;
+            let next_value = self.trie_scan.borrow_mut().current_scan().unwrap().next();
 
             if next_value.is_none() {
-                unsafe { &mut *self.trie_scan.get() }.up();
+                self.trie_scan.borrow_mut().up();
                 current_layer -= 1;
 
                 if current_layer == self.current_layer {
@@ -64,13 +62,12 @@ where
             }
 
             if !is_last_layer {
-                unsafe { &mut *self.trie_scan.get() }.down();
+                self.trie_scan.borrow_mut().down();
                 current_layer += 1;
             } else {
-                for _ in
-                    self.current_layer..(unsafe { &*self.trie_scan.get() }.get_schema().arity() - 1)
-                {
-                    unsafe { &mut *self.trie_scan.get() }.up();
+                let arity = self.trie_scan.borrow().get_schema().arity();
+                for _ in self.current_layer..(arity - 1) {
+                    self.trie_scan.borrow_mut().up();
                 }
 
                 return true;

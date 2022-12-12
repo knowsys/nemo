@@ -139,8 +139,8 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
         Some(&mut self.merge_joins[index])
     }
 
-    fn get_schema(&self) -> &dyn TableSchema {
-        &self.target_schema
+    fn get_schema(&self) -> TrieSchema {
+        self.target_schema.clone()
     }
 }
 

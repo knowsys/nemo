@@ -7,7 +7,7 @@ use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
 };
-use std::{cell::UnsafeCell, fmt::Debug, ops::Range, rc::Rc};
+use std::{cell::RefCell, fmt::Debug, ops::Range, rc::Rc};
 
 /// Iterator for a sorted interval of values
 pub trait ColumnScan: Debug + Iterator {
@@ -193,7 +193,7 @@ where
 
     /// Assumes that column scan is a union scan
     /// and returns a vector containing the positions of the scans with the smallest values
-    pub fn get_smallest_scans(&self) -> &Vec<bool> {
+    pub fn get_smallest_scans(&self) -> Vec<bool> {
         match self {
             Self::ColumnScanUnion(cs) => cs.get_smallest_scans(),
             _ => {
@@ -273,7 +273,7 @@ where
 
 /// A wrapper around a cell type holding a `ColumnScanEnum`.
 #[repr(transparent)]
-pub struct ColumnScanCell<'a, T>(UnsafeCell<ColumnScanEnum<'a, T>>)
+pub struct ColumnScanCell<'a, T>(RefCell<ColumnScanEnum<'a, T>>)
 where
     T: 'a + ColumnDataType;
 
@@ -282,8 +282,8 @@ where
     T: ColumnDataType,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let rcs = unsafe { &*self.0.get() };
-        f.debug_tuple("ColumnScanCell").field(rcs).finish()
+        let rcs = self.0.borrow();
+        f.debug_tuple("ColumnScanCell").field(&rcs).finish()
     }
 }
 
@@ -293,13 +293,13 @@ where
 {
     /// Construct a new `ColumnScanCell` from the given [`ColumnScanEnum`].
     pub fn new(cs: ColumnScanEnum<'a, T>) -> Self {
-        Self(UnsafeCell::new(cs))
+        Self(RefCell::new(cs))
     }
 
     /// Forward `next` to the underlying [`ColumnScanEnum`].
     #[inline]
     pub fn next(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
-        unsafe { &mut *self.0.get() }.next()
+        self.0.borrow_mut().next()
     }
 
     /// Forward `seek` to the underlying [`ColumnScanEnum`].
@@ -308,51 +308,51 @@ where
         &self,
         value: <ColumnScanEnum<'a, T> as Iterator>::Item,
     ) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
-        unsafe { &mut *self.0.get() }.seek(value)
+        self.0.borrow_mut().seek(value)
     }
 
     /// Forward `current` to the underlying [`ColumnScanEnum`].
     #[inline]
     pub fn current(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
-        unsafe { &mut *self.0.get() }.current()
+        self.0.borrow_mut().current()
     }
 
     /// Forward `reset` to the underlying [`ColumnScanEnum`].
     #[inline]
     pub fn reset(&self) {
-        unsafe { &mut *self.0.get() }.reset()
+        self.0.borrow_mut().reset()
     }
 
     /// Forward `pos` to the underlying [`ColumnScanEnum`].
     #[inline]
     pub fn pos(&self) -> Option<usize> {
-        unsafe { &(*self.0.get()) }.pos()
+        self.0.borrow().pos()
     }
 
     /// Forward `narrow` to the underlying [`ColumnScanEnum`].
     #[inline]
     pub fn narrow(&self, interval: Range<usize>) {
-        unsafe { &mut *self.0.get() }.narrow(interval)
+        self.0.borrow_mut().narrow(interval)
     }
 
     /// Forward `pos_multiple` to the underlying [`ColumnScanEnum`].
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
-        unsafe { &mut *self.0.get() }.pos_multiple()
+        self.0.borrow().pos_multiple()
     }
 
     /// Forward `narrow_ranges` to the underlying [`ColumnScanEnum`].
     pub fn narrow_ranges(&self, intervals: Vec<Range<usize>>) {
-        unsafe { &mut *self.0.get() }.narrow_ranges(intervals)
+        self.0.borrow_mut().narrow_ranges(intervals)
     }
 
     /// Forward `is_equal` to the underlying [`ColumnScanEnum`].
     pub fn is_equal(&self) -> bool {
-        unsafe { &mut *self.0.get() }.is_equal()
+        self.0.borrow().is_equal()
     }
 
     /// Forward `get_smallest_scans` to the underlying [`ColumnScanEnum`].
-    pub fn get_smallest_scans(&self) -> &Vec<bool> {
-        unsafe { &mut *self.0.get() }.get_smallest_scans()
+    pub fn get_smallest_scans(&self) -> Vec<bool> {
+        self.0.borrow().get_smallest_scans()
     }
 
     /// Forward `get_smallest_scans` to the underlying [`ColumnScanEnum`].
@@ -361,7 +361,9 @@ where
         active_scans: Vec<usize>,
         scans_for_replacement: Vec<ColumnScanRc<'a, T>>,
     ) {
-        unsafe { &mut *self.0.get() }.set_active_scans(active_scans, scans_for_replacement);
+        self.0
+            .borrow_mut()
+            .set_active_scans(active_scans, scans_for_replacement);
     }
 }
 
@@ -371,7 +373,7 @@ where
     T: 'a + ColumnDataType,
 {
     fn from(cs: S) -> Self {
-        Self(UnsafeCell::new(cs.into()))
+        Self(RefCell::new(cs.into()))
     }
 }
 
@@ -439,7 +441,7 @@ where
     }
 
     /// Forward `get_smallest_scans` to the underlying [`ColumnScanCell`].
-    pub fn get_smallest_scans(&self) -> &Vec<bool> {
+    pub fn get_smallest_scans(&self) -> Vec<bool> {
         self.0.get_smallest_scans()
     }
 
@@ -506,7 +508,7 @@ impl<'a> ColumnScanT<'a> {
 
     /// Assumes that column scan is a union scan
     /// and returns a vector containing the positions of the scans with the smallest values
-    pub fn get_smallest_scans(&self) -> &Vec<bool> {
+    pub fn get_smallest_scans(&self) -> Vec<bool> {
         forward_to_columnscan_rc!(self, get_smallest_scans)
     }
 
