@@ -14,7 +14,7 @@ impl<'a, T> ColumnScanPass<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new ColumnScanPass for a Column.
+    /// Constructs a new [`ColumnScanPass`].
     pub fn new(reference_scan: &'a ColumnScanCell<'a, T>) -> ColumnScanPass<'a, T> {
         ColumnScanPass { reference_scan }
     }

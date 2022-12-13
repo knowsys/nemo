@@ -21,7 +21,7 @@ impl<'a, T> ColumnScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new ColumnScanEqualColumn for a Column.
+    /// Constructs a new [`ColumnScanEqualColumn`].
     pub fn new(
         reference_scan: &'a ColumnScanCell<'a, T>,
         value_scan: &'a ColumnScanCell<'a, T>,

@@ -25,7 +25,7 @@ impl<'a, T> ColumnScanJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new ColumnVectorScan for a Column.
+    /// Constructs a new [`ColumnScanJoin`].
     pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> Self {
         ColumnScanJoin {
             column_scans,

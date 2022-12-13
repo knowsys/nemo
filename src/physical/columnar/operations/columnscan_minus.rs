@@ -120,7 +120,7 @@ impl<'a, T> ColumnScanMinus<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new ColumnVectorScan for a Column.
+    /// Constructs a new [`ColumnScanMinus`] for a Column.
     pub fn new(
         scan_left: &'a ColumnScanCell<'a, T>,
         scan_right: &'a ColumnScanCell<'a, T>,

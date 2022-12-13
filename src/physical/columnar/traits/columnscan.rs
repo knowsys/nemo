@@ -36,7 +36,7 @@ pub trait ColumnScan: Debug + Iterator {
     fn narrow(&mut self, interval: Range<usize>);
 }
 
-/// Enum for ranged column scans for all the supported types
+/// Enum for [`ColumnScan`] of all supported types
 #[derive(Debug)]
 pub enum ColumnScanEnum<'a, T>
 where

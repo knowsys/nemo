@@ -29,7 +29,7 @@ impl<'a, T> ColumnScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new [`ColumnScanUnion`] for a Column.
+    /// Constructs a new [`ColumnScanUnion`].
     pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> ColumnScanUnion<'a, T> {
         let scans_len = column_scans.len();
         ColumnScanUnion {
