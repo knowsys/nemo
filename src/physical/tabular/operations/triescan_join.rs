@@ -65,12 +65,9 @@ impl<'a> TrieScanJoin<'a> {
         debug_assert!(trie_scans
             .iter()
             .enumerate()
-            .fold(true, |acc, (scan_index, scan_enum)| acc
-                && (bindings[scan_index].len()
-                    == scan_enum.get_schema().arity())));
-        debug_assert!(bindings
-            .iter()
-            .fold(true, |acc, binding| acc && binding.is_sorted()));
+            .all(|(scan_index, scan_enum)| bindings[scan_index].len()
+                == scan_enum.get_schema().arity()));
+        debug_assert!(bindings.iter().all(|binding| binding.is_sorted()));
 
         // Indices of the sub tries which are assosiated with a given layer in the result
         let mut layer_to_scans = repeat(Vec::new())

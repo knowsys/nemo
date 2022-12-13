@@ -35,8 +35,9 @@ impl<'a> TrieScanUnion<'a> {
     /// Construct new TrieScanUnion object.
     pub fn new(trie_scans: Vec<TrieScanEnum<'a>>) -> TrieScanUnion<'a> {
         debug_assert!(!trie_scans.is_empty());
-        debug_assert!(trie_scans.iter().fold(true, |acc, scan| acc
-            && (scan.get_schema().arity() == trie_scans[0].get_schema().arity())));
+        debug_assert!(trie_scans
+            .iter()
+            .all(|scan| scan.get_schema().arity() == trie_scans[0].get_schema().arity()));
 
         // This assumes that every schema is the same
         // TODO: Perhaps debug_assert! this

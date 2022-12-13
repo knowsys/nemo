@@ -33,12 +33,8 @@ impl<'a> TrieScanSelectEqual<'a> {
     /// E.g. for R(a, a, b, c, d, c) eq_classes = [[0, 1], [3, 5]]
     /// Assumes that the members in each class are sorted and contains at least two elements
     pub fn new(base_trie: TrieScanEnum<'a>, eq_classes: Vec<Vec<usize>>) -> Self {
-        debug_assert!(eq_classes
-            .iter()
-            .fold(true, |acc, class| acc && class.is_sorted()));
-        debug_assert!(eq_classes
-            .iter()
-            .fold(true, |acc, class| acc && (class.len() > 1)));
+        debug_assert!(eq_classes.iter().all(|class| class.is_sorted()));
+        debug_assert!(eq_classes.iter().all(|class| class.len() > 1));
 
         let target_schema = base_trie.get_schema();
         let arity = target_schema.arity();
