@@ -164,6 +164,8 @@ where
 #[derive(Debug)]
 pub enum ColumnBuilderAdaptiveT {
     /// Case u64
+    U32(ColumnBuilderAdaptive<u32>),
+    /// Case u64
     U64(ColumnBuilderAdaptive<u64>),
     /// Case Float
     Float(ColumnBuilderAdaptive<Float>),
@@ -179,6 +181,10 @@ impl ColumnBuilderAdaptiveT {
         target_min_length_for_rle_elements: TargetMinLengthForRleElements,
     ) -> Self {
         match dtn {
+            DataTypeName::U32 => Self::U32(ColumnBuilderAdaptive::new(
+                decision_threshold,
+                target_min_length_for_rle_elements,
+            )),
             DataTypeName::U64 => Self::U64(ColumnBuilderAdaptive::new(
                 decision_threshold,
                 target_min_length_for_rle_elements,
@@ -197,6 +203,13 @@ impl ColumnBuilderAdaptiveT {
     /// Adds value of arbitrary type to the column builder
     pub fn add(&mut self, value: DataValueT) {
         match self {
+            Self::U32(cb) => {
+                if let DataValueT::U32(v) = value {
+                    cb.add(v);
+                } else {
+                    panic!("value does not match AdaptiveColumn type");
+                }
+            }
             Self::U64(cb) => {
                 if let DataValueT::U64(v) = value {
                     cb.add(v);
@@ -224,6 +237,7 @@ impl ColumnBuilderAdaptiveT {
     /// Return the number of elements that were already added.
     pub fn count(&self) -> usize {
         match self {
+            Self::U32(cb) => cb.count(),
             Self::U64(cb) => cb.count(),
             Self::Float(cb) => cb.count(),
             Self::Double(cb) => cb.count(),

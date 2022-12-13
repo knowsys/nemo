@@ -1,6 +1,8 @@
 use bytesize::ByteSize;
 
 use crate::logical::Permutator;
+use crate::physical::columnar::operations::{ColumnScanCast, ColumnScanCastEnum};
+use crate::physical::columnar::traits::columnscan::{ColumnScanCell, ColumnScanEnum};
 use crate::physical::columnar::{
     adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
     column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
@@ -284,7 +286,7 @@ impl Table for Trie {
                     .map(|_| {
                         let empty_data_col = ColumnBuilderAdaptiveT::new(DataTypeName::U64, Default::default(), Default::default());
                         let empty_interval_col = ColumnBuilderAdaptive::<usize>::default();
-                        build_interval_column!(empty_data_col, empty_interval_col; U64; Float; Double)
+                        build_interval_column!(empty_data_col, empty_interval_col; U32; U64; Float; Double)
                     })
                     .collect(),
             );
@@ -295,6 +297,9 @@ impl Table for Trie {
         let mut sorted_cols: Vec<VecT> =
             cols.iter()
                 .map(|col| match col {
+                    VecT::U32(vec) => VecT::U32(permutator.permutate(vec).expect(
+                        "length matches since permutator is constructed from these vectores",
+                    )),
                     VecT::U64(vec) => VecT::U64(permutator.permutate(vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
@@ -396,7 +401,7 @@ impl Table for Trie {
             condensed_data_builders
                 .into_iter()
                 .zip(condensed_interval_starts_builders)
-                .map(|(col, iv)| build_interval_column!(col, iv; U64; Float; Double))
+                .map(|(col, iv)| build_interval_column!(col, iv; U32; U64; Float; Double))
                 .collect(),
         )
     }
@@ -428,10 +433,11 @@ impl Table for Trie {
     }
 }
 
-/// Implementation of TrieScan for Trie with IntervalColumns
+/// Implementation of [`TrieScan`] for a [`Trie`].
 #[derive(Debug)]
 pub struct TrieScanGeneric<'a> {
     trie: &'a Trie,
+    column_types: TableColumnTypes,
     layers: Vec<UnsafeCell<ColumnScanT<'a>>>,
     current_layer: Option<usize>,
 }
@@ -439,15 +445,56 @@ pub struct TrieScanGeneric<'a> {
 impl<'a> TrieScanGeneric<'a> {
     /// Construct Trie iterator.
     pub fn new(trie: &'a Trie) -> Self {
+        let column_types = trie.get_types().clone();
+        Self::new_cast(trie, column_types)
+    }
+
+    /// Construct a new trie iterator but converts each column to the given types.
+    pub fn new_cast(trie: &'a Trie, column_types: TableColumnTypes) -> Self {
+        debug_assert!(trie.get_types().len() == column_types.len());
+
         let mut layers = Vec::<UnsafeCell<ColumnScanT<'a>>>::new();
 
-        for column_t in trie.columns() {
-            let new_scan = column_t.iter();
-            layers.push(UnsafeCell::new(new_scan));
+        for (column_index, column_t) in trie.columns().iter().enumerate() {
+            let src_column_type = trie.get_types()[column_index];
+            let dst_column_type = column_types[column_index];
+
+            if src_column_type == dst_column_type {
+                layers.push(UnsafeCell::new(column_t.iter()));
+            } else {
+                macro_rules! add_layer_for_datatype {
+                    ($src_name:ident, $dst_name:ident, $src_type:ty, $dst_type:ty) => {{
+                        let reference_scan = if let ColumnScanT::$src_name(scan) = column_t.iter() {
+                            scan
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($type));
+                        };
+
+                        let new_scan = ColumnScanT::$dst_name(ColumnScanCell::new(
+                            ColumnScanEnum::ColumnScanCast(ColumnScanCastEnum::$src_name(
+                                ColumnScanCast::<$src_type, $dst_type>::new(reference_scan),
+                            )),
+                        ));
+
+                        layers.push(UnsafeCell::new(new_scan));
+                    }};
+                }
+
+                match src_column_type {
+                    DataTypeName::U32 => match dst_column_type {
+                        DataTypeName::U64 => add_layer_for_datatype!(U32, U64, u32, u64),
+                        _ => panic!("Unsupported cast."),
+                    },
+                    DataTypeName::U64 => panic!("Unsupported cast."),
+                    DataTypeName::Float => panic!("Unsupported cast."),
+                    DataTypeName::Double => panic!("Unsupported cast."),
+                }
+            }
         }
 
         Self {
             trie,
+            column_types,
             layers,
             current_layer: None,
         }
@@ -504,7 +551,7 @@ impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
     }
 
     fn get_types(&self) -> &TableColumnTypes {
-        self.trie.get_types()
+        &self.column_types
     }
 }
 

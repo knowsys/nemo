@@ -142,6 +142,7 @@ impl<'a> TrieScanJoin<'a> {
             }
 
             match target_types[var_index] {
+                DataTypeName::U32 => merge_join_for_datatype!(U32, u32),
                 DataTypeName::U64 => merge_join_for_datatype!(U64, u64),
                 DataTypeName::Float => merge_join_for_datatype!(Float, Float),
                 DataTypeName::Double => merge_join_for_datatype!(Double, Double),

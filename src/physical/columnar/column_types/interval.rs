@@ -93,6 +93,8 @@ impl<T: ColumnDataType> ByteSized for ColumnWithIntervals<T> {
 /// Enum for Interval Column with different underlying datatypes
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColumnWithIntervalsT {
+    /// Case u32
+    U32(ColumnWithIntervals<u32>),
     /// Case u64
     U64(ColumnWithIntervals<u64>),
     /// Case Float
@@ -129,6 +131,7 @@ impl ColumnWithIntervalsT {
     /// Return the data type name of the column.
     pub fn get_type(&self) -> DataTypeName {
         match self {
+            Self::U32(_) => DataTypeName::U32,
             Self::U64(_) => DataTypeName::U64,
             Self::Float(_) => DataTypeName::Float,
             Self::Double(_) => DataTypeName::Double,

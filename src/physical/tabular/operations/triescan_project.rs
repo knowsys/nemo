@@ -48,6 +48,7 @@ fn shrink_position(column: &ColumnWithIntervalsT, pos: usize) -> usize {
     }
 
     match column {
+        ColumnWithIntervalsT::U32(col) => shrink_position_t(col, pos),
         ColumnWithIntervalsT::U64(col) => shrink_position_t(col, pos),
         ColumnWithIntervalsT::Float(col) => shrink_position_t(col, pos),
         ColumnWithIntervalsT::Double(col) => shrink_position_t(col, pos),
@@ -95,6 +96,7 @@ impl<'a> TrieScanProject<'a> {
             }
 
             match current_datatype {
+                DataTypeName::U32 => init_scans_for_datatype!(U32),
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -236,6 +238,7 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
         }
 
         match next_column {
+            ColumnWithIntervalsT::U32(_) => down_for_datatype!(U32),
             ColumnWithIntervalsT::U64(_) => down_for_datatype!(U64),
             ColumnWithIntervalsT::Float(_) => down_for_datatype!(Float),
             ColumnWithIntervalsT::Double(_) => down_for_datatype!(Double),

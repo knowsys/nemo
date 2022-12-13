@@ -6,14 +6,17 @@ use std::{
 
 use bytesize::ByteSize;
 
-use crate::physical::tabular::{
-    operations::{
-        materialize::{materialize, materialize_subset},
-        TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
-        TrieScanUnion,
+use crate::{
+    error::Error,
+    physical::tabular::{
+        operations::{
+            materialize::{materialize, materialize_subset},
+            TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
+            TrieScanUnion,
+        },
+        table_types::trie::{Trie, TrieScanGeneric},
+        traits::{table_schema::TableSchema, triescan::TrieScanEnum},
     },
-    table_types::trie::{Trie, TrieScanGeneric},
-    traits::triescan::TrieScanEnum,
 };
 
 use super::{
@@ -32,15 +35,33 @@ pub trait TableKeyType: Eq + Hash + Clone {}
 pub struct TableInfo<TableKey: TableKeyType> {
     /// The trie.
     pub trie: Trie,
-
     /// Associated key.
     pub key: TableKey,
+    /// The schema of the table
+    pub schema: TableSchema,
 }
 
 impl<TableKey: TableKeyType> TableInfo<TableKey> {
     /// Create new [`TableInfo`].
-    pub fn new(trie: Trie, key: TableKey) -> Self {
-        Self { trie, key }
+    pub fn new(trie: Trie, key: TableKey, schema: TableSchema) -> Self {
+        Self { trie, key, schema }
+    }
+}
+
+/// Struct that contains useful information about a trie
+/// that is only available temporarily.
+#[derive(Debug)]
+pub struct TempTableInfo {
+    /// The trie.
+    pub trie: Trie,
+    /// The schema of the table
+    pub schema: TableSchema,
+}
+
+impl TempTableInfo {
+    /// Create new [`TempTableInfo`].
+    pub fn new(trie: Trie, schema: TableSchema) -> Self {
+        Self { trie, schema }
     }
 }
 
@@ -112,12 +133,12 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
 
     /// Add the given trie to the instance under the given table key.
     /// Panics if the key is already used.
-    pub fn add(&mut self, key: TableKey, trie: Trie) -> TableId {
+    pub fn add(&mut self, key: TableKey, trie: Trie, schema: TableSchema) -> TableId {
         let used_id = self.current_id;
 
         let insert_result = self
             .id_to_table
-            .insert(self.current_id, TableInfo::new(trie, key.clone()));
+            .insert(self.current_id, TableInfo::new(trie, key.clone(), schema));
 
         if insert_result.is_some() {
             panic!("A table key should not be used twice");
@@ -173,14 +194,17 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
         }
     }
 
-    /// Executes a given [`ExecutionPlan`]
-    /// Returns true if a new (non-empty) table has been saved permanently
-    pub fn execute_plan(&mut self, plan: &ExecutionPlan<TableKey>) -> bool {
+    /// Executes a given [`ExecutionPlan`].
+    /// Returns true if a new (non-empty) table has been saved permanently.
+    /// This may fail if certain operations are performed on tries with incompatible types
+    /// or if the plan references tries that do not exist.
+    pub fn execute_plan(&mut self, plan: &ExecutionPlan<TableKey>) -> Result<bool, Error> {
         let mut new_table = false;
-        let mut temp_tries = HashMap::<TableId, Option<Trie>>::new();
+        let mut temp_tries = HashMap::<TableId, Option<TempTableInfo>>::new();
 
         for tree in &plan.trees {
-            let iter_option = self.get_iterator_node(tree.root(), &temp_tries);
+            let schema = TableSchema::new(); // TODO: Calc this
+            let iter_option = self.get_iterator_node(tree.root(), &temp_tries)?;
 
             if let Some(mut iter) = iter_option {
                 let new_trie_opt =
@@ -192,11 +216,11 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
 
                 match tree.result() {
                     ExecutionResult::Temp(id) | ExecutionResult::TempSubset(id, _) => {
-                        temp_tries.insert(*id, new_trie_opt);
+                        temp_tries.insert(*id, new_trie_opt.map(|t| TempTableInfo::new(t, schema)));
                     }
                     ExecutionResult::Save(key) => {
                         if let Some(new_trie) = new_trie_opt {
-                            self.add(key.clone(), new_trie);
+                            self.add(key.clone(), new_trie, schema);
                             new_table = true;
                         }
                     }
@@ -204,7 +228,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
             }
         }
 
-        new_table
+        Ok(new_table)
     }
 
     /// Given a Node in the execution tree returns the trie iterator
@@ -212,96 +236,132 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
     fn get_iterator_node<'a>(
         &'a self,
         node: ExecutionNodeRef,
-        temp_tries: &'a HashMap<TableId, Option<Trie>>,
-    ) -> Option<TrieScanEnum> {
+        temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
+    ) -> Result<Option<TrieScanEnum>, Error> {
         if let Some(self_rc) = node.0.upgrade() {
             let node_ref = &*self_rc.as_ref().borrow();
             let node_operation = node_ref.borrow();
 
             return match node_operation {
-                ExecutionNode::FetchTemp(id) => Some(TrieScanEnum::TrieScanGeneric(
-                    TrieScanGeneric::new(temp_tries.get(id)?.as_ref()?),
-                )),
+                ExecutionNode::FetchTemp(id) => {
+                    if let Some(info_opt) = temp_tries.get(id) {
+                        if let Some(info) = info_opt {
+                            Ok(Some(TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(
+                                &info.trie,
+                            ))))
+                        } else {
+                            // Referenced trie is empty
+                            Ok(None)
+                        }
+                    } else {
+                        // References trie does not exist
+                        Err(Error::InvalidExecutionPlan)
+                    }
+                }
                 ExecutionNode::FetchTable(id) => {
                     let trie = self.get_by_id(*id);
                     let interval_triescan = TrieScanGeneric::new(trie);
-                    Some(TrieScanEnum::TrieScanGeneric(interval_triescan))
+                    Ok(Some(TrieScanEnum::TrieScanGeneric(interval_triescan)))
                 }
                 ExecutionNode::Join(subtables, bindings) => {
-                    let mut subiterators: Vec<TrieScanEnum> = subtables
-                        .iter()
-                        .map(|s| self.get_iterator_node(s.clone(), temp_tries))
-                        .filter(|s| s.is_some())
-                        .flatten()
-                        .collect();
+                    let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
+                    for subtable in subtables {
+                        let subiterator_opt =
+                            self.get_iterator_node(subtable.clone(), temp_tries)?;
 
-                    // If subtables contain an empty table, then the join is empty
-                    if subiterators.len() != subtables.len() {
-                        return None;
+                        if let Some(subiterator) = subiterator_opt {
+                            subiterators.push(subiterator);
+                        } else {
+                            // If subtables contain an empty table, then the join is empty
+                            return Ok(None);
+                        }
                     }
 
                     // If it only contains one table, then we dont need the join
                     if subiterators.len() == 1 {
-                        return Some(subiterators.remove(0));
+                        return Ok(Some(subiterators.remove(0)));
                     }
 
-                    Some(TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
+                    Ok(Some(TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
                         subiterators,
                         bindings,
-                    )))
+                    ))))
                 }
                 ExecutionNode::Union(subtables) => {
-                    let mut subiterators: Vec<TrieScanEnum> = subtables
-                        .iter()
-                        .map(|s| self.get_iterator_node(s.clone(), temp_tries))
-                        .filter(|s| s.is_some())
-                        .flatten()
-                        .collect();
+                    let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
+                    for subtable in subtables {
+                        let subiterator_opt =
+                            self.get_iterator_node(subtable.clone(), temp_tries)?;
+
+                        if let Some(subiterator) = subiterator_opt {
+                            subiterators.push(subiterator);
+                        }
+                    }
 
                     // The union of empty tables is empty
                     if subiterators.is_empty() {
-                        return None;
+                        return Ok(None);
                     }
 
                     // If it only contains one table, then we dont need the join
                     if subiterators.len() == 1 {
-                        return Some(subiterators.remove(0));
+                        return Ok(Some(subiterators.remove(0)));
                     }
 
                     let union_scan = TrieScanUnion::new(subiterators);
 
-                    Some(TrieScanEnum::TrieScanUnion(union_scan))
+                    Ok(Some(TrieScanEnum::TrieScanUnion(union_scan)))
                 }
                 ExecutionNode::Minus(subtable_left, subtable_right) => {
-                    let left_scan = self.get_iterator_node(subtable_left.clone(), temp_tries)?;
-                    let right_scan_option =
-                        self.get_iterator_node(subtable_right.clone(), temp_tries);
-
-                    if let Some(right_scan) = right_scan_option {
-                        Some(TrieScanEnum::TrieScanMinus(TrieScanMinus::new(
-                            left_scan, right_scan,
-                        )))
+                    if let Some(left_scan) =
+                        self.get_iterator_node(subtable_left.clone(), temp_tries)?
+                    {
+                        if let Some(right_scan) =
+                            self.get_iterator_node(subtable_right.clone(), temp_tries)?
+                        {
+                            Ok(Some(TrieScanEnum::TrieScanMinus(TrieScanMinus::new(
+                                left_scan, right_scan,
+                            ))))
+                        } else {
+                            Ok(Some(left_scan))
+                        }
                     } else {
-                        Some(left_scan)
+                        Ok(None)
                     }
                 }
                 ExecutionNode::Project(id, sorting) => {
-                    let tmp_trie = temp_tries.get(id)?.as_ref()?;
-                    let project_scan = TrieScanProject::new(tmp_trie, sorting.clone());
+                    let tmp_trie_opt = if let Some(tmp_info_opt) = temp_tries.get(id) {
+                        tmp_info_opt.as_ref().map(|i| &i.trie)
+                    } else {
+                        return Err(Error::InvalidExecutionPlan);
+                    };
 
-                    Some(TrieScanEnum::TrieScanProject(project_scan))
+                    if let Some(tmp_trie) = tmp_trie_opt {
+                        let project_scan = TrieScanProject::new(tmp_trie, sorting.clone());
+                        Ok(Some(TrieScanEnum::TrieScanProject(project_scan)))
+                    } else {
+                        Ok(None)
+                    }
                 }
                 ExecutionNode::SelectValue(subtable, assignments) => {
-                    let subiterator = self.get_iterator_node(subtable.clone(), temp_tries)?;
-                    let select_scan = TrieScanSelectValue::new(subiterator, assignments);
+                    let subiterator_opt = self.get_iterator_node(subtable.clone(), temp_tries)?;
 
-                    Some(TrieScanEnum::TrieScanSelectValue(select_scan))
+                    if let Some(subiterator) = subiterator_opt {
+                        let select_scan = TrieScanSelectValue::new(subiterator, assignments);
+                        Ok(Some(TrieScanEnum::TrieScanSelectValue(select_scan)))
+                    } else {
+                        Ok(None)
+                    }
                 }
                 ExecutionNode::SelectEqual(subtable, classes) => {
-                    let subiterator = self.get_iterator_node(subtable.clone(), temp_tries)?;
-                    let select_scan = TrieScanSelectEqual::new(subiterator, classes);
+                    let subiterator_opt = self.get_iterator_node(subtable.clone(), temp_tries)?;
 
-                    Some(TrieScanEnum::TrieScanSelectEqual(select_scan))
+                    if let Some(subiterator) = subiterator_opt {
+                        let select_scan = TrieScanSelectEqual::new(subiterator, classes);
+                        Ok(Some(TrieScanEnum::TrieScanSelectEqual(select_scan)))
+                    } else {
+                        Ok(None)
+                    }
                 }
             };
         } else {
@@ -321,8 +381,12 @@ impl<TableKey: TableKeyType> ByteSized for DatabaseInstance<TableKey> {
 #[cfg(test)]
 mod test {
     use crate::physical::{
+        datatypes::DataTypeName,
         management::ByteSized,
-        tabular::{table_types::trie::Trie, traits::table::Table},
+        tabular::{
+            table_types::trie::Trie,
+            traits::{table::Table, table_schema::TableSchema},
+        },
         util::make_column_with_intervals_t,
     };
 
@@ -341,7 +405,10 @@ mod test {
 
         let mut instance = DatabaseInstance::<StringKeyType>::new();
 
-        assert_eq!(instance.add(String::from("A"), trie_a.clone()), 0);
+        let mut schema_a = TableSchema::new();
+        schema_a.add_entry(DataTypeName::U64, false, false);
+
+        assert_eq!(instance.add(String::from("A"), trie_a.clone(), schema_a), 0);
         assert_eq!(instance.get_key(0), String::from("A"));
         assert_eq!(instance.get_id(&String::from("A")), 0);
         assert!(std::panic::catch_unwind(|| instance.get_key(1)).is_err());
@@ -350,7 +417,10 @@ mod test {
 
         let last_size = instance.size_bytes();
 
-        assert_eq!(instance.add(String::from("B"), trie_b), 1);
+        let mut schema_b = TableSchema::new();
+        schema_b.add_entry(DataTypeName::U64, false, false);
+
+        assert_eq!(instance.add(String::from("B"), trie_b, schema_b), 1);
         assert!(instance.size_bytes() > last_size);
         assert_eq!(instance.get_by_key(&String::from("B")).row_num(), 6);
 

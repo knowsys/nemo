@@ -85,6 +85,8 @@ impl<T> ByteSized for ColumnEnum<T> {
 #[derive(Debug, Clone)]
 pub enum ColumnT {
     /// Case ColumnEnum<u64>
+    U32(ColumnEnum<u32>),
+    /// Case ColumnEnum<u64>
     U64(ColumnEnum<u64>),
     /// Case ColumnEnum<Float>
     Float(ColumnEnum<Float>),

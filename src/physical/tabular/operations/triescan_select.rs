@@ -64,6 +64,7 @@ impl<'a> TrieScanSelectEqual<'a> {
             }
 
             match column_types[col_index] {
+                DataTypeName::U32 => init_scans_for_datatype!(U32),
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -109,6 +110,7 @@ impl<'a> TrieScanSelectEqual<'a> {
                 }
 
                 match column_types[current_member_idx] {
+                    DataTypeName::U32 => init_scans_for_datatype!(U32),
                     DataTypeName::U64 => init_scans_for_datatype!(U64),
                     DataTypeName::Float => init_scans_for_datatype!(Float),
                     DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -210,6 +212,7 @@ impl<'a> TrieScanSelectValue<'a> {
             }
 
             match column_types[col_index] {
+                DataTypeName::U32 => init_scans_for_datatype!(U32),
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
@@ -244,6 +247,7 @@ impl<'a> TrieScanSelectValue<'a> {
                 };
             }
             match column_types[assignemnt.column_idx] {
+                DataTypeName::U32 => init_scans_for_datatype!(U32),
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),

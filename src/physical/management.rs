@@ -9,6 +9,10 @@ pub use database::DatabaseInstance;
 pub mod bytesized;
 pub use bytesized::ByteSized;
 
-/// Module for defining [``]
+/// Module for defining [`ExecutionPlan`]
 pub mod execution_plan;
 pub use execution_plan::ExecutionPlan;
+
+/// Module for defining [`ExecutionPlan`]
+pub mod type_analysis;
+pub use type_analysis::TypeTree;

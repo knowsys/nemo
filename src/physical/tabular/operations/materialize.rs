@@ -46,6 +46,7 @@ pub fn materialize_inner(
         }
 
         match column_types[var] {
+            DataTypeName::U32 => init_builder_for_datatype!(U32),
             DataTypeName::U64 => init_builder_for_datatype!(U64),
             DataTypeName::Float => init_builder_for_datatype!(Float),
             DataTypeName::Double => init_builder_for_datatype!(Double),
@@ -170,6 +171,7 @@ pub fn materialize_inner(
             }
 
             match column_types[column_index] {
+                DataTypeName::U32 => finalize_for_datatype!(U32, u32),
                 DataTypeName::U64 => finalize_for_datatype!(U64, u64),
                 DataTypeName::Float => finalize_for_datatype!(Float, Float),
                 DataTypeName::Double => finalize_for_datatype!(Double, Double),

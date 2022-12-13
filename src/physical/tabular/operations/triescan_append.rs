@@ -42,6 +42,7 @@ pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
             }
 
             match *value_t {
+                DataValueT::U32(value) => append_columns_for_datatype!(value, U32, u32, 0),
                 DataValueT::U64(value) => append_columns_for_datatype!(value, U64, u64, 0),
                 DataValueT::Float(value) => {
                     append_columns_for_datatype!(value, Float, Float, Float::new(0.0).unwrap())

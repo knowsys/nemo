@@ -151,6 +151,24 @@ impl TryFrom<usize> for Double {
     }
 }
 
+impl TryFrom<u32> for Double {
+    type Error = Error;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        f64::from_u32(value)
+            .ok_or(Error::U32ToFloatingPointValue(value))
+            .and_then(Double::new)
+    }
+}
+
+impl TryFrom<Double> for u32 {
+    type Error = Error;
+
+    fn try_from(value: Double) -> Result<Self, Self::Error> {
+        u32::from_f64(value.0).ok_or(Error::FloatingPointToInteger)
+    }
+}
+
 impl Zero for Double {
     fn zero() -> Self {
         Double::from_number(f64::zero())

@@ -88,6 +88,7 @@ impl<'a> TrieScanMinus<'a> {
             }
 
             match target_types[layer_index] {
+                DataTypeName::U32 => init_scans_for_datatype!(U32),
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
