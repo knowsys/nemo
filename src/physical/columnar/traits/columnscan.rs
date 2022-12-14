@@ -218,7 +218,7 @@ where
         if let Self::ColumnScanMinus(cs) = self {
             cs.minus_enable(enabled)
         } else {
-            unimplemented!("set_active_scans is only available for union_scans")
+            unimplemented!("minus_enable is only available for ColumnScanMinus")
         }
     }
 }
