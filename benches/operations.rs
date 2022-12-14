@@ -158,7 +158,7 @@ fn benchmark_project(c: &mut Criterion) {
     group_ours.sample_size(10);
     group_ours.bench_function("trie_project_hole", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(join_trie.as_ref().unwrap(), vec![0, 3]),
+            || TrieScanProject::new(&join_trie, vec![0, 3]),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -166,7 +166,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_project_beginning", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(join_trie.as_ref().unwrap(), vec![0, 1]),
+            || TrieScanProject::new(&join_trie, vec![0, 1]),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -174,7 +174,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_project_end", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(join_trie.as_ref().unwrap(), vec![2, 3]),
+            || TrieScanProject::new(&join_trie, vec![2, 3]),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
