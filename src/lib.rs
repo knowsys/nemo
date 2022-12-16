@@ -14,6 +14,7 @@
     variant_size_differences
 )]
 #![feature(macro_metavar_expr)]
+#![feature(is_sorted)]
 
 pub mod error;
 pub mod io;

@@ -24,7 +24,7 @@ impl<'a, T> ColumnScanReorder<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Construct a new ColumnScanReorder for a Column.
+    /// Construct a new [`ColumnScanReorder`].
     pub fn new(column: &'a ColumnEnum<T>) -> Self {
         ColumnScanReorder::narrowed(column, vec![0..column.len()])
     }

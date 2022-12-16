@@ -203,7 +203,7 @@ fn benchmark_project(c: &mut Criterion) {
         schema_target,
     );
 
-    let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter));
+    let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
 
     let mut group_ours = c.benchmark_group("trie_project");
     group_ours.sample_size(10);

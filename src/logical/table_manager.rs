@@ -9,14 +9,15 @@ use crate::meta::TimedCode;
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use crate::physical::tabular::operations::{
-    materialize, TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanSelectEqual,
-    TrieScanSelectValue, TrieScanUnion,
+    materialize, materialize_subset, TrieScanJoin, TrieScanMinus, TrieScanProject,
+    TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion,
 };
 use crate::physical::tabular::table_types::trie::{
     Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
 };
 use crate::physical::tabular::traits::{
     table::Table,
+    table_schema::TableSchema,
     triescan::{TrieScan, TrieScanEnum},
 };
 use crate::physical::util::cover_interval;
@@ -341,7 +342,10 @@ impl TableManager {
                     TableManager::translate_order(base_order, &info_order),
                 );
 
-                let reordered_trie = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
+                let reordered_trie = materialize(&mut TrieScanEnum::TrieScanProject(project_iter))
+                    .expect(
+                        "Reordering should not result in an empty trie if we didn't start with one",
+                    );
                 self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
 
                 log::info!(
@@ -720,7 +724,7 @@ impl TableManager {
             ];
 
             let code_string = match &plan.result {
-                ExecutionResult::Temp(tmp_id) => {
+                ExecutionResult::Temp(tmp_id) | ExecutionResult::TempSubset(tmp_id, _) => {
                     if *tmp_id < TMP_NAMES.len() {
                         TMP_NAMES[*tmp_id]
                     } else {
@@ -749,16 +753,19 @@ impl TableManager {
             let iter_option = self.get_iterator_node(&plan.root, &temp_tries);
             if let Some(mut iter) = iter_option {
                 // TODO: Materializig should check memory and so on...
-                let new_trie = materialize(&mut iter);
-                let new_trie_len = new_trie.row_num();
+                let new_trie_opt =
+                    if let ExecutionResult::TempSubset(_, picked_columns) = &plan.result {
+                        log::info!("Materializing subset {:?}", picked_columns);
+                        materialize_subset(&mut iter, picked_columns.clone())
+                    } else {
+                        materialize(&mut iter)
+                    };
+
+                let new_trie_len = new_trie_opt.as_ref().map_or(0, |trie| trie.row_num());
 
                 match plan.result {
-                    ExecutionResult::Temp(id) => {
-                        if new_trie_len > 0 {
-                            temp_tries.insert(id, Some(new_trie));
-                        } else {
-                            temp_tries.insert(id, None);
-                        }
+                    ExecutionResult::Temp(id) | ExecutionResult::TempSubset(id, _) => {
+                        temp_tries.insert(id, new_trie_opt);
 
                         log::info!("Temporary table {} ({} entries)", code_string, new_trie_len);
                     }
@@ -779,7 +786,13 @@ impl TableManager {
                                 new_table = true;
                             }
 
-                            self.add_trie(pred, range, order, priority, new_trie);
+                            self.add_trie(
+                                pred,
+                                range,
+                                order,
+                                priority,
+                                new_trie_opt.expect("Length is non-zero"),
+                            );
                         }
                     }
                 }

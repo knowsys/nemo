@@ -3,6 +3,7 @@
 /// Module for materializing tries
 pub mod materialize;
 pub use materialize::materialize;
+pub use materialize::materialize_subset;
 
 /// Module for defining [`TrieScanProject`]
 pub mod triescan_project;

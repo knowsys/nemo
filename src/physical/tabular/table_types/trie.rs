@@ -528,7 +528,7 @@ impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
         Some(&self.layers[index])
     }
 
-    fn get_schema(&self) -> &dyn TableSchema {
+    fn get_schema(&self) -> &TrieSchema {
         self.trie.schema()
     }
 }

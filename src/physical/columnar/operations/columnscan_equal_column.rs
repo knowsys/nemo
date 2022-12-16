@@ -2,21 +2,26 @@ use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
-/// Iterator which allows its sub iterator to only jump to the value pointed to by a reference iterator
+/// [`ColumnScan`] which allows its sub scan to only jump to the value pointed to by a reference scan
 #[derive(Debug)]
 pub struct ColumnScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType,
 {
+    /// `value_scan` may only jump to the value currently pointed to by this scan
     reference_scan: &'a ColumnScanCell<'a, T>,
+
+    /// The sub scan
     value_scan: &'a ColumnScanCell<'a, T>,
+
+    /// Current value of this scan
     current_value: Option<T>,
 }
 impl<'a, T> ColumnScanEqualColumn<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new ColumnScanEqualColumn for a Column.
+    /// Constructs a new [`ColumnScanEqualColumn`].
     pub fn new(
         reference_scan: &'a ColumnScanCell<'a, T>,
         value_scan: &'a ColumnScanCell<'a, T>,
@@ -37,9 +42,11 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_value.is_some() {
+            // Since we know that the next value must be bigger, we can return None
             self.current_value = None;
             return None;
         }
+
         let reference_value = self.reference_scan.current()?;
         let next_value_opt = self.value_scan.seek(reference_value);
 

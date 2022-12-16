@@ -168,7 +168,7 @@ impl Table for Ftrie {
 #[cfg(test)]
 mod test {
     use super::super::super::traits::{table::Table, table_schema::TableSchema};
-    use super::{Ftrie, FTableSchema};
+    use super::{FTableSchema, Ftrie};
     use crate::physical::datatypes::DataTypeName;
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;

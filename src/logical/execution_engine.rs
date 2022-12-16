@@ -513,6 +513,22 @@ impl RuleExecutionEngine {
             })
             .collect();
 
+        // Body variables that also appear in the head
+        let mut body_variables_sorted: Vec<Variable> = body_variables.clone().into_iter().collect();
+        body_variables_sorted.sort_by(|a, b| variable_order.get(a).cmp(&variable_order.get(b)));
+
+        let mut used_variables = Vec::<bool>::new();
+        let mut all_variables_used = true;
+
+        for body_variable in &body_variables_sorted {
+            let is_used = head_variables.contains(body_variable);
+            used_variables.push(is_used);
+
+            if !is_used {
+                all_variables_used = false;
+            }
+        }
+
         // Map containing, for each predicate in the head,
         // its column order and references to all atoms with that predicate
         let mut head_map = HashMap::<Identifier, (ColumnOrder, Vec<&Atom>)>::new();
@@ -747,10 +763,16 @@ impl RuleExecutionEngine {
 
         // We want to materialize this table
         // since the results will be derived from it through projection/reordering
+        let body_plan_result = if all_variables_used {
+            ExecutionResult::Temp(ID_BODY_JOIN)
+        } else {
+            ExecutionResult::TempSubset(ID_BODY_JOIN, used_variables)
+        };
+
         let body_plan = ExecutionPlan {
             root: body_node,
             leaves: body_leaves,
-            result: ExecutionResult::Temp(0),
+            result: body_plan_result,
         };
 
         plans.push(body_plan);

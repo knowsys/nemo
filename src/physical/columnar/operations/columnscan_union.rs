@@ -3,17 +3,25 @@ use crate::physical::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
 
-/// Iterator representing a union of column iterators
+/// [`ColumnScan`] representing the union of its sub scans
 #[derive(Debug)]
 pub struct ColumnScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
+    /// Sub scans of which the union is computed
     column_scans: Vec<&'a ColumnScanCell<'a, T>>,
+
+    /// `smallest_scans[i]` indicates whether the ith scan points to the smallest element
     smallest_scans: Vec<bool>,
+
+    /// Smallest value pointed to by the sub scans
     smallest_value: Option<T>,
 
+    /// We only compute the union of those scans whose index is in this vector
     active_scans: Vec<usize>,
+
+    /// Current values pointed to by active scans
     active_values: Vec<Option<T>>,
 }
 
@@ -21,7 +29,7 @@ impl<'a, T> ColumnScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new ColumnVectorScan for a Column.
+    /// Constructs a new [`ColumnScanUnion`].
     pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> ColumnScanUnion<'a, T> {
         let scans_len = column_scans.len();
         ColumnScanUnion {
@@ -55,6 +63,8 @@ where
 
         for &index in &self.active_scans {
             let current_element = if self.smallest_scans[index] {
+                // If the scan points to the smallest element then advance it
+                // and update active_value
                 let next_value = self.column_scans[index].next();
                 self.active_values[index] = next_value;
 
@@ -71,6 +81,7 @@ where
             {
                 next_smallest = current_element;
 
+                // New smallest element has been found, hence all previous scans don't point to it
                 for value in self.smallest_scans.iter_mut().take(index) {
                     *value = false;
                 }
@@ -105,6 +116,7 @@ where
             {
                 next_smallest = current_element;
 
+                // New smallest element has been found, hence all previous scans don't point to it
                 for value in self.smallest_scans.iter_mut().take(index) {
                     *value = false;
                 }

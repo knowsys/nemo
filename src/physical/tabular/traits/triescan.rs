@@ -4,8 +4,7 @@ use crate::physical::tabular::operations::{
     TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
     TrieScanUnion,
 };
-use crate::physical::tabular::table_types::trie::TrieScanGeneric;
-use crate::physical::tabular::traits::table_schema::TableSchema;
+use crate::physical::tabular::table_types::trie::{TrieScanGeneric, TrieSchema};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
@@ -26,7 +25,7 @@ pub trait TrieScan<'a>: Debug {
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
 
     /// Return the underlying [`TableSchema`].
-    fn get_schema(&self) -> &dyn TableSchema;
+    fn get_schema(&self) -> &TrieSchema;
 }
 
 /// Enum for TrieScan Variants
@@ -67,7 +66,7 @@ impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
         forward_to_scan!(self, get_scan(index))
     }
 
-    fn get_schema(&self) -> &dyn TableSchema {
+    fn get_schema(&self) -> &TrieSchema {
         forward_to_scan!(self, get_schema)
     }
 }
