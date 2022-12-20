@@ -11,29 +11,35 @@ use super::super::{
     table_manager::ColumnOrder,
 };
 
+/// Represents an ordering of variables as [`HashMap`].
 #[repr(transparent)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct VariableOrder(HashMap<Variable, usize>);
+pub struct VariableOrder(HashMap<Variable, usize>);
 
 impl VariableOrder {
-    pub(super) fn new() -> Self {
+    /// Create new [`VariableOrder`].
+    pub fn new() -> Self {
         Self(HashMap::new())
     }
 
-    pub(super) fn push(&mut self, variable: Variable) {
+    /// Insert new variable in the last position.
+    pub fn push(&mut self, variable: Variable) {
         let max_index = self.0.values().max();
         self.0.insert(variable, max_index.map_or(0, |i| i + 1));
     }
 
-    pub(super) fn get(&self, variable: &Variable) -> Option<&usize> {
+    /// Get position of a variable.
+    pub fn get(&self, variable: &Variable) -> Option<&usize> {
         self.0.get(variable)
     }
 
-    pub(super) fn contains(&self, variable: &Variable) -> bool {
+    /// Check if variable is part of the [`VariableOrder`].
+    pub fn contains(&self, variable: &Variable) -> bool {
         self.0.contains_key(variable)
     }
 
-    pub(super) fn iter(&self) -> impl Iterator<Item = &Variable> {
+    /// Return an iterator over all mapped variables.
+    pub fn iter(&self) -> impl Iterator<Item = &Variable> {
         let mut vars: Vec<&Variable> = self.0.keys().collect();
         vars.sort_by_key(|var| {
             self.0
@@ -42,10 +48,9 @@ impl VariableOrder {
         });
         vars.into_iter()
     }
-}
 
-impl VariableOrder {
-    pub(super) fn debug(&self, dict: &PrefixedStringDictionary) -> String {
+    /// Return [`String`] with the contents of this object for debugging.
+    pub fn debug(&self, dict: &PrefixedStringDictionary) -> String {
         let mut variable_vector = Vec::<Variable>::new();
         variable_vector.resize_with(self.0.len(), || Variable::Universal(Identifier(0)));
 
@@ -98,24 +103,27 @@ impl IterationOrder {
 }
 
 fn column_order_for(lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
-    let mut partial_col_order: ColumnOrder = var_order
-        .iter()
-        .flat_map(|var| {
-            lit.variables()
-                .enumerate()
-                .filter(move |(_, lit_var)| lit_var == var)
-                .map(|(i, _)| i)
-        })
-        .collect();
+    let mut partial_col_order = ColumnOrder(
+        var_order
+            .iter()
+            .flat_map(|var| {
+                lit.variables()
+                    .enumerate()
+                    .filter(move |(_, lit_var)| lit_var == var)
+                    .map(|(i, _)| i)
+            })
+            .collect(),
+    );
 
-    let mut remaining_vars: ColumnOrder = lit
-        .variables()
-        .enumerate()
-        .map(|(i, _)| i)
-        .filter(|i| !partial_col_order.contains(i))
-        .collect();
+    let mut remaining_vars = ColumnOrder(
+        lit.variables()
+            .enumerate()
+            .map(|(i, _)| i)
+            .filter(|i| !partial_col_order.0.contains(i))
+            .collect(),
+    );
 
-    partial_col_order.append(&mut remaining_vars);
+    partial_col_order.0.append(&mut remaining_vars.0);
 
     partial_col_order
 }
@@ -402,7 +410,7 @@ pub(super) fn build_preferable_variable_orders(
         preds
             .map(|(p, a)| {
                 let mut set = HashSet::new();
-                set.insert((0..*a).collect());
+                set.insert(ColumnOrder((0..*a).collect()));
                 (*p, set)
             })
             .collect()

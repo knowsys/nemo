@@ -22,7 +22,6 @@ fn load_trie(
 ) -> Trie {
     match source {
         DataSource::CsvFile(file) => {
-            log::info!("loading CSV file {file:?}");
             // Using fallback solution to treat eveything as string for now (storing as u64 internally)
             let datatypes: Vec<Option<DataTypeName>> = (0..order.len()).map(|_| None).collect();
 
@@ -50,9 +49,9 @@ pub fn benchmark_join(c: &mut Criterion) {
     let mut dict = PrefixedStringDictionary::default();
 
     let table_a = DataSource::csv_file("test-files/bench-data/xe.csv").unwrap();
-    let table_a_order: ColumnOrder = vec![0, 1, 2];
+    let table_a_order = ColumnOrder::new(vec![0, 1, 2]);
     let table_b = DataSource::csv_file("test-files/bench-data/aux.csv").unwrap();
-    let table_b_order: ColumnOrder = vec![0, 1, 2];
+    let table_b_order = ColumnOrder::new(vec![0, 1, 2]);
 
     let trie_a = load_trie(&table_a, &table_a_order, &mut dict);
     let trie_b = load_trie(&table_b, &table_b_order, &mut dict);
@@ -137,9 +136,9 @@ fn benchmark_project(c: &mut Criterion) {
     let mut dict = PrefixedStringDictionary::default();
 
     let table_a = DataSource::csv_file("test-files/bench-data/xe.csv").unwrap();
-    let table_a_order: ColumnOrder = vec![0, 1, 2];
+    let table_a_order = ColumnOrder::new(vec![0, 1, 2]);
     let table_b = DataSource::csv_file("test-files/bench-data/aux.csv").unwrap();
-    let table_b_order: ColumnOrder = vec![0, 1, 2];
+    let table_b_order = ColumnOrder::new(vec![0, 1, 2]);
 
     let trie_a = load_trie(&table_a, &table_a_order, &mut dict);
     let trie_b = load_trie(&table_b, &table_b_order, &mut dict);
@@ -223,7 +222,7 @@ fn benchmark_union(c: &mut Criterion) {
         filename += ".csv";
 
         let table_source = DataSource::csv_file(&filename).unwrap();
-        let table_order: ColumnOrder = vec![0, 1, 2];
+        let table_order = ColumnOrder::new(vec![0, 1, 2]);
 
         tries.push(load_trie(&table_source, &table_order, &mut dict));
 
