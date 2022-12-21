@@ -8,6 +8,13 @@ use bytesize::ByteSize;
 
 use crate::{
     error::Error,
+    meta::{
+        logging::{
+            log_empty_iter, log_empty_trie, log_executing_plan, log_save_trie_perm,
+            log_save_trie_temp,
+        },
+        TimedCode,
+    },
     physical::{
         dictionary::PrefixedStringDictionary,
         tabular::{
@@ -220,12 +227,17 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
         let mut temp_tries = HashMap::<TableId, Option<TempTableInfo>>::new();
 
         for tree in &plan.trees {
+            let timed_string = format!("Reasoning/Execution/{}", tree.name());
+            TimedCode::instance().sub(&timed_string).start();
+            log_executing_plan(tree);
+
             let schema = TableSchema::new(); // TODO: Calc this
 
             let root = if let Some(some_root) = tree.root() {
                 some_root
             } else {
                 // Empty tree means we can skip it
+                log_empty_iter();
                 continue;
             };
 
@@ -241,16 +253,30 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
 
                 match tree.result() {
                     ExecutionResult::Temp(id) | ExecutionResult::TempSubset(id, _) => {
+                        if let Some(new_trie) = &new_trie_opt {
+                            log_save_trie_temp(new_trie);
+                        } else {
+                            log_empty_trie();
+                        }
+
                         temp_tries.insert(*id, new_trie_opt.map(|t| TempTableInfo::new(t, schema)));
                     }
                     ExecutionResult::Save(key) => {
                         if let Some(new_trie) = new_trie_opt {
+                            log_save_trie_perm(&new_trie);
+
                             self.add(key.clone(), new_trie, schema);
                             new_tables.push(key.clone());
+                        } else {
+                            log_empty_trie();
                         }
                     }
                 }
+            } else {
+                log_empty_iter();
             }
+
+            TimedCode::instance().sub(&timed_string).stop();
         }
 
         Ok(new_tables)

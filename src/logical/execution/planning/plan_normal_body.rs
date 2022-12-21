@@ -165,7 +165,10 @@ impl<'a> BodyStrategy<'a> for SeminaiveStrategy<'a> {
             .map(|(i, &a)| join_binding(a, &atom_orders[i], &variable_order))
             .collect();
 
-        let mut tree = ExecutionTree::<TableKey>::new(ExecutionResult::Temp(BODY_JOIN));
+        let mut tree = ExecutionTree::<TableKey>::new(
+            "Body Join".to_string(),
+            ExecutionResult::Temp(BODY_JOIN),
+        );
 
         let mut seminaive_union = tree.union_empty();
         for atom_index in 0..body_reordered.len() {

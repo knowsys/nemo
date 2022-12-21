@@ -81,8 +81,10 @@ impl<'a> HeadStrategy<'a> for DatalogStrategy<'a> {
                 table_manager.get_table_name(predicate, step_number..step_number + 1);
             let head_table_key =
                 TableKey::from_name(head_table_name, ColumnOrder::default(predicate_arity));
-            let mut head_tree =
-                ExecutionTree::<TableKey>::new(ExecutionResult::Save(head_table_key));
+            let mut head_tree = ExecutionTree::<TableKey>::new(
+                "Datalog Head".to_string(),
+                ExecutionResult::Save(head_table_key),
+            );
 
             let mut project_nodes =
                 Vec::<ExecutionNodeRef<TableKey>>::with_capacity(head_atoms.len());

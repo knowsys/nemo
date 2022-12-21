@@ -5,6 +5,7 @@ use csv::ReaderBuilder;
 use super::model::{DataSource, Identifier};
 use crate::{
     io::csv::read,
+    meta::logging::log_load_table,
     physical::{
         datatypes::DataTypeName,
         dictionary::PrefixedStringDictionary,
@@ -506,8 +507,10 @@ impl TableManager {
 
         let output_name = self.get_table_name(output_predicate, output_range);
         let output_key = TableKey::from_name(output_name, output_order.clone());
-        let mut output_tree =
-            ExecutionTree::<TableKey>::new(ExecutionResult::Save(output_key.clone()));
+        let mut output_tree = ExecutionTree::<TableKey>::new(
+            "Merge Tables".to_string(),
+            ExecutionResult::Save(output_key.clone()),
+        );
 
         let fetch_nodes: Vec<ExecutionNodeRef<TableKey>> = input_covering
             .into_iter()
@@ -529,6 +532,8 @@ impl TableManager {
     /// Load table from a given on-disk source
     /// TODO: This function should change when the type system gets introduced on the logical layer
     fn load_table(source: &DataSource, arity: usize, dict: &mut PrefixedStringDictionary) -> Trie {
+        log_load_table(source);
+
         let (trie, _name) = match source {
             DataSource::CsvFile(file) => {
                 // Using fallback solution to treat eveything as string for now (storing as u64 internally)
@@ -648,8 +653,10 @@ impl TableManager {
                 // Construct new [`ÈxecutionPlan`] for the reordering
                 let projection_reordering = reordered_table.order.reorder_to(&required_order);
 
-                let mut project_tree =
-                    ExecutionTree::<TableKey>::new(ExecutionResult::Save(result_key.clone()));
+                let mut project_tree = ExecutionTree::<TableKey>::new(
+                    "Required Reorder".to_string(),
+                    ExecutionResult::Save(result_key.clone()),
+                );
                 let reordered_node = project_tree.fetch_table(reordered_table);
                 let project_node =
                     project_tree.project(reordered_node, projection_reordering.into());

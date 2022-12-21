@@ -21,6 +21,7 @@ fn main() {
     // let input = read_to_string("test-files/snomed-el-noaux.rls").unwrap();
 
     let input = read_to_string("test-files/galen-el-noaux.rls").unwrap();
+    let save_results = false;
 
     let parser = RuleParser::new();
     let mut parser_function = parser.parse_program();
@@ -39,28 +40,30 @@ fn main() {
     exec_engine.execute();
     let dict = exec_engine.get_dict().clone();
 
-    log::info!("Results:");
-    for (predicate, trie) in exec_engine.get_results() {
-        let predicate_string = parser
-            .resolve_identifier(&predicate)
-            .expect("should have been interned");
+    if save_results {
+        log::info!("Results:");
+        for (predicate, trie) in exec_engine.get_results() {
+            let predicate_string = parser
+                .resolve_identifier(&predicate)
+                .expect("should have been interned");
 
-        log::info!("{}: {} entries", predicate_string, trie.row_num());
+            log::info!("{}: {} entries", predicate_string, trie.row_num());
 
-        let predicate_file_name = predicate_string.replace(['/', ':'], "_");
+            let predicate_file_name = predicate_string.replace(['/', ':'], "_");
 
-        let path = PathBuf::from(format!("out/{predicate_file_name}.csv"));
-        match OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path.clone())
-        {
-            Ok(mut file) => {
-                write!(file, "{}", trie.debug(&dict)).expect("should succeed");
-                log::info!("wrote {path:?}");
+            let path = PathBuf::from(format!("out/{predicate_file_name}.csv"));
+            match OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(path.clone())
+            {
+                Ok(mut file) => {
+                    write!(file, "{}", trie.debug(&dict)).expect("should succeed");
+                    log::info!("wrote {path:?}");
+                }
+                Err(e) => log::warn!("error writing: {e:?}"),
             }
-            Err(e) => log::warn!("error writing: {e:?}"),
         }
     }
 

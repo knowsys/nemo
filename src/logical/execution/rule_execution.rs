@@ -2,11 +2,12 @@
 
 use crate::{
     logical::{
-        model::Rule,
+        model::{Program, Rule},
         program_analysis::analysis::{CopyRuleAnalysis, NormalRuleAnalysis, RuleAnalysis},
         table_manager::TableKey,
         TableManager,
     },
+    meta::logging::{log_avaiable_variable_order, log_choose_variable_order},
     physical::management::ExecutionPlan,
 };
 
@@ -47,6 +48,7 @@ impl<'a> NormalRuleExecution<'a> {
     ) -> bool {
         // TODO: Just because its the first doesn't mean its the best
         let best_variable_order = &self.analysis.promising_variable_orders[0];
+        log_choose_variable_order(0);
 
         let mut execution_plan = ExecutionPlan::<TableKey>::new();
         let tree_body = self.body_strategy.execution_tree(
@@ -145,12 +147,15 @@ impl<'a> RuleExecution<'a> {
     /// Returns whether a new (non-empty) table has been created.
     pub fn execute(
         &self,
+        program: &Program,
         table_manager: &mut TableManager,
         rule_info: &RuleInfo,
         step_number: usize,
     ) -> bool {
         match self {
             RuleExecution::NormalRule(execution) => {
+                log_avaiable_variable_order(program, execution.analysis);
+
                 execution.execute(table_manager, rule_info, step_number)
             }
             RuleExecution::CopyRule(execution) => {

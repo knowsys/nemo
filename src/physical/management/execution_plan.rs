@@ -93,21 +93,24 @@ pub enum ExecutionResult<TableKey: TableKeyType> {
 /// Represents the plan for calculating a table
 #[derive(Debug)]
 pub struct ExecutionTree<TableKey: TableKeyType> {
-    /// All the nodes in the tree
+    /// All the nodes in the tree.
     nodes: Vec<ExecutionNodeOwned<TableKey>>,
-    /// Root of the operation tree
+    /// Root of the operation tree.
     root: Option<ExecutionNodeRef<TableKey>>,
-    /// How to save the resulting table
+    /// How to save the resulting table.
     result: ExecutionResult<TableKey>,
+    /// Name which identifies this operation for timing.
+    name: String,
 }
 
 impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     /// Create new [`ExecutionTree`]
-    pub fn new(result: ExecutionResult<TableKey>) -> Self {
+    pub fn new(name: String, result: ExecutionResult<TableKey>) -> Self {
         Self {
             nodes: Vec::new(),
             root: None,
             result,
+            name,
         }
     }
 
@@ -122,6 +125,11 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     /// Return the result of this operation
     pub fn result(&self) -> &ExecutionResult<TableKey> {
         &self.result
+    }
+
+    /// Return the name of this tree.
+    pub fn name(&self) -> &String {
+        &self.name
     }
 
     /// Return the root of the trie
@@ -280,7 +288,8 @@ mod test {
 
     #[test]
     fn general_use() {
-        let mut body_tree = ExecutionTree::<MyTableKey>::new(ExecutionResult::Temp(0));
+        let mut body_tree =
+            ExecutionTree::<MyTableKey>::new("Test".to_string(), ExecutionResult::Temp(0));
 
         let mut seminaive_union_node = body_tree.union_empty();
         body_tree.set_root(seminaive_union_node.clone());

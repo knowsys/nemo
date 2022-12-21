@@ -9,6 +9,7 @@ use crate::{
         table_manager::{ColumnOrder, TableKey},
         TableManager,
     },
+    meta::{logging::log_apply_rule, TimedCode},
     physical::{
         datatypes::DataValueT,
         dictionary::PrefixedStringDictionary,
@@ -123,6 +124,9 @@ impl ExecutionEngine {
 
     /// Executes the program.
     pub fn execute(&mut self) {
+        TimedCode::instance().sub("Reasoning/Rules").start();
+        TimedCode::instance().sub("Reasoning/Execution").start();
+
         let rule_execution: Vec<RuleExecution> = self
             .program
             .rules()
@@ -135,13 +139,16 @@ impl ExecutionEngine {
         let mut current_rule_index: usize = 0;
 
         while without_derivation < self.program.rules().len() {
-            let _current_rule = &self.program.rules()[current_rule_index];
+            let timing_string = format!("Reasoning/Rules/Rule {current_rule_index}");
+            TimedCode::instance().sub(&timing_string).start();
+            log_apply_rule(&self.program, self.current_step, current_rule_index);
 
             let current_info = &mut self.rule_infos[current_rule_index];
             let current_analysis = &self.analysis.rule_analysis[current_rule_index];
             let current_execution = &rule_execution[current_rule_index];
 
             let no_derivation = !current_execution.execute(
+                &self.program,
                 &mut self.table_manager,
                 current_info,
                 self.current_step,
@@ -166,7 +173,12 @@ impl ExecutionEngine {
 
             current_info.step_last_applied = self.current_step;
             self.current_step += 1;
+
+            TimedCode::instance().sub(&timing_string).stop();
         }
+
+        TimedCode::instance().sub("Reasoning/Rules").stop();
+        TimedCode::instance().sub("Reasoning/Execution").stop();
     }
 
     /// Return the output tries that resulted form the exection.
