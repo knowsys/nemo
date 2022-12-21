@@ -342,7 +342,7 @@ impl Rule {
         if !existential_variables.is_empty() {
             return Err(ParseError::BodyExistential(
                 parser
-                    .resolve_term(existential_variables.first().expect("is not empty here").0)
+                    .resolve_identifier(existential_variables.first().expect("is not empty here"))
                     .expect("identifier has been parsed, so must be known"),
             ));
         }
@@ -367,7 +367,7 @@ impl Rule {
         if !negative_variables.is_empty() {
             return Err(ParseError::UnsafeNegatedVariable(
                 parser
-                    .resolve_term(negative_variables.first().expect("is not empty here").0)
+                    .resolve_identifier(*negative_variables.first().expect("is not empty here"))
                     .expect("identifier has been parsed, so must be known"),
             ));
         }
@@ -391,7 +391,7 @@ impl Rule {
         if !common_variables.is_empty() {
             return Err(ParseError::BothQuantifiers(
                 parser
-                    .resolve_term(common_variables.first().expect("is not empty here").0)
+                    .resolve_identifier(common_variables.first().expect("is not empty here"))
                     .expect("identifier has been parsed, so must be known"),
             ));
         }
@@ -461,6 +461,9 @@ pub struct Program {
     sources: Vec<DataSourceDeclaration>,
     rules: Vec<Rule>,
     facts: Vec<Fact>,
+
+    dict_names: PrefixedStringDictionary,
+    dict_constants: PrefixedStringDictionary,
 }
 
 impl Program {
@@ -471,6 +474,8 @@ impl Program {
         sources: Vec<DataSourceDeclaration>,
         rules: Vec<Rule>,
         facts: Vec<Fact>,
+        dict_names: PrefixedStringDictionary,
+        dict_constants: PrefixedStringDictionary,
     ) -> Self {
         Self {
             base,
@@ -478,6 +483,8 @@ impl Program {
             sources,
             rules,
             facts,
+            dict_names,
+            dict_constants,
         }
     }
 
@@ -556,6 +563,16 @@ impl Program {
     #[must_use]
     pub fn resolve_prefix(&self, tag: &str) -> Option<usize> {
         self.prefixes.get(tag).copied()
+    }
+
+    /// Return the dictionary for translating names of constants
+    pub fn get_dict_constants(&self) -> &PrefixedStringDictionary {
+        &self.dict_constants
+    }
+
+    /// Return the dictionary for translating e.g. predicate names
+    pub fn get_dict_names(&self) -> &PrefixedStringDictionary {
+        &self.dict_names
     }
 }
 
@@ -673,7 +690,7 @@ impl DataSourceDeclaration {
                 if arity != 3 {
                     return Err(ParseError::RdfSourceInvalidArity(
                         parser
-                            .resolve_term(predicate.0)
+                            .resolve_identifier(&predicate)
                             .expect("predicate has been parsed, must be known"),
                         path.to_str()
                             .unwrap_or("<path is invalid unicode>")
@@ -687,7 +704,7 @@ impl DataSourceDeclaration {
                 if variables != arity {
                     return Err(ParseError::SparqlSourceInvalidArity(
                         parser
-                            .resolve_term(predicate.0)
+                            .resolve_identifier(&predicate)
                             .expect("predicate has been parsed, must be known"),
                         variables,
                         arity,

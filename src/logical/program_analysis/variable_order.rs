@@ -443,6 +443,8 @@ pub(super) fn build_preferable_variable_orders(
 
 #[cfg(test)]
 mod test {
+    use crate::physical::dictionary::PrefixedStringDictionary;
+
     use super::{
         super::super::{
             model::{
@@ -655,7 +657,15 @@ mod test {
                 .into_iter()
                 .unzip();
 
-        let program = Program::new(None, HashMap::new(), vec![], rules, vec![]);
+        let program = Program::new(
+            None,
+            HashMap::new(),
+            vec![],
+            rules,
+            vec![],
+            PrefixedStringDictionary::default(),
+            PrefixedStringDictionary::default(),
+        );
 
         let rule_vars = &var_lists[0];
         let rule_var_orders: Vec<VariableOrder> = vec![
@@ -676,7 +686,15 @@ mod test {
                 .into_iter()
                 .unzip();
 
-        let program = Program::new(None, HashMap::new(), vec![], rules, vec![]);
+        let program = Program::new(
+            None,
+            HashMap::new(),
+            vec![],
+            rules,
+            vec![],
+            PrefixedStringDictionary::default(),
+            PrefixedStringDictionary::default(),
+        );
 
         let rule_vars = &var_lists[0];
         let rule_var_orders: Vec<VariableOrder> = vec![
@@ -699,7 +717,15 @@ mod test {
         .into_iter()
         .unzip();
 
-        let program = Program::new(None, HashMap::new(), vec![], rules, vec![]);
+        let program = Program::new(
+            None,
+            HashMap::new(),
+            vec![],
+            rules,
+            vec![],
+            PrefixedStringDictionary::default(),
+            PrefixedStringDictionary::default(),
+        );
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
@@ -852,6 +878,8 @@ mod test {
             ],
             rules,
             vec![],
+            PrefixedStringDictionary::default(),
+            PrefixedStringDictionary::default(),
         );
 
         let rule_1_vars = &var_lists[0];
@@ -1149,6 +1177,8 @@ mod test {
             ],
             rules,
             vec![],
+            PrefixedStringDictionary::default(),
+            PrefixedStringDictionary::default(),
         );
 
         let rule_1_vars = &var_lists[0];

@@ -77,7 +77,7 @@ pub struct DatabaseInstance<TableKey: TableKeyType> {
     key_to_tableid: HashMap<TableKey, TableId>,
 
     /// Dictionary which stores the strings associates with abstract constants
-    constant_dict: PrefixedStringDictionary,
+    dict_constants: PrefixedStringDictionary,
 
     /// The lowest unused TableId.
     /// Will be incremented for each new table and will never be reused.
@@ -86,11 +86,11 @@ pub struct DatabaseInstance<TableKey: TableKeyType> {
 
 impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
     /// Create new [`DatabaseInstance`]
-    pub fn new() -> Self {
+    pub fn new(dict_constants: PrefixedStringDictionary) -> Self {
         Self {
             id_to_table: HashMap::new(),
             key_to_tableid: HashMap::new(),
-            constant_dict: PrefixedStringDictionary::default(),
+            dict_constants,
             current_id: 0,
         }
     }
@@ -203,12 +203,12 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
 
     /// Returns a mutable reference to the dictionary used for associating abstract constants with strings.
     pub fn get_dict_constants_mut(&mut self) -> &mut PrefixedStringDictionary {
-        &mut self.constant_dict
+        &mut self.dict_constants
     }
 
     /// Returns a reference to the dictionary used for associating abstract constants with strings.
     pub fn get_dict_constants(&self) -> &PrefixedStringDictionary {
-        &self.constant_dict
+        &self.dict_constants
     }
 
     /// Executes a given [`ExecutionPlan`].
@@ -422,6 +422,7 @@ impl<TableKey: TableKeyType> ByteSized for DatabaseInstance<TableKey> {
 mod test {
     use crate::physical::{
         datatypes::DataTypeName,
+        dictionary::PrefixedStringDictionary,
         management::ByteSized,
         tabular::{
             table_types::trie::Trie,
@@ -443,7 +444,8 @@ mod test {
         let trie_a = Trie::new(vec![column_a]);
         let trie_b = Trie::new(vec![column_b]);
 
-        let mut instance = DatabaseInstance::<StringKeyType>::new();
+        let mut instance =
+            DatabaseInstance::<StringKeyType>::new(PrefixedStringDictionary::default());
 
         let mut schema_a = TableSchema::new();
         schema_a.add_entry(DataTypeName::U64, false, false);

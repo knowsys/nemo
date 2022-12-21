@@ -255,9 +255,9 @@ pub struct TableManager {
 
 impl TableManager {
     /// Create new [`TableManager`].
-    pub fn new() -> Self {
+    pub fn new(dict_constants: PrefixedStringDictionary) -> Self {
         Self {
-            database: DatabaseInstance::new(),
+            database: DatabaseInstance::new(dict_constants),
             status: HashMap::new(),
             predicate_arity: HashMap::new(),
             predicate_to_steps: HashMap::new(),
