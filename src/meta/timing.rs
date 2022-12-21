@@ -10,7 +10,7 @@ use std::{
 };
 
 /// Global instance of the [`TimedCode`]
-pub static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
+static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
     let instance = TimedCode::new();
     Mutex::new(instance)
 });
