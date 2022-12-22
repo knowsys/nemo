@@ -345,6 +345,13 @@ impl TableManager {
         }
     }
 
+    /// Return the last step a new table for a predicate has been derived or None if predicate is unknown.
+    pub fn predicate_last_step(&self, predicate: Identifier) -> Option<usize> {
+        let steps = self.predicate_to_steps.get(&predicate)?;
+
+        steps.last().copied()
+    }
+
     /// Returns whether there is at least one (non-empty) table associated with the given predicate.
     pub fn contains_predicate(&self, predicate: Identifier) -> bool {
         self.predicate_to_steps.contains_key(&predicate)
