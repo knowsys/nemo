@@ -139,10 +139,6 @@ impl ExecutionEngine {
         let mut current_rule_index: usize = 0;
 
         while without_derivation < self.program.rules().len() {
-            if self.current_step == 70 {
-                log::info!("70!");
-            }
-
             let timing_string = format!("Reasoning/Rules/Rule {current_rule_index}");
             TimedCode::instance().sub(&timing_string).start();
             log_apply_rule(&self.program, self.current_step, current_rule_index);
