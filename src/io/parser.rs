@@ -198,7 +198,7 @@ impl<'a> RuleParser<'a> {
                         delimited(
                             preceded(tag("sparql"), self.parse_open_parenthesis()),
                             tuple((
-                                self.parse_iri(),
+                                self.parse_iri_pred(),
                                 delimited(self.parse_comma(), turtle::string, self.parse_comma()),
                                 turtle::string,
                             )),
@@ -261,8 +261,27 @@ impl<'a> RuleParser<'a> {
         })
     }
 
-    /// Parse an IRI.
-    pub fn parse_iri(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
+    /// Parse an IRI which can be a predicate name.
+    pub fn parse_iri_pred(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
+        move |input| {
+            let (remainder, name) = traced(
+                "parse_iri",
+                alt((
+                    map(sparql::iriref, sparql::Name::IriReference),
+                    sparql::prefixed_name,
+                    sparql::blank_node_label,
+                )),
+            )(input)?;
+
+            Ok((
+                remainder,
+                self.intern_identifier(self.resolve_prefixed_name(name)?),
+            ))
+        }
+    }
+
+    /// Parse an IRI representing a constant.
+    pub fn parse_iri_constant(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
         move |input| {
             let (remainder, name) = traced(
                 "parse_iri",
@@ -284,7 +303,7 @@ impl<'a> RuleParser<'a> {
     pub fn parse_predicate_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
         traced(
             "parse_predicate_name",
-            alt((self.parse_iri(), self.parse_pred_name())),
+            alt((self.parse_iri_pred(), self.parse_pred_name())),
         )
     }
 
@@ -302,7 +321,7 @@ impl<'a> RuleParser<'a> {
         traced(
             "parse_ground_term",
             alt((
-                map(self.parse_iri(), Term::Constant),
+                map(self.parse_iri_constant(), Term::Constant),
                 map(turtle::numeric_literal, Term::NumericLiteral),
                 map(turtle::rdf_literal, move |literal| {
                     Term::RdfLiteral(self.intern_rdf_literal(literal))

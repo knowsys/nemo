@@ -18,10 +18,10 @@ fn main() {
     // let input = read_to_string("test-files/snomed-el-noconst.rls").unwrap();
     // let input = read_to_string("test-files/medmed-el-noconst.rls").unwrap();
     // let input = read_to_string("test-files/galen-el-without-constants.rls").unwrap();
-    // let input = read_to_string("test-files/snomed-el-noaux.rls").unwrap();
+    let input = read_to_string("test-files/snomed-el-noaux.rls").unwrap();
 
-    let input = read_to_string("test-files/galen-el-noaux.rls").unwrap();
-    let save_results = false;
+    // let input = read_to_string("test-files/galen-el-noaux.rls").unwrap();
+    let save_results = true;
 
     let parser = RuleParser::new();
     let mut parser_function = parser.parse_program();
@@ -38,8 +38,11 @@ fn main() {
     log::info!("Executing ...");
 
     exec_engine.execute();
-    let dict = exec_engine.get_dict().clone();
 
+    TimedCode::instance().sub("Reasoning").stop();
+    TimedCode::instance().sub("Save").start();
+
+    let dict = exec_engine.get_dict().clone();
     if save_results {
         log::info!("Results:");
         for (predicate, trie) in exec_engine.get_results() {
@@ -67,7 +70,7 @@ fn main() {
         }
     }
 
-    TimedCode::instance().sub("Reasoning").stop();
+    TimedCode::instance().sub("Save").stop();
     TimedCode::instance().stop();
 
     println!(

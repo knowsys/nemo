@@ -84,7 +84,7 @@ where
     /// Constructs a new [`ColumnScanVector`] for a Column, narrowed
     /// to the given interval.
     pub fn narrowed(column: &'a ColumnVector<T>, interval: Range<usize>) -> Self {
-        debug_assert!(interval.end >= interval.start);
+        debug_assert!(interval.end > interval.start);
 
         let result = Self {
             column,
@@ -198,7 +198,7 @@ where
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        debug_assert!(interval.end >= interval.start);
+        debug_assert!(interval.end > interval.start);
 
         self.interval = interval;
         self.pos = None;

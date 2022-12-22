@@ -152,8 +152,6 @@ impl<'a> BodyStrategy<'a> for SeminaiveStrategy<'a> {
     ) -> ExecutionTree<TableKey> {
         let atom_permutation = self.best_atom_permutation();
         let body_reordered: Vec<&Atom> = atom_permutation.iter().map(|&i| self.body[i]).collect();
-        let filters_reordered: Vec<&Filter> =
-            atom_permutation.iter().map(|&i| self.filters[i]).collect();
 
         let atom_orders: Vec<ColumnOrder> = body_reordered
             .iter()
@@ -192,7 +190,7 @@ impl<'a> BodyStrategy<'a> for SeminaiveStrategy<'a> {
             let (filter_classes, filter_assignments) = filters(
                 &self.analysis.body_variables,
                 &variable_order,
-                &filters_reordered,
+                &self.filters,
             );
 
             if !filter_assignments.is_empty() {

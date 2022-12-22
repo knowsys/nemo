@@ -80,6 +80,7 @@ fn get_variables(atoms: &[&Atom]) -> HashSet<Variable> {
 /// * The variables of each body atom have to be disjoint
 /// * No head predicate must appear twice
 /// * For every head atom there is a body atom which uses the same variables (possibly in a different order)
+/// * May not repeat variables in any atom (head nor body)
 /// * Must not use any filters
 /// Returns None if it isn't or the analysis result.
 fn check_copy_rule(rule: &Rule) -> Option<CopyRuleAnalysis> {
@@ -94,9 +95,16 @@ fn check_copy_rule(rule: &Rule) -> Option<CopyRuleAnalysis> {
     for body_literal in rule.body() {
         if let Literal::Positive(body_atom) = body_literal {
             let body_atom_variables = get_variables(&vec![body_atom]);
+
+            if body_atom_variables.len() != body_atom.terms().len() {
+                // Repeats at least one variable in body aotm
+                return None;
+            }
+
             if all_body_variables.is_disjoint(&body_atom_variables) {
                 all_body_variables.extend(body_atom_variables.iter());
             } else {
+                // Variables are not disjoint
                 return None;
             }
         } else {
@@ -108,8 +116,13 @@ fn check_copy_rule(rule: &Rule) -> Option<CopyRuleAnalysis> {
 
     for (head_index, head_atom) in rule.head().iter().enumerate() {
         let head_atom_variables = get_variables(&vec![head_atom]);
-        let mut covered_by_body = false;
 
+        if head_atom_variables.len() != head_atom.terms().len() {
+            // Repeats at least one variable in head aotm
+            return None;
+        }
+
+        let mut covered_by_body = false;
         for (body_index, body_literal) in rule.body().iter().enumerate() {
             if let Literal::Positive(body_atom) = body_literal {
                 let body_atom_variables = get_variables(&vec![body_atom]);

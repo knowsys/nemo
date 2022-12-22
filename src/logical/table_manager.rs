@@ -5,7 +5,7 @@ use csv::ReaderBuilder;
 use super::model::{DataSource, Identifier};
 use crate::{
     io::csv::read,
-    meta::logging::log_load_table,
+    meta::logging::{log_add_reference, log_load_table},
     physical::{
         datatypes::DataTypeName,
         dictionary::PrefixedStringDictionary,
@@ -445,9 +445,11 @@ impl TableManager {
         ref_name: TableName,
         ref_reorder: ColumnOrder,
     ) -> TableName {
+        log_add_reference(predicate, ref_name.predicate, &ref_reorder);
+
         let new_name = self.get_table_name(predicate, range);
 
-        debug_assert!(ref_reorder.len() == *self.predicate_arity.get(&new_name.predicate).unwrap());
+        debug_assert!(ref_reorder.len() == *self.predicate_arity.get(&ref_name.predicate).unwrap());
 
         let arity = ref_reorder.len();
 
@@ -728,10 +730,13 @@ impl TableManager {
             .predicate_to_steps
             .get(&predicate)
             .expect("If the above map contains the predicate then this one should too.");
+        let target_range = self.normalize_range(predicate, &steps);
 
         let ranges_transformed: Vec<Range<usize>> =
             ranges.iter().map(|r| r.start..(r.start + r.len)).collect();
-        let covering = cover_interval(&ranges_transformed, &steps);
+        let target_transformed = target_range.start..(target_range.start + target_range.len);
+
+        let covering = cover_interval(&ranges_transformed, &target_transformed);
 
         // We assume here that every length = 1 covering here corresponds to a non-union table
         covering

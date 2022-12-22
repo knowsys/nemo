@@ -687,6 +687,8 @@ where
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
+        debug_assert!(interval.end > interval.start);
+
         self.reset();
 
         self.lower_bound_inclusive = self

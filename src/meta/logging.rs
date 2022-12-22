@@ -2,8 +2,9 @@
 
 use crate::{
     logical::{
-        model::{DataSource, Program},
+        model::{DataSource, Identifier, Program},
         program_analysis::analysis::NormalRuleAnalysis,
+        table_manager::ColumnOrder,
     },
     physical::{
         management::{database::TableKeyType, execution_plan::ExecutionTree, ByteSized},
@@ -25,8 +26,12 @@ pub fn log_choose_variable_order(chosen_index: usize) {
 /// Log: Print all available variable orders.
 pub fn log_avaiable_variable_order(program: &Program, analysis: &NormalRuleAnalysis) {
     log::info!("Available orders:");
-    for promising_order in &analysis.promising_variable_orders {
-        log::info!("   * {}", promising_order.debug(program.get_dict_names()));
+    for (index, promising_order) in analysis.promising_variable_orders.iter().enumerate() {
+        log::info!(
+            "   ({}) {}",
+            index,
+            promising_order.debug(program.get_dict_names())
+        );
     }
 }
 
@@ -34,21 +39,26 @@ pub fn log_avaiable_variable_order(program: &Program, analysis: &NormalRuleAnaly
 pub fn log_load_table(source: &DataSource) {
     match source {
         DataSource::CsvFile(file) => {
-            log::info!("Added CSV file as source: {:?}", file);
+            log::info!("Loaded CSV file: {:?}", file);
         }
         DataSource::RdfFile(file) => {
-            log::info!("Added RDF file as source: {:?}", file);
+            log::info!("Loaded RDF file: {:?}", file);
         }
         DataSource::SparqlQuery(_query) => {
             // TODO: This is not very insightful...
-            log::info!("Added source: SparqlQuery");
+            log::info!("Loaded SparqlQuery");
         }
     }
 }
 
+/// Log: Add reference.
+pub fn log_add_reference(from: Identifier, to: Identifier, reorder: &ColumnOrder) {
+    log::info!("Add reference {} -> {} ({:?})", from.0, to.0, reorder.0);
+}
+
 /// Log: Executing plan.
 pub fn log_executing_plan<TableKey: TableKeyType>(tree: &ExecutionTree<TableKey>) {
-    log::info!("Executing plan {}:", tree.name());
+    log::info!("Executing plan \"{}\":", tree.name());
 }
 
 /// Log: Save temporary table.
@@ -72,9 +82,4 @@ pub fn log_save_trie_perm(trie: &Trie) {
 /// Log: Trie is empty.
 pub fn log_empty_trie() {
     log::info!("Trie does not contain any elements");
-}
-
-/// Log: Empty trie iterator.
-pub fn log_empty_iter() {
-    log::info!("Plan is empty");
 }

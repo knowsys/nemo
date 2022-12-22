@@ -9,10 +9,7 @@ use bytesize::ByteSize;
 use crate::{
     error::Error,
     meta::{
-        logging::{
-            log_empty_iter, log_empty_trie, log_executing_plan, log_save_trie_perm,
-            log_save_trie_temp,
-        },
+        logging::{log_empty_trie, log_executing_plan, log_save_trie_perm, log_save_trie_temp},
         TimedCode,
     },
     physical::{
@@ -24,7 +21,7 @@ use crate::{
                 TrieScanSelectValue, TrieScanUnion,
             },
             table_types::trie::{Trie, TrieScanGeneric},
-            traits::{table_schema::TableSchema, triescan::TrieScanEnum},
+            traits::{table::Table, table_schema::TableSchema, triescan::TrieScanEnum},
         },
     },
 };
@@ -100,6 +97,11 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
             dict_constants,
             current_id: 0,
         }
+    }
+
+    /// Return whether a given [`TableKey`] is associated with a table.
+    pub fn table_exists(&self, key: &TableKey) -> bool {
+        self.key_to_tableid.contains_key(key)
     }
 
     /// Return the current number of tables.
@@ -231,49 +233,52 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
             TimedCode::instance().sub(&timed_string).start();
             log_executing_plan(tree);
 
-            let schema = TableSchema::new(); // TODO: Calc this
+            // TODO: Properly determine this
+            let schema = TableSchema::new();
 
-            let root = if let Some(some_root) = tree.root() {
-                some_root
-            } else {
-                // Empty tree means we can skip it
-                log_empty_iter();
-                continue;
-            };
+            // Calculate the new trie
+            let new_trie_opt = if let Some(root) = tree.root() {
+                let iter_opt = self.get_iterator_node(root, &temp_tries)?;
 
-            let iter_option = self.get_iterator_node(root, &temp_tries)?;
-
-            if let Some(mut iter) = iter_option {
-                let new_trie_opt =
+                if let Some(mut iter) = iter_opt {
                     if let ExecutionResult::TempSubset(_, picked_columns) = tree.result() {
                         materialize_subset(&mut iter, picked_columns.clone())
                     } else {
                         materialize(&mut iter)
-                    };
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
 
+            if let Some(new_trie) = new_trie_opt {
+                if new_trie.row_num() == 0 {
+                    panic!("Empty trie that is not None");
+                }
+
+                // Add new trie to the appropriate place
                 match tree.result() {
                     ExecutionResult::Temp(id) | ExecutionResult::TempSubset(id, _) => {
-                        if let Some(new_trie) = &new_trie_opt {
-                            log_save_trie_temp(new_trie);
-                        } else {
-                            log_empty_trie();
-                        }
-
-                        temp_tries.insert(*id, new_trie_opt.map(|t| TempTableInfo::new(t, schema)));
+                        log_save_trie_temp(&new_trie);
+                        temp_tries.insert(*id, Some(TempTableInfo::new(new_trie, schema)));
                     }
                     ExecutionResult::Save(key) => {
-                        if let Some(new_trie) = new_trie_opt {
-                            log_save_trie_perm(&new_trie);
-
-                            self.add(key.clone(), new_trie, schema);
-                            new_tables.push(key.clone());
-                        } else {
-                            log_empty_trie();
-                        }
+                        log_save_trie_perm(&new_trie);
+                        self.add(key.clone(), new_trie, schema);
+                        new_tables.push(key.clone());
                     }
                 }
             } else {
-                log_empty_iter();
+                match tree.result() {
+                    ExecutionResult::Temp(id) | ExecutionResult::TempSubset(id, _) => {
+                        temp_tries.insert(*id, None);
+                    }
+                    _ => {}
+                }
+
+                log_empty_trie();
             }
 
             TimedCode::instance().sub(&timed_string).stop();
@@ -310,7 +315,15 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                     }
                 }
                 ExecutionNode::FetchTable(key) => {
+                    if !self.table_exists(key) {
+                        return Ok(None);
+                    }
+
                     let trie = self.get_by_key(key);
+                    if trie.row_num() == 0 {
+                        return Ok(None);
+                    }
+
                     let interval_triescan = TrieScanGeneric::new(trie);
                     Ok(Some(TrieScanEnum::TrieScanGeneric(interval_triescan)))
                 }
