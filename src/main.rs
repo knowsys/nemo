@@ -18,10 +18,10 @@ fn main() {
     // let input = read_to_string("test-files/snomed-el-noconst.rls").unwrap();
     // let input = read_to_string("test-files/medmed-el-noconst.rls").unwrap();
     // let input = read_to_string("test-files/galen-el-without-constants.rls").unwrap();
-    let input = read_to_string("test-files/snomed-el-noaux.rls").unwrap();
+    // let input = read_to_string("test-files/snomed-el-noaux.rls").unwrap();
 
-    // let input = read_to_string("test-files/galen-el-noaux.rls").unwrap();
-    let save_results = true;
+    let input = read_to_string("test-files/galen-el-noaux.rls").unwrap();
+    let save_results = false;
 
     let parser = RuleParser::new();
     let mut parser_function = parser.parse_program();
