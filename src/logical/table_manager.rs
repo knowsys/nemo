@@ -38,16 +38,19 @@ impl ColumnOrder {
     /// Create new [`ColumnOrder`].
     pub fn new(permutation: Vec<usize>) -> Self {
         debug_assert!(permutation.iter().all(|&p| p < permutation.len()));
+        debug_assert!(!permutation.is_empty());
 
         Self(permutation)
     }
 
     /// Return the default [`ColumnOrder`]
     pub fn default(arity: usize) -> Self {
+        debug_assert!(arity > 0);
+
         Self((0..arity).collect())
     }
 
-    /// Derive a column order from
+    /// Derive a column order that would transform a vector of elements into another.
     pub fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
         Self(
             target
@@ -62,6 +65,13 @@ impl ColumnOrder {
         )
     }
 
+    /// Apply the permutation represented by this column order to reorder a vector.
+    pub fn apply_to<T: Clone>(&self, vec: &[T]) -> Vec<T> {
+        debug_assert!(vec.len() >= self.len());
+
+        self.iter().map(|&i| vec[i].clone()).collect()
+    }
+
     /// Returns the amount of columns left.
     pub fn len(&self) -> usize {
         self.0.len()
@@ -72,10 +82,19 @@ impl ColumnOrder {
         self.0.iter()
     }
 
+    /// Return the value on the given index.
+    pub fn get(&self, index: usize) -> usize {
+        self.0[index]
+    }
+
     /// Return true if this is the default order
     pub fn is_default(&self) -> bool {
+        if self.get(0) != 0 {
+            return false;
+        }
+
         for index in 1..self.len() {
-            if let Some(difference) = self.0[index].checked_sub(self.0[index - 1]) {
+            if let Some(difference) = self.get(index).checked_sub(self.get(index - 1)) {
                 if difference != 1 {
                     return false;
                 }
@@ -87,20 +106,30 @@ impl ColumnOrder {
         true
     }
 
-    /// Concatenate two [`ColumnOrder`].
-    /// For example [1, 0, 2].concat([2, 0, 1]) = [2, 1, 0]
-    pub fn concat(&self, other: &Self) -> Self {
-        debug_assert!(other.len() >= self.len());
+    /// Apply a permutation to a [`ColumnOrder`].
+    /// The result is the permutation you would get from applying other after applying this.
+    /// For example `[1, 0, 2].apply([2, 0, 1]) = [0, 2, 1]`.
+    pub fn apply(&self, other: &Self) -> Self {
+        debug_assert!(self.len() >= other.len());
 
-        let result = other.0.iter().map(|&o| self.0[o]).collect::<Vec<usize>>();
+        let result = other.iter().map(|&o| self.get(o)).collect::<Vec<usize>>();
         Self(result)
     }
 
+    /// Calculates the [`ColumnOrder`] that if applied to the current results in the identity.
+    /// I.e. this is the result of the equation `this.apply(x) == ColumnOrder::default()`.
+    /// For example `[1, 0, 2].inverse() = [0, 1, 2]`.
+    pub fn inverse(&self) -> Self {
+        self.reorder_to(&Self::default(self.len()))
+    }
+
     /// Returns the permutation necessary to transform the current order into the target one.
+    /// I.e. this is the result of the equation `this.apply(x) == target`.
+    /// For example `[3, 0, 1, 2].target([1, 2, 0, 3]) = [2, 3, 1, 0]`.
     pub fn reorder_to(&self, target: &Self) -> Self {
         debug_assert!(self.len() == target.len());
 
-        let result = self.0.iter().map(|&s| target.0.iter().position(|&o| o == s).expect("If both objects are well-formed and of equal-length then they contain the same values.")).collect::<Vec<usize>>();
+        let result = target.iter().map(|&t| self.iter().position(|&s| t == s).expect("If both objects are well-formed and of equal-length then they contain the same values.")).collect::<Vec<usize>>();
         Self(result)
     }
 
@@ -459,7 +488,7 @@ impl TableManager {
                 .get(&ref_name)
                 .expect("Funcion assumes that referenced table exists.")
             {
-                let combined_reorder = another_order.concat(&ref_reorder);
+                let combined_reorder = another_order.apply(&ref_reorder);
 
                 (another_table.clone(), combined_reorder)
             } else {
@@ -586,7 +615,7 @@ impl TableManager {
             )
         };
 
-        let required_order = reordering.concat(&key.order);
+        let required_order = key.order.apply(&reordering.inverse());
         let result_key = TableKey {
             name: actual_name,
             order: required_order.clone(),
@@ -652,7 +681,7 @@ impl TableManager {
             };
 
             if let Some(reordered_table) = reordered_table_opt {
-                // Construct new [`ÈxecutionPlan`] for the reordering
+                // Construct new [`ExecutionPlan`] for the reordering
                 let projection_reordering = reordered_table.order.reorder_to(&required_order);
 
                 let mut project_tree = ExecutionTree::<TableKey>::new(
@@ -670,7 +699,7 @@ impl TableManager {
                 self.execute_plan(reorder_plan);
             }
         } else {
-            panic!("Function assumes that ")
+            panic!("Function assumes that materialized table is known.");
         }
 
         result_key
