@@ -9,7 +9,10 @@ use bytesize::ByteSize;
 use crate::{
     error::Error,
     meta::{
-        logging::{log_empty_trie, log_executing_plan, log_save_trie_perm, log_save_trie_temp},
+        logging::{
+            log_empty_trie, log_execution_title, log_execution_tree, log_save_trie_perm,
+            log_save_trie_temp,
+        },
         TimedCode,
     },
     physical::{
@@ -231,13 +234,15 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
         for tree in &plan.trees {
             let timed_string = format!("Reasoning/Execution/{}", tree.name());
             TimedCode::instance().sub(&timed_string).start();
-            log_executing_plan(tree);
+            log_execution_title(tree);
 
             // TODO: Properly determine this
             let schema = TableSchema::new();
 
             // Calculate the new trie
             let new_trie_opt = if let Some(root) = tree.root() {
+                log_execution_tree(&self.get_iterator_string(root.clone(), &temp_tries));
+
                 let iter_opt = self.get_iterator_node(root, &temp_tries)?;
 
                 if let Some(mut iter) = iter_opt {
@@ -446,6 +451,85 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
         } else {
             unreachable!("We never delete nodes from the plan");
         };
+    }
+
+    fn get_iterator_string_sub<'a>(
+        &'a self,
+        operation: &str,
+        subnodes: &Vec<&ExecutionNodeRef<TableKey>>,
+        temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
+    ) -> String {
+        let mut result = String::from(operation);
+        result += "(";
+
+        for (index, &sub) in subnodes.iter().enumerate() {
+            result += &self.get_iterator_string(sub.clone(), temp_tries);
+
+            if index < subnodes.len() - 1 {
+                result += ", ";
+            }
+        }
+
+        result += ")";
+
+        result
+    }
+
+    /// Return a string which represents a execution tree (given its root).
+    fn get_iterator_string<'a>(
+        &'a self,
+        node: ExecutionNodeRef<TableKey>,
+        temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
+    ) -> String {
+        if let Some(self_rc) = node.0.upgrade() {
+            let node_ref = &*self_rc.as_ref().borrow();
+            let node_operation = node_ref.borrow();
+
+            match node_operation {
+                ExecutionNode::FetchTemp(id) => {
+                    if let Some(info_opt) = temp_tries.get(id) {
+                        if let Some(info) = info_opt {
+                            info.trie.row_num().to_string()
+                        } else {
+                            // Referenced trie is empty
+                            String::from("")
+                        }
+                    } else {
+                        // References trie does not exist
+                        String::from("")
+                    }
+                }
+                ExecutionNode::FetchTable(key) => {
+                    if !self.table_exists(key) {
+                        return String::from("");
+                    }
+
+                    let trie = self.get_by_key(key);
+
+                    trie.row_num().to_string()
+                }
+                ExecutionNode::Join(sub, _) => {
+                    self.get_iterator_string_sub("Join", &sub.iter().collect(), temp_tries)
+                }
+                ExecutionNode::Union(sub) => {
+                    self.get_iterator_string_sub("Union", &sub.iter().collect(), temp_tries)
+                }
+                ExecutionNode::Minus(left, right) => {
+                    self.get_iterator_string_sub("Minus", &vec![left, right], temp_tries)
+                }
+                ExecutionNode::Project(subnode, _) => {
+                    self.get_iterator_string_sub("Project", &vec![subnode], temp_tries)
+                }
+                ExecutionNode::SelectValue(sub, _) => {
+                    self.get_iterator_string_sub("SelectValue", &vec![sub], temp_tries)
+                }
+                ExecutionNode::SelectEqual(sub, _) => {
+                    self.get_iterator_string_sub("SelectEqual", &vec![sub], temp_tries)
+                }
+            }
+        } else {
+            unreachable!("We never delete nodes from the plan")
+        }
     }
 }
 

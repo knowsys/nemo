@@ -1,5 +1,7 @@
 //! Module which collects functions for logging events.
 
+use num::ToPrimitive;
+
 use crate::{
     logical::{
         model::{DataSource, Identifier, Program},
@@ -56,9 +58,23 @@ pub fn log_add_reference(from: Identifier, to: Identifier, reorder: &ColumnOrder
     log::info!("Add reference {} -> {} ({:?})", from.0, to.0, reorder.0);
 }
 
-/// Log: Executing plan.
-pub fn log_executing_plan<TableKey: TableKeyType>(tree: &ExecutionTree<TableKey>) {
+/// Log: Executing plan title.
+pub fn log_execution_title<TableKey: TableKeyType>(tree: &ExecutionTree<TableKey>) {
     log::info!("Executing plan \"{}\":", tree.name());
+}
+
+/// Log: Executing plan.
+pub fn log_execution_tree(tree: &str) {
+    log::info!("   -> {tree}");
+}
+
+/// Log: Materialize.
+pub fn log_materialize(trie_elements: usize, next_count: usize) {
+    log::info!(
+        "Materialize: Next: {next_count}, Elements: {}, Quotient: {}",
+        trie_elements,
+        next_count.to_f64().unwrap() / trie_elements.to_f64().unwrap()
+    );
 }
 
 /// Log: Save temporary table.
