@@ -9,7 +9,10 @@ use crate::{
         table_manager::{ColumnOrder, TableKey},
         TableManager,
     },
-    meta::{logging::log_apply_rule, TimedCode},
+    meta::{
+        logging::{log_apply_rule, log_fragmentation_combine},
+        TimedCode,
+    },
     physical::{
         datatypes::DataValueT,
         dictionary::PrefixedStringDictionary,
@@ -21,6 +24,9 @@ use crate::{
 };
 
 use super::rule_execution::RuleExecution;
+
+// Number of tables that are periodically combined into one.
+const MAX_FRAGMENTATION: usize = 8;
 
 /// Stores useful information about a rule.
 #[derive(Debug, Copy, Clone)]
@@ -46,6 +52,9 @@ pub struct ExecutionEngine {
 
     table_manager: TableManager,
 
+    predicate_fragmentation: HashMap<Identifier, usize>,
+    predicate_last_union: HashMap<Identifier, usize>,
+
     rule_infos: Vec<RuleInfo>,
     current_step: usize,
 }
@@ -70,8 +79,10 @@ impl ExecutionEngine {
         Self {
             program,
             analysis,
-            rule_infos,
             table_manager,
+            predicate_fragmentation: HashMap::new(),
+            predicate_last_union: HashMap::new(),
+            rule_infos,
             current_step: 1,
         }
     }
@@ -147,12 +158,14 @@ impl ExecutionEngine {
             let current_analysis = &self.analysis.rule_analysis[current_rule_index];
             let current_execution = &rule_execution[current_rule_index];
 
-            let no_derivation = !current_execution.execute(
+            let updated_predicates = current_execution.execute(
                 &self.program,
                 &mut self.table_manager,
                 current_info,
                 self.current_step,
             );
+
+            let no_derivation = updated_predicates.is_empty();
 
             if no_derivation {
                 without_derivation += 1;
@@ -172,9 +185,45 @@ impl ExecutionEngine {
             }
 
             current_info.step_last_applied = self.current_step;
-            self.current_step += 1;
 
             TimedCode::instance().sub(&timing_string).stop();
+
+            // We prevent fragmentation by periodically collecting single-step tables into larger ones
+            for updated_pred in updated_predicates {
+                let counter = self
+                    .predicate_fragmentation
+                    .entry(updated_pred)
+                    .or_insert(0);
+                *counter += 1;
+
+                if *counter == MAX_FRAGMENTATION {
+                    let start =
+                        if let Some(last_union) = self.predicate_last_union.get(&updated_pred) {
+                            last_union + 1
+                        } else {
+                            0
+                        };
+
+                    let range = start..(self.current_step + 1);
+
+                    let new_key = self.table_manager.add_union_table(
+                        updated_pred,
+                        range.clone(),
+                        updated_pred,
+                        range.clone(),
+                        None,
+                    );
+
+                    let new_table_opt = new_key.map(|key| self.table_manager.get_trie(&key));
+                    log_fragmentation_combine(updated_pred, new_table_opt);
+
+                    self.predicate_last_union
+                        .insert(updated_pred, self.current_step);
+                    *counter = 0;
+                }
+            }
+
+            self.current_step += 1;
         }
 
         TimedCode::instance().sub("Reasoning/Rules").stop();

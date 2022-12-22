@@ -1,8 +1,10 @@
 //! This module contains functionailty for applying a rule.
 
+use std::collections::HashSet;
+
 use crate::{
     logical::{
-        model::{Program, Rule},
+        model::{Identifier, Program, Rule},
         program_analysis::analysis::{CopyRuleAnalysis, NormalRuleAnalysis, RuleAnalysis},
         table_manager::TableKey,
         TableManager,
@@ -39,13 +41,13 @@ impl<'a> NormalRuleExecution<'a> {
     }
 
     /// Execute the current rule.
-    /// Returns whether a new (non-empty) table has been created.
+    /// Returns the predicates which received new elements.
     pub fn execute(
         &self,
         table_manager: &mut TableManager,
         rule_info: &RuleInfo,
         step_number: usize,
-    ) -> bool {
+    ) -> HashSet<Identifier> {
         // TODO: Just because its the first doesn't mean its the best
         let best_variable_order = &self.analysis.promising_variable_orders[0];
         log_choose_variable_order(0);
@@ -85,13 +87,14 @@ impl<'a> CopyRuleExecution<'a> {
     }
 
     /// Execute the current rule.
-    /// Returns whether a new (non-empty) table has been created.
+    /// Returns the predicates which received new elements.
     pub fn execute(
         &self,
         table_manager: &mut TableManager,
         rule_info: &RuleInfo,
         step_number: usize,
-    ) -> bool {
+    ) -> HashSet<Identifier> {
+        let mut result = HashSet::<Identifier>::new();
         for (head_index, (body_index, reordering)) in &self.analysis.head_to_body {
             let head_predicate = self.rule.head()[*head_index].predicate();
             let body_predicate = self.rule.body()[*body_index].predicate();
@@ -108,6 +111,8 @@ impl<'a> CopyRuleExecution<'a> {
             );
 
             if let Some(new_key) = new_key_opt {
+                result.insert(new_key.name.predicate);
+
                 table_manager.add_reference(
                     head_predicate,
                     new_table_range,
@@ -117,7 +122,7 @@ impl<'a> CopyRuleExecution<'a> {
             }
         }
 
-        false
+        result
     }
 }
 
@@ -144,14 +149,14 @@ impl<'a> RuleExecution<'a> {
     }
 
     /// Execute the current rule.
-    /// Returns whether a new (non-empty) table has been created.
+    /// Returns the predicates which received new elements.
     pub fn execute(
         &self,
         program: &Program,
         table_manager: &mut TableManager,
         rule_info: &RuleInfo,
         step_number: usize,
-    ) -> bool {
+    ) -> HashSet<Identifier> {
         match self {
             RuleExecution::NormalRule(execution) => {
                 log_avaiable_variable_order(program, execution.analysis);

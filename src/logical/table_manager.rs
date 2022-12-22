@@ -24,7 +24,7 @@ use crate::{
 };
 use std::{
     cmp::Ordering,
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     fs::File,
     hash::Hash,
     ops::Range,
@@ -363,7 +363,7 @@ impl TableManager {
             debug_assert!(!steps.is_empty());
             debug_assert!(steps.is_sorted());
 
-            if range.end > *steps.last().unwrap() {
+            if range.start > *steps.last().unwrap() {
                 debug_assert!(range.len() == 1);
                 TableName::new(predicate, TableRange::Single(range.start))
             } else {
@@ -713,7 +713,8 @@ impl TableManager {
     }
 
     /// Execute a given [`ExecutionPlan`].
-    pub fn execute_plan(&mut self, mut plan: ExecutionPlan<TableKey>) -> bool {
+    /// Returns a list of those predicates that received new values.
+    pub fn execute_plan(&mut self, mut plan: ExecutionPlan<TableKey>) -> HashSet<Identifier> {
         // TODO: Simplify
         // TODO: Check for and remove duplicate tables
 
@@ -732,17 +733,18 @@ impl TableManager {
 
         match self.database.execute_plan(&plan) {
             Ok(new_tables) => {
-                let is_empty = new_tables.is_empty();
+                let mut result = HashSet::new();
 
                 for key in new_tables {
+                    result.insert(key.name.predicate);
                     self.register_table(key);
                 }
 
-                !is_empty
+                result
             }
             Err(err) => {
                 log::warn!("{err:?}");
-                false
+                HashSet::new()
             }
         }
     }

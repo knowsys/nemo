@@ -30,6 +30,23 @@ pub fn log_choose_atom_order(best_value: f64, worst_value: f64) {
     log::info!("Chose alternative atom order: {worst_value} -> {best_value}");
 }
 
+/// Log: Combine tables to prevent fragmentation
+pub fn log_fragmentation_combine(predicate: Identifier, trie_opt: Option<&Trie>) {
+    if let Some(trie) = trie_opt {
+        log::info!(
+            "Combined multiple single-step tables for predicate {}: {} elements ({})",
+            predicate.0,
+            trie.row_num(),
+            trie.size_bytes()
+        );
+    } else {
+        log::warn!(
+            "Combined multiple single-step tables for predicate {}: Empty table",
+            predicate.0
+        );
+    }
+}
+
 /// Log: Print all available variable orders.
 pub fn log_avaiable_variable_order(program: &Program, analysis: &NormalRuleAnalysis) {
     log::info!("Available orders:");
