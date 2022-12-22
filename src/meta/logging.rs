@@ -25,6 +25,11 @@ pub fn log_choose_variable_order(chosen_index: usize) {
     log::info!("Selected variable order: {chosen_index}");
 }
 
+/// Log: Choose atom order.
+pub fn log_choose_atom_order(best_value: f64, worst_value: f64) {
+    log::info!("Chose alternative atom order: {worst_value} -> {best_value}");
+}
+
 /// Log: Print all available variable orders.
 pub fn log_avaiable_variable_order(program: &Program, analysis: &NormalRuleAnalysis) {
     log::info!("Available orders:");

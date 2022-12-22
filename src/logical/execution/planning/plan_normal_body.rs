@@ -2,6 +2,8 @@
 
 use std::ops::Range;
 
+use itertools::Itertools;
+
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
@@ -10,6 +12,7 @@ use crate::{
         table_manager::{ColumnOrder, TableKey},
         TableManager,
     },
+    meta::logging::log_choose_atom_order,
     physical::{
         management::execution_plan::{ExecutionNodeRef, ExecutionResult, ExecutionTree},
         tabular::operations::triescan_join::JoinBinding,
@@ -44,10 +47,97 @@ pub struct SeminaiveStrategy<'a> {
 
 impl<'a> SeminaiveStrategy<'a> {
     // Tries to figure out what the best
-    fn best_atom_permutation(&self, atoms: &[&Atom]) -> ColumnOrder {
-        // For now, just do nothing
-        // TODO: Do something
-        ColumnOrder::default(atoms.len())
+    fn best_atom_permutation(
+        &self,
+        table_manager: &TableManager,
+        atoms: &[&Atom],
+        last_applied_step: usize,
+        current_step: usize,
+    ) -> ColumnOrder {
+        // Maximum number of random permutations we check
+        const MAX_NUM_PERMUTATIONS: usize = 3 * 2;
+
+        if atoms.len() == 1 {
+            return ColumnOrder::default(1);
+        }
+
+        let count_old: Vec<usize> = atoms
+            .iter()
+            .map(|&a| {
+                table_manager
+                    .get_table_covering(a.predicate(), 0..last_applied_step)
+                    .len()
+            })
+            .collect();
+
+        let count_new: Vec<usize> = atoms
+            .iter()
+            .map(|&a| {
+                table_manager
+                    .get_table_covering(a.predicate(), last_applied_step..current_step)
+                    .len()
+            })
+            .collect();
+
+        let count_all: Vec<usize> = atoms
+            .iter()
+            .map(|&a| {
+                table_manager
+                    .get_table_covering(a.predicate(), 0..current_step)
+                    .len()
+            })
+            .collect();
+
+        let inidices: Vec<usize> = (0..atoms.len()).collect();
+        let mut best_perm = inidices.clone();
+        let mut best_value = f64::INFINITY;
+        let mut worst_value: f64 = 0.0;
+
+        let mut counter: usize = 0;
+        for permutation in inidices.iter().permutations(inidices.len()) {
+            counter += 1;
+
+            // Note: We do these calculations with floating point numbers
+            // since using integers limits the number of multiplications one can do before overflowinf serverly
+            // Because this is a heuristic anayways, a loss in precision is not as bad
+            let mut value: f64 = 0.0;
+            for mid_point in 0..atoms.len() {
+                let mut product: f64 = 1.0;
+                for atom_index in 0..atoms.len() {
+                    let permuted_index = *permutation[atom_index];
+
+                    if permuted_index < mid_point {
+                        // Take all
+                        product *= count_all[atom_index] as f64;
+                    } else if permuted_index == mid_point {
+                        // Take new
+                        product *= count_new[atom_index] as f64;
+                    } else {
+                        // Take old
+                        product *= count_old[atom_index] as f64;
+                    }
+                }
+
+                value += product;
+            }
+
+            if value < best_value {
+                best_perm = permutation.into_iter().map(|i| *i).collect();
+                best_value = value;
+            }
+
+            if value > worst_value {
+                worst_value = value;
+            }
+
+            if counter >= MAX_NUM_PERMUTATIONS {
+                break;
+            }
+        }
+
+        log_choose_atom_order(best_value, worst_value);
+
+        ColumnOrder::new(best_perm)
     }
 
     // Calculate a subtree consisting of a union of in-memory tables.
@@ -192,7 +282,12 @@ impl<'a> BodyStrategy<'a> for SeminaiveStrategy<'a> {
         }
 
         // Order of the main body atoms matters so we try to find the best one and reorder them accordingly
-        let atom_permutation = self.best_atom_permutation(&body_main);
+        let atom_permutation = self.best_atom_permutation(
+            table_manager,
+            &body_main,
+            rule_info.step_last_applied,
+            step_number,
+        );
         let body_reordered: Vec<&Atom> = atom_permutation.apply_to(&body_main);
 
         // The variable order forces a specific [`ColumnOrder`] on each table
