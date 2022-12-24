@@ -10,6 +10,7 @@ use stage2::physical::tabular::operations::{
 };
 use stage2::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
 use stage2::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
+use stage2::physical::util::Reordering;
 use stage2::{
     logical::{model::DataSource, table_manager::ColumnOrder},
     physical::{datatypes::DataTypeName, dictionary::PrefixedStringDictionary},
@@ -23,7 +24,7 @@ fn load_trie(
     match source {
         DataSource::CsvFile(file) => {
             // Using fallback solution to treat eveything as string for now (storing as u64 internally)
-            let datatypes: Vec<Option<DataTypeName>> = (0..order.len()).map(|_| None).collect();
+            let datatypes: Vec<Option<DataTypeName>> = (0..order.arity()).map(|_| None).collect();
 
             let mut reader = ReaderBuilder::new()
                 .delimiter(b',')
@@ -157,7 +158,7 @@ fn benchmark_project(c: &mut Criterion) {
     group_ours.sample_size(10);
     group_ours.bench_function("trie_project_hole", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&join_trie, vec![0, 3]),
+            || TrieScanProject::new(&join_trie, Reordering::new(vec![0, 3], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -165,7 +166,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_project_beginning", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&join_trie, vec![0, 1]),
+            || TrieScanProject::new(&join_trie, Reordering::new(vec![0, 1], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -173,7 +174,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_project_end", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&join_trie, vec![2, 3]),
+            || TrieScanProject::new(&join_trie, Reordering::new(vec![2, 3], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -182,7 +183,7 @@ fn benchmark_project(c: &mut Criterion) {
 
     group_ours.bench_function("trie_reorder_1", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&trie_b, vec![0, 2, 1]),
+            || TrieScanProject::new(&trie_b, Reordering::new(vec![0, 2, 1], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -190,7 +191,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_reorder_2", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&trie_b, vec![1, 0, 2]),
+            || TrieScanProject::new(&trie_b, Reordering::new(vec![1, 0, 2], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -198,7 +199,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_reorder_3", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&trie_b, vec![2, 1, 0]),
+            || TrieScanProject::new(&trie_b, Reordering::new(vec![2, 1, 0], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },

@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::logical::{
-    model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
-    table_manager::ColumnOrder,
+use crate::{
+    logical::model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
+    physical::util::Reordering,
 };
 
 use super::variable_order::{build_preferable_variable_orders, VariableOrder};
@@ -34,7 +34,7 @@ pub struct CopyRuleAnalysis {
     /// Map each head atom to the body atom its supposed to be copied from
     /// For the example above:
     /// head_to_body = {0 -> (1, [1, 0]), 1 -> (0, [0, 1])}
-    pub head_to_body: HashMap<usize, (usize, ColumnOrder)>,
+    pub head_to_body: HashMap<usize, (usize, Reordering)>,
 }
 
 /// Result of the static analysis of a rule.
@@ -112,7 +112,7 @@ fn check_copy_rule(rule: &Rule) -> Option<CopyRuleAnalysis> {
         }
     }
 
-    let mut head_to_body = HashMap::<usize, (usize, ColumnOrder)>::new();
+    let mut head_to_body = HashMap::<usize, (usize, Reordering)>::new();
 
     for (head_index, head_atom) in rule.head().iter().enumerate() {
         let head_atom_variables = get_variables(&vec![head_atom]);
@@ -134,7 +134,7 @@ fn check_copy_rule(rule: &Rule) -> Option<CopyRuleAnalysis> {
                             head_index,
                             (
                                 body_index,
-                                ColumnOrder::from_transformation(
+                                Reordering::from_transformation(
                                     body_atom.terms(),
                                     &head_atom.terms(),
                                 ),

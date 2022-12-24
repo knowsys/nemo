@@ -13,6 +13,7 @@ use crate::{
     physical::{
         management::execution_plan::{ExecutionNodeRef, ExecutionResult, ExecutionTree},
         tabular::operations::triescan_join::JoinBinding,
+        util::Reordering,
     },
 };
 
@@ -37,10 +38,11 @@ pub trait HeadStrategy<'a> {
 #[derive(Debug)]
 pub struct DatalogStrategy<'a> {
     predicate_to_atoms: HashMap<Identifier, Vec<&'a Atom>>,
+    num_body_variables: usize,
 }
 
 impl<'a> HeadStrategy<'a> for DatalogStrategy<'a> {
-    fn initialize(rule: &'a Rule, _analysis: &'a NormalRuleAnalysis) -> Self {
+    fn initialize(rule: &'a Rule, analysis: &'a NormalRuleAnalysis) -> Self {
         let mut predicate_to_atoms = HashMap::<Identifier, Vec<&'a Atom>>::new();
 
         for head_atom in rule.head() {
@@ -51,7 +53,12 @@ impl<'a> HeadStrategy<'a> for DatalogStrategy<'a> {
             atoms.push(head_atom);
         }
 
-        Self { predicate_to_atoms }
+        let num_body_variables = analysis.body_variables.len();
+
+        Self {
+            predicate_to_atoms,
+            num_body_variables,
+        }
     }
 
     fn execution_tree(
@@ -68,13 +75,11 @@ impl<'a> HeadStrategy<'a> for DatalogStrategy<'a> {
 
             // We just pick the default order
             // TODO: Is there a better pick?
-            //          * One could try to save a projection the head is just a reordering of the body match
-            //          * However, one would still need to reorder for the duplicate elimination ...
             let head_order = ColumnOrder::default(predicate_arity);
 
             let head_bindings: JoinBinding = head_atoms
                 .iter()
-                .map(|&a| join_binding(a, &ColumnOrder::default(predicate_arity), &variable_order))
+                .map(|&a| join_binding(a, &Reordering::default(predicate_arity), &variable_order))
                 .collect();
 
             let head_table_name =
@@ -89,10 +94,13 @@ impl<'a> HeadStrategy<'a> for DatalogStrategy<'a> {
             let mut project_nodes =
                 Vec::<ExecutionNodeRef<TableKey>>::with_capacity(head_atoms.len());
             for head_atom_index in 0..head_atoms.len() {
-                let head_binding = &head_bindings[head_atom_index];
+                let head_reordering = Reordering::new(
+                    head_bindings[head_atom_index].clone(),
+                    self.num_body_variables,
+                );
 
                 let fetch_node = head_tree.fetch_temp(BODY_JOIN);
-                let project_node = head_tree.project(fetch_node, head_binding.clone());
+                let project_node = head_tree.project(fetch_node, head_reordering);
 
                 project_nodes.push(project_node);
             }

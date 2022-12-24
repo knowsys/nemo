@@ -10,15 +10,12 @@ use crate::physical::{
     datatypes::{ColumnDataType, DataTypeName},
     tabular::traits::{table::Table, triescan::TrieScan},
     tabular::{table_types::trie::Trie, traits::table_schema::TableColumnTypes},
+    util::Reordering,
 };
 
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
-
-/// Type that represents a reordering of columns
-/// So `perm[i]` is the new index of the ith column
-pub type ColumnPermutation = Vec<usize>;
 
 /// Helper function which, given a continous range, expands it in such a way
 /// that all of the child nodes are covered as well
@@ -61,19 +58,20 @@ pub struct TrieScanProject<'a> {
     trie: &'a Trie,
     current_layer: Option<usize>,
     target_types: TableColumnTypes,
-    picked_columns: ColumnPermutation,
+    picked_columns: Reordering,
     reorder_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> TrieScanProject<'a> {
     /// Create new TrieScanProject object
-    pub fn new(trie: &'a Trie, picked_columns: ColumnPermutation) -> Self {
+    pub fn new(trie: &'a Trie, picked_columns: Reordering) -> Self {
         let input_types = trie.get_types();
 
-        let mut reorder_scans = Vec::<UnsafeCell<ColumnScanT>>::with_capacity(picked_columns.len());
+        let mut reorder_scans =
+            Vec::<UnsafeCell<ColumnScanT>>::with_capacity(picked_columns.len_target());
 
-        let mut target_types = Vec::<DataTypeName>::with_capacity(picked_columns.len());
-        for &col_index in &picked_columns {
+        let mut target_types = Vec::<DataTypeName>::with_capacity(picked_columns.len_target());
+        for &col_index in picked_columns.iter() {
             let current_datatype = input_types[col_index];
 
             target_types.push(current_datatype);
@@ -144,8 +142,9 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
                 let next_ranges = if self.current_layer.is_none() {
                     vec![0..next_column.len()]
                 } else {
-                    let layer_for_comparison = self.picked_columns[0..self.current_layer.unwrap()]
-                        .iter()
+                    // [0..self.current_layer.unwrap()]
+                    let layer_for_comparison = self.picked_columns.iter()
+                        .take(self.current_layer.unwrap())
                         .copied()
                         .enumerate()
                         .filter(|(_, col_i)| *col_i >= self.picked_columns[self.current_layer.unwrap()])
@@ -272,6 +271,7 @@ mod test {
     use crate::physical::tabular::table_types::trie::Trie;
     use crate::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
     use crate::physical::util::test_util::make_column_with_intervals_t;
+    use crate::physical::util::Reordering;
     use test_log::test;
 
     #[test]
@@ -286,17 +286,17 @@ mod test {
 
         let trie_no_first = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![1, 2],
+            Reordering::new(vec![1, 2], 3),
         )))
         .unwrap();
         let trie_no_middle = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![0, 2],
+            Reordering::new(vec![0, 2], 3),
         )))
         .unwrap();
         let trie_no_last = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![0, 1],
+            Reordering::new(vec![0, 1], 3),
         )))
         .unwrap();
 
@@ -435,7 +435,7 @@ mod test {
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![0, 3, 5],
+            Reordering::new(vec![0, 3, 5], 6),
         )))
         .unwrap();
 
@@ -503,7 +503,7 @@ mod test {
 
         let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![2, 0, 1],
+            Reordering::new(vec![2, 0, 1], 3),
         )))
         .unwrap();
 
@@ -579,7 +579,7 @@ mod test {
 
         let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![2, 0],
+            Reordering::new(vec![2, 0], 3),
         )))
         .unwrap();
 
@@ -638,7 +638,7 @@ mod test {
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![0, 2, 4, 1],
+            Reordering::new(vec![0, 2, 4, 1], 3),
         )))
         .unwrap();
 
@@ -727,7 +727,7 @@ mod test {
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![2, 0, 3],
+            Reordering::new(vec![2, 0, 3], 4),
         )))
         .unwrap();
 
@@ -805,7 +805,7 @@ mod test {
 
         let columns = vec![first, second, third];
 
-        let picked_columns = vec![1, 0, 2];
+        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
         let base_trie = Trie::new(columns);
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
@@ -850,7 +850,7 @@ mod test {
             vec![e, r, z],
         ];
 
-        let picked_columns = vec![1, 0, 2];
+        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
         let base_trie = Trie::from_rows(rows);
 
         let mut project =
@@ -877,7 +877,7 @@ mod test {
 
         let rows = vec![vec![a, r, x], vec![b, r, y]];
 
-        let picked_columns = vec![1, 0, 2];
+        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
         let base_trie = Trie::from_rows(rows);
 
         let mut project =
@@ -914,7 +914,7 @@ mod test {
 
         let columns = vec![first, second, third];
 
-        let picked_columns = vec![1, 0, 2];
+        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
         let base_trie = Trie::new(columns);
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));

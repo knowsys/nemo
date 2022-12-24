@@ -7,12 +7,13 @@ use crate::{
         execution::execution_engine::RuleInfo,
         model::{Atom, Filter, Identifier, Rule},
         program_analysis::{analysis::NormalRuleAnalysis, variable_order::VariableOrder},
-        table_manager::{ColumnOrder, TableKey},
+        table_manager::TableKey,
         TableManager,
     },
     physical::{
         management::execution_plan::{ExecutionNodeRef, ExecutionResult, ExecutionTree},
         tabular::operations::triescan_join::JoinBinding,
+        util::Reordering,
     },
 };
 
@@ -50,12 +51,14 @@ impl<'a> SeminaiveStrategy<'a> {
         manager: &TableManager,
         predicate: Identifier,
         steps: Range<usize>,
-        order: &ColumnOrder,
+        order: &Reordering,
     ) -> ExecutionNodeRef<TableKey> {
+        debug_assert!(order.is_permutation());
+
         let base_tables: Vec<TableKey> = manager
             .get_table_covering(predicate, steps)
             .into_iter()
-            .map(|r| TableKey::new(predicate, r, order.clone()))
+            .map(|r| TableKey::new(predicate, r, order.clone().into()))
             .collect();
 
         let mut union_node = tree.union_empty();
@@ -74,8 +77,8 @@ impl<'a> SeminaiveStrategy<'a> {
         manager: &TableManager,
         side_atoms: &[&Atom],
         main_atoms: &[&Atom],
-        side_orders: &[ColumnOrder],
-        main_orders: &[ColumnOrder],
+        side_orders: &[Reordering],
+        main_orders: &[Reordering],
         rule_step: usize,
         overall_step: usize,
         mid: usize,
@@ -186,11 +189,11 @@ impl<'a> BodyStrategy<'a> for SeminaiveStrategy<'a> {
 
         // The variable order forces a specific [`ColumnOrder`] on each table
         // Needs to be done for the main and side atoms
-        let main_orders: Vec<ColumnOrder> = body_main
+        let main_orders: Vec<Reordering> = body_main
             .iter()
             .map(|&a| order_atom(a, &variable_order))
             .collect();
-        let side_orders: Vec<ColumnOrder> = body_side
+        let side_orders: Vec<Reordering> = body_side
             .iter()
             .map(|&a| order_atom(a, &variable_order))
             .collect();

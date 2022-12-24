@@ -103,29 +103,26 @@ impl IterationOrder {
 }
 
 fn column_order_for(lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
-    let mut partial_col_order = ColumnOrder(
-        var_order
-            .iter()
-            .flat_map(|var| {
-                lit.variables()
-                    .enumerate()
-                    .filter(move |(_, lit_var)| lit_var == var)
-                    .map(|(i, _)| i)
-            })
-            .collect(),
-    );
+    let mut partial_col_order: Vec<usize> = var_order
+        .iter()
+        .flat_map(|var| {
+            lit.variables()
+                .enumerate()
+                .filter(move |(_, lit_var)| lit_var == var)
+                .map(|(i, _)| i)
+        })
+        .collect();
 
-    let mut remaining_vars = ColumnOrder(
-        lit.variables()
-            .enumerate()
-            .map(|(i, _)| i)
-            .filter(|i| !partial_col_order.0.contains(i))
-            .collect(),
-    );
+    let mut remaining_vars: Vec<usize> = lit
+        .variables()
+        .enumerate()
+        .map(|(i, _)| i)
+        .filter(|i| !partial_col_order.contains(i))
+        .collect();
 
-    partial_col_order.0.append(&mut remaining_vars.0);
+    partial_col_order.append(&mut remaining_vars);
 
-    partial_col_order
+    ColumnOrder::new(partial_col_order)
 }
 
 trait RuleVariableList {
@@ -410,7 +407,7 @@ pub(super) fn build_preferable_variable_orders(
         preds
             .map(|(p, a)| {
                 let mut set = HashSet::new();
-                set.insert(ColumnOrder((0..*a).collect()));
+                set.insert(ColumnOrder::default(*a));
                 (*p, set)
             })
             .collect()

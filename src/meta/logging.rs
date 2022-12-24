@@ -6,11 +6,11 @@ use crate::{
     logical::{
         model::{DataSource, Identifier, Program},
         program_analysis::analysis::NormalRuleAnalysis,
-        table_manager::ColumnOrder,
     },
     physical::{
         management::{database::TableKeyType, execution_plan::ExecutionTree, ByteSized},
         tabular::{table_types::trie::Trie, traits::table::Table},
+        util::Reordering,
     },
 };
 
@@ -71,8 +71,8 @@ pub fn log_load_table(source: &DataSource) {
 }
 
 /// Log: Add reference.
-pub fn log_add_reference(from: Identifier, to: Identifier, reorder: &ColumnOrder) {
-    log::info!("Add reference {} -> {} ({:?})", from.0, to.0, reorder.0);
+pub fn log_add_reference(from: Identifier, to: Identifier, reorder: &Reordering) {
+    log::info!("Add reference {} -> {} ({:?})", from.0, to.0, reorder);
 }
 
 /// Log: Executing plan title.

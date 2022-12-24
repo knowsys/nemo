@@ -1,5 +1,9 @@
 //! This module collects miscellaneous functionality.
 
+/// Module defining [`Reordering`]
+pub mod reordering;
+pub use reordering::Reordering;
+
 /// Module for utility functions used in tests
 #[cfg(test)]
 pub mod test_util;

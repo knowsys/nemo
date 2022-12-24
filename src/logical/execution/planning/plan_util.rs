@@ -6,9 +6,11 @@ use crate::{
     logical::{
         model::{Atom, Filter, Term, Variable},
         program_analysis::variable_order::VariableOrder,
-        table_manager::ColumnOrder,
     },
-    physical::tabular::operations::{triescan_select::SelectEqualClasses, ValueAssignment},
+    physical::{
+        tabular::operations::{triescan_select::SelectEqualClasses, ValueAssignment},
+        util::Reordering,
+    },
 };
 
 /// Constant which refers to the body join table
@@ -18,7 +20,7 @@ pub const BODY_JOIN: usize = 0;
 /// such that in complies with the given [`VariableOrder`].
 /// Say we have a(x, y, z) but variable_order = [x -> 1, y -> 2, z -> 0].
 /// Then the result would be [2, 0, 1].
-pub fn order_atom(atom: &Atom, variable_order: &VariableOrder) -> ColumnOrder {
+pub fn order_atom(atom: &Atom, variable_order: &VariableOrder) -> Reordering {
     let terms = atom.terms();
     let mut reordering = (0..terms.len()).collect::<Vec<usize>>();
     reordering.sort_by(|a, b| {
@@ -45,17 +47,17 @@ pub fn order_atom(atom: &Atom, variable_order: &VariableOrder) -> ColumnOrder {
         position_a.cmp(&position_b)
     });
 
-    ColumnOrder::new(reordering)
+    Reordering::new(reordering, atom.terms().len())
 }
 
 /// Calculate the join binding for the given atom.
 /// Essentially, it replaces each variable with the position in the variable ordering
-/// while keeping in mind that the atom might be reordered with the ColumnOrder.
+/// while keeping in mind that the atom might be reordered.
 /// Say you have the join a(x, y, z) b(y, z). For no reordering the binding would be [[0, 1, 2], [1, 2]].
 /// If the variable order where [z, y, x] then we'd have [[0, 1, 2], [0, 1]].
 pub fn join_binding(
     atom: &Atom,
-    column_order: &ColumnOrder,
+    column_order: &Reordering,
     variable_order: &VariableOrder,
 ) -> Vec<usize> {
     // TODO: Currently this code assumes that no existential variable is part of the variable ordering

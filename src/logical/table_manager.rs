@@ -15,65 +15,41 @@ use crate::{
             DatabaseInstance, ExecutionPlan,
         },
         tabular::{
-            operations::triescan_project::ColumnPermutation,
             table_types::trie::Trie,
             traits::{table::Table, table_schema::TableSchema},
         },
-        util::cover_interval,
+        util::{cover_interval, Reordering},
     },
 };
 use std::{
     cmp::Ordering,
     collections::{hash_map::Entry, HashMap, HashSet},
+    fmt,
     fs::File,
     hash::Hash,
-    ops::Range,
+    ops::{Index, Range},
 };
 
-/// Type which represents a permutation of columns in a table
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct ColumnOrder(pub Vec<usize>);
+/// Type which represents the order of a column.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct ColumnOrder(Vec<usize>);
 
 impl ColumnOrder {
-    /// Create new [`ColumnOrder`].
-    pub fn new(permutation: Vec<usize>) -> Self {
-        debug_assert!(permutation.iter().all(|&p| p < permutation.len()));
-        debug_assert!(!permutation.is_empty());
+    /// Construct new [`ColumnOrder`].
+    pub fn new(order: Vec<usize>) -> Self {
+        debug_assert!(!order.is_empty());
+        debug_assert!(order.iter().all(|&r| r < order.len()));
 
-        Self(permutation)
+        Self(order)
     }
 
-    /// Return the default [`ColumnOrder`]
+    /// Construct the default [`ColumnOrder`].
     pub fn default(arity: usize) -> Self {
-        debug_assert!(arity > 0);
-
-        Self((0..arity).collect())
+        Self::new((0..arity).collect())
     }
 
-    /// Derive a column order that would transform a vector of elements into another.
-    pub fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
-        Self(
-            target
-                .iter()
-                .map(|t| {
-                    source
-                        .iter()
-                        .position(|s| *s == *t)
-                        .expect("We expect that target only uses elements from source.")
-                })
-                .collect(),
-        )
-    }
-
-    /// Apply the permutation represented by this column order to reorder a vector.
-    pub fn apply_to<T: Clone>(&self, vec: &[T]) -> Vec<T> {
-        debug_assert!(vec.len() >= self.len());
-
-        self.iter().map(|&i| vec[i].clone()).collect()
-    }
-
-    /// Returns the amount of columns left.
-    pub fn len(&self) -> usize {
+    /// Return the arity of the reordered table.
+    pub fn arity(&self) -> usize {
         self.0.len()
     }
 
@@ -82,19 +58,14 @@ impl ColumnOrder {
         self.0.iter()
     }
 
-    /// Return the value on the given index.
-    pub fn get(&self, index: usize) -> usize {
-        self.0[index]
-    }
-
-    /// Return true if this is the default order
+    /// Returns whether this is the default column order
     pub fn is_default(&self) -> bool {
-        if self.get(0) != 0 {
+        if self[0] != 0 {
             return false;
         }
 
-        for index in 1..self.len() {
-            if let Some(difference) = self.get(index).checked_sub(self.get(index - 1)) {
+        for index in 1..self.arity() {
+            if let Some(difference) = self[index].checked_sub(self[index - 1]) {
                 if difference != 1 {
                     return false;
                 }
@@ -106,31 +77,9 @@ impl ColumnOrder {
         true
     }
 
-    /// Apply a permutation to a [`ColumnOrder`].
-    /// The result is the permutation you would get from applying other after applying this.
-    /// For example `[1, 0, 2].apply([2, 0, 1]) = [0, 2, 1]`.
-    pub fn apply(&self, other: &Self) -> Self {
-        debug_assert!(self.len() >= other.len());
-
-        let result = other.iter().map(|&o| self.get(o)).collect::<Vec<usize>>();
-        Self(result)
-    }
-
-    /// Calculates the [`ColumnOrder`] that if applied to the current results in the identity.
-    /// I.e. this is the result of the equation `this.apply(x) == ColumnOrder::default()`.
-    /// For example `[1, 0, 2].inverse() = [0, 1, 2]`.
-    pub fn inverse(&self) -> Self {
-        self.reorder_to(&Self::default(self.len()))
-    }
-
-    /// Returns the permutation necessary to transform the current order into the target one.
-    /// I.e. this is the result of the equation `this.apply(x) == target`.
-    /// For example `[3, 0, 1, 2].target([1, 2, 0, 3]) = [2, 3, 1, 0]`.
-    pub fn reorder_to(&self, target: &Self) -> Self {
-        debug_assert!(self.len() == target.len());
-
-        let result = target.iter().map(|&t| self.iter().position(|&s| t == s).expect("If both objects are well-formed and of equal-length then they contain the same values.")).collect::<Vec<usize>>();
-        Self(result)
+    /// Returns a view into ordering vector.
+    pub fn as_slice(&self) -> &[usize] {
+        &self.0
     }
 
     /// Provides a measure of how "difficult" it is to transform a column with this order into another.
@@ -140,14 +89,14 @@ impl ColumnOrder {
     /// Finally, we go one layer down to reach 0 (+-0).
     /// This gives us an overall score of 3.
     /// Returned value is 0 if and only if self == other.
-    pub fn distance(&self, other: &Self) -> usize {
-        debug_assert!(other.len() >= self.len());
+    fn distance(&self, to: &ColumnOrder) -> usize {
+        debug_assert!(to.arity() >= self.arity());
 
         let mut current_score: usize = 0;
         let mut current_position: usize = 0;
 
-        for &current_value in &self.0 {
-            let position_other = other.0.iter().position(|&o| o == current_value).expect(
+        for &current_value in self.iter() {
+            let position_other = to.iter().position(|&o| o == current_value).expect(
                 "If both objects are well-formed then other must contain every value of self.",
             );
 
@@ -167,9 +116,17 @@ impl ColumnOrder {
     }
 }
 
-impl From<ColumnOrder> for ColumnPermutation {
-    fn from(order: ColumnOrder) -> ColumnPermutation {
-        order.0
+impl Index<usize> for ColumnOrder {
+    type Output = usize;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl fmt::Debug for ColumnOrder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -257,8 +214,8 @@ enum TableStatus {
     /// Table has to be loaded from disk.
     OnDisk(DataSource),
     /// Table has the same contents as another table except for reordering.
-    /// Meaning that "ThisTable = Reorder(ReferencedTable, Reordering)"
-    Reference(TableName, ColumnOrder),
+    /// Meaning that "ThisTable = Project(ReferencedTable, Reordering)"
+    Reference(TableName, Reordering),
 }
 
 /// Manager object for handling tables that are the result
@@ -410,7 +367,7 @@ impl TableManager {
 
     /// Update all auxillary structures for a new in-memory table.
     fn register_table(&mut self, key: TableKey) {
-        let arity = key.order.len();
+        let arity = key.order.arity();
 
         let register = match self.status.entry(key.name) {
             Entry::Occupied(mut entry) => {
@@ -474,20 +431,24 @@ impl TableManager {
 
     /// Add a reference to another table under a new name.
     /// If it is another reference then it will point to the referenced table of that.
+    /// We only allow reorderings that are permutations.
     pub fn add_reference(
         &mut self,
         predicate: Identifier,
         range: Range<usize>,
         ref_name: TableName,
-        ref_reorder: ColumnOrder,
+        ref_reorder: Reordering,
     ) -> TableName {
+        debug_assert!(ref_reorder.is_permutation());
+
         log_add_reference(predicate, ref_name.predicate, &ref_reorder);
 
+        debug_assert!(
+            ref_reorder.len_source() == *self.predicate_arity.get(&ref_name.predicate).unwrap()
+        );
+
         let new_name = self.get_table_name(predicate, range);
-
-        debug_assert!(ref_reorder.len() == *self.predicate_arity.get(&ref_name.predicate).unwrap());
-
-        let arity = ref_reorder.len();
+        let arity = ref_reorder.len_target();
 
         let (overall_name, overall_reorder) =
             if let TableStatus::Reference(another_table, another_order) = self
@@ -495,7 +456,7 @@ impl TableManager {
                 .get(&ref_name)
                 .expect("Funcion assumes that referenced table exists.")
             {
-                let combined_reorder = another_order.apply(&ref_reorder);
+                let combined_reorder = another_order.chain(&ref_reorder);
 
                 (another_table.clone(), combined_reorder)
             } else {
@@ -613,7 +574,7 @@ impl TableManager {
         } else {
             (
                 key.name.clone(),
-                ColumnOrder::default(
+                Reordering::default(
                     *self
                         .predicate_arity
                         .get(&key.name.predicate)
@@ -622,7 +583,7 @@ impl TableManager {
             )
         };
 
-        let required_order = key.order.apply(&reordering.inverse());
+        let required_order = ColumnOrder::new(reordering.inverse().apply_to(key.order.as_slice()));
         let result_key = TableKey {
             name: actual_name,
             order: required_order.clone(),
@@ -656,7 +617,7 @@ impl TableManager {
                     }
                 }
                 TableStatus::OnDisk(source) => {
-                    let arity = required_order.len();
+                    let arity = required_order.arity();
 
                     // Trie has to be loaded from disk
                     let trie =
@@ -689,7 +650,10 @@ impl TableManager {
 
             if let Some(reordered_table) = reordered_table_opt {
                 // Construct new [`ExecutionPlan`] for the reordering
-                let projection_reordering = reordered_table.order.reorder_to(&required_order);
+                let projection_reordering = Reordering::from_transformation(
+                    reordered_table.order.as_slice(),
+                    required_order.as_slice(),
+                );
 
                 let mut project_tree = ExecutionTree::<TableKey>::new(
                     "Required Reorder".to_string(),
