@@ -249,7 +249,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     /// Implements the functionalily for `simplify` by recusively traversing the tree.
     fn simplify_recursive(
         new_tree: &mut ExecutionTree<TableKey>,
-        node: &ExecutionNodeRef<TableKey>,
+        node: ExecutionNodeRef<TableKey>,
         removed_ids: &HashSet<TableId>,
     ) -> Option<ExecutionNodeRef<TableKey>> {
         if let Some(node_rc) = node.0.upgrade() {
@@ -269,7 +269,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                         Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
                     for subnode in subnodes {
                         let simplified_opt =
-                            Self::simplify_recursive(new_tree, subnode, removed_ids);
+                            Self::simplify_recursive(new_tree, subnode.clone(), removed_ids);
 
                         if let Some(simplified) = simplified_opt {
                             simplified_nodes.push(simplified)
@@ -290,7 +290,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                         Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
                     for subnode in subnodes {
                         let simplified_opt =
-                            Self::simplify_recursive(new_tree, subnode, removed_ids);
+                            Self::simplify_recursive(new_tree, subnode.clone(), removed_ids);
 
                         if let Some(simplified) = simplified_opt {
                             simplified_nodes.push(simplified)
@@ -308,9 +308,10 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                     Some(new_tree.union(simplified_nodes))
                 }
                 ExecutionNode::Minus(left, right) => {
-                    let simplified_left_opt = Self::simplify_recursive(new_tree, left, removed_ids);
+                    let simplified_left_opt =
+                        Self::simplify_recursive(new_tree, left.clone(), removed_ids);
                     let simplified_right_opt =
-                        Self::simplify_recursive(new_tree, right, removed_ids);
+                        Self::simplify_recursive(new_tree, right.clone(), removed_ids);
 
                     if let Some(simplified_left) = simplified_left_opt {
                         if let Some(simplififed_right) = simplified_right_opt {
@@ -323,7 +324,8 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                     None
                 }
                 ExecutionNode::Project(subnode, reorder) => {
-                    let simplified = Self::simplify_recursive(new_tree, subnode, removed_ids)?;
+                    let simplified =
+                        Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
 
                     if reorder.is_default() {
                         Some(simplified)
@@ -332,7 +334,8 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                     }
                 }
                 ExecutionNode::SelectValue(subnode, assignments) => {
-                    let simplified = Self::simplify_recursive(new_tree, subnode, removed_ids)?;
+                    let simplified =
+                        Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
 
                     if assignments.is_empty() {
                         Some(simplified)
@@ -341,7 +344,8 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                     }
                 }
                 ExecutionNode::SelectEqual(subnode, classes) => {
-                    let simplified = Self::simplify_recursive(new_tree, subnode, removed_ids)?;
+                    let simplified =
+                        Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
 
                     if classes.is_empty() {
                         Some(simplified)
@@ -362,7 +366,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         let mut new_tree = ExecutionTree::<TableKey>::new(self.name.clone(), self.result.clone());
 
         if let Some(old_root) = self.root() {
-            let new_root_opt = Self::simplify_recursive(&mut new_tree, &old_root, removed_temp_ids);
+            let new_root_opt = Self::simplify_recursive(&mut new_tree, old_root, removed_temp_ids);
             if let Some(new_root) = new_root_opt {
                 new_tree.set_root(new_root);
             }
