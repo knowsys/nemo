@@ -145,13 +145,9 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     pub fn all_fetched_tables(
         &mut self,
     ) -> impl Iterator<Item = &mut ExecutionNodeOwned<TableKey>> {
-        self.nodes.iter_mut().filter(|n| {
-            if let ExecutionNode::FetchTable(_) = &*n.0.as_ref().borrow() {
-                true
-            } else {
-                false
-            }
-        })
+        self.nodes
+            .iter_mut()
+            .filter(|n| matches!(&*n.0.as_ref().borrow(), ExecutionNode::FetchTable(_)))
     }
 
     /// Push new node to list of all nodes and returns a reference.
@@ -259,7 +255,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         if let Some(node_rc) = node.0.upgrade() {
             let node_ref = &*node_rc.as_ref().borrow();
 
-            return match node_ref {
+            match node_ref {
                 ExecutionNode::FetchTable(key) => Some(new_tree.fetch_table(key.clone())),
                 ExecutionNode::FetchTemp(id) => {
                     if removed_ids.contains(id) {
@@ -318,13 +314,13 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
 
                     if let Some(simplified_left) = simplified_left_opt {
                         if let Some(simplififed_right) = simplified_right_opt {
-                            Some(new_tree.minus(simplified_left, simplififed_right))
+                            return Some(new_tree.minus(simplified_left, simplififed_right));
                         } else {
-                            Some(simplified_left)
+                            return Some(simplified_left);
                         }
-                    } else {
-                        None
                     }
+
+                    None
                 }
                 ExecutionNode::Project(subnode, reorder) => {
                     let simplified = Self::simplify_recursive(new_tree, subnode, removed_ids)?;
@@ -353,7 +349,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                         Some(new_tree.select_equal(simplified, classes.clone()))
                     }
                 }
-            };
+            }
         } else {
             unreachable!()
         }
@@ -404,7 +400,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
 
 /// A series of execution plans
 /// Usually contains the information necessary for evaluating one rule
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ExecutionPlan<TableKey: TableKeyType> {
     /// The individual steps that will be executed
     /// Each step will result in either a temporary or a permanent table

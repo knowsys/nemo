@@ -93,11 +93,9 @@ impl<'a> HeadStrategy<'a> for DatalogStrategy<'a> {
 
             let mut project_nodes =
                 Vec::<ExecutionNodeRef<TableKey>>::with_capacity(head_atoms.len());
-            for head_atom_index in 0..head_atoms.len() {
-                let head_reordering = Reordering::new(
-                    head_bindings[head_atom_index].clone(),
-                    self.num_body_variables,
-                );
+            for head_binding in head_bindings {
+                let head_reordering =
+                    Reordering::new(head_binding.clone(), self.num_body_variables);
 
                 let fetch_node = head_tree.fetch_temp(BODY_JOIN);
                 let project_node = head_tree.project(fetch_node, head_reordering);

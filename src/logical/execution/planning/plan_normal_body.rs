@@ -71,6 +71,7 @@ impl<'a> SeminaiveStrategy<'a> {
     }
 
     // Calculate a subtree consiting of join representing one variant of an seminaive evaluation.
+    #[allow(clippy::too_many_arguments)]
     fn subtree_join(
         &self,
         tree: &mut ExecutionTree<TableKey>,
@@ -145,7 +146,7 @@ impl<'a> BodyStrategy<'a> for SeminaiveStrategy<'a> {
         // Since we don't support negation yet, we can just turn the literals into atoms
         // TODO: Think about negation here
         let body: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
-        let filters = rule.filters().iter().map(|f| f).collect::<Vec<&Filter>>();
+        let filters = rule.filters().iter().collect::<Vec<&Filter>>();
 
         Self {
             body,

@@ -81,6 +81,6 @@ fn normalize_rule(rule: &mut Rule) {
 impl Program {
     /// Transforms the rules into a "normalized" form.
     pub fn normalize(&mut self) {
-        self.rules_mut().iter_mut().for_each(|r| normalize_rule(r));
+        self.rules_mut().iter_mut().for_each(normalize_rule);
     }
 }

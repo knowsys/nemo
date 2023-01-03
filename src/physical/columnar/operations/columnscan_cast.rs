@@ -37,7 +37,7 @@ where
 {
     fn next(&mut self) -> Option<ToType> {
         if let Some(value) = self.reference_scan.next() {
-            return Some(ToType::try_from(value).ok()?);
+            return ToType::try_from(value).ok();
         }
 
         None
@@ -49,7 +49,7 @@ where
         // as this would indicate that there is no larger value.
         // This is a problem for signed datatypes.
         if let Some(seeked_value) = self.reference_scan.seek(ToType::try_into(value).ok()?) {
-            return Some(ToType::try_from(seeked_value).ok()?);
+            return ToType::try_from(seeked_value).ok();
         }
 
         None
@@ -57,7 +57,7 @@ where
 
     fn current(&mut self) -> Option<ToType> {
         if let Some(value) = self.reference_scan.current() {
-            return Some(ToType::try_from(value).ok()?);
+            return ToType::try_from(value).ok();
         }
 
         None

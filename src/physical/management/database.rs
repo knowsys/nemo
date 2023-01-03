@@ -268,11 +268,8 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                     }
                 }
             } else {
-                match tree.result() {
-                    ExecutionResult::Temp(id) => {
-                        temp_tries.insert(*id, None);
-                    }
-                    _ => {}
+                if let ExecutionResult::Temp(id) = tree.result() {
+                    temp_tries.insert(*id, None);
                 }
 
                 log_empty_trie();
@@ -296,18 +293,13 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
 
             return match node_ref {
                 ExecutionNode::FetchTemp(id) => {
-                    if let Some(info_opt) = temp_tries.get(id) {
-                        if let Some(info) = info_opt {
-                            Ok(Some(TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(
-                                &info.trie,
-                            ))))
-                        } else {
-                            // Referenced trie is empty
-                            Ok(None)
-                        }
+                    if let Some(Some(info)) = temp_tries.get(id) {
+                        Ok(Some(TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(
+                            &info.trie,
+                        ))))
                     } else {
-                        // References trie does not exist
-                        // This is not an error, since it could happen that the referenced trie
+                        // Referenced trie is empty or references trie does not exist
+                        // The latter is not an error, since it could happen that the referenced trie
                         // would have been produced by this plan but was just empty
                         Ok(None)
                     }
@@ -478,15 +470,10 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
 
             match node_ref {
                 ExecutionNode::FetchTemp(id) => {
-                    if let Some(info_opt) = temp_tries.get(id) {
-                        if let Some(info) = info_opt {
-                            info.trie.row_num().to_string()
-                        } else {
-                            // Referenced trie is empty
-                            String::from("")
-                        }
+                    if let Some(Some(info)) = temp_tries.get(id) {
+                        info.trie.row_num().to_string()
                     } else {
-                        // References trie does not exist
+                        // Referenced trie is empty or does not exist
                         String::from("")
                     }
                 }

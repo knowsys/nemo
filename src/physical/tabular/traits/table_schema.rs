@@ -17,7 +17,7 @@ pub struct TableSchemaEntry {
 
 /// Schema for a particular relation (table).
 /// Each column has a datatype.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct TableSchema {
     entries: Vec<TableSchemaEntry>,
 }

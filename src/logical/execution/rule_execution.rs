@@ -49,7 +49,7 @@ impl<'a> RuleExecution<'a> {
         rule_info: &RuleInfo,
         step_number: usize,
     ) -> HashSet<Identifier> {
-        log_avaiable_variable_order(program, &self.analysis);
+        log_avaiable_variable_order(program, self.analysis);
         // TODO: Just because its the first doesn't mean its the best
         let best_variable_order = &self.analysis.promising_variable_orders[0];
         log_choose_variable_order(0);

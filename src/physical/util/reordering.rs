@@ -4,8 +4,6 @@ use std::{
     ops::Index,
 };
 
-use crate::logical::table_manager::ColumnOrder;
-
 /// Type which represents a reordering of some list of things.
 /// For example, `{ reorder: [2, 0], len_source: 4 }` would be interpreted as
 /// "Take the third then the first element (and ignore the second and fourth one)".
@@ -148,14 +146,6 @@ impl Index<usize> for Reordering {
 impl Debug for Reordering {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.reorder.fmt(f)
-    }
-}
-
-impl Into<ColumnOrder> for Reordering {
-    fn into(self) -> ColumnOrder {
-        debug_assert!(self.is_permutation());
-
-        ColumnOrder::new(self.reorder)
     }
 }
 

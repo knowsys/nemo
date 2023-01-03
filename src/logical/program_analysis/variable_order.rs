@@ -13,7 +13,7 @@ use super::super::{
 
 /// Represents an ordering of variables as [`HashMap`].
 #[repr(transparent)]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct VariableOrder(HashMap<Variable, usize>);
 
 impl VariableOrder {

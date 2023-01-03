@@ -45,7 +45,7 @@ impl<'a> TrieScanMinus<'a> {
 
         let mut minus_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(layer_count);
 
-        for layer_index in 0..layer_count {
+        for (layer_index, target_type) in target_types.iter().enumerate() {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
                     unsafe {
@@ -87,7 +87,7 @@ impl<'a> TrieScanMinus<'a> {
                 };
             }
 
-            match target_types[layer_index] {
+            match target_type {
                 DataTypeName::U32 => init_scans_for_datatype!(U32),
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),

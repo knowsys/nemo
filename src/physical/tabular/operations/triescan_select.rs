@@ -42,7 +42,7 @@ impl<'a> TrieScanSelectEqual<'a> {
         let arity = column_types.len();
         let mut select_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
 
-        for col_index in 0..arity {
+        for (col_index, col_type) in column_types.iter().enumerate() {
             // As a default fill everything with [`ColScanPass`]
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
@@ -63,7 +63,7 @@ impl<'a> TrieScanSelectEqual<'a> {
                 };
             }
 
-            match column_types[col_index] {
+            match col_type {
                 DataTypeName::U32 => init_scans_for_datatype!(U32),
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
@@ -191,7 +191,7 @@ impl<'a> TrieScanSelectValue<'a> {
         let arity = column_types.len();
         let mut select_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
 
-        for col_index in 0..arity {
+        for (col_index, col_type) in column_types.iter().enumerate() {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
                     unsafe {
@@ -211,7 +211,7 @@ impl<'a> TrieScanSelectValue<'a> {
                 };
             }
 
-            match column_types[col_index] {
+            match col_type {
                 DataTypeName::U32 => init_scans_for_datatype!(U32),
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),

@@ -101,7 +101,7 @@ impl ColumnOrder {
 
             let difference: isize = (position_other as isize) - (current_position as isize);
             let penalty: usize = if difference <= 0 {
-                difference.abs() as usize
+                difference.unsigned_abs()
             } else {
                 // Taking one forward step should not be punished
                 (difference - 1) as usize
@@ -126,6 +126,12 @@ impl Index<usize> for ColumnOrder {
 impl fmt::Debug for ColumnOrder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+impl From<Reordering> for ColumnOrder {
+    fn from(reordering: Reordering) -> Self {
+        ColumnOrder::new(reordering.iter().copied().collect())
     }
 }
 
@@ -306,14 +312,8 @@ impl TableManager {
 
     /// Return all a list of all column orders associated with a table name.
     pub fn get_table_orders(&self, name: &TableName) -> Vec<&ColumnOrder> {
-        let status_opt = self.status.get(name);
-
-        if let Some(status) = status_opt {
-            if let TableStatus::InMemory(orders) = status {
-                orders.iter().map(|o| o).collect()
-            } else {
-                Vec::new()
-            }
+        if let Some(TableStatus::InMemory(orders)) = self.status.get(name) {
+            orders.iter().collect()
         } else {
             Vec::new()
         }
@@ -439,10 +439,9 @@ impl TableManager {
         const EDB_RANGE: Range<usize> = 0..1;
         let table_name = self.get_table_name(predicate, EDB_RANGE);
 
-        self.status
-            .insert(table_name.clone(), TableStatus::OnDisk(source));
+        self.status.insert(table_name, TableStatus::OnDisk(source));
 
-        self.register_name(table_name.clone(), arity);
+        self.register_name(table_name, arity);
 
         table_name
     }
@@ -496,12 +495,12 @@ impl TableManager {
             {
                 let combined_reorder = another_order.chain(&ref_reorder);
 
-                (another_table.clone(), combined_reorder)
+                (*another_table, combined_reorder)
             } else {
                 (ref_name, ref_reorder)
             };
 
-        self.register_name(new_name.clone(), arity);
+        self.register_name(new_name, arity);
         self.status.insert(
             new_name,
             TableStatus::Reference(overall_name, overall_reorder),
@@ -543,7 +542,7 @@ impl TableManager {
         };
 
         let output_name = self.get_table_name(output_predicate, output_range);
-        let output_key = TableKey::from_name(output_name, output_order.clone());
+        let output_key = TableKey::from_name(output_name, output_order);
         let mut output_tree = ExecutionTree::<TableKey>::new(
             "Merge Tables".to_string(),
             ExecutionResult::Save(output_key.clone()),
@@ -608,10 +607,10 @@ impl TableManager {
                 .get(&key.name)
                 .expect("Function assumes that table is known.")
         {
-            (referenced_name.clone(), reordering.clone())
+            (*referenced_name, reordering.clone())
         } else {
             (
-                key.name.clone(),
+                key.name,
                 Reordering::default(
                     *self
                         .predicate_arity
@@ -646,7 +645,7 @@ impl TableManager {
 
                     if distance > 0 {
                         Some(TableKey {
-                            name: actual_name.clone(),
+                            name: actual_name,
                             order: closest_order.clone(),
                         })
                     } else {
@@ -659,7 +658,7 @@ impl TableManager {
 
                     // Trie has to be loaded from disk
                     let trie =
-                        Self::load_table(&source, arity, self.database.get_dict_constants_mut());
+                        Self::load_table(source, arity, self.database.get_dict_constants_mut());
 
                     // We deduce the schema from the trie itself here
                     // TODO: Should change when type system is introduced in the logical layer
@@ -669,7 +668,7 @@ impl TableManager {
                     }
 
                     let loaded_table_key = TableKey {
-                        name: actual_name.clone(),
+                        name: actual_name,
                         order: ColumnOrder::default(arity),
                     };
 
@@ -698,8 +697,7 @@ impl TableManager {
                     ExecutionResult::Save(result_key.clone()),
                 );
                 let reordered_node = project_tree.fetch_table(reordered_table);
-                let project_node =
-                    project_tree.project(reordered_node, projection_reordering.into());
+                let project_node = project_tree.project(reordered_node, projection_reordering);
                 project_tree.set_root(project_node);
 
                 let mut reorder_plan = ExecutionPlan::<TableKey>::new();

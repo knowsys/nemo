@@ -367,7 +367,7 @@ impl Rule {
         if !negative_variables.is_empty() {
             return Err(ParseError::UnsafeNegatedVariable(
                 parser
-                    .resolve_identifier(*negative_variables.first().expect("is not empty here"))
+                    .resolve_identifier(negative_variables.first().expect("is not empty here"))
                     .expect("identifier has been parsed, so must be known"),
             ));
         }

@@ -35,7 +35,7 @@ pub fn materialize_inner(
     let mut data_column_builders = Vec::<ColumnBuilderAdaptiveT>::new();
     let mut intervals_column_builders = Vec::<ColumnBuilderAdaptive<usize>>::new();
 
-    for var in 0..arity {
+    for column_type in &column_types {
         intervals_column_builders.push(ColumnBuilderAdaptive::default());
 
         macro_rules! init_builder_for_datatype {
@@ -46,7 +46,7 @@ pub fn materialize_inner(
             }};
         }
 
-        match column_types[var] {
+        match column_type {
             DataTypeName::U32 => init_builder_for_datatype!(U32),
             DataTypeName::U64 => init_builder_for_datatype!(U64),
             DataTypeName::Float => init_builder_for_datatype!(Float),
@@ -149,7 +149,7 @@ pub fn materialize_inner(
 
     if !is_empty {
         // Collect data from column builders
-        for column_index in 0..arity {
+        for column_type in column_types {
             macro_rules! finalize_for_datatype {
                 ($variant:ident, $type:ty) => {{
                     let current_data_builder: ColumnBuilderAdaptive<$type> =
@@ -171,7 +171,7 @@ pub fn materialize_inner(
                 }};
             }
 
-            match column_types[column_index] {
+            match column_type {
                 DataTypeName::U32 => finalize_for_datatype!(U32, u32),
                 DataTypeName::U64 => finalize_for_datatype!(U64, u64),
                 DataTypeName::Float => finalize_for_datatype!(Float, Float),

@@ -29,7 +29,7 @@ use super::rule_execution::RuleExecution;
 const MAX_FRAGMENTATION: usize = 8;
 
 /// Stores useful information about a rule.
-#[derive(Debug, Copy, Clone)]
+#[derive(Default, Debug, Copy, Clone)]
 pub struct RuleInfo {
     /// The execution step this rule was last applied in.
     pub step_last_applied: usize,
