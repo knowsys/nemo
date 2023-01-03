@@ -1,5 +1,7 @@
 //! Module which collects functions for logging events.
 
+use std::time::Duration;
+
 use num::ToPrimitive;
 
 use crate::{
@@ -18,6 +20,11 @@ use crate::{
 pub fn log_apply_rule(_program: &Program, step: usize, rule_index: usize) {
     // TOOO: Maybe add a to_string() method to rules so
     log::info!("<<< {step}: APPLYING RULE {rule_index} >>>");
+}
+
+/// Log: Duration of executing a specific rule
+pub fn log_rule_duration(duration: Duration) {
+    log::info!("Rule duration: {} ms", duration.as_millis());
 }
 
 /// Log: Choose variable order.

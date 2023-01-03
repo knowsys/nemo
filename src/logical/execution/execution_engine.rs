@@ -10,7 +10,7 @@ use crate::{
         TableManager,
     },
     meta::{
-        logging::{log_apply_rule, log_fragmentation_combine},
+        logging::{log_apply_rule, log_fragmentation_combine, log_rule_duration},
         TimedCode,
     },
     physical::{
@@ -182,7 +182,8 @@ impl ExecutionEngine {
 
             current_info.step_last_applied = self.current_step;
 
-            TimedCode::instance().sub(&timing_string).stop();
+            let rule_duration = TimedCode::instance().sub(&timing_string).stop();
+            log_rule_duration(rule_duration);
 
             // We prevent fragmentation by periodically collecting single-step tables into larger ones
             for updated_pred in updated_predicates {
