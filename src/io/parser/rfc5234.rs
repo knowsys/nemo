@@ -11,14 +11,12 @@ use macros::traced;
 
 #[traced("parser::rfc5234")]
 pub(super) fn alpha(input: &str) -> IntermediateResult<&str> {
-    recognize(satisfy(|c| {
-        ('a'..='z').contains(&c) || ('A'..='Z').contains(&c)
-    }))(input)
+    recognize(satisfy(|c| c.is_ascii_alphabetic()))(input)
 }
 
 #[traced("parser::rfc5234")]
 pub(super) fn digit(input: &str) -> IntermediateResult<&str> {
-    recognize(satisfy(|c| ('0'..='9').contains(&c)))(input)
+    recognize(satisfy(|c| c.is_ascii_digit()))(input)
 }
 
 #[traced("parser::rfc5234")]

@@ -292,7 +292,7 @@ impl Default for PrefixedStringDictionary {
 impl Dictionary for PrefixedStringDictionary {
     fn add(&mut self, entry: String) -> usize {
         log::trace!("add {entry:?} to {self:?}");
-        let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).into_iter().collect();
+        let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).collect();
         log::trace!("prefixes: {prefixes:?}");
         let (real_prefixes, real_entry) = prefixes.split_at(prefixes.len() - 1);
         log::trace!("reals: {real_prefixes:?}, {real_entry:?}");
@@ -344,7 +344,7 @@ impl Dictionary for PrefixedStringDictionary {
     }
 
     fn index_of(&self, entry: &str) -> Option<usize> {
-        let prefixes: Vec<&str> = Prefixer::new(entry).into_iter().collect();
+        let prefixes: Vec<&str> = Prefixer::new(entry).collect();
         let (real_prefixes, real_entry) = prefixes.split_at(prefixes.len() - 1);
         let (node, remainder) = TrieNode::find_last_match(self.store.to_owned(), real_prefixes);
         if !remainder.is_empty() {

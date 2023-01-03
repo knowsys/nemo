@@ -660,11 +660,11 @@ impl TableManager {
                     let trie =
                         Self::load_table(source, arity, self.database.get_dict_constants_mut());
 
-                    // We deduce the schema from the trie itself here
+                    // We deduce the schema from the trie itself here assuming they are all dictionary entries
                     // TODO: Should change when type system is introduced in the logical layer
                     let mut schema = TableSchema::new();
                     for &type_name in trie.get_types() {
-                        schema.add_entry(type_name, false, false);
+                        schema.add_entry(type_name, true, false);
                     }
 
                     let loaded_table_key = TableKey {

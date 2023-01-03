@@ -373,7 +373,6 @@ impl Table for Trie {
         if let Some(last_col) = sorted_cols.pop() {
             condensed_data_builders.push(
                 (0..last_col.len())
-                    .into_iter()
                     .map(|i| last_col.get(i).expect("index is guaranteed to be in range"))
                     .collect::<ColumnBuilderAdaptiveT>(),
             );
