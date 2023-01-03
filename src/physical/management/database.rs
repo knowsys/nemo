@@ -44,6 +44,8 @@ struct TableInfo<TableKey: TableKeyType> {
     /// Associated key.
     pub key: TableKey,
     /// The schema of the table
+    /// TODO: Use this
+    #[allow(dead_code)]
     pub schema: TableSchema,
 }
 
@@ -61,6 +63,8 @@ struct TempTableInfo {
     /// The trie.
     pub trie: Trie,
     /// The schema of the table
+    /// TODO: Use this
+    #[allow(dead_code)]
     pub schema: TableSchema,
 }
 
