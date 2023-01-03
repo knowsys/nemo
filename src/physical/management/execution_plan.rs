@@ -1,11 +1,14 @@
 use std::{
     cell::RefCell,
+    collections::{hash_map::Entry, HashMap, HashSet},
     rc::{Rc, Weak},
 };
 
-use crate::physical::tabular::operations::{
-    triescan_join::JoinBinding, triescan_project::ColumnPermutation,
-    triescan_select::SelectEqualClasses, ValueAssignment,
+use crate::physical::{
+    tabular::operations::{
+        triescan_join::JoinBinding, triescan_select::SelectEqualClasses, ValueAssignment,
+    },
+    util::Reordering,
 };
 
 use super::database::{TableId, TableKeyType};
@@ -59,7 +62,7 @@ impl<TableKey: TableKeyType> ExecutionNodeRef<TableKey> {
 }
 
 /// Represents a database operation that should be performed
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExecutionNode<TableKey: TableKeyType> {
     /// Fetch table by key.
     FetchTable(TableKey),
@@ -72,7 +75,7 @@ pub enum ExecutionNode<TableKey: TableKeyType> {
     /// Table difference operation.
     Minus(ExecutionNodeRef<TableKey>, ExecutionNodeRef<TableKey>),
     /// Table project operation; can only be applied to a [`FetchTable`] or [`FetchTemp`] node.
-    Project(ExecutionNodeRef<TableKey>, ColumnPermutation),
+    Project(ExecutionNodeRef<TableKey>, Reordering),
     /// Only leave entries in that have a certain value.
     SelectValue(ExecutionNodeRef<TableKey>, Vec<ValueAssignment>),
     /// Only leave entries in that contain equal values in certain columns.
@@ -82,11 +85,9 @@ pub enum ExecutionNode<TableKey: TableKeyType> {
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently.
 #[derive(Debug, Clone)]
 pub enum ExecutionResult<TableKey: TableKeyType> {
-    /// Temporary table with the id
+    /// Temporary table with the id.
     Temp(TableId),
-    /// Temporary table that only uses a subset of the columns with the id
-    TempSubset(TableId, Vec<bool>),
-    /// Permanent table with the following identifier, range, column order and priority
+    /// Permanent table tih the table key.
     Save(TableKey),
 }
 
@@ -103,6 +104,7 @@ pub struct ExecutionTree<TableKey: TableKeyType> {
     name: String,
 }
 
+/// Public interface for [`ExecutionTree`]
 impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     /// Create new [`ExecutionTree`]
     pub fn new(name: String, result: ExecutionResult<TableKey>) -> Self {
@@ -112,14 +114,6 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
             result,
             name,
         }
-    }
-
-    fn simplify_recursive() {}
-
-    /// Builds a new [`ExecutionTree`] which does not include superfluous operations,
-    /// like, e.g., performing a join over one subtable.
-    pub fn simplify(&self) -> Option<Self> {
-        None
     }
 
     /// Return the result of this operation
@@ -132,14 +126,19 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         &self.name
     }
 
-    /// Return the root of the trie
+    /// Return the root of the trie.
     pub fn root(&self) -> Option<ExecutionNodeRef<TableKey>> {
         self.root.clone()
     }
 
-    /// Set the root node of the tree
+    /// Set the root node of the tree.
     pub fn set_root(&mut self, root: ExecutionNodeRef<TableKey>) {
         self.root = Some(root);
+    }
+
+    /// Set the result of the computation tree.
+    pub fn set_result(&mut self, result: ExecutionResult<TableKey>) {
+        self.result = result;
     }
 
     /// Return an iterator containing a mutable reference to all FetchTable nodes.
@@ -155,32 +154,32 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         })
     }
 
-    /// Pushed new node to list of all nodes and returns a reference
+    /// Push new node to list of all nodes and returns a reference.
     fn push_and_return_ref(&mut self, node: ExecutionNode<TableKey>) -> ExecutionNodeRef<TableKey> {
         self.nodes.push(ExecutionNodeOwned::new(node));
         self.nodes.last().unwrap().get_ref()
     }
 
-    /// Return [`ExecutionNodeRef`] for fetching a permanent table
+    /// Return [`ExecutionNodeRef`] for fetching a permanent table.
     pub fn fetch_table(&mut self, key: TableKey) -> ExecutionNodeRef<TableKey> {
         let new_node = ExecutionNode::FetchTable(key);
         self.push_and_return_ref(new_node)
     }
 
-    /// Return [`ExecutionNodeRef`] for fetching a temporary table
+    /// Return [`ExecutionNodeRef`] for fetching a temporary table.
     pub fn fetch_temp(&mut self, id: TableId) -> ExecutionNodeRef<TableKey> {
         let new_node = ExecutionNode::FetchTemp(id);
         self.push_and_return_ref(new_node)
     }
 
-    /// Return [`ExecutionNodeRef`] for joining tables
-    /// Starts out empty; add subnodes with `add_subnode`
+    /// Return [`ExecutionNodeRef`] for joining tables.
+    /// Starts out empty; add subnodes with `add_subnode`.
     pub fn join_empty(&mut self, binding: JoinBinding) -> ExecutionNodeRef<TableKey> {
         let new_node = ExecutionNode::Join(Vec::new(), binding);
         self.push_and_return_ref(new_node)
     }
 
-    /// Return [`ExecutionNodeRef`] for joining tables
+    /// Return [`ExecutionNodeRef`] for joining tables.
     pub fn join(
         &mut self,
         subtables: Vec<ExecutionNodeRef<TableKey>>,
@@ -190,8 +189,8 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         self.push_and_return_ref(new_node)
     }
 
-    /// Return [`ExecutionNodeRef`] for the union of several tables
-    /// Starts out empty; add subnodes with `add_subnode`
+    /// Return [`ExecutionNodeRef`] for the union of several tables.
+    /// Starts out empty; add subnodes with `add_subnode`.
     pub fn union_empty(&mut self) -> ExecutionNodeRef<TableKey> {
         let new_node = ExecutionNode::Union(Vec::new());
         self.nodes.push(ExecutionNodeOwned::new(new_node));
@@ -199,7 +198,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         self.nodes.last().unwrap().get_ref()
     }
 
-    /// Return [`ExecutionNodeRef`] for joining tables
+    /// Return [`ExecutionNodeRef`] for joining tables.
     pub fn union(
         &mut self,
         subtables: Vec<ExecutionNodeRef<TableKey>>,
@@ -208,7 +207,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         self.push_and_return_ref(new_node)
     }
 
-    /// Return [`ExecutionNodeRef`] for subtracting one table from another
+    /// Return [`ExecutionNodeRef`] for subtracting one table from another.
     pub fn minus(
         &mut self,
         left: ExecutionNodeRef<TableKey>,
@@ -218,17 +217,17 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         self.push_and_return_ref(new_node)
     }
 
-    /// Return [`ExecutionNodeRef`] for applying project to a table
+    /// Return [`ExecutionNodeRef`] for applying project to a table.
     pub fn project(
         &mut self,
         subnode: ExecutionNodeRef<TableKey>,
-        permutation: ColumnPermutation,
+        reorder: Reordering,
     ) -> ExecutionNodeRef<TableKey> {
-        let new_node = ExecutionNode::Project(subnode, permutation);
+        let new_node = ExecutionNode::Project(subnode, reorder);
         self.push_and_return_ref(new_node)
     }
 
-    /// Return [`ExecutionNodeRef`] for restricing a column to a certain value
+    /// Return [`ExecutionNodeRef`] for restricing a column to a certain value.
     pub fn select_value(
         &mut self,
         subnode: ExecutionNodeRef<TableKey>,
@@ -238,7 +237,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         self.push_and_return_ref(new_node)
     }
 
-    /// Return [`ExecutionNodeRef`] for restricing a column to values of certain other columns
+    /// Return [`ExecutionNodeRef`] for restricting a column to values of certain other columns.
     pub fn select_equal(
         &mut self,
         subnode: ExecutionNodeRef<TableKey>,
@@ -246,6 +245,160 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     ) -> ExecutionNodeRef<TableKey> {
         let new_node = ExecutionNode::SelectEqual(subnode, eq_classes);
         self.push_and_return_ref(new_node)
+    }
+}
+
+/// Functionality for optimizing an [`ExecutionTree`]
+impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
+    /// Implements the functionalily for `simplify` by recusively traversing the tree.
+    fn simplify_recursive(
+        new_tree: &mut ExecutionTree<TableKey>,
+        node: &ExecutionNodeRef<TableKey>,
+        removed_ids: &HashSet<TableId>,
+    ) -> Option<ExecutionNodeRef<TableKey>> {
+        if let Some(node_rc) = node.0.upgrade() {
+            let node_ref = &*node_rc.as_ref().borrow();
+
+            return match node_ref {
+                ExecutionNode::FetchTable(key) => Some(new_tree.fetch_table(key.clone())),
+                ExecutionNode::FetchTemp(id) => {
+                    if removed_ids.contains(id) {
+                        None
+                    } else {
+                        Some(new_tree.fetch_temp(*id))
+                    }
+                }
+                ExecutionNode::Join(subnodes, binding) => {
+                    let mut simplified_nodes =
+                        Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
+                    for subnode in subnodes {
+                        let simplified_opt =
+                            Self::simplify_recursive(new_tree, subnode, removed_ids);
+
+                        if let Some(simplified) = simplified_opt {
+                            simplified_nodes.push(simplified)
+                        } else {
+                            // If subtables contain an empty table, then the join is empty
+                            return None;
+                        }
+                    }
+
+                    if simplified_nodes.len() == 1 {
+                        return Some(simplified_nodes.remove(0));
+                    }
+
+                    Some(new_tree.join(simplified_nodes, binding.clone()))
+                }
+                ExecutionNode::Union(subnodes) => {
+                    let mut simplified_nodes =
+                        Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
+                    for subnode in subnodes {
+                        let simplified_opt =
+                            Self::simplify_recursive(new_tree, subnode, removed_ids);
+
+                        if let Some(simplified) = simplified_opt {
+                            simplified_nodes.push(simplified)
+                        }
+                    }
+
+                    if simplified_nodes.is_empty() {
+                        return None;
+                    }
+
+                    if simplified_nodes.len() == 1 {
+                        return Some(simplified_nodes.remove(0));
+                    }
+
+                    Some(new_tree.union(simplified_nodes))
+                }
+                ExecutionNode::Minus(left, right) => {
+                    let simplified_left_opt = Self::simplify_recursive(new_tree, left, removed_ids);
+                    let simplified_right_opt =
+                        Self::simplify_recursive(new_tree, right, removed_ids);
+
+                    if let Some(simplified_left) = simplified_left_opt {
+                        if let Some(simplififed_right) = simplified_right_opt {
+                            Some(new_tree.minus(simplified_left, simplififed_right))
+                        } else {
+                            Some(simplified_left)
+                        }
+                    } else {
+                        None
+                    }
+                }
+                ExecutionNode::Project(subnode, reorder) => {
+                    let simplified = Self::simplify_recursive(new_tree, subnode, removed_ids)?;
+
+                    if reorder.is_default() {
+                        Some(simplified)
+                    } else {
+                        Some(new_tree.project(simplified, reorder.clone()))
+                    }
+                }
+                ExecutionNode::SelectValue(subnode, assignments) => {
+                    let simplified = Self::simplify_recursive(new_tree, subnode, removed_ids)?;
+
+                    if assignments.is_empty() {
+                        Some(simplified)
+                    } else {
+                        Some(new_tree.select_value(simplified, assignments.clone()))
+                    }
+                }
+                ExecutionNode::SelectEqual(subnode, classes) => {
+                    let simplified = Self::simplify_recursive(new_tree, subnode, removed_ids)?;
+
+                    if classes.is_empty() {
+                        Some(simplified)
+                    } else {
+                        Some(new_tree.select_equal(simplified, classes.clone()))
+                    }
+                }
+            };
+        } else {
+            unreachable!()
+        }
+    }
+
+    /// Builds a new [`ExecutionTree`] which does not include superfluous operations,
+    /// like, e.g., performing a join over one subtable.
+    /// Will also exclude the supplied set of temporary tables.
+    fn simplify(&self, removed_temp_ids: &HashSet<TableId>) -> Self {
+        let mut new_tree = ExecutionTree::<TableKey>::new(self.name.clone(), self.result.clone());
+
+        if let Some(old_root) = self.root() {
+            let new_root_opt = Self::simplify_recursive(&mut new_tree, &old_root, removed_temp_ids);
+            if let Some(new_root) = new_root_opt {
+                new_tree.set_root(new_root);
+            }
+        }
+
+        new_tree
+    }
+
+    /// Replace temporary ids in the tree as well as in the result with the given mapping.
+    pub fn replace_temp_ids(&mut self, map: &HashMap<TableId, ExecutionNode<TableKey>>) {
+        if let ExecutionResult::Temp(id_saved) = self.result {
+            if let Some(node) = map.get(&id_saved) {
+                match node {
+                    ExecutionNode::FetchTable(key_loaded) => {
+                        self.set_result(ExecutionResult::Save(key_loaded.clone()));
+                    }
+                    ExecutionNode::FetchTemp(id_loaded) => {
+                        self.set_result(ExecutionResult::Temp(*id_loaded));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        for node in &mut self.nodes {
+            let node_unpacked = &mut *node.0.as_ref().borrow_mut();
+            if let ExecutionNode::FetchTemp(id) = node_unpacked {
+                if let Some(new_node) = map.get(id) {
+                    *node_unpacked = new_node.clone();
+                }
+            }
+        }
     }
 }
 
@@ -259,21 +412,158 @@ pub struct ExecutionPlan<TableKey: TableKeyType> {
 }
 
 impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
-    /// Create new [`ExecutionPlan`]
+    /// Create new [`ExecutionPlan`].
     pub fn new() -> Self {
         Self { trees: Vec::new() }
     }
 
-    /// Append new [`ExecutionTree`] to the plan
+    /// Append new [`ExecutionTree`] to the plan.
     pub fn push(&mut self, tree: ExecutionTree<TableKey>) {
-        debug_assert!(tree.root.is_some());
         self.trees.push(tree);
     }
 
-    /// Append a list of [`ExecutionTree`] to the plan
+    /// Append a list of [`ExecutionTree`] to the plan.
     pub fn append(&mut self, mut trees: Vec<ExecutionTree<TableKey>>) {
         debug_assert!(trees.iter().all(|t| t.root.is_some()));
         self.trees.append(&mut trees);
+    }
+
+    /// Adds a new entry to the given map which indicates that the given [`TableId`] shall be replaced
+    /// with the given [`ExecutionNode`].
+    /// Renaming of temporary tables to other temporary tables will be applied exhaustively.
+    /// I.e. if A -> B and B -> C then A -> C.
+    fn update_renaming_map(
+        map: &mut HashMap<TableId, ExecutionNode<TableKey>>,
+        from: TableId,
+        to: ExecutionNode<TableKey>,
+    ) {
+        let actual_to = if let ExecutionNode::FetchTemp(to_id) = to {
+            if let Some(actual_node) = map.get(&to_id) {
+                actual_node
+            } else {
+                &to
+            }
+        } else {
+            &to
+        }
+        .clone();
+
+        if let Entry::Vacant(vacant) = map.entry(from) {
+            vacant.insert(actual_to);
+        }
+    }
+
+    /// Simplifies the current [`ExecutionPlan`].
+    /// This includes:
+    ///     * Removing superflous operations like empty unions or default projects
+    ///     * Removing computations that would result in an empty table
+    ///     * Removing computations that would result in an unused temporary table
+    ///     * Removing temporary tables that are the same as other temporary tables
+    pub fn simplify(&mut self) {
+        let mut removed_temp_ids = HashSet::<TableId>::new();
+
+        let mut used_temp_ids = HashSet::<TableId>::new();
+        let mut used_temp_in = HashMap::<TableId, HashSet<TableId>>::new();
+
+        // First, simplify all the trees individually and remove fetch nodes which load an empty temporary table.
+        // We also remeber which temporary tables are used to compute permanent tables
+        // and also which temporary tables are used to compute which other temporary tables.
+        for tree in &mut self.trees {
+            *tree = tree.simplify(&removed_temp_ids);
+
+            if tree.root().is_some() {
+                for fetch_instruction in &tree.nodes {
+                    let node_unpacked = &*fetch_instruction.0.as_ref().borrow_mut();
+                    if let ExecutionNode::FetchTemp(used_id) = node_unpacked {
+                        match tree.result() {
+                            ExecutionResult::Temp(saved_id) => {
+                                let used_set =
+                                    used_temp_in.entry(*used_id).or_insert(HashSet::new());
+                                used_set.insert(*saved_id);
+                            }
+                            ExecutionResult::Save(_) => {
+                                used_temp_ids.insert(*used_id);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Note: We only remove temporary tables and not empty permanent tables
+                // since there might already exist a table with the same name that will be loaded instead
+                // (It is assumed that tables with the same name will have the same contents)
+                if let ExecutionResult::Temp(id) = tree.result() {
+                    removed_temp_ids.insert(*id);
+                }
+            }
+        }
+
+        // Keep only those trees which are not empty
+        // and are actually used for computing a permanent table.
+        // Also remove temporary tables which are the same as other tables and remember those.
+        let mut renamed_temp = HashMap::<TableId, ExecutionNode<TableKey>>::new();
+        self.trees.retain(|t| {
+            if let Some(root) = t.root() {
+                if let Some(node) = root.0.upgrade() {
+                    if let ExecutionResult::Temp(id) = t.result() {
+                        let used_directly = used_temp_ids.contains(id);
+                        let used_indirectly = if let Some(used_in) = used_temp_in.get(id) {
+                            used_temp_ids.is_disjoint(used_in)
+                        } else {
+                            false
+                        };
+
+                        if !used_directly && !used_indirectly {
+                            return false;
+                        }
+                    }
+
+                    let node_unpacked = &*node.as_ref().borrow();
+                    match node_unpacked {
+                        ExecutionNode::FetchTemp(id_loaded) => match t.result() {
+                            ExecutionResult::Temp(id_saved) => {
+                                Self::update_renaming_map(
+                                    &mut renamed_temp,
+                                    *id_saved,
+                                    ExecutionNode::FetchTemp(*id_loaded),
+                                );
+
+                                return false;
+                            }
+                            ExecutionResult::Save(key_saved) => {
+                                Self::update_renaming_map(
+                                    &mut renamed_temp,
+                                    *id_loaded,
+                                    ExecutionNode::FetchTable(key_saved.clone()),
+                                );
+
+                                return true;
+                            }
+                        },
+                        ExecutionNode::FetchTable(key_loaded) => {
+                            if let ExecutionResult::Temp(id_saved) = t.result() {
+                                renamed_temp.insert(
+                                    *id_saved,
+                                    ExecutionNode::FetchTable(key_loaded.clone()),
+                                );
+                                return false;
+                            }
+                        }
+                        _ => {}
+                    }
+                } else {
+                    unreachable!();
+                };
+
+                true
+            } else {
+                false
+            }
+        });
+
+        // Apply the above renaming to the remaining trees
+        for tree in &mut self.trees {
+            tree.replace_temp_ids(&renamed_temp);
+        }
     }
 }
 

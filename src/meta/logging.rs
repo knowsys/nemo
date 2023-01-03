@@ -5,7 +5,7 @@ use num::ToPrimitive;
 use crate::{
     logical::{
         model::{DataSource, Identifier, Program},
-        program_analysis::analysis::NormalRuleAnalysis,
+        program_analysis::analysis::RuleAnalysis,
     },
     physical::{
         management::{database::TableKeyType, execution_plan::ExecutionTree, ByteSized},
@@ -43,7 +43,7 @@ pub fn log_fragmentation_combine(predicate: Identifier, trie_opt: Option<&Trie>)
 }
 
 /// Log: Print all available variable orders.
-pub fn log_avaiable_variable_order(program: &Program, analysis: &NormalRuleAnalysis) {
+pub fn log_avaiable_variable_order(program: &Program, analysis: &RuleAnalysis) {
     log::info!("Available orders:");
     for (index, promising_order) in analysis.promising_variable_orders.iter().enumerate() {
         log::info!(

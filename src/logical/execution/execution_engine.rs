@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::{
     logical::{
         model::{Identifier, NumericLiteral, Program, Term},
-        program_analysis::analysis::{ProgramAnalysis, RuleAnalysis},
+        program_analysis::analysis::ProgramAnalysis,
         table_manager::{ColumnOrder, TableKey},
         TableManager,
     },
@@ -174,11 +174,7 @@ impl ExecutionEngine {
             }
 
             // If we have a derivation and the rule is recursive we want to stay on the same rule
-            let update_rule_index = if let RuleAnalysis::Normal(analysis) = current_analysis {
-                no_derivation || !analysis.is_recursive
-            } else {
-                true
-            };
+            let update_rule_index = no_derivation || !current_analysis.is_recursive;
 
             if update_rule_index {
                 current_rule_index = (current_rule_index + 1) % self.program.rules().len();

@@ -6,7 +6,7 @@ use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
         model::{Atom, Identifier, Rule},
-        program_analysis::{analysis::NormalRuleAnalysis, variable_order::VariableOrder},
+        program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::{ColumnOrder, TableKey},
         TableManager,
     },
@@ -22,7 +22,7 @@ use super::plan_util::{join_binding, BODY_JOIN};
 /// Strategies for calculating the newly derived tables.
 pub trait HeadStrategy<'a> {
     /// Do preperation work for the planning phase.
-    fn initialize(rule: &'a Rule, analysis: &'a NormalRuleAnalysis) -> Self;
+    fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self;
 
     /// Calculate the concrete plan given a variable order.
     fn execution_tree(
@@ -42,7 +42,7 @@ pub struct DatalogStrategy<'a> {
 }
 
 impl<'a> HeadStrategy<'a> for DatalogStrategy<'a> {
-    fn initialize(rule: &'a Rule, analysis: &'a NormalRuleAnalysis) -> Self {
+    fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self {
         let mut predicate_to_atoms = HashMap::<Identifier, Vec<&'a Atom>>::new();
 
         for head_atom in rule.head() {

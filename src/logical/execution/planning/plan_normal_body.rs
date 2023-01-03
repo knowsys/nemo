@@ -6,7 +6,7 @@ use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
         model::{Atom, Filter, Identifier, Rule},
-        program_analysis::{analysis::NormalRuleAnalysis, variable_order::VariableOrder},
+        program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::TableKey,
         TableManager,
     },
@@ -22,7 +22,7 @@ use super::plan_util::{filters, join_binding, order_atom, BODY_JOIN};
 /// Strategies for calculating all body matches.
 pub trait BodyStrategy<'a> {
     /// Do preperation work for the planning phase.
-    fn initialize(rule: &'a Rule, analysis: &'a NormalRuleAnalysis) -> Self;
+    fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self;
 
     /// Calculate the concrete plan given a variable order.
     fn execution_tree(
@@ -40,7 +40,7 @@ pub struct SeminaiveStrategy<'a> {
     body: Vec<&'a Atom>,
     filters: Vec<&'a Filter>,
 
-    analysis: &'a NormalRuleAnalysis,
+    analysis: &'a RuleAnalysis,
 }
 
 impl<'a> SeminaiveStrategy<'a> {
@@ -141,7 +141,7 @@ impl<'a> SeminaiveStrategy<'a> {
 }
 
 impl<'a> BodyStrategy<'a> for SeminaiveStrategy<'a> {
-    fn initialize(rule: &'a Rule, analysis: &'a NormalRuleAnalysis) -> Self {
+    fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self {
         // Since we don't support negation yet, we can just turn the literals into atoms
         // TODO: Think about negation here
         let body: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();

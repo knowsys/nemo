@@ -1,8 +1,5 @@
 use core::hash::Hash;
-use std::{
-    borrow::Borrow,
-    collections::{hash_map::Entry, HashMap},
-};
+use std::collections::{hash_map::Entry, HashMap};
 
 use bytesize::ByteSize;
 
@@ -19,9 +16,8 @@ use crate::{
         dictionary::PrefixedStringDictionary,
         tabular::{
             operations::{
-                materialize::{materialize, materialize_subset},
-                TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanSelectEqual,
-                TrieScanSelectValue, TrieScanUnion,
+                materialize::materialize, TrieScanJoin, TrieScanMinus, TrieScanProject,
+                TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion,
             },
             table_types::trie::{Trie, TrieScanGeneric},
             traits::{table::Table, table_schema::TableSchema, triescan::TrieScanEnum},
@@ -246,11 +242,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                 let iter_opt = self.get_iterator_node(root, &temp_tries)?;
 
                 if let Some(mut iter) = iter_opt {
-                    if let ExecutionResult::TempSubset(_, picked_columns) = tree.result() {
-                        materialize_subset(&mut iter, picked_columns.clone())
-                    } else {
-                        materialize(&mut iter)
-                    }
+                    materialize(&mut iter)
                 } else {
                     None
                 }
@@ -265,7 +257,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
 
                 // Add new trie to the appropriate place
                 match tree.result() {
-                    ExecutionResult::Temp(id) | ExecutionResult::TempSubset(id, _) => {
+                    ExecutionResult::Temp(id) => {
                         log_save_trie_temp(&new_trie);
                         temp_tries.insert(*id, Some(TempTableInfo::new(new_trie, schema)));
                     }
@@ -277,7 +269,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                 }
             } else {
                 match tree.result() {
-                    ExecutionResult::Temp(id) | ExecutionResult::TempSubset(id, _) => {
+                    ExecutionResult::Temp(id) => {
                         temp_tries.insert(*id, None);
                     }
                     _ => {}
@@ -301,9 +293,8 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
     ) -> Result<Option<TrieScanEnum>, Error> {
         if let Some(self_rc) = node.0.upgrade() {
             let node_ref = &*self_rc.as_ref().borrow();
-            let node_operation = node_ref.borrow();
 
-            return match node_operation {
+            return match node_ref {
                 ExecutionNode::FetchTemp(id) => {
                     if let Some(info_opt) = temp_tries.get(id) {
                         if let Some(info) = info_opt {
@@ -316,7 +307,9 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                         }
                     } else {
                         // References trie does not exist
-                        Err(Error::InvalidExecutionPlan)
+                        // This is not an error, since it could happen that the referenced trie
+                        // would have been produced by this plan but was just empty
+                        Ok(None)
                     }
                 }
                 ExecutionNode::FetchTable(key) => {
@@ -401,9 +394,8 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                 ExecutionNode::Project(subnode, sorting) => {
                     if let Some(subnode_rc) = subnode.0.upgrade() {
                         let subnode_ref = &*subnode_rc.as_ref().borrow();
-                        let subnode_operation = subnode_ref.borrow();
 
-                        let trie = match subnode_operation {
+                        let trie = match subnode_ref {
                             ExecutionNode::FetchTable(key) => self.get_by_key(key),
                             ExecutionNode::FetchTemp(id) => {
                                 if let Some(temp_trie_info) = temp_tries
@@ -481,11 +473,10 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
         node: ExecutionNodeRef<TableKey>,
         temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
     ) -> String {
-        if let Some(self_rc) = node.0.upgrade() {
-            let node_ref = &*self_rc.as_ref().borrow();
-            let node_operation = node_ref.borrow();
+        if let Some(node_rc) = node.0.upgrade() {
+            let node_ref = &*node_rc.as_ref().borrow();
 
-            match node_operation {
+            match node_ref {
                 ExecutionNode::FetchTemp(id) => {
                     if let Some(info_opt) = temp_tries.get(id) {
                         if let Some(info) = info_opt {

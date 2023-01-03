@@ -1,7 +1,5 @@
 //! Managing of tables
 
-use csv::ReaderBuilder;
-
 use super::model::{DataSource, Identifier};
 use crate::{
     io::csv::read,
@@ -10,7 +8,7 @@ use crate::{
         datatypes::DataTypeName,
         dictionary::PrefixedStringDictionary,
         management::{
-            database::TableKeyType,
+            database::{TableId, TableKeyType},
             execution_plan::{ExecutionNode, ExecutionNodeRef, ExecutionResult, ExecutionTree},
             DatabaseInstance, ExecutionPlan,
         },
@@ -21,6 +19,7 @@ use crate::{
         util::{cover_interval, Reordering},
     },
 };
+use csv::ReaderBuilder;
 use std::{
     cmp::Ordering,
     collections::{hash_map::Entry, HashMap, HashSet},
@@ -287,6 +286,24 @@ impl TableManager {
         TableCover { start, len }
     }
 
+    /// Given [`TableRange`], returns the range of steps that is covered.
+    /// I.e. this undoes the function `normalize_range`.
+    pub fn translate_range(&self, predicate: Identifier, range: TableRange) -> Range<usize> {
+        match range {
+            TableRange::Single(step) => step..(step + 1),
+            TableRange::Multiple(cover) => {
+                let steps = self
+                    .predicate_to_steps
+                    .get(&predicate)
+                    .expect("If the range is given as a cover then it must be known");
+                let start = steps[cover.start];
+                let end = steps[cover.start + cover.len];
+
+                start..(end + 1)
+            }
+        }
+    }
+
     /// Return all a list of all column orders associated with a table name.
     pub fn get_table_orders(&self, name: &TableName) -> Vec<&ColumnOrder> {
         let status_opt = self.status.get(name);
@@ -312,6 +329,27 @@ impl TableManager {
     /// Returns whether there is at least one (non-empty) table associated with the given predicate.
     pub fn contains_predicate(&self, predicate: Identifier) -> bool {
         self.predicate_to_steps.contains_key(&predicate)
+    }
+
+    /// Returns whether there is at least one (non-empty) table with the given key.
+    pub fn contains_key(&self, key: &TableKey) -> bool {
+        if let Some(status) = self.status.get(&key.name) {
+            match status {
+                TableStatus::InMemory(orders) => {
+                    for order in orders {
+                        if *order == key.order {
+                            return true;
+                        }
+                    }
+
+                    false
+                }
+                TableStatus::OnDisk(_) => true,
+                TableStatus::Reference(_, _) => true,
+            }
+        } else {
+            false
+        }
     }
 
     /// Given a predicate and a range, return the corresponding [`TableName`]
@@ -676,22 +714,24 @@ impl TableManager {
         result_key
     }
 
-    /// Execute a given [`ExecutionPlan`].
-    /// Returns a list of those predicates that received new values.
-    pub fn execute_plan(&mut self, mut plan: ExecutionPlan<TableKey>) -> HashSet<Identifier> {
-        // TODO: Simplify
-        // TODO: Check for and remove duplicate tables
-
-        // First, we need to make sure that every requested table is available
-        // or produce it if necessary
+    fn execute_plan(&mut self, mut plan: ExecutionPlan<TableKey>) -> HashSet<Identifier> {
+        // First, we need to make sure that every requested table is available or produce it if necessary
+        // We exclude from this tables that will be produced during the execution of the plan
+        let mut produced_keys = HashSet::<TableKey>::new();
         for tree in &mut plan.trees {
             for fetch_node in tree.all_fetched_tables() {
                 let node_unpacked = &mut *fetch_node.0.borrow_mut();
                 if let ExecutionNode::FetchTable(key) = node_unpacked {
-                    *key = self.materialize_table(key.clone());
+                    if !produced_keys.contains(key) {
+                        *key = self.materialize_table(key.clone());
+                    }
                 } else {
                     unreachable!()
                 }
+            }
+
+            if let ExecutionResult::Save(new_key) = tree.result() {
+                produced_keys.insert(new_key.clone());
             }
         }
 
@@ -711,6 +751,160 @@ impl TableManager {
                 HashSet::new()
             }
         }
+    }
+
+    /// Checks wether the tree is a union of continous part of a single table.
+    /// If so, returns the [`TableKey`] of the new table containing the result of this computation.
+    fn plan_recognize_simple_union(&self, tree: &ExecutionTree<TableKey>) -> Option<TableKey> {
+        if let ExecutionNode::Union(union) = &*tree.root()?.0.upgrade()?.as_ref().borrow() {
+            let mut overall_cover = Vec::<usize>::new();
+            let mut predicate_opt: Option<Identifier> = None;
+            let mut order_opt: Option<ColumnOrder> = None;
+
+            for subnode in union {
+                if let ExecutionNode::FetchTable(key) = &*subnode.0.upgrade()?.as_ref().borrow() {
+                    if let Some(predicate) = predicate_opt {
+                        let order = order_opt
+                            .as_ref()
+                            .expect("If predicate_opt is set then order_opt is also.");
+
+                        if predicate != key.name.predicate || key.order != *order {
+                            return None;
+                        }
+                    } else {
+                        predicate_opt = Some(key.name.predicate);
+                        order_opt = Some(key.order.clone());
+                    }
+
+                    let cover = match key.name.range {
+                        TableRange::Single(step) => {
+                            self.normalize_range(key.name.predicate, &(step..(step + 1)))
+                        }
+                        TableRange::Multiple(cover) => cover,
+                    };
+                    let cover_range = cover.start..(cover.start + cover.len);
+
+                    overall_cover.append(&mut cover_range.collect());
+                } else {
+                    return None;
+                }
+            }
+
+            overall_cover.sort();
+            overall_cover.dedup();
+
+            if overall_cover.len() <= 1 {
+                return None;
+            }
+
+            for cover_index in 1..overall_cover.len() {
+                if overall_cover[cover_index] - overall_cover[cover_index - 1] != 1 {
+                    return None;
+                }
+            }
+
+            if let Some(predicate) = predicate_opt {
+                return Some(TableKey::new(
+                    predicate,
+                    TableRange::Multiple(TableCover {
+                        start: overall_cover[0],
+                        len: overall_cover.len(),
+                    }),
+                    order_opt.expect("If predicate_opt is set then order_opt is also."),
+                ));
+            }
+        }
+
+        None
+    }
+
+    /// Checks whether tree consists of only a `FetchTable` node.
+    /// or if it is a `Project` node that has a `FetchTable` as a subnode.
+    /// If so, returns the reordering which would turn the referenced table into this one.
+    fn plan_recognize_renaming(
+        &self,
+        tree: &ExecutionTree<TableKey>,
+    ) -> Option<(TableName, Reordering)> {
+        match &*tree.root()?.0.upgrade()?.as_ref().borrow() {
+            ExecutionNode::FetchTable(key) => {
+                let arity = *self.predicate_arity.get(&key.name.predicate)?;
+                Some((key.name, Reordering::default(arity)))
+            }
+            ExecutionNode::Project(subnode, reordering) => {
+                if !reordering.is_permutation() {
+                    return None;
+                }
+
+                if let ExecutionNode::FetchTable(key) = &*subnode.0.upgrade()?.as_ref().borrow() {
+                    Some((key.name, reordering.clone()))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Execute a given [`ExecutionPlan`].
+    /// Before executing applies the following optimizations:
+    ///     * Remove trees that would compute a duplicate table (meaning a table with the same name)
+    ///     * Temporary tables which result in a continious union of subtables are saved permanently
+    ///     * Computation which only reorder another permanent tree are removed and a reference is added instead
+    ///
+    /// Returns a list of those predicates that received new values.
+    pub fn execute_plan_optimized(
+        &mut self,
+        mut plan: ExecutionPlan<TableKey>,
+    ) -> HashSet<Identifier> {
+        let mut result = HashSet::<Identifier>::new();
+
+        // Remove trees that save tables under existing names
+        plan.trees.retain(|t| {
+            if let ExecutionResult::Save(key) = t.result() {
+                return !self.contains_key(key);
+            }
+
+            true
+        });
+
+        // Simplifiy plan
+        plan.simplify();
+
+        // Save temporary table which compute a continious union under a new name
+        let mut union_map = HashMap::<TableId, ExecutionNode<TableKey>>::new();
+        for tree in &mut plan.trees {
+            if let ExecutionResult::Temp(id) = tree.result() {
+                if let Some(key) = self.plan_recognize_simple_union(tree) {
+                    union_map.insert(*id, ExecutionNode::FetchTable(key.clone()));
+                }
+            }
+
+            tree.replace_temp_ids(&union_map);
+        }
+
+        // Remove trees that only (project &) fetch another permanent table and replace it with a reference
+        plan.trees.retain(|t| {
+            if let ExecutionResult::Save(new_key) = t.result() {
+                if let Some((ref_name, reordering)) = self.plan_recognize_renaming(t) {
+                    self.add_reference(
+                        new_key.name.predicate,
+                        self.translate_range(new_key.name.predicate, new_key.name.range),
+                        ref_name,
+                        reordering,
+                    );
+
+                    result.insert(new_key.name.predicate);
+
+                    return false;
+                }
+            }
+
+            true
+        });
+
+        // Execute the omptimized plan
+        result.extend(self.execute_plan(plan).iter());
+        result
     }
 
     /// Given a range of step return a list of [`TableRange`] that would cover it
