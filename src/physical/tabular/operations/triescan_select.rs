@@ -406,7 +406,7 @@ mod test {
 
         let mut select_iter = TrieScanSelectValue::new(
             trie_iter,
-            &vec![
+            &[
                 ValueAssignment {
                     column_idx: 1,
                     value: DataValueT::U64(4),
