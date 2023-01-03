@@ -9,7 +9,7 @@ pub type TableColumnTypes = Vec<DataTypeName>;
 pub struct TableSchemaEntry {
     /// The data type in which the data is stored for this column.
     type_name: DataTypeName,
-    /// Whether the entries in the column are key for some dictionary.
+    /// Whether the entries in the column are the key for some dictionary.
     dict: bool,
     /// Whether this column may contain nulls.
     nullable: bool,
