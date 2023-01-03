@@ -298,7 +298,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                             &info.trie,
                         ))))
                     } else {
-                        // Referenced trie is empty or references trie does not exist
+                        // Referenced trie is empty or does not exist
                         // The latter is not an error, since it could happen that the referenced trie
                         // would have been produced by this plan but was just empty
                         Ok(None)
