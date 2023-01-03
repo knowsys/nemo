@@ -638,7 +638,7 @@ mod test {
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            Reordering::new(vec![0, 2, 4, 1], 3),
+            Reordering::new(vec![0, 2, 4, 1], 5),
         )))
         .unwrap();
 

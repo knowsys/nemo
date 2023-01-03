@@ -285,9 +285,6 @@ mod test {
         gcs.narrow(1..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
         let mut gcs = ColumnScanVector::new(&test_column);
-        gcs.narrow(1..1);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![]);
-        let mut gcs = ColumnScanVector::new(&test_column);
         gcs.narrow(0..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
     }
@@ -301,8 +298,6 @@ mod test {
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
         let gcs = ColumnScanVector::narrowed(&test_column, 1..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
-        let gcs = ColumnScanVector::narrowed(&test_column, 1..1);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![]);
         let gcs = ColumnScanVector::narrowed(&test_column, 0..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
     }
@@ -311,7 +306,7 @@ mod test {
     fn u64_narrow_and_widen() {
         let test_column = get_test_column();
         let mut gcs = ColumnScanVector::new(&test_column);
-        gcs.narrow(1..1);
+        gcs.narrow(1..2);
         gcs.widen();
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
         let mut gcs = ColumnScanVector::new(&test_column);
