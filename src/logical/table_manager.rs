@@ -59,7 +59,9 @@ impl ColumnOrder {
 
     /// Returns whether this is the default column order
     pub fn is_default(&self) -> bool {
-        self.iter().enumerate().all(|(index, element)| index == element)
+        self.iter()
+            .enumerate()
+            .all(|(index, element)| index == *element)
     }
 
     /// Returns a view into ordering vector.
