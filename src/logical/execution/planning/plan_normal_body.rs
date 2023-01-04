@@ -168,7 +168,8 @@ impl<'a> BodyStrategy<'a> for SeminaiveStrategy<'a> {
         );
 
         // We divide the atoms of the body into two parts:
-        //    * Main: Those atom who received new elements since the last rule application
+        //    * Main: Those atoms who received new elements since the last rule application
+        //    * Side: Those atoms which did not receive new elements since the last rule application
         let mut body_side = Vec::<&Atom>::new();
         let mut body_main = Vec::<&Atom>::new();
 
