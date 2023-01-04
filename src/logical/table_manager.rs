@@ -59,21 +59,7 @@ impl ColumnOrder {
 
     /// Returns whether this is the default column order
     pub fn is_default(&self) -> bool {
-        if self[0] != 0 {
-            return false;
-        }
-
-        for index in 1..self.arity() {
-            if let Some(difference) = self[index].checked_sub(self[index - 1]) {
-                if difference != 1 {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-
-        true
+        self.iter().enumerate().all(|(index, element)| index == element)
     }
 
     /// Returns a view into ordering vector.
