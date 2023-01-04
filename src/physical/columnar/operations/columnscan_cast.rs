@@ -30,37 +30,41 @@ where
     }
 }
 
-impl<'a, FromType, ToType> ColumnScanCast<'a, FromType, ToType>
+impl<'a, FromType, ToType> Iterator for ColumnScanCast<'a, FromType, ToType>
 where
     FromType: 'a + ColumnDataType,
     ToType: 'a + ColumnDataType + TryFrom<FromType> + TryInto<FromType>,
 {
+    type Item = ToType;
+
+    // TODO: we should be able to distinguish whether there was no next value or if the cast failed
+    // one could change Item to be Result<ToType, ...> but then e.g. seek also expects Result<ToType, ...> as an argument, which is not so nice...
     fn next(&mut self) -> Option<ToType> {
-        if let Some(value) = self.reference_scan.next() {
-            return ToType::try_from(value).ok();
-        }
-
-        None
+        self.reference_scan
+            .next()
+            .and_then(|val| ToType::try_from(val).ok())
     }
+}
 
+impl<'a, FromType, ToType> ColumnScan for ColumnScanCast<'a, FromType, ToType>
+where
+    FromType: 'a + ColumnDataType,
+    ToType: 'a + ColumnDataType + TryFrom<FromType> + TryInto<FromType>,
+{
     fn seek(&mut self, value: ToType) -> Option<ToType> {
         // TODO: The code below is not correct for all types
         // Casting from ToType to FromType should not simply return None if it fails
         // as this would indicate that there is no larger value.
         // This is a problem for signed datatypes.
-        if let Some(seeked_value) = self.reference_scan.seek(ToType::try_into(value).ok()?) {
-            return ToType::try_from(seeked_value).ok();
-        }
-
-        None
+        self.reference_scan
+            .seek(value.try_into().ok()?)
+            .and_then(|val| ToType::try_from(val).ok())
     }
 
     fn current(&mut self) -> Option<ToType> {
-        if let Some(value) = self.reference_scan.current() {
-            return ToType::try_from(value).ok();
-        }
-
-        None
+        self.reference_scan
+            .current()
+            .and_then(|val| ToType::try_from(val).ok())
     }
 
     fn reset(&mut self) {
@@ -143,7 +147,7 @@ mod test {
         column_types::vector::ColumnVector,
         traits::{
             column::Column,
-            columnscan::{ColumnScanCell, ColumnScanEnum},
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
         },
     };
 
