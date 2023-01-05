@@ -1,14 +1,19 @@
+use bytesize::ByteSize;
+
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
-    physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
+    physical::{
+        datatypes::{ColumnDataType, DataValueT, Double, Float},
+        management::ByteSized,
+    },
 };
-use std::fmt::Debug;
+use std::{fmt::Debug, mem::size_of};
 
 use super::super::column_types::{rle::ColumnRle, vector::ColumnVector};
 use super::columnscan::{ColumnScan, ColumnScanEnum};
 
 /// Column of ordered values.
-pub trait Column<'a, T>: Debug + Clone {
+pub trait Column<'a, T>: Debug + Clone + ByteSized {
     /// ColumnScan associated with the Column
     type Scan: 'a + ColumnScan<Item = T>;
 
@@ -69,9 +74,18 @@ where
     }
 }
 
+impl<T> ByteSized for ColumnEnum<T> {
+    fn size_bytes(&self) -> ByteSize {
+        let size_column = forward_to_column!(self, size_bytes);
+        ByteSize::b(size_of::<Self>() as u64) + size_column
+    }
+}
+
 /// Enum for column implementations
 #[derive(Debug, Clone)]
 pub enum ColumnT {
+    /// Case ColumnEnum<u64>
+    U32(ColumnEnum<u32>),
     /// Case ColumnEnum<u64>
     U64(ColumnEnum<u64>),
     /// Case ColumnEnum<Float>

@@ -1,9 +1,15 @@
 use std::{
     fmt::Debug,
+    mem::size_of,
     ops::{Index, Range},
 };
 
-use crate::physical::columnar::traits::{column::Column, columnscan::ColumnScan};
+use bytesize::ByteSize;
+
+use crate::physical::{
+    columnar::traits::{column::Column, columnscan::ColumnScan},
+    management::ByteSized,
+};
 
 /// Simple implementation of [`Column`] that uses Vec to store data.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +48,13 @@ impl<T: Debug + Copy + Ord> Index<usize> for ColumnVector<T> {
     }
 }
 
+impl<T> ByteSized for ColumnVector<T> {
+    fn size_bytes(&self) -> ByteSize {
+        // We cast everything to u64 separately to avoid overflows
+        ByteSize::b(size_of::<Self>() as u64 + self.data.capacity() as u64 * size_of::<T>() as u64)
+    }
+}
+
 /// Simple implementation of [`ColumnScan`] for a [`ColumnVector`].
 #[derive(Debug)]
 pub struct ColumnScanVector<'a, T> {
@@ -71,7 +84,7 @@ where
     /// Constructs a new [`ColumnScanVector`] for a Column, narrowed
     /// to the given interval.
     pub fn narrowed(column: &'a ColumnVector<T>, interval: Range<usize>) -> Self {
-        debug_assert!(interval.end >= interval.start);
+        debug_assert!(interval.end > interval.start);
 
         let result = Self {
             column,
@@ -185,7 +198,7 @@ where
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        debug_assert!(interval.end >= interval.start);
+        debug_assert!(interval.end > interval.start);
 
         self.interval = interval;
         self.pos = None;
@@ -272,9 +285,6 @@ mod test {
         gcs.narrow(1..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
         let mut gcs = ColumnScanVector::new(&test_column);
-        gcs.narrow(1..1);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![]);
-        let mut gcs = ColumnScanVector::new(&test_column);
         gcs.narrow(0..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
     }
@@ -288,8 +298,6 @@ mod test {
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
         let gcs = ColumnScanVector::narrowed(&test_column, 1..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
-        let gcs = ColumnScanVector::narrowed(&test_column, 1..1);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![]);
         let gcs = ColumnScanVector::narrowed(&test_column, 0..3);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
     }
@@ -298,7 +306,7 @@ mod test {
     fn u64_narrow_and_widen() {
         let test_column = get_test_column();
         let mut gcs = ColumnScanVector::new(&test_column);
-        gcs.narrow(1..1);
+        gcs.narrow(1..2);
         gcs.widen();
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
         let mut gcs = ColumnScanVector::new(&test_column);

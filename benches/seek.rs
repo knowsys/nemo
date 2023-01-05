@@ -42,13 +42,13 @@ pub fn benchmark_seek(c: &mut Criterion) {
     });
 
     let vec_col_handcrafted = ColumnVector::new(
-        (1..100000)
+        (1u32..100000)
             .chain(200000..400000)
             .chain(600000..800000)
             .collect(),
     );
     let rle_col_handcrafted = ColumnRle::new(
-        (1..100000)
+        (1u32..100000)
             .chain(200000..400000)
             .chain(600000..800000)
             .collect(),

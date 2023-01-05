@@ -1,4 +1,8 @@
+use bytesize::ByteSize;
+
 use crate::generate_datatype_forwarder;
+use crate::physical::datatypes::DataTypeName;
+use crate::physical::management::ByteSized;
 use crate::physical::{
     columnar::traits::{
         column::{Column, ColumnEnum},
@@ -6,6 +10,7 @@ use crate::physical::{
     },
     datatypes::{ColumnDataType, DataValueT, Double, Float},
 };
+use std::mem::size_of;
 use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`IntervalColumn`] that uses a second column to manage interval bounds.
@@ -77,9 +82,19 @@ where
     }
 }
 
+impl<T: ColumnDataType> ByteSized for ColumnWithIntervals<T> {
+    fn size_bytes(&self) -> ByteSize {
+        ByteSize::b(size_of::<Self>() as u64)
+            + self.data.size_bytes()
+            + self.int_starts.size_bytes()
+    }
+}
+
 /// Enum for Interval Column with different underlying datatypes
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColumnWithIntervalsT {
+    /// Case u32
+    U32(ColumnWithIntervals<u32>),
     /// Case u64
     U64(ColumnWithIntervals<u64>),
     /// Case Float
@@ -112,6 +127,16 @@ impl ColumnWithIntervalsT {
     pub fn int_bounds(&self, int_idx: usize) -> Range<usize> {
         forward_to_interval_column!(self, int_bounds(int_idx))
     }
+
+    /// Return the data type name of the column.
+    pub fn get_type(&self) -> DataTypeName {
+        match self {
+            Self::U32(_) => DataTypeName::U32,
+            Self::U64(_) => DataTypeName::U64,
+            Self::Float(_) => DataTypeName::Float,
+            Self::Double(_) => DataTypeName::Double,
+        }
+    }
 }
 
 impl<'a> Column<'a, DataValueT> for ColumnWithIntervalsT {
@@ -133,6 +158,12 @@ impl<'a> Column<'a, DataValueT> for ColumnWithIntervalsT {
             iter.wrap_with(ColumnScanCell::new)
                 .as_variant_of(ColumnScanT)
         )
+    }
+}
+
+impl ByteSized for ColumnWithIntervalsT {
+    fn size_bytes(&self) -> ByteSize {
+        ByteSize::b(size_of::<Self>() as u64) + forward_to_interval_column!(self, size_bytes)
     }
 }
 

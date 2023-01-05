@@ -12,6 +12,8 @@ use super::DataTypeName;
 /// option to interface with unknown values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DataValueT {
+    /// Case u32
+    U32(u32),
     /// Case u64
     U64(u64),
     /// Case Float
@@ -21,6 +23,13 @@ pub enum DataValueT {
 }
 
 impl DataValueT {
+    /// Returns either [`Option<u32>`], answering whether the [`DataValueT`] is of this datatype
+    pub fn as_u32(&self) -> Option<u32> {
+        match *self {
+            DataValueT::U32(val) => Some(val),
+            _ => None,
+        }
+    }
     /// Returns either [`Option<u64>`], answering whether the [`DataValueT`] is of this datatype
     pub fn as_u64(&self) -> Option<u64> {
         match *self {
@@ -48,6 +57,7 @@ impl DataValueT {
     /// Compares its value with another given [`DataValueT`]
     pub fn compare(&self, other: &Self) -> Option<Ordering> {
         match self {
+            DataValueT::U32(val) => other.as_u32().map(|otherval| val.cmp(&otherval)),
             DataValueT::U64(val) => other.as_u64().map(|otherval| val.cmp(&otherval)),
             DataValueT::Float(val) => other.as_float().map(|otherval| val.cmp(&otherval)),
             DataValueT::Double(val) => other.as_double().map(|otherval| val.cmp(&otherval)),
@@ -57,6 +67,7 @@ impl DataValueT {
     /// Returns the type of the VecT as DataTypeName
     pub fn get_type(&self) -> DataTypeName {
         match self {
+            Self::U32(_) => DataTypeName::U32,
             Self::U64(_) => DataTypeName::U64,
             Self::Float(_) => DataTypeName::Float,
             Self::Double(_) => DataTypeName::Double,
@@ -67,6 +78,7 @@ impl DataValueT {
 impl std::fmt::Display for DataValueT {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::U32(val) => write!(f, "{val}"),
             Self::U64(val) => write!(f, "{val}"),
             Self::Float(val) => write!(f, "{val}"),
             Self::Double(val) => write!(f, "{val}"),
@@ -77,6 +89,8 @@ impl std::fmt::Display for DataValueT {
 /// Enum for vectors of different supported input types
 #[derive(Debug)]
 pub enum VecT {
+    /// Case Vec<u32>
+    U32(Vec<u32>),
     /// Case Vec<u64>
     U64(Vec<u64>),
     /// Case Vec<Float>
@@ -91,6 +105,7 @@ impl VecT {
     /// Creates a new empty VecT for the given DataTypeName
     pub fn new(dtn: DataTypeName) -> Self {
         match dtn {
+            DataTypeName::U32 => Self::U32(Vec::new()),
             DataTypeName::U64 => Self::U64(Vec::new()),
             DataTypeName::Float => Self::Float(Vec::new()),
             DataTypeName::Double => Self::Double(Vec::new()),
@@ -100,6 +115,7 @@ impl VecT {
     /// Returns the type of the VecT as DataTypeName
     pub fn get_type(&self) -> DataTypeName {
         match self {
+            Self::U32(_) => DataTypeName::U32,
             Self::U64(_) => DataTypeName::U64,
             Self::Float(_) => DataTypeName::Float,
             Self::Double(_) => DataTypeName::Double,
@@ -114,6 +130,7 @@ impl VecT {
     /// Get the value at the given index as DataValueT
     pub fn get(&self, index: usize) -> Option<DataValueT> {
         match self {
+            VecT::U32(vec) => vec.get(index).copied().map(DataValueT::U32),
             VecT::U64(vec) => vec.get(index).copied().map(DataValueT::U64),
             VecT::Float(vec) => vec.get(index).copied().map(DataValueT::Float),
             VecT::Double(vec) => vec.get(index).copied().map(DataValueT::Double),
@@ -124,6 +141,11 @@ impl VecT {
     /// Note that it is not checked if the [DataValueT] has the right enum-variant
     pub(crate) fn push(&mut self, value: &DataValueT) {
         match self {
+            VecT::U32(vec) => {
+                vec.push(value.as_u32().expect(
+                    "expecting VecT::U32 and DataValueT::U32, but DataValueT does not match",
+                ))
+            }
             VecT::U64(vec) => {
                 vec.push(value.as_u64().expect(
                     "expecting VecT::U64 and DataValueT::U64, but DataValueT does not match",
@@ -151,10 +173,12 @@ impl VecT {
     /// Compares two values at the given index-points with each other
     pub fn compare_idx(&self, idx_a: usize, idx_b: usize) -> Option<Ordering> {
         match self {
+            VecT::U32(vec) => vec
+                .get(idx_a)
+                .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
             VecT::U64(vec) => vec
                 .get(idx_a)
                 .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
-
             VecT::Float(vec) => vec
                 .get(idx_a)
                 .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),

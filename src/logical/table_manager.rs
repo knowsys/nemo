@@ -1,275 +1,576 @@
 //! Managing of tables
 
-use super::execution_plan::{ExecutionNode, ExecutionOperation, ExecutionResult};
 use super::model::{DataSource, Identifier};
-use super::ExecutionSeries;
-
-use crate::io::csv::read;
-use crate::meta::TimedCode;
-use crate::physical::datatypes::DataTypeName;
-use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
-use crate::physical::tabular::operations::{
-    materialize, materialize_subset, TrieScanJoin, TrieScanMinus, TrieScanProject,
-    TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion,
+use crate::{
+    io::csv::read,
+    meta::logging::{log_add_reference, log_load_table},
+    physical::{
+        datatypes::DataTypeName,
+        dictionary::PrefixedStringDictionary,
+        management::{
+            database::{TableId, TableKeyType},
+            execution_plan::{ExecutionNode, ExecutionNodeRef, ExecutionResult, ExecutionTree},
+            DatabaseInstance, ExecutionPlan,
+        },
+        tabular::{
+            table_types::trie::Trie,
+            traits::{table::Table, table_schema::TableSchema},
+        },
+        util::{cover_interval, Reordering},
+    },
 };
-use crate::physical::tabular::table_types::trie::{
-    Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
-};
-use crate::physical::tabular::traits::{
-    table::Table,
-    table_schema::TableSchema,
-    triescan::{TrieScan, TrieScanEnum},
-};
-use crate::physical::util::cover_interval;
 use csv::ReaderBuilder;
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, HashSet};
-use std::fs::File;
-use std::ops::Range;
-use superslice::*;
+use std::{
+    cmp::Ordering,
+    collections::{hash_map::Entry, HashMap, HashSet},
+    fmt,
+    fs::File,
+    hash::Hash,
+    ops::{Index, Range},
+};
 
-/// Type which represents a variable ordering
-pub type ColumnOrder = Vec<usize>;
+/// Type which represents the order of a column.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct ColumnOrder(Vec<usize>);
 
-/// Type which represents table ids
-pub type TableId = usize;
+impl ColumnOrder {
+    /// Construct new [`ColumnOrder`].
+    pub fn new(order: Vec<usize>) -> Self {
+        debug_assert!(!order.is_empty());
+        debug_assert!(order.iter().all(|&r| r < order.len()));
 
-/// Information which identfies a table
-/// Serves as the key to hashmap
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct TableKey {
-    /// ID of the predicate
-    pub predicate_id: Identifier,
-    /// Range of step this table covers
-    /// Refers to the normalized ranges
-    pub step_range: Range<usize>,
-}
+        Self(order)
+    }
 
-/// Represents the storage status of a table
-#[derive(Clone, Debug)]
-pub enum TableStatus {
-    /// Table is not materialized and has to be generated from another table through reordering
-    Derived,
-    /// Table has to be read from disk
-    OnDisk(DataSource),
-    /// Table is present in main memory in materialized form
-    InMemory(Trie),
-    /// Table can be removed
-    Deleted,
-}
+    /// Construct the default [`ColumnOrder`].
+    pub fn default(arity: usize) -> Self {
+        Self::new((0..arity).collect())
+    }
 
-/// Represents the table management strategy
-#[derive(Debug, Copy, Clone)]
-pub enum TableManagerStrategy {
-    /// No restrictions
-    Unlimited,
-    /// Memory is restricted to a certain amount
-    Limited(u64),
-}
+    /// Return the arity of the reordered table.
+    pub fn arity(&self) -> usize {
+        self.0.len()
+    }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-struct TablePriority {
-    table_id: TableId,
-    priority: u64,
-}
+    /// Return an iterator over the contents of this order.
+    pub fn iter(&self) -> impl Iterator<Item = &usize> {
+        self.0.iter()
+    }
 
-impl Ord for TablePriority {
-    fn cmp(&self, other: &Self) -> Ordering {
-        other.priority.cmp(&self.priority)
+    /// Returns whether this is the default column order
+    pub fn is_default(&self) -> bool {
+        self.iter()
+            .enumerate()
+            .all(|(index, element)| index == *element)
+    }
+
+    /// Returns a view into ordering vector.
+    pub fn as_slice(&self) -> &[usize] {
+        &self.0
+    }
+
+    /// Provides a measure of how "difficult" it is to transform a column with this order into another.
+    /// Say, self = [2, 1, 0] and other = [1, 0, 2].
+    /// Starting from position 0 one needs to skip one layer to reach the 2 in other (+1).
+    /// Then we need to go back two layers to reach the one (+2)
+    /// Finally, we go one layer down to reach 0 (+-0).
+    /// This gives us an overall score of 3.
+    /// Returned value is 0 if and only if self == other.
+    fn distance(&self, to: &ColumnOrder) -> usize {
+        debug_assert!(to.arity() >= self.arity());
+
+        let mut current_score: usize = 0;
+        let mut current_position: usize = 0;
+
+        for &current_value in self.iter() {
+            let position_other = to.iter().position(|&o| o == current_value).expect(
+                "If both objects are well-formed then other must contain every value of self.",
+            );
+
+            let difference: isize = (position_other as isize) - (current_position as isize);
+            let penalty: usize = if difference <= 0 {
+                difference.unsigned_abs()
+            } else {
+                // Taking one forward step should not be punished
+                (difference - 1) as usize
+            };
+
+            current_score += penalty;
+            current_position = position_other;
+        }
+
+        current_score
     }
 }
 
-impl PartialOrd for TablePriority {
+impl Index<usize> for ColumnOrder {
+    type Output = usize;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl fmt::Debug for ColumnOrder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl From<Reordering> for ColumnOrder {
+    fn from(reordering: Reordering) -> Self {
+        ColumnOrder::new(reordering.iter().copied().collect())
+    }
+}
+
+/// Indicates that the table contains the union of successive tables.
+/// For example assume that for predicate p there were tables derived in steps 2, 4, 7, 10, 11.
+/// The range [4, 11) would be represented with TableCover { start: 1, len: 3 }.
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
+pub struct TableCover {
+    start: usize,
+    len: usize,
+}
+
+impl Ord for TableCover {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let start_cmp = self.start.cmp(&other.start);
+        if let Ordering::Equal = start_cmp {
+            self.len.cmp(&other.len)
+        } else {
+            start_cmp
+        }
+    }
+}
+
+impl PartialOrd for TableCover {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-/// Contains all the relevant information to a table stored in the [`TableManager`]
-#[derive(Debug)]
-pub struct TableInfo {
-    /// Storage location of the table
-    pub status: TableStatus,
-
-    // Redundant information, TODO: Get rid of this?
-    column_order: ColumnOrder,
-    key: TableKey,
-
-    priority: u64,
-    #[allow(dead_code)]
-    space: u64,
+/// Indicates which step or steps a given table covers.
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
+pub enum TableRange {
+    /// Table covers a single step.
+    Single(usize),
+    /// Table is the union of multiple tables.
+    Multiple(TableCover),
 }
 
-/// Object for keeping track of all the tables
+/// Name of a table.
+/// Consists of its predicate name and a range of steps.
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
+pub struct TableName {
+    /// Number associated with a predicate which corresponds to a table on user level.
+    pub predicate: Identifier,
+    /// Ranges of execution steps this table covers.
+    pub range: TableRange,
+}
+
+impl TableName {
+    /// Create new [`TableName`].
+    pub fn new(predicate: Identifier, range: TableRange) -> Self {
+        Self { predicate, range }
+    }
+}
+
+/// Properties which identify a table.
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct TableKey {
+    /// Name of the table.
+    pub name: TableName,
+    /// Order of the columns.
+    pub order: ColumnOrder,
+}
+impl TableKeyType for TableKey {}
+
+impl TableKey {
+    /// Create new [`TableKey`].
+    pub fn new(predicate: Identifier, range: TableRange, order: ColumnOrder) -> Self {
+        Self {
+            name: TableName::new(predicate, range),
+            order,
+        }
+    }
+
+    /// Create new [`TableKey`] given a [`TableName`].
+    pub fn from_name(name: TableName, order: ColumnOrder) -> Self {
+        Self { name, order }
+    }
+}
+
+#[derive(Debug)]
+enum TableStatus {
+    /// Table is materialized in memory in given following orders.
+    InMemory(Vec<ColumnOrder>),
+    /// Table has to be loaded from disk.
+    OnDisk(DataSource),
+    /// Table has the same contents as another table except for reordering.
+    /// Meaning that "ThisTable = Project(ReferencedTable, Reordering)"
+    Reference(TableName, Reordering),
+}
+
+/// Manager object for handling tables that are the result
+/// of a seminaive existential rules evaluation process.
 #[derive(Debug)]
 pub struct TableManager {
-    #[allow(dead_code)]
-    strategy: TableManagerStrategy,
-    tables: Vec<TableInfo>,
-    entries: HashMap<TableKey, Vec<(ColumnOrder, TableId)>>,
+    /// [`DatabaseInstance`] managing all existing tables.
+    database: DatabaseInstance<TableKey>,
 
-    // The vector is assumed to be sorted, because of the order data is put in here
+    /// Contains the status of each table.
+    status: HashMap<TableName, TableStatus>,
+
+    /// The arity associated with each predicate
+    predicate_arity: HashMap<Identifier, usize>,
+
+    /// Hashmap containing for each predicate on which
+    /// execution steps the associated tables have been derived.
+    /// Vector is assumed to be sorted.
     predicate_to_steps: HashMap<Identifier, Vec<usize>>,
-    // Ranges need to be sorted by their first entry when inserting
-    predicate_to_ranges: HashMap<Identifier, Vec<Range<usize>>>,
-    // What step the last big table has been computed in
-    predicate_to_bigtable_step: HashMap<Identifier, usize>,
-
-    priority_heap: BinaryHeap<TablePriority>,
-    current_id: TableId,
-
-    #[allow(dead_code)]
-    space_consumed: u64,
-
-    /// Dictionary containing all the relevant strings
-    pub dictionary: PrefixedStringDictionary,
-}
-
-/// Encodes the things that can go wrong while asking for a table
-#[derive(Debug, Copy, Clone)]
-pub enum GetTableError {
-    /// Manager does not contain a table with that predicate and step range
-    NoTable,
-    /// Manager contains the table but in a wrong column order
-    WrongOrder,
+    /// Hashmap containing for each predicate which ranges are covered by the predicate's tables.
+    /// Vector is assumed to be sorted.
+    predicate_to_covers: HashMap<Identifier, Vec<TableCover>>,
 }
 
 impl TableManager {
-    /// Create new [`TableManager`]
-    pub fn new(strategy: TableManagerStrategy, dictionary: PrefixedStringDictionary) -> Self {
+    /// Create new [`TableManager`].
+    pub fn new(dict_constants: PrefixedStringDictionary) -> Self {
         Self {
-            strategy,
-            tables: Vec::new(),
-            entries: HashMap::new(),
-            priority_heap: BinaryHeap::new(),
+            database: DatabaseInstance::new(dict_constants),
+            status: HashMap::new(),
+            predicate_arity: HashMap::new(),
             predicate_to_steps: HashMap::new(),
-            predicate_to_ranges: HashMap::new(),
-            predicate_to_bigtable_step: HashMap::new(),
-            space_consumed: 0,
-            current_id: 0,
-            dictionary,
+            predicate_to_covers: HashMap::new(),
         }
     }
 
-    fn normalize_range(&self, predicate: Identifier, range: &Range<usize>) -> Option<Range<usize>> {
-        // debug_assert!(range.end > 0);
+    /// A table may either be created as a result of a rule application at some step
+    /// or may represent a union of many previously computed tables.
+    /// Say, we have for a predicate p calculated tables at steps steps 2, 4, 7, 10, 11.
+    /// On the outside, we might now refer to all tables between steps 3 and 11 (exclusive).
+    /// Representing this as [3, 11) is ambigious as [4, 11) refers to the same three tables.
+    /// Hence, we translate both representations to TableCover { start: 1, len: 3}.
+    ///
+    /// This function performs the translation illustrated above.
+    fn normalize_range(&self, predicate: Identifier, range: &Range<usize>) -> TableCover {
+        let mut start: usize = 0;
+        let mut len: usize = 0;
 
-        let step_vec = self.predicate_to_steps.get(&predicate)?;
+        let steps = self
+            .predicate_to_steps
+            .get(&predicate)
+            .expect("Function assumes that predicate exist.");
+        let mut start_set = false;
+        for (index, step) in steps.iter().enumerate() {
+            if !start_set && *step >= range.start {
+                start = index;
+                start_set = true
+            }
 
-        let left = step_vec.lower_bound(&range.start);
-        let right = step_vec.lower_bound(&range.end);
+            if start_set && *step >= range.end {
+                break;
+            }
 
-        Some(left..right)
-    }
-
-    /// Returns the step, in wich the last big table was computed
-    pub fn get_bigtable_step(&self, predicate: &Identifier) -> usize {
-        *self.predicate_to_bigtable_step.get(predicate).unwrap_or(&0)
-    }
-
-    /// Set the step number in which a big table for a given predicate has been computed
-    pub fn set_bigtable_step(&mut self, predicate: &Identifier, step: usize) {
-        self.predicate_to_bigtable_step.insert(*predicate, step);
-    }
-
-    /// Given a range, returns all the block-numbers available for a predicate
-    pub fn get_blocks_within_range(
-        &self,
-        predicate: Identifier,
-        range: &Range<usize>,
-    ) -> Vec<Range<usize>> {
-        let absolute_steps = match self.predicate_to_steps.get(&predicate) {
-            Some(s) => s,
-            None => return Vec::new(),
-        };
-
-        match self.predicate_to_ranges.get(&predicate) {
-            Some(vec) => cover_interval(vec, &self.normalize_range(predicate, range).unwrap())
-                .iter()
-                .map(|r| absolute_steps[r.start]..(absolute_steps[r.end - 1] + 1))
-                .collect(),
-            None => Vec::new(),
-        }
-    }
-
-    /// Iterator for all the different variable orders a table is stored in
-    pub fn get_tables_by_key(
-        &self,
-        predicate_id: Identifier,
-        step_range: &Range<usize>,
-    ) -> &[(ColumnOrder, TableId)] {
-        if let Some(step_range) = self.normalize_range(predicate_id, step_range) {
-            return self
-                .entries
-                .get(&TableKey {
-                    predicate_id,
-                    step_range,
-                })
-                .map_or(&[], |p| p);
-        }
-
-        &[]
-    }
-
-    /// Searches for table given predicate, step range and variable order
-    pub fn get_table(
-        &self,
-        predicate_id: Identifier,
-        step_range: &Range<usize>,
-        column_order: &ColumnOrder,
-    ) -> Result<TableId, GetTableError> {
-        let orders = self
-            .entries
-            .get(&TableKey {
-                predicate_id,
-                step_range: self
-                    .normalize_range(predicate_id, step_range)
-                    .ok_or(GetTableError::NoTable)?,
-            })
-            .ok_or(GetTableError::NoTable)?;
-
-        for (order, id) in orders {
-            if TableManager::orders_equal(column_order, order) {
-                return Ok(*id);
+            if start_set {
+                len += 1;
             }
         }
 
-        Err(GetTableError::WrongOrder)
+        TableCover { start, len }
     }
 
-    fn translate_order(order_from: &ColumnOrder, order_to: &ColumnOrder) -> Vec<usize> {
-        let mut result = Vec::new();
+    /// Given [`TableRange`], returns the range of steps that is covered.
+    /// I.e. this undoes the function `normalize_range`.
+    pub fn translate_range(&self, predicate: Identifier, range: TableRange) -> Range<usize> {
+        match range {
+            TableRange::Single(step) => step..(step + 1),
+            TableRange::Multiple(cover) => {
+                let steps = self
+                    .predicate_to_steps
+                    .get(&predicate)
+                    .expect("If the range is given as a cover then it must be known");
+                let start = steps[cover.start];
+                let end = steps[cover.start + cover.len];
 
-        for &to_variable in order_to {
-            result.push(order_from.iter().position(|&x| x == to_variable).unwrap());
+                start..(end + 1)
+            }
+        }
+    }
+
+    /// Return all a list of all column orders associated with a table name.
+    pub fn get_table_orders(&self, name: &TableName) -> Vec<&ColumnOrder> {
+        if let Some(TableStatus::InMemory(orders)) = self.status.get(name) {
+            orders.iter().collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Return the last step a new table for a predicate has been derived or None if predicate is unknown.
+    pub fn predicate_last_step(&self, predicate: Identifier) -> Option<usize> {
+        let steps = self.predicate_to_steps.get(&predicate)?;
+
+        steps.last().copied()
+    }
+
+    /// Returns whether there is at least one (non-empty) table associated with the given predicate.
+    pub fn contains_predicate(&self, predicate: Identifier) -> bool {
+        self.predicate_to_steps.contains_key(&predicate)
+    }
+
+    /// Returns whether there is at least one (non-empty) table with the given key.
+    pub fn contains_key(&self, key: &TableKey) -> bool {
+        if let Some(status) = self.status.get(&key.name) {
+            match status {
+                TableStatus::InMemory(orders) => {
+                    for order in orders {
+                        if *order == key.order {
+                            return true;
+                        }
+                    }
+
+                    false
+                }
+                TableStatus::OnDisk(_) => true,
+                TableStatus::Reference(_, _) => true,
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Given a predicate and a range, return the corresponding [`TableName`]
+    pub fn get_table_name(&self, predicate: Identifier, range: Range<usize>) -> TableName {
+        if let Some(steps) = self.predicate_to_steps.get(&predicate) {
+            debug_assert!(!steps.is_empty());
+            debug_assert!(steps.is_sorted());
+
+            if range.start > *steps.last().unwrap() {
+                debug_assert!(range.len() == 1);
+                TableName::new(predicate, TableRange::Single(range.start))
+            } else {
+                TableName::new(
+                    predicate,
+                    TableRange::Multiple(self.normalize_range(predicate, &range)),
+                )
+            }
+        } else {
+            debug_assert!(range.len() == 1);
+            TableName::new(predicate, TableRange::Single(range.start))
+        }
+    }
+
+    /// Update all the auxillary structures for a new table name.
+    fn register_name(&mut self, name: TableName, arity: usize) {
+        let prev_arity = self.predicate_arity.entry(name.predicate).or_insert(arity);
+        debug_assert!(*prev_arity == arity);
+
+        let cover = match name.range {
+            TableRange::Single(step) => {
+                let steps = self
+                    .predicate_to_steps
+                    .entry(name.predicate)
+                    .or_insert(Vec::new());
+
+                steps.push(step);
+
+                TableCover {
+                    start: steps.len() - 1,
+                    len: 1,
+                }
+            }
+            TableRange::Multiple(cover) => cover,
+        };
+
+        let covers = self
+            .predicate_to_covers
+            .entry(name.predicate)
+            .or_insert(Vec::new());
+        covers.push(cover);
+        covers.sort();
+    }
+
+    /// Update all auxillary structures for a new in-memory table.
+    fn register_table(&mut self, key: TableKey) {
+        let arity = key.order.arity();
+
+        let register = match self.status.entry(key.name) {
+            Entry::Occupied(mut entry) => {
+                if let TableStatus::InMemory(orders) = entry.get_mut() {
+                    orders.push(key.order);
+                } else {
+                    panic!("You can only add to tables that are available in memory.");
+                }
+
+                false
+            }
+            Entry::Vacant(vacant) => {
+                vacant.insert(TableStatus::InMemory(vec![key.order]));
+
+                true
+            }
+        };
+
+        if register {
+            self.register_name(key.name, arity);
+        }
+    }
+
+    /// Add input table that is currently stored on disk.
+    pub fn add_source(
+        &mut self,
+        predicate: Identifier,
+        arity: usize,
+        source: DataSource,
+    ) -> TableName {
+        const EDB_RANGE: Range<usize> = 0..1;
+        let table_name = self.get_table_name(predicate, EDB_RANGE);
+
+        self.status.insert(table_name, TableStatus::OnDisk(source));
+
+        self.register_name(table_name, arity);
+
+        table_name
+    }
+
+    /// Add a [`Trie`].
+    pub fn add_table(
+        &mut self,
+        predicate: Identifier,
+        range: Range<usize>,
+        order: ColumnOrder,
+        schema: TableSchema,
+        table: Trie,
+    ) -> TableKey {
+        let table_key = TableKey {
+            name: self.get_table_name(predicate, range),
+            order,
+        };
+
+        self.register_table(table_key.clone());
+        self.database.add(table_key.clone(), table, schema);
+
+        table_key
+    }
+
+    /// Add a reference to another table under a new name.
+    /// If it is another reference then it will point to the referenced table of that.
+    /// We only allow reorderings that are permutations.
+    pub fn add_reference(
+        &mut self,
+        predicate: Identifier,
+        range: Range<usize>,
+        ref_name: TableName,
+        ref_reorder: Reordering,
+    ) -> TableName {
+        debug_assert!(ref_reorder.is_permutation());
+
+        log_add_reference(predicate, ref_name.predicate, &ref_reorder);
+
+        debug_assert!(
+            ref_reorder.len_source() == *self.predicate_arity.get(&ref_name.predicate).unwrap()
+        );
+
+        let new_name = self.get_table_name(predicate, range);
+        let arity = ref_reorder.len_target();
+
+        let (overall_name, overall_reorder) =
+            if let TableStatus::Reference(another_table, another_order) = self
+                .status
+                .get(&ref_name)
+                .expect("Funcion assumes that referenced table exists.")
+            {
+                let combined_reorder = another_order.chain(&ref_reorder);
+
+                (*another_table, combined_reorder)
+            } else {
+                (ref_name, ref_reorder)
+            };
+
+        self.register_name(new_name, arity);
+        self.status.insert(
+            new_name,
+            TableStatus::Reference(overall_name, overall_reorder),
+        );
+
+        new_name
+    }
+
+    /// Compute a table that contains the contents of the tables in the given range.
+    pub fn add_union_table(
+        &mut self,
+        input_predicate: Identifier,
+        input_ranges: Range<usize>,
+        output_predicate: Identifier,
+        output_range: Range<usize>,
+        output_order_opt: Option<ColumnOrder>,
+    ) -> Option<TableKey> {
+        let input_covering = self.get_table_covering(input_predicate, input_ranges);
+        let input_arity = *self.predicate_arity.get(&input_predicate)?;
+
+        if input_covering.is_empty() {
+            return None;
         }
 
-        result
+        let input_orders =
+            self.get_table_orders(&TableName::new(input_predicate, input_covering[0]));
+
+        let input_order = if input_orders.is_empty() {
+            // This occurs when input table is just a reference
+            ColumnOrder::default(input_arity)
+        } else {
+            input_orders[0].clone()
+        };
+
+        let output_order = if let Some(order) = output_order_opt {
+            order
+        } else {
+            input_order.clone()
+        };
+
+        let output_name = self.get_table_name(output_predicate, output_range);
+        let output_key = TableKey::from_name(output_name, output_order);
+        let mut output_tree = ExecutionTree::<TableKey>::new(
+            "Merge Tables".to_string(),
+            ExecutionResult::Save(output_key.clone()),
+        );
+
+        let fetch_nodes: Vec<ExecutionNodeRef<TableKey>> = input_covering
+            .into_iter()
+            .map(|r| {
+                let key = TableKey::new(input_predicate, r, input_order.clone());
+                output_tree.fetch_table(key)
+            })
+            .collect();
+        let union_node = output_tree.union(fetch_nodes);
+        output_tree.set_root(union_node);
+
+        let mut execution_plan = ExecutionPlan::<TableKey>::new();
+        execution_plan.push(output_tree);
+
+        self.execute_plan(execution_plan);
+        Some(output_key)
     }
 
-    fn materialize_on_disk(&mut self, source: &DataSource, order: &ColumnOrder) -> Trie {
-        let (trie, name) = match source {
+    /// Load table from a given on-disk source
+    /// TODO: This function should change when the type system gets introduced on the logical layer
+    fn load_table(source: &DataSource, arity: usize, dict: &mut PrefixedStringDictionary) -> Trie {
+        log_load_table(source);
+
+        let (trie, _name) = match source {
             DataSource::CsvFile(file) => {
                 // Using fallback solution to treat eveything as string for now (storing as u64 internally)
-                let datatypes: Vec<Option<DataTypeName>> = (0..order.len()).map(|_| None).collect();
+                let datatypes: Vec<Option<DataTypeName>> = (0..arity).map(|_| None).collect();
 
                 let mut reader = ReaderBuilder::new()
                     .delimiter(b',')
                     .has_headers(false)
                     .from_reader(File::open(file.as_path()).unwrap());
 
-                let col_table = read(&datatypes, &mut reader, &mut self.dictionary).unwrap();
+                let col_table = read(&datatypes, &mut reader, dict).unwrap();
 
-                let schema = TrieSchema::new(
-                    (0..col_table.len())
-                        .map(|i| TrieSchemaEntry {
-                            label: i,
-                            datatype: DataTypeName::U64,
-                        })
-                        .collect(),
-                );
-
-                let trie = Trie::from_cols(schema, col_table);
+                let trie = Trie::from_cols(col_table);
                 (
                     trie,
                     file.file_name()
@@ -282,746 +583,392 @@ impl TableManager {
             DataSource::SparqlQuery(_) => todo!(),
         };
 
-        log::info!(
-            "Loaded table {} from disk in order {:?} ({} elements)",
-            name,
-            &order,
-            trie.row_num()
-        );
-
         trie
     }
 
-    fn find_materialized_table(&self, key: &TableKey, id: TableId) -> Option<TableId> {
-        for (_, base_id) in self.entries.get(key).unwrap() {
-            if *base_id == id {
-                continue;
+    // Basically, makes sure that the given [`TableKey`] will exist in the [`DatabaseInstance`]
+    // or alternatively, return a key that does and will contain the same entries as the requested table.
+    fn materialize_table(&mut self, key: TableKey) -> TableKey {
+        let (actual_name, reordering) = if let TableStatus::Reference(referenced_name, reordering) =
+            &self
+                .status
+                .get(&key.name)
+                .expect("Function assumes that table is known.")
+        {
+            (*referenced_name, reordering.clone())
+        } else {
+            (
+                key.name,
+                Reordering::default(
+                    *self
+                        .predicate_arity
+                        .get(&key.name.predicate)
+                        .expect("Function assumes that predicate is not new."),
+                ),
+            )
+        };
+
+        let required_order = ColumnOrder::new(reordering.inverse().apply_to(key.order.as_slice()));
+        let result_key = TableKey {
+            name: actual_name,
+            order: required_order.clone(),
+        };
+
+        if let Entry::Occupied(mut entry) = self.status.entry(actual_name) {
+            let status = entry.get_mut();
+
+            let reordered_table_opt = match status {
+                TableStatus::InMemory(orders) => {
+                    let mut closest_order = &orders[0];
+                    let mut distance = usize::MAX;
+
+                    for order in orders.iter() {
+                        let current_distance = order.distance(&required_order);
+
+                        if current_distance < distance {
+                            closest_order = order;
+                            distance = current_distance;
+                        }
+                    }
+
+                    if distance > 0 {
+                        Some(TableKey {
+                            name: actual_name,
+                            order: closest_order.clone(),
+                        })
+                    } else {
+                        // The required order is already present
+                        None
+                    }
+                }
+                TableStatus::OnDisk(source) => {
+                    let arity = required_order.arity();
+
+                    // Trie has to be loaded from disk
+                    let trie =
+                        Self::load_table(source, arity, self.database.get_dict_constants_mut());
+
+                    // We deduce the schema from the trie itself here assuming they are all dictionary entries
+                    // TODO: Should change when type system is introduced in the logical layer
+                    let mut schema = TableSchema::new();
+                    for &type_name in trie.get_types() {
+                        schema.add_entry(type_name, true, false);
+                    }
+
+                    let loaded_table_key = TableKey {
+                        name: actual_name,
+                        order: ColumnOrder::default(arity),
+                    };
+
+                    self.database.add(loaded_table_key.clone(), trie, schema);
+                    *status = TableStatus::InMemory(vec![loaded_table_key.order.clone()]);
+
+                    if !required_order.is_default() {
+                        Some(loaded_table_key)
+                    } else {
+                        // If the default order is required then we are in luck
+                        None
+                    }
+                }
+                TableStatus::Reference(_, _) => unreachable!(),
+            };
+
+            if let Some(reordered_table) = reordered_table_opt {
+                // Construct new [`ExecutionPlan`] for the reordering
+                let projection_reordering = Reordering::from_transformation(
+                    reordered_table.order.as_slice(),
+                    required_order.as_slice(),
+                );
+
+                let mut project_tree = ExecutionTree::<TableKey>::new(
+                    "Required Reorder".to_string(),
+                    ExecutionResult::Save(result_key.clone()),
+                );
+                let reordered_node = project_tree.fetch_table(reordered_table);
+                let project_node = project_tree.project(reordered_node, projection_reordering);
+                project_tree.set_root(project_node);
+
+                let mut reorder_plan = ExecutionPlan::<TableKey>::new();
+                reorder_plan.push(project_tree);
+
+                self.execute_plan(reorder_plan);
+            }
+        } else {
+            panic!("Function assumes that materialized table is known.");
+        }
+
+        result_key
+    }
+
+    fn execute_plan(&mut self, mut plan: ExecutionPlan<TableKey>) -> HashSet<Identifier> {
+        // First, we need to make sure that every requested table is available or produce it if necessary
+        // We exclude from this tables that will be produced during the execution of the plan
+        let mut produced_keys = HashSet::<TableKey>::new();
+        for tree in &mut plan.trees {
+            for fetch_node in tree.all_fetched_tables() {
+                let node_unpacked = &mut *fetch_node.0.borrow_mut();
+                if let ExecutionNode::FetchTable(key) = node_unpacked {
+                    if !produced_keys.contains(key) {
+                        *key = self.materialize_table(key.clone());
+                    }
+                } else {
+                    unreachable!()
+                }
             }
 
-            let status = &self.tables[*base_id].status;
+            if let ExecutionResult::Save(new_key) = tree.result() {
+                produced_keys.insert(new_key.clone());
+            }
+        }
 
-            if matches!(status, TableStatus::InMemory(_))
-                || matches!(status, TableStatus::OnDisk(_))
-            {
-                return Some(*base_id);
+        match self.database.execute_plan(&plan) {
+            Ok(new_tables) => {
+                let mut result = HashSet::new();
+
+                for key in new_tables {
+                    result.insert(key.name.predicate);
+                    self.register_table(key);
+                }
+
+                result
+            }
+            Err(err) => {
+                log::warn!("{err:?}");
+                HashSet::new()
+            }
+        }
+    }
+
+    /// Checks wether the tree is a union of continous part of a single table.
+    /// If so, returns the [`TableKey`] of the new table containing the result of this computation.
+    fn plan_recognize_simple_union(&self, tree: &ExecutionTree<TableKey>) -> Option<TableKey> {
+        if let ExecutionNode::Union(union) = &*tree.root()?.0.upgrade()?.as_ref().borrow() {
+            let mut overall_cover = Vec::<usize>::new();
+            let mut predicate_opt: Option<Identifier> = None;
+            let mut order_opt: Option<ColumnOrder> = None;
+
+            for subnode in union {
+                if let ExecutionNode::FetchTable(key) = &*subnode.0.upgrade()?.as_ref().borrow() {
+                    if let Some(predicate) = predicate_opt {
+                        let order = order_opt
+                            .as_ref()
+                            .expect("If predicate_opt is set then order_opt is also.");
+
+                        if predicate != key.name.predicate || key.order != *order {
+                            return None;
+                        }
+                    } else {
+                        predicate_opt = Some(key.name.predicate);
+                        order_opt = Some(key.order.clone());
+                    }
+
+                    let cover = match key.name.range {
+                        TableRange::Single(step) => {
+                            self.normalize_range(key.name.predicate, &(step..(step + 1)))
+                        }
+                        TableRange::Multiple(cover) => cover,
+                    };
+                    let cover_range = cover.start..(cover.start + cover.len);
+
+                    overall_cover.append(&mut cover_range.collect());
+                } else {
+                    return None;
+                }
+            }
+
+            overall_cover.sort();
+            overall_cover.dedup();
+
+            if overall_cover.len() <= 1 {
+                return None;
+            }
+
+            for cover_index in 1..overall_cover.len() {
+                if overall_cover[cover_index] - overall_cover[cover_index - 1] != 1 {
+                    return None;
+                }
+            }
+
+            if let Some(predicate) = predicate_opt {
+                return Some(TableKey::new(
+                    predicate,
+                    TableRange::Multiple(TableCover {
+                        start: overall_cover[0],
+                        len: overall_cover.len(),
+                    }),
+                    order_opt.expect("If predicate_opt is set then order_opt is also."),
+                ));
             }
         }
 
         None
     }
 
-    fn materialize_required_tables(&mut self, tables: &HashSet<TableId>) {
-        for &table_id in tables {
-            let info = &self.tables[table_id];
-            let info_order = info.column_order.clone(); // TODO: Clones because of borrow checker
-            let table_name = self
-                .dictionary
-                .entry(info.key.predicate_id.0)
-                .unwrap_or_else(|| "<Unkown table>".to_string());
+    /// Checks whether tree consists of only a `FetchTable` node.
+    /// or if it is a `Project` node that has a `FetchTable` as a subnode.
+    /// If so, returns the reordering which would turn the referenced table into this one.
+    fn plan_recognize_renaming(
+        &self,
+        tree: &ExecutionTree<TableKey>,
+    ) -> Option<(TableName, Reordering)> {
+        match &*tree.root()?.0.upgrade()?.as_ref().borrow() {
+            ExecutionNode::FetchTable(key) => {
+                let arity = *self.predicate_arity.get(&key.name.predicate)?;
+                Some((key.name, Reordering::default(arity)))
+            }
+            ExecutionNode::Project(subnode, reordering) => {
+                if !reordering.is_permutation() {
+                    return None;
+                }
 
-            if let TableStatus::Derived = info.status {
-                let base_id = self.find_materialized_table(&info.key, table_id).unwrap();
-                let base_order = &self.tables[base_id].column_order.clone(); // TODO: Clones because of borrow checker
-
-                let base_trie = if let TableStatus::InMemory(trie) = &self.tables[base_id].status {
-                    trie
-                } else if let TableStatus::OnDisk(source) = self.tables[base_id].status.clone() {
-                    let trie = self.materialize_on_disk(&source, &info_order);
-                    self.tables[table_id].status = TableStatus::InMemory(trie);
-                    if let TableStatus::InMemory(trie) = &self.tables[table_id].status {
-                        trie
-                    } else {
-                        unreachable!()
-                    }
+                if let ExecutionNode::FetchTable(key) = &*subnode.0.upgrade()?.as_ref().borrow() {
+                    Some((key.name, reordering.clone()))
                 } else {
-                    unreachable!()
-                };
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
 
-                let project_iter = TrieScanProject::new(
-                    base_trie,
-                    TableManager::translate_order(base_order, &info_order),
-                );
+    /// Execute a given [`ExecutionPlan`].
+    /// Before executing applies the following optimizations:
+    ///     * Remove trees that would compute a duplicate table (meaning a table with the same name)
+    ///     * Temporary tables which result in a continious union of subtables are saved permanently
+    ///     * Computation which only reorder another permanent tree are removed and a reference is added instead
+    ///
+    /// Returns a list of those predicates that received new values.
+    pub fn execute_plan_optimized(
+        &mut self,
+        mut plan: ExecutionPlan<TableKey>,
+    ) -> HashSet<Identifier> {
+        let mut result = HashSet::<Identifier>::new();
 
-                let reordered_trie = materialize(&mut TrieScanEnum::TrieScanProject(project_iter))
-                    .expect(
-                        "Reordering should not result in an empty trie if we didn't start with one",
+        // Remove trees that save tables under existing names
+        plan.trees.retain(|t| {
+            if let ExecutionResult::Save(key) = t.result() {
+                return !self.contains_key(key);
+            }
+
+            true
+        });
+
+        // Simplifiy plan
+        plan.simplify();
+
+        // Save temporary table which compute a continious union under a new name
+        let mut union_map = HashMap::<TableId, ExecutionNode<TableKey>>::new();
+        for tree in &mut plan.trees {
+            if let ExecutionResult::Temp(id) = tree.result() {
+                if let Some(key) = self.plan_recognize_simple_union(tree) {
+                    union_map.insert(*id, ExecutionNode::FetchTable(key.clone()));
+                }
+            }
+
+            tree.replace_temp_ids(&union_map);
+        }
+
+        // Remove trees that only (project &) fetch another permanent table and replace it with a reference
+        plan.trees.retain(|t| {
+            if let ExecutionResult::Save(new_key) = t.result() {
+                if let Some((ref_name, reordering)) = self.plan_recognize_renaming(t) {
+                    self.add_reference(
+                        new_key.name.predicate,
+                        self.translate_range(new_key.name.predicate, new_key.name.range),
+                        ref_name,
+                        reordering,
                     );
-                self.tables[table_id].status = TableStatus::InMemory(reordered_trie);
 
-                log::info!(
-                    "Materializing required table {} by reordering {:?} -> {:?}",
-                    table_name,
-                    info_order,
-                    base_order
-                );
-            } else if let TableStatus::OnDisk(source) = info.status.clone() {
-                let trie = self.materialize_on_disk(&source, &info_order);
-                self.tables[table_id].status = TableStatus::InMemory(trie);
-            }
-        }
-    }
+                    result.insert(new_key.name.predicate);
 
-    /// This was for doing the memory management, needs some thinking
-    /*
-    fn update_status(&mut self, id: TableId) {
-        let table_info = &mut self.tables[id];
-
-        if table_info.preferred_status == TableStatus::InMemory
-            && table_info.current_status != TableStatus::InMemory
-        {
-            let mut move_into_memory = true;
-
-            if let TableManagerStrategy::Limited(limit) = self.strategy {
-                // If we have limited space we have to check if space is available
-                let estimated_space = match table_info.current_status {
-                    TableStatus::Derived => self.estimate_space(table_info.plan.as_ref().unwrap()),
-                    TableStatus::InMemory => unreachable!(),
-                    TableStatus::OnDisk => 0, //TODO: How to do this
-                    TableStatus::Deleted => unreachable!(),
-                };
-
-                self.priority_heap.push(TablePriority {
-                    table_id: id,
-                    priority: table_info.priority,
-                });
-
-                // TODO: Not clear what to do here
-                if estimated_space > limit {
-                    unimplemented!()
-                }
-
-                // Not enough space, hence we need to free low priority tables
-                while self.space_consumed + estimated_space > limit && self.priority_heap.len() > 0
-                {
-                    let lowest_element = self.priority_heap.peek().unwrap();
-                    if lowest_element.priority < table_info.priority {
-                        move_into_memory = false;
-                        break;
-                    }
-
-                    self.priority_heap.pop();
-
-                    // This should free memory, right?
-                    self.tables[lowest_element.table_id].table = None;
-
-                    self.space_consumed -= self.tables[lowest_element.table_id].space;
-                    self.tables[lowest_element.table_id].space = 0;
+                    return false;
                 }
             }
 
-            if move_into_memory {
-                match table_info.current_status {
-                    TableStatus::Derived => {
-                        let iterator = self.get_iterator(table_info.plan.as_ref().unwrap());
-                        table_info.table = Some(materialize(&mut iterator));
-                        table_info.space = 0; // TODO: Calculate this
-                    }
-                    // TODO: Implement this case
-                    TableStatus::OnDisk => {}
-                    _ => unreachable!(),
-                }
-
-                table_info.current_status = TableStatus::InMemory;
-                self.space_comsumed += self.tables[id].space;
-            }
-        } else {
-            unimplemented!();
-        }
-    } */
-
-    fn add_table_helper(
-        &mut self,
-        predicate: Identifier,
-        absolute_range: Range<usize>,
-        order: ColumnOrder,
-        priority: u64,
-        derived: bool,
-    ) -> Option<TableId> {
-        let new_id = self.current_id;
-        self.current_id += 1;
-
-        if !derived && absolute_range.len() == 1 {
-            let step_list = self
-                .predicate_to_steps
-                .entry(predicate)
-                .or_insert_with(Vec::new);
-            step_list.push(absolute_range.start);
-        }
-
-        let normalized_range = self.normalize_range(predicate, &absolute_range)?;
-
-        if !derived {
-            let range_list = self
-                .predicate_to_ranges
-                .entry(predicate)
-                .or_insert_with(Vec::new);
-            range_list.push(normalized_range.clone());
-            range_list.sort_by(|a, b| match a.start.cmp(&b.start) {
-                Ordering::Less => Ordering::Less,
-                Ordering::Equal => a.end.cmp(&b.end),
-                Ordering::Greater => Ordering::Greater,
-            });
-        }
-
-        let table_list = self
-            .entries
-            .entry(TableKey {
-                predicate_id: predicate,
-                step_range: normalized_range,
-            })
-            .or_insert_with(Vec::new);
-
-        // If the table list contained only one table then this means it couldnt have been deleted until now
-        // and therefore wasnt in the priority queue before, so we add it now
-        if table_list.len() == 1 {
-            let only_table_id = table_list[0].1;
-            let only_table_priority = self.tables[only_table_id].priority;
-
-            self.priority_heap.push(TablePriority {
-                table_id: only_table_id,
-                priority: only_table_priority,
-            });
-        }
-
-        if !table_list.is_empty() {
-            self.priority_heap.push(TablePriority {
-                table_id: new_id,
-                priority,
-            });
-        }
-
-        // For debugging, check if arity is equal
-        if !table_list.is_empty() {
-            debug_assert!(table_list[0].0.len() == order.len());
-        }
-
-        table_list.push((order, new_id));
-
-        Some(new_id)
-    }
-
-    /// Add a table that is stored on disk to the manager
-    pub fn add_edb(
-        &mut self,
-        data_source: DataSource,
-        predicate: Identifier,
-        column_order: ColumnOrder,
-        priority: u64,
-    ) -> TableId {
-        let key = TableKey {
-            predicate_id: predicate,
-            step_range: (0..1),
-        };
-
-        let trie = self.materialize_on_disk(&data_source, &column_order);
-        self.tables.push(TableInfo {
-            status: TableStatus::InMemory(trie),
-            column_order: column_order.clone(),
-            key,
-            priority,
-            space: 0, //TODO: How to do this
+            true
         });
 
-        self.add_table_helper(predicate, 0..1, column_order, priority, false)
-            .unwrap()
-    }
-
-    /// Add trie to the table manager
-    pub fn add_trie(
-        &mut self,
-        predicate: Identifier,
-        absolute_step_range: Range<usize>,
-        column_order: ColumnOrder,
-        priority: u64,
-        trie: Trie,
-    ) -> Option<TableId> {
-        if trie.row_num() == 0 {
-            return None;
-        }
-
-        let new_id = self.add_table_helper(
-            predicate,
-            absolute_step_range.clone(),
-            column_order.clone(),
-            priority,
-            false,
-        )?;
-
-        let key = TableKey {
-            predicate_id: predicate,
-            step_range: self.normalize_range(predicate, &absolute_step_range)?,
-        };
-
-        self.tables.push(TableInfo {
-            status: TableStatus::InMemory(trie),
-            column_order,
-            key,
-            priority,
-            space: 0, //TODO: How to do this
-        });
-
-        Some(new_id)
-    }
-
-    fn orders_equal(order_left: &ColumnOrder, order_right: &ColumnOrder) -> bool {
-        if order_left.len() != order_right.len() {
-            return false;
-        }
-
-        for index in 0..order_left.len() {
-            if order_left[index] != order_right[index] {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    /// Checks if the given table is empty
-    pub fn table_is_empty(&self, table_id: TableId) -> bool {
-        let table_info = &self.tables[table_id];
-
-        match &table_info.status {
-            TableStatus::InMemory(trie) => trie.row_num() == 0,
-            TableStatus::Derived => false,
-            TableStatus::OnDisk(_) => false, // TODO: Whats the best way to determine this?
-            TableStatus::Deleted => true,
-        }
-    }
-
-    /// Returns information about a table given its id
-    pub fn get_info_mut(&mut self, table_id: TableId) -> &mut TableInfo {
-        &mut self.tables[table_id]
-    }
-
-    /// Returns information about a table given its id
-    pub fn get_info(&self, table_id: TableId) -> &TableInfo {
-        &self.tables[table_id]
-    }
-
-    /// Estimates the amount of time executing a [`ExecutionSeries`] would take
-    /// TODO: Returns just 0 for now
-    pub fn estimate_runtime_costs(_series: &ExecutionSeries) -> u64 {
-        0
-    }
-
-    /// Estimate the potential space the materialization of a [`ExecutionPlan`] would take
-    pub fn estimate_space(plan: &ExecutionNode) -> u64 {
-        match &plan.operation {
-            // TODO:
-            ExecutionOperation::Fetch(_, _, _) => 0,
-            // TODO: This is tricky
-            ExecutionOperation::Join(_subtables, _bindings) => 0,
-            ExecutionOperation::Union(subtables) => {
-                subtables.iter().map(Self::estimate_space).sum()
-            }
-            ExecutionOperation::Minus(left, _right) => Self::estimate_space(left),
-            ExecutionOperation::Project(_id, _sorting) => {
-                // Should be easy to calculate
-                0
-            }
-            ExecutionOperation::Temp(_) => 0,
-            ExecutionOperation::SelectValue(subtable, _) => Self::estimate_space(subtable),
-            ExecutionOperation::SelectEqual(subtable, _) => Self::estimate_space(subtable),
-        }
-    }
-
-    /// Add table and mark its contents as derived
-    pub fn add_derived(
-        &mut self,
-        predicate: Identifier,
-        absolute_step_range: Range<usize>,
-        column_order: ColumnOrder,
-        priority: u64,
-    ) -> TableId {
-        let new_id = self
-            .add_table_helper(
-                predicate,
-                absolute_step_range.clone(),
-                column_order.clone(),
-                priority,
-                true,
-            )
-            .unwrap();
-
-        let key = TableKey {
-            predicate_id: predicate,
-            step_range: self
-                .normalize_range(predicate, &absolute_step_range)
-                .unwrap(),
-        };
-
-        self.tables.push(TableInfo {
-            status: TableStatus::Derived,
-            column_order,
-            key,
-            priority,
-            space: 0, //TODO: How to do this
-        });
-
-        new_id
-    }
-
-    /// Executes an [`ExecutionSeries`] and adds the resulting tables
-    /// Returns true if a non-empty table was added, false otherwise
-    pub fn execute_series(&mut self, series: ExecutionSeries) -> bool {
-        TimedCode::instance().sub("Reasoning/Materialize").start();
-
-        let mut new_table = false;
-        let mut temp_tries = HashMap::<TableId, Option<Trie>>::new();
-
-        for plan in series.plans {
-            let mut table_ids = HashSet::new();
-            for leave_node in plan.leaves {
-                if let ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) =
-                    &leave_node.operation
-                {
-                    match self.get_table(*predicate, absolute_step_range, column_order) {
-                        Err(error) => match error {
-                            GetTableError::NoTable => {
-                                log::warn!("expected a table for predicate {:?} with range {absolute_step_range:?} and order {column_order:?}", self.dictionary.entry(predicate.0).unwrap_or_else(|| "<Unkown predicate>".to_string()));
-                            }
-                            GetTableError::WrongOrder => {
-                                table_ids.insert(self.add_derived(
-                                    *predicate,
-                                    absolute_step_range.clone(),
-                                    column_order.clone(),
-                                    0,
-                                ));
-                            }
-                        },
-
-                        Ok(id) => {
-                            table_ids.insert(id);
-                        }
-                    };
-                } else {
-                    unreachable!();
-                }
-            }
-
-            TimedCode::instance()
-                .sub("Reasoning/Materialize/Reorder")
-                .start();
-
-            // TODO: Materializig should check memory and so on...
-            self.materialize_required_tables(&table_ids);
-
-            TimedCode::instance()
-                .sub("Reasoning/Materialize/Reorder")
-                .stop();
-
-            TimedCode::instance()
-                .sub("Reasoning/Materialize/Pipeline")
-                .start();
-
-            const TMP_NAMES: &[&str] = &[
-                "Body Join",
-                "Head Join",
-                "Body Frontier",
-                "Head Frontier",
-                "Existential Diff",
-            ];
-
-            let code_string = match &plan.result {
-                ExecutionResult::Temp(tmp_id) | ExecutionResult::TempSubset(tmp_id, _) => {
-                    if *tmp_id < TMP_NAMES.len() {
-                        TMP_NAMES[*tmp_id]
-                    } else {
-                        "Head Projection"
-                    }
-                }
-                ExecutionResult::Save(_, range, _, _) => {
-                    if range.len() == 1 {
-                        "Duplicates & Head Union"
-                    } else {
-                        "Big union"
-                    }
-                }
-            };
-
-            TimedCode::instance()
-                .sub("Reasoning/Materialize/Pipeline")
-                .sub(code_string)
-                .start();
-
-            log::info!(
-                "Plan: {}",
-                self.get_iterator_string(&plan.root, &temp_tries)
-            );
-
-            let iter_option = self.get_iterator_node(&plan.root, &temp_tries);
-            if let Some(mut iter) = iter_option {
-                // TODO: Materializig should check memory and so on...
-                let new_trie_opt =
-                    if let ExecutionResult::TempSubset(_, picked_columns) = &plan.result {
-                        log::info!("Materializing subset {:?}", picked_columns);
-                        materialize_subset(&mut iter, picked_columns.clone())
-                    } else {
-                        materialize(&mut iter)
-                    };
-
-                let new_trie_len = new_trie_opt.as_ref().map_or(0, |trie| trie.row_num());
-
-                match plan.result {
-                    ExecutionResult::Temp(id) | ExecutionResult::TempSubset(id, _) => {
-                        temp_tries.insert(id, new_trie_opt);
-
-                        log::info!("Temporary table {} ({} entries)", code_string, new_trie_len);
-                    }
-                    ExecutionResult::Save(pred, range, order, priority) => {
-                        let pred_string = self
-                            .dictionary
-                            .entry(pred.0)
-                            .unwrap_or_else(|| "<Unknown predicate>".to_string());
-                        log::info!(
-                            "Permament table {} with order {:?} ({} entries)",
-                            pred_string,
-                            order,
-                            new_trie_len
-                        );
-
-                        if new_trie_len > 0 {
-                            if range.len() == 1 {
-                                new_table = true;
-                            }
-
-                            self.add_trie(
-                                pred,
-                                range,
-                                order,
-                                priority,
-                                new_trie_opt.expect("Length is non-zero"),
-                            );
-                        }
-                    }
-                }
-            } else {
-                log::info!("Trie iterator is empty");
-            }
-
-            let duration = TimedCode::instance()
-                .sub("Reasoning/Materialize/Pipeline")
-                .sub(code_string)
-                .stop();
-
-            log::info!("{code_string}: {} ms", duration.as_millis());
-
-            TimedCode::instance()
-                .sub("Reasoning/Materialize/Pipeline")
-                .stop();
-        }
-
-        TimedCode::instance().sub("Reasoning/Materialize").stop();
-
-        new_table
-    }
-
-    fn get_iterator_string_sub<'a>(
-        &'a self,
-        operation: &str,
-        subnodes: &Vec<&ExecutionNode>,
-        temp_tries: &'a HashMap<TableId, Option<Trie>>,
-    ) -> String {
-        let mut result = String::from(operation);
-        result += "(";
-
-        for (index, sub) in subnodes.iter().enumerate() {
-            result += &self.get_iterator_string(sub, temp_tries);
-
-            if index < subnodes.len() - 1 {
-                result += ", ";
-            }
-        }
-
-        result += ")";
-
+        // Execute the omptimized plan
+        result.extend(self.execute_plan(plan).iter());
         result
     }
 
-    fn get_iterator_string<'a>(
-        &'a self,
-        node: &'a ExecutionNode,
-        temp_tries: &'a HashMap<TableId, Option<Trie>>,
-    ) -> String {
-        match &node.operation {
-            ExecutionOperation::Temp(id) => {
-                if let Some(tmp_trie_option) = temp_tries.get(id) {
-                    if let Some(tmp_trie) = tmp_trie_option {
-                        return tmp_trie.row_num().to_string();
-                    } else {
-                        return "0".to_string();
-                    }
-                }
+    /// Given a range of step return a list of [`TableRange`] that would cover it
+    /// using tables that are available for the given predicate.
+    pub fn get_table_covering(
+        &self,
+        predicate: Identifier,
+        steps: Range<usize>,
+    ) -> Vec<TableRange> {
+        let ranges = if let Some(ranges) = self.predicate_to_covers.get(&predicate) {
+            ranges
+        } else {
+            return Vec::new();
+        };
 
-                "Temp(Unknown id)".to_string()
-            }
-            ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) => {
-                if let Ok(table_id) = self.get_table(*predicate, absolute_step_range, column_order)
-                {
-                    let table_info = &self.tables[table_id];
+        debug_assert!(ranges.is_sorted());
 
-                    if let TableStatus::InMemory(trie) = &table_info.status {
-                        trie.row_num().to_string()
-                    } else {
-                        panic!("Base tables are supposed to be materialized");
-                    }
+        let table_steps = self
+            .predicate_to_steps
+            .get(&predicate)
+            .expect("If the above map contains the predicate then this one should too.");
+        let target_range = self.normalize_range(predicate, &steps);
+
+        let ranges_transformed: Vec<Range<usize>> =
+            ranges.iter().map(|r| r.start..(r.start + r.len)).collect();
+        let target_transformed = target_range.start..(target_range.start + target_range.len);
+
+        let covering = cover_interval(&ranges_transformed, &target_transformed);
+
+        // We assume here that every length = 1 covering here corresponds to a non-union table
+        covering
+            .iter()
+            .map(|&c| {
+                if c.len() == 1 {
+                    TableRange::Single(table_steps[c.start])
                 } else {
-                    "Unknown table".to_string()
+                    TableRange::Multiple(TableCover {
+                        start: c.start,
+                        len: c.end - c.start,
+                    })
                 }
-            }
-            ExecutionOperation::Join(sub, _) => {
-                self.get_iterator_string_sub("Join", &sub.iter().collect(), temp_tries)
-            }
-            ExecutionOperation::Union(sub) => {
-                self.get_iterator_string_sub("Union", &sub.iter().collect(), temp_tries)
-            }
-            ExecutionOperation::Minus(left, right) => {
-                self.get_iterator_string_sub("Minus", &vec![left, right], temp_tries)
-            }
-            ExecutionOperation::Project(id, _) => {
-                if let Some(tmp_trie_option) = temp_tries.get(id) {
-                    if let Some(tmp_trie) = tmp_trie_option {
-                        return format!("Project({})", tmp_trie.num_elements());
-                    } else {
-                        return "Project(0)".to_string();
-                    }
-                }
+            })
+            .collect()
+    }
 
-                "Project(Unknown id)".to_string()
-            }
-            ExecutionOperation::SelectValue(sub, _) => {
-                self.get_iterator_string_sub("SelectValue", &vec![sub], temp_tries)
-            }
-            ExecutionOperation::SelectEqual(sub, _) => {
-                self.get_iterator_string_sub("SelectEqual", &vec![sub], temp_tries)
-            }
+    /// Get all the [`TableRange`] that would cover every element of a given predicate's table.
+    pub fn cover_whole_table(&self, predicate: Identifier) -> Vec<TableRange> {
+        if let Some(steps) = self.predicate_to_steps.get(&predicate) {
+            let last_step = steps.last().expect("There is never empty.");
+
+            self.get_table_covering(predicate, 0..(last_step + 1))
+        } else {
+            Vec::new()
         }
     }
 
-    /// Returns None if the TrieScan would be empty
-    fn get_iterator_node<'a>(
-        &'a self,
-        node: &'a ExecutionNode,
-        temp_tries: &'a HashMap<TableId, Option<Trie>>,
-    ) -> Option<TrieScanEnum> {
-        match &node.operation {
-            ExecutionOperation::Temp(id) => Some(TrieScanEnum::TrieScanGeneric(
-                TrieScanGeneric::new(temp_tries.get(id)?.as_ref()?),
-            )),
-            ExecutionOperation::Fetch(predicate, absolute_step_range, column_order) => {
-                let table_info = &self.tables[self
-                    .get_table(*predicate, absolute_step_range, column_order)
-                    .ok()?];
-                if let TableStatus::InMemory(trie) = &table_info.status {
-                    if trie.row_num() == 0 {
-                        return None;
-                    }
+    /// Combine all tables associated with a given predicate into a materialized table in default variable order
+    pub fn combine_predicate(&mut self, predicate: Identifier, step: usize) -> Option<TableKey> {
+        let arity = *self.predicate_arity.get(&predicate)?;
+        let key = self.add_union_table(
+            predicate,
+            0..step,
+            predicate,
+            0..step,
+            Some(ColumnOrder::default(arity)),
+        )?;
 
-                    let interval_trie_scan = TrieScanGeneric::new(trie);
-                    Some(TrieScanEnum::TrieScanGeneric(interval_trie_scan))
-                } else {
-                    panic!("Base tables are supposed to be materialized");
-                }
-            }
-            ExecutionOperation::Join(subtables, bindings) => {
-                let mut subiterators: Vec<TrieScanEnum> = subtables
-                    .iter()
-                    .map(|s| self.get_iterator_node(s, temp_tries))
-                    .filter(|s| s.is_some())
-                    .flatten()
-                    .collect();
+        Some(self.materialize_table(key))
+    }
 
-                // If subtables contain an empty table, then the join is empty
-                if subiterators.len() != subtables.len() {
-                    return None;
-                }
+    /// Return trie with the given key.
+    pub fn get_trie<'a>(&'a self, key: &TableKey) -> &'a Trie {
+        self.database.get_by_key(key)
+    }
 
-                // If it only contains one table, then we dont need the join
-                if subiterators.len() == 1 {
-                    return Some(subiterators.remove(0));
-                }
-
-                let mut datatype_map = HashMap::<usize, DataTypeName>::new();
-                for (atom_index, binding) in bindings.iter().enumerate() {
-                    for (term_index, variable) in binding.iter().enumerate() {
-                        datatype_map.insert(
-                            *variable,
-                            subiterators[atom_index].get_schema().get_type(term_index),
-                        );
-                    }
-                }
-
-                let mut attributes = Vec::new();
-                let mut variable: usize = 0;
-                while let Some(datatype) = datatype_map.get(&variable) {
-                    attributes.push(TrieSchemaEntry {
-                        label: 0, // TODO: This should get perhaps a new label
-                        datatype: *datatype,
-                    });
-                    variable += 1;
-                }
-
-                let schema = TrieSchema::new(attributes);
-
-                Some(TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
-                    subiterators,
-                    bindings,
-                    schema,
-                )))
-            }
-            ExecutionOperation::Union(subtables) => {
-                let mut subiterators: Vec<TrieScanEnum> = subtables
-                    .iter()
-                    .map(|s| self.get_iterator_node(s, temp_tries))
-                    .filter(|s| s.is_some())
-                    .flatten()
-                    .collect();
-
-                // The union of empty tables is empty
-                if subiterators.is_empty() {
-                    return None;
-                }
-
-                // If it only contains one table, then we dont need the join
-                if subiterators.len() == 1 {
-                    return Some(subiterators.remove(0));
-                }
-
-                let union_scan = TrieScanUnion::new(subiterators);
-
-                Some(TrieScanEnum::TrieScanUnion(union_scan))
-            }
-            ExecutionOperation::Minus(subtable_left, subtable_right) => {
-                let left_scan = self.get_iterator_node(subtable_left, temp_tries);
-                let right_scan = self.get_iterator_node(subtable_right, temp_tries);
-
-                left_scan.map(|ls| match right_scan {
-                    Some(rs) => TrieScanEnum::TrieScanMinus(TrieScanMinus::new(ls, rs)),
-                    None => ls,
-                })
-            }
-            ExecutionOperation::Project(id, sorting) => {
-                let tmp_trie = temp_tries.get(id)?.as_ref()?;
-                let project_scan = TrieScanProject::new(tmp_trie, sorting.clone());
-
-                Some(TrieScanEnum::TrieScanProject(project_scan))
-            }
-            ExecutionOperation::SelectValue(subtable, assignments) => {
-                let subiterator = self.get_iterator_node(subtable, temp_tries)?;
-                let select_scan = TrieScanSelectValue::new(subiterator, assignments.clone());
-
-                Some(TrieScanEnum::TrieScanSelectValue(select_scan))
-            }
-            ExecutionOperation::SelectEqual(subtable, classes) => {
-                let subiterator = self.get_iterator_node(subtable, temp_tries)?;
-                let select_scan = TrieScanSelectEqual::new(subiterator, classes.clone());
-
-                Some(TrieScanEnum::TrieScanSelectEqual(select_scan))
-            }
-        }
+    /// Return the dictionary used in the database instance.
+    /// TODO: Remove this once proper Dictionary support is implemented on the physical layer.
+    pub fn get_dict(&self) -> &PrefixedStringDictionary {
+        self.database.get_dict_constants()
     }
 }
-
-#[cfg(test)]
-mod test {}

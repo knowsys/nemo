@@ -28,3 +28,8 @@ pub use columnscan_minus::ColumnScanMinus;
 /// Module for defining [`ColumnScanUnion`]
 pub mod columnscan_union;
 pub use columnscan_union::ColumnScanUnion;
+
+/// Module for defining [`ColumnScanCast`]
+pub mod columnscan_cast;
+pub use columnscan_cast::ColumnScanCast;
+pub use columnscan_cast::ColumnScanCastEnum;

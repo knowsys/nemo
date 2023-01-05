@@ -4,11 +4,8 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{DataTypeName, Double, Float},
-    tabular::table_types::trie::TrieSchema,
-    tabular::traits::{
-        table_schema::TableSchema,
-        triescan::{TrieScan, TrieScanEnum},
-    },
+    tabular::traits::table_schema::TableColumnTypes,
+    tabular::traits::triescan::{TrieScan, TrieScanEnum},
 };
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
@@ -32,24 +29,21 @@ pub struct TrieScanUnion<'a> {
 }
 
 impl<'a> TrieScanUnion<'a> {
-    /// Construct new TrieScanUnion object.
+    /// Construct new [`TrieScanUnion`] object.
     pub fn new(trie_scans: Vec<TrieScanEnum<'a>>) -> TrieScanUnion<'a> {
         debug_assert!(!trie_scans.is_empty());
         debug_assert!(trie_scans
             .iter()
-            .all(|scan| scan.get_schema().arity() == trie_scans[0].get_schema().arity()));
+            .all(|scan| scan.get_types().len() == trie_scans[0].get_types().len()));
 
-        // This assumes that every schema is the same
-        // TODO: Perhaps debug_assert! this
-        let target_schema = trie_scans[0].get_schema();
-        let mut union_scans =
-            Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(target_schema.arity());
+        let column_types = trie_scans[0].get_types();
+        let mut union_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(column_types.len());
 
-        for layer_index in 0..target_schema.arity() {
+        for layer_index in 0..column_types.len() {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident, $type:ty) => {{
                     let mut column_scans =
-                        Vec::<&'a ColumnScanCell<$type>>::with_capacity(target_schema.arity());
+                        Vec::<&'a ColumnScanCell<$type>>::with_capacity(column_types.len());
 
                     for scan in &trie_scans {
                         unsafe {
@@ -72,7 +66,8 @@ impl<'a> TrieScanUnion<'a> {
                 }};
             }
 
-            match target_schema.get_type(layer_index) {
+            match column_types[layer_index] {
+                DataTypeName::U32 => init_scans_for_datatype!(U32, u32),
                 DataTypeName::U64 => init_scans_for_datatype!(U64, u64),
                 DataTypeName::Float => init_scans_for_datatype!(Float, Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double, Double),
@@ -113,7 +108,7 @@ impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
         let next_layer = self.current_layer.map_or(0, |v| v + 1);
         self.current_layer = Some(next_layer);
 
-        debug_assert!(self.current_layer.unwrap() < self.trie_scans[0].get_schema().arity());
+        debug_assert!(self.current_layer.unwrap() < self.trie_scans[0].get_types().len());
 
         let mut active_scans = Vec::<usize>::new();
 
@@ -148,8 +143,8 @@ impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
         Some(&self.union_scans[index])
     }
 
-    fn get_schema(&self) -> &TrieSchema {
-        self.trie_scans[0].get_schema()
+    fn get_types(&self) -> &TableColumnTypes {
+        self.trie_scans[0].get_types()
     }
 }
 
@@ -157,11 +152,8 @@ impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
 mod test {
     use super::TrieScanUnion;
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
-    use crate::physical::datatypes::DataTypeName;
     use crate::physical::tabular::operations::TrieScanJoin;
-    use crate::physical::tabular::table_types::trie::{
-        Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
-    };
+    use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
@@ -191,23 +183,9 @@ mod test {
         let column_trd_x = make_column_with_intervals_t(&[1, 3, 7], &[0]);
         let column_trd_y = make_column_with_intervals_t(&[1, 4, 6, 3, 7, 8], &[0, 3, 4]);
 
-        let schema_fst = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let schema_snd = schema_fst.clone();
-        let schema_trd = schema_fst.clone();
-
-        let trie_fst = Trie::new(schema_fst, vec![column_fst_x, column_fst_y]);
-        let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y]);
-        let trie_trd = Trie::new(schema_trd, vec![column_trd_x, column_trd_y]);
+        let trie_fst = Trie::new(vec![column_fst_x, column_fst_y]);
+        let trie_snd = Trie::new(vec![column_snd_x, column_snd_y]);
+        let trie_trd = Trie::new(vec![column_trd_x, column_trd_y]);
 
         let trie_iter_fst = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_fst));
         let trie_iter_snd = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_snd));
@@ -280,21 +258,9 @@ mod test {
         let column_fst_y = make_column_with_intervals_t(&[3, 4, 5], &[0, 2]);
         let column_snd_x = make_column_with_intervals_t(&[2], &[0]);
         let column_snd_y = make_column_with_intervals_t(&[5, 6], &[0]);
-        let schema_fst = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-        ]);
 
-        let schema_snd = schema_fst.clone();
-
-        let trie_fst = Trie::new(schema_fst, vec![column_fst_x, column_fst_y]);
-        let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y]);
+        let trie_fst = Trie::new(vec![column_fst_x, column_fst_y]);
+        let trie_snd = Trie::new(vec![column_snd_x, column_snd_y]);
         let trie_iter_fst = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_fst));
         let trie_iter_snd = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_snd));
 
@@ -340,21 +306,9 @@ mod test {
             make_column_with_intervals_t(&[2, 3, 5, 10, 4, 7, 10, 9, 8, 9, 10], &[0, 4, 7, 8]);
         let column_snd_x = make_column_with_intervals_t(&[4, 7, 8, 9, 10], &[0]);
         let column_snd_y = make_column_with_intervals_t(&[1, 1, 2, 1, 2, 1, 2], &[0, 1, 2, 3, 5]);
-        let schema_fst = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-        ]);
 
-        let schema_snd = schema_fst.clone();
-
-        let trie_fst = Trie::new(schema_fst, vec![column_fst_x, column_fst_y]);
-        let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y]);
+        let trie_fst = Trie::new(vec![column_fst_x, column_fst_y]);
+        let trie_snd = Trie::new(vec![column_snd_x, column_snd_y]);
         let trie_iter_fst = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_fst));
         let trie_iter_snd = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_snd));
 
@@ -486,25 +440,9 @@ mod test {
         let column_snd_x = make_column_with_intervals_t(&[1, 2, 4], &[0]);
         let column_snd_y = make_column_with_intervals_t(&[4, 4, 1], &[0, 1, 2]);
         let column_snd_z = make_column_with_intervals_t(&[1, 1, 4], &[0, 1, 2]);
-        let schema_fst = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-        ]);
 
-        let schema_snd = schema_fst.clone();
-
-        let trie_fst = Trie::new(schema_fst, vec![column_fst_x, column_fst_y, column_fst_z]);
-        let trie_snd = Trie::new(schema_snd, vec![column_snd_x, column_snd_y, column_snd_z]);
+        let trie_fst = Trie::new(vec![column_fst_x, column_fst_y, column_fst_z]);
+        let trie_snd = Trie::new(vec![column_snd_x, column_snd_y, column_snd_z]);
         let trie_iter_fst = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_fst));
         let trie_iter_snd = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_snd));
 
@@ -592,44 +530,18 @@ mod test {
         let column_d_y = make_column_with_intervals_t(&[1, 4], &[0]);
         let column_d_z = make_column_with_intervals_t(&[4, 1], &[0, 1]);
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 10,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 11,
-                datatype: DataTypeName::U64,
-            },
-        ]);
+        let trie_a = Trie::new(vec![column_a_x, column_a_y]);
+        let trie_b = Trie::new(vec![column_b_y, column_b_z]);
 
-        let schema_target = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 100,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 101,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 102,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-        let trie_a = Trie::new(schema.clone(), vec![column_a_x, column_a_y]);
-        let trie_b = Trie::new(schema.clone(), vec![column_b_y, column_b_z]);
-
-        let trie_c = Trie::new(schema.clone(), vec![column_c_x, column_c_y]);
-        let trie_d = Trie::new(schema, vec![column_d_y, column_d_z]);
+        let trie_c = Trie::new(vec![column_c_x, column_c_y]);
+        let trie_d = Trie::new(vec![column_d_y, column_d_z]);
 
         let join_ab_iter = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
             vec![
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
-            &[vec![0, 1], vec![1, 2]],
-            schema_target.clone(),
+            &vec![vec![0, 1], vec![1, 2]],
         ));
 
         let join_cd_iter = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
@@ -637,8 +549,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_c)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_d)),
             ],
-            &[vec![0, 1], vec![1, 2]],
-            schema_target,
+            &vec![vec![0, 1], vec![1, 2]],
         ));
 
         let mut union_iter = TrieScanUnion::new(vec![join_ab_iter, join_cd_iter]);

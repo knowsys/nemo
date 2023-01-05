@@ -1,5 +1,9 @@
 //! This module collects miscellaneous functionality.
 
+/// Module defining [`Reordering`]
+pub mod reordering;
+pub use reordering::Reordering;
+
 /// Module for utility functions used in tests
 #[cfg(test)]
 pub mod test_util;
@@ -92,6 +96,7 @@ macro_rules! generate_forwarder {
 macro_rules! generate_datatype_forwarder {
     ($name:ident) => {
         $crate::generate_forwarder!($name;
+                                    U32,
                                     U64,
                                     Float,
                                     Double);

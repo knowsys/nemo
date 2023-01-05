@@ -8,8 +8,9 @@ use crate::physical::{
         },
     },
     datatypes::{ColumnDataType, DataTypeName},
-    tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry},
-    tabular::traits::{table::Table, table_schema::TableSchema, triescan::TrieScan},
+    tabular::traits::{table::Table, triescan::TrieScan},
+    tabular::{table_types::trie::Trie, traits::table_schema::TableColumnTypes},
+    util::Reordering,
 };
 
 use std::cell::UnsafeCell;
@@ -44,6 +45,7 @@ fn shrink_position(column: &ColumnWithIntervalsT, pos: usize) -> usize {
     }
 
     match column {
+        ColumnWithIntervalsT::U32(col) => shrink_position_t(col, pos),
         ColumnWithIntervalsT::U64(col) => shrink_position_t(col, pos),
         ColumnWithIntervalsT::Float(col) => shrink_position_t(col, pos),
         ColumnWithIntervalsT::Double(col) => shrink_position_t(col, pos),
@@ -55,27 +57,24 @@ fn shrink_position(column: &ColumnWithIntervalsT, pos: usize) -> usize {
 pub struct TrieScanProject<'a> {
     trie: &'a Trie,
     current_layer: Option<usize>,
-    target_schema: TrieSchema,
-    picked_columns: Vec<usize>,
+    target_types: TableColumnTypes,
+    picked_columns: Reordering,
     reorder_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> TrieScanProject<'a> {
     /// Create new TrieScanProject object
-    pub fn new(trie: &'a Trie, picked_columns: Vec<usize>) -> Self {
-        let input_schema = trie.schema();
+    pub fn new(trie: &'a Trie, picked_columns: Reordering) -> Self {
+        let input_types = trie.get_types();
 
-        let mut reorder_scans = Vec::<UnsafeCell<ColumnScanT>>::with_capacity(picked_columns.len());
+        let mut reorder_scans =
+            Vec::<UnsafeCell<ColumnScanT>>::with_capacity(picked_columns.len_target());
 
-        let mut target_attributes = Vec::<TrieSchemaEntry>::with_capacity(picked_columns.len());
-        for &col_index in &picked_columns {
-            let current_label = input_schema.get_label(col_index);
-            let current_datatype = input_schema.get_type(col_index);
+        let mut target_types = Vec::<DataTypeName>::with_capacity(picked_columns.len_target());
+        for &col_index in picked_columns.iter() {
+            let current_datatype = input_types[col_index];
 
-            target_attributes.push(TrieSchemaEntry {
-                label: current_label,
-                datatype: current_datatype,
-            });
+            target_types.push(current_datatype);
 
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {{
@@ -95,17 +94,17 @@ impl<'a> TrieScanProject<'a> {
             }
 
             match current_datatype {
+                DataTypeName::U32 => init_scans_for_datatype!(U32),
                 DataTypeName::U64 => init_scans_for_datatype!(U64),
                 DataTypeName::Float => init_scans_for_datatype!(Float),
                 DataTypeName::Double => init_scans_for_datatype!(Double),
             }
         }
-        let target_schema = TrieSchema::new(target_attributes);
 
         Self {
             trie,
             current_layer: None,
-            target_schema,
+            target_types,
             picked_columns,
             reorder_scans,
         }
@@ -127,7 +126,7 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
     fn down(&mut self) {
         let next_layer = self.current_layer.map_or(0, |v| v + 1);
 
-        debug_assert!(next_layer < self.target_schema.arity());
+        debug_assert!(next_layer < self.target_types.len());
 
         let next_column = self.trie.get_column(self.picked_columns[next_layer]);
 
@@ -143,8 +142,9 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
                 let next_ranges = if self.current_layer.is_none() {
                     vec![0..next_column.len()]
                 } else {
-                    let layer_for_comparison = self.picked_columns[0..self.current_layer.unwrap()]
-                        .iter()
+                    // [0..self.current_layer.unwrap()]
+                    let layer_for_comparison = self.picked_columns.iter()
+                        .take(self.current_layer.unwrap())
                         .copied()
                         .enumerate()
                         .filter(|(_, col_i)| *col_i >= self.picked_columns[self.current_layer.unwrap()])
@@ -237,6 +237,7 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
         }
 
         match next_column {
+            ColumnWithIntervalsT::U32(_) => down_for_datatype!(U32),
             ColumnWithIntervalsT::U64(_) => down_for_datatype!(U64),
             ColumnWithIntervalsT::Float(_) => down_for_datatype!(Float),
             ColumnWithIntervalsT::Double(_) => down_for_datatype!(Double),
@@ -255,8 +256,8 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
         Some(&self.reorder_scans[index])
     }
 
-    fn get_schema(&self) -> &TrieSchema {
-        &self.target_schema
+    fn get_types(&self) -> &TableColumnTypes {
+        &self.target_types
     }
 }
 
@@ -264,12 +265,13 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
 mod test {
     use super::TrieScanProject;
     use crate::physical::columnar::traits::column::Column;
-    use crate::physical::datatypes::{DataTypeName, DataValueT};
+    use crate::physical::datatypes::DataValueT;
     use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
     use crate::physical::tabular::operations::materialize;
-    use crate::physical::tabular::table_types::trie::{Trie, TrieSchema, TrieSchemaEntry};
+    use crate::physical::tabular::table_types::trie::Trie;
     use crate::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
     use crate::physical::util::test_util::make_column_with_intervals_t;
+    use crate::physical::util::Reordering;
     use test_log::test;
 
     #[test]
@@ -280,36 +282,21 @@ mod test {
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie = Trie::new(schema, column_vec);
+        let trie = Trie::new(column_vec);
 
         let trie_no_first = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![1, 2],
+            Reordering::new(vec![1, 2], 3),
         )))
         .unwrap();
         let trie_no_middle = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![0, 2],
+            Reordering::new(vec![0, 2], 3),
         )))
         .unwrap();
         let trie_no_last = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![0, 1],
+            Reordering::new(vec![0, 1], 3),
         )))
         .unwrap();
 
@@ -444,38 +431,11 @@ mod test {
             column_fst, column_snd, column_trd, column_fth, column_vth, column_sth,
         ];
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 3,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 4,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 5,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie = Trie::new(schema, column_vec);
+        let trie = Trie::new(column_vec);
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![0, 3, 5],
+            Reordering::new(vec![0, 3, 5], 6),
         )))
         .unwrap();
 
@@ -539,26 +499,11 @@ mod test {
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie = Trie::new(schema, column_vec);
+        let trie = Trie::new(column_vec);
 
         let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![2, 0, 1],
+            Reordering::new(vec![2, 0, 1], 3),
         )))
         .unwrap();
 
@@ -630,26 +575,11 @@ mod test {
 
         let column_vec = vec![column_fst, column_snd, column_trd];
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie = Trie::new(schema, column_vec);
+        let trie = Trie::new(column_vec);
 
         let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![2, 0],
+            Reordering::new(vec![2, 0], 3),
         )))
         .unwrap();
 
@@ -704,34 +634,11 @@ mod test {
 
         let column_vec = vec![column_fst, column_snd, column_trd, column_fth, column_vth];
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 3,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 4,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie = Trie::new(schema, column_vec);
+        let trie = Trie::new(column_vec);
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![0, 2, 4, 1],
+            Reordering::new(vec![0, 2, 4, 1], 5),
         )))
         .unwrap();
 
@@ -816,30 +723,11 @@ mod test {
 
         let column_vec = vec![column_fst, column_snd, column_trd, column_fth];
 
-        let schema = TrieSchema::new(vec![
-            TrieSchemaEntry {
-                label: 0,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 1,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 2,
-                datatype: DataTypeName::U64,
-            },
-            TrieSchemaEntry {
-                label: 3,
-                datatype: DataTypeName::U64,
-            },
-        ]);
-
-        let trie = Trie::new(schema, column_vec);
+        let trie = Trie::new(column_vec);
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            vec![2, 0, 3],
+            Reordering::new(vec![2, 0, 3], 4),
         )))
         .unwrap();
 
@@ -900,12 +788,6 @@ mod test {
     /// reordering a table with 2 rows results in a table with 4 rows.
     #[test]
     fn spurious_tuples_in_reorder_bug() {
-        let schema_entry = TrieSchemaEntry {
-            label: 0,
-            datatype: DataTypeName::U64,
-        };
-        let schema = TrieSchema::new(vec![schema_entry, schema_entry, schema_entry]);
-
         let mut dict = PrefixedStringDictionary::default();
         let x = dict.add("72".to_owned()).try_into().unwrap();
         let a = dict.add("139".to_owned()).try_into().unwrap();
@@ -923,8 +805,8 @@ mod test {
 
         let columns = vec![first, second, third];
 
-        let picked_columns = vec![1, 0, 2];
-        let base_trie = Trie::new(schema, columns);
+        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
+        let base_trie = Trie::new(columns);
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
 
@@ -938,12 +820,6 @@ mod test {
     /// reordering a table with 10 rows results in a table with 30 rows.
     #[test]
     fn spurious_tuples_in_reorder_mk2_bug() {
-        let schema_entry = TrieSchemaEntry {
-            label: 0,
-            datatype: DataTypeName::U64,
-        };
-        let schema = TrieSchema::new(vec![schema_entry, schema_entry, schema_entry]);
-
         let mut dict = PrefixedStringDictionary::default();
         let mut intern =
             |term: &str| DataValueT::U64(dict.add(term.to_owned()).try_into().unwrap());
@@ -974,8 +850,8 @@ mod test {
             vec![e, r, z],
         ];
 
-        let picked_columns = vec![1, 0, 2];
-        let base_trie = Trie::from_rows(schema, rows);
+        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
+        let base_trie = Trie::from_rows(rows);
 
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
@@ -989,12 +865,6 @@ mod test {
     /// but minimised to a table of 2 rows resulting in four rows.
     #[test]
     fn spurious_tuples_in_reorder_mk2_minimised_bug() {
-        let schema_entry = TrieSchemaEntry {
-            label: 0,
-            datatype: DataTypeName::U64,
-        };
-        let schema = TrieSchema::new(vec![schema_entry, schema_entry, schema_entry]);
-
         let mut dict = PrefixedStringDictionary::default();
         let mut intern =
             |term: &str| DataValueT::U64(dict.add(term.to_owned()).try_into().unwrap());
@@ -1007,8 +877,8 @@ mod test {
 
         let rows = vec![vec![a, r, x], vec![b, r, y]];
 
-        let picked_columns = vec![1, 0, 2];
-        let base_trie = Trie::from_rows(schema, rows);
+        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
+        let base_trie = Trie::from_rows(rows);
 
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
@@ -1020,12 +890,6 @@ mod test {
 
     #[test]
     fn spurious_tuples_in_reorder_bug2() {
-        let schema_entry = TrieSchemaEntry {
-            label: 0,
-            datatype: DataTypeName::U64,
-        };
-        let schema = TrieSchema::new(vec![schema_entry, schema_entry, schema_entry]);
-
         let mut dict = PrefixedStringDictionary::default();
 
         let rg = dict.add("RoleGroup".to_owned()).try_into().unwrap();
@@ -1050,8 +914,8 @@ mod test {
 
         let columns = vec![first, second, third];
 
-        let picked_columns = vec![1, 0, 2];
-        let base_trie = Trie::new(schema, columns);
+        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
+        let base_trie = Trie::new(columns);
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
 

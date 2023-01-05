@@ -6,5 +6,6 @@
 pub mod columnar;
 pub mod datatypes;
 pub mod dictionary;
+pub mod management;
 pub mod tabular;
 pub mod util;

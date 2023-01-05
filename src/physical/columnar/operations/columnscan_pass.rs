@@ -70,7 +70,7 @@ mod test {
 
     #[test]
     fn test_u64() {
-        let ref_col = ColumnVector::new(vec![0, 4, 7]);
+        let ref_col = ColumnVector::new(vec![0u32, 4, 7]);
         let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
 
         let mut pass_scan = ColumnScanPass::new(&ref_col_iter);

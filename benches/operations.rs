@@ -8,10 +8,9 @@ use stage2::io::csv::read;
 use stage2::physical::tabular::operations::{
     materialize, TrieScanJoin, TrieScanProject, TrieScanUnion,
 };
-use stage2::physical::tabular::table_types::trie::{
-    Trie, TrieScanGeneric, TrieSchema, TrieSchemaEntry,
-};
+use stage2::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
 use stage2::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
+use stage2::physical::util::Reordering;
 use stage2::{
     logical::{model::DataSource, table_manager::ColumnOrder},
     physical::{datatypes::DataTypeName, dictionary::PrefixedStringDictionary},
@@ -24,9 +23,8 @@ fn load_trie(
 ) -> Trie {
     match source {
         DataSource::CsvFile(file) => {
-            log::info!("loading CSV file {file:?}");
             // Using fallback solution to treat eveything as string for now (storing as u64 internally)
-            let datatypes: Vec<Option<DataTypeName>> = (0..order.len()).map(|_| None).collect();
+            let datatypes: Vec<Option<DataTypeName>> = (0..order.arity()).map(|_| None).collect();
 
             let mut reader = ReaderBuilder::new()
                 .delimiter(b',')
@@ -35,16 +33,7 @@ fn load_trie(
 
             let col_table = read(&datatypes, &mut reader, dict).unwrap();
 
-            let schema = TrieSchema::new(
-                (0..col_table.len())
-                    .map(|i| TrieSchemaEntry {
-                        label: i,
-                        datatype: DataTypeName::U64,
-                    })
-                    .collect(),
-            );
-
-            let trie = Trie::from_cols(schema, col_table);
+            let trie = Trie::from_cols(col_table);
 
             assert!(trie.row_num() > 0);
             println!("{}", trie.row_num());
@@ -61,31 +50,12 @@ pub fn benchmark_join(c: &mut Criterion) {
     let mut dict = PrefixedStringDictionary::default();
 
     let table_a = DataSource::csv_file("test-files/bench-data/xe.csv").unwrap();
-    let table_a_order: ColumnOrder = vec![0, 1, 2];
+    let table_a_order = ColumnOrder::new(vec![0, 1, 2]);
     let table_b = DataSource::csv_file("test-files/bench-data/aux.csv").unwrap();
-    let table_b_order: ColumnOrder = vec![0, 1, 2];
+    let table_b_order = ColumnOrder::new(vec![0, 1, 2]);
 
     let trie_a = load_trie(&table_a, &table_a_order, &mut dict);
     let trie_b = load_trie(&table_b, &table_b_order, &mut dict);
-
-    let schema_target = TrieSchema::new(vec![
-        TrieSchemaEntry {
-            label: 100,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 101,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 102,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 103,
-            datatype: DataTypeName::U64,
-        },
-    ]);
 
     let mut group_ours = c.benchmark_group("trie_join");
     group_ours.sample_size(10);
@@ -97,8 +67,7 @@ pub fn benchmark_join(c: &mut Criterion) {
                         TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                         TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
                     ],
-                    &[vec![0, 1, 2], vec![0, 1, 3]],
-                    schema_target.clone(),
+                    &vec![vec![0, 1, 2], vec![0, 1, 3]],
                 )
             },
             |join_iter| {
@@ -168,39 +137,19 @@ fn benchmark_project(c: &mut Criterion) {
     let mut dict = PrefixedStringDictionary::default();
 
     let table_a = DataSource::csv_file("test-files/bench-data/xe.csv").unwrap();
-    let table_a_order: ColumnOrder = vec![0, 1, 2];
+    let table_a_order = ColumnOrder::new(vec![0, 1, 2]);
     let table_b = DataSource::csv_file("test-files/bench-data/aux.csv").unwrap();
-    let table_b_order: ColumnOrder = vec![0, 1, 2];
+    let table_b_order = ColumnOrder::new(vec![0, 1, 2]);
 
     let trie_a = load_trie(&table_a, &table_a_order, &mut dict);
     let trie_b = load_trie(&table_b, &table_b_order, &mut dict);
-
-    let schema_target = TrieSchema::new(vec![
-        TrieSchemaEntry {
-            label: 100,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 101,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 102,
-            datatype: DataTypeName::U64,
-        },
-        TrieSchemaEntry {
-            label: 103,
-            datatype: DataTypeName::U64,
-        },
-    ]);
 
     let join_iter = TrieScanJoin::new(
         vec![
             TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
             TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
         ],
-        &[vec![0, 1, 2], vec![0, 1, 3]],
-        schema_target,
+        &vec![vec![0, 1, 2], vec![0, 1, 3]],
     );
 
     let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
@@ -209,7 +158,7 @@ fn benchmark_project(c: &mut Criterion) {
     group_ours.sample_size(10);
     group_ours.bench_function("trie_project_hole", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&join_trie, vec![0, 3]),
+            || TrieScanProject::new(&join_trie, Reordering::new(vec![0, 3], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -217,7 +166,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_project_beginning", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&join_trie, vec![0, 1]),
+            || TrieScanProject::new(&join_trie, Reordering::new(vec![0, 1], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -225,7 +174,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_project_end", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&join_trie, vec![2, 3]),
+            || TrieScanProject::new(&join_trie, Reordering::new(vec![2, 3], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -234,7 +183,7 @@ fn benchmark_project(c: &mut Criterion) {
 
     group_ours.bench_function("trie_reorder_1", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&trie_b, vec![0, 2, 1]),
+            || TrieScanProject::new(&trie_b, Reordering::new(vec![0, 2, 1], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -242,7 +191,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_reorder_2", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&trie_b, vec![1, 0, 2]),
+            || TrieScanProject::new(&trie_b, Reordering::new(vec![1, 0, 2], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -250,7 +199,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_reorder_3", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&trie_b, vec![2, 1, 0]),
+            || TrieScanProject::new(&trie_b, Reordering::new(vec![2, 1, 0], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -274,7 +223,7 @@ fn benchmark_union(c: &mut Criterion) {
         filename += ".csv";
 
         let table_source = DataSource::csv_file(&filename).unwrap();
-        let table_order: ColumnOrder = vec![0, 1, 2];
+        let table_order = ColumnOrder::new(vec![0, 1, 2]);
 
         tries.push(load_trie(&table_source, &table_order, &mut dict));
 

@@ -9,8 +9,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Global instance of the [`TimeCode`]
-pub static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
+/// Global instance of the [`TimedCode`]
+static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
     let instance = TimedCode::new();
     Mutex::new(instance)
 });

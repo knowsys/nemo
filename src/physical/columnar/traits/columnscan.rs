@@ -1,8 +1,9 @@
 use super::super::column_types::{rle::ColumnScanRle, vector::ColumnScanVector};
 use super::super::operations::{
-    ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus,
-    ColumnScanPass, ColumnScanReorder, ColumnScanUnion,
+    ColumnScanCastEnum, ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanFollow,
+    ColumnScanJoin, ColumnScanMinus, ColumnScanPass, ColumnScanReorder, ColumnScanUnion,
 };
+
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
@@ -48,6 +49,8 @@ where
     ColumnScanRle(ColumnScanRle<'a, T>),
     /// Case ColumnScanJoin
     ColumnScanJoin(ColumnScanJoin<'a, T>),
+    /// Case ColumnScanCast
+    ColumnScanCast(ColumnScanCastEnum<'a, T>),
     /// Case ColumnScanReorder
     ColumnScanReorder(ColumnScanReorder<'a, T>),
     /// Case ColumnScanEqualColumn
@@ -81,6 +84,15 @@ where
 {
     fn from(cs: ColumnScanRle<'a, T>) -> Self {
         Self::ColumnScanRle(cs)
+    }
+}
+
+impl<'a, T> From<ColumnScanCastEnum<'a, T>> for ColumnScanEnum<'a, T>
+where
+    T: 'a + ColumnDataType,
+{
+    fn from(cs: ColumnScanCastEnum<'a, T>) -> Self {
+        Self::ColumnScanCast(cs)
     }
 }
 
@@ -230,6 +242,7 @@ where
 generate_forwarder!(forward_to_columnscan;
     ColumnScanVector,
     ColumnScanRle,
+    ColumnScanCast,
     ColumnScanJoin,
     ColumnScanReorder, 
     ColumnScanEqualColumn, 
@@ -383,6 +396,8 @@ where
 /// Enum for [`ColumnScan`] for underlying data type
 #[derive(Debug)]
 pub enum ColumnScanT<'a> {
+    /// Case u32
+    U32(ColumnScanCell<'a, u32>),
     /// Case u64
     U64(ColumnScanCell<'a, u64>),
     /// Case Float
@@ -444,17 +459,21 @@ impl<'a> Iterator for ColumnScanT<'a> {
 impl<'a> ColumnScan for ColumnScanT<'a> {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
         match self {
+            Self::U32(cs) => match value {
+                Self::Item::U32(val) => cs.seek(val).map(DataValueT::U32),
+                _ => None,
+            },
             Self::U64(cs) => match value {
                 Self::Item::U64(val) => cs.seek(val).map(DataValueT::U64),
-                Self::Item::Float(_) | Self::Item::Double(_) => None,
+                _ => None,
             },
             Self::Float(cs) => match value {
-                Self::Item::U64(_) | Self::Item::Double(_) => None,
                 Self::Item::Float(val) => cs.seek(val).map(DataValueT::Float),
+                _ => None,
             },
             Self::Double(cs) => match value {
-                Self::Item::U64(_) | Self::Item::Float(_) => None,
                 Self::Item::Double(val) => cs.seek(val).map(DataValueT::Double),
+                _ => None,
             },
         }
     }

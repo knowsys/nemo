@@ -1,6 +1,6 @@
 use super::{FloatIsNaN, FloorToUsize};
 use crate::error::Error;
-use num::{CheckedMul, FromPrimitive, One, Zero};
+use num::{Bounded, CheckedMul, FromPrimitive, One, Zero};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
@@ -192,6 +192,16 @@ impl Product for Double {
 impl FloorToUsize for Double {
     fn floor_to_usize(self) -> Option<usize> {
         usize::from_f64(self.0.floor())
+    }
+}
+
+impl Bounded for Double {
+    fn min_value() -> Self {
+        Self(f64::MIN)
+    }
+
+    fn max_value() -> Self {
+        Self(f64::MAX)
     }
 }
 

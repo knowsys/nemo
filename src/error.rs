@@ -28,7 +28,16 @@ pub enum Error {
     /// Error when converting integer type to floating point value
     #[error("Usize value `{0}` could not be converted to floating point value")]
     UsizeToFloatingPointValue(usize),
+    /// Error when converting integer type to floating point value
+    #[error("U32 value `{0}` could not be converted to floating point value")]
+    U32ToFloatingPointValue(u32),
+    /// Error when converting floating type to integer point value
+    #[error("Floating type could not be converted to integer value")]
+    FloatingPointToInteger,
     /// Parse errors
     #[error(transparent)]
     ParseError(#[from] ParseError),
+    /// Permutation shall be sorted, but the input data is of different length
+    #[error("Incompatible types while building ExecutionPlan")]
+    InvalidExecutionPlan,
 }

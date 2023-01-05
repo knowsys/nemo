@@ -26,6 +26,7 @@ where
         result.push(
             dtype
                 .map(|dt| match dt {
+                    DataTypeName::U32 => VecT::U32(Vec::new()),
                     DataTypeName::U64 => VecT::U64(Vec::new()),
                     DataTypeName::Float => VecT::Float(Vec::new()),
                     DataTypeName::Double => VecT::Double(Vec::new()),
