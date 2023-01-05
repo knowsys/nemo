@@ -1,6 +1,6 @@
 use super::{FloatIsNaN, FloorToUsize};
 use crate::error::Error;
-use num::{CheckedMul, FromPrimitive, One, Zero};
+use num::{Bounded, CheckedMul, FromPrimitive, One, Zero};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
@@ -151,24 +151,6 @@ impl TryFrom<usize> for Double {
     }
 }
 
-impl TryFrom<u32> for Double {
-    type Error = Error;
-
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        f64::from_u32(value)
-            .ok_or(Error::U32ToFloatingPointValue(value))
-            .and_then(Double::new)
-    }
-}
-
-impl TryFrom<Double> for u32 {
-    type Error = Error;
-
-    fn try_from(value: Double) -> Result<Self, Self::Error> {
-        u32::from_f64(value.0).ok_or(Error::FloatingPointToInteger)
-    }
-}
-
 impl Zero for Double {
     fn zero() -> Self {
         Double::from_number(f64::zero())
@@ -210,6 +192,16 @@ impl Product for Double {
 impl FloorToUsize for Double {
     fn floor_to_usize(self) -> Option<usize> {
         usize::from_f64(self.0.floor())
+    }
+}
+
+impl Bounded for Double {
+    fn min_value() -> Self {
+        Self(f64::MIN)
+    }
+
+    fn max_value() -> Self {
+        Self(f64::MAX)
     }
 }
 

@@ -28,3 +28,7 @@ pub use floor_to_usize::FloorToUsize;
 /// Module for defining [`ColumnDataType`]
 pub mod column_data_type;
 pub use column_data_type::ColumnDataType;
+
+/// Module containing functionality relevant to casting types
+pub mod casting;
+pub use casting::ImplicitCastError;

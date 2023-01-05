@@ -1,13 +1,29 @@
 use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
-use crate::physical::datatypes::ColumnDataType;
+use crate::physical::datatypes::{
+    casting::{ImplicitCastError, ImplicitCastFrom, ImplicitCastInto},
+    ColumnDataType,
+};
 use std::{fmt::Debug, marker::PhantomData, ops::Range};
 
-/// [`ColumnScan`] which is takes the values of its sub scan but casts them into a different type.
+/// [`ColumnScan`] which is takes the values of its sub scan and casts them into a different type.
+///
+/// This is intended to be used only for types that use the same number representation format
+/// but where the range of one is smaller than the range of the other. E.g. u32 and u64.
+/// As such, the only possible errors that could occur while casting are either overflow or underflow.
+///
+/// Values of the referenced sub scan that are not representable in the target type (either because they are
+/// to small or to large) will be ignored and no error is emitted.
+/// This behaviour is useful when implementing data base operations
+/// between columns of different (but compatible in the above sense) types.
+/// E.g. performing a join of u32 columns with u64 columns.
+/// Since no non-u32 value from the u64 column can appear in u32 column they can be ignored.
+///
+/// When casting from a smaller to a larger type, however, it is guaranteed that no value will be skipped.
 #[derive(Debug)]
 pub struct ColumnScanCast<'a, FromType, ToType>
 where
     FromType: 'a + ColumnDataType,
-    ToType: 'a + ColumnDataType + TryFrom<FromType> + TryInto<FromType>,
+    ToType: 'a + ColumnDataType,
 {
     /// Necessary to bind the ToType.
     _phantom: PhantomData<ToType>,
@@ -19,7 +35,7 @@ where
 impl<'a, FromType, ToType> ColumnScanCast<'a, FromType, ToType>
 where
     FromType: 'a + ColumnDataType,
-    ToType: 'a + ColumnDataType + TryFrom<FromType> + TryInto<FromType>,
+    ToType: 'a + ColumnDataType + ImplicitCastFrom<FromType> + ImplicitCastInto<FromType>,
 {
     /// Constructs a new [`ColumnScanCast`] given a reference scan.
     pub fn new(reference_scan: ColumnScanCell<'a, FromType>) -> Self {
@@ -28,43 +44,89 @@ where
             reference_scan: Box::new(reference_scan),
         }
     }
+
+    /// Returns the appropriate result for `next` or `seek` in case the casting fails.
+    fn handle_error(&mut self, error: ImplicitCastError) -> Option<ToType> {
+        match error {
+            ImplicitCastError::Overflow => {
+                // In this case the next value is larger then the largest value reresentable in the target type
+                // Hence, we move the reference scan to the end and return None
+
+                self.reference_scan.seek(FromType::max_value());
+                self.reference_scan.next();
+
+                None
+            }
+            ImplicitCastError::Underflow => {
+                // In this case the next value is smaller then the smallest value reresentable in the target type
+                // Hence, we move the reference scan to the first value that is representable in the target type
+
+                self.seek(ToType::min_value())
+            }
+            ImplicitCastError::NonCastable => {
+                panic!("Trying to implicitlly cast incompatble values.")
+            }
+        }
+    }
 }
 
 impl<'a, FromType, ToType> Iterator for ColumnScanCast<'a, FromType, ToType>
 where
     FromType: 'a + ColumnDataType,
-    ToType: 'a + ColumnDataType + TryFrom<FromType> + TryInto<FromType>,
+    ToType: 'a + ColumnDataType + ImplicitCastFrom<FromType> + ImplicitCastInto<FromType>,
 {
     type Item = ToType;
 
-    // TODO: we should be able to distinguish whether there was no next value or if the cast failed
-    // one could change Item to be Result<ToType, ...> but then e.g. seek also expects Result<ToType, ...> as an argument, which is not so nice...
     fn next(&mut self) -> Option<ToType> {
-        self.reference_scan
-            .next()
-            .and_then(|val| ToType::try_from(val).ok())
+        let next_value = self.reference_scan.next()?;
+
+        match ToType::cast_from(next_value) {
+            Ok(value) => Some(value),
+            Err(error) => self.handle_error(error),
+        }
     }
 }
 
 impl<'a, FromType, ToType> ColumnScan for ColumnScanCast<'a, FromType, ToType>
 where
     FromType: 'a + ColumnDataType,
-    ToType: 'a + ColumnDataType + TryFrom<FromType> + TryInto<FromType>,
+    ToType: 'a + ColumnDataType + ImplicitCastFrom<FromType> + ImplicitCastInto<FromType>,
 {
     fn seek(&mut self, value: ToType) -> Option<ToType> {
-        // TODO: The code below is not correct for all types
-        // Casting from ToType to FromType should not simply return None if it fails
-        // as this would indicate that there is no larger value.
-        // This is a problem for signed datatypes.
-        self.reference_scan
-            .seek(value.try_into().ok()?)
-            .and_then(|val| ToType::try_from(val).ok())
+        match value.cast_into() {
+            Ok(casted_value) => match ToType::cast_from(self.reference_scan.seek(casted_value)?) {
+                Ok(v) => Some(v),
+                Err(error) => self.handle_error(error),
+            },
+            Err(error) => match error {
+                ImplicitCastError::Overflow => {
+                    // In this case the target value is larger then the largest value reresentable in the target type
+                    // Hence, we move the reference scan to the end and return None
+
+                    self.reference_scan.seek(FromType::max_value());
+                    self.reference_scan.next();
+
+                    None
+                }
+                ImplicitCastError::Underflow => {
+                    // In this case the target value is smaller then the smallest value reresentable in the target type
+                    // Hence, we move the reference scan to the first position
+
+                    self.reference_scan.reset();
+                    self.next()
+                }
+                ImplicitCastError::NonCastable => {
+                    panic!("Trying to implicitlly cast incompatble values.")
+                }
+            },
+        }
     }
 
     fn current(&mut self) -> Option<ToType> {
-        self.reference_scan
-            .current()
-            .and_then(|val| ToType::try_from(val).ok())
+        match ToType::cast_from(self.reference_scan.current()?) {
+            Ok(value) => Some(value),
+            Err(_) => panic!("The way seek and next are implemented should prevent a situation where reference scan points to value outside the range of ToType."),
+        }
     }
 
     fn reset(&mut self) {
@@ -159,14 +221,66 @@ mod test {
         let ref_col = ColumnVector::new(vec![0u32, 4, 7]);
         let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
 
-        let mut pass_scan = ColumnScanCast::<u32, u64>::new(ref_col_iter);
+        let mut cast_scan = ColumnScanCast::<u32, u64>::new(ref_col_iter);
 
-        assert_eq!(pass_scan.current(), None);
-        assert_eq!(pass_scan.next(), Some(0u64));
-        assert_eq!(pass_scan.current(), Some(0u64));
-        assert_eq!(pass_scan.seek(6), Some(7u64));
-        assert_eq!(pass_scan.current(), Some(7u64));
-        assert_eq!(pass_scan.next(), None);
-        assert_eq!(pass_scan.current(), None);
+        assert_eq!(cast_scan.current(), None);
+        assert_eq!(cast_scan.next(), Some(0u64));
+        assert_eq!(cast_scan.current(), Some(0u64));
+        assert_eq!(cast_scan.seek(6), Some(7u64));
+        assert_eq!(cast_scan.current(), Some(7u64));
+        assert_eq!(cast_scan.next(), None);
+        assert_eq!(cast_scan.current(), None);
+    }
+
+    #[test]
+    fn test_flow_next() {
+        let ref_col = ColumnVector::new(vec![-1000i16, -270, -100, 0, 5, 100, 1000, 1200]);
+        let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
+
+        let mut cast_scan = ColumnScanCast::<i16, i8>::new(ref_col_iter);
+
+        assert_eq!(cast_scan.current(), None);
+        assert_eq!(cast_scan.next(), Some(-100i8));
+        assert_eq!(cast_scan.current(), Some(-100i8));
+        assert_eq!(cast_scan.next(), Some(0i8));
+        assert_eq!(cast_scan.current(), Some(0i8));
+        assert_eq!(cast_scan.next(), Some(5i8));
+        assert_eq!(cast_scan.current(), Some(5i8));
+        assert_eq!(cast_scan.next(), Some(100i8));
+        assert_eq!(cast_scan.current(), Some(100i8));
+        assert_eq!(cast_scan.next(), None);
+        assert_eq!(cast_scan.current(), None);
+    }
+
+    #[test]
+    fn test_flow_seek_1() {
+        let ref_col = ColumnVector::new(vec![-1000i16, -270, -100, 0, 5, 100, 1000, 1200]);
+        let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
+
+        let mut cast_scan = ColumnScanCast::<i16, i8>::new(ref_col_iter);
+
+        assert_eq!(cast_scan.current(), None);
+        assert_eq!(cast_scan.seek(-110i8), Some(-100i8));
+        assert_eq!(cast_scan.current(), Some(-100i8));
+        assert_eq!(cast_scan.seek(100i8), Some(100i8));
+        assert_eq!(cast_scan.current(), Some(100i8));
+        assert_eq!(cast_scan.seek(120i8), None);
+        assert_eq!(cast_scan.current(), None);
+    }
+
+    #[test]
+    fn test_flow_seek_2() {
+        let ref_col = ColumnVector::new(vec![-100i8, 0, 5, 100]);
+        let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
+
+        let mut cast_scan = ColumnScanCast::<i8, i16>::new(ref_col_iter);
+
+        assert_eq!(cast_scan.current(), None);
+        assert_eq!(cast_scan.seek(-1000i16), Some(-100i16));
+        assert_eq!(cast_scan.current(), Some(-100i16));
+        assert_eq!(cast_scan.seek(3i16), Some(5i16));
+        assert_eq!(cast_scan.current(), Some(5i16));
+        assert_eq!(cast_scan.seek(300i16), None);
+        assert_eq!(cast_scan.current(), None);
     }
 }

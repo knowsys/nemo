@@ -1,5 +1,8 @@
-use super::{Field, FloorToUsize};
-use num::CheckedMul;
+use super::{
+    casting::{ImplicitCastFrom, ImplicitCastInto},
+    Field, FloorToUsize,
+};
+use num::{Bounded, CheckedMul};
 use std::fmt::Debug;
 
 /// A combination of traits that is required for a data type to be used in a column
@@ -11,8 +14,9 @@ pub trait ColumnDataType:
     + FloorToUsize
     + Field
     + CheckedMul
-    + TryFrom<u32>
-    + TryInto<u32>
+    + ImplicitCastFrom<u32>
+    + ImplicitCastInto<u32>
+    + Bounded
 {
 }
 
@@ -24,7 +28,8 @@ impl<T> ColumnDataType for T where
         + FloorToUsize
         + Field
         + CheckedMul
-        + TryFrom<u32>
-        + TryInto<u32>
+        + ImplicitCastFrom<u32>
+        + ImplicitCastInto<u32>
+        + Bounded
 {
 }
