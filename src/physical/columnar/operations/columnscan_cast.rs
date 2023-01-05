@@ -53,9 +53,7 @@ where
                 // Hence, we move the reference scan to the end and return None
 
                 self.reference_scan.seek(FromType::max_value());
-                while self.reference_scan.current().is_some() {
-                    self.reference_scan.next();
-                }
+                while self.reference_scan.next().is_some() {}
 
                 None
             }
@@ -106,9 +104,7 @@ where
                     // Hence, we move the reference scan to the end and return None
 
                     self.reference_scan.seek(FromType::max_value());
-                    while self.reference_scan.current().is_some() {
-                        self.reference_scan.next();
-                    }
+                    while self.reference_scan.next().is_some() {}
 
                     None
                 }
