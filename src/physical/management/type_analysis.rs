@@ -66,14 +66,14 @@ impl TypeTree {
         tree: &ExecutionTree<TableKey>,
     ) -> Result<Self, Error> {
         if let Some(tree_root) = tree.root() {
-            Self::from_execution_node(instance, temp_schemas, tree_root)
+            Self::propagate_up(instance, temp_schemas, tree_root)
         } else {
             Ok(TypeTree::default())
         }
     }
 
-    /// Implements the functionality of `from_execution_tree` by recursively traversing the [`ExecutionTree`].
-    fn from_execution_node<TableKey: TableKeyType>(
+    /// Types are propagated from bottom to top through the [`ExecutionTree`].
+    fn propagate_up<TableKey: TableKeyType>(
         instance: &DatabaseInstance<TableKey>,
         temp_schemas: &HashMap<TableId, TableSchema>,
         node: ExecutionNodeRef<TableKey>,
@@ -97,7 +97,7 @@ impl TypeTree {
                     let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(subtrees.len());
                     for subtree in subtrees {
                         let subtype_node =
-                            Self::from_execution_node(instance, temp_schemas, subtree.clone())?;
+                            Self::propagate_up(instance, temp_schemas, subtree.clone())?;
 
                         subtype_nodes.push(subtype_node);
                     }
@@ -147,7 +147,7 @@ impl TypeTree {
                     let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(subtrees.len());
                     for subtree in subtrees {
                         let subtype_node =
-                            Self::from_execution_node(instance, temp_schemas, subtree.clone())?;
+                            Self::propagate_up(instance, temp_schemas, subtree.clone())?;
 
                         subtype_nodes.push(subtype_node);
                     }
@@ -190,9 +190,9 @@ impl TypeTree {
                 }
                 ExecutionNode::Minus(left, right) => {
                     let subtypenode_left =
-                        Self::from_execution_node(instance, temp_schemas, left.clone())?;
+                        Self::propagate_up(instance, temp_schemas, left.clone())?;
                     let subtypenode_right =
-                        Self::from_execution_node(instance, temp_schemas, right.clone())?;
+                        Self::propagate_up(instance, temp_schemas, right.clone())?;
 
                     let arity = subtypenode_left.schema.arity();
 
@@ -218,8 +218,7 @@ impl TypeTree {
                     ))
                 }
                 ExecutionNode::Project(subtree, reordering) => {
-                    let subtype_node =
-                        Self::from_execution_node(instance, temp_schemas, subtree.clone())?;
+                    let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
 
                     let result_schema_enries =
                         reordering.apply_to(subtype_node.schema.get_entries());
@@ -229,21 +228,43 @@ impl TypeTree {
                     ))
                 }
                 ExecutionNode::SelectValue(subtree, _assignments) => {
-                    let subtype_node =
-                        Self::from_execution_node(instance, temp_schemas, subtree.clone())?;
+                    let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
                     Ok(TypeTreeNode::new(
                         subtype_node.schema.clone(),
                         vec![subtype_node],
                     ))
                 }
                 ExecutionNode::SelectEqual(subtree, _classes) => {
-                    let subtype_node =
-                        Self::from_execution_node(instance, temp_schemas, subtree.clone())?;
+                    let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
                     Ok(TypeTreeNode::new(
                         subtype_node.schema.clone(),
                         vec![subtype_node],
                     ))
                 }
+            }
+        } else {
+            unreachable!()
+        }
+    }
+
+    // Propagates types from the top of a [`TypeTree`] to the bottom.
+    fn propagate_down<TableKey: TableKeyType>(
+        tree: TypeTreeNode,
+        schema: TableSchema,
+        parent: ExecutionNodeRef<TableKey>,
+    ) -> TypeTreeNode {
+        if let Some(parent_rc) = parent.0.upgrade() {
+            let parent_ref = &*parent_rc.as_ref().borrow();
+
+            match parent_ref {
+                ExecutionNode::FetchTable(_) => unreachable!(),
+                ExecutionNode::FetchTemp(_) => unreachable!(),
+                ExecutionNode::Join(_, _) => todo!(),
+                ExecutionNode::Union(_) => todo!(),
+                ExecutionNode::Minus(_, _) => todo!(),
+                ExecutionNode::Project(_, _) => todo!(),
+                ExecutionNode::SelectValue(_, _) => todo!(),
+                ExecutionNode::SelectEqual(_, _) => todo!(),
             }
         } else {
             unreachable!()
@@ -582,7 +603,8 @@ mod test {
 
         let execution_tree = build_execution_tree();
 
-        let type_tree = TypeTree::from_execution_tree(&instance, &temp_schemas, &execution_tree);
+        let type_tree =
+            TypeTree::propagate_up(&instance, &temp_schemas, execution_tree.root().unwrap());
         assert!(type_tree.is_ok());
 
         let type_tree = type_tree.unwrap();
