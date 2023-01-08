@@ -59,12 +59,10 @@ impl<TableKey: TableKeyType> TableInfo<TableKey> {
 /// Struct that contains useful information about a trie
 /// that is only available temporarily.
 #[derive(Debug)]
-struct TempTableInfo {
+pub(super) struct TempTableInfo {
     /// The trie.
     pub trie: Trie,
     /// The schema of the table
-    /// TODO: Use this
-    #[allow(dead_code)]
     pub schema: TableSchema,
 }
 
@@ -138,16 +136,22 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
 
     /// Given a [`TableKey`] return a reference to the corresponding trie.
     /// Panics if the key does not exist.
-    pub fn get_by_key(&self, key: &TableKey) -> &Trie {
+    pub fn get_by_key<'a>(&'a self, key: &TableKey) -> &'a Trie {
         let id = self.get_id(key);
-        self.id_to_table.get(&id).map(|t| &t.trie).unwrap()
+        self.id_to_table.get(&id).map(|i| &i.trie).unwrap()
     }
 
     /// Given a [`TableKey`] return a mutable reference to the corresponding trie.
     /// Panics if the key does not exist.
-    pub fn get_by_key_mut(&mut self, key: &TableKey) -> &mut Trie {
+    pub fn get_by_key_mut<'a>(&'a mut self, key: &TableKey) -> &'a mut Trie {
         let id = self.get_id(key);
         self.id_to_table.get_mut(&id).map(|t| &mut t.trie).unwrap()
+    }
+
+    /// Return the schema of a table identified by the given [`TableKey`]
+    pub fn get_schema<'a>(&'a self, key: &TableKey) -> &'a TableSchema {
+        let id = self.get_id(key);
+        self.id_to_table.get(&id).map(|i| &i.schema).unwrap()
     }
 
     /// Add the given trie to the instance under the given table key.
