@@ -60,4 +60,9 @@ impl TableSchema {
     pub fn get_entry(&self, index: usize) -> &TableSchemaEntry {
         &self.entries[index]
     }
+
+    /// Return the vector of [`TableSchemaEntry`]s which defines a [`TableSchema`].
+    pub fn get_entries(&self) -> &Vec<TableSchemaEntry> {
+        &self.entries
+    }
 }

@@ -37,7 +37,7 @@ pub enum Error {
     /// Parse errors
     #[error(transparent)]
     ParseError(#[from] ParseError),
-    /// Permutation shall be sorted, but the input data is of different length
-    #[error("Incompatible types while building ExecutionPlan")]
+    /// Error when giving invalid execution plan to the database instance
+    #[error("The given execution plan is invalid.")]
     InvalidExecutionPlan,
 }
