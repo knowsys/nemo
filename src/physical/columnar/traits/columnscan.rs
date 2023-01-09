@@ -17,7 +17,7 @@ pub trait ColumnScan: Debug + Iterator {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item>;
 
     /// Return the value at the current position, if any.
-    fn current(&mut self) -> Option<Self::Item>;
+    fn current(&self) -> Option<Self::Item>;
 
     /// Return to the initial state
     /// Typically, the state of a [`ColumnScan`] is determined by the state of its sub scans
@@ -271,7 +271,7 @@ where
         forward_to_columnscan!(self, seek(value))
     }
 
-    fn current(&mut self) -> Option<Self::Item> {
+    fn current(&self) -> Option<Self::Item> {
         forward_to_columnscan!(self, current)
     }
 
@@ -478,7 +478,7 @@ impl<'a> ColumnScan for ColumnScanT<'a> {
         }
     }
 
-    fn current(&mut self) -> Option<Self::Item> {
+    fn current(&self) -> Option<Self::Item> {
         forward_to_columnscan_cell!(self, current.map_to(DataValueT))
     }
 

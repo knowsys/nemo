@@ -53,7 +53,7 @@ where
                 // Hence, we move the reference scan to the end and return None
 
                 self.reference_scan.seek(FromType::max_value());
-                self.reference_scan.next();
+                while self.reference_scan.next().is_some() {}
 
                 None
             }
@@ -104,7 +104,7 @@ where
                     // Hence, we move the reference scan to the end and return None
 
                     self.reference_scan.seek(FromType::max_value());
-                    self.reference_scan.next();
+                    while self.reference_scan.next().is_some() {}
 
                     None
                 }
@@ -122,7 +122,7 @@ where
         }
     }
 
-    fn current(&mut self) -> Option<ToType> {
+    fn current(&self) -> Option<ToType> {
         match ToType::cast_from(self.reference_scan.current()?) {
             Ok(value) => Some(value),
             Err(_) => panic!("The way seek and next are implemented should prevent a situation where reference scan points to value outside the range of ToType."),
@@ -188,7 +188,7 @@ where
         forward_to_column_scan_cast!(self, seek(value))
     }
 
-    fn current(&mut self) -> Option<Self::Item> {
+    fn current(&self) -> Option<Self::Item> {
         forward_to_column_scan_cast!(self, current)
     }
 

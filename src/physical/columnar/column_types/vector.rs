@@ -183,7 +183,7 @@ where
         }
     }
 
-    fn current(&mut self) -> Option<T> {
+    fn current(&self) -> Option<T> {
         self.pos
             .and_then(|pos| (pos < self.interval.end).then(|| self.column.get(pos)))
     }

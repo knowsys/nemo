@@ -668,7 +668,7 @@ where
         self.find(|&next| next >= value)
     }
 
-    fn current(&mut self) -> Option<Self::Item> {
+    fn current(&self) -> Option<Self::Item> {
         self.current
     }
 

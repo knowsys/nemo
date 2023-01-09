@@ -95,9 +95,7 @@ impl TypeTree {
     ) -> Result<Self, Error> {
         if let Some(tree_root) = tree.root() {
             let mut tree = Self::propagate_up(instance, temp_schemas, tree_root.clone())?;
-            println!("up: {}", tree);
             Self::propagate_down(&mut tree, None, tree_root);
-            println!("down: {}", tree);
 
             Ok(tree)
         } else {

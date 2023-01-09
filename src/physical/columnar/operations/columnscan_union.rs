@@ -132,7 +132,7 @@ where
         next_smallest
     }
 
-    fn current(&mut self) -> Option<T> {
+    fn current(&self) -> Option<T> {
         self.smallest_value
     }
 
