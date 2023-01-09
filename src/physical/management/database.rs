@@ -241,7 +241,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
             TimedCode::instance().sub(&timed_string).start();
             log_execution_title(tree);
 
-            let type_tree = TypeTree::from_execution_tree(&self, &temp_types, tree)?;
+            let type_tree = TypeTree::from_execution_tree(self, &temp_types, tree)?;
             let schema = type_tree.schema.clone();
             if let ExecutionResult::Temp(id) = tree.result() {
                 temp_types.insert(*id, schema.clone());
@@ -742,20 +742,17 @@ mod test {
         let result_col_first = if let ColumnWithIntervalsT::U64(col) = result_trie.get_column(0) {
             col
         } else {
-            assert!(false);
-            return;
+            unreachable!()
         };
         let result_col_second = if let ColumnWithIntervalsT::U32(col) = result_trie.get_column(1) {
             col
         } else {
-            assert!(false);
-            return;
+            unreachable!()
         };
         let result_col_third = if let ColumnWithIntervalsT::U64(col) = result_trie.get_column(2) {
             col
         } else {
-            assert!(false);
-            return;
+            unreachable!()
         };
 
         assert_eq!(

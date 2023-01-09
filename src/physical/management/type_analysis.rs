@@ -349,7 +349,7 @@ impl TypeTree {
                 ExecutionNode::Project(subtree, reordering) => {
                     let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
                     for (index, value) in reordering.iter().enumerate() {
-                        schema_map.insert(*value, type_node.schema.get_entry(index).clone());
+                        schema_map.insert(*value, *type_node.schema.get_entry(index));
                     }
 
                     Self::propagate_down(
