@@ -66,7 +66,10 @@ impl TypeTree {
         tree: &ExecutionTree<TableKey>,
     ) -> Result<Self, Error> {
         if let Some(tree_root) = tree.root() {
-            Self::propagate_up(instance, temp_schemas, tree_root)
+            let mut tree = Self::propagate_up(instance, temp_schemas, tree_root.clone())?;
+            Self::propagate_down(&mut tree, None, tree_root);
+
+            Ok(tree)
         } else {
             Ok(TypeTree::default())
         }
@@ -249,22 +252,112 @@ impl TypeTree {
 
     // Propagates types from the top of a [`TypeTree`] to the bottom.
     fn propagate_down<TableKey: TableKeyType>(
-        tree: TypeTreeNode,
-        schema: TableSchema,
-        parent: ExecutionNodeRef<TableKey>,
-    ) -> TypeTreeNode {
-        if let Some(parent_rc) = parent.0.upgrade() {
-            let parent_ref = &*parent_rc.as_ref().borrow();
+        type_node: &mut TypeTreeNode,
+        schema_map_opt: Option<HashMap<usize, TableSchemaEntry>>,
+        execution_node: ExecutionNodeRef<TableKey>,
+    ) {
+        if let Some(schema_map) = schema_map_opt {
+            for (index, schema_entry) in schema_map {
+                *type_node.schema.get_entry_mut(index) = schema_entry;
+            }
+        }
 
-            match parent_ref {
-                ExecutionNode::FetchTable(_) => unreachable!(),
-                ExecutionNode::FetchTemp(_) => unreachable!(),
-                ExecutionNode::Join(_, _) => todo!(),
-                ExecutionNode::Union(_) => todo!(),
-                ExecutionNode::Minus(_, _) => todo!(),
-                ExecutionNode::Project(_, _) => todo!(),
-                ExecutionNode::SelectValue(_, _) => todo!(),
-                ExecutionNode::SelectEqual(_, _) => todo!(),
+        if let Some(node_rc) = execution_node.0.upgrade() {
+            let node_ref = &*node_rc.as_ref().borrow();
+
+            match node_ref {
+                ExecutionNode::FetchTable(_) => {}
+                ExecutionNode::FetchTemp(_) => {}
+                ExecutionNode::Join(subtrees, bindings) => {
+                    for (tree_index, binding) in bindings.iter().enumerate() {
+                        let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                        for (column_index, value) in binding.iter().enumerate() {
+                            schema_map.insert(column_index, *type_node.schema.get_entry(*value));
+                        }
+
+                        Self::propagate_down(
+                            &mut type_node.subnodes[tree_index],
+                            Some(schema_map),
+                            subtrees[tree_index].clone(),
+                        );
+                    }
+                }
+                ExecutionNode::Union(subtrees) => {
+                    let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                    for (column_index, schema_entry) in
+                        type_node.schema.get_entries().iter().enumerate()
+                    {
+                        schema_map.insert(column_index, *schema_entry);
+                    }
+
+                    for (tree_index, subtree) in subtrees.iter().enumerate() {
+                        Self::propagate_down(
+                            &mut type_node.subnodes[tree_index],
+                            Some(schema_map.clone()),
+                            subtree.clone(),
+                        );
+                    }
+                }
+                ExecutionNode::Minus(left, right) => {
+                    let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                    for (column_index, schema_entry) in
+                        type_node.schema.get_entries().iter().enumerate()
+                    {
+                        schema_map.insert(column_index, *schema_entry);
+                    }
+
+                    Self::propagate_down(
+                        &mut type_node.subnodes[0],
+                        Some(schema_map.clone()),
+                        left.clone(),
+                    );
+
+                    Self::propagate_down(
+                        &mut type_node.subnodes[1],
+                        Some(schema_map.clone()),
+                        right.clone(),
+                    );
+                }
+                ExecutionNode::Project(subtree, reordering) => {
+                    let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                    for (index, value) in reordering.iter().enumerate() {
+                        schema_map.insert(*value, type_node.schema.get_entry(index).clone());
+                    }
+
+                    Self::propagate_down(
+                        &mut type_node.subnodes[0],
+                        Some(schema_map.clone()),
+                        subtree.clone(),
+                    );
+                }
+                ExecutionNode::SelectValue(subtree, _assignments) => {
+                    let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                    for (column_index, schema_entry) in
+                        type_node.schema.get_entries().iter().enumerate()
+                    {
+                        schema_map.insert(column_index, *schema_entry);
+                    }
+
+                    Self::propagate_down(
+                        &mut type_node.subnodes[0],
+                        Some(schema_map.clone()),
+                        subtree.clone(),
+                    );
+                }
+                ExecutionNode::SelectEqual(subtree, _classes) => {
+                    let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                    for (column_index, schema_entry) in
+                        type_node.schema.get_entries().iter().enumerate()
+                    {
+                        schema_map.insert(column_index, *schema_entry);
+                    }
+
+                    Self::propagate_down(
+                        &mut type_node.subnodes[0],
+                        Some(schema_map.clone()),
+                        subtree.clone(),
+                    );
+                }
             }
         } else {
             unreachable!()
@@ -324,7 +417,7 @@ mod test {
         datatypes::{DataTypeName, DataValueT},
         dictionary::PrefixedStringDictionary,
         management::{
-            database::{TableId, TableKeyType},
+            database::TableId,
             execution_plan::{ExecutionResult, ExecutionTree},
             DatabaseInstance,
         },
@@ -603,12 +696,17 @@ mod test {
 
         let execution_tree = build_execution_tree();
 
-        let type_tree =
+        let type_tree_up =
             TypeTree::propagate_up(&instance, &temp_schemas, execution_tree.root().unwrap());
-        assert!(type_tree.is_ok());
+        assert!(type_tree_up.is_ok());
 
-        let type_tree = type_tree.unwrap();
+        let type_tree_up = type_tree_up.unwrap();
         let expected_tree_up = build_expected_type_tree_up();
-        assert_eq!(type_tree, expected_tree_up);
+        assert_eq!(type_tree_up, expected_tree_up);
+
+        let type_tree = TypeTree::from_execution_tree(&instance, &temp_schemas, &execution_tree);
+        let type_tree = type_tree.unwrap();
+        let expected_tree_down = build_expected_type_tree_down();
+        assert_eq!(type_tree, expected_tree_down);
     }
 }

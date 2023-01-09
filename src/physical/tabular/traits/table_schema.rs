@@ -61,8 +61,23 @@ impl TableSchema {
         &self.entries[index]
     }
 
+    /// Returns the [`TableSchemaEntry`] associated with the column of the given index.
+    pub fn get_entry_mut(&mut self, index: usize) -> &mut TableSchemaEntry {
+        &mut self.entries[index]
+    }
+
     /// Return the vector of [`TableSchemaEntry`]s which defines a [`TableSchema`].
     pub fn get_entries(&self) -> &Vec<TableSchemaEntry> {
         &self.entries
+    }
+
+    /// Return the types of the associated columns.
+    pub fn get_column_types(&self) -> TableColumnTypes {
+        let mut result = Vec::<DataTypeName>::with_capacity(self.entries.len());
+        for entry in &self.entries {
+            result.push(entry.type_name);
+        }
+
+        result
     }
 }

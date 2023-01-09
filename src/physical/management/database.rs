@@ -27,6 +27,7 @@ use crate::{
 
 use super::{
     execution_plan::{ExecutionNode, ExecutionNodeRef, ExecutionResult},
+    type_analysis::{TypeTree, TypeTreeNode},
     ByteSized, ExecutionPlan,
 };
 
@@ -148,7 +149,8 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
         self.id_to_table.get_mut(&id).map(|t| &mut t.trie).unwrap()
     }
 
-    /// Return the schema of a table identified by the given [`TableKey`]
+    /// Return the schema of a table identified by the given [`TableKey`].
+    /// /// Panics if the key does not exist.
     pub fn get_schema<'a>(&'a self, key: &TableKey) -> &'a TableSchema {
         let id = self.get_id(key);
         self.id_to_table.get(&id).map(|i| &i.schema).unwrap()
@@ -234,20 +236,24 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
     pub fn execute_plan(&mut self, plan: &ExecutionPlan<TableKey>) -> Result<Vec<TableKey>, Error> {
         let mut new_tables = Vec::<TableKey>::new();
         let mut temp_tries = HashMap::<TableId, Option<TempTableInfo>>::new();
+        let mut temp_types = HashMap::<TableId, TableSchema>::new();
 
         for tree in &plan.trees {
             let timed_string = format!("Reasoning/Execution/{}", tree.name());
             TimedCode::instance().sub(&timed_string).start();
             log_execution_title(tree);
 
-            // TODO: Properly determine this
-            let schema = TableSchema::new();
+            let type_tree = TypeTree::from_execution_tree(&self, &temp_types, tree)?;
+            let schema = type_tree.schema.clone();
+            if let ExecutionResult::Temp(id) = tree.result() {
+                temp_types.insert(*id, schema.clone());
+            }
 
             // Calculate the new trie
             let new_trie_opt = if let Some(root) = tree.root() {
                 log_execution_tree(&self.get_iterator_string(root.clone(), &temp_tries));
 
-                let iter_opt = self.get_iterator_node(root, &temp_tries)?;
+                let iter_opt = self.get_iterator_node(root, &type_tree, &temp_tries)?;
 
                 if let Some(mut iter) = iter_opt {
                     materialize(&mut iter)
@@ -293,18 +299,19 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
     /// that if materialized will turn into the resulting trie of the represented computation
     fn get_iterator_node<'a>(
         &'a self,
-        node: ExecutionNodeRef<TableKey>,
+        execution_node: ExecutionNodeRef<TableKey>,
+        type_node: &'a TypeTreeNode,
         temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
     ) -> Result<Option<TrieScanEnum>, Error> {
-        if let Some(self_rc) = node.0.upgrade() {
-            let node_ref = &*self_rc.as_ref().borrow();
+        if let Some(node_rc) = execution_node.0.upgrade() {
+            let node_ref = &*node_rc.as_ref().borrow();
 
             return match node_ref {
                 ExecutionNode::FetchTemp(id) => {
                     if let Some(Some(info)) = temp_tries.get(id) {
-                        Ok(Some(TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(
-                            &info.trie,
-                        ))))
+                        Ok(Some(TrieScanEnum::TrieScanGeneric(
+                            TrieScanGeneric::new_cast(&info.trie, info.schema.get_column_types()),
+                        )))
                     } else {
                         // Referenced trie is empty or does not exist
                         // The latter is not an error, since it could happen that the referenced trie
@@ -321,15 +328,19 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                     if trie.row_num() == 0 {
                         return Ok(None);
                     }
+                    let schema = self.get_schema(key).get_column_types();
 
-                    let interval_triescan = TrieScanGeneric::new(trie);
+                    let interval_triescan = TrieScanGeneric::new_cast(trie, schema);
                     Ok(Some(TrieScanEnum::TrieScanGeneric(interval_triescan)))
                 }
                 ExecutionNode::Join(subtables, bindings) => {
                     let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
-                    for subtable in subtables {
-                        let subiterator_opt =
-                            self.get_iterator_node(subtable.clone(), temp_tries)?;
+                    for (table_index, subtable) in subtables.iter().enumerate() {
+                        let subiterator_opt = self.get_iterator_node(
+                            subtable.clone(),
+                            &type_node.subnodes[table_index],
+                            temp_tries,
+                        )?;
 
                         if let Some(subiterator) = subiterator_opt {
                             subiterators.push(subiterator);
@@ -351,9 +362,12 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                 }
                 ExecutionNode::Union(subtables) => {
                     let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
-                    for subtable in subtables {
-                        let subiterator_opt =
-                            self.get_iterator_node(subtable.clone(), temp_tries)?;
+                    for (table_index, subtable) in subtables.iter().enumerate() {
+                        let subiterator_opt = self.get_iterator_node(
+                            subtable.clone(),
+                            &type_node.subnodes[table_index],
+                            temp_tries,
+                        )?;
 
                         if let Some(subiterator) = subiterator_opt {
                             subiterators.push(subiterator);
@@ -375,12 +389,16 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                     Ok(Some(TrieScanEnum::TrieScanUnion(union_scan)))
                 }
                 ExecutionNode::Minus(subtable_left, subtable_right) => {
-                    if let Some(left_scan) =
-                        self.get_iterator_node(subtable_left.clone(), temp_tries)?
-                    {
-                        if let Some(right_scan) =
-                            self.get_iterator_node(subtable_right.clone(), temp_tries)?
-                        {
+                    if let Some(left_scan) = self.get_iterator_node(
+                        subtable_left.clone(),
+                        &type_node.subnodes[0],
+                        temp_tries,
+                    )? {
+                        if let Some(right_scan) = self.get_iterator_node(
+                            subtable_right.clone(),
+                            &type_node.subnodes[1],
+                            temp_tries,
+                        )? {
                             Ok(Some(TrieScanEnum::TrieScanMinus(TrieScanMinus::new(
                                 left_scan, right_scan,
                             ))))
@@ -420,7 +438,11 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                     }
                 }
                 ExecutionNode::SelectValue(subtable, assignments) => {
-                    let subiterator_opt = self.get_iterator_node(subtable.clone(), temp_tries)?;
+                    let subiterator_opt = self.get_iterator_node(
+                        subtable.clone(),
+                        &type_node.subnodes[0],
+                        temp_tries,
+                    )?;
 
                     if let Some(subiterator) = subiterator_opt {
                         let select_scan = TrieScanSelectValue::new(subiterator, assignments);
@@ -430,7 +452,11 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                     }
                 }
                 ExecutionNode::SelectEqual(subtable, classes) => {
-                    let subiterator_opt = self.get_iterator_node(subtable.clone(), temp_tries)?;
+                    let subiterator_opt = self.get_iterator_node(
+                        subtable.clone(),
+                        &type_node.subnodes[0],
+                        temp_tries,
+                    )?;
 
                     if let Some(subiterator) = subiterator_opt {
                         let select_scan = TrieScanSelectEqual::new(subiterator, classes);
