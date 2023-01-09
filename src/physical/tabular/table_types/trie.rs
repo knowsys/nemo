@@ -484,7 +484,10 @@ impl<'a> TrieScanGeneric<'a> {
                         DataTypeName::U64 => add_layer_for_datatype!(U32, U64, u32, u64),
                         _ => panic!("Unsupported cast."),
                     },
-                    DataTypeName::U64 => panic!("Unsupported cast."),
+                    DataTypeName::U64 => match dst_column_type {
+                        DataTypeName::U32 => add_layer_for_datatype!(U64, U32, u64, u32),
+                        _ => panic!("Unsupported cast."),
+                    },
                     DataTypeName::Float => panic!("Unsupported cast."),
                     DataTypeName::Double => panic!("Unsupported cast."),
                 }

@@ -63,14 +63,12 @@ impl<TableKey: TableKeyType> TableInfo<TableKey> {
 pub(super) struct TempTableInfo {
     /// The trie.
     pub trie: Trie,
-    /// The schema of the table
-    pub schema: TableSchema,
 }
 
 impl TempTableInfo {
     /// Create new [`TempTableInfo`].
-    pub fn new(trie: Trie, schema: TableSchema) -> Self {
-        Self { trie, schema }
+    pub fn new(trie: Trie) -> Self {
+        Self { trie }
     }
 }
 
@@ -273,7 +271,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                 match tree.result() {
                     ExecutionResult::Temp(id) => {
                         log_save_trie_temp(&new_trie);
-                        temp_tries.insert(*id, Some(TempTableInfo::new(new_trie, schema)));
+                        temp_tries.insert(*id, Some(TempTableInfo::new(new_trie)));
                     }
                     ExecutionResult::Save(key) => {
                         log_save_trie_perm(&new_trie);
@@ -295,7 +293,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
         Ok(new_tables)
     }
 
-    /// Given a Node in the execution tree returns the trie iterator
+    /// Given a node in the execution tree returns the trie iterator
     /// that if materialized will turn into the resulting trie of the represented computation
     fn get_iterator_node<'a>(
         &'a self,
@@ -310,7 +308,10 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                 ExecutionNode::FetchTemp(id) => {
                     if let Some(Some(info)) = temp_tries.get(id) {
                         Ok(Some(TrieScanEnum::TrieScanGeneric(
-                            TrieScanGeneric::new_cast(&info.trie, info.schema.get_column_types()),
+                            TrieScanGeneric::new_cast(
+                                &info.trie,
+                                type_node.schema.get_column_types(),
+                            ),
                         )))
                     } else {
                         // Referenced trie is empty or does not exist
@@ -328,7 +329,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                     if trie.row_num() == 0 {
                         return Ok(None);
                     }
-                    let schema = self.get_schema(key).get_column_types();
+                    let schema = type_node.schema.get_column_types();
 
                     let interval_triescan = TrieScanGeneric::new_cast(trie, schema);
                     Ok(Some(TrieScanEnum::TrieScanGeneric(interval_triescan)))
@@ -556,12 +557,19 @@ impl<TableKey: TableKeyType> ByteSized for DatabaseInstance<TableKey> {
 #[cfg(test)]
 mod test {
     use crate::physical::{
-        datatypes::DataTypeName,
+        columnar::{column_types::interval::ColumnWithIntervalsT, traits::column::Column},
+        datatypes::{DataTypeName, DataValueT},
         dictionary::PrefixedStringDictionary,
-        management::ByteSized,
+        management::{
+            execution_plan::{ExecutionResult, ExecutionTree},
+            ByteSized, ExecutionPlan,
+        },
         tabular::{
             table_types::trie::Trie,
-            traits::{table::Table, table_schema::TableSchema},
+            traits::{
+                table::Table,
+                table_schema::{TableSchema, TableSchemaEntry},
+            },
         },
         util::make_column_with_intervals_t,
     };
@@ -613,5 +621,186 @@ mod test {
         instance.delete_by_key(&String::from("A"));
         // // assert!(std::panic::catch_unwind(|| instance.get_id(&String::from("A"))).is_err());
         assert!(instance.size_bytes() < last_size);
+    }
+
+    fn schema_entry(type_name: DataTypeName) -> TableSchemaEntry {
+        TableSchemaEntry {
+            type_name,
+            dict: false,
+            nullable: false,
+        }
+    }
+
+    fn test_casting_execution_plan() -> ExecutionPlan<StringKeyType> {
+        // ExecutionPlan:
+        // Union
+        //  -> Minus
+        //      -> Trie_x [U64, U32, U64]
+        //      -> Trie_y [U32, U64, U32]
+        //  -> Join [[0, 1], [1, 2]]
+        //      -> Union
+        //          -> Trie_a [U32, U32]
+        //          -> Trie_b [U32, U64]
+        //      -> Union
+        //          -> Trie_b [U32, U64]
+        //          -> Trie_c [U32, U32]
+
+        let mut execution_tree = ExecutionTree::<StringKeyType>::new(
+            String::from("Test"),
+            ExecutionResult::Save(String::from("TableResult")),
+        );
+
+        let node_load_a = execution_tree.fetch_table(String::from("TableA"));
+        let node_load_b_1 = execution_tree.fetch_table(String::from("TableB"));
+        let node_load_b_2 = execution_tree.fetch_table(String::from("TableB"));
+        let node_load_c = execution_tree.fetch_table(String::from("TableC"));
+        let node_load_x = execution_tree.fetch_table(String::from("TableX"));
+        let node_load_y = execution_tree.fetch_table(String::from("TableY"));
+
+        let node_minus = execution_tree.minus(node_load_x, node_load_y);
+
+        let node_left_union = execution_tree.union(vec![node_load_a, node_load_b_1]);
+        let node_right_union = execution_tree.union(vec![node_load_b_2, node_load_c]);
+
+        let node_join = execution_tree.join(
+            vec![node_left_union, node_right_union],
+            vec![vec![0, 1], vec![1, 2]],
+        );
+
+        let node_root = execution_tree.union(vec![node_join, node_minus]);
+        execution_tree.set_root(node_root);
+
+        let mut execution_plan = ExecutionPlan::<StringKeyType>::new();
+        execution_plan.push(execution_tree);
+
+        execution_plan
+    }
+
+    #[test]
+    fn test_casting() {
+        let trie_a = Trie::from_rows(vec![vec![DataValueT::U32(1), DataValueT::U32(2)]]);
+        let trie_b = Trie::from_rows(vec![
+            vec![DataValueT::U32(2), DataValueT::U64(1 << 35)],
+            vec![DataValueT::U32(3), DataValueT::U64(2)],
+        ]);
+        let trie_c = Trie::from_rows(vec![vec![DataValueT::U32(2), DataValueT::U64(4)]]);
+        let trie_x = Trie::from_rows(vec![
+            vec![DataValueT::U64(1), DataValueT::U32(2), DataValueT::U64(4)],
+            vec![DataValueT::U64(3), DataValueT::U32(2), DataValueT::U64(4)],
+            vec![
+                DataValueT::U64(1 << 36),
+                DataValueT::U32(6),
+                DataValueT::U64(12),
+            ],
+        ]);
+        let trie_y = Trie::from_rows(vec![
+            vec![DataValueT::U32(1), DataValueT::U64(2), DataValueT::U32(4)],
+            vec![
+                DataValueT::U32(2),
+                DataValueT::U64(1 << 37),
+                DataValueT::U32(7),
+            ],
+        ]);
+
+        let schema_a = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U32),
+        ]);
+        let schema_b = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U64),
+        ]);
+        let schema_c = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U32),
+        ]);
+        let schema_x = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U64),
+        ]);
+        let schema_y = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U32),
+        ]);
+
+        let mut instance =
+            DatabaseInstance::<StringKeyType>::new(PrefixedStringDictionary::default());
+        instance.add(String::from("TableA"), trie_a, schema_a);
+        instance.add(String::from("TableB"), trie_b, schema_b);
+        instance.add(String::from("TableC"), trie_c, schema_c);
+        instance.add(String::from("TableX"), trie_x, schema_x);
+        instance.add(String::from("TableY"), trie_y, schema_y);
+
+        let plan = test_casting_execution_plan();
+        let result = instance.execute_plan(&plan);
+        assert!(result.is_ok());
+
+        let result_trie = instance.get_by_key(&String::from("TableResult"));
+
+        let result_col_first = if let ColumnWithIntervalsT::U64(col) = result_trie.get_column(0) {
+            col
+        } else {
+            assert!(false);
+            return;
+        };
+        let result_col_second = if let ColumnWithIntervalsT::U32(col) = result_trie.get_column(1) {
+            col
+        } else {
+            assert!(false);
+            return;
+        };
+        let result_col_third = if let ColumnWithIntervalsT::U64(col) = result_trie.get_column(2) {
+            col
+        } else {
+            assert!(false);
+            return;
+        };
+
+        assert_eq!(
+            result_col_first
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![1, 3, 1 << 36]
+        );
+        assert_eq!(
+            result_col_first
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0]
+        );
+
+        assert_eq!(
+            result_col_second
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u32>>(),
+            vec![2, 2, 6]
+        );
+        assert_eq!(
+            result_col_second
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 1, 2]
+        );
+
+        assert_eq!(
+            result_col_third
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![4, 1 << 35, 4, 1 << 35, 12],
+        );
+        assert_eq!(
+            result_col_third
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 2, 4]
+        );
     }
 }

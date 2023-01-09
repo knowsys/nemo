@@ -16,6 +16,8 @@ pub trait ColumnDataType:
     + CheckedMul
     + ImplicitCastFrom<u32>
     + ImplicitCastInto<u32>
+    + ImplicitCastFrom<u64>
+    + ImplicitCastInto<u64>
     + Bounded
 {
 }
@@ -30,6 +32,8 @@ impl<T> ColumnDataType for T where
         + CheckedMul
         + ImplicitCastFrom<u32>
         + ImplicitCastInto<u32>
+        + ImplicitCastFrom<u64>
+        + ImplicitCastInto<u64>
         + Bounded
 {
 }

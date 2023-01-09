@@ -1,6 +1,7 @@
 use std::{
     cmp::Ordering,
     collections::{hash_map::Entry, HashMap},
+    fmt::Display,
 };
 
 use crate::{
@@ -34,6 +35,27 @@ impl TypeTreeNode {
     pub(super) fn new(schema: TableSchema, subnodes: Vec<TypeTreeNode>) -> Self {
         Self { schema, subnodes }
     }
+
+    /// String representation of a [`TypeTree`].
+    fn to_string(&self, layer: usize) -> String {
+        let mut result = String::from("  ").repeat(layer);
+
+        result += "[";
+        for (entry_index, entry) in self.schema.get_entries().iter().enumerate() {
+            result += &format!("{}", entry.type_name);
+
+            if entry_index < self.schema.arity() - 1 {
+                result += ", ";
+            }
+        }
+        result += "]\n";
+
+        self.subnodes
+            .iter()
+            .for_each(|s| result += &s.to_string(layer + 1));
+
+        result
+    }
 }
 
 impl PartialEq for TypeTreeNode {
@@ -58,6 +80,12 @@ impl PartialEq for TypeTreeNode {
 }
 impl Eq for TypeTreeNode {}
 
+impl Display for TypeTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_string(0))
+    }
+}
+
 impl TypeTree {
     /// Create a [`TypeTree`] from an [`ExecutionPlan`]
     pub(super) fn from_execution_tree<TableKey: TableKeyType>(
@@ -67,7 +95,9 @@ impl TypeTree {
     ) -> Result<Self, Error> {
         if let Some(tree_root) = tree.root() {
             let mut tree = Self::propagate_up(instance, temp_schemas, tree_root.clone())?;
+            println!("up: {}", tree);
             Self::propagate_down(&mut tree, None, tree_root);
+            println!("down: {}", tree);
 
             Ok(tree)
         } else {
