@@ -39,7 +39,7 @@ where
         self.reference_scan.seek(value)
     }
 
-    fn current(&mut self) -> Option<T> {
+    fn current(&self) -> Option<T> {
         self.reference_scan.current()
     }
 

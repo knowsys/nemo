@@ -108,7 +108,7 @@ where
         self.current_value
     }
 
-    fn current(&mut self) -> Option<T> {
+    fn current(&self) -> Option<T> {
         self.current_value
     }
 
