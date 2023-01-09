@@ -40,4 +40,7 @@ pub enum Error {
     /// Permutation shall be sorted, but the input data is of different length
     #[error("Incompatible types while building ExecutionPlan")]
     InvalidExecutionPlan,
+    /// Parser could not parse whole Program-file, but should have read all of it.
+    #[error("Parser could not parse the whole input file")]
+    ProgramParseError,
 }
