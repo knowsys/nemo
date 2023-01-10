@@ -9,6 +9,10 @@ pub use materialize::materialize_subset;
 pub mod triescan_project;
 pub use triescan_project::TrieScanProject;
 
+/// Module for defining [`TrieScanReorderProject`]
+pub mod triescan_reorder_project;
+pub use triescan_reorder_project::TrieScanReorderProject;
+
 /// Module for defining [`TrieScanSelectEqual`] and [`TrieScanSelectValue`]
 pub mod triescan_select;
 pub use triescan_select::TrieScanSelectEqual;

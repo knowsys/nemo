@@ -2,6 +2,7 @@ use super::super::column_types::{rle::ColumnScanRle, vector::ColumnScanVector};
 use super::super::operations::{
     ColumnScanCastEnum, ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanFollow,
     ColumnScanJoin, ColumnScanMinus, ColumnScanPass, ColumnScanReorder, ColumnScanUnion,
+    ColumnScanMultipleRanges,
 };
 
 use crate::{
@@ -65,6 +66,8 @@ where
     ColumnScanMinus(ColumnScanMinus<'a, T>),
     /// Case ColumnScanUnion
     ColumnScanUnion(ColumnScanUnion<'a, T>),
+    /// Case ColumnScanMultipleRanges
+    ColumnScanMultipleRanges(ColumnScanMultipleRanges<'a, T>),
 }
 
 /// The following impl statements allow converting from a specific [`ColumnScan`] into a gerneral [`ColumnScanEnum`]
@@ -177,21 +180,21 @@ where
     /// Assumes that column scan is a [`ColumnScanReorder`]
     /// Return all positions in the underlying column the cursor is currently at
     pub fn pos_multiple(&self) -> Option<Vec<usize>> {
-        if let Self::ColumnScanReorder(cs) = self {
-            cs.pos_multiple()
-        } else {
-            unimplemented!("pos_multiple is only available for ColumnScanReorder")
+        match self {
+            Self::ColumnScanReorder(cs) => cs.pos_multiple(),
+            Self::ColumnScanMultipleRanges(cs) => cs.pos_multiple(),
+            _ => unimplemented!("pos_multiple is only available for ColumnScanReorder and ColumnScanMultipleRanges")
         }
     }
 
     /// Assumes that column scan is a [`ColumnScanReorder`]
     /// Set iterator to a set of possibly disjoint ranged
     pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
-        if let Self::ColumnScanReorder(cs) = self {
-            cs.narrow_ranges(intervals)
-        } else {
-            unimplemented!("narrow_ranges is only available for ColumnScanReorder")
-        }
+        match self {
+            Self::ColumnScanReorder(cs) => cs.narrow_ranges(intervals),
+            Self::ColumnScanMultipleRanges(cs) => cs.narrow_ranges(intervals),
+            _ => unimplemented!("narrow_ranges is only available for ColumnScanReorder and ColumnScanMultipleRanges")
+        };
     }
 
     /// Assumes that column scan is a [`ColumnScanFollow`]
@@ -250,7 +253,8 @@ generate_forwarder!(forward_to_columnscan;
     ColumnScanPass,
     ColumnScanFollow,
     ColumnScanMinus,
-    ColumnScanUnion);
+    ColumnScanUnion,
+    ColumnScanMultipleRanges);
 
 impl<'a, T> Iterator for ColumnScanEnum<'a, T>
 where

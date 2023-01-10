@@ -1,8 +1,8 @@
 use crate::generate_forwarder;
 use crate::physical::columnar::traits::columnscan::ColumnScanT;
 use crate::physical::tabular::operations::{
-    TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
-    TrieScanUnion,
+    TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanReorderProject,
+    TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion,
 };
 use crate::physical::tabular::table_types::trie::TrieScanGeneric;
 use std::cell::UnsafeCell;
@@ -39,6 +39,8 @@ pub enum TrieScanEnum<'a> {
     TrieScanJoin(TrieScanJoin<'a>),
     /// Case TrieScanProject
     TrieScanProject(TrieScanProject<'a>),
+    /// Case TrieScanReorderProject
+    TrieScanReorderProject(TrieScanReorderProject<'a>),
     /// Case TrieScanMinus
     TrieScanMinus(TrieScanMinus<'a>),
     /// Case TrieScanUnion
@@ -49,7 +51,7 @@ pub enum TrieScanEnum<'a> {
     TrieScanSelectValue(TrieScanSelectValue<'a>),
 }
 
-generate_forwarder!(forward_to_scan; TrieScanGeneric, TrieScanJoin, TrieScanProject, TrieScanMinus, TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion);
+generate_forwarder!(forward_to_scan; TrieScanGeneric, TrieScanJoin, TrieScanProject, TrieScanReorderProject, TrieScanMinus, TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion);
 
 impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
     fn up(&mut self) {

@@ -8,6 +8,10 @@ pub use columnscan_join::ColumnScanJoin;
 pub mod columnscan_reorder;
 pub use columnscan_reorder::ColumnScanReorder;
 
+/// Module for defining [`ColumnScanMultipleRanges`]
+pub mod columnscan_multiple_ranges;
+pub use columnscan_multiple_ranges::ColumnScanMultipleRanges;
+
 /// Module for defining [`ColumnScanEqualColumn`]
 pub mod columnscan_equal_column;
 pub use columnscan_equal_column::ColumnScanEqualColumn;

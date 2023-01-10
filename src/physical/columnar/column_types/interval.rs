@@ -57,6 +57,18 @@ where
             start_idx..self.data.len()
         }
     }
+
+    /// Returns the index of the interval to which a position of the data column belongs
+    /// or None if the position is out of bounds.
+    pub fn int_idx(&self, pos: usize) -> Option<usize> {
+        for idx in 0..self.int_len() {
+            if pos <= self.int_bounds(idx).max().expect("Intervals are non empty") {
+                return Some(idx);
+            }
+        }
+
+        return None;
+    }
 }
 
 impl<'a, T> Column<'a, T> for ColumnWithIntervals<T>
@@ -119,6 +131,11 @@ impl ColumnWithIntervalsT {
         forward_to_interval_column!(self, int_len)
     }
 
+    /// Return column containing the intervals
+    pub fn get_int_column(&self) -> &ColumnEnum<usize> {
+        forward_to_interval_column!(self, get_int_column)
+    }
+
     /// Returns the smallest and largest index of the interval with the given
     /// index.
     ///
@@ -126,6 +143,12 @@ impl ColumnWithIntervalsT {
     /// Panics if `int_idx` is out of bounds.
     pub fn int_bounds(&self, int_idx: usize) -> Range<usize> {
         forward_to_interval_column!(self, int_bounds(int_idx))
+    }
+
+    /// Returns the index of the interval to which a position of the data column belongs
+    /// or None if the position is out of bounds.
+    pub fn int_idx(&self, pos: usize) -> Option<usize> {
+        forward_to_interval_column!(self, int_idx(pos))
     }
 
     /// Return the data type name of the column.
