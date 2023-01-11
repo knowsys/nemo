@@ -1,5 +1,13 @@
 [package]
 name = "stage2"
+authors = [
+"Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de",
+"Lukas Gerlach <lukas.gerlach@tu-dresden.de",
+"Philipp Hanisch <philipp.hanisch@tu-dresden.de",
+"Alex Ivliev <alex.ivliev@tu-dresden.de",
+"Markus Krötzsch <markus.kroetzsch@tu-dresden.de",
+"Maximilian Marx <maximilian.marx@tu-dresden.de"
+]	
 version = "0.1.0"
 edition = "2021"
 
