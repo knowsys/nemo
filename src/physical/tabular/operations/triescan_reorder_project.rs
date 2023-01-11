@@ -28,10 +28,7 @@ pub struct TrieScanReorderProject<'a> {
 
 fn get_pos_towards_root(trie: &Trie, layer: usize, upwards_layer: usize, pos: usize) -> usize {
     (upwards_layer..layer).rev().fold(pos, |mut_pos, next| {
-        // println!("move up: {}@{}", mut_pos, next + 1);
-        let go_to = trie.get_column(next + 1).int_idx(mut_pos).unwrap();
-        // println!("...to: {}@{}", go_to, next);
-        go_to
+        trie.get_column(next + 1).int_idx(mut_pos).unwrap()
     })
 }
 
@@ -75,8 +72,6 @@ impl<'a> TrieScanReorderProject<'a> {
             }
         }
 
-        println!("{:?}", column_reordering);
-
         Self {
             trie,
             column_reordering,
@@ -90,7 +85,6 @@ impl<'a> TrieScanReorderProject<'a> {
 
 impl<'a> TrieScan<'a> for TrieScanReorderProject<'a> {
     fn up(&mut self) {
-        println!("Top-level up");
         debug_assert!(self.current_layer.is_some());
         let up_layer = if self.current_layer.unwrap() == 0 {
             None
@@ -111,7 +105,6 @@ impl<'a> TrieScan<'a> for TrieScanReorderProject<'a> {
     }
 
     fn down(&mut self) {
-        println!("Top-level down");
         let down_layer = self.current_layer.map_or(0, |v| v + 1);
         debug_assert!(down_layer < self.data_types.len());
 
@@ -123,24 +116,7 @@ impl<'a> TrieScan<'a> for TrieScanReorderProject<'a> {
                 .map(|int_idx| column.int_bounds(int_idx))
                 .collect();
 
-            /*
-            ranges = Vec<Range<usize>>::with_capacity(column.int_len());
-            let mut start: Option<usize> = None;
-            for idx in 0..intervals. {
-                start = match start {
-                    None => Some(column.get_int_column().get(idx)),
-                    Some<int_start> => {
-                        let int_next = column.get_int_column().get(idx);
-                        ranges.push(int_start..int_next-1);
-                        Some(int_next)
-                    }
-                };
-            }
-            ranges.push(start.unwrap()..column.len()-1);
-            */
-
         } else if self.column_reordering[down_layer] < self.column_reordering[self.current_layer.unwrap()] {
-            println!("up");
             // towards the root in underlying trie
             ranges = self.trie_scans[self.current_layer.unwrap()]
                 .get_mut().pos_multiple().unwrap().iter() // borrow suffices probably
@@ -150,26 +126,18 @@ impl<'a> TrieScan<'a> for TrieScanReorderProject<'a> {
                     self.column_reordering[down_layer],
                     *pos))
                 .map(|pos| pos..pos+1)
-                // .map(|pos| {
-                    //let mut layer = self.column_reordering[self.current_layer.unwrap()];
-                    //let mut mut_pos = *pos;
-                    //while layer > self.column_reordering[down_layer] {
-                        //mut_pos = self.trie.get_column(layer).int_idx(mut_pos).unwrap();
-                        // layer -= 1;
-                        // let mut int_iter = self.trie.get_column(layer).get_int_column().iter();
-                        // mut_pos = match int_iter.seek(mut_pos) {
-                            // Some(idx) => if idx == mut_pos { idx } else { idx - 1 },
-                            // None => self.trie.get_column(layer).int_len() - 1
-                        // };
-                    // }
-                    // mut_pos..mut_pos+1
-                // })
+                .collect();
+
+        } else if self.column_reordering[down_layer] == self.column_reordering[self.current_layer.unwrap()] {
+            // same layer used twice
+            ranges = self.trie_scans[self.current_layer.unwrap()]
+                .get_mut().pos_multiple().unwrap().iter() // borrow suffices probably
+                .map(|pos| *pos..*pos+1)
                 .collect();
 
         } else {
             // towards the leafs in underlying trie
             if self.deepest_layer.unwrap() < self.current_layer.unwrap() && self.column_reordering[down_layer] < self.column_reordering[self.deepest_layer.unwrap()] {
-                println!("down - in-between");
                 ranges = self.trie_scans[self.deepest_layer.unwrap()]
                     .get_mut().pos_multiple().unwrap().iter() // borrow suffices probably
                     .map(|pos| get_pos_towards_root(
@@ -181,7 +149,6 @@ impl<'a> TrieScan<'a> for TrieScanReorderProject<'a> {
                     .collect();
 
             } else if self.deepest_layer.unwrap() < self.current_layer.unwrap() {
-                println!("down after up");
                 let active_positions = self.trie_scans[self.current_layer.unwrap()].get_mut().pos_multiple().unwrap();
                 ranges = self.trie_scans[self.deepest_layer.unwrap()]
                     .get_mut().pos_multiple().expect("Well...").iter() // borrow suffices probably
@@ -206,10 +173,8 @@ impl<'a> TrieScan<'a> for TrieScanReorderProject<'a> {
                             .map(|int_idx| column.int_bounds(int_idx))
                     })
                     .collect();
-                println!("{:?}", ranges);
 
             } else {
-                println!("further down");
                 ranges = self.trie_scans[self.current_layer.unwrap()]
                     .get_mut().pos_multiple().unwrap().iter() // borrow suffices probably
                     .flat_map(|pos| {
@@ -610,6 +575,126 @@ mod test {
             vec![0, 1, 2, 3, 4, 5, 6, 7]
         );
     }
+
+
+    #[test]
+    fn reordering_reuses_first_layer() {
+        let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
+
+        let column_vec = vec![column_fst];
+
+        let trie = Trie::new(column_vec);
+
+        let trie_reordered = materialize(&mut TrieScanEnum::TrieScanReorderProject(TrieScanReorderProject::new(
+            &trie,
+            Reordering::new(vec![0, 0], 1),
+        )))
+        .unwrap();
+
+        let proj_column_fst = trie_reordered.get_column(0).as_u64().unwrap();
+        let proj_column_snd = trie_reordered.get_column(1).as_u64().unwrap();
+
+        assert_eq!(
+            proj_column_fst
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![1, 2]
+        );
+
+        assert_eq!(
+            proj_column_fst
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0]
+        );
+
+        assert_eq!(
+            proj_column_snd
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![1, 2]
+        );
+
+        assert_eq!(
+            proj_column_snd
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 1]
+        );
+    }
+
+
+    #[test]
+    fn reordering_reuses_deeper_layer() {
+        let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_snd = make_column_with_intervals_t(&[3, 5, 2, 4], &[0, 2]);
+
+        let column_vec = vec![column_fst, column_snd];
+
+        let trie = Trie::new(column_vec);
+
+        let trie_reordered = materialize(&mut TrieScanEnum::TrieScanReorderProject(TrieScanReorderProject::new(
+            &trie,
+            Reordering::new(vec![1, 0, 0], 2),
+        )))
+        .unwrap();
+
+        let proj_column_fst = trie_reordered.get_column(0).as_u64().unwrap();
+        let proj_column_snd = trie_reordered.get_column(1).as_u64().unwrap();
+        let proj_column_trd = trie_reordered.get_column(1).as_u64().unwrap();
+        assert_eq!(
+            proj_column_fst
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![2, 3, 4, 5]
+        );
+
+        assert_eq!(
+            proj_column_fst
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0]
+        );
+
+        assert_eq!(
+            proj_column_snd
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![2, 1, 2, 1]
+        );
+
+        assert_eq!(
+            proj_column_snd
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 1, 2, 3]
+        );
+
+        assert_eq!(
+            proj_column_trd
+                .get_data_column()
+                .iter()
+                .collect::<Vec<u64>>(),
+            vec![2, 1, 2, 1]
+        );
+
+        assert_eq!(
+            proj_column_trd
+                .get_int_column()
+                .iter()
+                .collect::<Vec<usize>>(),
+            vec![0, 1, 2, 3]
+        );
+    }
+
 
     #[test]
     fn test_duplicates() {
