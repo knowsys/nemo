@@ -8,11 +8,11 @@ pub type TableColumnTypes = Vec<DataTypeName>;
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct TableSchemaEntry {
     /// The data type in which the data is stored for this column.
-    type_name: DataTypeName,
+    pub type_name: DataTypeName,
     /// Whether the entries in the column are the key for some dictionary.
-    dict: bool,
+    pub dict: bool,
     /// Whether this column may contain nulls.
-    nullable: bool,
+    pub nullable: bool,
 }
 
 /// Schema for a particular relation (table).
@@ -54,5 +54,30 @@ impl TableSchema {
     /// The arity of the table.
     pub fn arity(&self) -> usize {
         self.entries.len()
+    }
+
+    /// Returns the [`TableSchemaEntry`] associated with the column of the given index.
+    pub fn get_entry(&self, index: usize) -> &TableSchemaEntry {
+        &self.entries[index]
+    }
+
+    /// Returns the [`TableSchemaEntry`] associated with the column of the given index.
+    pub fn get_entry_mut(&mut self, index: usize) -> &mut TableSchemaEntry {
+        &mut self.entries[index]
+    }
+
+    /// Return the vector of [`TableSchemaEntry`]s which defines a [`TableSchema`].
+    pub fn get_entries(&self) -> &Vec<TableSchemaEntry> {
+        &self.entries
+    }
+
+    /// Return the types of the associated columns.
+    pub fn get_column_types(&self) -> TableColumnTypes {
+        let mut result = Vec::<DataTypeName>::with_capacity(self.entries.len());
+        for entry in &self.entries {
+            result.push(entry.type_name);
+        }
+
+        result
     }
 }

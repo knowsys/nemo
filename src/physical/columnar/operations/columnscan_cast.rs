@@ -147,7 +147,7 @@ where
 macro_rules! generate_castable_forwarder {
     ($name:ident) => {
         $crate::generate_forwarder!($name;
-                                    U32);
+                                    U32, U64);
     }
 }
 
@@ -160,6 +160,8 @@ where
 {
     /// Cast from u32 to ToType
     U32(ColumnScanCast<'a, u32, ToType>),
+    /// Cast from u64 to ToType
+    U64(ColumnScanCast<'a, u64, ToType>),
 }
 
 // Generate a macro forward_to_columnscan_cell!, which takes a [`ColumnScanT`] and a function as arguments

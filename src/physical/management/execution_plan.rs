@@ -36,27 +36,24 @@ pub struct ExecutionNodeRef<TableKey: TableKeyType>(pub Weak<RefCell<ExecutionNo
 impl<TableKey: TableKeyType> ExecutionNodeRef<TableKey> {
     /// Add a sub node to a join or union node
     pub fn add_subnode(&mut self, subnode: ExecutionNodeRef<TableKey>) {
-        if let Some(self_rc) = self.0.upgrade() {
-            let node_ref = &mut *self_rc.as_ref().borrow_mut();
+        let self_rc = self
+            .0
+            .upgrade()
+            .expect("Referenced execution node has been deleted");
+        let node_ref = &mut *self_rc.as_ref().borrow_mut();
 
-            match node_ref {
-                ExecutionNode::Join(subnodes, _) => subnodes.push(subnode),
-                ExecutionNode::Union(subnodes) => subnodes.push(subnode),
-                ExecutionNode::FetchTable(_) | ExecutionNode::FetchTemp(_) => {
-                    panic!("Can't add subnode to a leaf node")
-                }
-                ExecutionNode::Minus(_, _)
-                | ExecutionNode::Project(_, _)
-                | ExecutionNode::SelectEqual(_, _)
-                | ExecutionNode::SelectValue(_, _) => {
-                    panic!(
-                        "Can only add subnodes to operations which can have arbitrary many of them"
-                    )
-                }
+        match node_ref {
+            ExecutionNode::Join(subnodes, _) => subnodes.push(subnode),
+            ExecutionNode::Union(subnodes) => subnodes.push(subnode),
+            ExecutionNode::FetchTable(_) | ExecutionNode::FetchTemp(_) => {
+                panic!("Can't add subnode to a leaf node")
             }
-        } else {
-            // This is probably a bug somewhere
-            panic!("Adding subnodes to a deleted node.");
+            ExecutionNode::Minus(_, _)
+            | ExecutionNode::Project(_, _)
+            | ExecutionNode::SelectEqual(_, _)
+            | ExecutionNode::SelectValue(_, _) => {
+                panic!("Can only add subnodes to operations which can have arbitrary many of them")
+            }
         }
     }
 }
@@ -252,110 +249,107 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         node: ExecutionNodeRef<TableKey>,
         removed_ids: &HashSet<TableId>,
     ) -> Option<ExecutionNodeRef<TableKey>> {
-        if let Some(node_rc) = node.0.upgrade() {
-            let node_ref = &*node_rc.as_ref().borrow();
+        let node_rc = node
+            .0
+            .upgrade()
+            .expect("Referenced execution node has been deleted");
+        let node_ref = &*node_rc.as_ref().borrow();
 
-            match node_ref {
-                ExecutionNode::FetchTable(key) => Some(new_tree.fetch_table(key.clone())),
-                ExecutionNode::FetchTemp(id) => {
-                    if removed_ids.contains(id) {
-                        None
-                    } else {
-                        Some(new_tree.fetch_temp(*id))
-                    }
-                }
-                ExecutionNode::Join(subnodes, binding) => {
-                    let mut simplified_nodes =
-                        Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
-                    for subnode in subnodes {
-                        let simplified_opt =
-                            Self::simplify_recursive(new_tree, subnode.clone(), removed_ids);
-
-                        if let Some(simplified) = simplified_opt {
-                            simplified_nodes.push(simplified)
-                        } else {
-                            // If subtables contain an empty table, then the join is empty
-                            return None;
-                        }
-                    }
-
-                    if simplified_nodes.len() == 1 {
-                        return Some(simplified_nodes.remove(0));
-                    }
-
-                    Some(new_tree.join(simplified_nodes, binding.clone()))
-                }
-                ExecutionNode::Union(subnodes) => {
-                    let mut simplified_nodes =
-                        Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
-                    for subnode in subnodes {
-                        let simplified_opt =
-                            Self::simplify_recursive(new_tree, subnode.clone(), removed_ids);
-
-                        if let Some(simplified) = simplified_opt {
-                            simplified_nodes.push(simplified)
-                        }
-                    }
-
-                    if simplified_nodes.is_empty() {
-                        return None;
-                    }
-
-                    if simplified_nodes.len() == 1 {
-                        return Some(simplified_nodes.remove(0));
-                    }
-
-                    Some(new_tree.union(simplified_nodes))
-                }
-                ExecutionNode::Minus(left, right) => {
-                    let simplified_left_opt =
-                        Self::simplify_recursive(new_tree, left.clone(), removed_ids);
-                    let simplified_right_opt =
-                        Self::simplify_recursive(new_tree, right.clone(), removed_ids);
-
-                    if let Some(simplified_left) = simplified_left_opt {
-                        if let Some(simplififed_right) = simplified_right_opt {
-                            return Some(new_tree.minus(simplified_left, simplififed_right));
-                        } else {
-                            return Some(simplified_left);
-                        }
-                    }
-
+        match node_ref {
+            ExecutionNode::FetchTable(key) => Some(new_tree.fetch_table(key.clone())),
+            ExecutionNode::FetchTemp(id) => {
+                if removed_ids.contains(id) {
                     None
-                }
-                ExecutionNode::Project(subnode, reorder) => {
-                    let simplified =
-                        Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
-
-                    if reorder.is_default() {
-                        Some(simplified)
-                    } else {
-                        Some(new_tree.project(simplified, reorder.clone()))
-                    }
-                }
-                ExecutionNode::SelectValue(subnode, assignments) => {
-                    let simplified =
-                        Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
-
-                    if assignments.is_empty() {
-                        Some(simplified)
-                    } else {
-                        Some(new_tree.select_value(simplified, assignments.clone()))
-                    }
-                }
-                ExecutionNode::SelectEqual(subnode, classes) => {
-                    let simplified =
-                        Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
-
-                    if classes.is_empty() {
-                        Some(simplified)
-                    } else {
-                        Some(new_tree.select_equal(simplified, classes.clone()))
-                    }
+                } else {
+                    Some(new_tree.fetch_temp(*id))
                 }
             }
-        } else {
-            unreachable!()
+            ExecutionNode::Join(subnodes, binding) => {
+                let mut simplified_nodes =
+                    Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
+                for subnode in subnodes {
+                    let simplified_opt =
+                        Self::simplify_recursive(new_tree, subnode.clone(), removed_ids);
+
+                    if let Some(simplified) = simplified_opt {
+                        simplified_nodes.push(simplified)
+                    } else {
+                        // If subtables contain an empty table, then the join is empty
+                        return None;
+                    }
+                }
+
+                if simplified_nodes.len() == 1 {
+                    return Some(simplified_nodes.remove(0));
+                }
+
+                Some(new_tree.join(simplified_nodes, binding.clone()))
+            }
+            ExecutionNode::Union(subnodes) => {
+                let mut simplified_nodes =
+                    Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
+                for subnode in subnodes {
+                    let simplified_opt =
+                        Self::simplify_recursive(new_tree, subnode.clone(), removed_ids);
+
+                    if let Some(simplified) = simplified_opt {
+                        simplified_nodes.push(simplified)
+                    }
+                }
+
+                if simplified_nodes.is_empty() {
+                    return None;
+                }
+
+                if simplified_nodes.len() == 1 {
+                    return Some(simplified_nodes.remove(0));
+                }
+
+                Some(new_tree.union(simplified_nodes))
+            }
+            ExecutionNode::Minus(left, right) => {
+                let simplified_left_opt =
+                    Self::simplify_recursive(new_tree, left.clone(), removed_ids);
+                let simplified_right_opt =
+                    Self::simplify_recursive(new_tree, right.clone(), removed_ids);
+
+                if let Some(simplified_left) = simplified_left_opt {
+                    if let Some(simplififed_right) = simplified_right_opt {
+                        return Some(new_tree.minus(simplified_left, simplififed_right));
+                    } else {
+                        return Some(simplified_left);
+                    }
+                }
+
+                None
+            }
+            ExecutionNode::Project(subnode, reorder) => {
+                let simplified = Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
+
+                if reorder.is_default() {
+                    Some(simplified)
+                } else {
+                    Some(new_tree.project(simplified, reorder.clone()))
+                }
+            }
+            ExecutionNode::SelectValue(subnode, assignments) => {
+                let simplified = Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
+
+                if assignments.is_empty() {
+                    Some(simplified)
+                } else {
+                    Some(new_tree.select_value(simplified, assignments.clone()))
+                }
+            }
+            ExecutionNode::SelectEqual(subnode, classes) => {
+                let simplified = Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
+
+                if classes.is_empty() {
+                    Some(simplified)
+                } else {
+                    Some(new_tree.select_equal(simplified, classes.clone()))
+                }
+            }
         }
     }
 
@@ -503,56 +497,54 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
         let mut renamed_temp = HashMap::<TableId, ExecutionNode<TableKey>>::new();
         self.trees.retain(|t| {
             if let Some(root) = t.root() {
-                if let Some(node) = root.0.upgrade() {
-                    if let ExecutionResult::Temp(id) = t.result() {
-                        let used_directly = used_temp_ids.contains(id);
-                        let used_indirectly = if let Some(used_in) = used_temp_in.get(id) {
-                            used_temp_ids.is_disjoint(used_in)
-                        } else {
-                            false
-                        };
+                let node = root
+                    .0
+                    .upgrade()
+                    .expect("Referenced execution node has been deleted");
+                if let ExecutionResult::Temp(id) = t.result() {
+                    let used_directly = used_temp_ids.contains(id);
+                    let used_indirectly = if let Some(used_in) = used_temp_in.get(id) {
+                        used_temp_ids.is_disjoint(used_in)
+                    } else {
+                        false
+                    };
 
-                        if !used_directly && !used_indirectly {
+                    if !used_directly && !used_indirectly {
+                        return false;
+                    }
+                }
+
+                let node_unpacked = &*node.as_ref().borrow();
+                match node_unpacked {
+                    ExecutionNode::FetchTemp(id_loaded) => match t.result() {
+                        ExecutionResult::Temp(id_saved) => {
+                            Self::update_renaming_map(
+                                &mut renamed_temp,
+                                *id_saved,
+                                ExecutionNode::FetchTemp(*id_loaded),
+                            );
+
+                            return false;
+                        }
+                        ExecutionResult::Save(key_saved) => {
+                            Self::update_renaming_map(
+                                &mut renamed_temp,
+                                *id_loaded,
+                                ExecutionNode::FetchTable(key_saved.clone()),
+                            );
+
+                            return true;
+                        }
+                    },
+                    ExecutionNode::FetchTable(key_loaded) => {
+                        if let ExecutionResult::Temp(id_saved) = t.result() {
+                            renamed_temp
+                                .insert(*id_saved, ExecutionNode::FetchTable(key_loaded.clone()));
                             return false;
                         }
                     }
-
-                    let node_unpacked = &*node.as_ref().borrow();
-                    match node_unpacked {
-                        ExecutionNode::FetchTemp(id_loaded) => match t.result() {
-                            ExecutionResult::Temp(id_saved) => {
-                                Self::update_renaming_map(
-                                    &mut renamed_temp,
-                                    *id_saved,
-                                    ExecutionNode::FetchTemp(*id_loaded),
-                                );
-
-                                return false;
-                            }
-                            ExecutionResult::Save(key_saved) => {
-                                Self::update_renaming_map(
-                                    &mut renamed_temp,
-                                    *id_loaded,
-                                    ExecutionNode::FetchTable(key_saved.clone()),
-                                );
-
-                                return true;
-                            }
-                        },
-                        ExecutionNode::FetchTable(key_loaded) => {
-                            if let ExecutionResult::Temp(id_saved) = t.result() {
-                                renamed_temp.insert(
-                                    *id_saved,
-                                    ExecutionNode::FetchTable(key_loaded.clone()),
-                                );
-                                return false;
-                            }
-                        }
-                        _ => {}
-                    }
-                } else {
-                    unreachable!();
-                };
+                    _ => {}
+                }
 
                 true
             } else {

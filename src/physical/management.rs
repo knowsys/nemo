@@ -13,6 +13,5 @@ pub use bytesized::ByteSized;
 pub mod execution_plan;
 pub use execution_plan::ExecutionPlan;
 
-/// Module for defining [`ExecutionPlan`]
+/// Module containing functionality for type analysis
 pub mod type_analysis;
-pub use type_analysis::TypeTree;
