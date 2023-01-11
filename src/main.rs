@@ -21,8 +21,7 @@
 use clap::Parser;
 use stage2::error::Error;
 use stage2::io::parser::RuleParser;
-use stage2::logical::execution::{execution_engine, ExecutionEngine};
-use stage2::logical::model::Program;
+use stage2::logical::execution::ExecutionEngine;
 use stage2::meta::timing::TimedDisplay;
 use stage2::meta::TimedCode;
 use stage2::physical::tabular::traits::table::Table;
@@ -33,7 +32,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 struct CliApp {
-    /// Sets the verbosity of logging to 'error', 'warn', 'info', 'debug' or 'trace' if the flags -v and -q are not used
+    /// Sets the verbosity of logging if the flags -v and -q are not used
     #[arg(long = "rust_log", env, value_parser=clap::builder::PossibleValuesParser::new(["error","warn","info","debug","trace"]))]
     rust_log: Option<String>,
     /// Sets log verbosity (multiple times means more verbose)
@@ -45,22 +44,80 @@ struct CliApp {
     /// Rule program
     #[arg(short, required = true)]
     rules: Vec<PathBuf>,
+    /// Save results
+    #[arg(short, long = "save-results")]
+    save_results: bool,
+    /// output folder
+    #[arg(short, long = "output-folder", default_value = "results")]
+    output_folder: PathBuf,
 }
 
 impl CliApp {
     /// Application logic, based on the parsed data inside the [`CliApp`] object
-    fn run(&self) -> Result<(), Error> {
+    fn run(&mut self) -> Result<(), Error> {
         self.init_logging();
         log::info!("Version: {}", clap::crate_version!());
         log::debug!("Rule files: {:?}", self.rules);
 
-        let program = self.parse_rules()?;
+        log::info!("Parsing rules ...");
+        let parser = RuleParser::new();
+        let mut inputs: Vec<String> = Vec::new();
+
+        match self.output_folder.canonicalize() {
+            Ok(result) => self.output_folder = result,
+            Err(e) => {
+                log::error!(
+                    "Error while checking for output folder, saving of output is disabled!\n{e}"
+                );
+                self.save_results = false;
+            }
+        }
+        self.rules.iter().for_each(|file| {
+            if !file.try_exists().unwrap_or_else(|_| {
+                // path/file access right errors
+                // use of panic to avoid nested function call in expect!-macro
+                panic!(
+                    "Cannot check existence of \"{}\"",
+                    file.as_os_str()
+                        .to_str()
+                        .expect("PathBuf should be initialised correctly")
+                )
+            }) {
+                // file existence error
+                log::error!(
+                    "Rule-file \"{}\" does not exist",
+                    file.as_os_str()
+                        .to_str()
+                        .expect("PathBuf should be initialised correctly")
+                );
+            } else {
+                // file exists and can be read; add input String
+                inputs.push(read_to_string(file).expect("File should be existing and readable"));
+            }
+        });
+        let input = inputs.iter_mut().fold(String::new(), |mut acc, item| {
+            acc.push_str(item);
+            acc
+        });
+        let (remain, program) = parser.parse_program()(&input).expect("Parsing of rules failed!");
+        if !remain.is_empty() {
+            log::debug!("Parsing of rules failed, check trace for the remaining string");
+            log::trace!("Remaining string:\n{}", remain);
+            return Err(Error::ProgramParse);
+        }
+        log::info!("Rules parsed");
+
         log::trace!("{:?}", program);
 
         let mut exec_engine = ExecutionEngine::initialize(program);
 
         log::info!("Reasoning ... ");
         exec_engine.execute();
+
+        if self.save_results {
+            let csv_writer =
+                stage2::io::csv::CSVWriter::try_new(&mut exec_engine, &self.output_folder, &parser);
+        }
 
         Ok(())
     }
@@ -95,55 +152,10 @@ impl CliApp {
         };
         env_logger::builder().filter_level(log_level).init();
     }
-
-    /// Parsing of all rule files, defined in [`Self::rules`]
-    ///
-    /// Note: Currently all rule files will be merged into one big set of rules and parsed afterwards, this needs to be fixed when #59 and #60 is done.
-    fn parse_rules(&self) -> Result<Program, Error> {
-        log::info!("Parsing rules ...");
-        let parser = RuleParser::new();
-        let mut inputs: Vec<String> = Vec::new();
-        self.rules.iter().for_each(|file| {
-            if !file.try_exists().unwrap_or_else(|_| {
-                // path/file access right errors
-                // use of panic to avoid nested function call in expect!-macro
-                panic!(
-                    "Cannot check existence of \"{}\"",
-                    file.as_os_str()
-                        .to_str()
-                        .expect("PathBuf should be initialised correctly")
-                )
-            }) {
-                // file existence error
-                log::error!(
-                    "Rule-file \"{}\" does not exist",
-                    file.as_os_str()
-                        .to_str()
-                        .expect("PathBuf should be initialised correctly")
-                );
-            } else {
-                // file exists and can be read; add input String
-                inputs.push(read_to_string(file).expect("File should be existing and readable"));
-            }
-        });
-        let input = inputs.iter_mut().fold(String::new(), |mut acc, item| {
-            acc.push_str(item);
-            acc
-        });
-        let x = parser.parse_program()(&input).expect("Parsing of rules failed!");
-        if x.0.is_empty() {
-            log::info!("Rules parsed");
-            Ok(x.1)
-        } else {
-            log::debug!("Parsing of rules failed, check trace for the remaining string");
-            log::trace!("Remaining string:\n{}", x.0);
-            Err(Error::ProgramParseError)
-        }
-    }
 }
 
 fn main() {
-    let app = CliApp::parse();
+    let mut app = CliApp::parse();
     if let Err(err) = app.run() {
         eprintln!("Application Error: {err}");
         std::process::exit(0);

@@ -1,9 +1,17 @@
 //! Represents different data-import methods
 
+use std::fmt::Display;
+use std::fs::create_dir_all;
+use std::path::PathBuf;
+
 use crate::error::Error;
+use crate::logical::execution::ExecutionEngine;
+use crate::logical::model::Program;
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use csv::Reader;
+
+use super::parser::RuleParser;
 
 /// Imports a csv file
 /// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
@@ -82,6 +90,62 @@ where
         }
     });
     Ok(result.into_iter().flatten().collect())
+}
+
+/// Contains all the needed information, to write results into csv-files
+#[derive(Debug)]
+pub struct CSVWriter<'a> {
+    /// Execution engine, where the Tables are managed
+    exec: &'a mut ExecutionEngine,
+    /// The path to where the results shall be written to
+    path: &'a PathBuf,
+    /// Parser information on predicates
+    parser: &'a RuleParser<'a>,
+}
+
+impl<'a> CSVWriter<'a> {
+    /// Instantiate a [`CSVWriter`].
+    ///
+    /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
+    pub fn try_new(
+        exec: &'a mut ExecutionEngine,
+        path: &'a PathBuf,
+        parser: &'a RuleParser<'a>,
+    ) -> Result<Self, Error> {
+        let path_str = path.to_str().expect("Path contains invalid unicode");
+        if path.exists() {
+            if path.is_file() {
+                return Err(Error::NotAFolder(String::from(path_str)));
+            }
+            let attr = path.metadata()?;
+            if attr.permissions().readonly() {
+                return Err(Error::FolderNotWritable(String::from(path_str)));
+            }
+        } else {
+            create_dir_all(path)?;
+        }
+        Ok(CSVWriter { exec, path, parser })
+    }
+}
+impl CSVWriter<'_> {
+    /// Writes the results to the output folder
+    pub fn write(&mut self) {
+        self.exec.get_results().iter().for_each(|(pred, trie)| {
+            let predicate_name = self
+                .parser
+                .resolve_identifier(pred)
+                .expect("Value should be interned");
+
+            let file_name = predicate_name.replace(['/', ':'], "_");
+            let file_path = PathBuf::from(format!(
+                "{}/{file_name}.csv",
+                self.path
+                    .as_os_str()
+                    .to_str()
+                    .expect("Path shall be a String")
+            ));
+        });
+    }
 }
 
 #[cfg(test)]

@@ -1,5 +1,7 @@
 //! Error-handling module for the crate
 
+use std::ffi::OsString;
+
 use crate::{io::parser::ParseError, physical::datatypes::float_is_nan::FloatIsNaN};
 use thiserror::Error;
 
@@ -42,5 +44,14 @@ pub enum Error {
     InvalidExecutionPlan,
     /// Parser could not parse whole Program-file, but should have read all of it.
     #[error("Parser could not parse the whole input file")]
-    ProgramParseError,
+    ProgramParse,
+    /// Output folder is not a folder
+    #[error("The path to the output-folder \"{0}\" is not a folder")]
+    NotAFolder(String),
+    /// Output folder is not writeable
+    #[error("The output-folder \"{0}\" is not writable")]
+    FolderNotWritable(String),
+    /// IO Error
+    #[error(transparent)]
+    IO(#[from] std::io::Error),
 }
