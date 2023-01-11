@@ -106,14 +106,6 @@ pub enum ColumnWithIntervalsT {
 generate_datatype_forwarder!(forward_to_interval_column);
 
 impl ColumnWithIntervalsT {
-    /// Return the u64 version of the column
-    pub fn as_u64(&self) -> Option<&ColumnWithIntervals<u64>> {
-        if let Self::U64(col) = self {
-            return Some(col);
-        }
-        None
-    }
-
     /// Returns the number of intervals in the interval column.
     pub fn int_len(&self) -> usize {
         forward_to_interval_column!(self, int_len)
@@ -136,6 +128,22 @@ impl ColumnWithIntervalsT {
             Self::Float(_) => DataTypeName::Float,
             Self::Double(_) => DataTypeName::Double,
         }
+    }
+
+    /// Return the u64 version of the column
+    pub fn as_u64(&self) -> Option<&ColumnWithIntervals<u64>> {
+        if let Self::U64(col) = self {
+            return Some(col);
+        }
+        None
+    }
+
+    /// Return the u32 version of the column
+    pub fn as_u32(&self) -> Option<&ColumnWithIntervals<u32>> {
+        if let Self::U32(col) = self {
+            return Some(col);
+        }
+        None
     }
 }
 

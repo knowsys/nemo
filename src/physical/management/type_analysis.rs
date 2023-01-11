@@ -37,7 +37,7 @@ impl TypeTreeNode {
     }
 
     /// String representation of a [`TypeTree`].
-    fn to_string(&self, layer: usize) -> String {
+    fn as_string(&self, layer: usize) -> String {
         let mut result = String::from("  ").repeat(layer);
 
         result += "[";
@@ -52,7 +52,7 @@ impl TypeTreeNode {
 
         self.subnodes
             .iter()
-            .for_each(|s| result += &s.to_string(layer + 1));
+            .for_each(|s| result += &s.as_string(layer + 1));
 
         result
     }
@@ -82,7 +82,7 @@ impl Eq for TypeTreeNode {}
 
 impl Display for TypeTree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string(0))
+        write!(f, "{}", self.as_string(0))
     }
 }
 
@@ -109,172 +109,164 @@ impl TypeTree {
         temp_schemas: &HashMap<TableId, TableSchema>,
         node: ExecutionNodeRef<TableKey>,
     ) -> Result<TypeTreeNode, Error> {
-        if let Some(node_rc) = node.0.upgrade() {
-            let node_ref = &*node_rc.as_ref().borrow();
+        let node_rc = node
+            .0
+            .upgrade()
+            .expect("Referenced execution node has been deleted");
+        let node_ref = &*node_rc.as_ref().borrow();
 
-            match node_ref {
-                ExecutionNode::FetchTable(key) => {
-                    let schema = instance.get_schema(key).clone();
-                    Ok(TypeTreeNode::new(schema, vec![]))
+        match node_ref {
+            ExecutionNode::FetchTable(key) => {
+                let schema = instance.get_schema(key).clone();
+                Ok(TypeTreeNode::new(schema, vec![]))
+            }
+            ExecutionNode::FetchTemp(id) => {
+                let schema = temp_schemas
+                    .get(id)
+                    .expect("Function assumes that referenced trie exists.");
+
+                Ok(TypeTreeNode::new(schema.clone(), vec![]))
+            }
+            ExecutionNode::Join(subtrees, bindings) => {
+                let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(subtrees.len());
+                for subtree in subtrees {
+                    let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
+
+                    subtype_nodes.push(subtype_node);
                 }
-                ExecutionNode::FetchTemp(id) => {
-                    let schema = temp_schemas
-                        .get(id)
-                        .expect("Function assumes that referenced trie exists.");
 
-                    Ok(TypeTreeNode::new(schema.clone(), vec![]))
-                }
-                ExecutionNode::Join(subtrees, bindings) => {
-                    let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(subtrees.len());
-                    for subtree in subtrees {
-                        let subtype_node =
-                            Self::propagate_up(instance, temp_schemas, subtree.clone())?;
+                // The following will take the minimum type of all joined positions
+                // E.g. bindings = [[0, 1], [1, 0]]; subtype_nodes =  [[U32, U32], [U64, U64]
+                // result -> [U32, U32, U64]
+                let mut position_type_map = HashMap::<usize, &TableSchemaEntry>::new();
+                for (subnode_index, binding) in bindings.iter().enumerate() {
+                    for (column_index, value) in binding.iter().enumerate() {
+                        let current_entry =
+                            subtype_nodes[subnode_index].schema.get_entry(column_index);
 
-                        subtype_nodes.push(subtype_node);
-                    }
-
-                    // The following will take the minimum type of all joined positions
-                    // E.g. bindings = [[0, 1], [1, 0]]; subtype_nodes =  [[U32, U32], [U64, U64]
-                    // result -> [U32, U32, U64]
-                    let mut position_type_map = HashMap::<usize, &TableSchemaEntry>::new();
-                    for (subnode_index, binding) in bindings.iter().enumerate() {
-                        for (column_index, value) in binding.iter().enumerate() {
-                            let current_entry =
-                                subtype_nodes[subnode_index].schema.get_entry(column_index);
-
-                            match position_type_map.entry(*value) {
-                                Entry::Occupied(mut entry) => {
-                                    *entry.get_mut() = if let Some(min_entry) =
-                                        Self::entry_min(entry.get(), current_entry)
-                                    {
-                                        min_entry
-                                    } else {
-                                        return Err(Error::InvalidExecutionPlan);
-                                    }
-                                }
-                                Entry::Vacant(vacant) => {
-                                    vacant.insert(current_entry);
-                                }
-                            }
-                        }
-                    }
-                    let placeholder_entry = TableSchemaEntry {
-                        type_name: DataTypeName::U64,
-                        dict: false,
-                        nullable: false,
-                    };
-                    let mut result_schema_entries =
-                        vec![placeholder_entry; position_type_map.len()];
-                    for (postion, entry) in position_type_map {
-                        result_schema_entries[postion] = *entry;
-                    }
-
-                    Ok(TypeTreeNode::new(
-                        TableSchema::from_vec(result_schema_entries),
-                        subtype_nodes,
-                    ))
-                }
-                ExecutionNode::Union(subtrees) => {
-                    let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(subtrees.len());
-                    for subtree in subtrees {
-                        let subtype_node =
-                            Self::propagate_up(instance, temp_schemas, subtree.clone())?;
-
-                        subtype_nodes.push(subtype_node);
-                    }
-
-                    let arity = if !subtype_nodes.is_empty() {
-                        subtype_nodes[0].schema.arity()
-                    } else {
-                        return Ok(TypeTreeNode::default());
-                    };
-
-                    // The following will take the maximum type of all columns
-                    // E.g. subtype_nodes = [[U32, U32], [U32, U64]
-                    // result -> [U32, U64]
-                    let mut result_schema_entries =
-                        Vec::<TableSchemaEntry>::with_capacity(subtrees.len());
-                    for column_index in 0..arity {
-                        for subtype_node in &subtype_nodes {
-                            let current_entry = subtype_node.schema.get_entry(column_index);
-
-                            if result_schema_entries.len() <= column_index {
-                                result_schema_entries.push(*current_entry);
-                            } else {
-                                result_schema_entries[column_index] = if let Some(max_entry) =
-                                    Self::entry_max(
-                                        &result_schema_entries[column_index],
-                                        current_entry,
-                                    ) {
-                                    *max_entry
+                        match position_type_map.entry(*value) {
+                            Entry::Occupied(mut entry) => {
+                                *entry.get_mut() = if let Some(min_entry) =
+                                    Self::entry_min(entry.get(), current_entry)
+                                {
+                                    min_entry
                                 } else {
                                     return Err(Error::InvalidExecutionPlan);
-                                };
+                                }
+                            }
+                            Entry::Vacant(vacant) => {
+                                vacant.insert(current_entry);
                             }
                         }
                     }
-
-                    Ok(TypeTreeNode::new(
-                        TableSchema::from_vec(result_schema_entries),
-                        subtype_nodes,
-                    ))
                 }
-                ExecutionNode::Minus(left, right) => {
-                    let subtypenode_left =
-                        Self::propagate_up(instance, temp_schemas, left.clone())?;
-                    let subtypenode_right =
-                        Self::propagate_up(instance, temp_schemas, right.clone())?;
+                let placeholder_entry = TableSchemaEntry {
+                    type_name: DataTypeName::U64,
+                    dict: false,
+                    nullable: false,
+                };
+                let mut result_schema_entries = vec![placeholder_entry; position_type_map.len()];
+                for (postion, entry) in position_type_map {
+                    result_schema_entries[postion] = *entry;
+                }
 
-                    let arity = subtypenode_left.schema.arity();
+                Ok(TypeTreeNode::new(
+                    TableSchema::from_vec(result_schema_entries),
+                    subtype_nodes,
+                ))
+            }
+            ExecutionNode::Union(subtrees) => {
+                let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(subtrees.len());
+                for subtree in subtrees {
+                    let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
 
-                    // Will copy the type of the left subtree as long
-                    // as they are compatbile with the types of the right subtree
-                    let mut result_schema_entries = Vec::<TableSchemaEntry>::new();
-                    for column_index in 0..arity {
-                        let current_left = subtypenode_left.schema.get_entry(column_index);
-                        let current_right = subtypenode_right.schema.get_entry(column_index);
+                    subtype_nodes.push(subtype_node);
+                }
 
-                        if Self::compatible(current_left, current_right) {
-                            result_schema_entries.push(*current_left);
+                let arity = if !subtype_nodes.is_empty() {
+                    subtype_nodes[0].schema.arity()
+                } else {
+                    return Ok(TypeTreeNode::default());
+                };
+
+                // The following will take the maximum type of all columns
+                // E.g. subtype_nodes = [[U32, U32], [U32, U64]
+                // result -> [U32, U64]
+                let mut result_schema_entries =
+                    Vec::<TableSchemaEntry>::with_capacity(subtrees.len());
+                for column_index in 0..arity {
+                    for subtype_node in &subtype_nodes {
+                        let current_entry = subtype_node.schema.get_entry(column_index);
+
+                        if result_schema_entries.len() <= column_index {
+                            result_schema_entries.push(*current_entry);
                         } else {
-                            return Err(Error::InvalidExecutionPlan);
+                            result_schema_entries[column_index] = if let Some(max_entry) =
+                                Self::entry_max(&result_schema_entries[column_index], current_entry)
+                            {
+                                *max_entry
+                            } else {
+                                return Err(Error::InvalidExecutionPlan);
+                            };
                         }
                     }
+                }
 
-                    let subtype_nodes = vec![subtypenode_left, subtypenode_right];
-
-                    Ok(TypeTreeNode::new(
-                        TableSchema::from_vec(result_schema_entries),
-                        subtype_nodes,
-                    ))
-                }
-                ExecutionNode::Project(subtree, reordering) => {
-                    let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
-
-                    let result_schema_enries =
-                        reordering.apply_to(subtype_node.schema.get_entries());
-                    Ok(TypeTreeNode::new(
-                        TableSchema::from_vec(result_schema_enries),
-                        vec![subtype_node],
-                    ))
-                }
-                ExecutionNode::SelectValue(subtree, _assignments) => {
-                    let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
-                    Ok(TypeTreeNode::new(
-                        subtype_node.schema.clone(),
-                        vec![subtype_node],
-                    ))
-                }
-                ExecutionNode::SelectEqual(subtree, _classes) => {
-                    let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
-                    Ok(TypeTreeNode::new(
-                        subtype_node.schema.clone(),
-                        vec![subtype_node],
-                    ))
-                }
+                Ok(TypeTreeNode::new(
+                    TableSchema::from_vec(result_schema_entries),
+                    subtype_nodes,
+                ))
             }
-        } else {
-            unreachable!()
+            ExecutionNode::Minus(left, right) => {
+                let subtypenode_left = Self::propagate_up(instance, temp_schemas, left.clone())?;
+                let subtypenode_right = Self::propagate_up(instance, temp_schemas, right.clone())?;
+
+                let arity = subtypenode_left.schema.arity();
+
+                // Will copy the type of the left subtree as long
+                // as they are compatbile with the types of the right subtree
+                let mut result_schema_entries = Vec::<TableSchemaEntry>::new();
+                for column_index in 0..arity {
+                    let current_left = subtypenode_left.schema.get_entry(column_index);
+                    let current_right = subtypenode_right.schema.get_entry(column_index);
+
+                    if Self::compatible(current_left, current_right) {
+                        result_schema_entries.push(*current_left);
+                    } else {
+                        return Err(Error::InvalidExecutionPlan);
+                    }
+                }
+
+                let subtype_nodes = vec![subtypenode_left, subtypenode_right];
+
+                Ok(TypeTreeNode::new(
+                    TableSchema::from_vec(result_schema_entries),
+                    subtype_nodes,
+                ))
+            }
+            ExecutionNode::Project(subtree, reordering) => {
+                let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
+
+                let result_schema_enries = reordering.apply_to(subtype_node.schema.get_entries());
+                Ok(TypeTreeNode::new(
+                    TableSchema::from_vec(result_schema_enries),
+                    vec![subtype_node],
+                ))
+            }
+            ExecutionNode::SelectValue(subtree, _assignments) => {
+                let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
+                Ok(TypeTreeNode::new(
+                    subtype_node.schema.clone(),
+                    vec![subtype_node],
+                ))
+            }
+            ExecutionNode::SelectEqual(subtree, _classes) => {
+                let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
+                Ok(TypeTreeNode::new(
+                    subtype_node.schema.clone(),
+                    vec![subtype_node],
+                ))
+            }
         }
     }
 
@@ -290,105 +282,105 @@ impl TypeTree {
             }
         }
 
-        if let Some(node_rc) = execution_node.0.upgrade() {
-            let node_ref = &*node_rc.as_ref().borrow();
+        let node_rc = execution_node
+            .0
+            .upgrade()
+            .expect("Referenced execution node has been deleted");
+        let node_ref = &*node_rc.as_ref().borrow();
 
-            match node_ref {
-                ExecutionNode::FetchTable(_) => {}
-                ExecutionNode::FetchTemp(_) => {}
-                ExecutionNode::Join(subtrees, bindings) => {
-                    for (tree_index, binding) in bindings.iter().enumerate() {
-                        let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
-                        for (column_index, value) in binding.iter().enumerate() {
-                            schema_map.insert(column_index, *type_node.schema.get_entry(*value));
-                        }
-
-                        Self::propagate_down(
-                            &mut type_node.subnodes[tree_index],
-                            Some(schema_map),
-                            subtrees[tree_index].clone(),
-                        );
-                    }
-                }
-                ExecutionNode::Union(subtrees) => {
+        match node_ref {
+            ExecutionNode::FetchTable(_) => {}
+            ExecutionNode::FetchTemp(_) => {}
+            ExecutionNode::Join(subtrees, bindings) => {
+                for (tree_index, binding) in bindings.iter().enumerate() {
                     let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
-                    for (column_index, schema_entry) in
-                        type_node.schema.get_entries().iter().enumerate()
-                    {
-                        schema_map.insert(column_index, *schema_entry);
-                    }
-
-                    for (tree_index, subtree) in subtrees.iter().enumerate() {
-                        Self::propagate_down(
-                            &mut type_node.subnodes[tree_index],
-                            Some(schema_map.clone()),
-                            subtree.clone(),
-                        );
-                    }
-                }
-                ExecutionNode::Minus(left, right) => {
-                    let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
-                    for (column_index, schema_entry) in
-                        type_node.schema.get_entries().iter().enumerate()
-                    {
-                        schema_map.insert(column_index, *schema_entry);
+                    for (column_index, value) in binding.iter().enumerate() {
+                        schema_map.insert(column_index, *type_node.schema.get_entry(*value));
                     }
 
                     Self::propagate_down(
-                        &mut type_node.subnodes[0],
-                        Some(schema_map.clone()),
-                        left.clone(),
-                    );
-
-                    Self::propagate_down(
-                        &mut type_node.subnodes[1],
-                        Some(schema_map.clone()),
-                        right.clone(),
+                        &mut type_node.subnodes[tree_index],
+                        Some(schema_map),
+                        subtrees[tree_index].clone(),
                     );
                 }
-                ExecutionNode::Project(subtree, reordering) => {
-                    let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
-                    for (index, value) in reordering.iter().enumerate() {
-                        schema_map.insert(*value, *type_node.schema.get_entry(index));
-                    }
-
-                    Self::propagate_down(
-                        &mut type_node.subnodes[0],
-                        Some(schema_map.clone()),
-                        subtree.clone(),
-                    );
+            }
+            ExecutionNode::Union(subtrees) => {
+                let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                for (column_index, schema_entry) in
+                    type_node.schema.get_entries().iter().enumerate()
+                {
+                    schema_map.insert(column_index, *schema_entry);
                 }
-                ExecutionNode::SelectValue(subtree, _assignments) => {
-                    let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
-                    for (column_index, schema_entry) in
-                        type_node.schema.get_entries().iter().enumerate()
-                    {
-                        schema_map.insert(column_index, *schema_entry);
-                    }
 
+                for (tree_index, subtree) in subtrees.iter().enumerate() {
                     Self::propagate_down(
-                        &mut type_node.subnodes[0],
-                        Some(schema_map.clone()),
-                        subtree.clone(),
-                    );
-                }
-                ExecutionNode::SelectEqual(subtree, _classes) => {
-                    let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
-                    for (column_index, schema_entry) in
-                        type_node.schema.get_entries().iter().enumerate()
-                    {
-                        schema_map.insert(column_index, *schema_entry);
-                    }
-
-                    Self::propagate_down(
-                        &mut type_node.subnodes[0],
+                        &mut type_node.subnodes[tree_index],
                         Some(schema_map.clone()),
                         subtree.clone(),
                     );
                 }
             }
-        } else {
-            unreachable!()
+            ExecutionNode::Minus(left, right) => {
+                let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                for (column_index, schema_entry) in
+                    type_node.schema.get_entries().iter().enumerate()
+                {
+                    schema_map.insert(column_index, *schema_entry);
+                }
+
+                Self::propagate_down(
+                    &mut type_node.subnodes[0],
+                    Some(schema_map.clone()),
+                    left.clone(),
+                );
+
+                Self::propagate_down(
+                    &mut type_node.subnodes[1],
+                    Some(schema_map.clone()),
+                    right.clone(),
+                );
+            }
+            ExecutionNode::Project(subtree, reordering) => {
+                let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                for (index, value) in reordering.iter().enumerate() {
+                    schema_map.insert(*value, *type_node.schema.get_entry(index));
+                }
+
+                Self::propagate_down(
+                    &mut type_node.subnodes[0],
+                    Some(schema_map.clone()),
+                    subtree.clone(),
+                );
+            }
+            ExecutionNode::SelectValue(subtree, _assignments) => {
+                let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                for (column_index, schema_entry) in
+                    type_node.schema.get_entries().iter().enumerate()
+                {
+                    schema_map.insert(column_index, *schema_entry);
+                }
+
+                Self::propagate_down(
+                    &mut type_node.subnodes[0],
+                    Some(schema_map.clone()),
+                    subtree.clone(),
+                );
+            }
+            ExecutionNode::SelectEqual(subtree, _classes) => {
+                let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                for (column_index, schema_entry) in
+                    type_node.schema.get_entries().iter().enumerate()
+                {
+                    schema_map.insert(column_index, *schema_entry);
+                }
+
+                Self::propagate_down(
+                    &mut type_node.subnodes[0],
+                    Some(schema_map.clone()),
+                    subtree.clone(),
+                );
+            }
         }
     }
 

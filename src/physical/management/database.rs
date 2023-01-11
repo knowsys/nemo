@@ -301,174 +301,165 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
         type_node: &'a TypeTreeNode,
         temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
     ) -> Result<Option<TrieScanEnum>, Error> {
-        if let Some(node_rc) = execution_node.0.upgrade() {
-            let node_ref = &*node_rc.as_ref().borrow();
+        let node_rc = execution_node
+            .0
+            .upgrade()
+            .expect("Referenced execution node has been deleted");
+        let node_ref = &*node_rc.as_ref().borrow();
 
-            return match node_ref {
-                ExecutionNode::FetchTemp(id) => {
-                    if let Some(Some(info)) = temp_tries.get(id) {
-                        Ok(Some(TrieScanEnum::TrieScanGeneric(
-                            TrieScanGeneric::new_cast(
-                                &info.trie,
-                                type_node.schema.get_column_types(),
-                            ),
-                        )))
+        return match node_ref {
+            ExecutionNode::FetchTemp(id) => {
+                if let Some(Some(info)) = temp_tries.get(id) {
+                    Ok(Some(TrieScanEnum::TrieScanGeneric(
+                        TrieScanGeneric::new_cast(&info.trie, type_node.schema.get_column_types()),
+                    )))
+                } else {
+                    // Referenced trie is empty or does not exist
+                    // The latter is not an error, since it could happen that the referenced trie
+                    // would have been produced by this plan but was just empty
+                    Ok(None)
+                }
+            }
+            ExecutionNode::FetchTable(key) => {
+                if !self.table_exists(key) {
+                    return Ok(None);
+                }
+
+                let trie = self.get_by_key(key);
+                if trie.row_num() == 0 {
+                    return Ok(None);
+                }
+                let schema = type_node.schema.get_column_types();
+
+                let interval_triescan = TrieScanGeneric::new_cast(trie, schema);
+                Ok(Some(TrieScanEnum::TrieScanGeneric(interval_triescan)))
+            }
+            ExecutionNode::Join(subtables, bindings) => {
+                let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
+                for (table_index, subtable) in subtables.iter().enumerate() {
+                    let subiterator_opt = self.get_iterator_node(
+                        subtable.clone(),
+                        &type_node.subnodes[table_index],
+                        temp_tries,
+                    )?;
+
+                    if let Some(subiterator) = subiterator_opt {
+                        subiterators.push(subiterator);
                     } else {
-                        // Referenced trie is empty or does not exist
-                        // The latter is not an error, since it could happen that the referenced trie
-                        // would have been produced by this plan but was just empty
-                        Ok(None)
-                    }
-                }
-                ExecutionNode::FetchTable(key) => {
-                    if !self.table_exists(key) {
+                        // If subtables contain an empty table, then the join is empty
                         return Ok(None);
                     }
-
-                    let trie = self.get_by_key(key);
-                    if trie.row_num() == 0 {
-                        return Ok(None);
-                    }
-                    let schema = type_node.schema.get_column_types();
-
-                    let interval_triescan = TrieScanGeneric::new_cast(trie, schema);
-                    Ok(Some(TrieScanEnum::TrieScanGeneric(interval_triescan)))
                 }
-                ExecutionNode::Join(subtables, bindings) => {
-                    let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
-                    for (table_index, subtable) in subtables.iter().enumerate() {
-                        let subiterator_opt = self.get_iterator_node(
-                            subtable.clone(),
-                            &type_node.subnodes[table_index],
-                            temp_tries,
-                        )?;
 
-                        if let Some(subiterator) = subiterator_opt {
-                            subiterators.push(subiterator);
+                // If it only contains one table, then we dont need the join
+                if subiterators.len() == 1 {
+                    return Ok(Some(subiterators.remove(0)));
+                }
+
+                Ok(Some(TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
+                    subiterators,
+                    bindings,
+                ))))
+            }
+            ExecutionNode::Union(subtables) => {
+                let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
+                for (table_index, subtable) in subtables.iter().enumerate() {
+                    let subiterator_opt = self.get_iterator_node(
+                        subtable.clone(),
+                        &type_node.subnodes[table_index],
+                        temp_tries,
+                    )?;
+
+                    if let Some(subiterator) = subiterator_opt {
+                        subiterators.push(subiterator);
+                    }
+                }
+
+                // The union of empty tables is empty
+                if subiterators.is_empty() {
+                    return Ok(None);
+                }
+
+                // If it only contains one table, then we dont need the join
+                if subiterators.len() == 1 {
+                    return Ok(Some(subiterators.remove(0)));
+                }
+
+                let union_scan = TrieScanUnion::new(subiterators);
+
+                Ok(Some(TrieScanEnum::TrieScanUnion(union_scan)))
+            }
+            ExecutionNode::Minus(subtable_left, subtable_right) => {
+                if let Some(left_scan) = self.get_iterator_node(
+                    subtable_left.clone(),
+                    &type_node.subnodes[0],
+                    temp_tries,
+                )? {
+                    if let Some(right_scan) = self.get_iterator_node(
+                        subtable_right.clone(),
+                        &type_node.subnodes[1],
+                        temp_tries,
+                    )? {
+                        Ok(Some(TrieScanEnum::TrieScanMinus(TrieScanMinus::new(
+                            left_scan, right_scan,
+                        ))))
+                    } else {
+                        Ok(Some(left_scan))
+                    }
+                } else {
+                    Ok(None)
+                }
+            }
+            ExecutionNode::Project(subnode, sorting) => {
+                let subnode_rc = subnode
+                    .0
+                    .upgrade()
+                    .expect("Referenced execution node has been deleted");
+                let subnode_ref = &*subnode_rc.as_ref().borrow();
+
+                let trie = match subnode_ref {
+                    ExecutionNode::FetchTable(key) => self.get_by_key(key),
+                    ExecutionNode::FetchTemp(id) => {
+                        if let Some(temp_trie_info) = temp_tries
+                            .get(id)
+                            .expect("Referenced temporary table should exist.")
+                        {
+                            &temp_trie_info.trie
                         } else {
-                            // If subtables contain an empty table, then the join is empty
                             return Ok(None);
                         }
                     }
-
-                    // If it only contains one table, then we dont need the join
-                    if subiterators.len() == 1 {
-                        return Ok(Some(subiterators.remove(0)));
+                    _ => {
+                        panic!("Project node has to have a Fetch node as its child.");
                     }
+                };
 
-                    Ok(Some(TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
-                        subiterators,
-                        bindings,
-                    ))))
+                let project_scan = TrieScanProject::new(trie, sorting.clone());
+
+                Ok(Some(TrieScanEnum::TrieScanProject(project_scan)))
+            }
+            ExecutionNode::SelectValue(subtable, assignments) => {
+                let subiterator_opt =
+                    self.get_iterator_node(subtable.clone(), &type_node.subnodes[0], temp_tries)?;
+
+                if let Some(subiterator) = subiterator_opt {
+                    let select_scan = TrieScanSelectValue::new(subiterator, assignments);
+                    Ok(Some(TrieScanEnum::TrieScanSelectValue(select_scan)))
+                } else {
+                    Ok(None)
                 }
-                ExecutionNode::Union(subtables) => {
-                    let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
-                    for (table_index, subtable) in subtables.iter().enumerate() {
-                        let subiterator_opt = self.get_iterator_node(
-                            subtable.clone(),
-                            &type_node.subnodes[table_index],
-                            temp_tries,
-                        )?;
+            }
+            ExecutionNode::SelectEqual(subtable, classes) => {
+                let subiterator_opt =
+                    self.get_iterator_node(subtable.clone(), &type_node.subnodes[0], temp_tries)?;
 
-                        if let Some(subiterator) = subiterator_opt {
-                            subiterators.push(subiterator);
-                        }
-                    }
-
-                    // The union of empty tables is empty
-                    if subiterators.is_empty() {
-                        return Ok(None);
-                    }
-
-                    // If it only contains one table, then we dont need the join
-                    if subiterators.len() == 1 {
-                        return Ok(Some(subiterators.remove(0)));
-                    }
-
-                    let union_scan = TrieScanUnion::new(subiterators);
-
-                    Ok(Some(TrieScanEnum::TrieScanUnion(union_scan)))
+                if let Some(subiterator) = subiterator_opt {
+                    let select_scan = TrieScanSelectEqual::new(subiterator, classes);
+                    Ok(Some(TrieScanEnum::TrieScanSelectEqual(select_scan)))
+                } else {
+                    Ok(None)
                 }
-                ExecutionNode::Minus(subtable_left, subtable_right) => {
-                    if let Some(left_scan) = self.get_iterator_node(
-                        subtable_left.clone(),
-                        &type_node.subnodes[0],
-                        temp_tries,
-                    )? {
-                        if let Some(right_scan) = self.get_iterator_node(
-                            subtable_right.clone(),
-                            &type_node.subnodes[1],
-                            temp_tries,
-                        )? {
-                            Ok(Some(TrieScanEnum::TrieScanMinus(TrieScanMinus::new(
-                                left_scan, right_scan,
-                            ))))
-                        } else {
-                            Ok(Some(left_scan))
-                        }
-                    } else {
-                        Ok(None)
-                    }
-                }
-                ExecutionNode::Project(subnode, sorting) => {
-                    if let Some(subnode_rc) = subnode.0.upgrade() {
-                        let subnode_ref = &*subnode_rc.as_ref().borrow();
-
-                        let trie = match subnode_ref {
-                            ExecutionNode::FetchTable(key) => self.get_by_key(key),
-                            ExecutionNode::FetchTemp(id) => {
-                                if let Some(temp_trie_info) = temp_tries
-                                    .get(id)
-                                    .expect("Referenced temporary table should exist.")
-                                {
-                                    &temp_trie_info.trie
-                                } else {
-                                    return Ok(None);
-                                }
-                            }
-                            _ => {
-                                panic!("Project node has to have a Fetch node as its child.");
-                            }
-                        };
-
-                        let project_scan = TrieScanProject::new(trie, sorting.clone());
-
-                        Ok(Some(TrieScanEnum::TrieScanProject(project_scan)))
-                    } else {
-                        panic!("Accessed non-existing tree node.");
-                    }
-                }
-                ExecutionNode::SelectValue(subtable, assignments) => {
-                    let subiterator_opt = self.get_iterator_node(
-                        subtable.clone(),
-                        &type_node.subnodes[0],
-                        temp_tries,
-                    )?;
-
-                    if let Some(subiterator) = subiterator_opt {
-                        let select_scan = TrieScanSelectValue::new(subiterator, assignments);
-                        Ok(Some(TrieScanEnum::TrieScanSelectValue(select_scan)))
-                    } else {
-                        Ok(None)
-                    }
-                }
-                ExecutionNode::SelectEqual(subtable, classes) => {
-                    let subiterator_opt = self.get_iterator_node(
-                        subtable.clone(),
-                        &type_node.subnodes[0],
-                        temp_tries,
-                    )?;
-
-                    if let Some(subiterator) = subiterator_opt {
-                        let select_scan = TrieScanSelectEqual::new(subiterator, classes);
-                        Ok(Some(TrieScanEnum::TrieScanSelectEqual(select_scan)))
-                    } else {
-                        Ok(None)
-                    }
-                }
-            };
-        } else {
-            unreachable!("We never delete nodes from the plan");
+            }
         };
     }
 
@@ -500,48 +491,48 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
         node: ExecutionNodeRef<TableKey>,
         temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
     ) -> String {
-        if let Some(node_rc) = node.0.upgrade() {
-            let node_ref = &*node_rc.as_ref().borrow();
+        let node_rc = node
+            .0
+            .upgrade()
+            .expect("Referenced execution node has been deleted");
+        let node_ref = &*node_rc.as_ref().borrow();
 
-            match node_ref {
-                ExecutionNode::FetchTemp(id) => {
-                    if let Some(Some(info)) = temp_tries.get(id) {
-                        info.trie.row_num().to_string()
-                    } else {
-                        // Referenced trie is empty or does not exist
-                        String::from("")
-                    }
-                }
-                ExecutionNode::FetchTable(key) => {
-                    if !self.table_exists(key) {
-                        return String::from("");
-                    }
-
-                    let trie = self.get_by_key(key);
-
-                    trie.row_num().to_string()
-                }
-                ExecutionNode::Join(sub, _) => {
-                    self.get_iterator_string_sub("Join", &sub.iter().collect(), temp_tries)
-                }
-                ExecutionNode::Union(sub) => {
-                    self.get_iterator_string_sub("Union", &sub.iter().collect(), temp_tries)
-                }
-                ExecutionNode::Minus(left, right) => {
-                    self.get_iterator_string_sub("Minus", &vec![left, right], temp_tries)
-                }
-                ExecutionNode::Project(subnode, _) => {
-                    self.get_iterator_string_sub("Project", &vec![subnode], temp_tries)
-                }
-                ExecutionNode::SelectValue(sub, _) => {
-                    self.get_iterator_string_sub("SelectValue", &vec![sub], temp_tries)
-                }
-                ExecutionNode::SelectEqual(sub, _) => {
-                    self.get_iterator_string_sub("SelectEqual", &vec![sub], temp_tries)
+        match node_ref {
+            ExecutionNode::FetchTemp(id) => {
+                if let Some(Some(info)) = temp_tries.get(id) {
+                    info.trie.row_num().to_string()
+                } else {
+                    // Referenced trie is empty or does not exist
+                    String::from("")
                 }
             }
-        } else {
-            unreachable!("We never delete nodes from the plan")
+            ExecutionNode::FetchTable(key) => {
+                if !self.table_exists(key) {
+                    return String::from("");
+                }
+
+                let trie = self.get_by_key(key);
+
+                trie.row_num().to_string()
+            }
+            ExecutionNode::Join(sub, _) => {
+                self.get_iterator_string_sub("Join", &sub.iter().collect(), temp_tries)
+            }
+            ExecutionNode::Union(sub) => {
+                self.get_iterator_string_sub("Union", &sub.iter().collect(), temp_tries)
+            }
+            ExecutionNode::Minus(left, right) => {
+                self.get_iterator_string_sub("Minus", &vec![left, right], temp_tries)
+            }
+            ExecutionNode::Project(subnode, _) => {
+                self.get_iterator_string_sub("Project", &vec![subnode], temp_tries)
+            }
+            ExecutionNode::SelectValue(sub, _) => {
+                self.get_iterator_string_sub("SelectValue", &vec![sub], temp_tries)
+            }
+            ExecutionNode::SelectEqual(sub, _) => {
+                self.get_iterator_string_sub("SelectEqual", &vec![sub], temp_tries)
+            }
         }
     }
 }
@@ -557,7 +548,7 @@ impl<TableKey: TableKeyType> ByteSized for DatabaseInstance<TableKey> {
 #[cfg(test)]
 mod test {
     use crate::physical::{
-        columnar::{column_types::interval::ColumnWithIntervalsT, traits::column::Column},
+        columnar::traits::column::Column,
         datatypes::{DataTypeName, DataValueT},
         dictionary::PrefixedStringDictionary,
         management::{
@@ -739,21 +730,9 @@ mod test {
 
         let result_trie = instance.get_by_key(&String::from("TableResult"));
 
-        let result_col_first = if let ColumnWithIntervalsT::U64(col) = result_trie.get_column(0) {
-            col
-        } else {
-            unreachable!()
-        };
-        let result_col_second = if let ColumnWithIntervalsT::U32(col) = result_trie.get_column(1) {
-            col
-        } else {
-            unreachable!()
-        };
-        let result_col_third = if let ColumnWithIntervalsT::U64(col) = result_trie.get_column(2) {
-            col
-        } else {
-            unreachable!()
-        };
+        let result_col_first = result_trie.get_column(0).as_u64().unwrap();
+        let result_col_second = result_trie.get_column(1).as_u32().unwrap();
+        let result_col_third = result_trie.get_column(2).as_u64().unwrap();
 
         assert_eq!(
             result_col_first
