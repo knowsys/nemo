@@ -14,28 +14,84 @@ use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
 
+#[derive(Debug)]
+enum UnderlyingDirection {
+    Init { layer: usize },
+    Up { from: usize, to: usize },
+    Stay,
+    Down { from: usize, to: usize },
+    DownAfterUp { from: usize, to: usize, deepest: usize, deepest_layer: usize },
+    DownInBetween { to: usize, deepest: usize, deepest_layer: usize },
+}
+
 
 /// Iterator which can reorder and project away colums of a trie
 #[derive(Debug)]
 pub struct TrieScanReorderProject<'a> {
     trie: &'a Trie,
-    column_reordering: Reordering,
     data_types: TableColumnTypes,
     current_layer: Option<usize>,
-    deepest_layer: Option<usize>,
     trie_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
+    underlying_directions: Vec<UnderlyingDirection>,
 }
 
+/// Find parent in upwards_layer for position pos in layer in a trie
 fn get_pos_towards_root(trie: &Trie, layer: usize, upwards_layer: usize, pos: usize) -> usize {
     (upwards_layer..layer).rev().fold(pos, |mut_pos, next| {
         trie.get_column(next + 1).int_idx(mut_pos).unwrap()
     })
 }
 
+/// Returns a vector of UnderlyingDirection which tells how to navigate an underlying trie to obtain the Reordering
+fn get_directions(reordering: &Reordering) -> Vec<UnderlyingDirection> {
+    let mut underlying_directions = Vec::<UnderlyingDirection>::with_capacity(reordering.len_target());
+    let mut deepest_or_none: Option<usize> = None;
+    let mut deepest_layer: Option<usize> = None;
+
+    for down_layer in 0..reordering.len_target() {
+        let to = reordering[down_layer];
+
+        if deepest_or_none.is_none() {
+            underlying_directions.push(UnderlyingDirection::Init { layer: to });
+
+            deepest_layer = Some(down_layer);
+            deepest_or_none = Some(to);
+            continue;
+        } 
+
+
+        let from = reordering[down_layer - 1];
+        let deepest = deepest_or_none.unwrap();
+
+        if from > to {
+            underlying_directions.push(UnderlyingDirection::Up { from, to });
+
+        } else if from == to {
+            underlying_directions.push(UnderlyingDirection::Stay);
+
+        } else if deepest == from {
+            underlying_directions.push(UnderlyingDirection::Down { from, to });
+            deepest_layer = Some(down_layer);
+            deepest_or_none = Some(to);
+
+        } else if deepest < to {
+            underlying_directions.push(UnderlyingDirection::DownAfterUp { from, to, deepest, deepest_layer: deepest_layer.unwrap() });
+            deepest_layer = Some(down_layer);
+            deepest_or_none = Some(to);
+
+        } else {
+            underlying_directions.push(UnderlyingDirection::DownInBetween { to, deepest, deepest_layer: deepest_layer.unwrap() });
+        }
+    }
+
+    underlying_directions
+}
+
 impl<'a> TrieScanReorderProject<'a> {
     /// Create new TrieScanReorderProject object
     pub fn new(trie: &'a Trie, column_reordering: Reordering) -> Self {
         let input_types = trie.get_types();
+        let underlying_directions = get_directions(&column_reordering);
 
         let mut trie_scans =
             Vec::<UnsafeCell<ColumnScanT>>::with_capacity(column_reordering.len_target());
@@ -72,13 +128,13 @@ impl<'a> TrieScanReorderProject<'a> {
             }
         }
 
+
         Self {
             trie,
-            column_reordering,
             current_layer: None,
-            deepest_layer: None,
             data_types: target_types,
-            trie_scans
+            trie_scans,
+            underlying_directions,
         }
     }
 }
@@ -92,16 +148,8 @@ impl<'a> TrieScan<'a> for TrieScanReorderProject<'a> {
             Some(self.current_layer.unwrap() - 1)
         };
 
-        let deepest_layer = if up_layer.is_none() {
-            None
-        } else {
-            let deepest_underlying_layer = (0..up_layer.unwrap() + 1).map(|layer| self.column_reordering[layer]).max().unwrap();
-            self.column_reordering.iter().position(|layer| *layer == deepest_underlying_layer)
-        };
-
         self.trie_scans[self.current_layer.unwrap()].get_mut().reset();
         self.current_layer = up_layer;
-        self.deepest_layer = deepest_layer;
     }
 
     fn down(&mut self) {
@@ -109,60 +157,45 @@ impl<'a> TrieScan<'a> for TrieScanReorderProject<'a> {
         debug_assert!(down_layer < self.data_types.len());
 
         let ranges: Vec<Range<usize>>;
-        if down_layer == 0 {
-            // the first layer uses all ranges of the target layer in underlying trie
-            let column = self.trie.get_column(self.column_reordering[0]);
-            ranges = (0..column.int_len())
-                .map(|int_idx| column.int_bounds(int_idx))
-                .collect();
 
-        } else if self.column_reordering[down_layer] < self.column_reordering[self.current_layer.unwrap()] {
-            // towards the root in underlying trie
-            ranges = self.trie_scans[self.current_layer.unwrap()]
-                .get_mut().pos_multiple().unwrap().iter() // borrow suffices probably
-                .map(|pos| get_pos_towards_root(
-                    self.trie,
-                    self.column_reordering[self.current_layer.unwrap()],
-                    self.column_reordering[down_layer],
-                    *pos))
-                .map(|pos| pos..pos+1)
-                .collect();
-
-        } else if self.column_reordering[down_layer] == self.column_reordering[self.current_layer.unwrap()] {
-            // same layer used twice
-            ranges = self.trie_scans[self.current_layer.unwrap()]
-                .get_mut().pos_multiple().unwrap().iter() // borrow suffices probably
-                .map(|pos| *pos..*pos+1)
-                .collect();
-
-        } else {
-            // towards the leafs in underlying trie
-            if self.deepest_layer.unwrap() < self.current_layer.unwrap() && self.column_reordering[down_layer] < self.column_reordering[self.deepest_layer.unwrap()] {
-                ranges = self.trie_scans[self.deepest_layer.unwrap()]
+        ranges = match self.underlying_directions[down_layer] {
+            UnderlyingDirection::Init { layer } => {
+                let column = self.trie.get_column(layer);
+                (0..column.int_len())
+                    .map(|int_idx| column.int_bounds(int_idx))
+                    .collect()
+            },
+            UnderlyingDirection::Up { from, to } => {
+                self.trie_scans[self.current_layer.unwrap()]
                     .get_mut().pos_multiple().unwrap().iter() // borrow suffices probably
-                    .map(|pos| get_pos_towards_root(
-                        self.trie,
-                        self.column_reordering[self.deepest_layer.unwrap()],
-                        self.column_reordering[down_layer],
-                        *pos))
+                    .map(|pos| get_pos_towards_root(self.trie, from, to, *pos))
                     .map(|pos| pos..pos+1)
-                    .collect();
-
-            } else if self.deepest_layer.unwrap() < self.current_layer.unwrap() {
+                    .collect()
+            },
+            UnderlyingDirection::Stay => {
+                self.trie_scans[self.current_layer.unwrap()]
+                    .get_mut().pos_multiple().unwrap().iter() // borrow suffices probably
+                    .map(|pos| *pos..*pos+1)
+                    .collect()
+            },
+            UnderlyingDirection::DownInBetween { to, deepest, deepest_layer } => {
+                self.trie_scans[deepest_layer]
+                    .get_mut().pos_multiple().unwrap().iter() // borrow suffices probably
+                    .map(|pos| get_pos_towards_root(self.trie, deepest, to, *pos))
+                    .map(|pos| pos..pos+1)
+                    .collect()
+            },
+            UnderlyingDirection::DownAfterUp { from, to, deepest, deepest_layer } => {
                 let active_positions = self.trie_scans[self.current_layer.unwrap()].get_mut().pos_multiple().unwrap();
-                ranges = self.trie_scans[self.deepest_layer.unwrap()]
+                self.trie_scans[deepest_layer]
                     .get_mut().pos_multiple().expect("Well...").iter() // borrow suffices probably
-                    .filter(|pos| active_positions.contains(&get_pos_towards_root(
-                        self.trie,
-                        self.column_reordering[self.deepest_layer.unwrap()],
-                        self.column_reordering[self.current_layer.unwrap()],
-                    **pos)))
+                    .filter(|pos| active_positions.contains(&get_pos_towards_root(self.trie, deepest, from, **pos)))
                     .flat_map(|pos| {
-                        let mut layer = self.column_reordering[self.deepest_layer.unwrap()];
+                        let mut layer = deepest;
                         let mut lower_bound = *pos;
                         let mut upper_bound = *pos;
 
-                        while layer < self.column_reordering[down_layer] {
+                        while layer < to {
                             layer += 1;
                             lower_bound = self.trie.get_column(layer).int_bounds(lower_bound).min().expect("Intervals are non empty");
                             upper_bound = self.trie.get_column(layer).int_bounds(upper_bound).max().expect("Intervals are non empty");
@@ -172,17 +205,17 @@ impl<'a> TrieScan<'a> for TrieScanReorderProject<'a> {
                         (column.int_idx(lower_bound).unwrap()..column.int_idx(upper_bound).unwrap()+1)
                             .map(|int_idx| column.int_bounds(int_idx))
                     })
-                    .collect();
-
-            } else {
-                ranges = self.trie_scans[self.current_layer.unwrap()]
+                    .collect()
+            },
+            UnderlyingDirection::Down { from, to } => {
+                self.trie_scans[self.current_layer.unwrap()]
                     .get_mut().pos_multiple().unwrap().iter() // borrow suffices probably
                     .flat_map(|pos| {
-                        let mut layer = self.column_reordering[self.current_layer.unwrap()];
+                        let mut layer = from;
                         let mut lower_bound = *pos;
                         let mut upper_bound = *pos;
  
-                        while layer < self.column_reordering[down_layer] {
+                        while layer < to {
                             layer += 1;
                             lower_bound = self.trie.get_column(layer).int_bounds(lower_bound).min().expect("Intervals are non empty");
                             upper_bound = self.trie.get_column(layer).int_bounds(upper_bound).max().expect("Intervals are non empty");
@@ -192,16 +225,12 @@ impl<'a> TrieScan<'a> for TrieScanReorderProject<'a> {
                         (column.int_idx(lower_bound).unwrap()..column.int_idx(upper_bound).unwrap()+1)
                             .map(|int_idx| column.int_bounds(int_idx))
                     })
-                    .collect();
+                    .collect()
             }
-        }
+        };
 
         self.trie_scans[down_layer].get_mut().narrow_ranges(ranges);
         self.current_layer = Some(down_layer);
-
-        if self.deepest_layer.is_none() || self.column_reordering[self.deepest_layer.unwrap()] < self.column_reordering[down_layer] {
-            self.deepest_layer = self.current_layer;
-        }
     }
 
     fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
