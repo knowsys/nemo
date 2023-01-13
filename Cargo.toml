@@ -1,12 +1,12 @@
 [package]
 name = "stage2"
 authors = [
-"Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de",
-"Lukas Gerlach <lukas.gerlach@tu-dresden.de",
-"Philipp Hanisch <philipp.hanisch@tu-dresden.de",
-"Alex Ivliev <alex.ivliev@tu-dresden.de",
-"Markus Krötzsch <markus.kroetzsch@tu-dresden.de",
-"Maximilian Marx <maximilian.marx@tu-dresden.de"
+"Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
+"Lukas Gerlach <lukas.gerlach@tu-dresden.de>",
+"Philipp Hanisch <philipp.hanisch1@tu-dresden.de>",
+"Alex Ivliev <alex.ivliev@tu-dresden.de>",
+"Markus Krötzsch <markus.kroetzsch@tu-dresden.de>",
+"Maximilian Marx <maximilian.marx@tu-dresden.de>"
 ]	
 version = "0.1.0"
 edition = "2021"
@@ -26,7 +26,7 @@ once_cell = "1.15.0"
 ascii_tree = "0.1.1"
 linked-hash-map = "0.5.6"
 bytesize = "1.1.0"
-clap = {verion = "4.0.32", features = [ "derive", "cargo", "env" ]}
+clap = {version = "4.0.32", features = [ "derive", "cargo", "env" ]}
 
 [dev-dependencies]
 test-log = "0.2"
