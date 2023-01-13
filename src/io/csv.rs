@@ -155,9 +155,10 @@ impl CSVWriter<'_> {
                 .open(file_path.clone())
             {
                 Ok(mut file) => {
-                    write!(file, "{}", trie.debug(self.constants.borrow().deref()))
-                        .expect("writing should succeed");
-                    log::info!("wrote {file_path:?}");
+                    log::info!("Writing {file_path:?}");
+                    write!(file, "{}", trie.debug(self.constants.borrow().deref())).unwrap_or_else(
+                        |err| log::error!("Error while writing {file_path:?}:{err}"),
+                    );
                 }
                 Err(e) => log::error!("error writing: {e:?}"),
             }
