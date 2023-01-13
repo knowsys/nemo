@@ -43,12 +43,6 @@ pub enum Error {
     /// Parser could not parse whole Program-file, but should have read all of it.
     #[error("Parser could not parse the whole input file")]
     ProgramParse,
-    /// Output directory is not a directory
-    #[error("The path to the output-directory \"{0}\" is not a directory")]
-    NotAFolder(String),
-    /// Output directory is not writable
-    #[error("The output-directory \"{0}\" is not writable")]
-    FolderNotWritable(String),
     /// IO Error
     #[error(transparent)]
     IO(#[from] std::io::Error),
