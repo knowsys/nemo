@@ -152,7 +152,8 @@ impl CliApp {
                 .as_os_str()
                 .to_str()
                 .expect("Pathbuf should be initialised correctly");
-            if !file.try_exists().expect("File cannot be be accessed") {
+
+            if !file.exists() {
                 // file existence error
                 log::error!("Rule-file \"{filename}\" does not exist");
             } else {
