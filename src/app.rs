@@ -36,28 +36,28 @@ impl AppState {
     }
 }
 
-/// Application settings and runner container
+/// Stage 2 CLI
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 pub struct CliApp {
     /// Sets the verbosity of logging if the flags -v and -q are not used
-    #[arg(long = "rust_log", env, value_parser=clap::builder::PossibleValuesParser::new(["error","warn","info","debug","trace"]))]
+    #[arg(long = "log", env, value_parser=clap::builder::PossibleValuesParser::new(["error","warn","info","debug","trace"]))]
     rust_log: Option<String>,
     /// Sets log verbosity (multiple times means more verbose)
-    #[arg(short, action = clap::builder::ArgAction::Count, group = "verbosity")]
+    #[arg(short, long, action = clap::builder::ArgAction::Count, group = "verbosity")]
     verbose: u8,
     /// Sets log verbosity to only log errors
-    #[arg(short, group = "verbosity")]
+    #[arg(short, long, group = "verbosity")]
     quiet: bool,
-    /// Rule program
-    #[arg(short, required = true)]
+    /// One or more rule program files
+    #[arg(value_parser, required = true)]
     rules: Vec<PathBuf>,
     /// Save results
     #[arg(short, long = "save-results")]
     save_results: bool,
-    /// output folder
-    #[arg(short, long = "output-folder", default_value = "results")]
-    output_folder: PathBuf,
+    /// output directory
+    #[arg(short, long = "output", default_value = "results")]
+    output_directory: PathBuf,
 }
 
 impl CliApp {
@@ -88,7 +88,7 @@ impl CliApp {
             log::info!("writing output");
             let mut csv_writer = stage2::io::csv::CSVWriter::try_new(
                 &mut exec_engine,
-                &self.output_folder,
+                &self.output_directory,
                 &app_state.name_dict,
                 &app_state.constants_dict,
             )?;
