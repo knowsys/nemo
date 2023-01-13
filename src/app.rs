@@ -176,8 +176,8 @@ impl CliApp {
         log::info!("Rules parsed");
         log::trace!("{:?}", program);
         Ok(AppState::new(
-            parser.dict_names(),
-            parser.dict_constants(),
+            Rc::new(RefCell::new(parser.clone_dict_names())),
+            Rc::new(RefCell::new(parser.clone_dict_constants())),
             program,
         ))
     }
