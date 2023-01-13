@@ -41,7 +41,7 @@ impl AppState {
 #[command(author, version, about)]
 pub struct CliApp {
     /// Sets the verbosity of logging if the flags -v and -q are not used
-    #[arg(long = "log", env, value_parser=clap::builder::PossibleValuesParser::new(["error","warn","info","debug","trace"]))]
+    #[arg(long = "log", value_parser=clap::builder::PossibleValuesParser::new(["error","warn","info","debug","trace"]), group="verbosity")]
     rust_log: Option<String>,
     /// Sets log verbosity (multiple times means more verbose)
     #[arg(short, long, action = clap::builder::ArgAction::Count, group = "verbosity")]
@@ -110,26 +110,33 @@ impl CliApp {
     ///  * `Warn` otherwise
     fn init_logging(&self) {
         let log_level = match self.verbose {
-            1 => log::LevelFilter::Info,
-            2 => log::LevelFilter::Debug,
-            3 => log::LevelFilter::Trace,
+            1 => Some(log::LevelFilter::Info),
+            2 => Some(log::LevelFilter::Debug),
+            3 => Some(log::LevelFilter::Trace),
             _ => {
                 if self.quiet {
-                    log::LevelFilter::Error
+                    Some(log::LevelFilter::Error)
                 } else if let Some(rust_log) = self.rust_log.clone() {
                     match rust_log.as_str() {
-                        "error" => log::LevelFilter::Error,
-                        "info" => log::LevelFilter::Info,
-                        "debug" => log::LevelFilter::Debug,
-                        "trace" => log::LevelFilter::Trace,
-                        _ => log::LevelFilter::Warn,
+                        "error" => Some(log::LevelFilter::Error),
+                        "info" => Some(log::LevelFilter::Info),
+                        "debug" => Some(log::LevelFilter::Debug),
+                        "trace" => Some(log::LevelFilter::Trace),
+                        _ => Some(log::LevelFilter::Warn),
                     }
                 } else {
-                    log::LevelFilter::Warn
+                    None
                 }
             }
         };
-        env_logger::builder().filter_level(log_level).init();
+
+        match log_level {
+            Some(level) => env_logger::builder().filter_level(level).init(),
+            None => {
+                env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
+                    .init()
+            }
+        };
     }
 
     /// Parsing of all rule files, defined in [`Self::rules`]. Links internally used and needed dictionaries into the program state.
