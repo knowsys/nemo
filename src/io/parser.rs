@@ -1,6 +1,6 @@
 //! A parser for rulewerk-style rules.
 
-use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
 use nom::{
     branch::alt,

@@ -15,9 +15,9 @@ use std::rc::Rc;
 /// Application state
 struct AppState {
     /// Name dictionary
-    name_dict: Rc<RefCell<PrefixedStringDictionary>>,
+    names: Rc<RefCell<PrefixedStringDictionary>>,
     /// Constant dictionary
-    constants_dict: Rc<RefCell<PrefixedStringDictionary>>,
+    constants: Rc<RefCell<PrefixedStringDictionary>>,
     /// parsed program data
     program: Program,
 }
@@ -29,8 +29,8 @@ impl AppState {
         program: Program,
     ) -> Self {
         Self {
-            name_dict: names,
-            constants_dict: constants,
+            names,
+            constants,
             program,
         }
     }
@@ -89,8 +89,8 @@ impl CliApp {
             let mut csv_writer = stage2::io::csv::CSVWriter::try_new(
                 &mut exec_engine,
                 &self.output_directory,
-                &app_state.name_dict,
-                &app_state.constants_dict,
+                &app_state.names,
+                &app_state.constants,
             )?;
             csv_writer.write();
             TimedCode::instance()
@@ -141,23 +141,13 @@ impl CliApp {
         let mut inputs: Vec<String> = Vec::new();
 
         self.rules.iter().for_each(|file| {
-            if !file.try_exists().unwrap_or_else(|_| {
-                // path/file access right errors
-                // use of panic to avoid nested function call in expect!-macro
-                panic!(
-                    "Cannot check existence of \"{}\"",
-                    file.as_os_str()
-                        .to_str()
-                        .expect("PathBuf should be initialised correctly")
-                )
-            }) {
+            let filename = file
+                .as_os_str()
+                .to_str()
+                .expect("Pathbuf should be initialised correctly");
+            if !file.try_exists().expect("File cannot be be accessed") {
                 // file existence error
-                log::error!(
-                    "Rule-file \"{}\" does not exist",
-                    file.as_os_str()
-                        .to_str()
-                        .expect("PathBuf should be initialised correctly")
-                );
+                log::error!("Rule-file \"{filename}\" does not exist");
             } else {
                 // file exists and can be read; add input String
                 inputs.push(read_to_string(file).expect("File should be existing and readable"));

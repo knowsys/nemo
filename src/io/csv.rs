@@ -116,18 +116,7 @@ impl<'a> CSVWriter<'a> {
         names: &Rc<RefCell<PrefixedStringDictionary>>,
         _constants: &Rc<RefCell<PrefixedStringDictionary>>,
     ) -> Result<Self, Error> {
-        let path_str = path.to_str().expect("Path contains invalid unicode");
-        if path.exists() {
-            if path.is_file() {
-                return Err(Error::NotAFolder(String::from(path_str)));
-            }
-            let attr = path.metadata()?;
-            if attr.permissions().readonly() {
-                return Err(Error::FolderNotWritable(String::from(path_str)));
-            }
-        } else {
-            create_dir_all(path)?;
-        }
+        create_dir_all(path)?;
         let names = Rc::clone(names);
         // TODO: this line should be the right one
         // let constants = Rc::clone(constants);
