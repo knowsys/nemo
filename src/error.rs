@@ -1,7 +1,5 @@
 //! Error-handling module for the crate
 
-use std::ffi::OsString;
-
 use crate::{io::parser::ParseError, physical::datatypes::float_is_nan::FloatIsNaN};
 use thiserror::Error;
 

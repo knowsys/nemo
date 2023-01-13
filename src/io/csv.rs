@@ -1,17 +1,17 @@
 //! Represents different data-import methods
 
-use std::fmt::Display;
-use std::fs::create_dir_all;
+use std::cell::RefCell;
+use std::fs::{create_dir_all, OpenOptions};
+use std::io::Write;
+use std::ops::Deref;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use crate::error::Error;
 use crate::logical::execution::ExecutionEngine;
-use crate::logical::model::Program;
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use csv::Reader;
-
-use super::parser::RuleParser;
 
 /// Imports a csv file
 /// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
@@ -100,17 +100,21 @@ pub struct CSVWriter<'a> {
     /// The path to where the results shall be written to
     path: &'a PathBuf,
     /// Parser information on predicates
-    parser: &'a RuleParser<'a>,
+    names: Rc<RefCell<PrefixedStringDictionary>>,
+    /// Parser information on constants
+    constants: Rc<RefCell<PrefixedStringDictionary>>,
 }
 
 impl<'a> CSVWriter<'a> {
     /// Instantiate a [`CSVWriter`].
     ///
     /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
+    /// TODO: handle constant dict correctly
     pub fn try_new(
         exec: &'a mut ExecutionEngine,
         path: &'a PathBuf,
-        parser: &'a RuleParser<'a>,
+        names: &Rc<RefCell<PrefixedStringDictionary>>,
+        _constants: &Rc<RefCell<PrefixedStringDictionary>>,
     ) -> Result<Self, Error> {
         let path_str = path.to_str().expect("Path contains invalid unicode");
         if path.exists() {
@@ -124,7 +128,17 @@ impl<'a> CSVWriter<'a> {
         } else {
             create_dir_all(path)?;
         }
-        Ok(CSVWriter { exec, path, parser })
+        let names = Rc::clone(names);
+        // TODO: this line should be the right one
+        // let constants = Rc::clone(constants);
+        // instead we need to copy the Dictionary
+        let constants = Rc::new(RefCell::new(exec.get_dict().clone()));
+        Ok(CSVWriter {
+            exec,
+            path,
+            names,
+            constants,
+        })
     }
 }
 impl CSVWriter<'_> {
@@ -132,9 +146,10 @@ impl CSVWriter<'_> {
     pub fn write(&mut self) {
         self.exec.get_results().iter().for_each(|(pred, trie)| {
             let predicate_name = self
-                .parser
-                .resolve_identifier(pred)
-                .expect("Value should be interned");
+                .names
+                .borrow()
+                .entry(pred.0)
+                .expect("All preds shall depend on the names dictionary");
 
             let file_name = predicate_name.replace(['/', ':'], "_");
             let file_path = PathBuf::from(format!(
@@ -144,6 +159,19 @@ impl CSVWriter<'_> {
                     .to_str()
                     .expect("Path shall be a String")
             ));
+            match OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(file_path.clone())
+            {
+                Ok(mut file) => {
+                    write!(file, "{}", trie.debug(self.constants.borrow().deref()))
+                        .expect("writing should succeed");
+                    log::info!("wrote {file_path:?}");
+                }
+                Err(e) => log::error!("error writing: {e:?}"),
+            }
         });
     }
 }

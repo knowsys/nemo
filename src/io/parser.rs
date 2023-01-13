@@ -1,6 +1,6 @@
 //! A parser for rulewerk-style rules.
 
-use std::{cell::RefCell, collections::HashMap, fmt::Debug};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
 use nom::{
     branch::alt,
@@ -48,9 +48,9 @@ where
 #[derive(Debug, Default)]
 pub struct RuleParser<'a> {
     /// The [`PrefixedStringDictionary`] mapping term names to their internal handles.
-    names: RefCell<PrefixedStringDictionary>,
+    names: Rc<RefCell<PrefixedStringDictionary>>,
     /// The [`PrefixedStringDictionary`] mapping constant names to their internal handles.
-    constants: RefCell<PrefixedStringDictionary>,
+    constants: Rc<RefCell<PrefixedStringDictionary>>,
     /// The base IRI, if set.
     base: RefCell<Option<&'a str>>,
     /// A map from Prefixes to IRIs.
@@ -82,6 +82,16 @@ impl<'a> RuleParser<'a> {
     /// Return a clone of the internal constants dictionary
     pub fn clone_dict_constants(&self) -> PrefixedStringDictionary {
         self.constants.replace_with(|dict| dict.clone())
+    }
+
+    /// Provides a handle to work with the internal names dictionary
+    pub fn dict_names(&self) -> Rc<RefCell<PrefixedStringDictionary>> {
+        Rc::clone(&self.names)
+    }
+
+    /// Provides a handle to work with the internal constants dictionary
+    pub fn dict_constants(&self) -> Rc<RefCell<PrefixedStringDictionary>> {
+        Rc::clone(&self.constants)
     }
 
     /// Parse the dot that ends declarations, optionally surrounded by spaces.
