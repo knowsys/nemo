@@ -97,7 +97,17 @@ impl CliApp {
                 .sub("Output & Final Materialization")
                 .stop();
         }
+        Ok(())
+    }
 
+    /// Initialising Logging
+    ///
+    /// Sets the logging verbosity to the given log-level in the following order:
+    ///  * `Info`, `Debug`, `Trace`; depending on the count of `-v`
+    ///  * `Error` when `-q` is used
+    ///  * The `RUST_LOG` environment variable value
+    ///  * `Warn` otherwise
+    fn init_logging(&self) {
         let mut builder = env_logger::Builder::new();
         let builder = builder.parse_default_env();
         let builder = if let Some(ref level) = self.rust_log {
@@ -112,7 +122,6 @@ impl CliApp {
                 _ => log::LevelFilter::Warn,
             })
         };
-
         builder.init();
     }
 
