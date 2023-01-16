@@ -98,45 +98,22 @@ impl CliApp {
                 .stop();
         }
 
-        Ok(())
-    }
-
-    /// Initialising Logging
-    ///
-    /// Sets the logging verbosity to the given log-level in the following order:
-    ///  * `Info`, `Debug`, `Trace`; depending on the count of `-v`
-    ///  * `Error` when `-q` is used
-    ///  * The `RUST_LOG` environment variable value
-    ///  * `Warn` otherwise
-    fn init_logging(&self) {
-        let log_level = match self.verbose {
-            1 => Some(log::LevelFilter::Info),
-            2 => Some(log::LevelFilter::Debug),
-            3 => Some(log::LevelFilter::Trace),
-            _ => {
-                if self.quiet {
-                    Some(log::LevelFilter::Error)
-                } else if let Some(rust_log) = self.rust_log.clone() {
-                    match rust_log.as_str() {
-                        "error" => Some(log::LevelFilter::Error),
-                        "info" => Some(log::LevelFilter::Info),
-                        "debug" => Some(log::LevelFilter::Debug),
-                        "trace" => Some(log::LevelFilter::Trace),
-                        _ => Some(log::LevelFilter::Warn),
-                    }
-                } else {
-                    None
-                }
-            }
+        let mut builder = env_logger::Builder::new();
+        let builder = builder.parse_default_env();
+        let builder = if let Some(ref level) = self.rust_log {
+            builder.parse_filters(level)
+        } else if self.quiet {
+            builder.filter_level(log::LevelFilter::Error)
+        } else {
+            builder.filter_level(match self.verbose {
+                1 => log::LevelFilter::Info,
+                2 => log::LevelFilter::Debug,
+                3 => log::LevelFilter::Trace,
+                _ => log::LevelFilter::Warn,
+            })
         };
 
-        match log_level {
-            Some(level) => env_logger::builder().filter_level(level).init(),
-            None => {
-                env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
-                    .init()
-            }
-        };
+        builder.init();
     }
 
     /// Parsing of all rule files, defined in [`Self::rules`]. Links internally used and needed dictionaries into the program state.
