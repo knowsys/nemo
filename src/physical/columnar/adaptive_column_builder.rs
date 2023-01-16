@@ -40,7 +40,10 @@ enum ColumnBuilderType<T> {
     ColumnRle(ColumnBuilderRle<T>),
 }
 
-impl<T> Default for ColumnBuilderType<T> {
+impl<T> Default for ColumnBuilderType<T>
+where
+    T: ColumnDataType + Default,
+{
     fn default() -> Self {
         Self::Undecided(Some(ColumnBuilderRle::new()))
     }
@@ -49,7 +52,10 @@ impl<T> Default for ColumnBuilderType<T> {
 /// Implementation of [`ColumnBuilder`] that may adaptively decide for the
 /// best possible column implementation for the given data.
 #[derive(Debug, Default, PartialEq)]
-pub struct ColumnBuilderAdaptive<T> {
+pub struct ColumnBuilderAdaptive<T>
+where
+    T: ColumnDataType,
+{
     builder: ColumnBuilderType<T>,
     decision_threshold: ColumnImplDecisionThreshold,
     target_min_length_for_rle_elements: TargetMinLengthForRleElements,
