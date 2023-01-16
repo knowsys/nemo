@@ -133,20 +133,10 @@ impl CliApp {
         let parser = RuleParser::new();
         let mut inputs: Vec<String> = Vec::new();
 
-        self.rules.iter().for_each(|file| {
-            let filename = file
-                .as_os_str()
-                .to_str()
-                .expect("Pathbuf should be initialised correctly");
-
-            if !file.exists() {
-                // file existence error
-                log::error!("Rule-file \"{filename}\" does not exist");
-            } else {
-                // file exists and can be read; add input String
-                inputs.push(read_to_string(file).expect("File should be existing and readable"));
-            }
-        });
+        self.rules.iter().try_for_each(|file| {
+            inputs.push(read_to_string(file)?);
+            std::io::Result::Ok(())
+        })?;
         let input = inputs.iter_mut().fold(String::new(), |mut acc, item| {
             acc.push_str(item);
             acc
