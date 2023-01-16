@@ -6,69 +6,10 @@ use crate::physical::{
         column_types::rle::{ColumnBuilderRle, ColumnRle},
         traits::{column::Column, column::ColumnEnum, columnbuilder::ColumnBuilder},
     },
-    datatypes::DataValueT,
+    datatypes::{DataTypeName, DataValueT},
     tabular::{table_types::trie::Trie, traits::table::Table},
 };
 use std::num::NonZeroUsize;
-
-/// Add columns consisting of only a constant to a trie
-/// Values are given as a slice of [`DataValueT`] vectors
-/// Its interpreted as follows:
-/// Append columns containing the value in ith vector at the ith gap in the original trie
-/// Example: Given a trie with schema: xyz and values [[2], [], [3, 4], [1]]
-/// results in a trie with "schema" 2xy34z1
-pub fn trie_add_constant(mut trie: Trie, values: &[Vec<DataValueT>]) -> Trie {
-    debug_assert!(values.len() == trie.get_types().len() + 1);
-
-    // Add the new columns
-    let mut new_columns = VecDeque::<ColumnWithIntervalsT>::new();
-    for gap_index in (0..=trie.get_types().len()).rev() {
-        let current_values = &values[gap_index];
-        for value_t in current_values.iter().rev() {
-            macro_rules! append_columns_for_datatype {
-                ($value:ident, $variant:ident, $type:ty) => {{
-                    let target_length = gap_index
-                        .checked_sub(1)
-                        .map(|i| trie.get_column(i).len())
-                        .unwrap_or(1);
-
-                    let new_data_column = ColumnRle::repeat_value(
-                        $value,
-                        NonZeroUsize::new(target_length).expect("This cannot be zero"),
-                    );
-                    let new_interval_column =
-                        ColumnRle::continious_range(0usize, 1usize, target_length);
-
-                    new_columns.push_front(ColumnWithIntervalsT::$variant(
-                        ColumnWithIntervals::new(
-                            ColumnEnum::ColumnRle(new_data_column),
-                            ColumnEnum::ColumnRle(new_interval_column),
-                        ),
-                    ));
-                }};
-            }
-
-            match *value_t {
-                DataValueT::U32(value) => append_columns_for_datatype!(value, U32, u32),
-                DataValueT::U64(value) => append_columns_for_datatype!(value, U64, u64),
-                DataValueT::Float(value) => {
-                    append_columns_for_datatype!(value, Float, Float)
-                }
-                DataValueT::Double(value) => {
-                    append_columns_for_datatype!(value, Double, Double)
-                }
-            };
-        }
-
-        if gap_index > 0 {
-            new_columns.push_front(trie.columns_mut().pop().expect(
-                "We only pop as many elements as there are columns, so the vector will never be empty",
-            ));
-        }
-    }
-
-    Trie::new(Vec::<ColumnWithIntervalsT>::from(new_columns))
-}
 
 /// Helper function which, given a continous range, expands it in such a way
 /// that all of the child nodes are covered as well.
@@ -89,56 +30,136 @@ fn expand_range(columns: &[ColumnWithIntervalsT], range: Range<usize>) -> Range<
     current_range
 }
 
-/// Duplicates existing columns to new positions
-/// Columns that are copied are given as a slice of [`usize`] vectors
+/// Enum which represents an instruction to modify a trie by appending certain columns.
+#[derive(Debug, Copy, Clone)]
+pub enum AppendInstruction {
+    /// Add column which has the same entries as another existing column.
+    RepeatColumn(usize),
+    /// Add a column which only contains a constant.
+    Constant(DataValueT),
+    /// Add a column which contains fresh nulls.
+    Null,
+}
+
+/// Appends columns to an existing trie and returns the modified trie.
+/// The parameter `instructions` is a slice of `AppendInstruction` vectors.
 /// It is interpreted as follows:
-/// The values in the vectors represent column indices of the existing trie.
-/// The columns referenced in the ith slice entry are duplicated into ith gap in the original trie
-/// (in the order they appear in the vector).
-/// Example: Given a trie with schema: xyz and indices slice [[], [1], [0, 2]]
-/// results in a trie with "schema" xyyzxz
-pub fn trie_repeat_column(mut trie: Trie, indices: &[Vec<usize>]) -> Trie {
-    debug_assert!(indices.len() == trie.get_types().len());
-    debug_assert!(indices
+/// The ith entry in the slice contains what type of column is added into the ith column gap in the original trie.
+/// Example: Given a trie with columns labeled xyz and instructions
+/// [[Constant(2)], [RepeatColumn(0)], [Constant(3), Constant(4)], [RepeatColumn(1), Constant(1), RepeatColumn(2)]]
+/// results in a trie with "schema" 2xxy34zy1z
+pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> Trie {
+    let arity = trie.get_types().len();
+
+    debug_assert!(instructions.len() == arity + 1);
+    debug_assert!(instructions
         .iter()
         .enumerate()
-        .all(|(i, v)| v.iter().all(|&e| e <= i)));
+        .all(|(i, v)| v
+            .iter()
+            .all(|&a| if let AppendInstruction::RepeatColumn(e) = a {
+                e <= i
+            } else {
+                true
+            })));
 
-    // Add the new columns
     let mut new_columns = VecDeque::<ColumnWithIntervalsT>::new();
-    for gap_index in (0..indices.len()).rev() {
-        let current_indices = &indices[gap_index];
-        for &index in current_indices.iter().rev() {
-            let referenced_column = trie.get_column(index);
-            let prev_column = trie.get_column(gap_index);
 
-            if let ColumnWithIntervalsT::U64(reference_column_typed) = referenced_column {
-                let mut new_data_column = ColumnBuilderRle::<u64>::new();
+    for gap_index in (0..=arity).rev() {
+        for instruction in instructions[gap_index].iter().rev() {
+            match instruction {
+                AppendInstruction::RepeatColumn(repeat_index) => {
+                    let referenced_column = trie.get_column(*repeat_index);
+                    let prev_column = trie.get_column(gap_index - 1);
 
-                for (value_index, value) in
-                    reference_column_typed.get_data_column().iter().enumerate()
-                {
-                    let expanded_range = expand_range(
-                        &trie.columns()[(index + 1)..=gap_index],
-                        value_index..(value_index + 1),
-                    );
+                    macro_rules! append_column_for_datatype {
+                        ($variant:ident, $type:ty) => {{
+                            if let ColumnWithIntervalsT::U64(reference_column_typed) =
+                                referenced_column
+                            {
+                                let mut new_data_column = ColumnBuilderRle::<u64>::new();
 
-                    new_data_column.add_repeated_value(value, expanded_range.len());
+                                for (value_index, value) in
+                                    reference_column_typed.get_data_column().iter().enumerate()
+                                {
+                                    let expanded_range = expand_range(
+                                        &trie.columns()[(*repeat_index + 1)..gap_index],
+                                        value_index..(value_index + 1),
+                                    );
+
+                                    new_data_column.add_repeated_value(value, expanded_range.len());
+                                }
+
+                                let new_interval_column =
+                                    ColumnRle::continious_range(0usize, 1usize, prev_column.len());
+
+                                new_columns.push_front(ColumnWithIntervalsT::U64(
+                                    ColumnWithIntervals::new(
+                                        ColumnEnum::ColumnRle(new_data_column.finalize()),
+                                        ColumnEnum::ColumnRle(new_interval_column),
+                                    ),
+                                ));
+                            } else {
+                                panic!("Expected a column of type {}", stringify!($type));
+                            }
+                        }};
+                    }
+
+                    match trie.get_types()[*repeat_index] {
+                        DataTypeName::U32 => append_column_for_datatype!(U32, u32),
+                        DataTypeName::U64 => append_column_for_datatype!(U64, u64),
+                        DataTypeName::Float => {
+                            append_column_for_datatype!(Float, Float)
+                        }
+                        DataTypeName::Double => {
+                            append_column_for_datatype!(Double, Double)
+                        }
+                    };
                 }
+                AppendInstruction::Constant(value_t) => {
+                    macro_rules! append_columns_for_datatype {
+                        ($value:ident, $variant:ident, $type:ty) => {{
+                            let target_length = gap_index
+                                .checked_sub(1)
+                                .map(|i| trie.get_column(i).len())
+                                .unwrap_or(1);
 
-                let new_interval_column =
-                    ColumnRle::continious_range(0usize, 1usize, prev_column.len());
+                            let new_data_column = ColumnRle::repeat_value(
+                                $value,
+                                NonZeroUsize::new(target_length).expect("This cannot be zero"),
+                            );
+                            let new_interval_column =
+                                ColumnRle::continious_range(0usize, 1usize, target_length);
 
-                new_columns.push_front(ColumnWithIntervalsT::U64(ColumnWithIntervals::new(
-                    ColumnEnum::ColumnRle(new_data_column.finalize()),
-                    ColumnEnum::ColumnRle(new_interval_column),
-                )));
+                            new_columns.push_front(ColumnWithIntervalsT::$variant(
+                                ColumnWithIntervals::new(
+                                    ColumnEnum::ColumnRle(new_data_column),
+                                    ColumnEnum::ColumnRle(new_interval_column),
+                                ),
+                            ));
+                        }};
+                    }
+
+                    match *value_t {
+                        DataValueT::U32(value) => append_columns_for_datatype!(value, U32, u32),
+                        DataValueT::U64(value) => append_columns_for_datatype!(value, U64, u64),
+                        DataValueT::Float(value) => {
+                            append_columns_for_datatype!(value, Float, Float)
+                        }
+                        DataValueT::Double(value) => {
+                            append_columns_for_datatype!(value, Double, Double)
+                        }
+                    };
+                }
+                AppendInstruction::Null => todo!(),
             }
         }
 
-        new_columns.push_front(trie.columns_mut().pop().expect(
-            "We only pop as many elements as there are columns, so the vector will never be empty",
-        ));
+        if gap_index > 0 {
+            new_columns.push_front(trie.columns_mut().pop().expect(
+                "We only pop as many elements as there are columns, so the vector will never be empty",
+            ));
+        }
     }
 
     Trie::new(Vec::<ColumnWithIntervalsT>::from(new_columns))
@@ -151,14 +172,12 @@ mod test {
         columnar::traits::columnscan::ColumnScanT,
         datatypes::DataValueT,
         tabular::{
-            operations::triescan_append::trie_repeat_column,
+            operations::triescan_append::{trie_append, AppendInstruction},
             table_types::trie::{Trie, TrieScanGeneric},
             traits::triescan::TrieScan,
         },
         util::make_column_with_intervals_t,
     };
-
-    use super::trie_add_constant;
 
     fn scan_next(int_scan: &mut TrieScanGeneric) -> Option<u64> {
         if let ColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
@@ -185,13 +204,16 @@ mod test {
         let column_z = make_column_with_intervals_t(&[5, 1, 7, 9, 3, 2, 4, 8], &[0, 1, 4, 5, 7]);
 
         let trie = Trie::new(vec![column_x, column_y, column_z]);
-        let trie_appended = trie_add_constant(
+        let trie_appended = trie_append(
             trie,
             &[
-                vec![DataValueT::U64(2)],
+                vec![AppendInstruction::Constant(DataValueT::U64(2))],
                 vec![],
-                vec![DataValueT::U64(3), DataValueT::U64(4)],
-                vec![DataValueT::U64(1)],
+                vec![
+                    AppendInstruction::Constant(DataValueT::U64(3)),
+                    AppendInstruction::Constant(DataValueT::U64(4)),
+                ],
+                vec![AppendInstruction::Constant(DataValueT::U64(1))],
             ],
         );
 
@@ -450,7 +472,17 @@ mod test {
             make_column_with_intervals_t(&[4, 5, 6, 7, 8, 9, 10, 11], &[0, 2, 4, 5, 6, 7]);
 
         let trie = Trie::new(vec![column_a, column_b, column_c, column_d, column_e]);
-        let trie_appended = trie_repeat_column(trie, &[vec![0], vec![], vec![], vec![1], vec![]]);
+        let trie_appended = trie_append(
+            trie,
+            &[
+                vec![],
+                vec![AppendInstruction::RepeatColumn(0)],
+                vec![],
+                vec![],
+                vec![AppendInstruction::RepeatColumn(1)],
+                vec![],
+            ],
+        );
 
         let mut trie_iter = TrieScanGeneric::new(&trie_appended);
 
