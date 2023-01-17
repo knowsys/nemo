@@ -12,6 +12,7 @@ use crate::logical::execution::ExecutionEngine;
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use csv::Reader;
+use sanitise_file_name::{sanitise_with_options, Options};
 
 /// Imports a csv file
 /// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
@@ -140,7 +141,11 @@ impl CSVWriter<'_> {
                 .entry(pred.0)
                 .expect("All preds shall depend on the names dictionary");
 
-            let file_name = predicate_name.replace(['/', ':'], "_");
+            let sanitise_options = Options::<Option<char>> {
+                url_safe: true,
+                ..Default::default()
+            };
+            let file_name = sanitise_with_options(&predicate_name, &sanitise_options);
             let file_path = PathBuf::from(format!(
                 "{}/{file_name}.csv",
                 self.path

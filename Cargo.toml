@@ -27,6 +27,7 @@ ascii_tree = "0.1.1"
 linked-hash-map = "0.5.6"
 bytesize = "1.1.0"
 clap = {version = "4.0.32", features = [ "derive", "cargo", "env" ]}
+sanitise-file-name = "1.0.0"
 
 [dev-dependencies]
 test-log = "0.2"
