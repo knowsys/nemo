@@ -30,7 +30,7 @@ fn main() {
     let mut app = app::CliApp::parse();
     if let Err(err) = app.run() {
         eprintln!("Application Error: {err}");
-        std::process::exit(0);
+        std::process::exit(1);
     }
     TimedCode::instance().stop();
     println!(
@@ -44,5 +44,4 @@ fn main() {
             ]
         )
     );
-    std::process::exit(1);
 }
