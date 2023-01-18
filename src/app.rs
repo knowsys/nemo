@@ -42,7 +42,7 @@ impl AppState {
 pub struct CliApp {
     /// Sets the verbosity of logging if the flags -v and -q are not used
     #[arg(long = "log", value_parser=clap::builder::PossibleValuesParser::new(["error","warn","info","debug","trace"]), group="verbosity")]
-    rust_log: Option<String>,
+    log_level: Option<String>,
     /// Sets log verbosity (multiple times means more verbose)
     #[arg(short, long, action = clap::builder::ArgAction::Count, group = "verbosity")]
     verbose: u8,
@@ -110,7 +110,7 @@ impl CliApp {
     fn init_logging(&self) {
         let mut builder = env_logger::Builder::new();
         let builder = builder.parse_default_env();
-        let builder = if let Some(ref level) = self.rust_log {
+        let builder = if let Some(ref level) = self.log_level {
             builder.parse_filters(level)
         } else if self.quiet {
             builder.filter_level(log::LevelFilter::Error)
