@@ -41,7 +41,7 @@ impl AppState {
 #[command(author, version, about)]
 pub struct CliApp {
     /// Sets the verbosity of logging if the flags -v and -q are not used
-    #[arg(long = "log", value_parser=clap::builder::PossibleValuesParser::new(["error","warn","info","debug","trace"]), group="verbosity")]
+    #[arg(long = "log", value_parser=clap::builder::PossibleValuesParser::new(["error", "warn", "info", "debug", "trace"]), group = "verbosity")]
     log_level: Option<String>,
     /// Sets log verbosity (multiple times means more verbose)
     #[arg(short, long, action = clap::builder::ArgAction::Count, group = "verbosity")]
