@@ -3,6 +3,7 @@ use assert_fs::prelude::*;
 use predicates::prelude::*; // Used for writing assertions
 use std::{fs::read_to_string, path::PathBuf, process::Command}; // Run programs
 
+#[cfg_attr(miri, ignore)]
 #[test]
 fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
     let bin = "stage2";
@@ -16,7 +17,7 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
     cmd.arg("-h");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Print help information"));
+        .stdout(predicate::str::contains("Print help"));
 
     cmd = Command::cargo_bin(bin)?;
     cmd.arg("--version");
@@ -48,6 +49,7 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg_attr(miri, ignore)]
 #[test]
 fn reasoning_symmetry_transitive_closure() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("stage2")?;
