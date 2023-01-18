@@ -487,6 +487,7 @@ mod test {
             DatabaseInstance,
         },
         tabular::{
+            operations::triescan_append::AppendInstruction,
             table_types::trie::Trie,
             traits::{
                 table::Table,
@@ -773,5 +774,65 @@ mod test {
         let type_tree = type_tree.unwrap();
         let expected_tree_down = build_expected_type_tree_down();
         assert_eq!(type_tree, expected_tree_down);
+    }
+
+    #[test]
+    fn test_append() {
+        let trie_a = Trie::from_rows(vec![vec![DataValueT::U32(1)]]);
+        let trie_b = Trie::from_rows(vec![vec![DataValueT::U64(1 << 35), DataValueT::U32(2)]]);
+
+        let schema_a = TableSchema::from_vec(vec![schema_entry(DataTypeName::U32)]);
+        let schema_b = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U32),
+        ]);
+
+        let mut instance =
+            DatabaseInstance::<StringKeyType>::new(PrefixedStringDictionary::default());
+        instance.add(String::from("TableA"), trie_a, schema_a);
+        instance.add(String::from("TableB"), trie_b, schema_b);
+
+        let mut execution_tree = ExecutionTree::new(
+            String::from("test"),
+            ExecutionResult::<StringKeyType>::Temp(1),
+        );
+
+        let fetch_a = execution_tree.fetch_table(String::from("TableA"));
+        let fetch_b = execution_tree.fetch_table(String::from("TableB"));
+
+        let append_a = execution_tree.append_columns(
+            fetch_a,
+            vec![vec![], vec![AppendInstruction::RepeatColumn(0)]],
+        );
+
+        let union = execution_tree.union(vec![append_a, fetch_b]);
+        execution_tree.set_root(union);
+
+        let temp_schemas = HashMap::<usize, TableSchema>::new();
+        let type_tree = TypeTree::from_execution_tree(&instance, &temp_schemas, &execution_tree);
+
+        let expect_a = TableSchema::from_vec(vec![schema_entry(DataTypeName::U64)]);
+        let expect_b = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U32),
+        ]);
+        let expect_append = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U32),
+        ]);
+        let expect_union = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U32),
+        ]);
+
+        let expected_type_tree = TypeTreeNode::new(
+            expect_union,
+            vec![
+                TypeTreeNode::new(expect_append, vec![TypeTreeNode::new(expect_a, vec![])]),
+                TypeTreeNode::new(expect_b, vec![]),
+            ],
+        );
+
+        assert_eq!(expected_type_tree, type_tree.unwrap());
     }
 }
