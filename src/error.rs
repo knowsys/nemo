@@ -40,4 +40,10 @@ pub enum Error {
     /// Error when giving invalid execution plan to the database instance
     #[error("The given execution plan is invalid.")]
     InvalidExecutionPlan,
+    /// Parser could not parse whole Program-file, but should have read all of it.
+    #[error("Parser could not parse the whole input file")]
+    ProgramParse,
+    /// IO Error
+    #[error(transparent)]
+    IO(#[from] std::io::Error),
 }

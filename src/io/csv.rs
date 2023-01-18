@@ -1,9 +1,18 @@
 //! Represents different data-import methods
 
+use std::cell::RefCell;
+use std::fs::{create_dir_all, OpenOptions};
+use std::io::Write;
+use std::ops::Deref;
+use std::path::PathBuf;
+use std::rc::Rc;
+
 use crate::error::Error;
+use crate::logical::execution::ExecutionEngine;
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 use csv::Reader;
+use sanitise_file_name::{sanitise_with_options, Options};
 
 /// Imports a csv file
 /// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
@@ -82,6 +91,84 @@ where
         }
     });
     Ok(result.into_iter().flatten().collect())
+}
+
+/// Contains all the needed information, to write results into csv-files
+#[derive(Debug)]
+pub struct CSVWriter<'a> {
+    /// Execution engine, where the Tables are managed
+    exec: &'a mut ExecutionEngine,
+    /// The path to where the results shall be written to
+    path: &'a PathBuf,
+    /// Parser information on predicates
+    names: Rc<RefCell<PrefixedStringDictionary>>,
+    /// Parser information on constants
+    constants: Rc<RefCell<PrefixedStringDictionary>>,
+}
+
+impl<'a> CSVWriter<'a> {
+    /// Instantiate a [`CSVWriter`].
+    ///
+    /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
+    /// TODO: handle constant dict correctly
+    pub fn try_new(
+        exec: &'a mut ExecutionEngine,
+        path: &'a PathBuf,
+        names: &Rc<RefCell<PrefixedStringDictionary>>,
+        _constants: &Rc<RefCell<PrefixedStringDictionary>>,
+    ) -> Result<Self, Error> {
+        create_dir_all(path)?;
+        let names = Rc::clone(names);
+        // TODO: this line should be the right one
+        // let constants = Rc::clone(constants);
+        // instead we need to copy the Dictionary
+        let constants = Rc::new(RefCell::new(exec.get_dict().clone()));
+        Ok(CSVWriter {
+            exec,
+            path,
+            names,
+            constants,
+        })
+    }
+}
+impl CSVWriter<'_> {
+    /// Writes the results to the output folder
+    pub fn write(&mut self) {
+        self.exec.get_results().iter().for_each(|(pred, trie)| {
+            let predicate_name = self
+                .names
+                .borrow()
+                .entry(pred.0)
+                .expect("All preds shall depend on the names dictionary");
+
+            let sanitise_options = Options::<Option<char>> {
+                url_safe: true,
+                ..Default::default()
+            };
+            let file_name = sanitise_with_options(&predicate_name, &sanitise_options);
+            let file_path = PathBuf::from(format!(
+                "{}/{file_name}.csv",
+                self.path
+                    .as_os_str()
+                    .to_str()
+                    .expect("Path shall be a String")
+            ));
+            match OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(file_path.clone())
+            {
+                Ok(mut file) => {
+                    log::info!("Writing {file_path:?}");
+                    write!(file, "{}", trie.debug(self.constants.borrow().deref())).unwrap_or_else(
+                        |err| log::error!("Error while writing {file_path:?}:{err}"),
+                    );
+                }
+                Err(e) => log::error!("error writing: {e:?}"),
+            }
+        });
+    }
 }
 
 #[cfg(test)]
