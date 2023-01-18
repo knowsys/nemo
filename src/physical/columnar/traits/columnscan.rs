@@ -4,6 +4,7 @@ use super::super::operations::{
     ColumnScanJoin, ColumnScanMinus, ColumnScanPass, ColumnScanReorder, ColumnScanUnion,
 };
 
+use crate::physical::columnar::operations::{ColumnScanConstant, ColumnScanCopy};
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
@@ -65,6 +66,10 @@ where
     ColumnScanMinus(ColumnScanMinus<'a, T>),
     /// Case ColumnScanUnion
     ColumnScanUnion(ColumnScanUnion<'a, T>),
+    /// Case ColumnScanConstant
+    ColumnScanConstant(ColumnScanConstant<T>),
+    /// Case ColumnScanCopy
+    ColumnScanCopy(ColumnScanCopy<'a, T>),
 }
 
 /// The following impl statements allow converting from a specific [`ColumnScan`] into a gerneral [`ColumnScanEnum`]
@@ -244,13 +249,16 @@ generate_forwarder!(forward_to_columnscan;
     ColumnScanRle,
     ColumnScanCast,
     ColumnScanJoin,
-    ColumnScanReorder, 
-    ColumnScanEqualColumn, 
+    ColumnScanReorder,
+    ColumnScanEqualColumn,
     ColumnScanEqualValue,
     ColumnScanPass,
     ColumnScanFollow,
     ColumnScanMinus,
-    ColumnScanUnion);
+    ColumnScanUnion,
+    ColumnScanConstant,
+    ColumnScanCopy
+);
 
 impl<'a, T> Iterator for ColumnScanEnum<'a, T>
 where

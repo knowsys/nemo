@@ -29,6 +29,14 @@ pub use columnscan_minus::ColumnScanMinus;
 pub mod columnscan_union;
 pub use columnscan_union::ColumnScanUnion;
 
+/// Module for defining [`ColumnScanConstant`]
+pub mod columnscan_constant;
+pub use columnscan_constant::ColumnScanConstant;
+
+/// Module for defining [`ColumnScanCopy`]
+pub mod columnscan_copy;
+pub use columnscan_copy::ColumnScanCopy;
+
 /// Module for defining [`ColumnScanCast`]
 pub mod columnscan_cast;
 pub use columnscan_cast::ColumnScanCast;

@@ -1,13 +1,32 @@
-use std::{collections::VecDeque, ops::Range};
+use std::{cell::UnsafeCell, collections::VecDeque, ops::Range};
 
-use crate::physical::{
-    columnar::{
-        column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-        column_types::rle::{ColumnBuilderRle, ColumnRle},
-        traits::{column::Column, column::ColumnEnum, columnbuilder::ColumnBuilder},
+use crate::{
+    generate_cast_statements,
+    physical::{
+        columnar::{
+            column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+            column_types::rle::{ColumnBuilderRle, ColumnRle},
+            operations::{
+                ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant, ColumnScanCopy,
+                ColumnScanPass,
+            },
+            traits::{
+                column::Column,
+                column::ColumnEnum,
+                columnbuilder::ColumnBuilder,
+                columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+            },
+        },
+        datatypes::{DataTypeName, DataValueT},
+        tabular::{
+            table_types::trie::Trie,
+            traits::{
+                table::Table,
+                table_schema::TableColumnTypes,
+                triescan::{TrieScan, TrieScanEnum},
+            },
+        },
     },
-    datatypes::{DataTypeName, DataValueT},
-    tabular::{table_types::trie::Trie, traits::table::Table},
 };
 use std::num::NonZeroUsize;
 
@@ -36,7 +55,10 @@ pub enum AppendInstruction {
     /// Add column which has the same entries as another existing column.
     RepeatColumn(usize),
     /// Add a column which only contains a constant.
-    Constant(DataValueT),
+    /// Must contain schema information.
+    /// In this case whether the constant is associated with a dict
+    /// TODO: Maybe this wont be needed if dicts are moved out of the physical layer
+    Constant(DataValueT, bool),
     /// Add a column which contains fresh nulls.
     Null,
 }
@@ -48,6 +70,7 @@ pub enum AppendInstruction {
 /// Example: Given a trie with columns labeled xyz and instructions
 /// [[Constant(2)], [RepeatColumn(0)], [Constant(3), Constant(4)], [RepeatColumn(1), Constant(1), RepeatColumn(2)]]
 /// results in a trie with "schema" 2xxy34zy1z
+/// TODO: Maybe this version of append is not needed.
 pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> Trie {
     let arity = trie.get_types().len();
 
@@ -116,7 +139,7 @@ pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> T
                         }
                     };
                 }
-                AppendInstruction::Constant(value_t) => {
+                AppendInstruction::Constant(value_t, _) => {
                     macro_rules! append_columns_for_datatype {
                         ($value:ident, $variant:ident, $type:ty) => {{
                             let target_length = gap_index
@@ -165,21 +188,249 @@ pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> T
     Trie::new(Vec::<ColumnWithIntervalsT>::from(new_columns))
 }
 
+/// [`TrieScan`] which represents the result from joining a set of tries (given as [`TrieScan`]s),
+#[derive(Debug)]
+pub struct TrieScanAppend<'a> {
+    /// Trie scans to which new columns will be appended.
+    trie_scan: Box<TrieScanEnum<'a>>,
+
+    /// Layer we are currently at in the resulting trie.
+    current_layer: Option<usize>,
+
+    /// Types of the resulting trie.
+    target_types: TableColumnTypes,
+
+    /// Layers in the current trie that point to layers in the base trie.
+    /// I.e. in which layers are the pass scans.
+    base_indices: Vec<usize>,
+    /// Pointer into the `base_indices` member.
+    base_pointer: usize,
+
+    /// [`ColumnScanT`]s which represent each new layer in the resulting trie.
+    /// Note: Reason for using [`UnsafeCell`] is explained for [`TrieScanJoin`].
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
+}
+
+impl<'a> TrieScanAppend<'a> {
+    /// The parameter `instructions` is a slice of `AppendInstruction` vectors.
+    /// It is interpreted as follows:
+    /// The ith entry in the slice contains what type of column is added into the ith column gap in the original trie.
+    /// Example: Given a trie with columns labeled xyz and instructions
+    /// [[Constant(2)], [RepeatColumn(0)], [Constant(3), Constant(4)], [RepeatColumn(1), Constant(1), RepeatColumn(2)]]
+    /// results in a trie with "schema" 2xxy34zy1z
+    /// Note: This also receives type information. This is important because copied columns might require different types.
+    pub fn new(
+        trie_scan: TrieScanEnum<'a>,
+        instructions: &[Vec<AppendInstruction>],
+        target_types: TableColumnTypes,
+    ) -> Self {
+        let arity = trie_scan.get_types().len();
+
+        debug_assert!(instructions.len() == arity + 1);
+        debug_assert!(instructions
+            .iter()
+            .enumerate()
+            .all(|(i, v)| v
+                .iter()
+                .all(|&a| if let AppendInstruction::RepeatColumn(e) = a {
+                    e <= i
+                } else {
+                    true
+                })));
+
+        let mut column_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::new();
+        let mut base_indices = Vec::<usize>::with_capacity(arity);
+
+        for gap_index in 0..instructions.len() {
+            for instruction in instructions[gap_index].iter() {
+                match instruction {
+                    AppendInstruction::RepeatColumn(repeat_index) => unsafe {
+                        let referenced_scan = &*trie_scan.get_scan(*repeat_index).unwrap().get();
+
+                        macro_rules! append_repeat_for_datatype {
+                            ($variant:ident) => {{
+                                if let ColumnScanT::$variant(referenced_scan_cell) = referenced_scan
+                                {
+                                    column_scans.push(UnsafeCell::new(ColumnScanT::$variant(
+                                        ColumnScanCell::new(ColumnScanEnum::ColumnScanCopy(
+                                            ColumnScanCopy::new(referenced_scan_cell),
+                                        )),
+                                    )));
+                                }
+                            }};
+                        }
+
+                        match trie_scan.get_types()[*repeat_index] {
+                            DataTypeName::U32 => append_repeat_for_datatype!(U32),
+                            DataTypeName::U64 => append_repeat_for_datatype!(U64),
+                            DataTypeName::Float => append_repeat_for_datatype!(Float),
+                            DataTypeName::Double => append_repeat_for_datatype!(Double),
+                        }
+                    },
+                    AppendInstruction::Constant(constant, _) => {
+                        macro_rules! append_constant_for_datatype {
+                            ($variant:ident, $value: expr) => {{
+                                column_scans.push(UnsafeCell::new(ColumnScanT::$variant(
+                                    ColumnScanCell::new(ColumnScanEnum::ColumnScanConstant(
+                                        ColumnScanConstant::new($value),
+                                    )),
+                                )));
+                            }};
+                        }
+
+                        match constant {
+                            DataValueT::U32(value) => append_constant_for_datatype!(U32, *value),
+                            DataValueT::U64(value) => append_constant_for_datatype!(U64, *value),
+                            DataValueT::Float(value) => {
+                                append_constant_for_datatype!(Float, *value)
+                            }
+                            DataValueT::Double(value) => {
+                                append_constant_for_datatype!(Double, *value)
+                            }
+                        }
+                    }
+                    AppendInstruction::Null => todo!(),
+                }
+            }
+
+            if gap_index < instructions.len() - 1 {
+                base_indices.push(column_scans.len());
+                let src_type = trie_scan.get_types()[gap_index];
+                let dst_type = target_types[gap_index];
+
+                unsafe {
+                    let base_scan = &*trie_scan.get_scan(gap_index).unwrap().get();
+
+                    macro_rules! append_pass_for_datatype {
+                        ($variant:ident) => {{
+                            if let ColumnScanT::$variant(base_scan_cell) = base_scan {
+                                ColumnScanT::$variant(ColumnScanCell::new(
+                                    ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(
+                                        base_scan_cell,
+                                    )),
+                                ))
+                            } else {
+                                panic!("Expected a column scan of type {}", stringify!($variant));
+                            }
+                        }};
+                    }
+
+                    let reference_scan = match trie_scan.get_types()[gap_index] {
+                        DataTypeName::U32 => append_pass_for_datatype!(U32),
+                        DataTypeName::U64 => append_pass_for_datatype!(U64),
+                        DataTypeName::Float => append_pass_for_datatype!(Float),
+                        DataTypeName::Double => append_pass_for_datatype!(Double),
+                    };
+
+                    if src_type == dst_type {
+                        column_scans.push(UnsafeCell::new(reference_scan));
+                    } else {
+                        macro_rules! cast_reference_scan {
+                            ($src_name:ident, $dst_name:ident, $src_type:ty, $dst_type:ty) => {{
+                                let reference_scan_typed = if let ColumnScanT::$src_name(scan) =
+                                    reference_scan
+                                {
+                                    scan
+                                } else {
+                                    panic!("Expected a column scan of type {}", stringify!($type));
+                                };
+
+                                let new_scan = ColumnScanT::$dst_name(ColumnScanCell::new(
+                                    ColumnScanEnum::ColumnScanCast(ColumnScanCastEnum::$src_name(
+                                        ColumnScanCast::<$src_type, $dst_type>::new(
+                                            reference_scan_typed,
+                                        ),
+                                    )),
+                                ));
+
+                                column_scans.push(UnsafeCell::new(new_scan));
+                            }};
+                        }
+
+                        generate_cast_statements!(cast_reference_scan; src_type, dst_type);
+                    }
+                }
+            }
+        }
+
+        Self {
+            trie_scan: Box::new(trie_scan),
+            current_layer: None,
+            target_types,
+            base_indices,
+            base_pointer: 0,
+            column_scans,
+        }
+    }
+}
+
+impl<'a> TrieScan<'a> for TrieScanAppend<'a> {
+    fn up(&mut self) {
+        if self.current_layer.is_none() {
+            return;
+        }
+
+        if self.base_pointer < self.base_indices.len()
+            && self.base_indices[self.base_pointer] == self.current_layer.unwrap()
+        {
+            self.trie_scan.up();
+
+            if self.trie_scan.current_scan().is_some() {
+                self.base_pointer -= 1;
+            }
+        }
+
+        self.current_layer = self.current_layer.and_then(|l| l.checked_sub(1));
+    }
+
+    fn down(&mut self) {
+        if self.current_layer.is_none() {
+            self.trie_scan.down();
+        }
+
+        if self.base_pointer < self.base_indices.len() - 1
+            && self.current_layer.is_some()
+            && self.base_indices[self.base_pointer] == self.current_layer.unwrap()
+        {
+            self.trie_scan.down();
+            self.base_pointer += 1;
+        }
+
+        self.current_layer = Some(self.current_layer.map_or(0, |v| v + 1));
+        debug_assert!(self.current_layer.unwrap() < self.get_types().len());
+
+        self.column_scans[self.current_layer.unwrap()]
+            .get_mut()
+            .reset();
+    }
+
+    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+        self.get_scan(self.current_layer?)
+    }
+
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+        Some(&self.column_scans[index])
+    }
+
+    fn get_types(&self) -> &TableColumnTypes {
+        &self.target_types
+    }
+}
+
 #[cfg(test)]
 mod test {
-
     use crate::physical::{
         columnar::traits::columnscan::ColumnScanT,
-        datatypes::DataValueT,
+        datatypes::{DataTypeName, DataValueT},
         tabular::{
-            operations::triescan_append::{trie_append, AppendInstruction},
+            operations::triescan_append::{AppendInstruction, TrieScanAppend},
             table_types::trie::{Trie, TrieScanGeneric},
-            traits::triescan::TrieScan,
+            traits::triescan::{TrieScan, TrieScanEnum},
         },
         util::make_column_with_intervals_t,
     };
 
-    fn scan_next(int_scan: &mut TrieScanGeneric) -> Option<u64> {
+    fn scan_next(int_scan: &mut TrieScanAppend) -> Option<u64> {
         if let ColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
             rcs.next()
         } else {
@@ -187,7 +438,7 @@ mod test {
         }
     }
 
-    fn scan_current(int_scan: &mut TrieScanGeneric) -> Option<u64> {
+    fn scan_current(int_scan: &mut TrieScanAppend) -> Option<u64> {
         unsafe {
             if let ColumnScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
                 rcs.current()
@@ -204,20 +455,29 @@ mod test {
         let column_z = make_column_with_intervals_t(&[5, 1, 7, 9, 3, 2, 4, 8], &[0, 1, 4, 5, 7]);
 
         let trie = Trie::new(vec![column_x, column_y, column_z]);
-        let trie_appended = trie_append(
-            trie,
+        let trie_generic = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+
+        let mut trie_iter = TrieScanAppend::new(
+            trie_generic,
             &[
-                vec![AppendInstruction::Constant(DataValueT::U64(2))],
+                vec![AppendInstruction::Constant(DataValueT::U64(2), false)],
                 vec![],
                 vec![
-                    AppendInstruction::Constant(DataValueT::U64(3)),
-                    AppendInstruction::Constant(DataValueT::U64(4)),
+                    AppendInstruction::Constant(DataValueT::U64(3), false),
+                    AppendInstruction::Constant(DataValueT::U64(4), false),
                 ],
-                vec![AppendInstruction::Constant(DataValueT::U64(1))],
+                vec![AppendInstruction::Constant(DataValueT::U64(1), false)],
+            ],
+            vec![
+                DataTypeName::U64,
+                DataTypeName::U64,
+                DataTypeName::U64,
+                DataTypeName::U64,
+                DataTypeName::U64,
+                DataTypeName::U64,
+                DataTypeName::U64,
             ],
         );
-
-        let mut trie_iter = TrieScanGeneric::new(&trie_appended);
 
         assert!(scan_current(&mut trie_iter).is_none());
 
@@ -460,6 +720,39 @@ mod test {
         assert_eq!(scan_current(&mut trie_iter), Some(1));
         assert_eq!(scan_next(&mut trie_iter), None);
         assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(2));
+        assert_eq!(scan_current(&mut trie_iter), Some(2));
     }
 
     #[test]
@@ -472,8 +765,10 @@ mod test {
             make_column_with_intervals_t(&[4, 5, 6, 7, 8, 9, 10, 11], &[0, 2, 4, 5, 6, 7]);
 
         let trie = Trie::new(vec![column_a, column_b, column_c, column_d, column_e]);
-        let trie_appended = trie_append(
-            trie,
+        let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+
+        let mut trie_iter = TrieScanAppend::new(
+            trie_iter,
             &[
                 vec![],
                 vec![AppendInstruction::RepeatColumn(0)],
@@ -482,9 +777,16 @@ mod test {
                 vec![AppendInstruction::RepeatColumn(1)],
                 vec![],
             ],
+            vec![
+                DataTypeName::U64,
+                DataTypeName::U64,
+                DataTypeName::U64,
+                DataTypeName::U64,
+                DataTypeName::U64,
+                DataTypeName::U64,
+                DataTypeName::U64,
+            ],
         );
-
-        let mut trie_iter = TrieScanGeneric::new(&trie_appended);
 
         assert!(scan_current(&mut trie_iter).is_none());
 

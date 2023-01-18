@@ -51,6 +51,11 @@ impl TableSchema {
         });
     }
 
+    /// Add new entry to the schema by cloning it.
+    pub fn add_entry_cloned(&mut self, entry: &TableSchemaEntry) {
+        self.entries.push(entry.clone());
+    }
+
     /// The arity of the table.
     pub fn arity(&self) -> usize {
         self.entries.len()
@@ -73,11 +78,6 @@ impl TableSchema {
 
     /// Return the types of the associated columns.
     pub fn get_column_types(&self) -> TableColumnTypes {
-        let mut result = Vec::<DataTypeName>::with_capacity(self.entries.len());
-        for entry in &self.entries {
-            result.push(entry.type_name);
-        }
-
-        result
+        self.entries.iter().map(|e| e.type_name).collect()
     }
 }

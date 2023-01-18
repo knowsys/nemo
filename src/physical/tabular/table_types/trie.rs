@@ -1,5 +1,6 @@
 use bytesize::ByteSize;
 
+use crate::generate_cast_statements;
 use crate::logical::Permutator;
 use crate::physical::columnar::operations::{ColumnScanCast, ColumnScanCastEnum};
 use crate::physical::columnar::traits::columnscan::{ColumnScanCell, ColumnScanEnum};
@@ -479,18 +480,20 @@ impl<'a> TrieScanGeneric<'a> {
                     }};
                 }
 
-                match src_column_type {
-                    DataTypeName::U32 => match dst_column_type {
-                        DataTypeName::U64 => add_layer_for_datatype!(U32, U64, u32, u64),
-                        _ => panic!("Unsupported cast."),
-                    },
-                    DataTypeName::U64 => match dst_column_type {
-                        DataTypeName::U32 => add_layer_for_datatype!(U64, U32, u64, u32),
-                        _ => panic!("Unsupported cast."),
-                    },
-                    DataTypeName::Float => panic!("Unsupported cast."),
-                    DataTypeName::Double => panic!("Unsupported cast."),
-                }
+                generate_cast_statements!(add_layer_for_datatype; src_column_type, dst_column_type);
+
+                // match src_column_type {
+                //     DataTypeName::U32 => match dst_column_type {
+                //         DataTypeName::U64 => add_layer_for_datatype!(U32, U64, u32, u64),
+                //         _ => panic!("Unsupported cast."),
+                //     },
+                //     DataTypeName::U64 => match dst_column_type {
+                //         DataTypeName::U32 => add_layer_for_datatype!(U64, U32, u64, u32),
+                //         _ => panic!("Unsupported cast."),
+                //     },
+                //     DataTypeName::Float => panic!("Unsupported cast."),
+                //     DataTypeName::Double => panic!("Unsupported cast."),
+                // }
             }
         }
 
