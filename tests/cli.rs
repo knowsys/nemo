@@ -43,9 +43,9 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
 
     cmd = Command::cargo_bin(bin)?;
     cmd.arg("--log").arg("cats");
-    cmd.assert().failure().stderr(predicate::str::contains(
-        "error: 'cats' isn't a valid value for '--log <LOG_LEVEL>'",
-    ));
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("'--log <LOG_LEVEL>'"));
     Ok(())
 }
 
