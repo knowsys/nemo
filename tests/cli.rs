@@ -26,19 +26,19 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
     cmd = Command::cargo_bin(bin)?;
     cmd.arg("-v").arg("-q");
     cmd.assert().failure().stderr(predicate::str::contains(
-        "error: The argument '--verbose...' cannot be used with '--quiet'",
+        "argument '--verbose...' cannot be used with '--quiet'",
     ));
 
     cmd = Command::cargo_bin(bin)?;
     cmd.arg("-v").arg("-q");
     cmd.assert().failure().stderr(predicate::str::contains(
-        "error: The argument '--verbose...' cannot be used with '--quiet'",
+        "argument '--verbose...' cannot be used with '--quiet'",
     ));
 
     cmd = Command::cargo_bin(bin)?;
     cmd.arg("-v").arg("--log").arg("error");
     cmd.assert().failure().stderr(predicate::str::contains(
-        "error: The argument '--verbose...' cannot be used with '--log <LOG_LEVEL>'",
+        "argument '--verbose...' cannot be used with '--log <LOG_LEVEL>'",
     ));
 
     cmd = Command::cargo_bin(bin)?;
