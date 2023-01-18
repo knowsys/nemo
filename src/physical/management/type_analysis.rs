@@ -413,10 +413,7 @@ impl TypeTree {
                     instructions.iter().take(instructions.len() - 1).enumerate()
                 {
                     not_appended_index += gap_instructions.len();
-                    schema_map.insert(
-                        gap_index,
-                        type_node.schema.get_entry(not_appended_index).clone(),
-                    );
+                    schema_map.insert(gap_index, *type_node.schema.get_entry(not_appended_index));
                     not_appended_index += 1;
                 }
 

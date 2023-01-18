@@ -53,7 +53,7 @@ impl TableSchema {
 
     /// Add new entry to the schema by cloning it.
     pub fn add_entry_cloned(&mut self, entry: &TableSchemaEntry) {
-        self.entries.push(entry.clone());
+        self.entries.push(*entry);
     }
 
     /// The arity of the table.

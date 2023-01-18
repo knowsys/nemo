@@ -467,7 +467,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                 let target_types = type_node.schema.get_column_types();
 
                 if let Some(subiterator) = subiterator_opt {
-                    let select_scan = TrieScanAppend::new(subiterator, &instructions, target_types);
+                    let select_scan = TrieScanAppend::new(subiterator, instructions, target_types);
                     Ok(Some(TrieScanEnum::TrieScanAppend(select_scan)))
                 } else {
                     Ok(None)
