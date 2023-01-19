@@ -20,22 +20,10 @@ use crate::{
     },
 };
 
-use super::plan_util::{join_binding, BODY_JOIN};
-
-/// Strategies for calculating the newly derived tables.
-pub trait HeadStrategy<Dict: Dictionary> {
-    /// Do preparation work for the planning phase.
-    fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self;
-
-    /// Calculate the concrete plan given a variable order.
-    fn execution_tree(
-        &self,
-        table_manager: &TableManager<Dict>,
-        rule_info: &RuleInfo,
-        variable_order: VariableOrder,
-        step_number: usize,
-    ) -> Vec<ExecutionTree<TableKey>>;
-}
+use super::{
+    plan_util::{join_binding, BODY_JOIN},
+    HeadStrategy,
+};
 
 /// Derived from head atoms which may contain duplicate variables or constants.
 /// Represents a normal form which only contains non-duplicate variables and
@@ -55,6 +43,26 @@ pub struct DatalogStrategy {
 }
 
 impl DatalogStrategy {
+    /// Create a new [`DatalogStrategy`] object.
+    pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
+        let mut predicate_to_atoms = HashMap::<Identifier, Vec<HeadInstruction>>::new();
+
+        for head_atom in rule.head() {
+            let atoms = predicate_to_atoms
+                .entry(head_atom.predicate())
+                .or_insert(Vec::new());
+
+            atoms.push(Self::head_instruction_from_atom(head_atom));
+        }
+
+        let num_body_variables = analysis.body_variables.len();
+
+        Self {
+            predicate_to_atoms,
+            num_body_variables,
+        }
+    }
+
     /// TODO: This needs to be revised once the Type System on the logical layer has been implemented.
     fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
         let arity = atom.terms().len();
@@ -118,25 +126,6 @@ impl DatalogStrategy {
 }
 
 impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
-    fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
-        let mut predicate_to_atoms = HashMap::<Identifier, Vec<HeadInstruction>>::new();
-
-        for head_atom in rule.head() {
-            let atoms = predicate_to_atoms
-                .entry(head_atom.predicate())
-                .or_insert(Vec::new());
-
-            atoms.push(Self::head_instruction_from_atom(head_atom));
-        }
-
-        let num_body_variables = analysis.body_variables.len();
-
-        Self {
-            predicate_to_atoms,
-            num_body_variables,
-        }
-    }
-
     fn execution_tree(
         &self,
         table_manager: &TableManager<Dict>,

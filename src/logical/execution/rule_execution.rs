@@ -17,8 +17,8 @@ use crate::{
 use super::{
     execution_engine::RuleInfo,
     planning::{
-        plan_body::{BodyStrategy, SeminaiveStrategy},
-        plan_head_datalog::{DatalogStrategy, HeadStrategy},
+        plan_body_seminaive::SeminaiveStrategy, plan_head_datalog::DatalogStrategy,
+        plan_head_restricted::RestrictedChaseStrategy, BodyStrategy, HeadStrategy,
     },
 };
 
@@ -27,9 +27,8 @@ use super::{
 pub struct RuleExecution<'a, Dict: Dictionary> {
     analysis: &'a RuleAnalysis,
 
-    body_strategy: SeminaiveStrategy<'a>,
-    head_strategy: DatalogStrategy,
-    _dict: PhantomData<Dict>,
+    body_strategy: Box<dyn BodyStrategy<'a, Dict> + 'a>,
+    head_strategy: Box<dyn HeadStrategy<Dict> + 'a>,
 }
 
 impl<'a, Dict: Dictionary> RuleExecution<'a, Dict> {
@@ -37,9 +36,12 @@ impl<'a, Dict: Dictionary> RuleExecution<'a, Dict> {
     pub fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self {
         Self {
             analysis,
-            body_strategy: <SeminaiveStrategy as BodyStrategy<Dict>>::initialize(rule, analysis),
-            head_strategy: <DatalogStrategy as HeadStrategy<Dict>>::initialize(rule, analysis),
-            _dict: PhantomData {},
+            body_strategy: Box::new(SeminaiveStrategy::initialize(rule, analysis)),
+            head_strategy: if analysis.is_existential {
+                Box::new(RestrictedChaseStrategy::initialize(rule, analysis))
+            } else {
+                Box::new(DatalogStrategy::initialize(rule, analysis))
+            },
         }
     }
 
