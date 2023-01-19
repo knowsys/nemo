@@ -30,7 +30,7 @@ use crate::{
 };
 use std::num::NonZeroUsize;
 
-/// Helper function which, given a continous range, expands it in such a way
+/// Helper function which, given a continuous range, expands it in such a way
 /// that all of the child nodes are covered as well.
 /// This process is repeated the
 fn expand_range(columns: &[ColumnWithIntervalsT], range: Range<usize>) -> Range<usize> {
@@ -147,7 +147,7 @@ pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> T
                                 .map(|i| trie.get_column(i).len())
                                 .unwrap_or(1);
 
-                            let new_data_column = ColumnRle::repeat_value(
+                            let new_data_column = ColumnRle::continuous_range(
                                 $value,
                                 NonZeroUsize::new(target_length).expect("This cannot be zero"),
                             );

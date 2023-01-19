@@ -353,7 +353,7 @@ where
     }
 
     /// Construct a new [`ColumnRle`] consisting of one value that is repeated a given number of times.
-    pub fn repeat_value(value: T, length: NonZeroUsize) -> ColumnRle<T> {
+    pub fn continuous_range(value: T, length: NonZeroUsize) -> ColumnRle<T> {
         let element = RleElement {
             value,
             length,
@@ -363,7 +363,7 @@ where
         Self::from_rle_elements(vec![element])
     }
 
-    /// Construct new [`ColumnScanRle`] consisting of a single continous range of values.
+    /// Construct new [`ColumnScanRle`] consisting of a single continuous range of values.
     pub fn continious_range(start_value: T, increment: T, count: usize) -> ColumnRle<T> {
         let element = RleElement {
             value: start_value,

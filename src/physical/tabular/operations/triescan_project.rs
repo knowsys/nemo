@@ -17,7 +17,7 @@ use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
 
-/// Helper function which, given a continous range, expands it in such a way
+/// Helper function which, given a continuous range, expands it in such a way
 /// that all of the child nodes are covered as well
 fn expand_range(column: &ColumnWithIntervalsT, range: Range<usize>) -> Range<usize> {
     let start = column.int_bounds(range.start).start;
