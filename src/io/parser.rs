@@ -184,16 +184,19 @@ impl<'a> RuleParser<'a> {
                 terminated(tag("@source"), multispace1),
                 pair(
                     self.parse_predicate_name(),
-                    delimited(
-                        tag("["),
-                        map_res(digit1, |number: &str| number.parse::<usize>()),
-                        tag("]"),
+                    preceded(
+                        multispace0,
+                        delimited(
+                            tag("["),
+                            map_res(digit1, |number: &str| number.parse::<usize>()),
+                            tag("]"),
+                        ),
                     ),
                 ),
             )(input)?;
 
             let (remainder, datasource) = delimited(
-                terminated(tag(":"), multispace1),
+                delimited(multispace0, tag(":"), multispace1),
                 alt((
                     map(
                         delimited(
@@ -713,6 +716,24 @@ mod test {
         assert!(parser.resolve_prefix(prefix).is_err());
         assert_parse!(parser.parse_prefix(), input.as_str(), prefix);
         assert_eq!(parser.resolve_prefix(prefix), Ok(iri));
+    }
+
+    #[test]
+    fn source() {
+        let parser = RuleParser::new();
+        let file = "drinks.csv";
+        let predicate_name = "drink";
+        let predicate = parser.intern_identifier(predicate_name.to_owned());
+        let source = DataSourceDeclaration::new(predicate, 1, DataSource::csv_file(file).unwrap());
+        // rulewerk accepts all of these variants
+        let input = format!(r#"@source {predicate_name}[1]: load-csv("{file}") ."#);
+        assert_parse!(parser.parse_source(), &input, source);
+        let input = format!(r#"@source {predicate_name}[1] : load-csv("{file}") ."#);
+        assert_parse!(parser.parse_source(), &input, source);
+        let input = format!(r#"@source {predicate_name}[1] : load-csv ( "{file}" ) ."#);
+        assert_parse!(parser.parse_source(), &input, source);
+        let input = format!(r#"@source {predicate_name} [1] : load-csv ( "{file}" ) ."#);
+        assert_parse!(parser.parse_source(), &input, source);
     }
 
     #[test]
