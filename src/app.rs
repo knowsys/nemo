@@ -2,7 +2,7 @@
 
 use clap::Parser;
 use stage2::error::Error;
-use stage2::io::parser::RuleParser;
+use stage2::io::parser::{all_input_consumed, RuleParser};
 use stage2::logical::execution::ExecutionEngine;
 use stage2::logical::model::Program;
 use stage2::meta::TimedCode;
@@ -141,12 +141,7 @@ impl CliApp {
             acc.push_str(item);
             acc
         });
-        let (remain, program) = parser.parse_program()(&input).expect("Parsing of rules failed!");
-        if !remain.is_empty() {
-            log::debug!("Parsing of rules failed, check trace for the remaining string");
-            log::trace!("Remaining string:\n{}", remain);
-            return Err(Error::ProgramParse);
-        }
+        let program = all_input_consumed(parser.parse_program())(&input)?;
         log::info!("Rules parsed");
         log::trace!("{:?}", program);
         Ok(AppState::new(

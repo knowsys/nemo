@@ -6,7 +6,7 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric0, digit1, multispace0, multispace1},
-    combinator::{map, map_res, opt, recognize, value},
+    combinator::{all_consuming, map, map_res, opt, recognize, value},
     multi::{many0, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
@@ -40,6 +40,23 @@ where
         let result = parser(input);
         log::trace!(target: "parser", "{fun}({input:?}) -> {result:?}");
         result
+    }
+}
+
+/// A combinator that makes sure all input has been consumed.
+pub fn all_input_consumed<'a, T>(
+    parser: impl FnMut(&'a str) -> IntermediateResult<'a, T>,
+) -> impl FnMut(&'a str) -> Result<T, crate::error::Error> {
+    let mut p = all_consuming(parser);
+    move |input| {
+        p(input).map(|(_, result)| result).map_err(|e| match e {
+            nom::Err::Incomplete(e) => ParseError::MissingInput(match e {
+                nom::Needed::Unknown => "expected an unknown amount of further input".to_owned(),
+                nom::Needed::Size(size) => format!("expected at least {size} more bytes"),
+            })
+            .into(),
+            nom::Err::Error(e) | nom::Err::Failure(e) => e,
+        })
     }
 }
 
@@ -659,24 +676,16 @@ impl<'a> RuleParser<'a> {
 
 #[cfg(test)]
 mod test {
-    use nom::combinator::all_consuming;
     use test_log::test;
 
     use crate::physical::datatypes::Double;
 
     use super::*;
 
-    fn all<'a, T>(
-        parser: impl FnMut(&'a str) -> IntermediateResult<'a, T>,
-    ) -> impl FnMut(&'a str) -> Option<T> {
-        let mut p = all_consuming(parser);
-        move |input| p(input).map(|(_, result)| result).ok()
-    }
-
     macro_rules! assert_parse {
         ($parser:expr, $left:expr, $right:expr $(,) ?) => {
             assert_eq!(
-                all($parser)($left).expect(
+                all_input_consumed($parser)($left).expect(
                     format!("failed to parse `{:?}`\nexpected `{:?}`", $left, $right).as_str()
                 ),
                 $right
