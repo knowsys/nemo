@@ -4,10 +4,10 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
 use nom::{
     branch::alt,
-    bytes::complete::tag,
-    character::complete::{alpha1, alphanumeric0, digit1, multispace0, multispace1, satisfy},
+    bytes::complete::{is_not, tag},
+    character::complete::{alpha1, alphanumeric0, digit1, multispace1, satisfy},
     combinator::{all_consuming, map, map_res, opt, recognize, value},
-    multi::{many0, separated_list1},
+    multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
 
@@ -60,6 +60,24 @@ pub fn all_input_consumed<'a, T>(
     }
 }
 
+/// A combinator that recognises a comment, starting at a `%`
+/// character and ending at the end of the line.
+pub fn comment(input: &str) -> IntermediateResult<()> {
+    value((), pair(tag("%"), is_not("\n\r")))(input)
+}
+
+/// A combinator that recognises an arbitrary amount of whitespace and
+/// comments.
+pub fn multispace_or_comment0(input: &str) -> IntermediateResult<()> {
+    value((), many0(alt((value((), multispace1), comment))))(input)
+}
+
+/// A combinator that recognises any non-empty amount of whitespace
+/// and comments.
+pub fn multispace_or_comment1(input: &str) -> IntermediateResult<()> {
+    value((), many1(alt((value((), multispace1), comment))))(input)
+}
+
 /// The main parser. Holds a dictionary for terms and a hash map for
 /// prefixes, as well as the base IRI.
 #[derive(Debug, Default)]
@@ -103,24 +121,33 @@ impl<'a> RuleParser<'a> {
 
     /// Parse the dot that ends declarations, optionally surrounded by spaces.
     fn parse_dot(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced("parse_dot", delimited(multispace0, tag("."), multispace0))
+        traced(
+            "parse_dot",
+            delimited(multispace_or_comment0, tag("."), multispace_or_comment0),
+        )
     }
 
     /// Parse a comma, optionally surrounded by spaces.
     fn parse_comma(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced("parse_comma", delimited(multispace0, tag(","), multispace0))
+        traced(
+            "parse_comma",
+            delimited(multispace_or_comment0, tag(","), multispace_or_comment0),
+        )
     }
 
     /// Parse a negation sign (`~`), optionally surrounded by spaces.
     fn parse_not(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced("parse_not", delimited(multispace0, tag("~"), multispace0))
+        traced(
+            "parse_not",
+            delimited(multispace_or_comment0, tag("~"), multispace_or_comment0),
+        )
     }
 
     /// Parse an arrow (`:-`), optionally surrounded by spaces.
     fn parse_arrow(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
         traced(
             "parse_arrow",
-            delimited(multispace0, tag(":-"), multispace0),
+            delimited(multispace_or_comment0, tag(":-"), multispace_or_comment0),
         )
     }
 
@@ -128,7 +155,7 @@ impl<'a> RuleParser<'a> {
     fn parse_open_parenthesis(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
         traced(
             "parse_open_parenthesis",
-            delimited(multispace0, tag("("), multispace0),
+            delimited(multispace_or_comment0, tag("("), multispace_or_comment0),
         )
     }
 
@@ -136,7 +163,7 @@ impl<'a> RuleParser<'a> {
     fn parse_close_parenthesis(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
         traced(
             "parse_close_parenthesis",
-            delimited(multispace0, tag(")"), multispace0),
+            delimited(multispace_or_comment0, tag(")"), multispace_or_comment0),
         )
     }
 
@@ -144,7 +171,7 @@ impl<'a> RuleParser<'a> {
     fn parse_base(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
         traced("parse_base", move |input| {
             let (remainder, base) = delimited(
-                terminated(tag("@base"), multispace1),
+                terminated(tag("@base"), multispace_or_comment1),
                 sparql::iriref,
                 self.parse_dot(),
             )(input)?;
@@ -159,8 +186,11 @@ impl<'a> RuleParser<'a> {
     fn parse_prefix(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
         traced("parse_prefix", move |input| {
             let (remainder, (prefix, iri)) = delimited(
-                terminated(tag("@prefix"), multispace1),
-                tuple((terminated(sparql::pname_ns, multispace1), sparql::iriref)),
+                terminated(tag("@prefix"), multispace_or_comment1),
+                tuple((
+                    terminated(sparql::pname_ns, multispace_or_comment1),
+                    sparql::iriref,
+                )),
                 self.parse_dot(),
             )(input)?;
 
@@ -181,11 +211,11 @@ impl<'a> RuleParser<'a> {
     ) -> impl FnMut(&'a str) -> IntermediateResult<DataSourceDeclaration> {
         traced("parse_source", move |input| {
             let (remainder, (predicate, arity)) = preceded(
-                terminated(tag("@source"), multispace1),
+                terminated(tag("@source"), multispace_or_comment1),
                 pair(
                     self.parse_predicate_name(),
                     preceded(
-                        multispace0,
+                        multispace_or_comment0,
                         delimited(
                             tag("["),
                             map_res(digit1, |number: &str| number.parse::<usize>()),
@@ -196,7 +226,7 @@ impl<'a> RuleParser<'a> {
             )(input)?;
 
             let (remainder, datasource) = delimited(
-                delimited(multispace0, tag(":"), multispace1),
+                delimited(multispace_or_comment0, tag(":"), multispace_or_comment1),
                 alt((
                     map(
                         delimited(
@@ -264,9 +294,9 @@ impl<'a> RuleParser<'a> {
                 pair(
                     self.parse_predicate_name(),
                     delimited(
-                        tag("("),
+                        self.parse_open_parenthesis(),
                         separated_list1(self.parse_comma(), self.parse_ground_term()),
-                        tag(")"),
+                        self.parse_close_parenthesis(),
                     ),
                 ),
                 self.parse_dot(),
@@ -512,7 +542,7 @@ impl<'a> RuleParser<'a> {
         traced(
             "parse_filter_operator",
             delimited(
-                multispace0,
+                multispace_or_comment0,
                 alt((
                     value(FilterOperation::LessThanEq, tag("<=")),
                     value(FilterOperation::LessThan, tag("<")),
@@ -520,7 +550,7 @@ impl<'a> RuleParser<'a> {
                     value(FilterOperation::GreaterThanEq, tag(">=")),
                     value(FilterOperation::GreaterThan, tag(">")),
                 )),
-                multispace0,
+                multispace_or_comment0,
             ),
         )
     }
@@ -556,7 +586,8 @@ impl<'a> RuleParser<'a> {
     /// Parses a program in the rules language.
     pub fn parse_program(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Program> {
         traced("parse_program", move |input| {
-            let (remainder, _) = opt(self.parse_base())(input)?;
+            let (remainder, _) = multispace_or_comment0(input)?;
+            let (remainder, _) = opt(self.parse_base())(remainder)?;
             let (remainder, _) = many0(self.parse_prefix())(remainder)?;
             let (remainder, _) = many0(self.parse_source())(remainder)?;
             let (remainder, statements) = many0(self.parse_statement())(remainder)?;
@@ -774,6 +805,7 @@ mod test {
             ))
         );
     }
+
     #[test]
     fn fact_namespaced() {
         let parser = RuleParser::new();
@@ -850,6 +882,35 @@ mod test {
             parser.parse_fact(),
             &fact,
             Fact(Atom::new(p, vec![Term::Constant(a)]))
+        );
+    }
+
+    #[test]
+    fn fact_comment() {
+        let parser = RuleParser::new();
+        let predicate = "p";
+        let value = "foo";
+        let datatype = "bar";
+        let p = parser.intern_identifier(predicate.to_owned());
+        let v = parser.intern_identifier(value.to_owned()).0;
+        let t = parser.intern_identifier(datatype.to_owned()).0;
+        let fact = format!(
+            r#"{predicate}(% comment 1
+                 "{value}"^^<{datatype}> % comment 2
+                 ) % comment 3
+               . % comment 4"#
+        );
+
+        assert_parse!(
+            parser.parse_fact(),
+            &fact,
+            Fact(Atom::new(
+                p,
+                vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                    value: v,
+                    datatype: t
+                })]
+            ))
         );
     }
 
