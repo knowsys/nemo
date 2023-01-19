@@ -13,13 +13,51 @@ use crate::physical::datatypes::Field;
 // TODO: have type for everything (rdfs:resource)
 // Generally: support rdf types
 
+/// Marker Trait for Type Parse Errors
+pub trait LogicalTypeParseError: Debug + Display {
+    /// Construct Error from string that was tried to parse and the supported data types that are tried to match
+    fn new(failed_str: String, known_type_names: Vec<String>) -> Self;
+}
+
+#[derive(Debug)]
+/// Default Logical Type Parse Error implementation holding just the string that could not be parsed and the known type names
+pub struct DefaultLogicalTypeParseError {
+    failed_str: String,
+    known_type_names: Vec<String>,
+}
+
+impl Display for DefaultLogicalTypeParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Failed to parse type {}. Known Types: {}",
+            self.failed_str,
+            self.known_type_names.join(", ")
+        )
+    }
+}
+
+impl LogicalTypeParseError for DefaultLogicalTypeParseError {
+    fn new(failed_str: String, known_type_names: Vec<String>) -> Self {
+        Self {
+            failed_str,
+            known_type_names,
+        }
+    }
+}
+
 /// Trait marking Enums representing a list of logical type names
-pub trait LogicalTypeCollection: Clone + Debug + Display + FromStr {
+pub trait LogicalTypeCollection:
+    Clone + Debug + Display + FromStr<Err = Self::ParseTypeNameErr>
+{
+    /// Type that is essentially <Self as FromStr>::Err but we need to set a trait bound on it which I don't know how to set otherwise
+    type ParseTypeNameErr: LogicalTypeParseError;
+
     /// The corresponding enum that can hold the logical types in its variats
     type LogicalTypeEnum: LogicalTypeEnum;
 
     /// Parse string according into type respresented by self
-    fn parse(&self, s: &str) -> Result<Self::LogicalTypeEnum, String>; //TODO: error type should probably not be a plain string...
+    fn parse(&self, s: &str) -> Result<Self::LogicalTypeEnum, String>; // TODO: error should not be a string
 }
 
 /// Trait marking Enums wrapping a a list of logical types into respective variants
@@ -45,7 +83,7 @@ pub trait LogicalType {
 /// Generate Logical Type Enums by specifying how type names map to actual logical type implementations
 #[macro_export]
 macro_rules! generate_type_collection_and_enum {
-    ([$collection_vis:vis] $name_collection:ident, [$enum_vis:vis] $name_enum:ident, $(($variant_name:ident, $content:ty)),+) => {
+    ([$collection_vis:vis] $name_collection:ident, [$enum_vis:vis] $name_enum:ident, $error_impl:ident, $(($variant_name:ident, $content:ty)),+) => {
         /// Generated Logical Type Collection Type $name_collection
         #[derive(Copy, Clone, Debug)]
         $collection_vis enum $name_collection {
@@ -64,22 +102,23 @@ macro_rules! generate_type_collection_and_enum {
         }
 
         impl FromStr for $name_collection {
-            type Err = String; // TODO: error type should probably not be a plain string...
+            type Err = $error_impl;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s {
                     $(stringify!($variant_name) => Ok(Self::$variant_name)),+,
-                    _ => Err(format!("Type {s} not known!"))
+                    _ => Err(Self::Err::new(s.to_string(), vec![$(stringify!($variant_name).to_string()),+]))
                 }
             }
         }
 
         impl LogicalTypeCollection for $name_collection {
+            type ParseTypeNameErr = <Self as FromStr>::Err;
             type LogicalTypeEnum = $name_enum;
 
-            fn parse(&self, s: &str) -> Result<Self::LogicalTypeEnum, String> {
+            fn parse(&self, s: &str) -> Result<Self::LogicalTypeEnum, String> { // TODO: error should not be a string
                 match self {
-                    $(Self::$variant_name => <$content>::from_str(s).map(|ok| Self::LogicalTypeEnum::$variant_name(ok)).map_err(|err| err.to_string())),+
+                    $(Self::$variant_name => <$content>::from_str(s).map(|ok| Self::LogicalTypeEnum::$variant_name(ok)).map_err(|err| err.to_string())),+ // TODO: error should not be a string
                 }
             }
         }
@@ -111,6 +150,7 @@ macro_rules! generate_type_collection_and_enum {
 generate_type_collection_and_enum!(
     [pub] DefaultLogicalTypeCollection,
     [pub] DefaultLogicalTypeEnum,
+    DefaultLogicalTypeParseError,
     (GenericEverything, GenericEverything),
     (Integer, Integer<i64>)
 );

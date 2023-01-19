@@ -217,6 +217,38 @@ impl<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> RuleParser<'a, D
         })
     }
 
+    fn parse_predicate_declaration(
+        &'a self,
+    ) -> impl FnMut(&'a str) -> IntermediateResult<PredicateTypeDeclaration<LogicalTypes>> {
+        traced("parse_predicate_declaration", move |input| {
+            let (remainder, (predicate, types)) = delimited(
+                terminated(tag("@decl"), multispace1),
+                pair(
+                    self.parse_predicate_name(),
+                    delimited(
+                        self.parse_open_parenthesis(),
+                        separated_list1(self.parse_comma(), self.parse_type_name()),
+                        self.parse_close_parenthesis(),
+                    ),
+                ),
+                self.parse_dot(),
+            )(input)?;
+
+            Ok((remainder, PredicateTypeDeclaration::new(predicate, types)))
+        })
+    }
+
+    fn parse_type_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<LogicalTypes> {
+        traced("parse_type_name", move |input| {
+            let (remainder, type_name) =
+                (map_res(recognize(pair(alpha1, alphanumeric0)), |name: &str| {
+                    name.parse::<LogicalTypes>()
+                }))(input)?;
+
+            Ok((remainder, type_name))
+        })
+    }
+
     /// Parses a data source declaration.
     pub fn parse_source(
         &'a self,
@@ -597,6 +629,9 @@ impl<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> RuleParser<'a, D
             let (remainder, _) = multispace_or_comment0(input)?;
             let (remainder, _) = opt(self.parse_base())(remainder)?;
             let (remainder, _) = many0(self.parse_prefix())(remainder)?;
+
+            let (remainder, _) = many0(self.parse_predicate_declaration())(remainder)?;
+
             let (remainder, _) = many0(self.parse_source())(remainder)?;
             let (remainder, statements) = many0(self.parse_statement())(remainder)?;
 

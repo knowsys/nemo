@@ -735,3 +735,10 @@ pub struct PredicateTypeDeclaration<LogicalTypes: LogicalTypeCollection> {
     predicate: Identifier,
     types: Vec<LogicalTypes>,
 }
+
+impl<LogicalTypes: LogicalTypeCollection> PredicateTypeDeclaration<LogicalTypes> {
+    /// Construct new PredicateTypeDeclaration from values for its fields
+    pub fn new(predicate: Identifier, types: Vec<LogicalTypes>) -> Self {
+        Self { predicate, types }
+    }
+}
