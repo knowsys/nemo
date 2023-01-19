@@ -17,8 +17,8 @@ use crate::{
 use super::{
     execution_engine::RuleInfo,
     planning::{
-        plan_normal_body::{BodyStrategy, SeminaiveStrategy},
-        plan_normal_head::{DatalogStrategy, HeadStrategy},
+        plan_body::{BodyStrategy, SeminaiveStrategy},
+        plan_head_datalog::{DatalogStrategy, HeadStrategy},
     },
 };
 
