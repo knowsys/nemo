@@ -6,7 +6,8 @@ use std::{
 
 use crate::physical::{
     tabular::operations::{
-        triescan_join::JoinBinding, triescan_select::SelectEqualClasses, ValueAssignment,
+        triescan_append::AppendInstruction, triescan_join::JoinBinding,
+        triescan_select::SelectEqualClasses, ValueAssignment,
     },
     util::Reordering,
 };
@@ -51,7 +52,8 @@ impl<TableKey: TableKeyType> ExecutionNodeRef<TableKey> {
             ExecutionNode::Minus(_, _)
             | ExecutionNode::Project(_, _)
             | ExecutionNode::SelectEqual(_, _)
-            | ExecutionNode::SelectValue(_, _) => {
+            | ExecutionNode::SelectValue(_, _)
+            | ExecutionNode::AppendColumns(_, _) => {
                 panic!("Can only add subnodes to operations which can have arbitrary many of them")
             }
         }
@@ -77,6 +79,8 @@ pub enum ExecutionNode<TableKey: TableKeyType> {
     SelectValue(ExecutionNodeRef<TableKey>, Vec<ValueAssignment>),
     /// Only leave entries in that contain equal values in certain columns.
     SelectEqual(ExecutionNodeRef<TableKey>, SelectEqualClasses),
+    /// Append certain columns to the trie.
+    AppendColumns(ExecutionNodeRef<TableKey>, Vec<Vec<AppendInstruction>>),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently.
@@ -239,6 +243,16 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         let new_node = ExecutionNode::SelectEqual(subnode, eq_classes);
         self.push_and_return_ref(new_node)
     }
+
+    /// Return [`ExecutionNodeRef`] for appending columns to a trie.
+    pub fn append_columns(
+        &mut self,
+        subnode: ExecutionNodeRef<TableKey>,
+        instructions: Vec<Vec<AppendInstruction>>,
+    ) -> ExecutionNodeRef<TableKey> {
+        let new_node = ExecutionNode::AppendColumns(subnode, instructions);
+        self.push_and_return_ref(new_node)
+    }
 }
 
 /// Functionality for optimizing an [`ExecutionTree`]
@@ -348,6 +362,15 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                     Some(simplified)
                 } else {
                     Some(new_tree.select_equal(simplified, classes.clone()))
+                }
+            }
+            ExecutionNode::AppendColumns(subnode, instructions) => {
+                let simplified = Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
+
+                if instructions.iter().all(|i| i.is_empty()) {
+                    Some(simplified)
+                } else {
+                    Some(new_tree.append_columns(simplified, instructions.clone()))
                 }
             }
         }

@@ -303,3 +303,31 @@ impl PartialOrd for DataTypeName {
         }
     }
 }
+
+/// Used to generate the match statements covering all the possible combinations
+/// of implicitly castable types.
+/// For each combinations, calls another macro which takes as input the type names
+/// as well as the type.
+/// The provided macro must be of this form:
+///     macro_rules! name {
+///         ($src_name:ident, $dst_name:ident, $src_type:ty, $dst_type:ty) => {{
+///             ...
+///         }};
+///     }
+#[macro_export]
+macro_rules! generate_cast_statements {
+    ($cast_macro:ident; $src_type:expr, $dst_type:expr) => {
+        match $src_type {
+            DataTypeName::U32 => match $dst_type {
+                DataTypeName::U64 => $cast_macro!(U32, U64, u32, u64),
+                _ => panic!("Unsupported cast."),
+            },
+            DataTypeName::U64 => match $dst_type {
+                DataTypeName::U32 => $cast_macro!(U64, U32, u64, u32),
+                _ => panic!("Unsupported cast."),
+            },
+            DataTypeName::Float => panic!("Unsupported cast."),
+            DataTypeName::Double => panic!("Unsupported cast."),
+        }
+    };
+}

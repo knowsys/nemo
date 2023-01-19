@@ -184,13 +184,23 @@ pub struct ColumnBuilderRle<T> {
     count: usize,
 }
 
-impl<T> ColumnBuilderRle<T> {
+impl<T> ColumnBuilderRle<T>
+where
+    T: ColumnDataType + Default,
+{
     /// Constructor.
     pub fn new() -> ColumnBuilderRle<T> {
         ColumnBuilderRle {
             elements: Vec::new(),
             previous_value_opt: None,
             count: 0,
+        }
+    }
+
+    /// Adds an repeated value into the currently built column.
+    pub fn add_repeated_value(&mut self, value: T, length: usize) {
+        for _ in 0..length {
+            self.add(value);
         }
     }
 }
@@ -332,7 +342,7 @@ where
         }
     }
 
-    /// Constructs a new ColumnRle from a vector of the suitable type.
+    /// Constructs a new [`ColumnRle`] from a vector of the suitable type.
     pub fn new(data: Vec<T>) -> ColumnRle<T> {
         let mut builder = ColumnBuilderRle::new();
         for value in data {
@@ -340,6 +350,28 @@ where
         }
 
         builder.finalize_raw()
+    }
+
+    /// Construct a new [`ColumnRle`] consisting of one value that is repeated a given number of times.
+    pub fn continuous_range(value: T, length: NonZeroUsize) -> ColumnRle<T> {
+        let element = RleElement {
+            value,
+            length,
+            increment: Step::Increment(T::zero()),
+        };
+
+        Self::from_rle_elements(vec![element])
+    }
+
+    /// Construct new [`ColumnScanRle`] consisting of a single continuous range of values.
+    pub fn continious_range(start_value: T, increment: T, count: usize) -> ColumnRle<T> {
+        let element = RleElement {
+            value: start_value,
+            length: NonZeroUsize::new(count).expect("Tried to construct empty rle column."),
+            increment: Step::Increment(increment),
+        };
+
+        Self::from_rle_elements(vec![element])
     }
 }
 

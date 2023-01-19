@@ -27,7 +27,7 @@ pub struct RuleExecution<'a> {
     analysis: &'a RuleAnalysis,
 
     body_strategy: SeminaiveStrategy<'a>,
-    head_strategy: DatalogStrategy<'a>,
+    head_strategy: DatalogStrategy,
 }
 
 impl<'a> RuleExecution<'a> {

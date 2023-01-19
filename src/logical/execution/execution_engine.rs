@@ -95,7 +95,7 @@ impl ExecutionEngine {
     }
 
     /// Add all input facts as tables into the table manager.
-    /// TODO: This function has to be revised when the new type system for the logicla layer is introduced.
+    /// TODO: This function has to be revised when the new type system for the logical layer is introduced.
     fn add_input_facts(table_manager: &mut TableManager, program: &Program) {
         let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<DataValueT>>>::new();
 

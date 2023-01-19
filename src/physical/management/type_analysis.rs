@@ -8,7 +8,10 @@ use crate::{
     error::Error,
     physical::{
         datatypes::DataTypeName,
-        tabular::traits::table_schema::{TableSchema, TableSchemaEntry},
+        tabular::{
+            operations::triescan_append::AppendInstruction,
+            traits::table_schema::{TableSchema, TableSchemaEntry},
+        },
     },
 };
 
@@ -267,6 +270,31 @@ impl TypeTree {
                     vec![subtype_node],
                 ))
             }
+            ExecutionNode::AppendColumns(subtree, instructions) => {
+                let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
+                let mut new_schema = TableSchema::new();
+
+                for (gap_index, gap_instructions) in instructions.iter().enumerate() {
+                    for instruction in gap_instructions {
+                        match instruction {
+                            AppendInstruction::RepeatColumn(repeat_index) => {
+                                new_schema
+                                    .add_entry_cloned(subtype_node.schema.get_entry(*repeat_index));
+                            }
+                            AppendInstruction::Constant(constant, dict) => {
+                                new_schema.add_entry(constant.get_type(), *dict, false);
+                            }
+                            AppendInstruction::Null => todo!(),
+                        }
+                    }
+
+                    if gap_index < instructions.len() - 1 {
+                        new_schema.add_entry_cloned(subtype_node.schema.get_entry(gap_index));
+                    }
+                }
+
+                Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
+            }
         }
     }
 
@@ -335,11 +363,7 @@ impl TypeTree {
                     left.clone(),
                 );
 
-                Self::propagate_down(
-                    &mut type_node.subnodes[1],
-                    Some(schema_map.clone()),
-                    right.clone(),
-                );
+                Self::propagate_down(&mut type_node.subnodes[1], Some(schema_map), right.clone());
             }
             ExecutionNode::Project(subtree, reordering) => {
                 let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
@@ -349,7 +373,7 @@ impl TypeTree {
 
                 Self::propagate_down(
                     &mut type_node.subnodes[0],
-                    Some(schema_map.clone()),
+                    Some(schema_map),
                     subtree.clone(),
                 );
             }
@@ -363,7 +387,7 @@ impl TypeTree {
 
                 Self::propagate_down(
                     &mut type_node.subnodes[0],
-                    Some(schema_map.clone()),
+                    Some(schema_map),
                     subtree.clone(),
                 );
             }
@@ -377,7 +401,25 @@ impl TypeTree {
 
                 Self::propagate_down(
                     &mut type_node.subnodes[0],
-                    Some(schema_map.clone()),
+                    Some(schema_map),
+                    subtree.clone(),
+                );
+            }
+            ExecutionNode::AppendColumns(subtree, instructions) => {
+                let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+                let mut not_appended_index: usize = 0;
+
+                for (gap_index, gap_instructions) in
+                    instructions.iter().take(instructions.len() - 1).enumerate()
+                {
+                    not_appended_index += gap_instructions.len();
+                    schema_map.insert(gap_index, *type_node.schema.get_entry(not_appended_index));
+                    not_appended_index += 1;
+                }
+
+                Self::propagate_down(
+                    &mut type_node.subnodes[0],
+                    Some(schema_map),
                     subtree.clone(),
                 );
             }
@@ -442,6 +484,7 @@ mod test {
             DatabaseInstance,
         },
         tabular::{
+            operations::triescan_append::AppendInstruction,
             table_types::trie::Trie,
             traits::{
                 table::Table,
@@ -728,5 +771,65 @@ mod test {
         let type_tree = type_tree.unwrap();
         let expected_tree_down = build_expected_type_tree_down();
         assert_eq!(type_tree, expected_tree_down);
+    }
+
+    #[test]
+    fn test_append() {
+        let trie_a = Trie::from_rows(vec![vec![DataValueT::U32(1)]]);
+        let trie_b = Trie::from_rows(vec![vec![DataValueT::U64(1 << 35), DataValueT::U32(2)]]);
+
+        let schema_a = TableSchema::from_vec(vec![schema_entry(DataTypeName::U32)]);
+        let schema_b = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U32),
+        ]);
+
+        let mut instance =
+            DatabaseInstance::<StringKeyType>::new(PrefixedStringDictionary::default());
+        instance.add(String::from("TableA"), trie_a, schema_a);
+        instance.add(String::from("TableB"), trie_b, schema_b);
+
+        let mut execution_tree = ExecutionTree::new(
+            String::from("test"),
+            ExecutionResult::<StringKeyType>::Temp(1),
+        );
+
+        let fetch_a = execution_tree.fetch_table(String::from("TableA"));
+        let fetch_b = execution_tree.fetch_table(String::from("TableB"));
+
+        let append_a = execution_tree.append_columns(
+            fetch_a,
+            vec![vec![], vec![AppendInstruction::RepeatColumn(0)]],
+        );
+
+        let union = execution_tree.union(vec![append_a, fetch_b]);
+        execution_tree.set_root(union);
+
+        let temp_schemas = HashMap::<usize, TableSchema>::new();
+        let type_tree = TypeTree::from_execution_tree(&instance, &temp_schemas, &execution_tree);
+
+        let expect_a = TableSchema::from_vec(vec![schema_entry(DataTypeName::U64)]);
+        let expect_b = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U32),
+        ]);
+        let expect_append = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U32),
+        ]);
+        let expect_union = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U32),
+        ]);
+
+        let expected_type_tree = TypeTreeNode::new(
+            expect_union,
+            vec![
+                TypeTreeNode::new(expect_append, vec![TypeTreeNode::new(expect_a, vec![])]),
+                TypeTreeNode::new(expect_b, vec![]),
+            ],
+        );
+
+        assert_eq!(expected_type_tree, type_tree.unwrap());
     }
 }

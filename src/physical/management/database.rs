@@ -16,8 +16,9 @@ use crate::{
         dictionary::PrefixedStringDictionary,
         tabular::{
             operations::{
-                materialize::materialize, TrieScanJoin, TrieScanMinus, TrieScanProject,
-                TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion,
+                materialize::materialize, triescan_append::TrieScanAppend, TrieScanJoin,
+                TrieScanMinus, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
+                TrieScanUnion,
             },
             table_types::trie::{Trie, TrieScanGeneric},
             traits::{table::Table, table_schema::TableSchema, triescan::TrieScanEnum},
@@ -460,6 +461,18 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
                     Ok(None)
                 }
             }
+            ExecutionNode::AppendColumns(subtable, instructions) => {
+                let subiterator_opt =
+                    self.get_iterator_node(subtable.clone(), &type_node.subnodes[0], temp_tries)?;
+                let target_types = type_node.schema.get_column_types();
+
+                if let Some(subiterator) = subiterator_opt {
+                    let select_scan = TrieScanAppend::new(subiterator, instructions, target_types);
+                    Ok(Some(TrieScanEnum::TrieScanAppend(select_scan)))
+                } else {
+                    Ok(None)
+                }
+            }
         };
     }
 
@@ -532,6 +545,9 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
             }
             ExecutionNode::SelectEqual(sub, _) => {
                 self.get_iterator_string_sub("SelectEqual", &vec![sub], temp_tries)
+            }
+            ExecutionNode::AppendColumns(sub, _) => {
+                self.get_iterator_string_sub("AppendColumns", &vec![sub], temp_tries)
             }
         }
     }

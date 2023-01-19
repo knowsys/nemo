@@ -1,5 +1,6 @@
 use crate::generate_forwarder;
 use crate::physical::columnar::traits::columnscan::ColumnScanT;
+use crate::physical::tabular::operations::triescan_append::TrieScanAppend;
 use crate::physical::tabular::operations::{
     TrieScanJoin, TrieScanMinus, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
     TrieScanUnion,
@@ -47,9 +48,20 @@ pub enum TrieScanEnum<'a> {
     TrieScanSelectEqual(TrieScanSelectEqual<'a>),
     /// Case TrieScanSelectValue
     TrieScanSelectValue(TrieScanSelectValue<'a>),
+    /// Case TrieScanAppend
+    TrieScanAppend(TrieScanAppend<'a>),
 }
 
-generate_forwarder!(forward_to_scan; TrieScanGeneric, TrieScanJoin, TrieScanProject, TrieScanMinus, TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion);
+generate_forwarder!(forward_to_scan;
+    TrieScanGeneric,
+    TrieScanJoin,
+    TrieScanProject,
+    TrieScanMinus,
+    TrieScanSelectEqual,
+    TrieScanSelectValue,
+    TrieScanUnion,
+    TrieScanAppend
+);
 
 impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
     fn up(&mut self) {
