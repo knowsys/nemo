@@ -17,6 +17,9 @@ pub enum ParseError {
     /// bounds on [std::error::Error] require ['static] lifetime.
     #[error("Syntax error: {0}")]
     SyntaxError(#[from] error::Error<String>),
+    /// More input needed.
+    #[error("Expected further input: {0}")]
+    MissingInput(String),
     /// Use of an undeclared prefix
     #[error(r#"Undeclared prefix "{0}""#)]
     UndeclaredPrefix(String),
