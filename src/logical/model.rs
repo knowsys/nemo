@@ -586,7 +586,7 @@ pub enum Directive {
 }
 
 /// A SPARQL query.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SparqlQuery {
     /// The SPARQL endpoint, should be an IRI.
     endpoint: String,
@@ -632,7 +632,7 @@ impl SparqlQuery {
 }
 
 /// An external data source.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataSource {
     /// A CSV file data source with the given path.
     CsvFile(Box<PathBuf>),
@@ -660,7 +660,7 @@ impl DataSource {
 }
 
 /// A Data source declaration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataSourceDeclaration {
     predicate: Identifier,
     arity: usize,
