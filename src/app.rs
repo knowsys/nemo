@@ -5,19 +5,20 @@ use stage2::error::Error;
 use stage2::io::parser::{all_input_consumed, RuleParser};
 use stage2::logical::execution::ExecutionEngine;
 use stage2::logical::model::Program;
+use stage2::logical::types::{DefaultLogicalTypeCollection, LogicalTypeCollection};
 use stage2::meta::TimedCode;
 use stage2::physical::dictionary::Dictionary;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
 /// Application state
-struct AppState<Dict: Dictionary> {
+struct AppState<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
     /// parsed program data
-    program: Program<Dict>,
+    program: Program<Dict, LogicalTypes>,
 }
 
-impl<Dict: Dictionary> AppState<Dict> {
-    fn new(program: Program<Dict>) -> Self {
+impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> AppState<Dict, LogicalTypes> {
+    fn new(program: Program<Dict, LogicalTypes>) -> Self {
         Self { program }
     }
 }
@@ -59,6 +60,8 @@ type Dict = stage2::physical::dictionary::StringDictionary;
 #[cfg(not(feature = "no-prefixed-string-dictionary"))]
 type Dict = stage2::physical::dictionary::PrefixedStringDictionary;
 
+type LogicalTypes = DefaultLogicalTypeCollection;
+
 impl CliApp {
     /// Application logic, based on the parsed data inside the [`CliApp`] object
     pub fn run(&mut self) -> Result<(), Error> {
@@ -80,7 +83,7 @@ impl CliApp {
             );
         }
 
-        let app_state = self.parse_rules::<Dict>()?;
+        let app_state = self.parse_rules::<Dict, LogicalTypes>()?;
 
         let mut exec_engine = ExecutionEngine::initialize(app_state.program);
 
@@ -151,7 +154,9 @@ impl CliApp {
     /// Parsing of all rule files, defined in [`Self::rules`]. Links internally used and needed dictionaries into the program state.
     ///
     /// Note: Currently all rule files will be merged into one big set of rules and parsed afterwards, this needs to be fixed when #59 and #60 is done.
-    fn parse_rules<Dict: Dictionary>(&mut self) -> Result<AppState<Dict>, Error> {
+    fn parse_rules<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
+        &mut self,
+    ) -> Result<AppState<Dict, LogicalTypes>, Error> {
         log::info!("Parsing rules ...");
         let parser = RuleParser::new();
         let mut inputs: Vec<String> = Vec::new();

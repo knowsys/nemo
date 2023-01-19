@@ -11,7 +11,9 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
 
-use crate::{logical::model::*, physical::dictionary::Dictionary};
+use crate::{
+    logical::model::*, logical::types::LogicalTypeCollection, physical::dictionary::Dictionary,
+};
 
 mod types;
 use types::IntermediateResult;
@@ -77,8 +79,8 @@ pub fn multispace_or_comment1(input: &str) -> IntermediateResult<()> {
 
 /// The main parser. Holds a dictionary for terms and a hash map for
 /// prefixes, as well as the base IRI.
-#[derive(Debug, Default)]
-pub struct RuleParser<'a, Dict: Dictionary> {
+#[derive(Debug)]
+pub struct RuleParser<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
     /// The [`Dictionary`] mapping names to their internal handles.
     names: RefCell<Dict>,
     /// The base IRI, if set.
@@ -87,6 +89,26 @@ pub struct RuleParser<'a, Dict: Dictionary> {
     prefixes: RefCell<HashMap<&'a str, &'a str>>,
     /// The external data sources.
     sources: RefCell<Vec<DataSourceDeclaration>>,
+    /// Declarations of predicates with their types.
+    predicate_declarations: RefCell<Vec<PredicateTypeDeclaration<LogicalTypes>>>, // TODO: why are all of these ref cells?
+}
+
+// NOTE: deriving this does not work
+// since rust then requires a Default trait bound
+// on the generic argument LogicalTypes as well,
+// which we do not need or want
+impl<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> Default
+    for RuleParser<'a, Dict, LogicalTypes>
+{
+    fn default() -> Self {
+        Self {
+            names: Default::default(),
+            base: Default::default(),
+            prefixes: Default::default(),
+            sources: Default::default(),
+            predicate_declarations: Default::default(),
+        }
+    }
 }
 
 /// Body may contain literals or filter expressions
@@ -98,7 +120,7 @@ pub enum BodyExpression {
     Filter(Filter),
 }
 
-impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
+impl<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> RuleParser<'a, Dict, LogicalTypes> {
     /// Construct a new [`RuleParser`].
     pub fn new() -> Self {
         Default::default()
@@ -568,7 +590,9 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
     }
 
     /// Parses a program in the rules language.
-    pub fn parse_program(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Program<Dict>> {
+    pub fn parse_program(
+        &'a self,
+    ) -> impl FnMut(&'a str) -> IntermediateResult<Program<Dict, LogicalTypes>> {
         traced("parse_program", move |input| {
             let (remainder, _) = multispace_or_comment0(input)?;
             let (remainder, _) = opt(self.parse_base())(remainder)?;
@@ -599,6 +623,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                     self.sources.borrow().clone(),
                     rules,
                     facts,
+                    self.predicate_declarations.borrow().clone(),
                     self.clone_names(),
                 ),
             ))
@@ -696,6 +721,7 @@ mod test {
     use super::*;
 
     type Dict = crate::physical::dictionary::PrefixedStringDictionary;
+    type LogicalTypes = crate::logical::types::DefaultLogicalTypeCollection;
 
     macro_rules! assert_parse {
         ($parser:expr, $left:expr, $right:expr $(,) ?) => {
@@ -712,7 +738,7 @@ mod test {
     fn base_directive() {
         let base = "http://example.org/foo";
         let input = format!("@base <{base}> .");
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::<Dict, LogicalTypes>::new();
         let b = parser.intern(base.to_owned());
         assert!(parser.base().is_none());
         assert_parse!(parser.parse_base(), input.as_str(), b);
@@ -724,7 +750,7 @@ mod test {
         let prefix = "foo";
         let iri = "http://example.org/foo";
         let input = format!("@prefix {prefix}: <{iri}> .");
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::<Dict, LogicalTypes>::new();
         assert!(parser.resolve_prefix(prefix).is_err());
         assert_parse!(parser.parse_prefix(), input.as_str(), prefix);
         assert_eq!(parser.resolve_prefix(prefix), Ok(iri));
@@ -732,7 +758,7 @@ mod test {
 
     #[test]
     fn source() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::<Dict, LogicalTypes>::new();
         let file = "drinks.csv";
         let predicate_name = "drink";
         let predicate = parser.intern(predicate_name.to_owned());
@@ -750,7 +776,7 @@ mod test {
 
     #[test]
     fn fact() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::<Dict, LogicalTypes>::new();
         let predicate = "p";
         let value = "foo";
         let datatype = "bar";
@@ -774,7 +800,7 @@ mod test {
 
     #[test]
     fn fact_namespaced() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::<Dict, LogicalTypes>::new();
         let predicate = "p";
         let name = "foo";
         let prefix = "eg";
@@ -796,7 +822,7 @@ mod test {
 
     #[test]
     fn fact_bnode() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::<Dict, LogicalTypes>::new();
         let predicate = "p";
         let name = "foo";
         let p = parser.intern(predicate.to_owned());
@@ -813,7 +839,7 @@ mod test {
 
     #[test]
     fn fact_numbers() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::<Dict, LogicalTypes>::new();
         let predicate = "p";
         let p = parser.intern(predicate.to_owned());
         let int = 23_i64;
@@ -837,7 +863,7 @@ mod test {
 
     #[test]
     fn fact_abstract() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::<Dict, LogicalTypes>::new();
         let predicate = "p";
         let name = "a";
         let p = parser.intern(predicate.to_owned());
@@ -853,7 +879,7 @@ mod test {
 
     #[test]
     fn fact_comment() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::<Dict, LogicalTypes>::new();
         let predicate = "p";
         let value = "foo";
         let datatype = "bar";
@@ -882,7 +908,7 @@ mod test {
 
     #[test]
     fn filter() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::<Dict, LogicalTypes>::new();
         let aa = "A";
         let a = parser.intern(aa.to_owned());
         let bb = "B";

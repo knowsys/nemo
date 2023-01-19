@@ -8,6 +8,7 @@ use crate::{
         model::{Identifier, Program, Rule},
         program_analysis::analysis::RuleAnalysis,
         table_manager::TableKey,
+        types::LogicalTypeCollection,
         TableManager,
     },
     meta::logging::{log_available_variable_order, log_choose_variable_order},
@@ -45,9 +46,9 @@ impl<'a, Dict: Dictionary> RuleExecution<'a, Dict> {
 
     /// Execute the current rule.
     /// Returns the predicates which received new elements.
-    pub fn execute(
+    pub fn execute<LogicalTypes: LogicalTypeCollection>(
         &self,
-        program: &Program<Dict>,
+        program: &Program<Dict, LogicalTypes>,
         table_manager: &mut TableManager<Dict>,
         rule_info: &RuleInfo,
         step_number: usize,

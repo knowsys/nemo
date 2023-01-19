@@ -1,3 +1,5 @@
+//! This module contains traits for logical types and also some standard types.
+
 use num::{One, Zero};
 use std::fmt::{Debug, Display};
 use std::str::FromStr;
@@ -11,43 +13,84 @@ use crate::physical::datatypes::Field;
 // TODO: have type for everything (rdfs:resource)
 // Generally: support rdf types
 
-trait LogicalTypeCollection {
+/// Trait marking Enums representing a list of logical type names
+pub trait LogicalTypeCollection: Clone + Debug + Display + FromStr {
+    /// The corresponding enum that can hold the logical types in its variats
     type LogicalTypeEnum: LogicalTypeEnum;
 
-    fn parse(&self, str: &str) -> Result<Self::LogicalTypeEnum, String>; //TODO: error type shoudl probably not be a plain string...
+    /// Parse string according into type respresented by self
+    fn parse(&self, s: &str) -> Result<Self::LogicalTypeEnum, String>; //TODO: error type should probably not be a plain string...
 }
 
-trait LogicalTypeEnum {
+/// Trait marking Enums wrapping a a list of logical types into respective variants
+pub trait LogicalTypeEnum: Debug {
+    /// The corresponding enum that only has the type names
     type LogicalTypeCollection: LogicalTypeCollection;
 
+    /// Return name of the type of self
     fn get_type(&self) -> Self::LogicalTypeCollection;
 }
 
-trait LogicalType {
+/// Trait of types in logical layer
+pub trait LogicalType {
+    /// Type in Physical layer representing this Logical Types
     type PhysicalType;
 
+    /// convert physical type into logical type
     fn from_physical(t: &Self::PhysicalType) -> Self;
+    /// convert logical type into physical type
     fn to_physical(&self) -> Self::PhysicalType;
 }
 
+/// Generate Logical Type Enums by specifying how type names map to actual logical type implementations
+#[macro_export]
 macro_rules! generate_type_collection_and_enum {
-    ($name_collection:ident, $name_enum:ident, $(($variant_name:ident, $content:ty)),+) => {
-        enum $name_collection {
-            $($variant_name),+
+    ([$collection_vis:vis] $name_collection:ident, [$enum_vis:vis] $name_enum:ident, $(($variant_name:ident, $content:ty)),+) => {
+        /// Generated Logical Type Collection Type $name_collection
+        #[derive(Copy, Clone, Debug)]
+        $collection_vis enum $name_collection {
+            $(
+                /// $variant_name
+                $variant_name
+            ),+
+        }
+
+        impl Display for $name_collection {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                match self {
+                    $(Self::$variant_name => write!(f, stringify!($variant_name))),+
+                }
+            }
+        }
+
+        impl FromStr for $name_collection {
+            type Err = String; // TODO: error type should probably not be a plain string...
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    $(stringify!($variant_name) => Ok(Self::$variant_name)),+,
+                    _ => Err(format!("Type {s} not known!"))
+                }
+            }
         }
 
         impl LogicalTypeCollection for $name_collection {
             type LogicalTypeEnum = $name_enum;
 
-            fn parse(&self, str: &str) -> Result<Self::LogicalTypeEnum, String> {
+            fn parse(&self, s: &str) -> Result<Self::LogicalTypeEnum, String> {
                 match self {
-                    $(Self::$variant_name => <$content>::from_str(str).map(|ok| Self::LogicalTypeEnum::$variant_name(ok)).map_err(|err| err.to_string())),+
+                    $(Self::$variant_name => <$content>::from_str(s).map(|ok| Self::LogicalTypeEnum::$variant_name(ok)).map_err(|err| err.to_string())),+
                 }
             }
         }
 
-        enum $name_enum {
-            $($variant_name($content)),+
+        /// Generated Logical Type Enum Type $name_enum
+        #[derive(Debug)]
+        $enum_vis enum $name_enum {
+            $(
+                /// $variant_name with $content
+                $variant_name($content)
+            ),+
         }
 
         impl LogicalTypeEnum for $name_enum {
@@ -60,17 +103,21 @@ macro_rules! generate_type_collection_and_enum {
             }
         }
     };
+    ($name_collection:ident, $name_enum:ident, $(($variant_name:ident, $content:ty)),+) => {
+        generate_type_collection_and_enum!([pub(self)] $name_collection, [pub(self)] $name_enum, $(($variant_name, $content)),+);
+    };
 }
 
 generate_type_collection_and_enum!(
-    DefaultLogicalTypeCollection,
-    DefaultLogicalTypeEnum,
+    [pub] DefaultLogicalTypeCollection,
+    [pub] DefaultLogicalTypeEnum,
     (GenericEverything, GenericEverything),
     (Integer, Integer<i64>)
 );
 
-#[derive(Debug)]
-struct GenericEverything {
+/// Type similar to rdfs:resource able to capture every value as a string
+#[derive(Copy, Clone, Debug)]
+pub struct GenericEverything {
     physical: u64, // TODO: also include dictionary somehow
 }
 
@@ -83,7 +130,7 @@ impl Display for GenericEverything {
 impl FromStr for GenericEverything {
     type Err = <u64 as FromStr>::Err; // TODO: adjust this once we have dictionary
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(_s: &str) -> Result<Self, Self::Err> {
         Ok(Self { physical: 0 }) // TODO: use dictionary
     }
 }
@@ -100,14 +147,17 @@ impl LogicalType for GenericEverything {
     }
 }
 
-trait PhysicalNumber: Copy + Debug + Display + FromStr + Field + Ord {}
+/// Trait summing up what a number should be able to do in physical layer
+pub trait PhysicalNumber: Copy + Debug + Display + FromStr + Field + Ord {}
 impl<T: Copy + Debug + Display + FromStr + Field + Ord> PhysicalNumber for T {}
 
+/// Trait summing up what a number should be able to do in logical layer
 trait LogicalNumber: LogicalType + Field + Ord {}
 impl<T: LogicalType + Field + Ord> LogicalNumber for T {}
 
+/// Generic Logical Integer that needs to specify its actual type when instantiated, e.g. i64
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct Integer<T>
+pub struct Integer<T>
 where
     T: PhysicalNumber,
 {

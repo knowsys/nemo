@@ -16,6 +16,8 @@ use crate::{
     },
 };
 
+use super::types::LogicalTypeCollection;
+
 /// An identifier for, e.g., a Term or a Predicate.
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
 pub struct Identifier(pub(crate) usize);
@@ -332,11 +334,11 @@ impl Rule {
     }
 
     /// Construct a new rule, validating constraints on variable usage.
-    pub(crate) fn new_validated<Dict: Dictionary>(
+    pub(crate) fn new_validated<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
         head: Vec<Atom>,
         body: Vec<Literal>,
         filters: Vec<Filter>,
-        parser: &RuleParser<Dict>,
+        parser: &RuleParser<Dict, LogicalTypes>,
     ) -> Result<Self, ParseError> {
         // Check if existential variables occur in the body.
         let existential_variables = body
@@ -460,17 +462,18 @@ pub enum Statement {
 
 /// A full program.
 #[derive(Debug)]
-pub struct Program<Dict: Dictionary> {
+pub struct Program<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
     base: Option<usize>,
     prefixes: HashMap<String, usize>,
     sources: Vec<DataSourceDeclaration>,
     rules: Vec<Rule>,
     facts: Vec<Fact>,
+    type_declarations: Vec<PredicateTypeDeclaration<LogicalTypes>>,
 
     names: Dict,
 }
 
-impl<Dict: Dictionary> Program<Dict> {
+impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> Program<Dict, LogicalTypes> {
     /// Construct a new program.
     pub fn new(
         base: Option<usize>,
@@ -478,6 +481,7 @@ impl<Dict: Dictionary> Program<Dict> {
         sources: Vec<DataSourceDeclaration>,
         rules: Vec<Rule>,
         facts: Vec<Fact>,
+        type_declarations: Vec<PredicateTypeDeclaration<LogicalTypes>>,
         names: Dict,
     ) -> Self {
         Self {
@@ -486,6 +490,7 @@ impl<Dict: Dictionary> Program<Dict> {
             sources,
             rules,
             facts,
+            type_declarations,
             names,
         }
     }
@@ -512,6 +517,12 @@ impl<Dict: Dictionary> Program<Dict> {
     #[must_use]
     pub fn facts(&self) -> &Vec<Fact> {
         &self.facts
+    }
+
+    /// Return all type declarations in the program.
+    #[must_use]
+    pub fn type_declarations(&self) -> &Vec<PredicateTypeDeclaration<LogicalTypes>> {
+        &self.type_declarations
     }
 
     /// Return a HashSet of all predicates in the program (in rules and facts).
@@ -675,11 +686,11 @@ impl DataSourceDeclaration {
     }
 
     /// Construct a new data source declaration, validating constraints on, e.g., arity.
-    pub(crate) fn new_validated<Dict: Dictionary>(
+    pub(crate) fn new_validated<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
         predicate: Identifier,
         arity: usize,
         source: DataSource,
-        parser: &RuleParser<Dict>,
+        parser: &RuleParser<Dict, LogicalTypes>,
     ) -> Result<Self, ParseError> {
         match source {
             DataSource::CsvFile(_) => (), // no validation for CSV files
@@ -716,4 +727,11 @@ impl DataSourceDeclaration {
             source,
         })
     }
+}
+
+/// Type declarations for a predicate
+#[derive(Debug, Clone)]
+pub struct PredicateTypeDeclaration<LogicalTypes: LogicalTypeCollection> {
+    predicate: Identifier,
+    types: Vec<LogicalTypes>,
 }

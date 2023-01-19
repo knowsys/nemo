@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
     logical::model::{Filter, FilterOperation, Identifier, Literal, Program, Rule, Term, Variable},
+    logical::types::LogicalTypeCollection,
     physical::dictionary::Dictionary,
 };
 
@@ -79,7 +80,7 @@ fn normalize_rule(rule: &mut Rule) {
     *rule.filters_mut() = new_filters;
 }
 
-impl<Dict: Dictionary> Program<Dict> {
+impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> Program<Dict, LogicalTypes> {
     /// Transforms the rules into a "normalized" form.
     pub fn normalize(&mut self) {
         self.rules_mut().iter_mut().for_each(normalize_rule);

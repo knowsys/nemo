@@ -2,6 +2,7 @@
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
+use crate::logical::types::LogicalTypeCollection;
 use crate::logical::Permutator;
 use crate::physical::dictionary::Dictionary;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -228,16 +229,18 @@ impl RuleVariableList for Vec<Variable> {
     }
 }
 
-struct VariableOrderBuilder<'a, Dict: Dictionary> {
-    program: &'a Program<Dict>,
+struct VariableOrderBuilder<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
+    program: &'a Program<Dict, LogicalTypes>,
     iteration_order_within_rule: IterationOrder,
     required_trie_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>, // maps predicates to sets of column orders
     idb_preds: HashSet<Identifier>,
 }
 
-impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
+impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>
+    VariableOrderBuilder<'_, Dict, LogicalTypes>
+{
     fn build_for(
-        program: &Program<Dict>,
+        program: &Program<Dict, LogicalTypes>,
         iteration_order_within_rule: IterationOrder,
         initial_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>,
     ) -> Vec<VariableOrder> {
@@ -383,8 +386,11 @@ impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
     }
 }
 
-pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
-    program: &Program<Dict>,
+pub(super) fn build_preferable_variable_orders<
+    Dict: Dictionary,
+    LogicalTypes: LogicalTypeCollection,
+>(
+    program: &Program<Dict, LogicalTypes>,
     initial_column_orders: Option<HashMap<Identifier, HashSet<ColumnOrder>>>,
 ) -> Vec<Vec<VariableOrder>> {
     let iteration_orders = [
@@ -440,6 +446,7 @@ pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
 
 #[cfg(test)]
 mod test {
+    use crate::logical::types::DefaultLogicalTypeCollection;
     use crate::physical::dictionary::PrefixedStringDictionary;
 
     use super::{
@@ -654,11 +661,12 @@ mod test {
                 .into_iter()
                 .unzip();
 
-        let program = Program::new(
+        let program = Program::<PrefixedStringDictionary, DefaultLogicalTypeCollection>::new(
             None,
             HashMap::new(),
             vec![],
             rules,
+            vec![],
             vec![],
             PrefixedStringDictionary::default(),
         );
@@ -682,11 +690,12 @@ mod test {
                 .into_iter()
                 .unzip();
 
-        let program = Program::new(
+        let program = Program::<PrefixedStringDictionary, DefaultLogicalTypeCollection>::new(
             None,
             HashMap::new(),
             vec![],
             rules,
+            vec![],
             vec![],
             PrefixedStringDictionary::default(),
         );
@@ -712,11 +721,12 @@ mod test {
         .into_iter()
         .unzip();
 
-        let program = Program::new(
+        let program = Program::<PrefixedStringDictionary, DefaultLogicalTypeCollection>::new(
             None,
             HashMap::new(),
             vec![],
             rules,
+            vec![],
             vec![],
             PrefixedStringDictionary::default(),
         );
@@ -840,7 +850,7 @@ mod test {
         let (rules, var_lists, predicates) =
             get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant();
 
-        let program = Program::new(
+        let program = Program::<PrefixedStringDictionary, DefaultLogicalTypeCollection>::new(
             None,
             HashMap::new(),
             vec![
@@ -871,6 +881,7 @@ mod test {
                 ),
             ],
             rules,
+            vec![],
             vec![],
             PrefixedStringDictionary::default(),
         );
@@ -1128,7 +1139,7 @@ mod test {
     fn build_preferable_variable_orders_with_el_without_constant() {
         let (rules, var_lists, predicates) = get_el_test_ruleset_without_constants();
 
-        let program = Program::new(
+        let program = Program::<PrefixedStringDictionary, DefaultLogicalTypeCollection>::new(
             None,
             HashMap::new(),
             vec![
@@ -1169,6 +1180,7 @@ mod test {
                 ),
             ],
             rules,
+            vec![],
             vec![],
             PrefixedStringDictionary::default(),
         );

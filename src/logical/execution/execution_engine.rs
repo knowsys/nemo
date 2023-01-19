@@ -8,6 +8,7 @@ use crate::{
         model::{Identifier, NumericLiteral, Program, Term},
         program_analysis::analysis::ProgramAnalysis,
         table_manager::ColumnOrder,
+        types::LogicalTypeCollection,
         TableManager,
     },
     meta::{
@@ -47,8 +48,8 @@ impl RuleInfo {
 
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
-pub struct ExecutionEngine<Dict: Dictionary> {
-    program: Program<Dict>,
+pub struct ExecutionEngine<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
+    program: Program<Dict, LogicalTypes>,
     analysis: ProgramAnalysis,
 
     table_manager: TableManager<Dict>,
@@ -60,9 +61,9 @@ pub struct ExecutionEngine<Dict: Dictionary> {
     current_step: usize,
 }
 
-impl<Dict: Dictionary> ExecutionEngine<Dict> {
+impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> ExecutionEngine<Dict, LogicalTypes> {
     /// Initialize [`ExecutionEngine`].
-    pub fn initialize(mut program: Program<Dict>) -> Self {
+    pub fn initialize(mut program: Program<Dict, LogicalTypes>) -> Self {
         program.normalize();
         let analysis = program.analyze();
 
@@ -89,7 +90,10 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
     }
 
     /// Add all the data source declarations from the program into the table manager.
-    fn add_input_sources(table_manager: &mut TableManager<Dict>, program: &Program<Dict>) {
+    fn add_input_sources(
+        table_manager: &mut TableManager<Dict>,
+        program: &Program<Dict, LogicalTypes>,
+    ) {
         for ((predicate, arity), source) in program.sources() {
             table_manager.add_source(predicate, arity, source.clone());
         }
@@ -97,7 +101,10 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
 
     /// Add all input facts as tables into the table manager.
     /// TODO: This function has to be revised when the new type system for the logical layer is introduced.
-    fn add_input_facts(table_manager: &mut TableManager<Dict>, program: &Program<Dict>) {
+    fn add_input_facts(
+        table_manager: &mut TableManager<Dict>,
+        program: &Program<Dict, LogicalTypes>,
+    ) {
         let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<DataValueT>>>::new();
 
         for fact in program.facts() {

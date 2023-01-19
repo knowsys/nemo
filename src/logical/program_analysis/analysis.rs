@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
     logical::model::{Atom, Identifier, Program, Rule, Term, Variable},
+    logical::types::LogicalTypeCollection,
     physical::dictionary::Dictionary,
 };
 
@@ -78,7 +79,7 @@ pub struct ProgramAnalysis {
     pub derived_predicates: HashSet<Identifier>,
 }
 
-impl<Dict: Dictionary> Program<Dict> {
+impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> Program<Dict, LogicalTypes> {
     /// Collect all predicates that appear in a head atom into a [`HashSet`]
     fn get_head_predicates(&self) -> HashSet<Identifier> {
         let mut result = HashSet::<Identifier>::new();

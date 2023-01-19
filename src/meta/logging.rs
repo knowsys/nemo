@@ -8,6 +8,7 @@ use crate::{
     logical::{
         model::{DataSource, Identifier, Program},
         program_analysis::analysis::RuleAnalysis,
+        types::LogicalTypeCollection,
     },
     physical::{
         dictionary::Dictionary,
@@ -18,7 +19,11 @@ use crate::{
 };
 
 /// Log: Rule application.
-pub fn log_apply_rule<Dict: Dictionary>(_program: &Program<Dict>, step: usize, rule_index: usize) {
+pub fn log_apply_rule<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
+    _program: &Program<Dict, LogicalTypes>,
+    step: usize,
+    rule_index: usize,
+) {
     // TOOO: Maybe add a to_string() method to rules so
     log::info!("<<< {step}: APPLYING RULE {rule_index} >>>");
 }
@@ -51,8 +56,8 @@ pub fn log_fragmentation_combine(predicate: Identifier, trie_opt: Option<&Trie>)
 }
 
 /// Log: Print all available variable orders.
-pub fn log_available_variable_order<Dict: Dictionary>(
-    program: &Program<Dict>,
+pub fn log_available_variable_order<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
+    program: &Program<Dict, LogicalTypes>,
     analysis: &RuleAnalysis,
 ) {
     log::info!("Available orders:");
