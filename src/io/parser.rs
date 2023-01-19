@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{alpha1, alphanumeric0, digit1, multispace0, multispace1},
+    character::complete::{alpha1, alphanumeric0, digit1, multispace0, multispace1, satisfy},
     combinator::{all_consuming, map, map_res, opt, recognize, value},
     multi::{many0, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
@@ -285,7 +285,7 @@ impl<'a> RuleParser<'a> {
     pub fn parse_iri_pred(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
         move |input| {
             let (remainder, name) = traced(
-                "parse_iri",
+                "parse_iri_pred",
                 alt((
                     map(sparql::iriref, sparql::Name::IriReference),
                     sparql::prefixed_name,
@@ -304,11 +304,12 @@ impl<'a> RuleParser<'a> {
     pub fn parse_iri_constant(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
         move |input| {
             let (remainder, name) = traced(
-                "parse_iri",
+                "parse_iri_constant",
                 alt((
                     map(sparql::iriref, sparql::Name::IriReference),
                     sparql::prefixed_name,
                     sparql::blank_node_label,
+                    map(self.parse_bare_name(), sparql::Name::IriReference),
                 )),
             )(input)?;
 
@@ -327,10 +328,24 @@ impl<'a> RuleParser<'a> {
         )
     }
 
+    fn parse_bare_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
+        traced(
+            "parse_bare_name",
+            recognize(pair(
+                alpha1,
+                many0(satisfy(|c| {
+                    ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
+                        .iter()
+                        .any(|range| range.contains(&c))
+                })),
+            )),
+        )
+    }
+
     /// Parse a PREDNAME, i.e., a predicate name that is not an IRI.
     pub fn parse_pred_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
         traced("parse_pred_name", move |input| {
-            let (remainder, name) = recognize(pair(alpha1, alphanumeric0))(input)?;
+            let (remainder, name) = self.parse_bare_name()(input)?;
 
             Ok((remainder, self.intern_identifier(name.to_owned())))
         })
@@ -819,6 +834,22 @@ mod test {
                     Term::NumericLiteral(NumericLiteral::Decimal(13, 37)),
                 ]
             ))
+        );
+    }
+
+    #[test]
+    fn fact_abstract() {
+        let parser = RuleParser::new();
+        let predicate = "p";
+        let name = "a";
+        let p = parser.intern_identifier(predicate.to_owned());
+        let a = parser.intern_constant(name.to_owned());
+        let fact = format!(r#"{predicate}({name}) ."#);
+
+        assert_parse!(
+            parser.parse_fact(),
+            &fact,
+            Fact(Atom::new(p, vec![Term::Constant(a)]))
         );
     }
 
