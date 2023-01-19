@@ -1,4 +1,5 @@
-//! Module defining the strategies used to derive the new facts for a rule application.
+//! Module defining the strategies used to
+//! derive the new facts for a rule application without existential variables in the head.
 
 use std::collections::HashMap;
 
