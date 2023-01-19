@@ -20,7 +20,7 @@ pub enum ParseError {
     /// More input needed.
     #[error("Expected further input: {0}")]
     MissingInput(String),
-    /// Use of an undeclared prefix
+    /// Use of an undeclared prefix.
     #[error(r#"Undeclared prefix "{0}""#)]
     UndeclaredPrefix(String),
     /// Re-declared prefix
