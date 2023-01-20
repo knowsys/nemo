@@ -465,6 +465,7 @@ pub enum Statement {
 pub struct Program<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
     base: Option<usize>,
     prefixes: HashMap<String, usize>,
+    // TODO: sources and type_declarations could be unified; also sources do not need arities anymore since those can be derived from the type_declarations
     sources: Vec<DataSourceDeclaration>,
     rules: Vec<Rule>,
     facts: Vec<Fact>,
