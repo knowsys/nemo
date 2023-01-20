@@ -234,7 +234,9 @@ impl<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> RuleParser<'a, D
                 self.parse_dot(),
             )(input)?;
 
-            Ok((remainder, PredicateTypeDeclaration::new(predicate, types)))
+            let predicate_type_declaration = PredicateTypeDeclaration::new(predicate, types);
+            self.predicate_declarations.borrow_mut().push(predicate_type_declaration.clone());
+            Ok((remainder, predicate_type_declaration))
         })
     }
 
