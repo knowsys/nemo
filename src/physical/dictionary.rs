@@ -29,4 +29,8 @@ pub trait Dictionary: Debug + Default + Clone {
     fn index_of(&self, entry: &str) -> Option<usize>;
     /// Returns an equivalent [String] to the one associated with the `index` or None if the `index` is out of bounds
     fn entry(&self, index: usize) -> Option<String>;
+    /// Returns the number of elements in the dictionary.
+    fn len(&self) -> usize;
+    /// Returns whether the dictionary is empty.
+    fn is_empty(&self) -> bool;
 }

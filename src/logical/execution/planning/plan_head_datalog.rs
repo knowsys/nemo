@@ -146,7 +146,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
             let head_table_key =
                 TableKey::from_name(head_table_name, ColumnOrder::default(predicate_arity));
             let mut head_tree = ExecutionTree::<TableKey>::new(
-                "Datalog Head".to_string(),
+                "Head (Datalog)".to_string(),
                 ExecutionResult::Save(head_table_key),
             );
 

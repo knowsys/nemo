@@ -277,8 +277,6 @@ pub struct PrefixedStringDictionary {
     store: Rc<RefCell<TrieNode>>,
 }
 
-impl PrefixedStringDictionary {}
-
 impl Default for PrefixedStringDictionary {
     fn default() -> Self {
         Self {
@@ -368,6 +366,14 @@ impl Dictionary for PrefixedStringDictionary {
         } else {
             None
         }
+    }
+
+    fn len(&self) -> usize {
+        self.ordering.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

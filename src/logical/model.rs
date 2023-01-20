@@ -571,6 +571,16 @@ impl<Dict: Dictionary> Program<Dict> {
     pub fn get_names(&self) -> &Dict {
         &self.names
     }
+
+    /// Returns the first [`Identifier`] that is not used for naming e.g. a predicate.
+    pub fn first_unused_id_names(&self) -> Identifier {
+        Identifier(self.dict_names.len())
+    }
+
+    /// Returns the first [`Identifier`] that is not used for naming a constant.
+    pub fn first_unused_id_constants(&self) -> Identifier {
+        Identifier(self.dict_constants.len())
+    }
 }
 
 /// A directive that can occur in the program.

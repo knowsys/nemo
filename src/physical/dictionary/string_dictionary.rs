@@ -31,6 +31,14 @@ impl Dictionary for StringDictionary {
             .get(index)
             .map(|entry| -> String { Rc::clone(entry).to_string() })
     }
+
+    fn len(&self) -> usize {
+        self.mapping.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.mapping.is_empty()
+    }
 }
 
 #[cfg(test)]
