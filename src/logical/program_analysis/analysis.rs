@@ -66,6 +66,9 @@ fn analyze_rule(
     let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
     let head_atoms: Vec<&Atom> = rule.head().iter().collect();
 
+    // TODO: This is a bit hacky, as we do not know whether if the dictionary has been altered after creating the program
+    // (See the other hack for normalization)
+    // This has to be fixed once the dictionary discussions have beeen completed
     *fresh_id += 1;
 
     RuleAnalysis {

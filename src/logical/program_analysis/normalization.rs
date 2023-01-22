@@ -1,32 +1,38 @@
 use std::collections::HashSet;
 
 use crate::{
-    logical::model::{Filter, FilterOperation, Identifier, Literal, Program, Rule, Term, Variable},
+    logical::model::{Atom, Filter, FilterOperation, Identifier, Literal, Program, Term, Variable},
     physical::dictionary::Dictionary,
 };
 
-// Transforms a given rule into a "normalized" form.
-// Applies equality filters, e.g., "a(x, y), b(z), y = z" will turn into "a(x, y), b(y)".
-// Also, turns literals like "a(x, 3, x)" into "a(x, y, z), y = 3, z = x".
-fn normalize_rule(rule: &mut Rule) {
-    // Apply all equality filters
+/// Represents the result of normalizing a list of atoms.
+/// Normalized atoms do not contain constants or repeat variables in one atom.
+#[derive(Debug)]
+pub struct NormalizationResult {
+    /// Normalized atoms.
+    /// Don't contain constants or duplicate variables.
+    pub atoms: Vec<Atom>,
+    /// Filters.
+    /// Do not contain Equality expressions.
+    pub filters: Vec<Filter>,
+}
 
-    // We'll just remove everything from rules.filters and put stuff we want to keep here,
-    // so we don't have to delete elements in the vector while iterating on it
+/// Transforms a given atom vectors with filters into a "normalized" form.
+/// Applies equality filters, e.g., "a(x, y), b(z), y = z" will turn into "a(x, y), b(y)".
+/// Also, turns literals like "a(x, 3, x)" into "a(x, y, z), y = 3, z = x".
+pub fn normalize_atom_vector(atoms: &[&Atom], filters: &[Filter]) -> NormalizationResult {
+    let mut new_atoms: Vec<Atom> = atoms.iter().cloned().cloned().collect();
     let mut new_filters = Vec::<Filter>::new();
-    while !rule.filters().is_empty() {
-        let filter = rule.filters_mut().pop().expect("Vector is not empty");
 
+    // Apply all equality filters
+    for filter in filters {
         if filter.operation == FilterOperation::Equals {
             if let Term::Variable(right_variable) = filter.right {
-                for body_literal in rule.body_mut() {
-                    // TODO: We dont support negation yet
-                    if let Literal::Positive(body_atom) = body_literal {
-                        for term in body_atom.terms_mut() {
-                            if let Term::Variable(current_variable) = term {
-                                if *current_variable == filter.left {
-                                    *current_variable = right_variable;
-                                }
+                for atom in new_atoms.iter_mut() {
+                    for term in atom.terms_mut() {
+                        if let Term::Variable(current_variable) = term {
+                            if *current_variable == filter.left {
+                                *current_variable = right_variable;
                             }
                         }
                     }
@@ -37,7 +43,7 @@ fn normalize_rule(rule: &mut Rule) {
             }
         }
 
-        new_filters.push(filter);
+        new_filters.push(filter.clone());
     }
 
     // Create new filters for handling constants or duplicate variables within one atom
@@ -47,41 +53,63 @@ fn normalize_rule(rule: &mut Rule) {
     const FRESH_ID: usize = usize::MAX - 10000;
     let mut current_id = FRESH_ID;
 
-    for body_literal in rule.body_mut() {
-        // TODO: We dont support negation yet
-        if let Literal::Positive(body_atom) = body_literal {
-            let mut atom_variables = HashSet::new();
-            for term in body_atom.terms_mut() {
-                let add_filter = if let Term::Variable(variable) = term {
-                    // If term is a variable we add a filter iff it has already occured
-                    !atom_variables.insert(*variable)
-                } else {
-                    // If term is not a variable then we need to add a filter
-                    true
-                };
+    for atom in new_atoms.iter_mut() {
+        let mut atom_variables = HashSet::new();
 
-                if add_filter {
-                    // Create fresh variable
-                    let new_variable = Variable::Universal(Identifier(current_id));
-                    current_id += 1;
+        for term in atom.terms_mut() {
+            let add_filter = if let Term::Variable(variable) = term {
+                // If term is a variable we add a filter iff it has already occured
+                !atom_variables.insert(*variable)
+            } else {
+                // If term is not a variable then we need to add a filter
+                true
+            };
 
-                    // Add new filter expression
-                    new_filters.push(Filter::new(FilterOperation::Equals, new_variable, *term));
+            if add_filter {
+                // Create fresh variable
+                let new_variable = Variable::Universal(Identifier(current_id));
+                current_id += 1;
 
-                    // Replace current term with the new variable
-                    *term = Term::Variable(new_variable);
-                }
+                // Add new filter expression
+                new_filters.push(Filter::new(FilterOperation::Equals, new_variable, *term));
+
+                // Replace current term with the new variable
+                *term = Term::Variable(new_variable);
             }
         }
     }
 
-    // Don't forget to assign the new filters
-    *rule.filters_mut() = new_filters;
+    NormalizationResult {
+        atoms: new_atoms,
+        filters: new_filters,
+    }
 }
 
 impl<Dict: Dictionary> Program<Dict> {
     /// Transforms the rules into a "normalized" form.
     pub fn normalize(&mut self) {
-        self.rules_mut().iter_mut().for_each(normalize_rule);
+        for rule in self.rules_mut() {
+            let body_atoms: Vec<&Atom> = rule
+                .body()
+                .iter()
+                .map(|l| {
+                    if let Literal::Positive(a) = l {
+                        a
+                    } else {
+                        // TODO:
+                        panic!("We do not support negation yet")
+                    }
+                })
+                .collect();
+
+            let normalized_body = normalize_atom_vector(&body_atoms, &rule.filters());
+            // TODO: Consider negation
+            *rule.body_mut() = normalized_body
+                .atoms
+                .iter()
+                .map(|a| Literal::Positive(a.clone()))
+                .collect();
+            *rule.filters_mut() = normalized_body.filters;
+        }
     }
 }

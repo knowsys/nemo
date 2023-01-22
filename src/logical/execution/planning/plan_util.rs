@@ -7,27 +7,31 @@ use std::{
 
 use crate::{
     logical::{
-        model::{Atom, Filter, Identifier, Term, Variable},
+        model::{Atom, Filter, Identifier, NumericLiteral, Term, Variable},
         program_analysis::variable_order::VariableOrder,
         table_manager::TableKey,
         TableManager,
     },
     physical::{
+        datatypes::DataValueT,
         dictionary::Dictionary,
         management::execution_plan::{ExecutionNodeRef, ExecutionTree},
-        tabular::operations::{triescan_select::SelectEqualClasses, ValueAssignment},
+        tabular::operations::{
+            triescan_append::AppendInstruction, triescan_select::SelectEqualClasses,
+            ValueAssignment,
+        },
         util::Reordering,
     },
 };
 
 /// Constant which refers to the body join table
-pub const BODY_JOIN: usize = 0;
+pub(super) const BODY_JOIN: usize = 0;
 
 /// Calculates the [`ColumnOrder`] to transform the given [`Atom`]
 /// such that in complies with the given [`VariableOrder`].
 /// Say we have a(x, y, z) but variable_order = [x -> 1, y -> 2, z -> 0].
 /// Then the result would be [2, 0, 1].
-pub fn order_atom(atom: &Atom, variable_order: &VariableOrder) -> Reordering {
+pub(super) fn order_atom(atom: &Atom, variable_order: &VariableOrder) -> Reordering {
     let terms = atom.terms();
     let mut reordering = (0..terms.len()).collect::<Vec<usize>>();
     reordering.sort_by(|a, b| {
@@ -62,7 +66,7 @@ pub fn order_atom(atom: &Atom, variable_order: &VariableOrder) -> Reordering {
 /// while keeping in mind that the atom might be reordered.
 /// Say you have the join a(x, y, z) b(y, z). For no reordering the binding would be [[0, 1, 2], [1, 2]].
 /// If the variable order where [z, y, x] then we'd have [[0, 1, 2], [0, 1]].
-pub fn join_binding(
+pub(super) fn join_binding(
     atom: &Atom,
     column_order: &Reordering,
     variable_order: &VariableOrder,
@@ -84,7 +88,7 @@ pub fn join_binding(
 
 /// Calculate helper structures that define the filters that need to be applied.
 /// TODO: Revise this when updating the type system.
-pub fn filters(
+pub(super) fn compute_filters(
     body_variables: &HashSet<Variable>,
     variable_order: &VariableOrder,
     filters: &[&Filter],
@@ -175,7 +179,7 @@ pub fn filters(
 }
 
 /// Compute the subtree that represents the union of a tables within a certain step range.
-pub fn subtree_union<Dict: Dictionary>(
+pub(super) fn subtree_union<Dict: Dictionary>(
     tree: &mut ExecutionTree<TableKey>,
     manager: &TableManager<Dict>,
     predicate: Identifier,
@@ -197,4 +201,83 @@ pub fn subtree_union<Dict: Dictionary>(
     }
 
     union_node
+}
+
+// TODO: Was ist mit existential variablen????
+// Vermutung: Existential müssen einfach genau so wie Universal behandelt werden
+// Append(null) muss auf dem
+
+/// Derived from head atoms which may contain duplicate (non-existential) variables or constants.
+/// Represents a normal form which only contains non-duplicate universal variables and
+/// the respective [`AppendInstruction`]s to obtain the intended result.
+#[derive(Debug)]
+pub(super) struct HeadInstruction {
+    /// Reduced form of the the atom which only contains duplicate variables, constants or existential variables.
+    pub reduced_atom: Atom,
+    /// The [`AppendInstruction`]s to get the original atom.
+    pub append_instructions: Vec<Vec<AppendInstruction>>,
+    /// The arity of the original atom.
+    pub arity: usize,
+}
+
+/// Given an atom, bring compute the corresponding [`HeadInstruction`].
+/// TODO: This needs to be revised once the Type System on the logical layer has been implemented.
+pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
+    let arity = atom.terms().len();
+    let mut reduced_terms = Vec::<Term>::with_capacity(arity);
+    let mut append_instructions = Vec::<Vec<AppendInstruction>>::new();
+
+    append_instructions.push(vec![]);
+    let mut current_append_vector = &mut append_instructions[0];
+
+    let mut variable_map = HashMap::<Identifier, usize>::new();
+
+    for (term_index, term) in atom.terms().iter().enumerate() {
+        match term {
+            Term::NumericLiteral(nl) => match nl {
+                NumericLiteral::Integer(i) => {
+                    let instruction = AppendInstruction::Constant(
+                        DataValueT::U64((*i).try_into().unwrap()),
+                        false,
+                    );
+                    current_append_vector.push(instruction);
+                }
+                _ => unimplemented!(),
+            },
+            Term::Constant(identifier) => {
+                let instruction = AppendInstruction::Constant(
+                    DataValueT::U64(identifier.to_constant_u64()),
+                    false,
+                );
+                current_append_vector.push(instruction);
+            }
+            Term::Variable(variable) => {
+                if let Variable::Universal(universal_variable) = variable {
+                    if let Some(repeat_index) = variable_map.get(universal_variable) {
+                        let instruction = AppendInstruction::RepeatColumn(*repeat_index);
+                        current_append_vector.push(instruction);
+                    } else {
+                        reduced_terms
+                            .push(Term::Variable(Variable::Universal(*universal_variable)));
+
+                        variable_map.insert(*universal_variable, term_index);
+
+                        append_instructions.push(vec![]);
+                        current_append_vector = append_instructions.last_mut().unwrap();
+                    }
+                } else {
+                    panic!("This class provides a strategy only for datalog rules.");
+                }
+            }
+            Term::RdfLiteral(_) => unimplemented!(),
+        }
+    }
+
+    let reduced_atom = Atom::new(atom.predicate(), reduced_terms);
+
+    HeadInstruction {
+        reduced_atom,
+        append_instructions,
+        arity,
+    }
 }

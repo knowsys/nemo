@@ -1,6 +1,6 @@
 //! This module contains functionality for applying a rule.
 
-use std::{collections::HashSet, marker::PhantomData};
+use std::collections::HashSet;
 
 use crate::{
     error::Error,

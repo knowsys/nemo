@@ -12,4 +12,7 @@ pub use strategy_head::HeadStrategy;
 pub mod strategy_body;
 pub use strategy_body::BodyStrategy;
 
+pub mod seminaive_join;
+pub use seminaive_join::seminaive_join;
+
 pub mod plan_util;

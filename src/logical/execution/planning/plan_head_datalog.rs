@@ -6,34 +6,22 @@ use std::collections::HashMap;
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Atom, Identifier, NumericLiteral, Rule, Term, Variable},
+        model::{Identifier, Rule},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::{ColumnOrder, TableKey},
         TableManager,
     },
     physical::{
-        datatypes::DataValueT,
         dictionary::Dictionary,
         management::execution_plan::{ExecutionNodeRef, ExecutionResult, ExecutionTree},
-        tabular::operations::triescan_append::AppendInstruction,
         util::Reordering,
     },
 };
 
 use super::{
-    plan_util::{join_binding, BODY_JOIN},
+    plan_util::{head_instruction_from_atom, join_binding, HeadInstruction, BODY_JOIN},
     HeadStrategy,
 };
-
-/// Derived from head atoms which may contain duplicate variables or constants.
-/// Represents a normal form which only contains non-duplicate variables and
-/// the respective [`AppendInstruction`]s to obtain the intended result.
-#[derive(Debug)]
-struct HeadInstruction {
-    reduced_atom: Atom,
-    append_instructions: Vec<Vec<AppendInstruction>>,
-    arity: usize,
-}
 
 /// Strategy for computing the results for a datalog (non-existential) rule.
 #[derive(Debug)]
@@ -52,7 +40,7 @@ impl DatalogStrategy {
                 .entry(head_atom.predicate())
                 .or_insert(Vec::new());
 
-            atoms.push(Self::head_instruction_from_atom(head_atom));
+            atoms.push(head_instruction_from_atom(head_atom));
         }
 
         let num_body_variables = analysis.body_variables.len();
@@ -60,67 +48,6 @@ impl DatalogStrategy {
         Self {
             predicate_to_atoms,
             num_body_variables,
-        }
-    }
-
-    /// TODO: This needs to be revised once the Type System on the logical layer has been implemented.
-    fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
-        let arity = atom.terms().len();
-        let mut reduced_terms = Vec::<Term>::with_capacity(arity);
-        let mut append_instructions = Vec::<Vec<AppendInstruction>>::new();
-
-        append_instructions.push(vec![]);
-        let mut current_append_vector = &mut append_instructions[0];
-
-        let mut variable_map = HashMap::<Identifier, usize>::new();
-
-        for (term_index, term) in atom.terms().iter().enumerate() {
-            match term {
-                Term::NumericLiteral(nl) => match nl {
-                    NumericLiteral::Integer(i) => {
-                        let instruction = AppendInstruction::Constant(
-                            DataValueT::U64((*i).try_into().unwrap()),
-                            false,
-                        );
-                        current_append_vector.push(instruction);
-                    }
-                    _ => unimplemented!(),
-                },
-                Term::Constant(identifier) => {
-                    let instruction = AppendInstruction::Constant(
-                        DataValueT::U64(identifier.to_constant_u64()),
-                        false,
-                    );
-                    current_append_vector.push(instruction);
-                }
-                Term::Variable(variable) => {
-                    if let Variable::Universal(universal_variable) = variable {
-                        if let Some(repeat_index) = variable_map.get(universal_variable) {
-                            let instruction = AppendInstruction::RepeatColumn(*repeat_index);
-                            current_append_vector.push(instruction);
-                        } else {
-                            reduced_terms
-                                .push(Term::Variable(Variable::Universal(*universal_variable)));
-
-                            variable_map.insert(*universal_variable, term_index);
-
-                            append_instructions.push(vec![]);
-                            current_append_vector = append_instructions.last_mut().unwrap();
-                        }
-                    } else {
-                        panic!("This class provides a strategy only for datalog rules.");
-                    }
-                }
-                Term::RdfLiteral(_) => unimplemented!(),
-            }
-        }
-
-        let reduced_atom = Atom::new(atom.predicate(), reduced_terms);
-
-        HeadInstruction {
-            reduced_atom,
-            append_instructions,
-            arity,
         }
     }
 }
