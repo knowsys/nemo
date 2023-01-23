@@ -17,8 +17,8 @@ use crate::{
         tabular::{
             operations::{
                 materialize::materialize, triescan_append::TrieScanAppend, TrieScanJoin,
-                TrieScanMinus, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
-                TrieScanUnion,
+                TrieScanMinus, TrieScanNulls, TrieScanProject, TrieScanSelectEqual,
+                TrieScanSelectValue, TrieScanUnion,
             },
             table_types::trie::{Trie, TrieScanGeneric},
             traits::{table::Table, table_schema::TableSchema, triescan::TrieScanEnum},
@@ -84,6 +84,9 @@ pub struct DatabaseInstance<TableKey: TableKeyType, Dict: Dictionary> {
     /// Dictionary which stores the strings associates with abstract constants
     dict_constants: Dict,
 
+    /// Lowest unused null value.
+    current_null: u64,
+
     /// The lowest unused TableId.
     /// Will be incremented for each new table and will never be reused.
     current_id: usize,
@@ -92,10 +95,13 @@ pub struct DatabaseInstance<TableKey: TableKeyType, Dict: Dictionary> {
 impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> {
     /// Create new [`DatabaseInstance`]
     pub fn new(dict_constants: Dict) -> Self {
+        let current_null = dict_constants.len() as u64 + 1; // TODO: Check this once dictionary question has been solved
+
         Self {
             id_to_table: HashMap::new(),
             key_to_tableid: HashMap::new(),
             dict_constants,
+            current_null,
             current_id: 0,
         }
     }
@@ -228,6 +234,22 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
         &self.dict_constants
     }
 
+    // Helper function which checks whether the top level tree node is of type `AppendNulls`.
+    // If this is the case returns the amount of null-columns that have been appended.
+    // TODO: Nothing about this feels right; revise later
+    fn appends_nulls(node: ExecutionNodeRef<TableKey>) -> u64 {
+        let node_rc = node
+            .0
+            .upgrade()
+            .expect("Referenced execution node has been deleted");
+        let node_ref = &*node_rc.as_ref().borrow();
+
+        match node_ref {
+            ExecutionNode::AppendNulls(_subnode, num_nulls) => *num_nulls as u64,
+            _ => 0,
+        }
+    }
+
     /// Executes a given [`ExecutionPlan`].
     /// Returns the [`TableKey`]s of all new non-empty tables.
     /// This may fail if certain operations are performed on tries with incompatible types
@@ -248,9 +270,13 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                 temp_types.insert(*id, schema.clone());
             }
 
+            let mut num_null_columns = 0u64;
+
             // Calculate the new trie
             let new_trie_opt = if let Some(root) = tree.root() {
                 log_execution_tree(&self.get_iterator_string(root.clone(), &temp_tries));
+
+                num_null_columns = Self::appends_nulls(root.clone());
 
                 let iter_opt = self.get_iterator_node(root, &type_tree, &temp_tries)?;
 
@@ -267,6 +293,9 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                 if new_trie.row_num() == 0 {
                     panic!("Empty trie that is not None");
                 }
+
+                // If trie appended nulls then we need to update our `current_null` value
+                self.current_null += new_trie.num_elements() as u64 * num_null_columns;
 
                 // Add new trie to the appropriate place
                 match tree.result() {
@@ -472,8 +501,19 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                 let target_types = type_node.schema.get_column_types();
 
                 if let Some(subiterator) = subiterator_opt {
-                    let select_scan = TrieScanAppend::new(subiterator, instructions, target_types);
-                    Ok(Some(TrieScanEnum::TrieScanAppend(select_scan)))
+                    let append_scan = TrieScanAppend::new(subiterator, instructions, target_types);
+                    Ok(Some(TrieScanEnum::TrieScanAppend(append_scan)))
+                } else {
+                    Ok(None)
+                }
+            }
+            ExecutionNode::AppendNulls(subtable, num_nulls) => {
+                let subiterator_opt =
+                    self.get_iterator_node(subtable.clone(), &type_node.subnodes[0], temp_tries)?;
+
+                if let Some(subiterator) = subiterator_opt {
+                    let nulls_scan = TrieScanNulls::new(subiterator, *num_nulls, self.current_null);
+                    Ok(Some(TrieScanEnum::TrieScanNulls(nulls_scan)))
                 } else {
                     Ok(None)
                 }
@@ -553,6 +593,9 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
             }
             ExecutionNode::AppendColumns(sub, _) => {
                 self.get_iterator_string_sub("AppendColumns", &vec![sub], temp_tries)
+            }
+            ExecutionNode::AppendNulls(sub, _) => {
+                self.get_iterator_string_sub("AppendNulls", &vec![sub], temp_tries)
             }
         }
     }

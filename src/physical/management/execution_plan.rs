@@ -49,11 +49,7 @@ impl<TableKey: TableKeyType> ExecutionNodeRef<TableKey> {
             ExecutionNode::FetchTable(_) | ExecutionNode::FetchTemp(_) => {
                 panic!("Can't add subnode to a leaf node")
             }
-            ExecutionNode::Minus(_, _)
-            | ExecutionNode::Project(_, _)
-            | ExecutionNode::SelectEqual(_, _)
-            | ExecutionNode::SelectValue(_, _)
-            | ExecutionNode::AppendColumns(_, _) => {
+            _ => {
                 panic!("Can only add subnodes to operations which can have arbitrary many of them")
             }
         }
@@ -81,6 +77,8 @@ pub enum ExecutionNode<TableKey: TableKeyType> {
     SelectEqual(ExecutionNodeRef<TableKey>, SelectEqualClasses),
     /// Append certain columns to the trie.
     AppendColumns(ExecutionNodeRef<TableKey>, Vec<Vec<AppendInstruction>>),
+    /// Append (the given number of) columns containing fresh nulls.
+    AppendNulls(ExecutionNodeRef<TableKey>, usize),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently.
@@ -268,6 +266,16 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         let new_node = ExecutionNode::AppendColumns(subnode, instructions);
         self.push_and_return_ref(new_node)
     }
+
+    /// Return [`ExecutionNodeRef`] for appending null-columns to a trie.
+    pub fn append_nulls(
+        &mut self,
+        subnode: ExecutionNodeRef<TableKey>,
+        num_nulls: usize,
+    ) -> ExecutionNodeRef<TableKey> {
+        let new_node = ExecutionNode::AppendNulls(subnode, num_nulls);
+        self.push_and_return_ref(new_node)
+    }
 }
 
 /// Functionality for optimizing an [`ExecutionTree`]
@@ -386,6 +394,15 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                     Some(simplified)
                 } else {
                     Some(new_tree.append_columns(simplified, instructions.clone()))
+                }
+            }
+            ExecutionNode::AppendNulls(subnode, num_nulls) => {
+                let simplified = Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
+
+                if *num_nulls == 0 {
+                    Some(simplified)
+                } else {
+                    Some(new_tree.append_nulls(simplified, *num_nulls))
                 }
             }
         }

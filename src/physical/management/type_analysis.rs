@@ -338,6 +338,17 @@ impl TypeTree {
 
                 Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
+            ExecutionNode::AppendNulls(subtree, num_nulls) => {
+                let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
+                let mut new_schema = subtype_node.schema.clone();
+
+                for _ in 0..*num_nulls {
+                    // TODO: Revise this once type system is complete
+                    new_schema.add_entry(DataTypeName::U64, false, true);
+                }
+
+                Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
+            }
         }
     }
 
@@ -462,6 +473,25 @@ impl TypeTree {
                     not_appended_index += gap_instructions.len();
                     schema_map.insert(gap_index, *type_node.schema.get_entry(not_appended_index));
                     not_appended_index += 1;
+                }
+
+                Self::propagate_down(
+                    &mut type_node.subnodes[0],
+                    Some(schema_map),
+                    subtree.clone(),
+                );
+            }
+            ExecutionNode::AppendNulls(subtree, num_nulls) => {
+                let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
+
+                for (index, schema_entry) in type_node
+                    .schema
+                    .get_entries()
+                    .iter()
+                    .take(type_node.schema.arity() - num_nulls)
+                    .enumerate()
+                {
+                    schema_map.insert(index, schema_entry.clone());
                 }
 
                 Self::propagate_down(
