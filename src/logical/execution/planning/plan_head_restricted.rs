@@ -207,6 +207,8 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
         tree_unsatisfied.set_root(node_unsatisfied);
         trees.push(tree_unsatisfied);
 
+        // 4. Project the unsatisfied head atoms to each
+
         trees
     }
 }

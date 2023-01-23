@@ -327,7 +327,6 @@ impl TypeTree {
                                 AppendInstruction::Constant(constant, dict) => {
                                     new_schema.add_entry(constant.get_type(), *dict, false);
                                 }
-                                AppendInstruction::Null => todo!(),
                             }
                         }
 
