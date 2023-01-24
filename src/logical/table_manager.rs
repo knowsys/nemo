@@ -2,6 +2,7 @@
 
 use super::model::{DataSource, Identifier};
 use crate::{
+    error::Error,
     io::csv::read,
     meta::logging::{log_add_reference, log_load_table},
     physical::{
@@ -498,6 +499,7 @@ impl TableManager {
     }
 
     /// Compute a table that contains the contents of the tables in the given range.
+    /// Returns an [`Ok(None)`] on non usable tables.
     pub fn add_union_table(
         &mut self,
         input_predicate: Identifier,
@@ -505,12 +507,17 @@ impl TableManager {
         output_predicate: Identifier,
         output_range: Range<usize>,
         output_order_opt: Option<ColumnOrder>,
-    ) -> Option<TableKey> {
+    ) -> Result<Option<TableKey>, Error> {
         let input_covering = self.get_table_covering(input_predicate, input_ranges);
-        let input_arity = *self.predicate_arity.get(&input_predicate)?;
+        let input_arity = match self.predicate_arity.get(&input_predicate) {
+            Some(val) => *val,
+            None => {
+                return Ok(None);
+            }
+        };
 
         if input_covering.is_empty() {
-            return None;
+            return Ok(None);
         }
 
         let input_orders =
@@ -549,13 +556,17 @@ impl TableManager {
         let mut execution_plan = ExecutionPlan::<TableKey>::new();
         execution_plan.push(output_tree);
 
-        self.execute_plan(execution_plan);
-        Some(output_key)
+        self.execute_plan(execution_plan)?;
+        Ok(Some(output_key))
     }
 
     /// Load table from a given on-disk source
     /// TODO: This function should change when the type system gets introduced on the logical layer
-    fn load_table(source: &DataSource, arity: usize, dict: &mut PrefixedStringDictionary) -> Trie {
+    fn load_table(
+        source: &DataSource,
+        arity: usize,
+        dict: &mut PrefixedStringDictionary,
+    ) -> Result<Trie, Error> {
         log_load_table(source);
 
         let (trie, _name) = match source {
@@ -566,9 +577,9 @@ impl TableManager {
                 let mut reader = ReaderBuilder::new()
                     .delimiter(b',')
                     .has_headers(false)
-                    .from_reader(File::open(file.as_path()).unwrap());
+                    .from_reader(File::open(file.as_path())?);
 
-                let col_table = read(&datatypes, &mut reader, dict).unwrap();
+                let col_table = read(&datatypes, &mut reader, dict)?;
 
                 let trie = Trie::from_cols(col_table);
                 (
@@ -583,12 +594,12 @@ impl TableManager {
             DataSource::SparqlQuery(_) => todo!(),
         };
 
-        trie
+        Ok(trie)
     }
 
     // Basically, makes sure that the given [`TableKey`] will exist in the [`DatabaseInstance`]
     // or alternatively, return a key that does and will contain the same entries as the requested table.
-    fn materialize_table(&mut self, key: TableKey) -> TableKey {
+    fn materialize_table(&mut self, key: TableKey) -> Result<TableKey, Error> {
         let (actual_name, reordering) = if let TableStatus::Reference(referenced_name, reordering) =
             &self
                 .status
@@ -646,7 +657,7 @@ impl TableManager {
 
                     // Trie has to be loaded from disk
                     let trie =
-                        Self::load_table(source, arity, self.database.get_dict_constants_mut());
+                        Self::load_table(source, arity, self.database.get_dict_constants_mut())?;
 
                     // We deduce the schema from the trie itself here assuming they are all dictionary entries
                     // TODO: Should change when type system is introduced in the logical layer
@@ -691,16 +702,19 @@ impl TableManager {
                 let mut reorder_plan = ExecutionPlan::<TableKey>::new();
                 reorder_plan.push(project_tree);
 
-                self.execute_plan(reorder_plan);
+                self.execute_plan(reorder_plan)?;
             }
         } else {
             panic!("Function assumes that materialized table is known.");
         }
 
-        result_key
+        Ok(result_key)
     }
 
-    fn execute_plan(&mut self, mut plan: ExecutionPlan<TableKey>) -> HashSet<Identifier> {
+    fn execute_plan(
+        &mut self,
+        mut plan: ExecutionPlan<TableKey>,
+    ) -> Result<HashSet<Identifier>, Error> {
         // First, we need to make sure that every requested table is available or produce it if necessary
         // We exclude from this tables that will be produced during the execution of the plan
         let mut produced_keys = HashSet::<TableKey>::new();
@@ -709,7 +723,7 @@ impl TableManager {
                 let node_unpacked = &mut *fetch_node.0.borrow_mut();
                 if let ExecutionNode::FetchTable(key) = node_unpacked {
                     if !produced_keys.contains(key) {
-                        *key = self.materialize_table(key.clone());
+                        *key = self.materialize_table(key.clone())?;
                     }
                 } else {
                     unreachable!()
@@ -730,11 +744,11 @@ impl TableManager {
                     self.register_table(key);
                 }
 
-                result
+                Ok(result)
             }
             Err(err) => {
                 log::warn!("{err:?}");
-                HashSet::new()
+                Ok(HashSet::new())
             }
         }
     }
@@ -841,7 +855,7 @@ impl TableManager {
     pub fn execute_plan_optimized(
         &mut self,
         mut plan: ExecutionPlan<TableKey>,
-    ) -> HashSet<Identifier> {
+    ) -> Result<HashSet<Identifier>, Error> {
         let mut result = HashSet::<Identifier>::new();
 
         // Remove trees that save tables under existing names
@@ -889,8 +903,8 @@ impl TableManager {
         });
 
         // Execute the omptimized plan
-        result.extend(self.execute_plan(plan).iter());
-        result
+        result.extend(self.execute_plan(plan)?.iter());
+        Ok(result)
     }
 
     /// Given a range of step return a list of [`TableRange`] that would cover it
@@ -948,17 +962,31 @@ impl TableManager {
     }
 
     /// Combine all tables associated with a given predicate into a materialized table in default variable order
-    pub fn combine_predicate(&mut self, predicate: Identifier, step: usize) -> Option<TableKey> {
-        let arity = *self.predicate_arity.get(&predicate)?;
-        let key = self.add_union_table(
-            predicate,
-            0..step,
-            predicate,
-            0..step,
-            Some(ColumnOrder::default(arity)),
-        )?;
+    /// Returns an [`Ok(None)`] on non usable tables.
+    pub fn combine_predicate(
+        &mut self,
+        predicate: Identifier,
+        step: usize,
+    ) -> Result<Option<TableKey>, Error> {
+        let mut table_key = || {
+            let arity = match self.predicate_arity.get(&predicate) {
+                Some(val) => *val,
+                None => return Ok(None),
+            };
+            self.add_union_table(
+                predicate,
+                0..step,
+                predicate,
+                0..step,
+                Some(ColumnOrder::default(arity)),
+            )
+        };
 
-        Some(self.materialize_table(key))
+        if let Some(key) = table_key()? {
+            self.materialize_table(key).map(Some)
+        } else {
+            Ok(None)
+        }
     }
 
     /// Return trie with the given key.

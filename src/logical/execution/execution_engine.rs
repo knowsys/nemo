@@ -3,10 +3,11 @@
 use std::collections::HashMap;
 
 use crate::{
+    error::Error,
     logical::{
         model::{Identifier, NumericLiteral, Program, Term},
         program_analysis::analysis::ProgramAnalysis,
-        table_manager::{ColumnOrder, TableKey},
+        table_manager::ColumnOrder,
         TableManager,
     },
     meta::{
@@ -134,7 +135,7 @@ impl ExecutionEngine {
     }
 
     /// Executes the program.
-    pub fn execute(&mut self) {
+    pub fn execute(&mut self) -> Result<(), Error> {
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
@@ -163,7 +164,7 @@ impl ExecutionEngine {
                 &mut self.table_manager,
                 current_info,
                 self.current_step,
-            );
+            )?;
 
             let no_derivation = updated_predicates.is_empty();
 
@@ -209,7 +210,7 @@ impl ExecutionEngine {
                         updated_pred,
                         range.clone(),
                         None,
-                    );
+                    )?;
 
                     let new_table_opt = new_key.map(|key| self.table_manager.get_trie(&key));
                     log_fragmentation_combine(updated_pred, new_table_opt);
@@ -225,17 +226,16 @@ impl ExecutionEngine {
 
         TimedCode::instance().sub("Reasoning/Rules").stop();
         TimedCode::instance().sub("Reasoning/Execution").stop();
+        Ok(())
     }
 
     /// Return the output tries that resulted form the exection.
-    pub fn get_results(&mut self) -> Vec<(Identifier, &Trie)> {
+    pub fn get_results(&mut self) -> Result<Vec<(Identifier, &Trie)>, Error> {
         let mut result = Vec::<(Identifier, &Trie)>::new();
-        let result_keys: Vec<Option<TableKey>> = self
-            .analysis
-            .derived_predicates
-            .iter()
-            .map(|&p| self.table_manager.combine_predicate(p, self.current_step))
-            .collect();
+        let mut result_keys = Vec::new();
+        for &p in self.analysis.derived_predicates.iter() {
+            result_keys.push(self.table_manager.combine_predicate(p, self.current_step)?);
+        }
 
         for key_opt in result_keys {
             if let Some(key) = &key_opt {
@@ -243,7 +243,7 @@ impl ExecutionEngine {
             }
         }
 
-        result
+        Ok(result)
     }
 
     /// Return the dictionary used in the database instance.
