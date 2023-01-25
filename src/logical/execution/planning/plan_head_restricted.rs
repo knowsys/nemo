@@ -81,6 +81,26 @@ impl RestrictedChaseStrategy {
             *is_full_existential &= is_existential;
         }
 
+        let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
+        let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();
+
+        for head_atom in rule.head() {
+            let is_existential = head_atom
+                .terms()
+                .iter()
+                .any(|t| matches!(t, Term::Variable(Variable::Existential(_))));
+
+            let instructions = predicate_to_instructions
+                .entry(head_atom.predicate())
+                .or_insert(Vec::new());
+            instructions.push(head_instruction_from_atom(head_atom));
+
+            let is_full_existential = predicate_to_full_existential
+                .entry(head_atom.predicate())
+                .or_insert(true);
+            *is_full_existential &= is_existential;
+        }
+
         RestrictedChaseStrategy {
             frontier_variables,
             normalized_head_atoms: normalized_head.atoms,
