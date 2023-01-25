@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use crate::{
+    error::Error,
     logical::{
         model::{Identifier, Program, Rule},
         program_analysis::analysis::RuleAnalysis,
@@ -48,7 +49,7 @@ impl<'a> RuleExecution<'a> {
         table_manager: &mut TableManager,
         rule_info: &RuleInfo,
         step_number: usize,
-    ) -> HashSet<Identifier> {
+    ) -> Result<HashSet<Identifier>, Error> {
         log_avaiable_variable_order(program, self.analysis);
         // TODO: Just because its the first doesn't mean its the best
         let best_variable_order = &self.analysis.promising_variable_orders[0];

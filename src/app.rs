@@ -76,7 +76,7 @@ impl CliApp {
         TimedCode::instance().sub("Reasoning").start();
 
         log::info!("Reasoning ... ");
-        exec_engine.execute();
+        exec_engine.execute()?;
         log::info!("Reasoning done");
 
         TimedCode::instance().sub("Reasoning").stop();
@@ -92,7 +92,7 @@ impl CliApp {
                 &app_state.names,
                 &app_state.constants,
             )?;
-            csv_writer.write();
+            csv_writer.write()?;
             TimedCode::instance()
                 .sub("Output & Final Materialization")
                 .stop();
