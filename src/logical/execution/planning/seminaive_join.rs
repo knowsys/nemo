@@ -17,7 +17,7 @@ use crate::{
     },
 };
 
-use super::plan_util::{compute_filters, join_binding, order_atom, subtree_union};
+use super::plan_util::{atom_binding, compute_filters, order_atom, subtree_union};
 
 // Calculate a subtree consiting of join representing one variant of an seminaive evaluation.
 #[allow(clippy::too_many_arguments)]
@@ -137,11 +137,11 @@ pub fn seminaive_join<Dict: Dictionary>(
     let side_binding = body_side
         .iter()
         .enumerate()
-        .map(|(i, &a)| join_binding(a, &side_orders[i], &variable_order));
+        .map(|(i, &a)| atom_binding(a, &side_orders[i], &variable_order));
     let main_binding = body_main
         .iter()
         .enumerate()
-        .map(|(i, &a)| join_binding(a, &main_orders[i], &variable_order));
+        .map(|(i, &a)| atom_binding(a, &main_orders[i], &variable_order));
     // We then combine the bindings into one
     let join_binding: JoinBinding = side_binding.chain(main_binding).collect();
 

@@ -19,7 +19,7 @@ use crate::{
 };
 
 use super::{
-    plan_util::{head_instruction_from_atom, join_binding, HeadInstruction, BODY_JOIN},
+    plan_util::{atom_binding, head_instruction_from_atom, HeadInstruction, BODY_JOIN},
     HeadStrategy,
 };
 
@@ -70,8 +70,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
 
             let head_table_name =
                 table_manager.get_table_name(predicate, step_number..step_number + 1);
-            let head_table_key =
-                TableKey::from_name(head_table_name, ColumnOrder::default(predicate_arity));
+            let head_table_key = TableKey::from_name(head_table_name, head_order.clone());
             let mut head_tree = ExecutionTree::<TableKey>::new(
                 "Head (Datalog)".to_string(),
                 ExecutionResult::Save(head_table_key),
@@ -80,7 +79,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
             let mut project_append_nodes =
                 Vec::<ExecutionNodeRef<TableKey>>::with_capacity(head_instructions.len());
             for head_instruction in head_instructions {
-                let head_binding = join_binding(
+                let head_binding = atom_binding(
                     &head_instruction.reduced_atom,
                     &Reordering::default(head_instruction.reduced_atom.terms().len()),
                     &variable_order,

@@ -21,6 +21,8 @@ pub struct RuleAnalysis {
     pub body_variables: HashSet<Variable>,
     /// Variables occuring in the head.
     pub head_variables: HashSet<Variable>,
+    /// Number of existential variables.
+    pub num_existential: usize,
 
     /// Table identifier for storing head matches for the restricted chase
     pub head_matches_identifier: Identifier,
@@ -38,12 +40,15 @@ fn is_recursive(rule: &Rule) -> bool {
     })
 }
 
-fn is_existential(rule: &Rule) -> bool {
-    rule.head().iter().any(|a| {
-        a.terms()
-            .iter()
-            .any(|t| matches!(t, Term::Variable(Variable::Existential(_))))
-    })
+fn count_existential(rule: &Rule) -> usize {
+    rule.head()
+        .iter()
+        .filter(|a| {
+            a.terms()
+                .iter()
+                .any(|t| matches!(t, Term::Variable(Variable::Existential(_))))
+        })
+        .count()
 }
 
 fn get_variables(atoms: &[&Atom]) -> HashSet<Variable> {
@@ -66,17 +71,20 @@ fn analyze_rule(
     let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
     let head_atoms: Vec<&Atom> = rule.head().iter().collect();
 
+    let num_existential = count_existential(rule);
+
     // TODO: This is a bit hacky, as we do not know whether if the dictionary has been altered after creating the program
     // (See the other hack for normalization)
     // This has to be fixed once the dictionary discussions have beeen completed
     *fresh_id += 1;
 
     RuleAnalysis {
-        is_existential: is_existential(rule),
+        is_existential: num_existential > 0,
         is_recursive: is_recursive(rule),
         has_filters: !rule.filters().is_empty(),
         body_variables: get_variables(&body_atoms),
         head_variables: get_variables(&head_atoms),
+        num_existential,
         head_matches_identifier: Identifier(*fresh_id),
         promising_variable_orders,
     }

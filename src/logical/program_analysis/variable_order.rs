@@ -38,6 +38,38 @@ impl VariableOrder {
         self.0.contains_key(variable)
     }
 
+    /// Returns a [`VariableOrder`] which is restricted to the given variables (but preserver their order)
+    pub fn restrict_to(&self, variables: &HashSet<Variable>) -> Self {
+        let mut result = HashMap::<Variable, usize>::new();
+
+        let mut min = usize::MAX;
+        for variable in variables {
+            if let Some(variable_index) = self.0.get(variable) {
+                result.insert(*variable, *variable_index);
+
+                if *variable_index < min {
+                    min = *variable_index;
+                }
+            }
+        }
+
+        for (_, value) in result.iter_mut() {
+            *value -= min;
+        }
+
+        Self(result)
+    }
+
+    /// Returns the number of entries.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns whether it contains any entry.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Return an iterator over all mapped variables.
     pub fn iter(&self) -> impl Iterator<Item = &Variable> {
         let mut vars: Vec<&Variable> = self.0.keys().collect();

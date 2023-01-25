@@ -1,12 +1,12 @@
 //! Module defining the strategies used to
 //! derive the new facts for a rule application with existential variables in the head.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Atom, Filter, Rule, Variable},
+        model::{Atom, Filter, Identifier, Rule, Term, Variable},
         program_analysis::{
             analysis::RuleAnalysis, normalization::normalize_atom_vector,
             variable_order::VariableOrder,
@@ -16,13 +16,15 @@ use crate::{
     },
     physical::{
         dictionary::Dictionary,
-        management::execution_plan::{ExecutionResult, ExecutionTree},
+        management::execution_plan::{ExecutionNodeRef, ExecutionResult, ExecutionTree},
         util::Reordering,
     },
 };
 
 use super::{
-    plan_util::{subtree_union, BODY_JOIN},
+    plan_util::{
+        atom_binding, head_instruction_from_atom, subtree_union, HeadInstruction, BODY_JOIN,
+    },
     seminaive_join, HeadStrategy,
 };
 
@@ -33,6 +35,9 @@ pub struct RestrictedChaseStrategy<'a> {
     normalized_head_filters: Vec<Filter>,
 
     frontier_variables: HashSet<Variable>,
+
+    predicate_to_instructions: HashMap<Identifier, Vec<HeadInstruction>>,
+    predicate_to_full_existential: HashMap<Identifier, bool>,
 
     analysis: &'a RuleAnalysis,
 }
@@ -51,10 +56,32 @@ impl<'a> RestrictedChaseStrategy<'a> {
             &vec![],
         );
 
+        let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
+        let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();
+
+        for head_atom in rule.head() {
+            let is_existential = head_atom
+                .terms()
+                .iter()
+                .any(|t| matches!(t, Term::Variable(Variable::Existential(_))));
+
+            let instructions = predicate_to_instructions
+                .entry(head_atom.predicate())
+                .or_insert(Vec::new());
+            instructions.push(head_instruction_from_atom(head_atom));
+
+            let is_full_existential = predicate_to_full_existential
+                .entry(head_atom.predicate())
+                .or_insert(true);
+            *is_full_existential &= is_existential;
+        }
+
         RestrictedChaseStrategy {
             frontier_variables,
             normalized_head_atoms: normalized_head.atoms,
             normalized_head_filters: normalized_head.filters,
+            predicate_to_instructions,
+            predicate_to_full_existential,
             analysis,
         }
     }
@@ -77,7 +104,7 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
         // Resulting trie will contain all the non-satisfied body matches
         // Input from the generated head tables will be projected from this
         let mut tree_unsatisfied = ExecutionTree::<TableKey>::new(
-            String::from("Head (Restricted): Unsat"),
+            String::from("Head (Restricted): Unsatisfied"),
             ExecutionResult::Temp(HEAD_UNSAT),
         );
 
@@ -114,7 +141,7 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
 
         // Find the matches for the head by performing a seminaive join
         let mut tree_head_join = ExecutionTree::<TableKey>::new(
-            String::from("Head Join"),
+            String::from("Head (Restricted): Satisfied"),
             ExecutionResult::Temp(HEAD_JOIN),
         );
 
@@ -150,11 +177,11 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
         );
         let head_projected_key = TableKey::from_name(head_projected_name, head_projected_order);
         let mut tree_head_projected = ExecutionTree::<TableKey>::new(
-            "Head Projection".to_string(),
+            "Head (Restricted): Sat. Frontier".to_string(),
             ExecutionResult::Save(head_projected_key),
         );
 
-        // Get a vector of all the body variables but sorted in the variable order
+        // Get a vector of all the head variables but sorted in the variable order
         let mut head_variables_in_order: Vec<&Variable> =
             self.analysis.head_variables.iter().collect();
         head_variables_in_order.sort_by(|a, b| {
@@ -164,7 +191,7 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
                 .cmp(variable_order.get(b).unwrap())
         });
 
-        // Get the appropriate `Reordering` object that
+        // Get the appropriate `Reordering` object that projects the head join down to the frontier variables
         let head_projection_reorder = Reordering::new(
             head_variables_in_order
                 .iter()
@@ -203,12 +230,85 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
         );
         let node_unsatisfied = tree_unsatisfied.minus(node_body_project, node_satisfied);
 
+        // Append new nulls
+        let node_with_nulls =
+            tree_unsatisfied.append_nulls(node_unsatisfied, self.analysis.num_existential);
+
         // Add tree
-        tree_unsatisfied.set_root(node_unsatisfied);
+        tree_unsatisfied.set_root(node_with_nulls);
         trees.push(tree_unsatisfied);
 
-        // 4. Project the unsatisfied head atoms to each
+        // 4. Project the new entries to each head atom
+        for (&predicate, head_instructions) in self.predicate_to_instructions.iter() {
+            let predicate_arity = head_instructions[0].arity;
+            // We just pick the default order
+            // TODO: Is there a better pick?
+            let head_order = ColumnOrder::default(predicate_arity);
 
+            let head_table_name =
+                table_manager.get_table_name(predicate, step_number..step_number + 1);
+            let head_table_key = TableKey::from_name(head_table_name, head_order.clone());
+            let mut head_tree = ExecutionTree::<TableKey>::new(
+                "Head (Restricted): Result Project".to_string(),
+                ExecutionResult::Save(head_table_key),
+            );
+
+            let mut unsat_variable_order = VariableOrder::new();
+            for &variable in &head_variables_in_order {
+                if matches!(variable, Variable::Universal(_)) {
+                    unsat_variable_order.push(*variable);
+                }
+            }
+            for &variable in &head_variables_in_order {
+                if matches!(variable, Variable::Existential(_)) {
+                    unsat_variable_order.push(*variable);
+                }
+            }
+
+            let mut final_head_nodes =
+                Vec::<ExecutionNodeRef<TableKey>>::with_capacity(head_instructions.len());
+            for head_instruction in head_instructions {
+                let head_binding = atom_binding(
+                    &head_instruction.reduced_atom,
+                    &Reordering::new(head_order.clone().into(), unsat_variable_order.len()),
+                    &unsat_variable_order,
+                );
+                let head_reordering =
+                    Reordering::new(head_binding.clone(), unsat_variable_order.len());
+
+                let fetch_node = head_tree.fetch_temp(HEAD_UNSAT);
+                let project_node = head_tree.project(fetch_node, head_reordering);
+                let append_node = head_tree
+                    .append_columns(project_node, head_instruction.append_instructions.clone());
+
+                final_head_nodes.push(append_node);
+            }
+
+            let new_tables_union = head_tree.union(final_head_nodes);
+
+            if *self.predicate_to_full_existential.get(&predicate).unwrap() {
+                // Since every new entry will contain a fresh null no duplcate elimination is needed
+                head_tree.set_root(new_tables_union);
+            } else {
+                // Duplicate elimination for atoms thats do not contain existential variables
+                // Same as in plan_head_datalog
+                let old_tables_keys: Vec<TableKey> = table_manager
+                    .cover_whole_table(predicate)
+                    .into_iter()
+                    .map(|r| TableKey::new(predicate, r, head_order.clone()))
+                    .collect();
+                let old_table_nodes: Vec<ExecutionNodeRef<TableKey>> = old_tables_keys
+                    .into_iter()
+                    .map(|k| head_tree.fetch_table(k))
+                    .collect();
+                let old_table_union = head_tree.union(old_table_nodes);
+
+                let remove_duplicate_node = head_tree.minus(new_tables_union, old_table_union);
+                head_tree.set_root(remove_duplicate_node);
+            }
+
+            trees.push(head_tree);
+        }
         trees
     }
 }

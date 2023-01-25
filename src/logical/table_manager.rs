@@ -126,6 +126,12 @@ impl From<Reordering> for ColumnOrder {
     }
 }
 
+impl From<ColumnOrder> for Vec<usize> {
+    fn from(order: ColumnOrder) -> Self {
+        order.0
+    }
+}
+
 /// Indicates that the table contains the union of successive tables.
 /// For example assume that for predicate p there were tables derived in steps 2, 4, 7, 10, 11.
 /// The range [4, 11) would be represented with TableCover { start: 1, len: 3 }.

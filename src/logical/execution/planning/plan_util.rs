@@ -61,19 +61,23 @@ pub(super) fn order_atom(atom: &Atom, variable_order: &VariableOrder) -> Reorder
     Reordering::new(reordering, atom.terms().len())
 }
 
-/// Calculate the join binding for the given atom.
-/// Essentially, it replaces each variable with the position in the variable ordering
+/// This function replaces each variable in the atom with its position in the variable ordering
 /// while keeping in mind that the atom might be reordered.
-/// Say you have the join a(x, y, z) b(y, z). For no reordering the binding would be [[0, 1, 2], [1, 2]].
-/// If the variable order where [z, y, x] then we'd have [[0, 1, 2], [0, 1]].
-pub(super) fn join_binding(
+/// Examples: 
+///     * a(x, y, z) with atom order [0, 1, 2] and variable order [y, z, x] results in [1, 2, 0]
+///     * a(x, y, z) with atom order [2, 1, 0] and variable order [y, z, x] results in [1, 0, 2]
+/// This function is useful in the following scenarios:
+///     * Computing JoinBindings: In this case you would apply this function to each atom in the join to obtain the "JoinBinding"
+///         - Example: For a leapfrog join a(x, y, z) b(z, y) with order [x, y, z] you'd obtain [[0, 1, 2], [1, 2]]
+///                    (given the reordering for b: [1, 0])
+///     * Calculating a projection/reordering for an atom: 
+///         - Example: Say you have a table t(x, y, z) and want to project to the last two columns and save the atom in the column order [1, 0]
+///                    Then you'd obtain [2, 1]
+pub(super) fn atom_binding(
     atom: &Atom,
     column_order: &Reordering,
     variable_order: &VariableOrder,
 ) -> Vec<usize> {
-    // TODO: Currently this code assumes that no existential variable is part of the variable ordering
-    // Reconsider this when adding support for existential rules.
-
     column_order
         .iter()
         .map(|&i| {
@@ -203,10 +207,6 @@ pub(super) fn subtree_union<Dict: Dictionary>(
     union_node
 }
 
-// TODO: Was ist mit existential variablen????
-// Vermutung: Existential müssen einfach genau so wie Universal behandelt werden
-// Append(null) muss auf dem
-
 /// Derived from head atoms which may contain duplicate (non-existential) variables or constants.
 /// Represents a normal form which only contains non-duplicate universal variables and
 /// the respective [`AppendInstruction`]s to obtain the intended result.
@@ -252,21 +252,21 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
                 current_append_vector.push(instruction);
             }
             Term::Variable(variable) => {
-                if let Variable::Universal(universal_variable) = variable {
-                    if let Some(repeat_index) = variable_map.get(universal_variable) {
-                        let instruction = AppendInstruction::RepeatColumn(*repeat_index);
-                        current_append_vector.push(instruction);
-                    } else {
-                        reduced_terms
-                            .push(Term::Variable(Variable::Universal(*universal_variable)));
+                let variable_identifier = match variable {
+                    Variable::Universal(id) => *id,
+                    Variable::Existential(id) => *id,
+                };
 
-                        variable_map.insert(*universal_variable, term_index);
-
-                        append_instructions.push(vec![]);
-                        current_append_vector = append_instructions.last_mut().unwrap();
-                    }
+                if let Some(repeat_index) = variable_map.get(&variable_identifier) {
+                    let instruction = AppendInstruction::RepeatColumn(*repeat_index);
+                    current_append_vector.push(instruction);
                 } else {
-                    panic!("This class provides a strategy only for datalog rules.");
+                    reduced_terms.push(Term::Variable(Variable::Universal(variable_identifier)));
+
+                    variable_map.insert(variable_identifier, term_index);
+
+                    append_instructions.push(vec![]);
+                    current_append_vector = append_instructions.last_mut().unwrap();
                 }
             }
             Term::RdfLiteral(_) => unimplemented!(),

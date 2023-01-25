@@ -46,13 +46,17 @@ impl<'a, Dict: Dictionary> BodyStrategy<'a, Dict> for SeminaiveStrategy<'a> {
         &self,
         table_manager: &TableManager<Dict>,
         rule_info: &RuleInfo,
-        variable_order: VariableOrder,
+        mut variable_order: VariableOrder,
         step_number: usize,
     ) -> ExecutionTree<TableKey> {
         let mut tree = ExecutionTree::<TableKey>::new(
             "Body Join".to_string(),
             ExecutionResult::Temp(BODY_JOIN),
         );
+
+        if self.analysis.is_existential {
+            variable_order = variable_order.restrict_to(&self.analysis.body_variables);
+        }
 
         let node_seminaive = if let Some(node) = seminaive_join(
             &mut tree,
