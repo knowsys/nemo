@@ -52,7 +52,7 @@ pub struct ExecutionEngine<Dict: Dictionary, LogicalTypes: LogicalTypeCollection
     program: Program<Dict, LogicalTypes>,
     analysis: ProgramAnalysis,
 
-    table_manager: TableManager<Dict>,
+    table_manager: TableManager<Dict, LogicalTypes>,
 
     predicate_fragmentation: HashMap<Identifier, usize>,
     predicate_last_union: HashMap<Identifier, usize>,
@@ -67,7 +67,15 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> ExecutionEngine<Dict
         program.normalize();
         let analysis = program.analyze();
 
-        let mut table_manager = TableManager::new(program.get_names().clone());
+        let mut predicate_to_type_declaration: HashMap<Identifier, Vec<LogicalTypes>> =
+            HashMap::new();
+        for decl in program.type_declarations() {
+            predicate_to_type_declaration
+                .entry(decl.predicate())
+                .or_insert(decl.types());
+        }
+        let mut table_manager =
+            TableManager::new(program.get_names().clone(), predicate_to_type_declaration);
 
         Self::add_input_sources(&mut table_manager, &program);
         Self::add_input_facts(&mut table_manager, &program);
@@ -91,7 +99,7 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> ExecutionEngine<Dict
 
     /// Add all the data source declarations from the program into the table manager.
     fn add_input_sources(
-        table_manager: &mut TableManager<Dict>,
+        table_manager: &mut TableManager<Dict, LogicalTypes>,
         program: &Program<Dict, LogicalTypes>,
     ) {
         for ((predicate, arity), source) in program.sources() {
@@ -100,9 +108,8 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> ExecutionEngine<Dict
     }
 
     /// Add all input facts as tables into the table manager.
-    /// TODO: This function has to be revised when the new type system for the logical layer is introduced.
     fn add_input_facts(
-        table_manager: &mut TableManager<Dict>,
+        table_manager: &mut TableManager<Dict, LogicalTypes>,
         program: &Program<Dict, LogicalTypes>,
     ) {
         let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<DataValueT>>>::new();

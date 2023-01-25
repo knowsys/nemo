@@ -23,8 +23,8 @@ impl DataTypeName {
         Ok(match self {
             DataTypeName::U32 => DataValueT::U32(string.parse::<u32>()?),
             DataTypeName::U64 => DataValueT::U64(string.parse::<u64>()?),
-            DataTypeName::Float => DataValueT::Float(super::Float::new(string.parse::<f32>()?)?),
-            DataTypeName::Double => DataValueT::Double(super::Double::new(string.parse::<f64>()?)?),
+            DataTypeName::Float => DataValueT::Float(string.parse::<super::Float>()?),
+            DataTypeName::Double => DataValueT::Double(string.parse::<super::Double>()?),
         })
     }
 }
@@ -39,3 +39,24 @@ impl Display for DataTypeName {
         }
     }
 }
+
+/// Types implementing this trait have a function to get their corresponding DataTypeName enum Variant
+pub trait HasDataTypeName {
+    /// Get the DataTypeName of Self
+    fn data_type_name() -> DataTypeName;
+}
+
+macro_rules! has_data_type_name {
+    ($type:ty, $variant:ident) => {
+        impl HasDataTypeName for $type {
+            fn data_type_name() -> DataTypeName {
+                DataTypeName::$variant
+            }
+        }
+    };
+}
+
+has_data_type_name!(u32, U32);
+has_data_type_name!(u64, U64);
+has_data_type_name!(super::Float, Float);
+has_data_type_name!(super::Double, Double);

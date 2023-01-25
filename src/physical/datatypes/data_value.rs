@@ -86,6 +86,27 @@ impl std::fmt::Display for DataValueT {
     }
 }
 
+/// Types implementing this trait have a method wrapping then in a DataValueT
+pub trait WrappableInDataValueT {
+    /// Wrap self in DataValueT
+    fn wrap_in_data_value_t(&self) -> DataValueT;
+}
+
+macro_rules! wrap_in_data_value_t {
+    ($type:ty, $variant:ident) => {
+        impl WrappableInDataValueT for $type {
+            fn wrap_in_data_value_t(&self) -> DataValueT {
+                DataValueT::$variant(*self)
+            }
+        }
+    };
+}
+
+wrap_in_data_value_t!(u32, U32);
+wrap_in_data_value_t!(u64, U64);
+wrap_in_data_value_t!(Float, Float);
+wrap_in_data_value_t!(Double, Double);
+
 /// Enum for vectors of different supported input types
 #[derive(Debug)]
 pub enum VecT {

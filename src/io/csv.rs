@@ -5,7 +5,8 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use crate::error::Error;
-use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
+use crate::logical::types::{LogicalTypeCollection, LogicalTypeEnum};
+use crate::physical::datatypes::{data_value::VecT, DataTypeName};
 use crate::physical::dictionary::Dictionary;
 use crate::physical::tabular::table_types::trie::Trie;
 use csv::{Reader, ReaderBuilder};
@@ -26,6 +27,7 @@ where
         .from_reader(rdr)
 }
 
+// TODO: adjust comment
 /// Imports a csv file
 /// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
 /// # Parameters
@@ -33,76 +35,49 @@ where
 ///   If the Option is [`None`] the field will be ignored. [`Some(DataTypeName)`] describes the datatype of the field in the csv-file.
 /// # Behaviour
 /// If a given datatype from `datatypes` is not matching the value in the field (i.e. it cannot be parsed into such a value), the whole line will be ignored and an error message is emitted to the log.
-pub fn read<T, Dict: Dictionary>(
-    datatypes: &[Option<DataTypeName>], // If no datatype (i.e. None) is specified, we treat the column as string (for now); TODO: discuss this
+pub fn read<T, Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
+    datatypes: &[LogicalTypes], // If no datatype (i.e. None) is specified, we treat the column as string (for now); TODO: discuss this
     csv_reader: &mut Reader<T>,
     dictionary: &mut Dict,
-) -> Result<Vec<VecT>, Error>
+) -> Vec<VecT>
 where
     T: Read,
 {
-    let mut result: Vec<Option<VecT>> = Vec::new();
+    let mut result: Vec<VecT> = Vec::new();
 
     datatypes.iter().for_each(|dtype| {
-        result.push(
-            dtype
-                .map(|dt| match dt {
-                    DataTypeName::U32 => VecT::U32(Vec::new()),
-                    DataTypeName::U64 => VecT::U64(Vec::new()),
-                    DataTypeName::Float => VecT::Float(Vec::new()),
-                    DataTypeName::Double => VecT::Double(Vec::new()),
-                })
-                .or_else(|| {
-                    // TODO: not sure if we actually want to handle everything as string which is not specified
-                    // but let's just do this on for now
-                    // (we use u64 with a dictionary for strings)
-                    Some(VecT::U64(Vec::new()))
-                }),
-        );
+        result.push(match dtype.data_type_name() {
+            DataTypeName::U32 => VecT::U32(Vec::new()),
+            DataTypeName::U64 => VecT::U64(Vec::new()),
+            DataTypeName::Float => VecT::Float(Vec::new()),
+            DataTypeName::Double => VecT::Double(Vec::new()),
+        });
     });
+
     csv_reader.records().for_each(|rec| {
         if let Ok(row) = rec {
             log::trace!("imported row: {:?}", row);
-            if let Err(Error::RollBack(rollback)) =
-                row.iter().enumerate().try_for_each(|(idx, item)| {
-                    if let Some(datatype) = datatypes[idx] {
-                        match datatype.parse(item) {
-                            Ok(val) => {
-                                result[idx].as_mut().map(|vect| {
-                                    vect.push(&val);
-                                    Some(())
-                                });
-                                Ok(())
-                            }
-                            Err(e) => {
-                                log::error!("Ignoring line {:?}, parsing failed: {}", row, e);
-                                Err(Error::RollBack(idx))
-                            }
-                        }
-                    } else {
-                        // TODO: not sure if we actually want to handle everything as string which is not specified
-                        // but let's just do this for now
-                        // (we use u64 with a dictionary for strings)
 
-                        let u64_equivalent =
-                            DataValueT::U64(dictionary.add(item.to_string()).try_into().unwrap());
-                        if let Some(result_col) = result[idx].as_mut() {
-                            result_col.push(&u64_equivalent);
-                        }
-
+            let parse_result = row.iter().enumerate().try_for_each(|(idx, item)| {
+                match datatypes[idx].parse(item, dictionary) {
+                    Ok(val) => {
+                        result[idx].push(&val.as_data_value_t());
                         Ok(())
                     }
-                })
-            {
-                for item in result.iter_mut().take(rollback) {
-                    if let Some(vec) = item.as_mut() {
-                        vec.pop()
+                    Err(e) => {
+                        log::error!("Ignoring line {:?}, parsing failed: {}", row, e);
+                        Err(Error::RollBack(idx))
                     }
                 }
+            });
+
+            if let Err(Error::RollBack(rollback)) = parse_result {
+                result.iter_mut().take(rollback).for_each(|item| item.pop())
             }
         }
     });
-    Ok(result.into_iter().flatten().collect())
+
+    result
 }
 
 /// Contains all the needed information, to write results into csv-files
@@ -173,6 +148,8 @@ impl CSVWriter<'_> {
     ) -> Result<(), Error> {
         log::debug!("Writing {pred}");
         let mut file = self.create_file(pred)?;
+        // TODO: we should use the logical types for writing, i.e. the physical type should be wrapped into its logical representation again
+        // to let the logical type implementation decide how to make this into a string again
         let content = trie.debug(dict);
         if self.gzip {
             write!(GzEncoder::new(file, Compression::best()), "{}", &content)?;
@@ -185,6 +162,7 @@ impl CSVWriter<'_> {
 
 #[cfg(test)]
 mod test {
+    use crate::logical::types::DefaultLogicalTypeCollection;
     use crate::physical::dictionary::PrefixedStringDictionary;
 
     use super::*;
@@ -203,10 +181,15 @@ Boston;United States;4628910
             .from_reader(data.as_bytes());
 
         let mut dict = PrefixedStringDictionary::default();
-        let x = read(&[None, None, None], &mut rdr, &mut dict);
-        assert!(x.is_ok());
-
-        let x = x.unwrap();
+        let x = read(
+            &[
+                DefaultLogicalTypeCollection::GenericEverything,
+                DefaultLogicalTypeCollection::GenericEverything,
+                DefaultLogicalTypeCollection::GenericEverything,
+            ],
+            &mut rdr,
+            &mut dict,
+        );
 
         assert_eq!(x.len(), 3);
         assert!(x.iter().all(|vect| vect.len() == 1));
@@ -255,20 +238,19 @@ node03;123;123;13;55;123;invalid
         let mut dict = PrefixedStringDictionary::default();
         let imported = read(
             &[
-                None,
-                Some(DataTypeName::U64),
-                Some(DataTypeName::Double),
-                Some(DataTypeName::Float),
-                Some(DataTypeName::U64),
-                None,
+                DefaultLogicalTypeCollection::GenericEverything,
+                DefaultLogicalTypeCollection::UnsignedInteger,
+                DefaultLogicalTypeCollection::Double,
+                DefaultLogicalTypeCollection::Float,
+                DefaultLogicalTypeCollection::UnsignedInteger,
+                DefaultLogicalTypeCollection::GenericEverything,
             ],
             &mut rdr,
             &mut dict,
         );
 
-        assert!(imported.is_ok());
-        assert_eq!(imported.as_ref().unwrap().len(), 6);
-        assert_eq!(imported.as_ref().unwrap()[1].len(), 3);
+        assert_eq!(imported.len(), 6);
+        assert_eq!(imported[1].len(), 3);
     }
 
     #[quickcheck]
@@ -304,18 +286,17 @@ node03;123;123;13;55;123;invalid
         let mut dict = PrefixedStringDictionary::default();
         let imported = read(
             &[
-                Some(DataTypeName::U64),
-                Some(DataTypeName::Double),
-                Some(DataTypeName::U64),
-                Some(DataTypeName::Float),
+                DefaultLogicalTypeCollection::UnsignedInteger,
+                DefaultLogicalTypeCollection::Double,
+                DefaultLogicalTypeCollection::UnsignedInteger,
+                DefaultLogicalTypeCollection::Float,
             ],
             &mut rdr,
             &mut dict,
         );
 
-        assert!(imported.is_ok());
-        assert_eq!(imported.as_ref().unwrap().len(), 4);
-        assert_eq!(imported.as_ref().unwrap()[0].len(), len);
+        assert_eq!(imported.len(), 4);
+        assert_eq!(imported[0].len(), len);
         true
     }
 }

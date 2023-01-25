@@ -6,6 +6,7 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::iter::{Product, Sum};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+use std::str::FromStr;
 
 #[cfg(test)]
 use quickcheck::{Arbitrary, Gen};
@@ -124,6 +125,14 @@ impl DivAssign for Float {
 impl fmt::Display for Float {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl FromStr for Float {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse().map_err(Error::ParseFloat).and_then(Self::new)
     }
 }
 

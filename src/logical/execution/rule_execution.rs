@@ -49,7 +49,7 @@ impl<'a, Dict: Dictionary> RuleExecution<'a, Dict> {
     pub fn execute<LogicalTypes: LogicalTypeCollection>(
         &self,
         program: &Program<Dict, LogicalTypes>,
-        table_manager: &mut TableManager<Dict>,
+        table_manager: &mut TableManager<Dict, LogicalTypes>,
         rule_info: &RuleInfo,
         step_number: usize,
     ) -> Result<HashSet<Identifier>, Error> {

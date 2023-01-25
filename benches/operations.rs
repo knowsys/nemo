@@ -5,6 +5,7 @@ use csv::ReaderBuilder;
 use polars::prelude::{CsvReader, DataFrame, DataType, JoinType, Schema, SerReader};
 use stage2::io::csv::read;
 
+use stage2::logical::types::DefaultLogicalTypeCollection;
 use stage2::physical::tabular::operations::{
     materialize, TrieScanJoin, TrieScanProject, TrieScanUnion,
 };
@@ -13,7 +14,7 @@ use stage2::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
 use stage2::physical::util::Reordering;
 use stage2::{
     logical::{model::DataSource, table_manager::ColumnOrder},
-    physical::{datatypes::DataTypeName, dictionary::PrefixedStringDictionary},
+    physical::dictionary::PrefixedStringDictionary,
 };
 
 fn load_trie(
@@ -24,14 +25,16 @@ fn load_trie(
     match source {
         DataSource::CsvFile(file) => {
             // Using fallback solution to treat eveything as string for now (storing as u64 internally)
-            let datatypes: Vec<Option<DataTypeName>> = (0..order.arity()).map(|_| None).collect();
+            let datatypes: Vec<DefaultLogicalTypeCollection> = (0..order.arity())
+                .map(|_| DefaultLogicalTypeCollection::GenericEverything)
+                .collect();
 
             let mut reader = ReaderBuilder::new()
                 .delimiter(b',')
                 .has_headers(false)
                 .from_reader(File::open(file.as_path()).unwrap());
 
-            let col_table = read(&datatypes, &mut reader, dict).unwrap();
+            let col_table = read(&datatypes, &mut reader, dict);
 
             let trie = Trie::from_cols(col_table);
 

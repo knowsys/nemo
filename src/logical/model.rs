@@ -742,4 +742,16 @@ impl<LogicalTypes: LogicalTypeCollection> PredicateTypeDeclaration<LogicalTypes>
     pub fn new(predicate: Identifier, types: Vec<LogicalTypes>) -> Self {
         Self { predicate, types }
     }
+
+    /// Get predicate of declaration
+    #[must_use]
+    pub fn predicate(&self) -> Identifier {
+        self.predicate
+    }
+
+    /// Get types of declaration
+    #[must_use]
+    pub fn types(&self) -> Vec<LogicalTypes> {
+        self.types.clone()
+    }
 }

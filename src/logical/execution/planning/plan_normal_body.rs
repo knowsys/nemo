@@ -8,6 +8,7 @@ use crate::{
         model::{Atom, Filter, Identifier, Rule},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::TableKey,
+        types::LogicalTypeCollection,
         TableManager,
     },
     physical::{
@@ -26,9 +27,9 @@ pub trait BodyStrategy<'a, Dict: Dictionary> {
     fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self;
 
     /// Calculate the concrete plan given a variable order.
-    fn execution_tree(
+    fn execution_tree<LogicalTypes: LogicalTypeCollection>(
         &self,
-        table_manager: &TableManager<Dict>,
+        table_manager: &TableManager<Dict, LogicalTypes>,
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,
@@ -46,10 +47,10 @@ pub struct SeminaiveStrategy<'a> {
 
 impl SeminaiveStrategy<'_> {
     // Calculate a subtree consisting of a union of in-memory tables.
-    fn subtree_union<Dict: Dictionary>(
+    fn subtree_union<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
         &self,
         tree: &mut ExecutionTree<TableKey>,
-        manager: &TableManager<Dict>,
+        manager: &TableManager<Dict, LogicalTypes>,
         predicate: Identifier,
         steps: Range<usize>,
         order: &Reordering,
@@ -73,10 +74,10 @@ impl SeminaiveStrategy<'_> {
 
     // Calculate a subtree consiting of join representing one variant of an seminaive evaluation.
     #[allow(clippy::too_many_arguments)]
-    fn subtree_join<Dict: Dictionary>(
+    fn subtree_join<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
         &self,
         tree: &mut ExecutionTree<TableKey>,
-        manager: &TableManager<Dict>,
+        manager: &TableManager<Dict, LogicalTypes>,
         side_atoms: &[&Atom],
         main_atoms: &[&Atom],
         side_orders: &[Reordering],
@@ -156,9 +157,9 @@ impl<'a, Dict: Dictionary> BodyStrategy<'a, Dict> for SeminaiveStrategy<'a> {
         }
     }
 
-    fn execution_tree(
+    fn execution_tree<LogicalTypes: LogicalTypeCollection>(
         &self,
-        table_manager: &TableManager<Dict>,
+        table_manager: &TableManager<Dict, LogicalTypes>,
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,

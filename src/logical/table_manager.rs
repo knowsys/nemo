@@ -1,6 +1,9 @@
 //! Managing of tables
 
-use super::model::{DataSource, Identifier};
+use super::{
+    model::{DataSource, Identifier},
+    types::LogicalTypeCollection,
+};
 use crate::{
     error::Error,
     io::csv::read,
@@ -9,7 +12,6 @@ use crate::{
         TimedCode,
     },
     physical::{
-        datatypes::DataTypeName,
         dictionary::Dictionary,
         management::{
             database::{TableId, TableKeyType},
@@ -217,13 +219,22 @@ enum TableStatus {
 /// Manager object for handling tables that are the result
 /// of a seminaive existential rules evaluation process.
 #[derive(Debug)]
-pub struct TableManager<Dict: Dictionary> {
+pub struct TableManager<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
     /// [`DatabaseInstance`] managing all existing tables.
     database: DatabaseInstance<TableKey, Dict>,
 
     /// Contains the status of each table.
     status: HashMap<TableName, TableStatus>,
 
+    /// The type declaration associated with each predicate
+    predicate_to_type_declarations: HashMap<Identifier, Vec<LogicalTypes>>,
+
+    // TODO: in theorey we should be able to get this information from the type declarations
+    // HOWEVER: apparently the arity information is only added when a table for the predicate is already present
+    // the absense of a table might cause an early return with None in some functions that return an option and use the arity;
+    // when we use the type_declarations that are there from the beginning for all prediactes, then this whole thing falls apart...
+    // this needs further investigation but for now it is safer to just add the type_declaration in a way
+    // that does not interfere with the existing implementation
     /// The arity associated with each predicate
     predicate_arity: HashMap<Identifier, usize>,
 
@@ -236,12 +247,16 @@ pub struct TableManager<Dict: Dictionary> {
     predicate_to_covers: HashMap<Identifier, Vec<TableCover>>,
 }
 
-impl<Dict: Dictionary> TableManager<Dict> {
+impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> TableManager<Dict, LogicalTypes> {
     /// Create new [`TableManager`].
-    pub fn new(dict_constants: Dict) -> Self {
+    pub fn new(
+        dict_constants: Dict,
+        predicate_to_type_declarations: HashMap<Identifier, Vec<LogicalTypes>>,
+    ) -> Self {
         Self {
             database: DatabaseInstance::new(dict_constants),
             status: HashMap::new(),
+            predicate_to_type_declarations,
             predicate_arity: HashMap::new(),
             predicate_to_steps: HashMap::new(),
             predicate_to_covers: HashMap::new(),
@@ -563,8 +578,11 @@ impl<Dict: Dictionary> TableManager<Dict> {
     }
 
     /// Load table from a given on-disk source
-    /// TODO: This function should change when the type system gets introduced on the logical layer
-    fn load_table(source: &DataSource, arity: usize, dict: &mut Dict) -> Result<Trie, Error> {
+    fn load_table(
+        source: &DataSource,
+        type_declaration: &[LogicalTypes],
+        dict: &mut Dict,
+    ) -> Result<Trie, Error> {
         TimedCode::instance()
             .sub("Reasoning/Execution/Load Table")
             .start();
@@ -573,18 +591,20 @@ impl<Dict: Dictionary> TableManager<Dict> {
         let (trie, _name) = match source {
             DataSource::CsvFile(file) => {
                 // Using fallback solution to treat eveything as string for now (storing as u64 internally)
-                let datatypes: Vec<Option<DataTypeName>> = (0..arity).map(|_| None).collect();
-
                 let gz_decoder = flate2::read::GzDecoder::new(File::open(file.as_path())?);
 
                 let col_table = if gz_decoder.header().is_some() {
-                    read(&datatypes, &mut crate::io::csv::reader(gz_decoder), dict)?
+                    read(
+                        type_declaration,
+                        &mut crate::io::csv::reader(gz_decoder),
+                        dict,
+                    )
                 } else {
                     read(
-                        &datatypes,
+                        type_declaration,
                         &mut crate::io::csv::reader(File::open(file.as_path())?),
                         dict,
-                    )?
+                    )
                 };
                 let trie = Trie::from_cols(col_table);
                 (
@@ -662,10 +682,16 @@ impl<Dict: Dictionary> TableManager<Dict> {
                 }
                 TableStatus::OnDisk(source) => {
                     let arity = required_order.arity();
+                    let type_declaration = self.predicate_to_type_declarations.get(&key.name.predicate).expect("We expect all predicate type declarations to be known up front (at the moment).");
+
+                    debug_assert!(arity == type_declaration.len());
 
                     // Trie has to be loaded from disk
-                    let trie =
-                        Self::load_table(source, arity, self.database.get_dict_constants_mut())?;
+                    let trie = Self::load_table(
+                        source,
+                        type_declaration,
+                        self.database.get_dict_constants_mut(),
+                    )?;
 
                     // We deduce the schema from the trie itself here assuming they are all dictionary entries
                     // TODO: Should change when type system is introduced in the logical layer

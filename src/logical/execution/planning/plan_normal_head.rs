@@ -8,6 +8,7 @@ use crate::{
         model::{Atom, Identifier, NumericLiteral, Rule, Term, Variable},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::{ColumnOrder, TableKey},
+        types::LogicalTypeCollection,
         TableManager,
     },
     physical::{
@@ -27,9 +28,9 @@ pub trait HeadStrategy<Dict: Dictionary> {
     fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self;
 
     /// Calculate the concrete plan given a variable order.
-    fn execution_tree(
+    fn execution_tree<LogicalTypes: LogicalTypeCollection>(
         &self,
-        table_manager: &TableManager<Dict>,
+        table_manager: &TableManager<Dict, LogicalTypes>,
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,
@@ -136,9 +137,9 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
         }
     }
 
-    fn execution_tree(
+    fn execution_tree<LogicalTypes: LogicalTypeCollection>(
         &self,
-        table_manager: &TableManager<Dict>,
+        table_manager: &TableManager<Dict, LogicalTypes>,
         _rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,

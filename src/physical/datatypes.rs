@@ -3,9 +3,11 @@
 /// Module for defining [`DataTypeName`]
 pub mod data_type_name;
 pub use data_type_name::DataTypeName;
+pub use data_type_name::HasDataTypeName;
 /// Module for defining [`DataValueT`]
 pub mod data_value;
 pub use data_value::DataValueT;
+pub use data_value::WrappableInDataValueT;
 /// Module for defining [`Double`]
 pub mod double;
 pub use double::Double;

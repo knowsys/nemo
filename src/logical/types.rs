@@ -8,7 +8,10 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use crate::physical::datatypes::Field;
+use crate::physical::datatypes::{
+    DataTypeName, DataValueT, Double, Field, Float, HasDataTypeName, WrappableInDataValueT,
+};
+use crate::physical::dictionary::Dictionary;
 
 // TODO: have type for everything (rdfs:resource)
 // Generally: support rdf types
@@ -48,7 +51,7 @@ impl LogicalTypeParseError for DefaultLogicalTypeParseError {
 
 /// Trait marking Enums representing a list of logical type names
 pub trait LogicalTypeCollection:
-    Clone + Debug + Display + FromStr<Err = Self::ParseTypeNameErr>
+    Clone + Debug + Display + Eq + FromStr<Err = Self::ParseTypeNameErr>
 {
     /// Type that is essentially <Self as FromStr>::Err but we need to set a trait bound on it which I don't know how to set otherwise
     type ParseTypeNameErr: LogicalTypeParseError;
@@ -56,8 +59,15 @@ pub trait LogicalTypeCollection:
     /// The corresponding enum that can hold the logical types in its variats
     type LogicalTypeEnum: LogicalTypeEnum;
 
-    /// Parse string according into type respresented by self
-    fn parse(&self, s: &str) -> Result<Self::LogicalTypeEnum, String>; // TODO: error should not be a string
+    /// Parse string according to type respresented by self
+    fn parse<Dict: Dictionary>(
+        &self,
+        s: &str,
+        dict: &mut Dict,
+    ) -> Result<Self::LogicalTypeEnum, String>; // TODO: error should not be a string
+
+    /// Get the corresponding physical data type name
+    fn data_type_name(&self) -> DataTypeName;
 }
 
 /// Trait marking Enums wrapping a a list of logical types into respective variants
@@ -67,17 +77,26 @@ pub trait LogicalTypeEnum: Debug {
 
     /// Return name of the type of self
     fn get_type(&self) -> Self::LogicalTypeCollection;
+
+    /// Get underlying physical value as DataValueT
+    fn as_data_value_t(&self) -> DataValueT;
 }
 
 /// Trait of types in logical layer
-pub trait LogicalType {
+pub trait LogicalType: Sized {
     /// Type in Physical layer representing this Logical Types
-    type PhysicalType;
+    type PhysicalType: HasDataTypeName;
 
     /// convert physical type into logical type
     fn from_physical(t: &Self::PhysicalType) -> Self;
     /// convert logical type into physical type
     fn to_physical(&self) -> Self::PhysicalType;
+
+    /// Parse string according to type respresented by self
+    fn parse<Dict: Dictionary>(s: &str, dict: &mut Dict) -> Result<Self, String>; // TODO: error should not be a string
+
+    /// Write type into string (inverse of parsing)
+    fn write<Dict: Dictionary>(&self, dict: &Dict) -> String;
 }
 
 /// Generate Logical Type Enums by specifying how type names map to actual logical type implementations
@@ -85,7 +104,7 @@ pub trait LogicalType {
 macro_rules! generate_type_collection_and_enum {
     ([$collection_vis:vis] $name_collection:ident, [$enum_vis:vis] $name_enum:ident, $error_impl:ident, $(($variant_name:ident, $content:ty)),+) => {
         /// Generated Logical Type Collection Type $name_collection
-        #[derive(Copy, Clone, Debug)]
+        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
         $collection_vis enum $name_collection {
             $(
                 /// $variant_name
@@ -116,15 +135,21 @@ macro_rules! generate_type_collection_and_enum {
             type ParseTypeNameErr = <Self as FromStr>::Err;
             type LogicalTypeEnum = $name_enum;
 
-            fn parse(&self, s: &str) -> Result<Self::LogicalTypeEnum, String> { // TODO: error should not be a string
+            fn parse<Dict: Dictionary>(&self, s: &str, dict: &mut Dict) -> Result<Self::LogicalTypeEnum, String> { // TODO: error should not be a string
                 match self {
-                    $(Self::$variant_name => <$content>::from_str(s).map(|ok| Self::LogicalTypeEnum::$variant_name(ok)).map_err(|err| err.to_string())),+ // TODO: error should not be a string
+                    $(Self::$variant_name => <$content>::parse(s, dict).map(|val| val.as_logical_type_enum())),+ // TODO: error should not be a string
+                }
+            }
+
+            fn data_type_name(&self) -> DataTypeName {
+                match self {
+                    $(Self::$variant_name => <$content as LogicalType>::PhysicalType::data_type_name()),+
                 }
             }
         }
 
         /// Generated Logical Type Enum Type $name_enum
-        #[derive(Debug)]
+        #[derive(Copy, Clone, Debug)]
         $enum_vis enum $name_enum {
             $(
                 /// $variant_name with $content
@@ -140,19 +165,36 @@ macro_rules! generate_type_collection_and_enum {
                     $(Self::$variant_name(_) => Self::LogicalTypeCollection::$variant_name),+
                 }
             }
+
+            fn as_data_value_t(&self) -> DataValueT {
+                match self {
+                    $(Self::$variant_name(val) => val.to_physical().wrap_in_data_value_t()),+
+                }
+            }
         }
+
+        $(
+        impl $content {
+            fn as_logical_type_enum(&self) -> $name_enum {
+                $name_enum::$variant_name(*self)
+            }
+        }
+        )+
     };
     ($name_collection:ident, $name_enum:ident, $(($variant_name:ident, $content:ty)),+) => {
         generate_type_collection_and_enum!([pub(self)] $name_collection, [pub(self)] $name_enum, $(($variant_name, $content)),+);
     };
 }
 
+// TODO: can we somehow mark GenericEverything as Default in the future to allow to NOT specify type declarations in rules?
 generate_type_collection_and_enum!(
     [pub] DefaultLogicalTypeCollection,
     [pub] DefaultLogicalTypeEnum,
     DefaultLogicalTypeParseError,
     (GenericEverything, GenericEverything),
-    (Integer, Integer<i64>)
+    (UnsignedInteger, Number<u64>),
+    (Float, Number<Float>),
+    (Double, Number<Double>)
 );
 
 /// Type similar to rdfs:resource able to capture every value as a string
@@ -167,14 +209,6 @@ impl Display for GenericEverything {
     }
 }
 
-impl FromStr for GenericEverything {
-    type Err = <u64 as FromStr>::Err; // TODO: adjust this once we have dictionary
-
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Ok(Self { physical: 0 }) // TODO: use dictionary
-    }
-}
-
 impl LogicalType for GenericEverything {
     type PhysicalType = u64;
 
@@ -185,32 +219,48 @@ impl LogicalType for GenericEverything {
     fn to_physical(&self) -> Self::PhysicalType {
         self.physical
     }
+
+    fn parse<Dict: Dictionary>(s: &str, dict: &mut Dict) -> Result<Self, String> {
+        let idx_in_dict = dict.add(s.to_string());
+
+        Ok(Self {
+            physical: idx_in_dict.try_into().expect(
+                "number of elements in dictionary should not overflow 64 bit unsinged integers",
+            ),
+        })
+    }
+
+    fn write<Dict: Dictionary>(&self, dict: &Dict) -> String {
+        let dict_idx = self.physical;
+        dict.entry(dict_idx.try_into().expect("U64 should also fit into usize"))
+            .unwrap_or_else(|| format!("<{dict_idx} should have been interned>"))
+    }
 }
 
 /// Trait summing up what a number should be able to do in physical layer
-pub trait PhysicalNumber: Copy + Debug + Display + FromStr + Field + Ord {}
-impl<T: Copy + Debug + Display + FromStr + Field + Ord> PhysicalNumber for T {}
+pub trait PhysicalNumber: Copy + Debug + Display + FromStr + Field + Ord + HasDataTypeName {}
+impl<T: Copy + Debug + Display + FromStr + Field + Ord + HasDataTypeName> PhysicalNumber for T {}
 
 /// Trait summing up what a number should be able to do in logical layer
 trait LogicalNumber: LogicalType + Field + Ord {}
 impl<T: LogicalType + Field + Ord> LogicalNumber for T {}
 
-/// Generic Logical Integer that needs to specify its actual type when instantiated, e.g. i64
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Integer<T>
+/// Generic Logical Number that needs to specify its actual type when instantiated, e.g. i64
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Number<T>
 where
     T: PhysicalNumber,
 {
     physical: T,
 }
 
-impl<T: PhysicalNumber> Display for Integer<T> {
+impl<T: PhysicalNumber> Display for Number<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.physical)
     }
 }
 
-impl<T: PhysicalNumber> FromStr for Integer<T> {
+impl<T: PhysicalNumber> FromStr for Number<T> {
     type Err = <T as FromStr>::Err;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -218,7 +268,10 @@ impl<T: PhysicalNumber> FromStr for Integer<T> {
     }
 }
 
-impl<T: PhysicalNumber> LogicalType for Integer<T> {
+impl<T: PhysicalNumber> LogicalType for Number<T>
+where
+    <T as FromStr>::Err: ToString,
+{
     type PhysicalType = T;
 
     fn from_physical(t: &Self::PhysicalType) -> Self {
@@ -228,9 +281,18 @@ impl<T: PhysicalNumber> LogicalType for Integer<T> {
     fn to_physical(&self) -> Self::PhysicalType {
         self.physical
     }
+
+    fn parse<Dict: Dictionary>(s: &str, _dict: &mut Dict) -> Result<Self, String> {
+        s.parse()
+            .map_err(|err: <Self as FromStr>::Err| err.to_string())
+    }
+
+    fn write<Dict: Dictionary>(&self, _dict: &Dict) -> String {
+        self.to_string()
+    }
 }
 
-impl<T: PhysicalNumber> Add for Integer<T> {
+impl<T: PhysicalNumber> Add for Number<T> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -240,7 +302,7 @@ impl<T: PhysicalNumber> Add for Integer<T> {
     }
 }
 
-impl<T: PhysicalNumber> Sub for Integer<T> {
+impl<T: PhysicalNumber> Sub for Number<T> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -250,7 +312,7 @@ impl<T: PhysicalNumber> Sub for Integer<T> {
     }
 }
 
-impl<T: PhysicalNumber> Mul for Integer<T> {
+impl<T: PhysicalNumber> Mul for Number<T> {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -260,7 +322,7 @@ impl<T: PhysicalNumber> Mul for Integer<T> {
     }
 }
 
-impl<T: PhysicalNumber> Div for Integer<T> {
+impl<T: PhysicalNumber> Div for Number<T> {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self::Output {
@@ -270,7 +332,7 @@ impl<T: PhysicalNumber> Div for Integer<T> {
     }
 }
 
-impl<T: PhysicalNumber> Sum for Integer<T> {
+impl<T: PhysicalNumber> Sum for Number<T> {
     fn sum<I>(iter: I) -> Self
     where
         I: Iterator<Item = Self>,
@@ -281,7 +343,7 @@ impl<T: PhysicalNumber> Sum for Integer<T> {
     }
 }
 
-impl<T: PhysicalNumber> Product for Integer<T> {
+impl<T: PhysicalNumber> Product for Number<T> {
     fn product<I>(iter: I) -> Self
     where
         I: Iterator<Item = Self>,
@@ -292,7 +354,7 @@ impl<T: PhysicalNumber> Product for Integer<T> {
     }
 }
 
-impl<T: PhysicalNumber> Zero for Integer<T> {
+impl<T: PhysicalNumber> Zero for Number<T> {
     fn zero() -> Self {
         Self {
             physical: T::zero(),
@@ -304,7 +366,7 @@ impl<T: PhysicalNumber> Zero for Integer<T> {
     }
 }
 
-impl<T: PhysicalNumber> One for Integer<T> {
+impl<T: PhysicalNumber> One for Number<T> {
     fn one() -> Self {
         Self { physical: T::one() }
     }

@@ -66,8 +66,12 @@ fn reasoning_symmetry_transitive_closure() -> Result<(), Box<dyn std::error::Err
     let rule_content = format!(
         "@source city[1]: load-csv(\"{csv_path_1}\"). \n@source conn[2]: load-csv(\"{csv_path_2}\"). \n{rules}"
     );
-    println!("{rule_content}");
-    rule_file.write_str(&rule_content)?;
+    let type_declarations = [
+        "@decl city(GenericEverything) .",
+        "@decl conn(GenericEverything, GenericEverything) .",
+        "@decl connected(GenericEverything, GenericEverything) .",
+    ];
+    rule_file.write_str(&(type_declarations.join("\n") + "\n" + &rule_content))?;
     csv_file_1.write_str("Vienna\nBerlin\nParis\nBasel\nRome")?;
     csv_file_2.write_str("Vienna,Berlin\nVienna,Rome\nVienna,Zurich\nBerlin,Paris")?;
 
