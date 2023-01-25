@@ -565,7 +565,9 @@ impl TableManager {
 
                 let mut reader = ReaderBuilder::new()
                     .delimiter(b',')
+                    .escape(Some(b'\\'))
                     .has_headers(false)
+                    .double_quote(true)
                     .from_reader(File::open(file.as_path()).unwrap());
 
                 let col_table = read(&datatypes, &mut reader, dict).unwrap();
