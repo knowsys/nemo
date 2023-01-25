@@ -970,25 +970,23 @@ impl TableManager {
         predicate: Identifier,
         step: usize,
     ) -> Result<Option<TableKey>, Error> {
-        let mut table_key = || {
-            let arity = match self.predicate_arity.get(&predicate) {
-                Some(val) => *val,
-                None => return Ok(None),
-            };
-            self.add_union_table(
-                predicate,
-                0..step,
-                predicate,
-                0..step,
-                Some(ColumnOrder::default(arity)),
-            )
-        };
-
-        if let Some(key) = table_key()? {
-            self.materialize_table(key).map(Some)
-        } else {
-            Ok(None)
+        if !self.predicate_arity.contains_key(&predicate) {
+            return Ok(None);
         }
+
+        let arity = *self
+            .predicate_arity
+            .get(&predicate)
+            .expect("Arity should have a value; Checked for existence before.");
+        self.add_union_table(
+            predicate,
+            0..step,
+            predicate,
+            0..step,
+            Some(ColumnOrder::default(arity)),
+        )?
+        .map(|key| self.materialize_table(key))
+        .transpose()
     }
 
     /// Return trie with the given key.
