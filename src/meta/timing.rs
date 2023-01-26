@@ -16,10 +16,9 @@ static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
 });
 
 /// Represents a block of code that is timed
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct TimedCodeInfo {
     accumulated_time: Duration,
-    individual_times: Vec<Duration>,
 
     start_time: Option<Instant>,
 }
@@ -29,7 +28,6 @@ impl TimedCodeInfo {
     pub fn new() -> Self {
         Self {
             accumulated_time: Duration::from_secs(0),
-            individual_times: Vec::new(),
             start_time: None,
         }
     }
@@ -138,7 +136,6 @@ impl TimedCode {
         let duration = now - start;
 
         self.info.accumulated_time += duration;
-        self.info.individual_times.push(duration);
         self.info.start_time = None;
 
         duration

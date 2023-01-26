@@ -737,22 +737,16 @@ impl TableManager {
             }
         }
 
-        match self.database.execute_plan(&plan) {
-            Ok(new_tables) => {
-                let mut result = HashSet::new();
+        let new_tables = self.database.execute_plan(&plan)?;
 
-                for key in new_tables {
-                    result.insert(key.name.predicate);
-                    self.register_table(key);
-                }
+        let mut result = HashSet::new();
 
-                Ok(result)
-            }
-            Err(err) => {
-                log::warn!("{err:?}");
-                Ok(HashSet::new())
-            }
+        for key in new_tables {
+            result.insert(key.name.predicate);
+            self.register_table(key);
         }
+
+        Ok(result)
     }
 
     /// Checks wether the tree is a union of continous part of a single table.
