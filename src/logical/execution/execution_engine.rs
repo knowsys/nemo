@@ -251,4 +251,20 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
     pub fn get_dict(&self) -> &Dict {
         self.table_manager.get_dict()
     }
+
+    /// Iterator over all IDB predicates, with Tries if present.
+    pub fn idb_predicates(
+        &mut self,
+    ) -> Result<impl Iterator<Item = (Identifier, Option<&Trie>)>, Error> {
+        let idbs = self.program.idb_predicates();
+        let tables = self.get_results()?.into_iter().collect::<HashMap<_, _>>();
+        let mut result = Vec::new();
+
+        for predicate in idbs {
+            let table = tables.get(&predicate).copied();
+            result.push((predicate, table));
+        }
+
+        Ok(result.into_iter())
+    }
 }

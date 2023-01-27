@@ -123,42 +123,41 @@ impl<'a, Dict: Dictionary> CSVWriter<'a, Dict> {
 impl<Dict: Dictionary> CSVWriter<'_, Dict> {
     /// Writes the results to the output folder
     pub fn write(&mut self) -> Result<(), Error> {
-        self.exec
-            .get_results()?
-            .iter()
-            .try_for_each(|(pred, trie)| {
-                let predicate_name = self
-                    .names
-                    .borrow()
-                    .entry(pred.0)
-                    .expect("All preds shall depend on the names dictionary");
+        self.exec.idb_predicates()?.try_for_each(|(pred, trie)| {
+            let predicate_name = self
+                .names
+                .borrow()
+                .entry(pred.0)
+                .expect("All predicate names should be present in the dictionary");
 
-                let sanitise_options = Options::<Option<char>> {
-                    url_safe: true,
-                    ..Default::default()
-                };
-                let file_name = sanitise_with_options(&predicate_name, &sanitise_options);
-                let file_path = PathBuf::from(format!(
-                    "{}/{file_name}.csv",
-                    self.path
-                        .as_os_str()
-                        .to_str()
-                        .expect("Path shall be a string")
-                ));
-                match OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(file_path.clone())
-                {
-                    Ok(mut file) => {
-                        log::info!("Writing {file_path:?}");
+            let sanitise_options = Options::<Option<char>> {
+                url_safe: true,
+                ..Default::default()
+            };
+            let file_name = sanitise_with_options(&predicate_name, &sanitise_options);
+            let file_path = PathBuf::from(format!(
+                "{}/{file_name}.csv",
+                self.path
+                    .as_os_str()
+                    .to_str()
+                    .expect("Path shall be a string")
+            ));
+            match OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(file_path.clone())
+            {
+                Ok(mut file) => {
+                    log::info!("Writing {file_path:?}");
+                    if let Some(trie) = trie {
                         write!(file, "{}", trie.debug(self.names.borrow().deref()))?;
                     }
-                    Err(e) => log::error!("error writing: {e:?}"),
                 }
-                Ok(())
-            })
+                Err(e) => log::error!("error writing: {e:?}"),
+            }
+            Ok(())
+        })
     }
 }
 
