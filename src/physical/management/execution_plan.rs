@@ -473,7 +473,6 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
 
     /// Append a list of [`ExecutionTree`] to the plan.
     pub fn append(&mut self, mut trees: Vec<ExecutionTree<TableKey>>) {
-        debug_assert!(trees.iter().all(|t| t.root.is_some()));
         self.trees.append(&mut trees);
     }
 

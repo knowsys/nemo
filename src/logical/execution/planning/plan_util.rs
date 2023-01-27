@@ -63,14 +63,14 @@ pub(super) fn order_atom(atom: &Atom, variable_order: &VariableOrder) -> Reorder
 
 /// This function replaces each variable in the atom with its position in the variable ordering
 /// while keeping in mind that the atom might be reordered.
-/// Examples: 
+/// Examples:
 ///     * a(x, y, z) with atom order [0, 1, 2] and variable order [y, z, x] results in [1, 2, 0]
 ///     * a(x, y, z) with atom order [2, 1, 0] and variable order [y, z, x] results in [1, 0, 2]
 /// This function is useful in the following scenarios:
 ///     * Computing JoinBindings: In this case you would apply this function to each atom in the join to obtain the "JoinBinding"
 ///         - Example: For a leapfrog join a(x, y, z) b(z, y) with order [x, y, z] you'd obtain [[0, 1, 2], [1, 2]]
 ///                    (given the reordering for b: [1, 0])
-///     * Calculating a projection/reordering for an atom: 
+///     * Calculating a projection/reordering for an atom:
 ///         - Example: Say you have a table t(x, y, z) and want to project to the last two columns and save the atom in the column order [1, 0]
 ///                    Then you'd obtain [2, 1]
 pub(super) fn atom_binding(
@@ -84,7 +84,7 @@ pub(super) fn atom_binding(
             if let Term::Variable(variable) = &atom.terms()[i] {
                 *variable_order.get(variable).unwrap()
             } else {
-                panic!("Only universal variables are supported.");
+                panic!("It is assumed that this function is only called on atoms which only contain variables.");
             }
         })
         .collect()
@@ -261,7 +261,7 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
                     let instruction = AppendInstruction::RepeatColumn(*repeat_index);
                     current_append_vector.push(instruction);
                 } else {
-                    reduced_terms.push(Term::Variable(Variable::Universal(variable_identifier)));
+                    reduced_terms.push(Term::Variable(*variable));
 
                     variable_map.insert(variable_identifier, term_index);
 
