@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Offers a simple way to store multiple [String] objects, associate them to a [usize] and manage ownership for them
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct StringDictionary {
     store: Vec<Rc<String>>,
     mapping: HashMap<Rc<String>, usize>,

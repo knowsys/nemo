@@ -13,7 +13,7 @@ use crate::{
         TimedCode,
     },
     physical::{
-        dictionary::PrefixedStringDictionary,
+        dictionary::Dictionary,
         tabular::{
             operations::{
                 materialize::materialize, triescan_append::TrieScanAppend, TrieScanJoin,
@@ -75,23 +75,23 @@ impl TempTableInfo {
 
 /// Represents a collection of tables
 #[derive(Debug)]
-pub struct DatabaseInstance<TableKey: TableKeyType> {
+pub struct DatabaseInstance<TableKey: TableKeyType, Dict: Dictionary> {
     /// Structure which owns all the tries; accessed through Id.
     id_to_table: HashMap<TableId, TableInfo<TableKey>>,
     /// Alternative access scheme through a TableKey.
     key_to_tableid: HashMap<TableKey, TableId>,
 
     /// Dictionary which stores the strings associates with abstract constants
-    dict_constants: PrefixedStringDictionary,
+    dict_constants: Dict,
 
     /// The lowest unused TableId.
     /// Will be incremented for each new table and will never be reused.
     current_id: usize,
 }
 
-impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
+impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> {
     /// Create new [`DatabaseInstance`]
-    pub fn new(dict_constants: PrefixedStringDictionary) -> Self {
+    pub fn new(dict_constants: Dict) -> Self {
         Self {
             id_to_table: HashMap::new(),
             key_to_tableid: HashMap::new(),
@@ -219,12 +219,12 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
     }
 
     /// Returns a mutable reference to the dictionary used for associating abstract constants with strings.
-    pub fn get_dict_constants_mut(&mut self) -> &mut PrefixedStringDictionary {
+    pub fn get_dict_constants_mut(&mut self) -> &mut Dict {
         &mut self.dict_constants
     }
 
     /// Returns a reference to the dictionary used for associating abstract constants with strings.
-    pub fn get_dict_constants(&self) -> &PrefixedStringDictionary {
+    pub fn get_dict_constants(&self) -> &Dict {
         &self.dict_constants
     }
 
@@ -553,7 +553,7 @@ impl<TableKey: TableKeyType> DatabaseInstance<TableKey> {
     }
 }
 
-impl<TableKey: TableKeyType> ByteSized for DatabaseInstance<TableKey> {
+impl<TableKey: TableKeyType, Dict: Dictionary> ByteSized for DatabaseInstance<TableKey, Dict> {
     fn size_bytes(&self) -> ByteSize {
         self.id_to_table
             .iter()
@@ -566,7 +566,7 @@ mod test {
     use crate::physical::{
         columnar::traits::column::Column,
         datatypes::{DataTypeName, DataValueT},
-        dictionary::PrefixedStringDictionary,
+        dictionary::StringDictionary,
         management::{
             execution_plan::{ExecutionResult, ExecutionTree},
             ByteSized, ExecutionPlan,
@@ -594,8 +594,7 @@ mod test {
         let trie_a = Trie::new(vec![column_a]);
         let trie_b = Trie::new(vec![column_b]);
 
-        let mut instance =
-            DatabaseInstance::<StringKeyType>::new(PrefixedStringDictionary::default());
+        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
 
         let mut schema_a = TableSchema::new();
         schema_a.add_entry(DataTypeName::U64, false, false);
@@ -603,7 +602,7 @@ mod test {
         assert_eq!(instance.add(String::from("A"), trie_a.clone(), schema_a), 0);
         assert_eq!(instance.get_key(0), String::from("A"));
         assert_eq!(instance.get_id(&String::from("A")), 0);
-        // TODO: Look into catch_unwind and PrefixedStringDictionary
+        // TODO: Look into catch_unwind and Dict
         // assert!(std::panic::catch_unwind(|| instance.get_key(1)).is_err());
         // assert!(std::panic::catch_unwind(|| instance.get_id(&String::from("C"))).is_err());
         assert_eq!(instance.get_by_id(0).row_num(), 3);
@@ -732,8 +731,7 @@ mod test {
             schema_entry(DataTypeName::U32),
         ]);
 
-        let mut instance =
-            DatabaseInstance::<StringKeyType>::new(PrefixedStringDictionary::default());
+        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
         instance.add(String::from("TableA"), trie_a, schema_a);
         instance.add(String::from("TableB"), trie_b, schema_b);
         instance.add(String::from("TableC"), trie_c, schema_c);

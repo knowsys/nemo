@@ -12,6 +12,7 @@ use crate::{
     },
     physical::{
         datatypes::DataValueT,
+        dictionary::Dictionary,
         management::execution_plan::{ExecutionNodeRef, ExecutionResult, ExecutionTree},
         tabular::operations::triescan_append::AppendInstruction,
         util::Reordering,
@@ -21,14 +22,14 @@ use crate::{
 use super::plan_util::{join_binding, BODY_JOIN};
 
 /// Strategies for calculating the newly derived tables.
-pub trait HeadStrategy {
+pub trait HeadStrategy<Dict: Dictionary> {
     /// Do preperation work for the planning phase.
     fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self;
 
     /// Calculate the concrete plan given a variable order.
     fn execution_tree(
         &self,
-        table_manager: &TableManager,
+        table_manager: &TableManager<Dict>,
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,
@@ -115,7 +116,7 @@ impl DatalogStrategy {
     }
 }
 
-impl HeadStrategy for DatalogStrategy {
+impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
     fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
         let mut predicate_to_atoms = HashMap::<Identifier, Vec<HeadInstruction>>::new();
 
@@ -137,7 +138,7 @@ impl HeadStrategy for DatalogStrategy {
 
     fn execution_tree(
         &self,
-        table_manager: &TableManager,
+        table_manager: &TableManager<Dict>,
         _rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,

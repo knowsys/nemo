@@ -10,6 +10,7 @@ use crate::{
         program_analysis::analysis::RuleAnalysis,
     },
     physical::{
+        dictionary::Dictionary,
         management::{database::TableKeyType, execution_plan::ExecutionTree, ByteSized},
         tabular::{table_types::trie::Trie, traits::table::Table},
         util::Reordering,
@@ -17,7 +18,7 @@ use crate::{
 };
 
 /// Log: Rule application.
-pub fn log_apply_rule(_program: &Program, step: usize, rule_index: usize) {
+pub fn log_apply_rule<Dict: Dictionary>(_program: &Program<Dict>, step: usize, rule_index: usize) {
     // TOOO: Maybe add a to_string() method to rules so
     log::info!("<<< {step}: APPLYING RULE {rule_index} >>>");
 }
@@ -50,7 +51,10 @@ pub fn log_fragmentation_combine(predicate: Identifier, trie_opt: Option<&Trie>)
 }
 
 /// Log: Print all available variable orders.
-pub fn log_avaiable_variable_order(program: &Program, analysis: &RuleAnalysis) {
+pub fn log_avaiable_variable_order<Dict: Dictionary>(
+    program: &Program<Dict>,
+    analysis: &RuleAnalysis,
+) {
     log::info!("Available orders:");
     for (index, promising_order) in analysis.promising_variable_orders.iter().enumerate() {
         log::info!(

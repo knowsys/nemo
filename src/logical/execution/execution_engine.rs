@@ -16,7 +16,7 @@ use crate::{
     },
     physical::{
         datatypes::DataValueT,
-        dictionary::PrefixedStringDictionary,
+        dictionary::Dictionary,
         tabular::{
             table_types::trie::Trie,
             traits::{table::Table, table_schema::TableSchema},
@@ -47,11 +47,11 @@ impl RuleInfo {
 
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
-pub struct ExecutionEngine {
-    program: Program,
+pub struct ExecutionEngine<Dict: Dictionary> {
+    program: Program<Dict>,
     analysis: ProgramAnalysis,
 
-    table_manager: TableManager,
+    table_manager: TableManager<Dict>,
 
     predicate_fragmentation: HashMap<Identifier, usize>,
     predicate_last_union: HashMap<Identifier, usize>,
@@ -60,9 +60,9 @@ pub struct ExecutionEngine {
     current_step: usize,
 }
 
-impl ExecutionEngine {
+impl<Dict: Dictionary> ExecutionEngine<Dict> {
     /// Initialize [`ExecutionEngine`].
-    pub fn initialize(mut program: Program) -> Self {
+    pub fn initialize(mut program: Program<Dict>) -> Self {
         program.normalize();
         let analysis = program.analyze();
 
@@ -89,7 +89,7 @@ impl ExecutionEngine {
     }
 
     /// Add all the data source decliarations from the program into the table manager.
-    fn add_input_sources(table_manager: &mut TableManager, program: &Program) {
+    fn add_input_sources(table_manager: &mut TableManager<Dict>, program: &Program<Dict>) {
         for ((predicate, arity), source) in program.sources() {
             table_manager.add_source(predicate, arity, source.clone());
         }
@@ -97,7 +97,7 @@ impl ExecutionEngine {
 
     /// Add all input facts as tables into the table manager.
     /// TODO: This function has to be revised when the new type system for the logical layer is introduced.
-    fn add_input_facts(table_manager: &mut TableManager, program: &Program) {
+    fn add_input_facts(table_manager: &mut TableManager<Dict>, program: &Program<Dict>) {
         let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<DataValueT>>>::new();
 
         for fact in program.facts() {
@@ -139,7 +139,7 @@ impl ExecutionEngine {
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
-        let rule_execution: Vec<RuleExecution> = self
+        let rule_execution: Vec<RuleExecution<Dict>> = self
             .program
             .rules()
             .iter()
@@ -248,7 +248,7 @@ impl ExecutionEngine {
 
     /// Return the dictionary used in the database instance.
     /// TODO: Remove this once proper Dictionary support is implemented on the physical layer.
-    pub fn get_dict(&self) -> &PrefixedStringDictionary {
+    pub fn get_dict(&self) -> &Dict {
         self.table_manager.get_dict()
     }
 }

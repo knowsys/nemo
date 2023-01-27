@@ -1,6 +1,8 @@
 //! This module provides different dictionary functionalities
 //! In general these dictionary functionalities allow to represent [String] values as [usize] values
 
+use std::fmt::Debug;
+
 /// Module to define a [PrefixedStringDictionary]
 /// This will provide a more memory-efficient storage of [String] values if they share equivalent prefixes (such as IRIs)
 /// The prefixes of the [String] will be stored as a Triestructure.
@@ -11,7 +13,7 @@ pub mod string_dictionary;
 pub use string_dictionary::StringDictionary;
 
 /// This Dictionary Trait defines dictionaries, which keep ownership of the inserted elements.
-pub trait Dictionary {
+pub trait Dictionary: Debug + Default + Clone {
     /// Construct a new and empty [`Dictionary`]
     fn new() -> Self
     where

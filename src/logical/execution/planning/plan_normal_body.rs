@@ -11,6 +11,7 @@ use crate::{
         TableManager,
     },
     physical::{
+        dictionary::Dictionary,
         management::execution_plan::{ExecutionNodeRef, ExecutionResult, ExecutionTree},
         tabular::operations::triescan_join::JoinBinding,
         util::Reordering,
@@ -20,14 +21,14 @@ use crate::{
 use super::plan_util::{filters, join_binding, order_atom, BODY_JOIN};
 
 /// Strategies for calculating all body matches.
-pub trait BodyStrategy<'a> {
+pub trait BodyStrategy<'a, Dict: Dictionary> {
     /// Do preperation work for the planning phase.
     fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self;
 
     /// Calculate the concrete plan given a variable order.
     fn execution_tree(
         &self,
-        table_manager: &TableManager,
+        table_manager: &TableManager<Dict>,
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,
@@ -43,12 +44,12 @@ pub struct SeminaiveStrategy<'a> {
     analysis: &'a RuleAnalysis,
 }
 
-impl<'a> SeminaiveStrategy<'a> {
+impl SeminaiveStrategy<'_> {
     // Calculate a subtree consisting of a union of in-memory tables.
-    fn subtree_union(
+    fn subtree_union<Dict: Dictionary>(
         &self,
         tree: &mut ExecutionTree<TableKey>,
-        manager: &TableManager,
+        manager: &TableManager<Dict>,
         predicate: Identifier,
         steps: Range<usize>,
         order: &Reordering,
@@ -72,10 +73,10 @@ impl<'a> SeminaiveStrategy<'a> {
 
     // Calculate a subtree consiting of join representing one variant of an seminaive evaluation.
     #[allow(clippy::too_many_arguments)]
-    fn subtree_join(
+    fn subtree_join<Dict: Dictionary>(
         &self,
         tree: &mut ExecutionTree<TableKey>,
-        manager: &TableManager,
+        manager: &TableManager<Dict>,
         side_atoms: &[&Atom],
         main_atoms: &[&Atom],
         side_orders: &[Reordering],
@@ -141,7 +142,7 @@ impl<'a> SeminaiveStrategy<'a> {
     }
 }
 
-impl<'a> BodyStrategy<'a> for SeminaiveStrategy<'a> {
+impl<'a, Dict: Dictionary> BodyStrategy<'a, Dict> for SeminaiveStrategy<'a> {
     fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self {
         // Since we don't support negation yet, we can just turn the literals into atoms
         // TODO: Think about negation here
@@ -157,7 +158,7 @@ impl<'a> BodyStrategy<'a> for SeminaiveStrategy<'a> {
 
     fn execution_tree(
         &self,
-        table_manager: &TableManager,
+        table_manager: &TableManager<Dict>,
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,

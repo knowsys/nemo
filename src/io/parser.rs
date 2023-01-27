@@ -11,10 +11,7 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
 
-use crate::{
-    logical::model::*,
-    physical::dictionary::{Dictionary, PrefixedStringDictionary},
-};
+use crate::{logical::model::*, physical::dictionary::Dictionary};
 
 mod types;
 use types::IntermediateResult;
@@ -81,11 +78,11 @@ pub fn multispace_or_comment1(input: &str) -> IntermediateResult<()> {
 /// The main parser. Holds a dictionary for terms and a hash map for
 /// prefixes, as well as the base IRI.
 #[derive(Debug, Default)]
-pub struct RuleParser<'a> {
-    /// The [`PrefixedStringDictionary`] mapping term names to their internal handles.
-    names: RefCell<PrefixedStringDictionary>,
-    /// The [`PrefixedStringDictionary`] mapping constant names to their internal handles.
-    constants: RefCell<PrefixedStringDictionary>,
+pub struct RuleParser<'a, Dict: Dictionary> {
+    /// The [`Dictionary`] mapping term names to their internal handles.
+    names: RefCell<Dict>,
+    /// The [`Dictionary`] mapping constant names to their internal handles.
+    constants: RefCell<Dict>,
     /// The base IRI, if set.
     base: RefCell<Option<&'a str>>,
     /// A map from Prefixes to IRIs.
@@ -103,19 +100,19 @@ pub enum BodyExpression {
     Filter(Filter),
 }
 
-impl<'a> RuleParser<'a> {
+impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
     /// Construct a new [`RuleParser`].
     pub fn new() -> Self {
         Default::default()
     }
 
     /// Return a clone of the internal names dictionary
-    pub fn clone_dict_names(&self) -> PrefixedStringDictionary {
+    pub fn clone_dict_names(&self) -> Dict {
         self.names.replace_with(|dict| dict.clone())
     }
 
     /// Return a clone of the internal constants dictionary
-    pub fn clone_dict_constants(&self) -> PrefixedStringDictionary {
+    pub fn clone_dict_constants(&self) -> Dict {
         self.constants.replace_with(|dict| dict.clone())
     }
 
@@ -584,7 +581,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parses a program in the rules language.
-    pub fn parse_program(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Program> {
+    pub fn parse_program(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Program<Dict>> {
         traced("parse_program", move |input| {
             let (remainder, _) = multispace_or_comment0(input)?;
             let (remainder, _) = opt(self.parse_base())(remainder)?;
@@ -731,6 +728,8 @@ mod test {
 
     use super::*;
 
+    type Dict = crate::physical::dictionary::PrefixedStringDictionary;
+
     macro_rules! assert_parse {
         ($parser:expr, $left:expr, $right:expr $(,) ?) => {
             assert_eq!(
@@ -746,7 +745,7 @@ mod test {
     fn base_directive() {
         let base = "http://example.org/foo";
         let input = format!("@base <{base}> .");
-        let parser = RuleParser::new();
+        let parser = RuleParser::<Dict>::new();
         let b = parser.intern_identifier(base.to_owned());
         assert!(parser.base().is_none());
         assert_parse!(parser.parse_base(), input.as_str(), b);
@@ -758,7 +757,7 @@ mod test {
         let prefix = "foo";
         let iri = "http://example.org/foo";
         let input = format!("@prefix {prefix}: <{iri}> .");
-        let parser = RuleParser::new();
+        let parser = RuleParser::<Dict>::new();
         assert!(parser.resolve_prefix(prefix).is_err());
         assert_parse!(parser.parse_prefix(), input.as_str(), prefix);
         assert_eq!(parser.resolve_prefix(prefix), Ok(iri));
@@ -766,7 +765,7 @@ mod test {
 
     #[test]
     fn source() {
-        let parser = RuleParser::new();
+        let parser = RuleParser::<Dict>::new();
         let file = "drinks.csv";
         let predicate_name = "drink";
         let predicate = parser.intern_identifier(predicate_name.to_owned());
@@ -784,7 +783,7 @@ mod test {
 
     #[test]
     fn fact() {
-        let parser = RuleParser::new();
+        let parser = RuleParser::<Dict>::new();
         let predicate = "p";
         let value = "foo";
         let datatype = "bar";
@@ -808,7 +807,7 @@ mod test {
 
     #[test]
     fn fact_namespaced() {
-        let parser = RuleParser::new();
+        let parser = RuleParser::<Dict>::new();
         let predicate = "p";
         let name = "foo";
         let prefix = "eg";
@@ -830,7 +829,7 @@ mod test {
 
     #[test]
     fn fact_bnode() {
-        let parser = RuleParser::new();
+        let parser = RuleParser::<Dict>::new();
         let predicate = "p";
         let name = "foo";
         let p = parser.intern_identifier(predicate.to_owned());
@@ -847,7 +846,7 @@ mod test {
 
     #[test]
     fn fact_numbers() {
-        let parser = RuleParser::new();
+        let parser = RuleParser::<Dict>::new();
         let predicate = "p";
         let p = parser.intern_identifier(predicate.to_owned());
         let int = 23_i64;
@@ -871,7 +870,7 @@ mod test {
 
     #[test]
     fn fact_abstract() {
-        let parser = RuleParser::new();
+        let parser = RuleParser::<Dict>::new();
         let predicate = "p";
         let name = "a";
         let p = parser.intern_identifier(predicate.to_owned());
@@ -887,7 +886,7 @@ mod test {
 
     #[test]
     fn fact_comment() {
-        let parser = RuleParser::new();
+        let parser = RuleParser::<Dict>::new();
         let predicate = "p";
         let value = "foo";
         let datatype = "bar";
@@ -916,7 +915,7 @@ mod test {
 
     #[test]
     fn filter() {
-        let parser = RuleParser::new();
+        let parser = RuleParser::<Dict>::new();
         let aa = "A";
         let a = parser.intern_identifier(aa.to_owned());
         let bb = "B";

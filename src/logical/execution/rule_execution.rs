@@ -1,6 +1,6 @@
 //! This module contains functionailty for applying a rule.
 
-use std::collections::HashSet;
+use std::{collections::HashSet, marker::PhantomData};
 
 use crate::{
     error::Error,
@@ -11,7 +11,7 @@ use crate::{
         TableManager,
     },
     meta::logging::{log_avaiable_variable_order, log_choose_variable_order},
-    physical::management::ExecutionPlan,
+    physical::{dictionary::Dictionary, management::ExecutionPlan},
 };
 
 use super::{
@@ -24,20 +24,22 @@ use super::{
 
 /// Object responsible for executing a "normal" rule.
 #[derive(Debug)]
-pub struct RuleExecution<'a> {
+pub struct RuleExecution<'a, Dict: Dictionary> {
     analysis: &'a RuleAnalysis,
 
     body_strategy: SeminaiveStrategy<'a>,
     head_strategy: DatalogStrategy,
+    _dict: PhantomData<Dict>,
 }
 
-impl<'a> RuleExecution<'a> {
-    /// Create new [`NormalRuleExecution`].
+impl<'a, Dict: Dictionary> RuleExecution<'a, Dict> {
+    /// Create new [`RuleExecution`].
     pub fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self {
         Self {
             analysis,
-            body_strategy: SeminaiveStrategy::initialize(rule, analysis),
-            head_strategy: DatalogStrategy::initialize(rule, analysis),
+            body_strategy: <SeminaiveStrategy as BodyStrategy<Dict>>::initialize(rule, analysis),
+            head_strategy: <DatalogStrategy as HeadStrategy<Dict>>::initialize(rule, analysis),
+            _dict: PhantomData {},
         }
     }
 
@@ -45,8 +47,8 @@ impl<'a> RuleExecution<'a> {
     /// Returns the predicates which received new elements.
     pub fn execute(
         &self,
-        program: &Program,
-        table_manager: &mut TableManager,
+        program: &Program<Dict>,
+        table_manager: &mut TableManager<Dict>,
         rule_info: &RuleInfo,
         step_number: usize,
     ) -> Result<HashSet<Identifier>, Error> {
