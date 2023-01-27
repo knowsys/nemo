@@ -15,10 +15,10 @@ use crate::{logical::model::*, physical::dictionary::Dictionary};
 
 mod types;
 use types::IntermediateResult;
-mod iri;
-mod rfc5234;
-mod sparql;
-mod turtle;
+pub(crate) mod iri;
+pub(crate) mod rfc5234;
+pub(crate) mod sparql;
+pub(crate) mod turtle;
 pub use types::{ParseError, ParseResult};
 
 /// A combinator to add tracing to the parser.
@@ -79,10 +79,8 @@ pub fn multispace_or_comment1(input: &str) -> IntermediateResult<()> {
 /// prefixes, as well as the base IRI.
 #[derive(Debug, Default)]
 pub struct RuleParser<'a, Dict: Dictionary> {
-    /// The [`Dictionary`] mapping term names to their internal handles.
+    /// The [`Dictionary`] mapping names to their internal handles.
     names: RefCell<Dict>,
-    /// The [`Dictionary`] mapping constant names to their internal handles.
-    constants: RefCell<Dict>,
     /// The base IRI, if set.
     base: RefCell<Option<&'a str>>,
     /// A map from Prefixes to IRIs.
@@ -107,13 +105,8 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
     }
 
     /// Return a clone of the internal names dictionary
-    pub fn clone_dict_names(&self) -> Dict {
+    pub fn clone_names(&self) -> Dict {
         self.names.replace_with(|dict| dict.clone())
-    }
-
-    /// Return a clone of the internal constants dictionary
-    pub fn clone_dict_constants(&self) -> Dict {
-        self.constants.replace_with(|dict| dict.clone())
     }
 
     /// Parse the dot that ends declarations, optionally surrounded by spaces.
@@ -176,7 +169,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
             log::debug!(target: "parser", r#"parse_base: set new base: "{base}""#);
             *self.base.borrow_mut() = Some(base);
 
-            Ok((remainder, self.intern_identifier(base.to_owned())))
+            Ok((remainder, self.intern(base.to_owned())))
         })
     }
 
@@ -253,7 +246,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                         ),
                         |(endpoint, projection, query)| {
                             DataSource::sparql_query(SparqlQuery::new(
-                                self.resolve_identifier(&endpoint)
+                                self.resolve(&endpoint)
                                     .expect("should have been interned during parsing"),
                                 projection.to_owned(),
                                 query.to_owned(),
@@ -300,7 +293,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
             )(input)?;
 
             let predicate_name = self
-                .resolve_identifier(&predicate)
+                .resolve(&predicate)
                 .expect("should have been interned during parsing");
             log::trace!(target: "parser", "found fact {predicate_name}({terms:?})");
 
@@ -320,10 +313,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                 )),
             )(input)?;
 
-            Ok((
-                remainder,
-                self.intern_identifier(self.resolve_prefixed_name(name)?),
-            ))
+            Ok((remainder, self.intern(self.resolve_prefixed_name(name)?)))
         }
     }
 
@@ -340,10 +330,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                 )),
             )(input)?;
 
-            Ok((
-                remainder,
-                self.intern_constant(self.resolve_prefixed_name(name)?),
-            ))
+            Ok((remainder, self.intern(self.resolve_prefixed_name(name)?)))
         }
     }
 
@@ -374,7 +361,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
         traced("parse_pred_name", move |input| {
             let (remainder, name) = self.parse_bare_name()(input)?;
 
-            Ok((remainder, self.intern_identifier(name.to_owned())))
+            Ok((remainder, self.intern(name.to_owned())))
         })
     }
 
@@ -440,7 +427,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
             )(remainder)?;
 
             let predicate_name = self
-                .resolve_identifier(&predicate)
+                .resolve(&predicate)
                 .expect("term should have been interned during parsing");
             log::trace!(target: "parser", "found atom {predicate_name}({terms:?})");
 
@@ -501,7 +488,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
         traced("parse_variable", move |input| {
             let (remainder, name) = recognize(pair(alpha1, alphanumeric0))(input)?;
 
-            Ok((remainder, self.intern_identifier(name.to_owned())))
+            Ok((remainder, self.intern(name.to_owned())))
         })
     }
 
@@ -589,16 +576,12 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
             let (remainder, _) = many0(self.parse_source())(remainder)?;
             let (remainder, statements) = many0(self.parse_statement())(remainder)?;
 
-            let base = self
-                .base()
-                .map(|base| self.intern_identifier(base.to_owned()).0);
+            let base = self.base().map(|base| self.intern(base.to_owned()).0);
             let prefixes = self
                 .prefixes
                 .borrow()
                 .iter()
-                .map(|(&prefix, &iri)| {
-                    (prefix.to_owned(), self.intern_identifier(iri.to_owned()).0)
-                })
+                .map(|(&prefix, &iri)| (prefix.to_owned(), self.intern(iri.to_owned()).0))
                 .collect();
             let mut rules = Vec::new();
             let mut facts = Vec::new();
@@ -616,8 +599,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                     self.sources.borrow().clone(),
                     rules,
                     facts,
-                    self.clone_dict_names(),
-                    self.clone_dict_constants(),
+                    self.clone_names(),
                 ),
             ))
         })
@@ -671,32 +653,17 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
 
     /// Intern a term.
     #[must_use]
-    pub fn intern_identifier(&self, term: String) -> Identifier {
+    pub fn intern(&self, term: String) -> Identifier {
         log::trace!(target: "parser", r#"interning term "{term}""#);
         let result = self.names.borrow_mut().add(term);
         log::trace!(target: "parser", "interned as {result}");
         Identifier(result)
     }
 
-    /// Intern a constant.
-    #[must_use]
-    pub fn intern_constant(&self, term: String) -> Identifier {
-        log::trace!(target: "parser", r#"interning term "{term}""#);
-        let result = self.constants.borrow_mut().add(term);
-        log::trace!(target: "parser", "interned as {result}");
-        Identifier(result)
-    }
-
     /// Resolve an interned [Identifier].
     #[must_use]
-    pub fn resolve_identifier(&self, identifier: &Identifier) -> Option<String> {
+    pub fn resolve(&self, identifier: &Identifier) -> Option<String> {
         self.names.borrow().entry(identifier.0)
-    }
-
-    /// Resolve an interned term.
-    #[must_use]
-    pub fn resolve_constant(&self, constant: usize) -> Option<String> {
-        self.constants.borrow().entry(constant)
     }
 
     /// Intern a [`turtle::RdfLiteral`].
@@ -704,13 +671,13 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
     fn intern_rdf_literal(&self, literal: turtle::RdfLiteral) -> RdfLiteral {
         match literal {
             turtle::RdfLiteral::LanguageString { value, tag } => RdfLiteral::LanguageString {
-                value: self.intern_identifier(value.to_owned()).0,
-                tag: self.intern_identifier(tag.to_owned()).0,
+                value: self.intern(value.to_owned()).0,
+                tag: self.intern(tag.to_owned()).0,
             },
             turtle::RdfLiteral::DatatypeValue { value, datatype } => RdfLiteral::DatatypeValue {
-                value: self.intern_identifier(value.to_owned()).0,
+                value: self.intern(value.to_owned()).0,
                 datatype: self
-                    .intern_identifier(
+                    .intern(
                         self.resolve_prefixed_name(datatype)
                             .expect("prefix should have been registered during parsing"),
                     )
@@ -746,7 +713,7 @@ mod test {
         let base = "http://example.org/foo";
         let input = format!("@base <{base}> .");
         let parser = RuleParser::<Dict>::new();
-        let b = parser.intern_identifier(base.to_owned());
+        let b = parser.intern(base.to_owned());
         assert!(parser.base().is_none());
         assert_parse!(parser.parse_base(), input.as_str(), b);
         assert_eq!(parser.base(), Some(base));
@@ -768,7 +735,7 @@ mod test {
         let parser = RuleParser::<Dict>::new();
         let file = "drinks.csv";
         let predicate_name = "drink";
-        let predicate = parser.intern_identifier(predicate_name.to_owned());
+        let predicate = parser.intern(predicate_name.to_owned());
         let source = DataSourceDeclaration::new(predicate, 1, DataSource::csv_file(file).unwrap());
         // rulewerk accepts all of these variants
         let input = format!(r#"@source {predicate_name}[1]: load-csv("{file}") ."#);
@@ -787,9 +754,9 @@ mod test {
         let predicate = "p";
         let value = "foo";
         let datatype = "bar";
-        let p = parser.intern_identifier(predicate.to_owned());
-        let v = parser.intern_identifier(value.to_owned()).0;
-        let t = parser.intern_identifier(datatype.to_owned()).0;
+        let p = parser.intern(predicate.to_owned());
+        let v = parser.intern(value.to_owned()).0;
+        let t = parser.intern(datatype.to_owned()).0;
         let fact = format!(r#"{predicate}("{value}"^^<{datatype}>) ."#);
 
         assert_parse!(
@@ -813,9 +780,9 @@ mod test {
         let prefix = "eg";
         let iri = "http://example.org/foo";
         let prefix_declaration = format!("@prefix {prefix}: <{iri}> .");
-        let p = parser.intern_identifier(predicate.to_owned());
+        let p = parser.intern(predicate.to_owned());
         let pn = format!("{prefix}:{name}");
-        let v = parser.intern_constant(format!("{iri}{name}"));
+        let v = parser.intern(format!("{iri}{name}"));
         let fact = format!(r#"{predicate}({pn}) ."#);
 
         assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
@@ -832,10 +799,10 @@ mod test {
         let parser = RuleParser::<Dict>::new();
         let predicate = "p";
         let name = "foo";
-        let p = parser.intern_identifier(predicate.to_owned());
+        let p = parser.intern(predicate.to_owned());
         let pn = format!("_:{name}");
         let fact = format!(r#"{predicate}({pn}) ."#);
-        let v = parser.intern_constant(pn);
+        let v = parser.intern(pn);
 
         assert_parse!(
             parser.parse_fact(),
@@ -848,7 +815,7 @@ mod test {
     fn fact_numbers() {
         let parser = RuleParser::<Dict>::new();
         let predicate = "p";
-        let p = parser.intern_identifier(predicate.to_owned());
+        let p = parser.intern(predicate.to_owned());
         let int = 23_i64;
         let dbl = Double::new(42.0).expect("is not NaN");
         let dec = 13.37;
@@ -873,8 +840,8 @@ mod test {
         let parser = RuleParser::<Dict>::new();
         let predicate = "p";
         let name = "a";
-        let p = parser.intern_identifier(predicate.to_owned());
-        let a = parser.intern_constant(name.to_owned());
+        let p = parser.intern(predicate.to_owned());
+        let a = parser.intern(name.to_owned());
         let fact = format!(r#"{predicate}({name}) ."#);
 
         assert_parse!(
@@ -890,9 +857,9 @@ mod test {
         let predicate = "p";
         let value = "foo";
         let datatype = "bar";
-        let p = parser.intern_identifier(predicate.to_owned());
-        let v = parser.intern_identifier(value.to_owned()).0;
-        let t = parser.intern_identifier(datatype.to_owned()).0;
+        let p = parser.intern(predicate.to_owned());
+        let v = parser.intern(value.to_owned()).0;
+        let t = parser.intern(datatype.to_owned()).0;
         let fact = format!(
             r#"{predicate}(% comment 1
                  "{value}"^^<{datatype}> % comment 2
@@ -917,17 +884,17 @@ mod test {
     fn filter() {
         let parser = RuleParser::<Dict>::new();
         let aa = "A";
-        let a = parser.intern_identifier(aa.to_owned());
+        let a = parser.intern(aa.to_owned());
         let bb = "B";
-        let b = parser.intern_identifier(bb.to_owned());
+        let b = parser.intern(bb.to_owned());
         let pp = "P";
-        let p = parser.intern_identifier(pp.to_owned());
+        let p = parser.intern(pp.to_owned());
         let xx = "X";
-        let x = parser.intern_identifier(xx.to_owned());
+        let x = parser.intern(xx.to_owned());
         let yy = "Y";
-        let y = parser.intern_identifier(yy.to_owned());
+        let y = parser.intern(yy.to_owned());
         let zz = "Z";
-        let z = parser.intern_identifier(zz.to_owned());
+        let z = parser.intern(zz.to_owned());
 
         let rule = format!(
             "{pp}(?{xx}) :- {aa}(?{xx}, ?{yy}), ?{yy} > ?{xx}, {bb}(?{zz}), ?{xx} = 3, ?{zz} < 7, ?{xx} <= ?{zz}, ?{zz} >= ?{yy} ."

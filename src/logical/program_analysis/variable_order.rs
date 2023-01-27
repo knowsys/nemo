@@ -661,7 +661,6 @@ mod test {
             rules,
             vec![],
             PrefixedStringDictionary::default(),
-            PrefixedStringDictionary::default(),
         );
 
         let rule_vars = &var_lists[0];
@@ -689,7 +688,6 @@ mod test {
             vec![],
             rules,
             vec![],
-            PrefixedStringDictionary::default(),
             PrefixedStringDictionary::default(),
         );
 
@@ -720,7 +718,6 @@ mod test {
             vec![],
             rules,
             vec![],
-            PrefixedStringDictionary::default(),
             PrefixedStringDictionary::default(),
         );
 
@@ -875,7 +872,6 @@ mod test {
             ],
             rules,
             vec![],
-            PrefixedStringDictionary::default(),
             PrefixedStringDictionary::default(),
         );
 
@@ -1174,7 +1170,6 @@ mod test {
             ],
             rules,
             vec![],
-            PrefixedStringDictionary::default(),
             PrefixedStringDictionary::default(),
         );
 

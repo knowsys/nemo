@@ -14,21 +14,13 @@ use std::rc::Rc;
 
 /// Application state
 struct AppState<Dict: Dictionary> {
-    /// Name dictionary
-    names: Rc<RefCell<Dict>>,
-    /// Constant dictionary
-    constants: Rc<RefCell<Dict>>,
     /// parsed program data
     program: Program<Dict>,
 }
 
 impl<Dict: Dictionary> AppState<Dict> {
-    fn new(names: Rc<RefCell<Dict>>, constants: Rc<RefCell<Dict>>, program: Program<Dict>) -> Self {
-        Self {
-            names,
-            constants,
-            program,
-        }
+    fn new(program: Program<Dict>) -> Self {
+        Self { program }
     }
 }
 
@@ -82,6 +74,8 @@ impl CliApp {
 
         TimedCode::instance().sub("Reasoning").stop();
 
+        let dictionary = Rc::new(RefCell::new(exec_engine.get_dict().clone()));
+
         if self.save_results {
             TimedCode::instance()
                 .sub("Output & Final Materialization")
@@ -90,8 +84,7 @@ impl CliApp {
             let mut csv_writer = stage2::io::csv::CSVWriter::try_new(
                 &mut exec_engine,
                 &self.output_directory,
-                &app_state.names,
-                &app_state.constants,
+                &dictionary,
             )?;
             csv_writer.write()?;
             TimedCode::instance()
@@ -145,10 +138,6 @@ impl CliApp {
         let program = all_input_consumed(parser.parse_program())(&input)?;
         log::info!("Rules parsed");
         log::trace!("{:?}", program);
-        Ok(AppState::new(
-            Rc::new(RefCell::new(parser.clone_dict_names())),
-            Rc::new(RefCell::new(parser.clone_dict_constants())),
-            program,
-        ))
+        Ok(AppState::new(program))
     }
 }

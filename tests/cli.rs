@@ -2,6 +2,7 @@ use assert_cmd::prelude::*; // Add methods on commands
 use assert_fs::prelude::*;
 use predicates::prelude::*; // Used for writing assertions
 use std::{fs::read_to_string, path::PathBuf, process::Command}; // Run programs
+use test_log::test;
 
 #[cfg_attr(miri, ignore)]
 #[test]
@@ -53,6 +54,7 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn reasoning_symmetry_transitive_closure() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("stage2")?;
+
     let rule_file = assert_fs::NamedTempFile::new("rule_file.rls")?;
     let csv_file_1 = assert_fs::NamedTempFile::new("csv1.csv")?;
     let csv_file_2 = assert_fs::NamedTempFile::new("csv2.csv")?;
