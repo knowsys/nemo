@@ -66,7 +66,7 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         program.normalize();
         let analysis = program.analyze();
 
-        let mut table_manager = TableManager::new(program.get_dict_constants().clone());
+        let mut table_manager = TableManager::new(program.get_names().clone());
 
         Self::add_input_sources(&mut table_manager, &program);
         Self::add_input_facts(&mut table_manager, &program);

@@ -102,8 +102,6 @@ pub struct CSVWriter<'a, Dict: Dictionary> {
     path: &'a PathBuf,
     /// Parser information on predicates
     names: Rc<RefCell<Dict>>,
-    /// Parser information on constants
-    constants: Rc<RefCell<Dict>>,
 }
 
 impl<'a, Dict: Dictionary> CSVWriter<'a, Dict> {
@@ -115,20 +113,10 @@ impl<'a, Dict: Dictionary> CSVWriter<'a, Dict> {
         exec: &'a mut ExecutionEngine<Dict>,
         path: &'a PathBuf,
         names: &Rc<RefCell<Dict>>,
-        _constants: &Rc<RefCell<Dict>>,
     ) -> Result<Self, Error> {
         create_dir_all(path)?;
         let names = Rc::clone(names);
-        // TODO: this line should be the right one
-        // let constants = Rc::clone(constants);
-        // instead we need to copy the Dictionary
-        let constants = Rc::new(RefCell::new(exec.get_dict().clone()));
-        Ok(CSVWriter {
-            exec,
-            path,
-            names,
-            constants,
-        })
+        Ok(CSVWriter { exec, path, names })
     }
 }
 
@@ -165,7 +153,7 @@ impl<Dict: Dictionary> CSVWriter<'_, Dict> {
                 {
                     Ok(mut file) => {
                         log::info!("Writing {file_path:?}");
-                        write!(file, "{}", trie.debug(self.constants.borrow().deref()))?;
+                        write!(file, "{}", trie.debug(self.names.borrow().deref()))?;
                     }
                     Err(e) => log::error!("error writing: {e:?}"),
                 }

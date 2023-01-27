@@ -342,7 +342,7 @@ impl Rule {
         if !existential_variables.is_empty() {
             return Err(ParseError::BodyExistential(
                 parser
-                    .resolve_identifier(existential_variables.first().expect("is not empty here"))
+                    .resolve(existential_variables.first().expect("is not empty here"))
                     .expect("identifier has been parsed, so must be known"),
             ));
         }
@@ -367,7 +367,7 @@ impl Rule {
         if !negative_variables.is_empty() {
             return Err(ParseError::UnsafeNegatedVariable(
                 parser
-                    .resolve_identifier(negative_variables.first().expect("is not empty here"))
+                    .resolve(negative_variables.first().expect("is not empty here"))
                     .expect("identifier has been parsed, so must be known"),
             ));
         }
@@ -391,7 +391,7 @@ impl Rule {
         if !common_variables.is_empty() {
             return Err(ParseError::BothQuantifiers(
                 parser
-                    .resolve_identifier(common_variables.first().expect("is not empty here"))
+                    .resolve(common_variables.first().expect("is not empty here"))
                     .expect("identifier has been parsed, so must be known"),
             ));
         }
@@ -462,8 +462,7 @@ pub struct Program<Dict: Dictionary> {
     rules: Vec<Rule>,
     facts: Vec<Fact>,
 
-    dict_names: Dict,
-    dict_constants: Dict,
+    names: Dict,
 }
 
 impl<Dict: Dictionary> Program<Dict> {
@@ -474,8 +473,7 @@ impl<Dict: Dictionary> Program<Dict> {
         sources: Vec<DataSourceDeclaration>,
         rules: Vec<Rule>,
         facts: Vec<Fact>,
-        dict_names: Dict,
-        dict_constants: Dict,
+        names: Dict,
     ) -> Self {
         Self {
             base,
@@ -483,8 +481,7 @@ impl<Dict: Dictionary> Program<Dict> {
             sources,
             rules,
             facts,
-            dict_names,
-            dict_constants,
+            names,
         }
     }
 
@@ -565,14 +562,9 @@ impl<Dict: Dictionary> Program<Dict> {
         self.prefixes.get(tag).copied()
     }
 
-    /// Return the dictionary for translating names of constants
-    pub fn get_dict_constants(&self) -> &Dict {
-        &self.dict_constants
-    }
-
-    /// Return the dictionary for translating e.g. predicate names
-    pub fn get_dict_names(&self) -> &Dict {
-        &self.dict_names
+    /// Return the dictionary
+    pub fn get_names(&self) -> &Dict {
+        &self.names
     }
 }
 
@@ -690,7 +682,7 @@ impl DataSourceDeclaration {
                 if arity != 3 {
                     return Err(ParseError::RdfSourceInvalidArity(
                         parser
-                            .resolve_identifier(&predicate)
+                            .resolve(&predicate)
                             .expect("predicate has been parsed, must be known"),
                         path.to_str()
                             .unwrap_or("<path is invalid unicode>")
@@ -704,7 +696,7 @@ impl DataSourceDeclaration {
                 if variables != arity {
                     return Err(ParseError::SparqlSourceInvalidArity(
                         parser
-                            .resolve_identifier(&predicate)
+                            .resolve(&predicate)
                             .expect("predicate has been parsed, must be known"),
                         variables,
                         arity,
