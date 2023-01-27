@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 
-use crate::logical::model::{
-    Filter, FilterOperation, Identifier, Literal, Program, Rule, Term, Variable,
+use crate::{
+    logical::model::{Filter, FilterOperation, Identifier, Literal, Program, Rule, Term, Variable},
+    physical::dictionary::Dictionary,
 };
 
 // Transforms a given rule into a "normalized" form.
@@ -78,7 +79,7 @@ fn normalize_rule(rule: &mut Rule) {
     *rule.filters_mut() = new_filters;
 }
 
-impl Program {
+impl<Dict: Dictionary> Program<Dict> {
     /// Transforms the rules into a "normalized" form.
     pub fn normalize(&mut self) {
         self.rules_mut().iter_mut().for_each(normalize_rule);

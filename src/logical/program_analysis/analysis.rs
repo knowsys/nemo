@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use crate::logical::model::{Atom, Identifier, Program, Rule, Term, Variable};
+use crate::{
+    logical::model::{Atom, Identifier, Program, Rule, Term, Variable},
+    physical::dictionary::Dictionary,
+};
 
 use super::variable_order::{build_preferable_variable_orders, VariableOrder};
 
@@ -75,7 +78,7 @@ pub struct ProgramAnalysis {
     pub derived_predicates: HashSet<Identifier>,
 }
 
-impl Program {
+impl<Dict: Dictionary> Program<Dict> {
     /// Collect all predicates that appear in a head atom into a [`HashSet`]
     fn get_head_predicates(&self) -> HashSet<Identifier> {
         let mut result = HashSet::<Identifier>::new();

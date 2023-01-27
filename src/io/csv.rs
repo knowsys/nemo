@@ -10,7 +10,7 @@ use std::rc::Rc;
 use crate::error::Error;
 use crate::logical::execution::ExecutionEngine;
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
-use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
+use crate::physical::dictionary::Dictionary;
 use csv::Reader;
 use sanitise_file_name::{sanitise_with_options, Options};
 
@@ -21,10 +21,10 @@ use sanitise_file_name::{sanitise_with_options, Options};
 ///   If the Option is [`None`] the field will be ignored. [`Some(DataTypeName)`] describes the datatype of the field in the csv-file.
 /// # Behaviour
 /// If a given datatype from `datatypes` is not matching the value in the field (i.e. it cannot be parsed into such a value), the whole line will be ignored and an error message is emitted to the log.
-pub fn read<T>(
+pub fn read<T, Dict: Dictionary>(
     datatypes: &[Option<DataTypeName>], // If no datatype (i.e. None) is specified, we treat the column as string (for now); TODO: discuss this
     csv_reader: &mut Reader<T>,
-    dictionary: &mut PrefixedStringDictionary,
+    dictionary: &mut Dict,
 ) -> Result<Vec<VecT>, Error>
 where
     T: std::io::Read,
@@ -95,27 +95,27 @@ where
 
 /// Contains all the needed information, to write results into csv-files
 #[derive(Debug)]
-pub struct CSVWriter<'a> {
+pub struct CSVWriter<'a, Dict: Dictionary> {
     /// Execution engine, where the Tables are managed
-    exec: &'a mut ExecutionEngine,
+    exec: &'a mut ExecutionEngine<Dict>,
     /// The path to where the results shall be written to
     path: &'a PathBuf,
     /// Parser information on predicates
-    names: Rc<RefCell<PrefixedStringDictionary>>,
+    names: Rc<RefCell<Dict>>,
     /// Parser information on constants
-    constants: Rc<RefCell<PrefixedStringDictionary>>,
+    constants: Rc<RefCell<Dict>>,
 }
 
-impl<'a> CSVWriter<'a> {
+impl<'a, Dict: Dictionary> CSVWriter<'a, Dict> {
     /// Instantiate a [`CSVWriter`].
     ///
     /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
     /// TODO: handle constant dict correctly
     pub fn try_new(
-        exec: &'a mut ExecutionEngine,
+        exec: &'a mut ExecutionEngine<Dict>,
         path: &'a PathBuf,
-        names: &Rc<RefCell<PrefixedStringDictionary>>,
-        _constants: &Rc<RefCell<PrefixedStringDictionary>>,
+        names: &Rc<RefCell<Dict>>,
+        _constants: &Rc<RefCell<Dict>>,
     ) -> Result<Self, Error> {
         create_dir_all(path)?;
         let names = Rc::clone(names);
@@ -131,7 +131,8 @@ impl<'a> CSVWriter<'a> {
         })
     }
 }
-impl CSVWriter<'_> {
+
+impl<Dict: Dictionary> CSVWriter<'_, Dict> {
     /// Writes the results to the output folder
     pub fn write(&mut self) -> Result<(), Error> {
         self.exec
@@ -175,6 +176,8 @@ impl CSVWriter<'_> {
 
 #[cfg(test)]
 mod test {
+    use crate::physical::dictionary::PrefixedStringDictionary;
+
     use super::*;
     use csv::ReaderBuilder;
     use quickcheck_macros::quickcheck;

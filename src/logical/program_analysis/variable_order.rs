@@ -3,7 +3,7 @@
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
 use crate::logical::Permutator;
-use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
+use crate::physical::dictionary::Dictionary;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::super::{
@@ -50,7 +50,7 @@ impl VariableOrder {
     }
 
     /// Return [`String`] with the contents of this object for debugging.
-    pub fn debug(&self, dict: &PrefixedStringDictionary) -> String {
+    pub fn debug<Dict: Dictionary>(&self, dict: &Dict) -> String {
         let mut variable_vector = Vec::<Variable>::new();
         variable_vector.resize_with(self.0.len(), || Variable::Universal(Identifier(0)));
 
@@ -228,16 +228,16 @@ impl RuleVariableList for Vec<Variable> {
     }
 }
 
-struct VariableOrderBuilder<'a> {
-    program: &'a Program,
+struct VariableOrderBuilder<'a, Dict: Dictionary> {
+    program: &'a Program<Dict>,
     iteration_order_within_rule: IterationOrder,
     required_trie_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>, // maps predicates to sets of column orders
     idb_preds: HashSet<Identifier>,
 }
 
-impl<'a> VariableOrderBuilder<'a> {
+impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
     fn build_for(
-        program: &Program,
+        program: &Program<Dict>,
         iteration_order_within_rule: IterationOrder,
         initial_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>,
     ) -> Vec<VariableOrder> {
@@ -383,8 +383,8 @@ impl<'a> VariableOrderBuilder<'a> {
     }
 }
 
-pub(super) fn build_preferable_variable_orders(
-    program: &Program,
+pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
+    program: &Program<Dict>,
     initial_column_orders: Option<HashMap<Identifier, HashSet<ColumnOrder>>>,
 ) -> Vec<Vec<VariableOrder>> {
     let iteration_orders = [

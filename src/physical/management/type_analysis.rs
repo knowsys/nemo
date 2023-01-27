@@ -8,6 +8,7 @@ use crate::{
     error::Error,
     physical::{
         datatypes::DataTypeName,
+        dictionary::Dictionary,
         tabular::{
             operations::triescan_append::AppendInstruction,
             traits::table_schema::{TableSchema, TableSchemaEntry},
@@ -91,8 +92,8 @@ impl Display for TypeTree {
 
 impl TypeTree {
     /// Create a [`TypeTree`] from an [`ExecutionPlan`]
-    pub(super) fn from_execution_tree<TableKey: TableKeyType>(
-        instance: &DatabaseInstance<TableKey>,
+    pub(super) fn from_execution_tree<TableKey: TableKeyType, Dict: Dictionary>(
+        instance: &DatabaseInstance<TableKey, Dict>,
         temp_schemas: &HashMap<TableId, TableSchema>,
         tree: &ExecutionTree<TableKey>,
     ) -> Result<Self, Error> {
@@ -107,8 +108,8 @@ impl TypeTree {
     }
 
     /// Types are propagated from bottom to top through the [`ExecutionTree`].
-    fn propagate_up<TableKey: TableKeyType>(
-        instance: &DatabaseInstance<TableKey>,
+    fn propagate_up<TableKey: TableKeyType, Dict: Dictionary>(
+        instance: &DatabaseInstance<TableKey, Dict>,
         temp_schemas: &HashMap<TableId, TableSchema>,
         node: ExecutionNodeRef<TableKey>,
     ) -> Result<TypeTreeNode, Error> {
@@ -477,7 +478,7 @@ mod test {
 
     use crate::physical::{
         datatypes::{DataTypeName, DataValueT},
-        dictionary::PrefixedStringDictionary,
+        dictionary::StringDictionary,
         management::{
             database::TableId,
             execution_plan::{ExecutionResult, ExecutionTree},
@@ -748,8 +749,7 @@ mod test {
             schema_entry(DataTypeName::U32),
         ]);
 
-        let mut instance =
-            DatabaseInstance::<StringKeyType>::new(PrefixedStringDictionary::default());
+        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
         instance.add(String::from("TableA"), trie_a, schema_a);
         instance.add(String::from("TableB"), trie_b, schema_b);
         instance.add(String::from("TableC"), trie_c, schema_c);
@@ -784,8 +784,7 @@ mod test {
             schema_entry(DataTypeName::U32),
         ]);
 
-        let mut instance =
-            DatabaseInstance::<StringKeyType>::new(PrefixedStringDictionary::default());
+        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
         instance.add(String::from("TableA"), trie_a, schema_a);
         instance.add(String::from("TableB"), trie_b, schema_b);
 

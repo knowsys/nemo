@@ -12,7 +12,7 @@ use crate::{
     io::parser::{ParseError, RuleParser},
     physical::{
         datatypes::{DataValueT, Double},
-        dictionary::{Dictionary, PrefixedStringDictionary},
+        dictionary::Dictionary,
     },
 };
 
@@ -22,11 +22,11 @@ pub struct Identifier(pub(crate) usize);
 
 impl Identifier {
     /// Make the [`Identifier`] pretty-printable using the given
-    /// [`PrefixedStringDictionary`].
-    pub fn format<'a, 'b>(
+    /// [`Dictionary`].
+    pub fn format<'a, 'b, Dict: Dictionary>(
         &'a self,
-        dictionary: &'b PrefixedStringDictionary,
-    ) -> PrintableIdentifier<'b>
+        dictionary: &'b Dict,
+    ) -> PrintableIdentifier<'b, Dict>
     where
         'a: 'b,
     {
@@ -44,12 +44,12 @@ impl Identifier {
 
 /// A pretty-printable identifier that can be resolved using the dictionary.
 #[derive(Debug)]
-pub struct PrintableIdentifier<'a> {
+pub struct PrintableIdentifier<'a, Dict: Dictionary> {
     identifier: Identifier,
-    dictionary: &'a PrefixedStringDictionary,
+    dictionary: &'a Dict,
 }
 
-impl Display for PrintableIdentifier<'_> {
+impl<Dict: Dictionary> Display for PrintableIdentifier<'_, Dict> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ident = self.identifier.0;
         write!(
@@ -327,11 +327,11 @@ impl Rule {
     }
 
     /// Construct a new rule, validating constraints on variable usage.
-    pub(crate) fn new_validated(
+    pub(crate) fn new_validated<Dict: Dictionary>(
         head: Vec<Atom>,
         body: Vec<Literal>,
         filters: Vec<Filter>,
-        parser: &RuleParser,
+        parser: &RuleParser<Dict>,
     ) -> Result<Self, ParseError> {
         // Check if existential variables occur in the body.
         let existential_variables = body
@@ -455,18 +455,18 @@ pub enum Statement {
 
 /// A full program.
 #[derive(Debug)]
-pub struct Program {
+pub struct Program<Dict: Dictionary> {
     base: Option<usize>,
     prefixes: HashMap<String, usize>,
     sources: Vec<DataSourceDeclaration>,
     rules: Vec<Rule>,
     facts: Vec<Fact>,
 
-    dict_names: PrefixedStringDictionary,
-    dict_constants: PrefixedStringDictionary,
+    dict_names: Dict,
+    dict_constants: Dict,
 }
 
-impl Program {
+impl<Dict: Dictionary> Program<Dict> {
     /// Construct a new program.
     pub fn new(
         base: Option<usize>,
@@ -474,8 +474,8 @@ impl Program {
         sources: Vec<DataSourceDeclaration>,
         rules: Vec<Rule>,
         facts: Vec<Fact>,
-        dict_names: PrefixedStringDictionary,
-        dict_constants: PrefixedStringDictionary,
+        dict_names: Dict,
+        dict_constants: Dict,
     ) -> Self {
         Self {
             base,
@@ -566,12 +566,12 @@ impl Program {
     }
 
     /// Return the dictionary for translating names of constants
-    pub fn get_dict_constants(&self) -> &PrefixedStringDictionary {
+    pub fn get_dict_constants(&self) -> &Dict {
         &self.dict_constants
     }
 
     /// Return the dictionary for translating e.g. predicate names
-    pub fn get_dict_names(&self) -> &PrefixedStringDictionary {
+    pub fn get_dict_names(&self) -> &Dict {
         &self.dict_names
     }
 }
@@ -678,11 +678,11 @@ impl DataSourceDeclaration {
     }
 
     /// Construct a new data source declaration, validating constraints on, e.g., arity.
-    pub(crate) fn new_validated(
+    pub(crate) fn new_validated<Dict: Dictionary>(
         predicate: Identifier,
         arity: usize,
         source: DataSource,
-        parser: &RuleParser,
+        parser: &RuleParser<Dict>,
     ) -> Result<Self, ParseError> {
         match source {
             DataSource::CsvFile(_) => (), // no validation for CSV files

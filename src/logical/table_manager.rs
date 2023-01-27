@@ -7,7 +7,7 @@ use crate::{
     meta::logging::{log_add_reference, log_load_table},
     physical::{
         datatypes::DataTypeName,
-        dictionary::PrefixedStringDictionary,
+        dictionary::Dictionary,
         management::{
             database::{TableId, TableKeyType},
             execution_plan::{ExecutionNode, ExecutionNodeRef, ExecutionResult, ExecutionTree},
@@ -215,9 +215,9 @@ enum TableStatus {
 /// Manager object for handling tables that are the result
 /// of a seminaive existential rules evaluation process.
 #[derive(Debug)]
-pub struct TableManager {
+pub struct TableManager<Dict: Dictionary> {
     /// [`DatabaseInstance`] managing all existing tables.
-    database: DatabaseInstance<TableKey>,
+    database: DatabaseInstance<TableKey, Dict>,
 
     /// Contains the status of each table.
     status: HashMap<TableName, TableStatus>,
@@ -234,9 +234,9 @@ pub struct TableManager {
     predicate_to_covers: HashMap<Identifier, Vec<TableCover>>,
 }
 
-impl TableManager {
+impl<Dict: Dictionary> TableManager<Dict> {
     /// Create new [`TableManager`].
-    pub fn new(dict_constants: PrefixedStringDictionary) -> Self {
+    pub fn new(dict_constants: Dict) -> Self {
         Self {
             database: DatabaseInstance::new(dict_constants),
             status: HashMap::new(),
@@ -562,11 +562,7 @@ impl TableManager {
 
     /// Load table from a given on-disk source
     /// TODO: This function should change when the type system gets introduced on the logical layer
-    fn load_table(
-        source: &DataSource,
-        arity: usize,
-        dict: &mut PrefixedStringDictionary,
-    ) -> Result<Trie, Error> {
+    fn load_table(source: &DataSource, arity: usize, dict: &mut Dict) -> Result<Trie, Error> {
         log_load_table(source);
 
         let (trie, _name) = match source {
@@ -990,7 +986,7 @@ impl TableManager {
 
     /// Return the dictionary used in the database instance.
     /// TODO: Remove this once proper Dictionary support is implemented on the physical layer.
-    pub fn get_dict(&self) -> &PrefixedStringDictionary {
+    pub fn get_dict(&self) -> &Dict {
         self.database.get_dict_constants()
     }
 }

@@ -6,28 +6,24 @@ use stage2::io::parser::{all_input_consumed, RuleParser};
 use stage2::logical::execution::ExecutionEngine;
 use stage2::logical::model::Program;
 use stage2::meta::TimedCode;
-use stage2::physical::dictionary::PrefixedStringDictionary;
+use stage2::physical::dictionary::Dictionary;
 use std::cell::RefCell;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 /// Application state
-struct AppState {
+struct AppState<Dict: Dictionary> {
     /// Name dictionary
-    names: Rc<RefCell<PrefixedStringDictionary>>,
+    names: Rc<RefCell<Dict>>,
     /// Constant dictionary
-    constants: Rc<RefCell<PrefixedStringDictionary>>,
+    constants: Rc<RefCell<Dict>>,
     /// parsed program data
-    program: Program,
+    program: Program<Dict>,
 }
 
-impl AppState {
-    fn new(
-        names: Rc<RefCell<PrefixedStringDictionary>>,
-        constants: Rc<RefCell<PrefixedStringDictionary>>,
-        program: Program,
-    ) -> Self {
+impl<Dict: Dictionary> AppState<Dict> {
+    fn new(names: Rc<RefCell<Dict>>, constants: Rc<RefCell<Dict>>, program: Program<Dict>) -> Self {
         Self {
             names,
             constants,
@@ -60,6 +56,11 @@ pub struct CliApp {
     output_directory: PathBuf,
 }
 
+#[cfg(feature = "no-prefixed-string-dictionary")]
+type Dict = stage2::physical::dictionary::StringDictionary;
+#[cfg(not(feature = "no-prefixed-string-dictionary"))]
+type Dict = stage2::physical::dictionary::PrefixedStringDictionary;
+
 impl CliApp {
     /// Application logic, based on the parsed data inside the [`CliApp`] object
     pub fn run(&mut self) -> Result<(), Error> {
@@ -68,7 +69,7 @@ impl CliApp {
         log::info!("Version: {}", clap::crate_version!());
         log::debug!("Rule files: {:?}", self.rules);
 
-        let app_state = self.parse_rules()?;
+        let app_state = self.parse_rules::<Dict>()?;
 
         let mut exec_engine = ExecutionEngine::initialize(app_state.program);
 
@@ -128,7 +129,7 @@ impl CliApp {
     /// Parsing of all rule files, defined in [`Self::rules`]. Links internally used and needed dictionaries into the program state.
     ///
     /// Note: Currently all rule files will be merged into one big set of rules and parsed afterwards, this needs to be fixed when #59 and #60 is done.
-    fn parse_rules(&mut self) -> Result<AppState, Error> {
+    fn parse_rules<Dict: Dictionary>(&mut self) -> Result<AppState<Dict>, Error> {
         log::info!("Parsing rules ...");
         let parser = RuleParser::new();
         let mut inputs: Vec<String> = Vec::new();
