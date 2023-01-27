@@ -661,7 +661,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
                     // TODO: Should change when type system is introduced in the logical layer
                     let mut schema = TableSchema::new();
                     for &type_name in trie.get_types() {
-                        schema.add_entry(type_name, true, false);
+                        schema.add_entry(type_name, false, false);
                     }
 
                     let loaded_table_key = TableKey {
