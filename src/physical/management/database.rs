@@ -95,7 +95,7 @@ pub struct DatabaseInstance<TableKey: TableKeyType, Dict: Dictionary> {
 impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> {
     /// Create new [`DatabaseInstance`]
     pub fn new(dict_constants: Dict) -> Self {
-        let current_null = dict_constants.len() as u64 + 1; // TODO: Check this once dictionary question has been solved
+        let current_null = 1 << 63; // TODO: Think about a robust null representation method
 
         Self {
             id_to_table: HashMap::new(),
