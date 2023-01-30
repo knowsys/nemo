@@ -27,6 +27,7 @@ use std::{
     fmt,
     fs::File,
     hash::Hash,
+    io::Read,
     ops::{Index, Range},
 };
 
@@ -570,15 +571,17 @@ impl<Dict: Dictionary> TableManager<Dict> {
                 // Using fallback solution to treat eveything as string for now (storing as u64 internally)
                 let datatypes: Vec<Option<DataTypeName>> = (0..arity).map(|_| None).collect();
 
-                let mut reader = ReaderBuilder::new()
-                    .delimiter(b',')
-                    .escape(Some(b'\\'))
-                    .has_headers(false)
-                    .double_quote(true)
-                    .from_reader(File::open(file.as_path())?);
+                let mut gz_decoder = flate2::read::GzDecoder::new(File::open(file.as_path())?);
 
-                let col_table = read(&datatypes, &mut reader, dict)?;
-
+                let col_table = if gz_decoder.header().is_some() {
+                    read(&datatypes, &mut crate::io::reader(gz_decoder), dict)?
+                } else {
+                    read(
+                        &datatypes,
+                        &mut crate::io::reader(gz_decoder.into_inner()),
+                        dict,
+                    )?
+                };
                 let trie = Trie::from_cols(col_table);
                 (
                     trie,
