@@ -576,7 +576,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
                 } else {
                     read(
                         &datatypes,
-                        &mut crate::io::csv::reader(gz_decoder.into_inner()),
+                        &mut crate::io::csv::reader(File::open(file.as_path())?),
                         dict,
                     )?
                 };

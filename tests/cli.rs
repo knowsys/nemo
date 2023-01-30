@@ -66,7 +66,7 @@ fn reasoning_symmetry_transitive_closure() -> Result<(), Box<dyn std::error::Err
     );
     println!("{rule_content}");
     rule_file.write_str(&rule_content)?;
-    csv_file_1.write_str("Vienna\nBerlin\nParis\nWaldegg\nRome")?;
+    csv_file_1.write_str("Vienna\nBerlin\nParis\nBasel\nRome")?;
     csv_file_2.write_str("Vienna,Berlin\nVienna,Rome\nVienna,Zurich\nBerlin,Paris")?;
 
     cmd.arg("-vvv")
