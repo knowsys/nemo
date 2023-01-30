@@ -20,14 +20,12 @@ use crate::{
         util::{cover_interval, Reordering},
     },
 };
-use csv::ReaderBuilder;
 use std::{
     cmp::Ordering,
     collections::{hash_map::Entry, HashMap, HashSet},
     fmt,
     fs::File,
     hash::Hash,
-    io::Read,
     ops::{Index, Range},
 };
 
@@ -571,14 +569,14 @@ impl<Dict: Dictionary> TableManager<Dict> {
                 // Using fallback solution to treat eveything as string for now (storing as u64 internally)
                 let datatypes: Vec<Option<DataTypeName>> = (0..arity).map(|_| None).collect();
 
-                let mut gz_decoder = flate2::read::GzDecoder::new(File::open(file.as_path())?);
+                let gz_decoder = flate2::read::GzDecoder::new(File::open(file.as_path())?);
 
                 let col_table = if gz_decoder.header().is_some() {
-                    read(&datatypes, &mut crate::io::reader(gz_decoder), dict)?
+                    read(&datatypes, &mut crate::io::csv::reader(gz_decoder), dict)?
                 } else {
                     read(
                         &datatypes,
-                        &mut crate::io::reader(gz_decoder.into_inner()),
+                        &mut crate::io::csv::reader(gz_decoder.into_inner()),
                         dict,
                     )?
                 };

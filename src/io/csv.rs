@@ -2,7 +2,7 @@
 
 use std::cell::RefCell;
 use std::fs::{create_dir_all, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -11,8 +11,21 @@ use crate::error::Error;
 use crate::logical::execution::ExecutionEngine;
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::Dictionary;
-use csv::Reader;
+use csv::{Reader, ReaderBuilder};
 use sanitise_file_name::{sanitise_with_options, Options};
+
+/// Creates a [csv::Reader], based on any `Reader` which implements the [std::io::Read] trait
+pub(crate) fn reader<R>(rdr: R) -> Reader<R>
+where
+    R: Read,
+{
+    ReaderBuilder::new()
+        .delimiter(b',')
+        .escape(Some(b'\\'))
+        .has_headers(false)
+        .double_quote(true)
+        .from_reader(rdr)
+}
 
 /// Imports a csv file
 /// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
@@ -27,7 +40,7 @@ pub fn read<T, Dict: Dictionary>(
     dictionary: &mut Dict,
 ) -> Result<Vec<VecT>, Error>
 where
-    T: std::io::Read,
+    T: Read,
 {
     let mut result: Vec<Option<VecT>> = Vec::new();
 
