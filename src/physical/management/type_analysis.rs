@@ -323,6 +323,10 @@ impl TypeTree {
         schema_map_opt: Option<HashMap<usize, TableSchemaEntry>>,
         execution_node: ExecutionNodeRef<TableKey>,
     ) {
+        if type_node.schema.is_empty() {
+            return;
+        }
+
         if let Some(schema_map) = schema_map_opt {
             for (index, schema_entry) in schema_map {
                 *type_node.schema.get_entry_mut(index) = schema_entry;
