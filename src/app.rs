@@ -47,6 +47,9 @@ pub struct CliApp {
     /// Overwrite existing files. This will remove all files in the given output directory
     #[arg(long = "overwrite-results", default_value = "false")]
     overwrite: bool,
+    /// Gzip output files
+    #[arg(short, long = "gzip", default_value = "false")]
+    gz: bool,
 }
 
 #[cfg(feature = "no-prefixed-string-dictionary")]
@@ -80,8 +83,11 @@ impl CliApp {
                 .sub("Output & Final Materialization")
                 .start();
             log::info!("writing output");
-            let csv_writer =
-                stage2::io::csv::CSVWriter::try_new(&self.output_directory, self.overwrite)?;
+            let csv_writer = stage2::io::csv::CSVWriter::try_new(
+                &self.output_directory,
+                self.overwrite,
+                self.gz,
+            )?;
             // TODO fix cloning
             let dict = exec_engine.get_dict().clone();
             exec_engine.idb_predicates()?.try_for_each(|(pred, trie)| {

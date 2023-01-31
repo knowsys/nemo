@@ -9,6 +9,8 @@ use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::Dictionary;
 use crate::physical::tabular::table_types::trie::Trie;
 use csv::{Reader, ReaderBuilder};
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use sanitise_file_name::{sanitise_with_options, Options};
 
 /// Creates a [csv::Reader], based on any `Reader` which implements the [std::io::Read] trait
@@ -106,10 +108,12 @@ where
 /// Contains all the needed information, to write results into csv-files
 #[derive(Debug)]
 pub struct CSVWriter<'a> {
-    /// The path to where the results shall be written to
+    /// The path to where the results shall be written to.
     path: &'a PathBuf,
-    /// Overwrite files, note that the target folder will be emptied if `overwrite` is set to [true]
+    /// Overwrite files, note that the target folder will be emptied if `overwrite` is set to [true].
     overwrite: bool,
+    /// Gzip csv-file.
+    gzip: bool,
 }
 
 impl<'a> CSVWriter<'a> {
@@ -117,13 +121,17 @@ impl<'a> CSVWriter<'a> {
     ///
     /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
     /// TODO: handle constant dict correctly
-    pub fn try_new(path: &'a PathBuf, overwrite: bool) -> Result<Self, Error> {
+    pub fn try_new(path: &'a PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
         if path.exists() && overwrite {
             log::info!("Result directory {path:?} exists; Deleting all files in directory.");
             remove_dir_all(path)?;
         }
         create_dir_all(path)?;
-        Ok(CSVWriter { path, overwrite })
+        Ok(CSVWriter {
+            path,
+            overwrite,
+            gzip,
+        })
     }
 }
 
@@ -136,11 +144,12 @@ impl CSVWriter<'_> {
         };
         let file_name = sanitise_with_options(pred, &sanitise_options);
         let file_path = PathBuf::from(format!(
-            "{}/{file_name}.csv",
+            "{}/{file_name}.csv{}",
             self.path
                 .as_os_str()
                 .to_str()
-                .expect("Path should be a unicode string")
+                .expect("Path should be a unicode string"),
+            if self.gzip { ".gz" } else { "" }
         ));
         log::info!("Creating {pred} as {file_path:?}");
         if self.overwrite {
@@ -174,7 +183,12 @@ impl CSVWriter<'_> {
     ) -> Result<(), Error> {
         log::debug!("Writing {pred}");
         let mut file = self.create_file(pred)?;
-        write!(file, "{}", trie.debug(dict))?;
+        let content = trie.debug(dict);
+        if self.gzip {
+            write!(GzEncoder::new(file, Compression::best()), "{}", &content)?;
+        } else {
+            write!(file, "{}", &content)?;
+        }
         Ok(())
     }
 }
