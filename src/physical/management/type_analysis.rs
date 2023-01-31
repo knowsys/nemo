@@ -121,7 +121,7 @@ impl TypeTree {
 
         match node_ref {
             ExecutionNode::FetchTable(key) => {
-                if !instance.table_exists(&key) {
+                if !instance.table_exists(key) {
                     return Ok(TypeTreeNode::default());
                 }
 
