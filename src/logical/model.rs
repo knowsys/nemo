@@ -712,3 +712,12 @@ impl DataSourceDeclaration {
         })
     }
 }
+
+/// Structure which represents a conjunctive query.
+#[derive(Debug)]
+pub struct ConjunctiveQuery {
+    /// List of atoms which forms the query
+    pub atoms: Vec<Atom>,
+    /// List of answer variables
+    pub answer_variables: Vec<Variable>,
+}

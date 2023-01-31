@@ -38,6 +38,16 @@ impl VariableOrder {
         self.0.contains_key(variable)
     }
 
+    /// Returns the number of entries.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns whether it contains any entry.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Return an iterator over all mapped variables.
     pub fn iter(&self) -> impl Iterator<Item = &Variable> {
         let mut vars: Vec<&Variable> = self.0.keys().collect();
@@ -383,7 +393,8 @@ impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
     }
 }
 
-pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
+/// Calculates a good variable order for a [`Program`].
+pub fn build_preferable_variable_orders<Dict: Dictionary>(
     program: &Program<Dict>,
     initial_column_orders: Option<HashMap<Identifier, HashSet<ColumnOrder>>>,
 ) -> Vec<Vec<VariableOrder>> {

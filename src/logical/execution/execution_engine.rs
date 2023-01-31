@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::{
     error::Error,
     logical::{
-        model::{Identifier, NumericLiteral, Program, Term},
+        model::{ConjunctiveQuery, Identifier, NumericLiteral, Program, Term},
         program_analysis::analysis::ProgramAnalysis,
         table_manager::ColumnOrder,
         TableManager,
@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-use super::rule_execution::RuleExecution;
+use super::{planning::plan_cq_answering::compute_cq_plan, rule_execution::RuleExecution};
 
 // Number of tables that are periodically combined into one.
 const MAX_FRAGMENTATION: usize = 8;
@@ -227,6 +227,17 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         TimedCode::instance().sub("Reasoning/Rules").stop();
         TimedCode::instance().sub("Reasoning/Execution").stop();
         Ok(())
+    }
+
+    /// Query the result of the chase.
+    pub fn query(&mut self, query: ConjunctiveQuery) -> Result<Option<&Trie>, Error> {
+        let (plan, result_key) = compute_cq_plan(query, &mut self.table_manager, self.current_step);
+
+        if !self.table_manager.execute_plan_optimized(plan)?.is_empty() {
+            Ok(Some(self.table_manager.get_trie(&result_key)))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Return the output tries that resulted form the execution.

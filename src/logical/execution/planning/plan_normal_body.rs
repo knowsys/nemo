@@ -1,11 +1,9 @@
 //! Module defining the strategy for calculating all body matches for a rule application.
 
-use std::ops::Range;
-
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Atom, Filter, Identifier, Rule},
+        model::{Atom, Filter, Rule},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::TableKey,
         TableManager,
@@ -18,7 +16,7 @@ use crate::{
     },
 };
 
-use super::plan_util::{filters, join_binding, order_atom, BODY_JOIN};
+use super::plan_util::{filters, join_binding, order_atom, subtree_union, BODY_JOIN};
 
 /// Strategies for calculating all body matches.
 pub trait BodyStrategy<'a, Dict: Dictionary> {
@@ -45,32 +43,6 @@ pub struct SeminaiveStrategy<'a> {
 }
 
 impl SeminaiveStrategy<'_> {
-    // Calculate a subtree consisting of a union of in-memory tables.
-    fn subtree_union<Dict: Dictionary>(
-        &self,
-        tree: &mut ExecutionTree<TableKey>,
-        manager: &TableManager<Dict>,
-        predicate: Identifier,
-        steps: Range<usize>,
-        order: &Reordering,
-    ) -> ExecutionNodeRef<TableKey> {
-        debug_assert!(order.is_permutation());
-
-        let base_tables: Vec<TableKey> = manager
-            .get_table_covering(predicate, steps)
-            .into_iter()
-            .map(|r| TableKey::new(predicate, r, order.clone().into()))
-            .collect();
-
-        let mut union_node = tree.union_empty();
-        for key in base_tables {
-            let base_node = tree.fetch_table(key);
-            union_node.add_subnode(base_node);
-        }
-
-        union_node
-    }
-
     // Calculate a subtree consiting of join representing one variant of an seminaive evaluation.
     #[allow(clippy::too_many_arguments)]
     fn subtree_join<Dict: Dictionary>(
@@ -90,7 +62,7 @@ impl SeminaiveStrategy<'_> {
 
         // For every atom that did not receive any update since the last rule application take all available elements
         for (atom_index, atom) in side_atoms.iter().enumerate() {
-            let subnode = self.subtree_union(
+            let subnode = subtree_union(
                 tree,
                 manager,
                 atom.predicate(),
@@ -103,7 +75,7 @@ impl SeminaiveStrategy<'_> {
 
         // For every atom before the mid point we take all the tables until the current `rule_step`
         for (atom_index, atom) in main_atoms.iter().take(mid).enumerate() {
-            let subnode = self.subtree_union(
+            let subnode = subtree_union(
                 tree,
                 manager,
                 atom.predicate(),
@@ -115,7 +87,7 @@ impl SeminaiveStrategy<'_> {
         }
 
         // For the middle atom we only take the new tables
-        let midnode = self.subtree_union(
+        let midnode = subtree_union(
             tree,
             manager,
             main_atoms[mid].predicate(),
@@ -127,7 +99,7 @@ impl SeminaiveStrategy<'_> {
 
         // For every atom past the mid point we take only the old tables
         for (atom_index, atom) in main_atoms.iter().enumerate().skip(mid + 1) {
-            let subnode = self.subtree_union(
+            let subnode = subtree_union(
                 tree,
                 manager,
                 atom.predicate(),

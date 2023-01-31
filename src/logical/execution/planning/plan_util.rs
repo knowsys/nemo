@@ -1,13 +1,20 @@
 //! Functionality that is useful for planing a rule application but is not specific to either part.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Range,
+};
 
 use crate::{
     logical::{
-        model::{Atom, Filter, Term, Variable},
+        model::{Atom, Filter, Identifier, Term, Variable},
         program_analysis::variable_order::VariableOrder,
+        table_manager::TableKey,
+        TableManager,
     },
     physical::{
+        dictionary::Dictionary,
+        management::execution_plan::{ExecutionNodeRef, ExecutionTree},
         tabular::operations::{triescan_select::SelectEqualClasses, ValueAssignment},
         util::Reordering,
     },
@@ -165,4 +172,29 @@ pub fn filters(
         .collect();
 
     (filter_classes, filter_assignments)
+}
+
+// Calculate a subtree consisting of a union of in-memory tables.
+pub(super) fn subtree_union<Dict: Dictionary>(
+    tree: &mut ExecutionTree<TableKey>,
+    manager: &TableManager<Dict>,
+    predicate: Identifier,
+    steps: Range<usize>,
+    order: &Reordering,
+) -> ExecutionNodeRef<TableKey> {
+    debug_assert!(order.is_permutation());
+
+    let base_tables: Vec<TableKey> = manager
+        .get_table_covering(predicate, steps)
+        .into_iter()
+        .map(|r| TableKey::new(predicate, r, order.clone().into()))
+        .collect();
+
+    let mut union_node = tree.union_empty();
+    for key in base_tables {
+        let base_node = tree.fetch_table(key);
+        union_node.add_subnode(base_node);
+    }
+
+    union_node
 }
