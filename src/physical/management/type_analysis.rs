@@ -283,12 +283,33 @@ impl TypeTree {
                     vec![subtype_node],
                 ))
             }
-            ExecutionNode::SelectEqual(subtree, _classes) => {
+            ExecutionNode::SelectEqual(subtree, classes) => {
                 let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
-                Ok(TypeTreeNode::new(
-                    subtype_node.schema.clone(),
-                    vec![subtype_node],
-                ))
+
+                let mut new_schema = subtype_node.schema.clone();
+
+                if !new_schema.is_empty() {
+                    for class in classes {
+                        let mut min_type = *new_schema.get_entry(class[0]);
+
+                        // First calculate the minimum type
+                        for &index in class {
+                            let current_entry = new_schema.get_entry(index);
+                            if let Some(min_entry) = Self::entry_min(&min_type, current_entry) {
+                                min_type = *min_entry;
+                            } else {
+                                return Err(Error::InvalidExecutionPlan);
+                            }
+                        }
+
+                        // Then replace each entry in the new schema with the minimal type
+                        for &index in class {
+                            *new_schema.get_entry_mut(index) = min_type;
+                        }
+                    }
+                }
+
+                Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
             ExecutionNode::AppendColumns(subtree, instructions) => {
                 let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
@@ -851,6 +872,74 @@ mod test {
             expect_union,
             vec![
                 TypeTreeNode::new(expect_append, vec![TypeTreeNode::new(expect_a, vec![])]),
+                TypeTreeNode::new(expect_b, vec![]),
+            ],
+        );
+
+        assert_eq!(expected_type_tree, type_tree.unwrap());
+    }
+
+    #[test]
+    fn test_equal_col() {
+        let trie_a = Trie::from_rows(vec![vec![DataValueT::U32(1), DataValueT::U64(1 << 34)]]);
+        let trie_b = Trie::from_rows(vec![vec![
+            DataValueT::U64(1 << 35),
+            DataValueT::U64(1 << 36),
+        ]]);
+
+        let schema_a = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U64),
+        ]);
+        let schema_b = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U64),
+        ]);
+
+        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
+        instance.add(String::from("TableA"), trie_a, schema_a);
+        instance.add(String::from("TableB"), trie_b, schema_b);
+
+        let mut execution_tree = ExecutionTree::new(
+            String::from("test"),
+            ExecutionResult::<StringKeyType>::Temp(1),
+        );
+
+        let fetch_a = execution_tree.fetch_table(String::from("TableA"));
+        let fetch_b = execution_tree.fetch_table(String::from("TableB"));
+
+        let node_eq_col = execution_tree.select_equal(fetch_a, vec![vec![0, 1]]);
+
+        let node_join =
+            execution_tree.join(vec![node_eq_col, fetch_b], vec![vec![0, 1], vec![1, 2]]);
+
+        execution_tree.set_root(node_join);
+
+        let temp_schemas = HashMap::<usize, TableSchema>::new();
+        let type_tree = TypeTree::from_execution_tree(&instance, &temp_schemas, &execution_tree);
+
+        let expect_a = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U32),
+        ]);
+        let expect_b = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U64),
+        ]);
+        let expect_eq = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U32),
+        ]);
+        let expect_join = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U64),
+        ]);
+
+        let expected_type_tree = TypeTreeNode::new(
+            expect_join,
+            vec![
+                TypeTreeNode::new(expect_eq, vec![TypeTreeNode::new(expect_a, vec![])]),
                 TypeTreeNode::new(expect_b, vec![]),
             ],
         );
