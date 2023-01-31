@@ -121,20 +121,28 @@ impl TypeTree {
 
         match node_ref {
             ExecutionNode::FetchTable(key) => {
+                if !instance.table_exists(&key) {
+                    return Ok(TypeTreeNode::default());
+                }
+
                 let schema = instance.get_schema(key).clone();
                 Ok(TypeTreeNode::new(schema, vec![]))
             }
             ExecutionNode::FetchTemp(id) => {
-                let schema = temp_schemas
-                    .get(id)
-                    .expect("Function assumes that referenced trie exists.");
-
-                Ok(TypeTreeNode::new(schema.clone(), vec![]))
+                if let Some(schema) = temp_schemas.get(id) {
+                    Ok(TypeTreeNode::new(schema.clone(), vec![]))
+                } else {
+                    Ok(TypeTreeNode::default())
+                }
             }
             ExecutionNode::Join(subtrees, bindings) => {
                 let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(subtrees.len());
                 for subtree in subtrees {
                     let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
+
+                    if subtype_node.schema.is_empty() {
+                        return Ok(TypeTreeNode::default());
+                    }
 
                     subtype_nodes.push(subtype_node);
                 }
@@ -200,6 +208,10 @@ impl TypeTree {
                     Vec::<TableSchemaEntry>::with_capacity(subtrees.len());
                 for column_index in 0..arity {
                     for subtype_node in &subtype_nodes {
+                        if subtype_node.schema.is_empty() {
+                            continue;
+                        }
+
                         let current_entry = subtype_node.schema.get_entry(column_index);
 
                         if result_schema_entries.len() <= column_index {
@@ -225,28 +237,31 @@ impl TypeTree {
                 let subtypenode_left = Self::propagate_up(instance, temp_schemas, left.clone())?;
                 let subtypenode_right = Self::propagate_up(instance, temp_schemas, right.clone())?;
 
-                let arity = subtypenode_left.schema.arity();
+                let result_schema = if !subtypenode_right.schema.is_empty() {
+                    let arity = subtypenode_left.schema.arity();
 
-                // Will copy the type of the left subtree as long
-                // as they are compatbile with the types of the right subtree
-                let mut result_schema_entries = Vec::<TableSchemaEntry>::new();
-                for column_index in 0..arity {
-                    let current_left = subtypenode_left.schema.get_entry(column_index);
-                    let current_right = subtypenode_right.schema.get_entry(column_index);
+                    // Will copy the type of the left subtree as long
+                    // as they are compatbile with the types of the right subtree
+                    let mut result_schema_entries = Vec::<TableSchemaEntry>::new();
+                    for column_index in 0..arity {
+                        let current_left = subtypenode_left.schema.get_entry(column_index);
+                        let current_right = subtypenode_right.schema.get_entry(column_index);
 
-                    if Self::compatible(current_left, current_right) {
-                        result_schema_entries.push(*current_left);
-                    } else {
-                        return Err(Error::InvalidExecutionPlan);
+                        if Self::compatible(current_left, current_right) {
+                            result_schema_entries.push(*current_left);
+                        } else {
+                            return Err(Error::InvalidExecutionPlan);
+                        }
                     }
-                }
+
+                    TableSchema::from_vec(result_schema_entries)
+                } else {
+                    subtypenode_left.schema.clone()
+                };
 
                 let subtype_nodes = vec![subtypenode_left, subtypenode_right];
 
-                Ok(TypeTreeNode::new(
-                    TableSchema::from_vec(result_schema_entries),
-                    subtype_nodes,
-                ))
+                Ok(TypeTreeNode::new(result_schema, subtype_nodes))
             }
             ExecutionNode::Project(subtree, reordering) => {
                 let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
@@ -275,22 +290,25 @@ impl TypeTree {
                 let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
                 let mut new_schema = TableSchema::new();
 
-                for (gap_index, gap_instructions) in instructions.iter().enumerate() {
-                    for instruction in gap_instructions {
-                        match instruction {
-                            AppendInstruction::RepeatColumn(repeat_index) => {
-                                new_schema
-                                    .add_entry_cloned(subtype_node.schema.get_entry(*repeat_index));
+                if !subtype_node.schema.is_empty() {
+                    for (gap_index, gap_instructions) in instructions.iter().enumerate() {
+                        for instruction in gap_instructions {
+                            match instruction {
+                                AppendInstruction::RepeatColumn(repeat_index) => {
+                                    new_schema.add_entry_cloned(
+                                        subtype_node.schema.get_entry(*repeat_index),
+                                    );
+                                }
+                                AppendInstruction::Constant(constant, dict) => {
+                                    new_schema.add_entry(constant.get_type(), *dict, false);
+                                }
+                                AppendInstruction::Null => todo!(),
                             }
-                            AppendInstruction::Constant(constant, dict) => {
-                                new_schema.add_entry(constant.get_type(), *dict, false);
-                            }
-                            AppendInstruction::Null => todo!(),
                         }
-                    }
 
-                    if gap_index < instructions.len() - 1 {
-                        new_schema.add_entry_cloned(subtype_node.schema.get_entry(gap_index));
+                        if gap_index < instructions.len() - 1 {
+                            new_schema.add_entry_cloned(subtype_node.schema.get_entry(gap_index));
+                        }
                     }
                 }
 
