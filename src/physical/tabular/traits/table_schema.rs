@@ -61,6 +61,11 @@ impl TableSchema {
         self.entries.len()
     }
 
+    /// The arity of the table.
+    pub fn is_empty(&self) -> bool {
+        self.arity() == 0
+    }
+
     /// Returns the [`TableSchemaEntry`] associated with the column of the given index.
     pub fn get_entry(&self, index: usize) -> &TableSchemaEntry {
         &self.entries[index]
