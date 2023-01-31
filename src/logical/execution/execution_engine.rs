@@ -66,7 +66,7 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         program.normalize();
         let analysis = program.analyze();
 
-        let mut table_manager = TableManager::new(program.get_dict_constants().clone());
+        let mut table_manager = TableManager::new(program.get_names().clone());
 
         Self::add_input_sources(&mut table_manager, &program);
         Self::add_input_facts(&mut table_manager, &program);
@@ -250,5 +250,21 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
     /// TODO: Remove this once proper Dictionary support is implemented on the physical layer.
     pub fn get_dict(&self) -> &Dict {
         self.table_manager.get_dict()
+    }
+
+    /// Iterator over all IDB predicates, with Tries if present.
+    pub fn idb_predicates(
+        &mut self,
+    ) -> Result<impl Iterator<Item = (Identifier, Option<&Trie>)>, Error> {
+        let idbs = self.program.idb_predicates();
+        let tables = self.get_results()?.into_iter().collect::<HashMap<_, _>>();
+        let mut result = Vec::new();
+
+        for predicate in idbs {
+            let table = tables.get(&predicate).copied();
+            result.push((predicate, table));
+        }
+
+        Ok(result.into_iter())
     }
 }

@@ -483,7 +483,7 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
         let mut used_temp_in = HashMap::<TableId, HashSet<TableId>>::new();
 
         // First, simplify all the trees individually and remove fetch nodes which load an empty temporary table.
-        // We also remeber which temporary tables are used to compute permanent tables
+        // We also remember which temporary tables are used to compute permanent tables
         // and also which temporary tables are used to compute which other temporary tables.
         for tree in &mut self.trees {
             *tree = tree.simplify(&removed_temp_ids);
@@ -527,7 +527,7 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
                 if let ExecutionResult::Temp(id) = t.result() {
                     let used_directly = used_temp_ids.contains(id);
                     let used_indirectly = if let Some(used_in) = used_temp_in.get(id) {
-                        used_temp_ids.is_disjoint(used_in)
+                        !used_temp_ids.is_disjoint(used_in)
                     } else {
                         false
                     };

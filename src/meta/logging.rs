@@ -60,7 +60,7 @@ pub fn log_avaiable_variable_order<Dict: Dictionary>(
         log::info!(
             "   ({}) {}",
             index,
-            promising_order.debug(program.get_dict_names())
+            promising_order.debug(program.get_names())
         );
     }
 }

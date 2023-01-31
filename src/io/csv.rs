@@ -115,8 +115,6 @@ pub struct CSVWriter<'a, Dict: Dictionary> {
     path: &'a PathBuf,
     /// Parser information on predicates
     names: Rc<RefCell<Dict>>,
-    /// Parser information on constants
-    constants: Rc<RefCell<Dict>>,
 }
 
 impl<'a, Dict: Dictionary> CSVWriter<'a, Dict> {
@@ -128,62 +126,51 @@ impl<'a, Dict: Dictionary> CSVWriter<'a, Dict> {
         exec: &'a mut ExecutionEngine<Dict>,
         path: &'a PathBuf,
         names: &Rc<RefCell<Dict>>,
-        _constants: &Rc<RefCell<Dict>>,
     ) -> Result<Self, Error> {
         create_dir_all(path)?;
         let names = Rc::clone(names);
-        // TODO: this line should be the right one
-        // let constants = Rc::clone(constants);
-        // instead we need to copy the Dictionary
-        let constants = Rc::new(RefCell::new(exec.get_dict().clone()));
-        Ok(CSVWriter {
-            exec,
-            path,
-            names,
-            constants,
-        })
+        Ok(CSVWriter { exec, path, names })
     }
 }
 
 impl<Dict: Dictionary> CSVWriter<'_, Dict> {
     /// Writes the results to the output folder
     pub fn write(&mut self) -> Result<(), Error> {
-        self.exec
-            .get_results()?
-            .iter()
-            .try_for_each(|(pred, trie)| {
-                let predicate_name = self
-                    .names
-                    .borrow()
-                    .entry(pred.0)
-                    .expect("All preds shall depend on the names dictionary");
+        self.exec.idb_predicates()?.try_for_each(|(pred, trie)| {
+            let predicate_name = self
+                .names
+                .borrow()
+                .entry(pred.0)
+                .expect("All predicate names should be present in the dictionary");
 
-                let sanitise_options = Options::<Option<char>> {
-                    url_safe: true,
-                    ..Default::default()
-                };
-                let file_name = sanitise_with_options(&predicate_name, &sanitise_options);
-                let file_path = PathBuf::from(format!(
-                    "{}/{file_name}.csv",
-                    self.path
-                        .as_os_str()
-                        .to_str()
-                        .expect("Path shall be a string")
-                ));
-                match OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(file_path.clone())
-                {
-                    Ok(mut file) => {
-                        log::info!("Writing {file_path:?}");
-                        write!(file, "{}", trie.debug(self.constants.borrow().deref()))?;
+            let sanitise_options = Options::<Option<char>> {
+                url_safe: true,
+                ..Default::default()
+            };
+            let file_name = sanitise_with_options(&predicate_name, &sanitise_options);
+            let file_path = PathBuf::from(format!(
+                "{}/{file_name}.csv",
+                self.path
+                    .as_os_str()
+                    .to_str()
+                    .expect("Path shall be a string")
+            ));
+            match OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(file_path.clone())
+            {
+                Ok(mut file) => {
+                    log::info!("Writing {file_path:?}");
+                    if let Some(trie) = trie {
+                        write!(file, "{}", trie.debug(self.names.borrow().deref()))?;
                     }
-                    Err(e) => log::error!("error writing: {e:?}"),
                 }
-                Ok(())
-            })
+                Err(e) => log::error!("error writing: {e:?}"),
+            }
+            Ok(())
+        })
     }
 }
 

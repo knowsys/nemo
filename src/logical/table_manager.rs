@@ -479,7 +479,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             if let TableStatus::Reference(another_table, another_order) = self
                 .status
                 .get(&ref_name)
-                .expect("Funcion assumes that referenced table exists.")
+                .expect("Function assumes that referenced table exists.")
             {
                 let combined_reorder = another_order.chain(&ref_reorder);
 
