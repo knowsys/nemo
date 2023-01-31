@@ -121,20 +121,28 @@ impl TypeTree {
 
         match node_ref {
             ExecutionNode::FetchTable(key) => {
+                if !instance.table_exists(key) {
+                    return Ok(TypeTreeNode::default());
+                }
+
                 let schema = instance.get_schema(key).clone();
                 Ok(TypeTreeNode::new(schema, vec![]))
             }
             ExecutionNode::FetchTemp(id) => {
-                let schema = temp_schemas
-                    .get(id)
-                    .expect("Function assumes that referenced trie exists.");
-
-                Ok(TypeTreeNode::new(schema.clone(), vec![]))
+                if let Some(schema) = temp_schemas.get(id) {
+                    Ok(TypeTreeNode::new(schema.clone(), vec![]))
+                } else {
+                    Ok(TypeTreeNode::default())
+                }
             }
             ExecutionNode::Join(subtrees, bindings) => {
                 let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(subtrees.len());
                 for subtree in subtrees {
                     let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
+
+                    if subtype_node.schema.is_empty() {
+                        return Ok(TypeTreeNode::default());
+                    }
 
                     subtype_nodes.push(subtype_node);
                 }
@@ -200,6 +208,10 @@ impl TypeTree {
                     Vec::<TableSchemaEntry>::with_capacity(subtrees.len());
                 for column_index in 0..arity {
                     for subtype_node in &subtype_nodes {
+                        if subtype_node.schema.is_empty() {
+                            continue;
+                        }
+
                         let current_entry = subtype_node.schema.get_entry(column_index);
 
                         if result_schema_entries.len() <= column_index {
@@ -225,37 +237,44 @@ impl TypeTree {
                 let subtypenode_left = Self::propagate_up(instance, temp_schemas, left.clone())?;
                 let subtypenode_right = Self::propagate_up(instance, temp_schemas, right.clone())?;
 
-                let arity = subtypenode_left.schema.arity();
+                let result_schema = if !subtypenode_right.schema.is_empty() {
+                    let arity = subtypenode_left.schema.arity();
 
-                // Will copy the type of the left subtree as long
-                // as they are compatbile with the types of the right subtree
-                let mut result_schema_entries = Vec::<TableSchemaEntry>::new();
-                for column_index in 0..arity {
-                    let current_left = subtypenode_left.schema.get_entry(column_index);
-                    let current_right = subtypenode_right.schema.get_entry(column_index);
+                    // Will copy the type of the left subtree as long
+                    // as they are compatbile with the types of the right subtree
+                    let mut result_schema_entries = Vec::<TableSchemaEntry>::new();
+                    for column_index in 0..arity {
+                        let current_left = subtypenode_left.schema.get_entry(column_index);
+                        let current_right = subtypenode_right.schema.get_entry(column_index);
 
-                    if Self::compatible(current_left, current_right) {
-                        result_schema_entries.push(*current_left);
-                    } else {
-                        return Err(Error::InvalidExecutionPlan);
+                        if Self::compatible(current_left, current_right) {
+                            result_schema_entries.push(*current_left);
+                        } else {
+                            return Err(Error::InvalidExecutionPlan);
+                        }
                     }
-                }
+
+                    TableSchema::from_vec(result_schema_entries)
+                } else {
+                    subtypenode_left.schema.clone()
+                };
 
                 let subtype_nodes = vec![subtypenode_left, subtypenode_right];
 
-                Ok(TypeTreeNode::new(
-                    TableSchema::from_vec(result_schema_entries),
-                    subtype_nodes,
-                ))
+                Ok(TypeTreeNode::new(result_schema, subtype_nodes))
             }
             ExecutionNode::Project(subtree, reordering) => {
                 let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
 
-                let result_schema_enries = reordering.apply_to(subtype_node.schema.get_entries());
-                Ok(TypeTreeNode::new(
-                    TableSchema::from_vec(result_schema_enries),
-                    vec![subtype_node],
-                ))
+                let new_schema = if !subtype_node.schema.is_empty() {
+                    let result_schema_enries =
+                        reordering.apply_to(subtype_node.schema.get_entries());
+                    TableSchema::from_vec(result_schema_enries)
+                } else {
+                    TableSchema::default()
+                };
+
+                Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
             ExecutionNode::SelectValue(subtree, _assignments) => {
                 let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
@@ -264,33 +283,57 @@ impl TypeTree {
                     vec![subtype_node],
                 ))
             }
-            ExecutionNode::SelectEqual(subtree, _classes) => {
+            ExecutionNode::SelectEqual(subtree, classes) => {
                 let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
-                Ok(TypeTreeNode::new(
-                    subtype_node.schema.clone(),
-                    vec![subtype_node],
-                ))
+
+                let mut new_schema = subtype_node.schema.clone();
+
+                if !new_schema.is_empty() {
+                    for class in classes {
+                        let mut min_type = *new_schema.get_entry(class[0]);
+
+                        // First calculate the minimum type
+                        for &index in class {
+                            let current_entry = new_schema.get_entry(index);
+                            if let Some(min_entry) = Self::entry_min(&min_type, current_entry) {
+                                min_type = *min_entry;
+                            } else {
+                                return Err(Error::InvalidExecutionPlan);
+                            }
+                        }
+
+                        // Then replace each entry in the new schema with the minimal type
+                        for &index in class {
+                            *new_schema.get_entry_mut(index) = min_type;
+                        }
+                    }
+                }
+
+                Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
             ExecutionNode::AppendColumns(subtree, instructions) => {
                 let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
                 let mut new_schema = TableSchema::new();
 
-                for (gap_index, gap_instructions) in instructions.iter().enumerate() {
-                    for instruction in gap_instructions {
-                        match instruction {
-                            AppendInstruction::RepeatColumn(repeat_index) => {
-                                new_schema
-                                    .add_entry_cloned(subtype_node.schema.get_entry(*repeat_index));
+                if !subtype_node.schema.is_empty() {
+                    for (gap_index, gap_instructions) in instructions.iter().enumerate() {
+                        for instruction in gap_instructions {
+                            match instruction {
+                                AppendInstruction::RepeatColumn(repeat_index) => {
+                                    new_schema.add_entry_cloned(
+                                        subtype_node.schema.get_entry(*repeat_index),
+                                    );
+                                }
+                                AppendInstruction::Constant(constant, dict) => {
+                                    new_schema.add_entry(constant.get_type(), *dict, false);
+                                }
+                                AppendInstruction::Null => todo!(),
                             }
-                            AppendInstruction::Constant(constant, dict) => {
-                                new_schema.add_entry(constant.get_type(), *dict, false);
-                            }
-                            AppendInstruction::Null => todo!(),
                         }
-                    }
 
-                    if gap_index < instructions.len() - 1 {
-                        new_schema.add_entry_cloned(subtype_node.schema.get_entry(gap_index));
+                        if gap_index < instructions.len() - 1 {
+                            new_schema.add_entry_cloned(subtype_node.schema.get_entry(gap_index));
+                        }
                     }
                 }
 
@@ -305,6 +348,10 @@ impl TypeTree {
         schema_map_opt: Option<HashMap<usize, TableSchemaEntry>>,
         execution_node: ExecutionNodeRef<TableKey>,
     ) {
+        if type_node.schema.is_empty() {
+            return;
+        }
+
         if let Some(schema_map) = schema_map_opt {
             for (index, schema_entry) in schema_map {
                 *type_node.schema.get_entry_mut(index) = schema_entry;
@@ -825,6 +872,74 @@ mod test {
             expect_union,
             vec![
                 TypeTreeNode::new(expect_append, vec![TypeTreeNode::new(expect_a, vec![])]),
+                TypeTreeNode::new(expect_b, vec![]),
+            ],
+        );
+
+        assert_eq!(expected_type_tree, type_tree.unwrap());
+    }
+
+    #[test]
+    fn test_equal_col() {
+        let trie_a = Trie::from_rows(vec![vec![DataValueT::U32(1), DataValueT::U64(1 << 34)]]);
+        let trie_b = Trie::from_rows(vec![vec![
+            DataValueT::U64(1 << 35),
+            DataValueT::U64(1 << 36),
+        ]]);
+
+        let schema_a = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U64),
+        ]);
+        let schema_b = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U64),
+            schema_entry(DataTypeName::U64),
+        ]);
+
+        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
+        instance.add(String::from("TableA"), trie_a, schema_a);
+        instance.add(String::from("TableB"), trie_b, schema_b);
+
+        let mut execution_tree = ExecutionTree::new(
+            String::from("test"),
+            ExecutionResult::<StringKeyType>::Temp(1),
+        );
+
+        let fetch_a = execution_tree.fetch_table(String::from("TableA"));
+        let fetch_b = execution_tree.fetch_table(String::from("TableB"));
+
+        let node_eq_col = execution_tree.select_equal(fetch_a, vec![vec![0, 1]]);
+
+        let node_join =
+            execution_tree.join(vec![node_eq_col, fetch_b], vec![vec![0, 1], vec![1, 2]]);
+
+        execution_tree.set_root(node_join);
+
+        let temp_schemas = HashMap::<usize, TableSchema>::new();
+        let type_tree = TypeTree::from_execution_tree(&instance, &temp_schemas, &execution_tree);
+
+        let expect_a = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U32),
+        ]);
+        let expect_b = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U64),
+        ]);
+        let expect_eq = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U32),
+        ]);
+        let expect_join = TableSchema::from_vec(vec![
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U32),
+            schema_entry(DataTypeName::U64),
+        ]);
+
+        let expected_type_tree = TypeTreeNode::new(
+            expect_join,
+            vec![
+                TypeTreeNode::new(expect_eq, vec![TypeTreeNode::new(expect_a, vec![])]),
                 TypeTreeNode::new(expect_b, vec![]),
             ],
         );

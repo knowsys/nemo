@@ -361,7 +361,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         }
     }
 
-    /// Update all the auxillary structures for a new table name.
+    /// Update all the auxiliary structures for a new table name.
     fn register_name(&mut self, name: TableName, arity: usize) {
         let prev_arity = self.predicate_arity.entry(name.predicate).or_insert(arity);
         debug_assert!(*prev_arity == arity);
@@ -746,7 +746,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         Ok(result)
     }
 
-    /// Checks wether the tree is a union of continous part of a single table.
+    /// Checks whether the tree is a union of continuous part of a single table.
     /// If so, returns the [`TableKey`] of the new table containing the result of this computation.
     fn plan_recognize_simple_union(&self, tree: &ExecutionTree<TableKey>) -> Option<TableKey> {
         if let ExecutionNode::Union(union) = &*tree.root()?.0.upgrade()?.as_ref().borrow() {
@@ -841,7 +841,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
     /// Execute a given [`ExecutionPlan`].
     /// Before executing applies the following optimizations:
     ///     * Remove trees that would compute a duplicate table (meaning a table with the same name)
-    ///     * Temporary tables which result in a continious union of subtables are saved permanently
+    ///     * Temporary tables which result in a continuous union of subtables are saved permanently
     ///     * Computation which only reorder another permanent tree are removed and a reference is added instead
     ///
     /// Returns a list of those predicates that received new values.
@@ -860,10 +860,10 @@ impl<Dict: Dictionary> TableManager<Dict> {
             true
         });
 
-        // Simplifiy plan
+        // Simplify plan
         plan.simplify();
 
-        // Save temporary table which compute a continious union under a new name
+        // Save temporary table which compute a continuous union under a new name
         let mut union_map = HashMap::<TableId, ExecutionNode<TableKey>>::new();
         for tree in &mut plan.trees {
             if let ExecutionResult::Temp(id) = tree.result() {
@@ -875,28 +875,60 @@ impl<Dict: Dictionary> TableManager<Dict> {
             tree.replace_temp_ids(&union_map);
         }
 
-        // Remove trees that only (project &) fetch another permanent table and replace it with a reference
+        // Remove trees that only (project &) fetch another permanent table and are themselves unused
+        // Remember them so they can still be added as references later
+        struct AddReference {
+            from_predicate: Identifier,
+            from_range: Range<usize>,
+            to: TableName,
+            reordering: Reordering,
+        }
+
+        let all_fetched_keys = plan.all_fetched_keys();
+        let mut references = Vec::<AddReference>::new();
+        let mut retain_index: usize = 0;
         plan.trees.retain(|t| {
-            if let ExecutionResult::Save(new_key) = t.result() {
+            let result = if let ExecutionResult::Save(new_key) = t.result() {
                 if let Some((ref_name, reordering)) = self.plan_recognize_renaming(t) {
-                    self.add_reference(
-                        new_key.name.predicate,
-                        self.translate_range(new_key.name.predicate, new_key.name.range),
-                        ref_name,
+                    if all_fetched_keys.contains(new_key) {
+                        return true;
+                    }
+
+                    references.push(AddReference {
+                        from_predicate: new_key.name.predicate,
+                        from_range: self
+                            .translate_range(new_key.name.predicate, new_key.name.range),
+                        to: ref_name,
                         reordering,
-                    );
+                    });
 
-                    result.insert(new_key.name.predicate);
-
-                    return false;
+                    false
+                } else {
+                    true
                 }
-            }
+            } else {
+                true
+            };
 
-            true
+            // Note: This works because retain guarantees the iteration order
+            retain_index += 1;
+
+            result
         });
 
-        // Execute the omptimized plan
+        // Execute the optimized plan
         result.extend(self.execute_plan(plan)?.iter());
+
+        // Add the references from before
+        for reference in references {
+            self.add_reference(
+                reference.from_predicate,
+                reference.from_range,
+                reference.to,
+                reference.reordering,
+            );
+        }
+
         Ok(result)
     }
 

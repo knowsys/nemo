@@ -51,7 +51,7 @@ pub fn log_fragmentation_combine(predicate: Identifier, trie_opt: Option<&Trie>)
 }
 
 /// Log: Print all available variable orders.
-pub fn log_avaiable_variable_order<Dict: Dictionary>(
+pub fn log_available_variable_order<Dict: Dictionary>(
     program: &Program<Dict>,
     analysis: &RuleAnalysis,
 ) {

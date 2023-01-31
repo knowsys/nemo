@@ -99,7 +99,7 @@ impl Term {
     }
 
     // TODO: Not sure if this is a sane way to do it, some discussion needed
-    /// Coverts term to DataValueT
+    /// Converts term to DataValueT
     pub fn to_datavalue_t(&self) -> Option<DataValueT> {
         match self {
             Self::Constant(Identifier(i)) => Some(DataValueT::U64((*i).try_into().ok()?)),

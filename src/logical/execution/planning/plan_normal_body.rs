@@ -22,7 +22,7 @@ use super::plan_util::{filters, join_binding, order_atom, BODY_JOIN};
 
 /// Strategies for calculating all body matches.
 pub trait BodyStrategy<'a, Dict: Dictionary> {
-    /// Do preperation work for the planning phase.
+    /// Do preparation work for the planning phase.
     fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self;
 
     /// Calculate the concrete plan given a variable order.
