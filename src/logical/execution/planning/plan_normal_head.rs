@@ -23,7 +23,7 @@ use super::plan_util::{join_binding, BODY_JOIN};
 
 /// Strategies for calculating the newly derived tables.
 pub trait HeadStrategy<Dict: Dictionary> {
-    /// Do preperation work for the planning phase.
+    /// Do preparation work for the planning phase.
     fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self;
 
     /// Calculate the concrete plan given a variable order.

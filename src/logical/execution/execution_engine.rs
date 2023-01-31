@@ -88,7 +88,7 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         }
     }
 
-    /// Add all the data source decliarations from the program into the table manager.
+    /// Add all the data source declarations from the program into the table manager.
     fn add_input_sources(table_manager: &mut TableManager<Dict>, program: &Program<Dict>) {
         for ((predicate, arity), source) in program.sources() {
             table_manager.add_source(predicate, arity, source.clone());
@@ -229,7 +229,7 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         Ok(())
     }
 
-    /// Return the output tries that resulted form the exection.
+    /// Return the output tries that resulted form the execution.
     pub fn get_results(&mut self) -> Result<Vec<(Identifier, &Trie)>, Error> {
         let mut result = Vec::<(Identifier, &Trie)>::new();
         let mut result_keys = Vec::new();

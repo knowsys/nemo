@@ -113,8 +113,12 @@ pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> T
                                     new_data_column.add_repeated_value(value, expanded_range.len());
                                 }
 
-                                let new_interval_column =
-                                    ColumnRle::continious_range(0usize, 1usize, prev_column.len());
+                                let new_interval_column = ColumnRle::range(
+                                    0usize,
+                                    1usize,
+                                    NonZeroUsize::new(prev_column.len())
+                                        .expect("Tried to construct empty rle column."),
+                                );
 
                                 new_columns.push_front(ColumnWithIntervalsT::U64(
                                     ColumnWithIntervals::new(
@@ -146,13 +150,12 @@ pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> T
                                 .checked_sub(1)
                                 .map(|i| trie.get_column(i).len())
                                 .unwrap_or(1);
+                            let target_length = NonZeroUsize::new(target_length)
+                                .expect("Tried to construct empty rle column.");
 
-                            let new_data_column = ColumnRle::continuous_range(
-                                $value,
-                                NonZeroUsize::new(target_length).expect("This cannot be zero"),
-                            );
+                            let new_data_column = ColumnRle::constant($value, target_length);
                             let new_interval_column =
-                                ColumnRle::continious_range(0usize, 1usize, target_length);
+                                ColumnRle::range(0usize, 1usize, target_length);
 
                             new_columns.push_front(ColumnWithIntervalsT::$variant(
                                 ColumnWithIntervals::new(

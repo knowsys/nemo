@@ -1,4 +1,4 @@
-//! This module contains functionailty for applying a rule.
+//! This module contains functionality for applying a rule.
 
 use std::{collections::HashSet, marker::PhantomData};
 
@@ -10,7 +10,7 @@ use crate::{
         table_manager::TableKey,
         TableManager,
     },
-    meta::logging::{log_avaiable_variable_order, log_choose_variable_order},
+    meta::logging::{log_available_variable_order, log_choose_variable_order},
     physical::{dictionary::Dictionary, management::ExecutionPlan},
 };
 
@@ -52,7 +52,7 @@ impl<'a, Dict: Dictionary> RuleExecution<'a, Dict> {
         rule_info: &RuleInfo,
         step_number: usize,
     ) -> Result<HashSet<Identifier>, Error> {
-        log_avaiable_variable_order(program, self.analysis);
+        log_available_variable_order(program, self.analysis);
         // TODO: Just because its the first doesn't mean its the best
         let best_variable_order = &self.analysis.promising_variable_orders[0];
         log_choose_variable_order(0);
