@@ -73,6 +73,12 @@ impl CliApp {
                 self.output_directory
             );
         }
+        if !self.save_results && self.gz {
+            log::warn!(
+                "Ignoring gz-compression o output files `{:?}` since `--save-results` is false",
+                self.gz
+            );
+        }
 
         let app_state = self.parse_rules::<Dict>()?;
 
