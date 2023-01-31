@@ -18,7 +18,7 @@ jobs:
         include:
           - { rust: nightly, os: ubuntu-latest }
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: hecrj/setup-rust-action@v1
         with:
           rust-version: ${{ matrix.rust }}
@@ -32,7 +32,7 @@ jobs:
     env:
       RUSTFLAGS: -Dwarnings
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: hecrj/setup-rust-action@v1
         with:
           components: clippy
@@ -45,7 +45,7 @@ jobs:
     name: Verify code formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: hecrj/setup-rust-action@v1
         with:
           components: rustfmt
@@ -55,20 +55,10 @@ jobs:
     name: Check for undefined behaviour with miri
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v3
+      - uses: hecrj/setup-rust-action@v1
         with:
-          profile: minimal
-          toolchain: nightly
-          override: true
           components: miri
-      - name: miri setup
-        uses: actions-rs/cargo@v1
-        with:
-          command: miri
-          args: setup
-      - name: miri test
-        uses: actions-rs/cargo@v1
-        with:
-          command: miri
-          args: test
+          rust-version: nightly
+      - run: cargo miri setup
+      - run: cargo miri test
