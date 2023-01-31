@@ -8,7 +8,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::error::Error;
-use crate::io::parser::{all_input_consumed, sparql};
 use crate::logical::execution::ExecutionEngine;
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::Dictionary;
@@ -53,49 +52,35 @@ where
         if let Ok(row) = rec {
             log::trace!("imported row: {:?}", row);
             if let Err(Error::RollBack(rollback)) =
-                row.iter()
-                    .enumerate()
-                    .try_for_each(|(idx, item)| -> Result<(), Error> {
-                        if let Some(datatype) = datatypes[idx] {
-                            match datatype.parse(item) {
-                                Ok(val) => {
-                                    result[idx].as_mut().map(|vect| {
-                                        vect.push(&val);
-                                        Some(())
-                                    });
-                                    Ok(())
-                                }
-                                Err(e) => {
-                                    log::error!("Ignoring line {:?}, parsing failed: {}", row, e);
-                                    Err(Error::RollBack(idx))
-                                }
+                row.iter().enumerate().try_for_each(|(idx, item)| {
+                    if let Some(datatype) = datatypes[idx] {
+                        match datatype.parse(item) {
+                            Ok(val) => {
+                                result[idx].as_mut().map(|vect| {
+                                    vect.push(&val);
+                                    Some(())
+                                });
+                                Ok(())
                             }
-                        } else {
-                            // TODO: not sure if we actually want to handle everything as string which is not specified
-                            // but let's just do this for now
-                            // (we use u64 with a dictionary for strings)
-
-                            let u64_equivalent = DataValueT::U64(
-                                dictionary
-                                    .add(
-                                        // HACK HACK HACK: check whether this is an absolute IRI, and handle it accordingly.
-                                        match all_input_consumed(sparql::iriref)(item) {
-                                            Ok(iri) => iri,
-                                            _ => item,
-                                        }
-                                        .to_string(),
-                                    )
-                                    .try_into()
-                                    .unwrap(),
-                            );
-
-                            if let Some(result_col) = result[idx].as_mut() {
-                                result_col.push(&u64_equivalent);
+                            Err(e) => {
+                                log::error!("Ignoring line {:?}, parsing failed: {}", row, e);
+                                Err(Error::RollBack(idx))
                             }
-
-                            Ok(())
                         }
-                    })
+                    } else {
+                        // TODO: not sure if we actually want to handle everything as string which is not specified
+                        // but let's just do this for now
+                        // (we use u64 with a dictionary for strings)
+
+                        let u64_equivalent =
+                            DataValueT::U64(dictionary.add(item.to_string()).try_into().unwrap());
+                        if let Some(result_col) = result[idx].as_mut() {
+                            result_col.push(&u64_equivalent);
+                        }
+
+                        Ok(())
+                    }
+                })
             {
                 for item in result.iter_mut().take(rollback) {
                     if let Some(vec) = item.as_mut() {
