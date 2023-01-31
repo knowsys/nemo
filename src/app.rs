@@ -24,6 +24,8 @@ impl<Dict: Dictionary> AppState<Dict> {
     }
 }
 
+const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
+
 /// Stage 2 CLI
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -44,7 +46,7 @@ pub struct CliApp {
     #[arg(short, long = "save-results")]
     save_results: bool,
     /// output directory
-    #[arg(short, long = "output", default_value = "results")]
+    #[arg(short, long = "output", default_value = DEFAULT_OUTPUT_DIRECTORY)]
     output_directory: PathBuf,
 }
 
@@ -60,6 +62,13 @@ impl CliApp {
         self.init_logging();
         log::info!("Version: {}", clap::crate_version!());
         log::debug!("Rule files: {:?}", self.rules);
+
+        if self.output_directory != PathBuf::from(DEFAULT_OUTPUT_DIRECTORY) && !self.save_results {
+            log::warn!(
+                "Ignoring output directory `{:?}` since `--save-results` is false",
+                self.output_directory
+            );
+        }
 
         let app_state = self.parse_rules::<Dict>()?;
 
