@@ -623,10 +623,10 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
     /// Expand a prefixed name.
     pub fn resolve_prefixed_name(&self, name: sparql::Name) -> Result<String, ParseError> {
         match name {
-            sparql::Name::IriReference(iri) => Ok(iri.to_owned()),
+            sparql::Name::IriReference(iri) => Ok(format!("<{iri}>")),
             sparql::Name::PrefixedName { prefix, local } => self
                 .resolve_prefix(prefix)
-                .map(|iri| format!("{iri}{local}")),
+                .map(|iri| format!("<{iri}{local}>")),
             sparql::Name::BlankNode(label) => Ok(format!("_:{label}")),
         }
     }
