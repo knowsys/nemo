@@ -1,4 +1,4 @@
-//! Functionality for evalatuing an existential rule program.
+//! Functionality for evaluating an existential rule program.
 
 pub mod execution_engine;
 pub use execution_engine::ExecutionEngine;

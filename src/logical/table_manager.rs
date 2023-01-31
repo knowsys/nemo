@@ -362,7 +362,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         }
     }
 
-    /// Update all the auxillary structures for a new table name.
+    /// Update all the auxiliary structures for a new table name.
     fn register_name(&mut self, name: TableName, arity: usize) {
         let prev_arity = self.predicate_arity.entry(name.predicate).or_insert(arity);
         debug_assert!(*prev_arity == arity);
@@ -745,7 +745,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         Ok(result)
     }
 
-    /// Checks wether the tree is a union of continous part of a single table.
+    /// Checks whether the tree is a union of continuous part of a single table.
     /// If so, returns the [`TableKey`] of the new table containing the result of this computation.
     fn plan_recognize_simple_union(&self, tree: &ExecutionTree<TableKey>) -> Option<TableKey> {
         if let ExecutionNode::Union(union) = &*tree.root()?.0.upgrade()?.as_ref().borrow() {
@@ -840,7 +840,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
     /// Execute a given [`ExecutionPlan`].
     /// Before executing applies the following optimizations:
     ///     * Remove trees that would compute a duplicate table (meaning a table with the same name)
-    ///     * Temporary tables which result in a continious union of subtables are saved permanently
+    ///     * Temporary tables which result in a continuous union of subtables are saved permanently
     ///     * Computation which only reorder another permanent tree are removed and a reference is added instead
     ///
     /// Returns a list of those predicates that received new values.
@@ -859,10 +859,10 @@ impl<Dict: Dictionary> TableManager<Dict> {
             true
         });
 
-        // Simplifiy plan
+        // Simplify plan
         plan.simplify();
 
-        // Save temporary table which compute a continious union under a new name
+        // Save temporary table which compute a continuous union under a new name
         let mut union_map = HashMap::<TableId, ExecutionNode<TableKey>>::new();
         for tree in &mut plan.trees {
             if let ExecutionResult::Temp(id) = tree.result() {
@@ -894,7 +894,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             true
         });
 
-        // Execute the omptimized plan
+        // Execute the optimized plan
         result.extend(self.execute_plan(plan)?.iter());
         Ok(result)
     }

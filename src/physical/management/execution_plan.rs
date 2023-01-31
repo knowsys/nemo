@@ -472,7 +472,7 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
 
     /// Simplifies the current [`ExecutionPlan`].
     /// This includes:
-    ///     * Removing superflous operations like empty unions or default projects
+    ///     * Removing superfluous operations like empty unions or default projects
     ///     * Removing computations that would result in an empty table
     ///     * Removing computations that would result in an unused temporary table
     ///     * Removing temporary tables that are the same as other temporary tables

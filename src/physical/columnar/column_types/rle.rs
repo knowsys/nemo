@@ -353,7 +353,7 @@ where
     }
 
     /// Construct a new [`ColumnRle`] consisting of one value that is repeated a given number of times.
-    pub fn continuous_range(value: T, length: NonZeroUsize) -> ColumnRle<T> {
+    pub fn constant(value: T, length: NonZeroUsize) -> ColumnRle<T> {
         let element = RleElement {
             value,
             length,
@@ -364,10 +364,10 @@ where
     }
 
     /// Construct new [`ColumnScanRle`] consisting of a single continuous range of values.
-    pub fn continious_range(start_value: T, increment: T, count: usize) -> ColumnRle<T> {
+    pub fn range(start_value: T, increment: T, length: NonZeroUsize) -> ColumnRle<T> {
         let element = RleElement {
             value: start_value,
-            length: NonZeroUsize::new(count).expect("Tried to construct empty rle column."),
+            length,
             increment: Step::Increment(increment),
         };
 
