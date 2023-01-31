@@ -1,6 +1,6 @@
 //! Represents different data-import methods
 
-use std::fs::{create_dir_all, remove_dir_all, File, OpenOptions};
+use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
@@ -122,10 +122,6 @@ impl<'a> CSVWriter<'a> {
     /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
     /// TODO: handle constant dict correctly
     pub fn try_new(path: &'a PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
-        if path.exists() && overwrite {
-            log::info!("Result directory {path:?} exists; Deleting all files in directory.");
-            remove_dir_all(path)?;
-        }
         create_dir_all(path)?;
         Ok(CSVWriter {
             path,
@@ -152,20 +148,14 @@ impl CSVWriter<'_> {
             if self.gzip { ".gz" } else { "" }
         ));
         log::info!("Creating {pred} as {file_path:?}");
+        let mut options = OpenOptions::new();
+        options.write(true);
         if self.overwrite {
-            OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(file_path)
-                .map_err(|err| err.into())
+            options.create(true).truncate(true);
         } else {
-            OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(file_path)
-                .map_err(|err| err.into())
-        }
+            options.create_new(true);
+        };
+        options.open(file_path).map_err(|err| err.into())
     }
     /// Writes a predicate as a csv-file into the corresponding result-directory
     /// # Parameters

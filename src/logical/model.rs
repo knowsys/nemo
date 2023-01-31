@@ -36,9 +36,9 @@ impl Identifier {
         }
     }
 
-    /// Return the internal `id` of the [`Identifier`]
-    pub fn id(&self) -> usize {
-        self.0
+    /// Returns the associated name, based on a given [`Dictionary`]
+    pub fn name<Dict: Dictionary>(&self, dict: &Dict) -> Option<String> {
+        dict.entry(self.0)
     }
 
     /// TODO(mx): ugly hack, this needs to go.

@@ -91,8 +91,8 @@ impl CliApp {
             // TODO fix cloning
             let dict = exec_engine.get_dict().clone();
             exec_engine.idb_predicates()?.try_for_each(|(pred, trie)| {
-                let pred_name = dict
-                    .entry(pred.id())
+                let pred_name = pred
+                    .name(&dict)
                     .expect("All predicates shall depend on the dictionary");
                 if let Some(trie) = trie {
                     csv_writer.write_predicate(&pred_name, trie, &dict)
