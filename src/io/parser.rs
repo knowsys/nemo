@@ -756,7 +756,7 @@ mod test {
         let datatype = "bar";
         let p = parser.intern(predicate.to_owned());
         let v = parser.intern(value.to_owned()).0;
-        let t = parser.intern(datatype.to_owned()).0;
+        let t = parser.intern(format!("<{datatype}>")).0;
         let fact = format!(r#"{predicate}("{value}"^^<{datatype}>) ."#);
 
         assert_parse!(
@@ -782,7 +782,7 @@ mod test {
         let prefix_declaration = format!("@prefix {prefix}: <{iri}> .");
         let p = parser.intern(predicate.to_owned());
         let pn = format!("{prefix}:{name}");
-        let v = parser.intern(format!("{iri}{name}"));
+        let v = parser.intern(format!("<{iri}{name}>"));
         let fact = format!(r#"{predicate}({pn}) ."#);
 
         assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
@@ -841,7 +841,7 @@ mod test {
         let predicate = "p";
         let name = "a";
         let p = parser.intern(predicate.to_owned());
-        let a = parser.intern(name.to_owned());
+        let a = parser.intern(format!("<{name}>"));
         let fact = format!(r#"{predicate}({name}) ."#);
 
         assert_parse!(
@@ -859,7 +859,7 @@ mod test {
         let datatype = "bar";
         let p = parser.intern(predicate.to_owned());
         let v = parser.intern(value.to_owned()).0;
-        let t = parser.intern(datatype.to_owned()).0;
+        let t = parser.intern(format!("<{datatype}>")).0;
         let fact = format!(
             r#"{predicate}(% comment 1
                  "{value}"^^<{datatype}> % comment 2
