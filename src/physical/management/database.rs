@@ -302,6 +302,11 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
         type_node: &'a TypeTreeNode,
         temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
     ) -> Result<Option<TrieScanEnum>, Error> {
+        if type_node.schema.is_empty() {
+            // That there is no schema for this node implies that the table is empty
+            return Ok(None);
+        }
+
         let node_rc = execution_node
             .0
             .upgrade()

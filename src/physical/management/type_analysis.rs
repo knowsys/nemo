@@ -266,11 +266,15 @@ impl TypeTree {
             ExecutionNode::Project(subtree, reordering) => {
                 let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
 
-                let result_schema_enries = reordering.apply_to(subtype_node.schema.get_entries());
-                Ok(TypeTreeNode::new(
-                    TableSchema::from_vec(result_schema_enries),
-                    vec![subtype_node],
-                ))
+                let new_schema = if !subtype_node.schema.is_empty() {
+                    let result_schema_enries =
+                        reordering.apply_to(subtype_node.schema.get_entries());
+                    TableSchema::from_vec(result_schema_enries)
+                } else {
+                    TableSchema::default()
+                };
+
+                Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
             ExecutionNode::SelectValue(subtree, _assignments) => {
                 let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
