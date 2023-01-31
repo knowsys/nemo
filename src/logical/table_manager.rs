@@ -874,28 +874,60 @@ impl<Dict: Dictionary> TableManager<Dict> {
             tree.replace_temp_ids(&union_map);
         }
 
-        // Remove trees that only (project &) fetch another permanent table and replace it with a reference
+        // Remove trees that only (project &) fetch another permanent table and are themselves unused
+        // Remember them so they can still be added as references later
+        struct AddReference {
+            from_predicate: Identifier,
+            from_range: Range<usize>,
+            to: TableName,
+            reordering: Reordering,
+        }
+
+        let all_fetched_keys = plan.all_fetched_keys();
+        let mut references = Vec::<AddReference>::new();
+        let mut retain_index: usize = 0;
         plan.trees.retain(|t| {
-            if let ExecutionResult::Save(new_key) = t.result() {
+            let result = if let ExecutionResult::Save(new_key) = t.result() {
                 if let Some((ref_name, reordering)) = self.plan_recognize_renaming(t) {
-                    self.add_reference(
-                        new_key.name.predicate,
-                        self.translate_range(new_key.name.predicate, new_key.name.range),
-                        ref_name,
+                    if all_fetched_keys.contains(new_key) {
+                        return true;
+                    }
+
+                    references.push(AddReference {
+                        from_predicate: new_key.name.predicate,
+                        from_range: self
+                            .translate_range(new_key.name.predicate, new_key.name.range),
+                        to: ref_name,
                         reordering,
-                    );
+                    });
 
-                    result.insert(new_key.name.predicate);
-
-                    return false;
+                    false
+                } else {
+                    true
                 }
-            }
+            } else {
+                true
+            };
 
-            true
+            // Note: This works because retain guarantees the iteration order
+            retain_index += 1;
+
+            result
         });
 
         // Execute the optimized plan
         result.extend(self.execute_plan(plan)?.iter());
+
+        // Add the references from before
+        for reference in references {
+            self.add_reference(
+                reference.from_predicate,
+                reference.from_range,
+                reference.to,
+                reference.reordering,
+            );
+        }
+
         Ok(result)
     }
 

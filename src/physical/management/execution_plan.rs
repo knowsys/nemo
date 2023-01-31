@@ -151,6 +151,21 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
             .filter(|n| matches!(&*n.0.as_ref().borrow(), ExecutionNode::FetchTable(_)))
     }
 
+    /// Return all table keys that have been fetched
+    pub fn all_fetched_keys(&self) -> HashSet<TableKey> {
+        let mut result = HashSet::<TableKey>::new();
+
+        for node in &self.nodes {
+            let node_ref = &*node.0.as_ref().borrow();
+
+            if let ExecutionNode::FetchTable(key) = node_ref {
+                result.insert(key.clone());
+            }
+        }
+
+        result
+    }
+
     /// Push new node to list of all nodes and returns a reference.
     fn push_and_return_ref(&mut self, node: ExecutionNode<TableKey>) -> ExecutionNodeRef<TableKey> {
         self.nodes.push(ExecutionNodeOwned::new(node));
@@ -579,6 +594,19 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
         for tree in &mut self.trees {
             tree.replace_temp_ids(&renamed_temp);
         }
+    }
+
+    /// Return all table keys that have been fetched
+    pub fn all_fetched_keys(&self) -> HashSet<TableKey> {
+        let mut result = HashSet::<TableKey>::new();
+
+        for tree in &self.trees {
+            let tree_keys = tree.all_fetched_keys();
+
+            result = result.union(&tree_keys).cloned().collect();
+        }
+
+        result
     }
 }
 
