@@ -52,8 +52,23 @@ iai = "0.1" # needs valgrind -> unix only
 panic = "unwind"
 
 [profile.release]
-panic = "abort"
+panic = "unwind"
 debug=true
+
+#debug profile without debug assertions
+[profile.debug-noassert]
+inherits = "dev"
+debug-assertions = false
+
+#profile with minimal executable size
+[profile.release-minimal]
+inherits = "release"
+panic = "abort"
+debug=false
+strip=true
+
+[profile.bench]
+inherits = "release-minimal"
 
 [[bench]]
 name = "seek"
