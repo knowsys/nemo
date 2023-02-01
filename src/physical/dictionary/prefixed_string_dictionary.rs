@@ -13,30 +13,39 @@ enum TrieNode {
     Root {
         prefix: String,
         children: Vec<Rc<RefCell<TrieNode>>>,
+        hash: HashMap<String, usize>,
     },
     Node {
         prefix: String,
         children: Vec<Rc<RefCell<TrieNode>>>,
         parent: Weak<RefCell<TrieNode>>,
+        hash: HashMap<String, usize>,
     },
 }
 
 impl std::fmt::Debug for TrieNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TrieNode::Root { prefix, children } => f
+            TrieNode::Root {
+                prefix,
+                children,
+                hash,
+            } => f
                 .debug_struct("TrieNode::Root")
                 .field("prefix", prefix)
                 .field("children", children)
+                .field("hash", hash)
                 .finish(),
             TrieNode::Node {
                 prefix,
                 children,
                 parent,
+                hash,
             } => f
                 .debug_struct("TrieNode::Node")
                 .field("prefix", prefix)
                 .field("children", children)
+                .field("hash", hash)
                 .field(
                     "parent(prefix)",
                     &parent
@@ -56,6 +65,7 @@ impl Default for TrieNode {
         Self::Root {
             prefix: "".to_string(),
             children: Vec::new(),
+            hash: HashMap::new(),
         }
     }
 }
@@ -67,12 +77,14 @@ impl Hash for TrieNode {
             TrieNode::Root {
                 prefix: _,
                 children: _,
+                hash: _,
             } => {
                 "".hash(state);
             }
             TrieNode::Node {
                 prefix: _,
                 children: _,
+                hash: _,
                 parent,
             } => {
                 parent
@@ -92,30 +104,36 @@ impl PartialEq for TrieNode {
             TrieNode::Root {
                 prefix: left,
                 children: _,
+                hash: _,
             } => match other {
                 TrieNode::Root {
                     prefix: right,
                     children: _,
+                    hash: _,
                 } => left.eq(right),
                 TrieNode::Node {
                     prefix: _,
                     children: _,
                     parent: _,
+                    hash: _,
                 } => false,
             },
             TrieNode::Node {
                 prefix: left,
                 children: _,
                 parent: parent_left,
+                hash: _,
             } => match other {
                 TrieNode::Root {
                     prefix: _,
                     children: _,
+                    hash: _,
                 } => false,
                 TrieNode::Node {
                     prefix: right,
                     children: _,
                     parent: parent_right,
+                    hash: _,
                 } => {
                     left.eq(right)
                         && parent_left
@@ -142,10 +160,12 @@ impl Display for TrieNode {
             TrieNode::Root {
                 prefix: _,
                 children: _,
+                hash: _,
             } => {}
             TrieNode::Node {
                 prefix: _,
                 children: _,
+                hash: _,
                 parent,
             } => {
                 write!(
@@ -167,38 +187,61 @@ impl TrieNode {
             prefix,
             children: Vec::new(),
             parent: Rc::downgrade(&parent),
+            hash: HashMap::new(),
         }
     }
 
     /// add another child to the list of children of this node
     /// Note that it does not check whether some child already exists
     fn add_node(&mut self, child: Rc<RefCell<TrieNode>>) {
-        match self {
+        let (children, hash) = match self {
             Self::Node {
                 children,
                 prefix: _,
                 parent: _,
-            } => children,
+                hash,
+            } => (children, hash),
             Self::Root {
                 children,
                 prefix: _,
-            } => children,
-        }
-        .push(Rc::clone(&child));
+                hash,
+            } => (children, hash),
+        };
+        children.push(Rc::clone(&child));
+        hash.insert(child.borrow_mut().prefix().to_string(), children.len() - 1);
     }
 
     /// Returns the children of the given [TrieNode]
-    fn children(&self) -> Option<&Vec<Rc<RefCell<TrieNode>>>> {
+    fn children(&self) -> &Vec<Rc<RefCell<TrieNode>>> {
         match self {
             Self::Node {
                 children,
                 prefix: _,
                 parent: _,
-            } => Some(children),
+                hash: _,
+            } => children,
             Self::Root {
                 children,
                 prefix: _,
-            } => Some(children),
+                hash: _,
+            } => children,
+        }
+    }
+
+    /// Returns the hash of the given [TrieNode]
+    fn prefix_hash(&self) -> &HashMap<String, usize> {
+        match self {
+            Self::Node {
+                children: _,
+                prefix: _,
+                parent: _,
+                hash,
+            } => hash,
+            Self::Root {
+                children: _,
+                prefix: _,
+                hash,
+            } => hash,
         }
     }
 
@@ -209,24 +252,21 @@ impl TrieNode {
                 children: _,
                 prefix,
                 parent: _,
+                hash: _,
             } => prefix,
             Self::Root {
                 children: _,
                 prefix,
+                hash: _,
             } => prefix,
         }
     }
 
     /// Given a prefix, checks whether the prefix occurs in the children. Returns that child if that is the case.
     fn matching_child(&self, search_value: &str) -> Option<Rc<RefCell<TrieNode>>> {
-        if let Some(children) = self.children() {
-            for child in children {
-                if child.as_ref().borrow().prefix().eq(search_value) {
-                    return Some(Rc::clone(child));
-                }
-            }
-        }
-        None
+        self.prefix_hash()
+            .get(search_value)
+            .map(|&idx| Rc::clone(&self.children()[idx]))
     }
 
     /// Given a list of prefixes `search_list` and a `node`, searches for a matching path down the sub-tree with respect to the given list.
@@ -467,10 +507,10 @@ mod test {
     fn properties() {
         let mut dict = create_dict();
         // no prefixes, so no children
-        assert!(dict.store.as_ref().borrow().children().unwrap().is_empty());
+        assert!(dict.store.as_ref().borrow().children().is_empty());
         dict.add("https://wikidata.org/entity/Q42".to_string());
         // now we need some children
-        assert!(!dict.store.as_ref().borrow().children().unwrap().is_empty());
+        assert!(!dict.store.as_ref().borrow().children().is_empty());
         assert_eq!(
             dict.entry(6),
             Some("https://wikidata.org/entity/Q42".to_string())
@@ -481,10 +521,10 @@ mod test {
     fn iri() {
         let mut dict = create_dict();
         // no prefixes, so no children
-        assert!(dict.store.as_ref().borrow().children().unwrap().is_empty());
+        assert!(dict.store.as_ref().borrow().children().is_empty());
         dict.add("https://wikidata.org/entity/Q42".to_string());
         // now we need some children
-        assert!(!dict.store.as_ref().borrow().children().unwrap().is_empty());
+        assert!(!dict.store.as_ref().borrow().children().is_empty());
         assert_eq!(
             dict.entry(6),
             Some("https://wikidata.org/entity/Q42".to_string())
