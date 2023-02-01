@@ -7,10 +7,8 @@ use stage2::logical::execution::ExecutionEngine;
 use stage2::logical::model::Program;
 use stage2::meta::TimedCode;
 use stage2::physical::dictionary::Dictionary;
-use std::cell::RefCell;
 use std::fs::read_to_string;
 use std::path::PathBuf;
-use std::rc::Rc;
 
 /// Application state
 struct AppState<Dict: Dictionary> {
@@ -48,6 +46,12 @@ pub struct CliApp {
     /// output directory
     #[arg(short, long = "output", default_value = DEFAULT_OUTPUT_DIRECTORY)]
     output_directory: PathBuf,
+    /// Overwrite existing files. This will remove all files in the given output directory
+    #[arg(long = "overwrite-results", default_value = "false")]
+    overwrite: bool,
+    /// Gzip output files
+    #[arg(short, long = "gzip", default_value = "false")]
+    gz: bool,
 }
 
 #[cfg(feature = "no-prefixed-string-dictionary")]
@@ -69,6 +73,12 @@ impl CliApp {
                 self.output_directory
             );
         }
+        if !self.save_results && self.gz {
+            log::warn!(
+                "Ignoring gz-compression of output files `{:?}` since `--save-results` is false",
+                self.gz
+            );
+        }
 
         let app_state = self.parse_rules::<Dict>()?;
 
@@ -83,19 +93,29 @@ impl CliApp {
 
         TimedCode::instance().sub("Reasoning").stop();
 
-        let dictionary = Rc::new(RefCell::new(exec_engine.get_dict().clone()));
-
         if self.save_results {
             TimedCode::instance()
                 .sub("Output & Final Materialization")
                 .start();
             log::info!("writing output");
-            let mut csv_writer = stage2::io::csv::CSVWriter::try_new(
-                &mut exec_engine,
+            let csv_writer = stage2::io::csv::CSVWriter::try_new(
                 &self.output_directory,
-                &dictionary,
+                self.overwrite,
+                self.gz,
             )?;
-            csv_writer.write()?;
+            // TODO fix cloning
+            let dict = exec_engine.get_dict().clone();
+            exec_engine.idb_predicates()?.try_for_each(|(pred, trie)| {
+                let pred_name = pred
+                    .name(&dict)
+                    .expect("All predicates shall depend on the dictionary");
+                if let Some(trie) = trie {
+                    csv_writer.write_predicate(&pred_name, trie, &dict)
+                } else {
+                    csv_writer.create_file(&pred_name).map(|_| ())
+                }
+            })?;
+
             TimedCode::instance()
                 .sub("Output & Final Materialization")
                 .stop();

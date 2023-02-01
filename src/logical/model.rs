@@ -36,6 +36,11 @@ impl Identifier {
         }
     }
 
+    /// Returns the associated name, based on a given [`Dictionary`]
+    pub fn name<Dict: Dictionary>(&self, dict: &Dict) -> Option<String> {
+        dict.entry(self.0)
+    }
+
     /// TODO(mx): ugly hack, this needs to go.
     pub fn to_constant_u64(self) -> u64 {
         self.0 as u64

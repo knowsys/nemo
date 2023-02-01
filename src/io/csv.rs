@@ -1,18 +1,30 @@
 //! Represents different data-import methods
 
-use std::cell::RefCell;
-use std::fs::{create_dir_all, OpenOptions};
-use std::io::Write;
-use std::ops::Deref;
+use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use crate::error::Error;
-use crate::logical::execution::ExecutionEngine;
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::Dictionary;
-use csv::Reader;
+use crate::physical::tabular::table_types::trie::Trie;
+use csv::{Reader, ReaderBuilder};
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use sanitise_file_name::{sanitise_with_options, Options};
+
+/// Creates a [csv::Reader], based on any `Reader` which implements the [std::io::Read] trait
+pub(crate) fn reader<R>(rdr: R) -> Reader<R>
+where
+    R: Read,
+{
+    ReaderBuilder::new()
+        .delimiter(b',')
+        .escape(Some(b'\\'))
+        .has_headers(false)
+        .double_quote(true)
+        .from_reader(rdr)
+}
 
 /// Imports a csv file
 /// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
@@ -27,7 +39,7 @@ pub fn read<T, Dict: Dictionary>(
     dictionary: &mut Dict,
 ) -> Result<Vec<VecT>, Error>
 where
-    T: std::io::Read,
+    T: Read,
 {
     let mut result: Vec<Option<VecT>> = Vec::new();
 
@@ -95,69 +107,79 @@ where
 
 /// Contains all the needed information, to write results into csv-files
 #[derive(Debug)]
-pub struct CSVWriter<'a, Dict: Dictionary> {
-    /// Execution engine, where the Tables are managed
-    exec: &'a mut ExecutionEngine<Dict>,
-    /// The path to where the results shall be written to
+pub struct CSVWriter<'a> {
+    /// The path to where the results shall be written to.
     path: &'a PathBuf,
-    /// Parser information on predicates
-    names: Rc<RefCell<Dict>>,
+    /// Overwrite files, note that the target folder will be emptied if `overwrite` is set to [true].
+    overwrite: bool,
+    /// Gzip csv-file.
+    gzip: bool,
 }
 
-impl<'a, Dict: Dictionary> CSVWriter<'a, Dict> {
+impl<'a> CSVWriter<'a> {
     /// Instantiate a [`CSVWriter`].
     ///
     /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
     /// TODO: handle constant dict correctly
-    pub fn try_new(
-        exec: &'a mut ExecutionEngine<Dict>,
-        path: &'a PathBuf,
-        names: &Rc<RefCell<Dict>>,
-    ) -> Result<Self, Error> {
+    pub fn try_new(path: &'a PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
         create_dir_all(path)?;
-        let names = Rc::clone(names);
-        Ok(CSVWriter { exec, path, names })
+        Ok(CSVWriter {
+            path,
+            overwrite,
+            gzip,
+        })
     }
 }
 
-impl<Dict: Dictionary> CSVWriter<'_, Dict> {
-    /// Writes the results to the output folder
-    pub fn write(&mut self) -> Result<(), Error> {
-        self.exec.idb_predicates()?.try_for_each(|(pred, trie)| {
-            let predicate_name = self
-                .names
-                .borrow()
-                .entry(pred.0)
-                .expect("All predicate names should be present in the dictionary");
-
-            let sanitise_options = Options::<Option<char>> {
-                url_safe: true,
-                ..Default::default()
-            };
-            let file_name = sanitise_with_options(&predicate_name, &sanitise_options);
-            let file_path = PathBuf::from(format!(
-                "{}/{file_name}.csv",
-                self.path
-                    .as_os_str()
-                    .to_str()
-                    .expect("Path shall be a string")
-            ));
-            match OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(file_path.clone())
-            {
-                Ok(mut file) => {
-                    log::info!("Writing {file_path:?}");
-                    if let Some(trie) = trie {
-                        write!(file, "{}", trie.debug(self.names.borrow().deref()))?;
-                    }
-                }
-                Err(e) => log::error!("error writing: {e:?}"),
-            }
-            Ok(())
-        })
+impl CSVWriter<'_> {
+    /// Creates a csv-file and returns a [`File`] handle to write data.
+    pub fn create_file(&self, pred: &str) -> Result<File, Error> {
+        let sanitise_options = Options::<Option<char>> {
+            url_safe: true,
+            ..Default::default()
+        };
+        let file_name = sanitise_with_options(pred, &sanitise_options);
+        let file_path = PathBuf::from(format!(
+            "{}/{file_name}.csv{}",
+            self.path
+                .as_os_str()
+                .to_str()
+                .expect("Path should be a unicode string"),
+            if self.gzip { ".gz" } else { "" }
+        ));
+        log::info!("Creating {pred} as {file_path:?}");
+        let mut options = OpenOptions::new();
+        options.write(true);
+        if self.overwrite {
+            options.create(true).truncate(true);
+        } else {
+            options.create_new(true);
+        };
+        options.open(file_path).map_err(|err| err.into())
+    }
+    /// Writes a predicate as a csv-file into the corresponding result-directory
+    /// # Parameters
+    /// * `pred` is a [`&str`], representing a predicate name
+    /// * `trie` is the [`Trie`] which holds all the content of the given predicate
+    /// * `dict` is a [`Dictionary`], containing the mapping of the internal number representation to a [`String`]
+    /// # Returns
+    /// * [`Ok`][std::result::Result::Ok] if the predicate could be written to the csv-file
+    /// * [`Error`] in case of any issues during writing the file
+    pub fn write_predicate<Dict: Dictionary>(
+        &self,
+        pred: &str,
+        trie: &Trie,
+        dict: &Dict,
+    ) -> Result<(), Error> {
+        log::debug!("Writing {pred}");
+        let mut file = self.create_file(pred)?;
+        let content = trie.debug(dict);
+        if self.gzip {
+            write!(GzEncoder::new(file, Compression::best()), "{}", &content)?;
+        } else {
+            write!(file, "{}", &content)?;
+        }
+        Ok(())
     }
 }
 
