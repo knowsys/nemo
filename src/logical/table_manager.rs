@@ -876,7 +876,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         }
 
         // Simplify plan
-        plan.simplify();
+        // plan.simplify();
 
         // Save temporary table which compute a continuous union under a new name
         let mut union_map = HashMap::<TableId, ExecutionNode<TableKey>>::new();
