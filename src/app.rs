@@ -75,7 +75,7 @@ impl CliApp {
         }
         if !self.save_results && self.gz {
             log::warn!(
-                "Ignoring gz-compression o output files `{:?}` since `--save-results` is false",
+                "Ignoring gz-compression of output files `{:?}` since `--save-results` is false",
                 self.gz
             );
         }
