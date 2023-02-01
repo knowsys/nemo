@@ -51,10 +51,8 @@ impl<'a> RestrictedChaseStrategy<'a> {
             .cloned()
             .collect();
 
-        let normalized_head = normalize_atom_vector(
-            &rule.head().iter().by_ref().collect::<Vec<&Atom>>(),
-            &vec![],
-        );
+        let normalized_head =
+            normalize_atom_vector(&rule.head().iter().by_ref().collect::<Vec<&Atom>>(), &[]);
 
         let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
         let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();

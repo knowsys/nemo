@@ -493,7 +493,7 @@ impl TypeTree {
                     .take(type_node.schema.arity() - num_nulls)
                     .enumerate()
                 {
-                    schema_map.insert(index, schema_entry.clone());
+                    schema_map.insert(index, *schema_entry);
                 }
 
                 Self::propagate_down(

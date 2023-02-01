@@ -43,7 +43,7 @@ pub fn normalize_atom_vector(atoms: &[&Atom], filters: &[Filter]) -> Normalizati
             }
         }
 
-        new_filters.push(filter.clone());
+        new_filters.push(*filter);
     }
 
     // Create new filters for handling constants or duplicate variables within one atom
@@ -101,7 +101,7 @@ impl<Dict: Dictionary> Program<Dict> {
                 })
                 .collect();
 
-            let normalized_body = normalize_atom_vector(&body_atoms, &rule.filters());
+            let normalized_body = normalize_atom_vector(&body_atoms, rule.filters());
             // TODO: Consider negation
             *rule.body_mut() = normalized_body
                 .atoms

@@ -91,6 +91,7 @@ fn subtree_join<Dict: Dictionary>(
 /// Given a list of atoms and filters compute the appropriate execution tree to perform the join of those atoms
 /// with the seminaive evaluation strategy.
 /// Note: The [`VariableOrder`] must only contain variables that occur in the `atoms` parameter.
+#[allow(clippy::too_many_arguments)]
 pub fn seminaive_join<Dict: Dictionary>(
     tree: &mut ExecutionTree<TableKey>,
     table_manager: &TableManager<Dict>,
@@ -127,22 +128,22 @@ pub fn seminaive_join<Dict: Dictionary>(
     // Needs to be done for the main and side atoms
     let main_orders: Vec<Reordering> = body_main
         .iter()
-        .map(|&a| order_atom(a, &variable_order))
+        .map(|&a| order_atom(a, variable_order))
         .collect();
     let side_orders: Vec<Reordering> = body_side
         .iter()
-        .map(|&a| order_atom(a, &variable_order))
+        .map(|&a| order_atom(a, variable_order))
         .collect();
 
     // Join binding needs to be computed for both types of atoms as well
     let side_binding = body_side
         .iter()
         .enumerate()
-        .map(|(i, &a)| atom_binding(a, &side_orders[i], &variable_order));
+        .map(|(i, &a)| atom_binding(a, &side_orders[i], variable_order));
     let main_binding = body_main
         .iter()
         .enumerate()
-        .map(|(i, &a)| atom_binding(a, &main_orders[i], &variable_order));
+        .map(|(i, &a)| atom_binding(a, &main_orders[i], variable_order));
     // We then combine the bindings into one
     let join_binding: JoinBinding = side_binding.chain(main_binding).collect();
 
@@ -166,8 +167,7 @@ pub fn seminaive_join<Dict: Dictionary>(
     }
 
     // Apply filters
-    let (filter_classes, filter_assignments) =
-        compute_filters(variables, &variable_order, &filters);
+    let (filter_classes, filter_assignments) = compute_filters(variables, variable_order, filters);
 
     let node_select_value = tree.select_value(seminaive_union, filter_assignments);
     let node_select_equal = tree.select_equal(node_select_value, filter_classes);
