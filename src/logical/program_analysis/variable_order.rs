@@ -39,23 +39,27 @@ impl VariableOrder {
         self.0.contains_key(variable)
     }
 
-    /// Returns a [`VariableOrder`] which is restricted to the given variables (but preserver their order)
+    /// Returns a [`VariableOrder`] which is restricted to the given variables (but preserve their order)
     pub fn restrict_to(&self, variables: &HashSet<Variable>) -> Self {
-        let mut result = HashMap::<Variable, usize>::new();
-
-        let mut min = usize::MAX;
+        let mut variable_vector = Vec::<Variable>::with_capacity(variables.len());
         for variable in variables {
-            if let Some(variable_index) = self.0.get(variable) {
-                result.insert(*variable, *variable_index);
-
-                if *variable_index < min {
-                    min = *variable_index;
-                }
+            if self.0.get(variable).is_some() {
+                variable_vector.push(*variable);
             }
         }
 
-        for (_, value) in result.iter_mut() {
-            *value -= min;
+        variable_vector.sort_by(|a, b| {
+            variables
+                .get(a)
+                .unwrap()
+                .partial_cmp(variables.get(b).unwrap())
+                .unwrap()
+        });
+
+        let mut result = HashMap::<Variable, usize>::new();
+
+        for (index, variable) in variable_vector.into_iter().enumerate() {
+            result.insert(variable, index);
         }
 
         Self(result)

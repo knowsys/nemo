@@ -1,8 +1,11 @@
 use std::{
     cell::RefCell,
     collections::{hash_map::Entry, HashMap, HashSet},
+    fmt::Debug,
     rc::{Rc, Weak},
 };
+
+use ascii_tree::{write_tree, Tree};
 
 use crate::physical::{
     tabular::operations::{
@@ -91,7 +94,6 @@ pub enum ExecutionResult<TableKey: TableKeyType> {
 }
 
 /// Represents the plan for calculating a table
-#[derive(Debug)]
 pub struct ExecutionTree<TableKey: TableKeyType> {
     /// All the nodes in the tree.
     nodes: Vec<ExecutionNodeOwned<TableKey>>,
@@ -101,6 +103,12 @@ pub struct ExecutionTree<TableKey: TableKeyType> {
     result: ExecutionResult<TableKey>,
     /// Name which identifies this operation for timing.
     name: String,
+}
+
+impl<TableKey: TableKeyType> Debug for ExecutionTree<TableKey> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write_tree(f, &self.ascii_tree())
+    }
 }
 
 /// Public interface for [`ExecutionTree`]
@@ -275,6 +283,92 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     ) -> ExecutionNodeRef<TableKey> {
         let new_node = ExecutionNode::AppendNulls(subnode, num_nulls);
         self.push_and_return_ref(new_node)
+    }
+
+    fn ascii_tree_recursive(node: ExecutionNodeRef<TableKey>) -> Tree {
+        let node_rc = node
+            .0
+            .upgrade()
+            .expect("Referenced execution node has been deleted");
+        let node_ref = &*node_rc.as_ref().borrow();
+
+        match node_ref {
+            ExecutionNode::FetchTable(key) => {
+                Tree::Leaf(vec![format!("Permanent Table: {:?}", key)])
+            }
+            ExecutionNode::FetchTemp(id) => Tree::Leaf(vec![format!("Temporary Table: {:}", id)]),
+            ExecutionNode::Join(subnodes, bindings) => {
+                let subtrees = subnodes
+                    .iter()
+                    .map(|n| Self::ascii_tree_recursive(n.clone()))
+                    .collect();
+
+                Tree::Node(String::from(format!("Join {:?}", bindings)), subtrees)
+            }
+            ExecutionNode::Union(subnodes) => {
+                let subtrees = subnodes
+                    .iter()
+                    .map(|n| Self::ascii_tree_recursive(n.clone()))
+                    .collect();
+
+                Tree::Node(String::from("Union"), subtrees)
+            }
+            ExecutionNode::Minus(node_left, node_right) => {
+                let subtree_left = Self::ascii_tree_recursive(node_left.clone());
+                let subtree_right = Self::ascii_tree_recursive(node_right.clone());
+
+                Tree::Node(String::from("Minus"), vec![subtree_left, subtree_right])
+            }
+            ExecutionNode::Project(subnode, reorder) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(
+                    String::from(format!("Project {:?}", reorder)),
+                    vec![subtree],
+                )
+            }
+            ExecutionNode::SelectValue(subnode, assignments) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(
+                    String::from(format!("Select Value {:?}", assignments)),
+                    vec![subtree],
+                )
+            }
+            ExecutionNode::SelectEqual(subnode, classes) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(
+                    String::from(format!("Select Equal {:?}", classes)),
+                    vec![subtree],
+                )
+            }
+            ExecutionNode::AppendColumns(subnode, instructions) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(
+                    String::from(format!("Append Columns {:?}", instructions)),
+                    vec![subtree],
+                )
+            }
+            ExecutionNode::AppendNulls(subnode, num_nulls) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(
+                    String::from(format!("Append Nulls {}", num_nulls)),
+                    vec![subtree],
+                )
+            }
+        }
+    }
+
+    /// Return an ascii tree representation of the [`ExecutionTree`]
+    pub fn ascii_tree(&self) -> Tree {
+        if let Some(root) = self.root().clone() {
+            Self::ascii_tree_recursive(root)
+        } else {
+            Tree::Leaf(vec![])
+        }
     }
 }
 

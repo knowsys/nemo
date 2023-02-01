@@ -1,5 +1,6 @@
 use core::hash::Hash;
 use std::collections::{hash_map::Entry, HashMap};
+use std::fmt::Debug;
 
 use bytesize::ByteSize;
 
@@ -35,7 +36,7 @@ use super::{
 /// Type which represents table id.
 pub type TableId = usize;
 /// Traits which have to be satisfied by a TableKey type.
-pub trait TableKeyType: Eq + Hash + Clone {}
+pub trait TableKeyType: Debug + Eq + Hash + Clone {}
 
 /// Struct that contains useful information about a trie
 /// as well as the actual owner of the trie.

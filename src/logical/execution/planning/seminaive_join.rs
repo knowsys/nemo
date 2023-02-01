@@ -90,6 +90,7 @@ fn subtree_join<Dict: Dictionary>(
 
 /// Given a list of atoms and filters compute the appropriate execution tree to perform the join of those atoms
 /// with the seminaive evaluation strategy.
+/// Note: The [`VariableOrder`] must only contain variables that occur in the `atoms` parameter.
 pub fn seminaive_join<Dict: Dictionary>(
     tree: &mut ExecutionTree<TableKey>,
     table_manager: &TableManager<Dict>,

@@ -99,6 +99,13 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
         variable_order: VariableOrder,
         step_number: usize,
     ) -> Vec<ExecutionTree<TableKey>> {
+        // TODO: We need like three versions of the same variable order in this function
+        // Clearly, some more thinking is needed
+        let normalized_head_variable_order = compute_normalized_variable_order(
+            &self.normalized_head_atoms,
+            variable_order.restrict_to(&self.analysis.head_variables),
+        );
+
         let mut trees = Vec::<ExecutionTree<TableKey>>::new();
 
         // Resulting trie will contain all the non-satisfied body matches
@@ -123,7 +130,7 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
                 .cmp(variable_order.get(b).unwrap())
         });
 
-        // Get the appropriate `Reordering` object that
+        // Get the appropriate `Reordering` object that projects from the body join to the frontier variables
         let body_projection_reorder = Reordering::new(
             body_variables_in_order
                 .iter()
@@ -150,7 +157,7 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
             table_manager,
             rule_info.step_last_applied,
             step_number,
-            &variable_order,
+            &normalized_head_variable_order,
             &self.analysis.head_variables,
             &self
                 .normalized_head_atoms
@@ -178,17 +185,17 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
         let head_projected_key = TableKey::from_name(head_projected_name, head_projected_order);
         let mut tree_head_projected = ExecutionTree::<TableKey>::new(
             "Head (Restricted): Sat. Frontier".to_string(),
-            ExecutionResult::Save(head_projected_key),
+            ExecutionResult::Save(head_projected_key.clone()),
         );
 
-        // Get a vector of all the head variables but sorted in the variable order
+        // Get a vector of all the normalized head variables but sorted in the variable order
         let mut head_variables_in_order: Vec<&Variable> =
-            self.analysis.head_variables.iter().collect();
+            normalized_head_variable_order.iter().collect();
         head_variables_in_order.sort_by(|a, b| {
-            variable_order
+            normalized_head_variable_order
                 .get(a)
                 .unwrap()
-                .cmp(variable_order.get(b).unwrap())
+                .cmp(normalized_head_variable_order.get(b).unwrap())
         });
 
         // Get the appropriate `Reordering` object that projects the head join down to the frontier variables
@@ -221,13 +228,18 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
         trees.push(tree_head_projected);
 
         // 3.Compute the unsatisfied matches by taking the difference between the projected body and projected head matches
-        let node_satisfied = subtree_union(
+        let mut node_satisfied = subtree_union(
             &mut tree_unsatisfied,
             table_manager,
             self.analysis.head_matches_identifier,
-            0..(step_number + 1),
+            0..step_number,
             &Reordering::default(self.frontier_variables.len()),
         );
+
+        // The above does not include the table computed in this iteration, so we need to load and include it
+        let node_fetch_sat = tree_unsatisfied.fetch_table(head_projected_key);
+        node_satisfied.add_subnode(node_fetch_sat);
+
         let node_unsatisfied = tree_unsatisfied.minus(node_body_project, node_satisfied);
 
         // Append new nulls
@@ -311,4 +323,19 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
         }
         trees
     }
+}
+
+/// Helper function to compute a variable order for a normalized
+fn compute_normalized_variable_order(atoms: &[Atom], mut order: VariableOrder) -> VariableOrder {
+    for atom in atoms {
+        for term in atom.terms() {
+            if let Term::Variable(variable) = term {
+                if order.get(variable).is_none() {
+                    order.push(*variable);
+                }
+            }
+        }
+    }
+
+    order
 }

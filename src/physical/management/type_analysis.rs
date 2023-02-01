@@ -342,9 +342,11 @@ impl TypeTree {
                 let subtype_node = Self::propagate_up(instance, temp_schemas, subtree.clone())?;
                 let mut new_schema = subtype_node.schema.clone();
 
-                for _ in 0..*num_nulls {
-                    // TODO: Revise this once type system is complete
-                    new_schema.add_entry(DataTypeName::U64, false, true);
+                if !subtype_node.schema.is_empty() {
+                    for _ in 0..*num_nulls {
+                        // TODO: Revise this once type system is complete
+                        new_schema.add_entry(DataTypeName::U64, false, true);
+                    }
                 }
 
                 Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
