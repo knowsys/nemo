@@ -59,13 +59,15 @@ debug=true
 inherits = "dev"
 debug-assertions = false
 
-#profile with minimum executable size
-[profile.release-minimum]
+#profile with minimal executable size
+[profile.release-minimal]
 inherits = "release"
 panic = "abort"
 debug=false
 strip=true
 
+[profile.bench]
+inherits = "release-minimal"
 
 [[bench]]
 name = "seek"
