@@ -1,12 +1,14 @@
 //! Code for timing blocks of code
 
 use ascii_tree::{write_tree, Tree};
+use howlong::*;
 use linked_hash_map::LinkedHashMap;
 use once_cell::sync::Lazy;
+use std::fmt;
 use std::{
     str::FromStr,
     sync::{Mutex, MutexGuard},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 /// Global instance of the [`TimedCode`]
@@ -16,20 +18,49 @@ static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
 });
 
 /// Represents a block of code that is timed
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct TimedCodeInfo {
-    accumulated_time: Duration,
-
-    start_time: Option<Instant>,
+    total_system_time: Duration,
+    total_process_time: Duration,
+    total_thread_time: Duration,
+    start_system: Option<TimePoint>,
+    start_process: Option<TimePoint>,
+    start_thread: Option<TimePoint>,
+    runs: u64,
 }
 
 impl TimedCodeInfo {
     /// Create new [`TimedCodeInfo`] object
     pub fn new() -> Self {
         Self {
-            accumulated_time: Duration::from_secs(0),
-            start_time: None,
+            total_system_time: Duration::from_secs(0),
+            total_process_time: Duration::from_secs(0),
+            total_thread_time: Duration::from_secs(0),
+            start_system: None,
+            start_process: None,
+            start_thread: None,
+            runs: 0,
         }
+    }
+}
+
+impl fmt::Debug for TimedCodeInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let run_msg;
+        if self.start_system.is_some() {
+            run_msg = "currently running";
+        } else {
+            run_msg = "currently not running";
+        }
+        write!(
+            f,
+            "TimedCodeInfo [totals (msec): {}/{}/{}, {:?} completed runs, {}]",
+            self.total_system_time.as_millis(),
+            self.total_process_time.as_millis(),
+            self.total_thread_time.as_millis(),
+            self.runs,
+            run_msg
+        )
     }
 }
 
@@ -41,7 +72,7 @@ pub enum TimedSorting {
     /// Alphabetical by the title of the block
     Alphabetical,
     /// Show the blocks which took longest first
-    LongestTime,
+    LongestThreadTime,
 }
 
 impl Default for TimedSorting {
@@ -114,9 +145,11 @@ impl TimedCode {
             return;
         }
 
-        debug_assert!(self.info.start_time.is_none());
+        debug_assert!(self.info.start_thread.is_none());
 
-        self.info.start_time = Some(Instant::now());
+        self.info.start_system = Some(HighResolutionClock::now());
+        self.info.start_process = Some(ProcessRealCPUClock::now());
+        self.info.start_thread = Some(ThreadClock::now());
     }
 
     /// Stop the current measurement and save the times
@@ -125,20 +158,34 @@ impl TimedCode {
             return Duration::ZERO;
         }
 
-        debug_assert!(self.info.start_time.is_some());
+        debug_assert!(self.info.start_system.is_some());
 
-        let start = self
+        let start_system = self
             .info
-            .start_time
-            .expect("When calling stop it is assumed that start was called before");
-        let now = Instant::now();
+            .start_system
+            .expect("start() must be called before calling stop()");
+        let start_process = self
+            .info
+            .start_process
+            .expect("start() must be called before calling stop()");
+        let start_thread = self
+            .info
+            .start_thread
+            .expect("start() must be called before calling stop()");
 
-        let duration = now - start;
+        let duration_system = HighResolutionClock::now() - start_system;
+        let duration_process = ProcessRealCPUClock::now() - start_process;
+        let duration_thread = ThreadClock::now() - start_thread;
 
-        self.info.accumulated_time += duration;
-        self.info.start_time = None;
+        self.info.total_system_time += duration_system;
+        self.info.total_process_time += duration_process;
+        self.info.total_thread_time += duration_thread;
+        self.info.start_system = None;
+        self.info.start_process = None;
+        self.info.start_thread = None;
+        self.info.runs += 1;
 
-        duration
+        duration_thread
     }
 
     fn apply_display_option<'a>(
@@ -150,10 +197,10 @@ impl TimedCode {
         match option.sorting {
             TimedSorting::Default => {}
             TimedSorting::Alphabetical => blocks.sort_by(|a, b| a.0.partial_cmp(b.0).unwrap()),
-            TimedSorting::LongestTime => blocks.sort_by(|a, b| {
+            TimedSorting::LongestThreadTime => blocks.sort_by(|a, b| {
                 b.1.info
-                    .accumulated_time
-                    .partial_cmp(&a.1.info.accumulated_time)
+                    .total_thread_time
+                    .partial_cmp(&a.1.info.total_thread_time)
                     .unwrap()
             }),
         };
@@ -165,15 +212,9 @@ impl TimedCode {
         blocks
     }
 
-    /// Turns e.g. (Test, 0.642355) into "Test [64.2%]"
-    fn format_title(title: &String, percentage: f64) -> String {
-        let percentage_string = format!("{percentage:.1}");
-
-        let mut result = String::clone(title);
-        result.push_str(" [");
-        result.push_str(&percentage_string);
-        result.push_str("%]");
-
+    /// Turns e.g. (Test, 0.642355,1234,56) into "Test [64.2%, 1234ms, 56x]"
+    fn format_title(title: &String, percentage: f64, msecs: u128, runs: u64) -> String {
+        let result = format!("{title} [{percentage:.1}%, {msecs}ms, {runs}x]");
         result
     }
 
@@ -199,10 +240,10 @@ impl TimedCode {
 
         let filtered_blocks = TimedCode::apply_display_option(current_node, current_option);
         for block in filtered_blocks {
-            let percentage = if current_node.info.accumulated_time > Duration::new(0, 0) {
+            let percentage = if current_node.info.total_thread_time > Duration::new(0, 0) {
                 100.0
-                    * (block.1.info.accumulated_time.as_secs_f64()
-                        / current_node.info.accumulated_time.as_secs_f64())
+                    * (block.1.info.total_thread_time.as_secs_f64()
+                        / current_node.info.total_thread_time.as_secs_f64())
             } else {
                 0.0
             };
@@ -210,7 +251,12 @@ impl TimedCode {
             subnodes.push(TimedCode::create_tree_recursive(
                 current_layer + 1,
                 block.1,
-                TimedCode::format_title(block.0, percentage),
+                TimedCode::format_title(
+                    block.0,
+                    percentage,
+                    block.1.info.total_thread_time.as_millis(),
+                    block.1.info.runs,
+                ),
                 options,
             ));
         }
@@ -224,11 +270,12 @@ impl TimedCode {
 
     /// Creates an ASCII tree
     pub fn create_tree(&self, title: &str, options: &[TimedDisplay]) -> Tree {
-        let mut title_string = String::from_str(title).unwrap();
-        title_string.push_str(" [");
-        title_string.push_str(&self.info.accumulated_time.as_millis().to_string());
-        title_string.push_str(" ms]");
-
+        let title_string: String = format!(
+            "{title} [system/process/thread (ms): {}/{}/{}]",
+            self.info.total_system_time.as_millis(),
+            self.info.total_process_time.as_millis(),
+            self.info.total_thread_time.as_millis()
+        );
         TimedCode::create_tree_recursive(0, self, title_string, options)
     }
 

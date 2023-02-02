@@ -40,7 +40,7 @@ fn main() {
             &[
                 TimedDisplay::default(),
                 TimedDisplay::default(),
-                TimedDisplay::new(stage2::meta::timing::TimedSorting::LongestTime, 0)
+                TimedDisplay::new(stage2::meta::timing::TimedSorting::LongestThreadTime, 0)
             ]
         )
     );
