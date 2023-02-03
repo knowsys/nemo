@@ -27,7 +27,7 @@ pub struct RuleAnalysis {
     pub promising_variable_orders: Vec<VariableOrder>,
 }
 
-fn is_recursive(rule: &Rule) -> bool {
+fn is_recursive<LogicalTypes: LogicalTypeCollection>(rule: &Rule<LogicalTypes>) -> bool {
     rule.head().iter().any(|h| {
         rule.body()
             .iter()
@@ -36,7 +36,7 @@ fn is_recursive(rule: &Rule) -> bool {
     })
 }
 
-fn is_existential(rule: &Rule) -> bool {
+fn is_existential<LogicalTypes: LogicalTypeCollection>(rule: &Rule<LogicalTypes>) -> bool {
     rule.head().iter().any(|a| {
         a.terms()
             .iter()
@@ -56,7 +56,10 @@ fn get_variables(atoms: &[&Atom]) -> HashSet<Variable> {
     result
 }
 
-fn analyze_rule(rule: &Rule, promising_variable_orders: Vec<VariableOrder>) -> RuleAnalysis {
+fn analyze_rule<LogicalTypes: LogicalTypeCollection>(
+    rule: &Rule<LogicalTypes>,
+    promising_variable_orders: Vec<VariableOrder>,
+) -> RuleAnalysis {
     let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
     let head_atoms: Vec<&Atom> = rule.head().iter().collect();
 

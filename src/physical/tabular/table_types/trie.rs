@@ -1,6 +1,7 @@
 use bytesize::ByteSize;
 
 use crate::generate_cast_statements;
+use crate::logical::types::{LogicalTypeCollection, LogicalTypeEnum};
 use crate::logical::Permutator;
 use crate::physical::columnar::operations::{ColumnScanCast, ColumnScanCastEnum};
 use crate::physical::columnar::traits::columnscan::{ColumnScanCell, ColumnScanEnum};
@@ -60,8 +61,16 @@ impl Trie {
     }
 
     /// Return a [`DebugTrie`] from the [`Trie`]
-    pub fn debug<'a, Dict: Dictionary>(&'a self, dict: &'a Dict) -> DebugTrie<'a, Dict> {
-        DebugTrie { trie: self, dict }
+    pub fn debug<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
+        &'a self,
+        dict: &'a Dict,
+        types: Option<&'a [LogicalTypes]>,
+    ) -> DebugTrie<'a, Dict, LogicalTypes> {
+        DebugTrie {
+            trie: self,
+            dict,
+            types,
+        }
     }
 
     /// Returns the sum of the lengths of each column
@@ -76,10 +85,12 @@ impl Trie {
     }
 
     // TODO: unify this with Display Trait implementation
-    pub(crate) fn format_as_csv<Dict: Dictionary>(
+    // TODO: the logical types should not get to this level; when outputting tables, this should probably go through the table manager or execution engine that can bring the physical types back to logical types and then output them as strings
+    pub(crate) fn format_as_csv<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
         &self,
         f: &mut fmt::Formatter<'_>,
         dict: &Dict,
+        types: Option<&[LogicalTypes]>,
     ) -> fmt::Result {
         if self
             .columns
@@ -102,11 +113,13 @@ impl Trie {
             .last()
             .expect("we return early if columns are empty")
             .iter()
-            .map(|val| match val {
-                DataValueT::U64(constant) => dict
-                    .entry(constant.try_into().unwrap())
-                    .unwrap_or_else(|| format!("<{constant} should have been interned>")),
-                _ => val.to_string(),
+            .map(|val| {
+                types
+                    .map(|types| *types.last().expect("there are as many types as columns"))
+                    .unwrap_or_default()
+                    .convert_from_data_value_t(&val)
+                    .expect("DataValueT should be in line with logical column type")
+                    .write(dict)
             })
             .collect()];
         for column_index in (0..(self.columns.len() - 1)).rev() {
@@ -129,23 +142,31 @@ impl Trie {
                     .iter()
                     .zip(padding_lengths)
                     .flat_map(|(val, pl)| {
-                        iter::once(match val {
-                            DataValueT::U64(constant) => {
-                                dict.entry(constant.try_into().unwrap()).unwrap_or_else(|| {
-                                    format!("<{constant} should have been interned>")
+                        iter::once(
+                            types
+                                .map(|types| {
+                                    *types
+                                        .get(column_index)
+                                        .expect("there are as many types as columns")
                                 })
-                            }
-                            _ => val.to_string(),
-                        })
+                                .unwrap_or_default()
+                                .convert_from_data_value_t(&val)
+                                .expect("DataValueT should be in line with logical column type")
+                                .write(dict),
+                        )
                         .chain(
-                            iter::repeat(match val {
-                                DataValueT::U64(constant) => {
-                                    dict.entry(constant.try_into().unwrap()).unwrap_or_else(|| {
-                                        format!("<{constant} should have been interned>")
+                            iter::repeat(
+                                types
+                                    .map(|types| {
+                                        *types
+                                            .get(column_index)
+                                            .expect("there are as many types as columns")
                                     })
-                                }
-                                _ => val.to_string(),
-                            })
+                                    .unwrap_or_default()
+                                    .convert_from_data_value_t(&val)
+                                    .expect("DataValueT should be in line with logical column type")
+                                    .write(dict),
+                            )
                             .take(pl),
                         )
                     })
@@ -182,14 +203,17 @@ impl ByteSized for Trie {
 
 /// [`Trie`] which also contains an associated dictionary for displaying proper names
 #[derive(Debug)]
-pub struct DebugTrie<'a, Dict: Dictionary> {
+pub struct DebugTrie<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
     trie: &'a Trie,
     dict: &'a Dict,
+    types: Option<&'a [LogicalTypes]>,
 }
 
-impl<Dict: Dictionary> fmt::Display for DebugTrie<'_, Dict> {
+impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> fmt::Display
+    for DebugTrie<'_, Dict, LogicalTypes>
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.trie.format_as_csv(f, self.dict)
+        self.trie.format_as_csv(f, self.dict, self.types)
     }
 }
 

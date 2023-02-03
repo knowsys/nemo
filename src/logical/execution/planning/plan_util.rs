@@ -6,6 +6,8 @@ use crate::{
     logical::{
         model::{Atom, Filter, Term, Variable},
         program_analysis::variable_order::VariableOrder,
+        types::LogicalTypeCollection,
+        types::LogicalTypeEnum,
     },
     physical::{
         tabular::operations::{triescan_select::SelectEqualClasses, ValueAssignment},
@@ -77,10 +79,11 @@ pub fn join_binding(
 
 /// Calculate helper structures that define the filters that need to be applied.
 /// TODO: Revise this when updating the type system.
-pub fn filters(
+pub fn filters<LogicalTypes: LogicalTypeCollection>(
     body_variables: &HashSet<Variable>,
     variable_order: &VariableOrder,
     filters: &[&Filter],
+    variable_types: &HashMap<Variable, LogicalTypes>,
 ) -> (SelectEqualClasses, Vec<ValueAssignment>) {
     let mut body_variables_sorted: Vec<Variable> = body_variables.clone().into_iter().collect();
     body_variables_sorted.sort_by(|a, b| variable_order.get(a).cmp(&variable_order.get(b)));
@@ -141,14 +144,17 @@ pub fn filters(
                 }
             }
             _ => {
-                if let Some(datavalue) = filter.right.to_datavalue_t() {
-                    filter_assignments.push(ValueAssignment {
-                        column_idx: *variable_to_columnindex.get(&filter.left).unwrap(),
-                        value: datavalue,
-                    });
-                } else {
-                    // TODO: Not sure what to do in this case
-                }
+                // TODO: proper error handling
+                let datavalue = variable_types
+                    .get(&filter.left)
+                    .expect("We expect a type for every variable (it might be the default type).")
+                    .convert_from_ground_term(&filter.right)
+                    .expect("for now we just expect the convertion to work")
+                    .as_data_value_t();
+                filter_assignments.push(ValueAssignment {
+                    column_idx: *variable_to_columnindex.get(&filter.left).unwrap(),
+                    value: datavalue,
+                });
             }
         }
     }

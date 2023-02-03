@@ -90,7 +90,7 @@ pub struct RuleParser<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection>
     /// The external data sources.
     sources: RefCell<Vec<DataSourceDeclaration>>,
     /// Declarations of predicates with their types.
-    predicate_declarations: RefCell<Vec<PredicateTypeDeclaration<LogicalTypes>>>, // TODO: why are all of these ref cells?
+    pub predicate_declarations: RefCell<HashMap<Identifier, Vec<LogicalTypes>>>,
 }
 
 // NOTE: deriving this does not work
@@ -219,7 +219,7 @@ impl<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> RuleParser<'a, D
 
     fn parse_predicate_declaration(
         &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<PredicateTypeDeclaration<LogicalTypes>> {
+    ) -> impl FnMut(&'a str) -> IntermediateResult<(Identifier, Vec<LogicalTypes>)> {
         traced("parse_predicate_declaration", move |input| {
             let (remainder, (predicate, types)) = delimited(
                 terminated(tag("@decl"), multispace1),
@@ -234,11 +234,11 @@ impl<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> RuleParser<'a, D
                 self.parse_dot(),
             )(input)?;
 
-            let predicate_type_declaration = PredicateTypeDeclaration::new(predicate, types);
             self.predicate_declarations
                 .borrow_mut()
-                .push(predicate_type_declaration.clone());
-            Ok((remainder, predicate_type_declaration))
+                .entry(predicate)
+                .or_insert(types.clone());
+            Ok((remainder, (predicate, types)))
         })
     }
 
@@ -325,7 +325,9 @@ impl<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> RuleParser<'a, D
     }
 
     /// Parses a statement.
-    pub fn parse_statement(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Statement> {
+    pub fn parse_statement(
+        &'a self,
+    ) -> impl FnMut(&'a str) -> IntermediateResult<Statement<LogicalTypes>> {
         traced(
             "parse_statement",
             alt((
@@ -438,7 +440,7 @@ impl<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> RuleParser<'a, D
     }
 
     /// Parse a rule.
-    pub fn parse_rule(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Rule> {
+    pub fn parse_rule(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Rule<LogicalTypes>> {
         traced("parse_rule", move |input| {
             let (remainder, (head, body)) = pair(
                 terminated(
@@ -965,10 +967,16 @@ mod test {
             "{pp}(?{xx}) :- {aa}(?{xx}, ?{yy}), ?{yy} > ?{xx}, {bb}(?{zz}), ?{xx} = 3, ?{zz} < 7, ?{xx} <= ?{zz}, ?{zz} >= ?{yy} ."
         );
 
+        let mut var_types = HashMap::new();
+
+        var_types.insert(Variable::Universal(x), LogicalTypes::GenericEverything);
+        var_types.insert(Variable::Universal(y), LogicalTypes::GenericEverything);
+        var_types.insert(Variable::Universal(z), LogicalTypes::GenericEverything);
+
         assert_parse!(
             parser.parse_rule(),
             &rule,
-            Rule::new(
+            Rule::<LogicalTypes>::new_with_types(
                 vec![Atom::new(p, vec![Term::Variable(Variable::Universal(x))])],
                 vec![
                     Literal::Positive(Atom::new(
@@ -1006,7 +1014,8 @@ mod test {
                         Variable::Universal(z),
                         Term::Variable(Variable::Universal(y)),
                     ),
-                ]
+                ],
+                var_types.clone(), // TODO: not sure why I needed to clone here...
             )
         );
     }

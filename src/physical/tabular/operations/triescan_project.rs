@@ -264,6 +264,7 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanProject;
+    use crate::logical::types::DefaultLogicalTypeCollection;
     use crate::physical::columnar::traits::column::Column;
     use crate::physical::datatypes::DataValueT;
     use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
@@ -509,8 +510,22 @@ mod test {
 
         log::debug!(
             "\n{}\n\n{}",
-            trie.debug(&PrefixedStringDictionary::default()),
-            trie_reordered.debug(&PrefixedStringDictionary::default())
+            trie.debug(
+                &PrefixedStringDictionary::default(),
+                Some(&[
+                    DefaultLogicalTypeCollection::UnsignedInteger,
+                    DefaultLogicalTypeCollection::UnsignedInteger,
+                    DefaultLogicalTypeCollection::UnsignedInteger
+                ])
+            ),
+            trie_reordered.debug(
+                &PrefixedStringDictionary::default(),
+                Some(&[
+                    DefaultLogicalTypeCollection::UnsignedInteger,
+                    DefaultLogicalTypeCollection::UnsignedInteger,
+                    DefaultLogicalTypeCollection::UnsignedInteger
+                ])
+            )
         );
 
         assert_eq!(trie.row_num(), trie_reordered.row_num());

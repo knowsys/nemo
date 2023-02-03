@@ -1,11 +1,11 @@
 //! Module defining the strategy for calculating all body matches for a rule application.
 
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range};
 
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Atom, Filter, Identifier, Rule},
+        model::{Atom, Filter, Identifier, Rule, Variable},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::TableKey,
         types::LogicalTypeCollection,
@@ -22,12 +22,12 @@ use crate::{
 use super::plan_util::{filters, join_binding, order_atom, BODY_JOIN};
 
 /// Strategies for calculating all body matches.
-pub trait BodyStrategy<'a, Dict: Dictionary> {
+pub trait BodyStrategy<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
     /// Do preparation work for the planning phase.
-    fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self;
+    fn initialize(rule: &'a Rule<LogicalTypes>, analysis: &'a RuleAnalysis) -> Self;
 
     /// Calculate the concrete plan given a variable order.
-    fn execution_tree<LogicalTypes: LogicalTypeCollection>(
+    fn execution_tree(
         &self,
         table_manager: &TableManager<Dict, LogicalTypes>,
         rule_info: &RuleInfo,
@@ -38,16 +38,17 @@ pub trait BodyStrategy<'a, Dict: Dictionary> {
 
 /// Implementation of the semi-naive existential rule evaluation strategy.
 #[derive(Debug)]
-pub struct SeminaiveStrategy<'a> {
+pub struct SeminaiveStrategy<'a, LogicalTypes: LogicalTypeCollection> {
     body: Vec<&'a Atom>,
     filters: Vec<&'a Filter>,
+    variable_types: &'a HashMap<Variable, LogicalTypes>,
 
     analysis: &'a RuleAnalysis,
 }
 
-impl SeminaiveStrategy<'_> {
+impl<LogicalTypes: LogicalTypeCollection> SeminaiveStrategy<'_, LogicalTypes> {
     // Calculate a subtree consisting of a union of in-memory tables.
-    fn subtree_union<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
+    fn subtree_union<Dict: Dictionary>(
         &self,
         tree: &mut ExecutionTree<TableKey>,
         manager: &TableManager<Dict, LogicalTypes>,
@@ -74,7 +75,7 @@ impl SeminaiveStrategy<'_> {
 
     // Calculate a subtree consiting of join representing one variant of an seminaive evaluation.
     #[allow(clippy::too_many_arguments)]
-    fn subtree_join<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
+    fn subtree_join<Dict: Dictionary>(
         &self,
         tree: &mut ExecutionTree<TableKey>,
         manager: &TableManager<Dict, LogicalTypes>,
@@ -143,21 +144,25 @@ impl SeminaiveStrategy<'_> {
     }
 }
 
-impl<'a, Dict: Dictionary> BodyStrategy<'a, Dict> for SeminaiveStrategy<'a> {
-    fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self {
+impl<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> BodyStrategy<'a, Dict, LogicalTypes>
+    for SeminaiveStrategy<'a, LogicalTypes>
+{
+    fn initialize(rule: &'a Rule<LogicalTypes>, analysis: &'a RuleAnalysis) -> Self {
         // Since we don't support negation yet, we can just turn the literals into atoms
         // TODO: Think about negation here
         let body: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
         let filters = rule.filters().iter().collect::<Vec<&Filter>>();
+        let variable_types = rule.variable_types();
 
         Self {
             body,
             filters,
             analysis,
+            variable_types,
         }
     }
 
-    fn execution_tree<LogicalTypes: LogicalTypeCollection>(
+    fn execution_tree(
         &self,
         table_manager: &TableManager<Dict, LogicalTypes>,
         rule_info: &RuleInfo,
@@ -241,6 +246,7 @@ impl<'a, Dict: Dictionary> BodyStrategy<'a, Dict> for SeminaiveStrategy<'a> {
                 &self.analysis.body_variables,
                 &variable_order,
                 &self.filters,
+                self.variable_types,
             );
 
             if !filter_assignments.is_empty() {

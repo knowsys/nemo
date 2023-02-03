@@ -67,15 +67,10 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> ExecutionEngine<Dict
         program.normalize();
         let analysis = program.analyze();
 
-        let mut predicate_to_type_declaration: HashMap<Identifier, Vec<LogicalTypes>> =
-            HashMap::new();
-        for decl in program.type_declarations() {
-            predicate_to_type_declaration
-                .entry(decl.predicate())
-                .or_insert(decl.types());
-        }
-        let mut table_manager =
-            TableManager::new(program.get_names().clone(), predicate_to_type_declaration);
+        let mut table_manager = TableManager::new(
+            program.get_names().clone(),
+            program.type_declarations().clone(),
+        ); //TODO: do not clone the type declarations
 
         Self::add_input_sources(&mut table_manager, &program);
         Self::add_input_facts(&mut table_manager, &program);
@@ -153,7 +148,7 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> ExecutionEngine<Dict
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
-        let rule_execution: Vec<RuleExecution<Dict>> = self
+        let rule_execution: Vec<RuleExecution<Dict, LogicalTypes>> = self
             .program
             .rules()
             .iter()
@@ -264,6 +259,12 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> ExecutionEngine<Dict
     /// TODO: Remove this once proper Dictionary support is implemented on the physical layer.
     pub fn get_dict(&self) -> &Dict {
         self.table_manager.get_dict()
+    }
+
+    /// Return the type declarations from the program.
+    /// TODO: Find a better way of sharing this information
+    pub fn get_types(&self) -> &HashMap<Identifier, Vec<LogicalTypes>> {
+        self.program.type_declarations()
     }
 
     /// Iterator over all IDB predicates, with Tries if present.

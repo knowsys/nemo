@@ -25,28 +25,35 @@ use super::{
 
 /// Object responsible for executing a "normal" rule.
 #[derive(Debug)]
-pub struct RuleExecution<'a, Dict: Dictionary> {
+pub struct RuleExecution<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
     analysis: &'a RuleAnalysis,
 
-    body_strategy: SeminaiveStrategy<'a>,
+    body_strategy: SeminaiveStrategy<'a, LogicalTypes>,
     head_strategy: DatalogStrategy,
     _dict: PhantomData<Dict>,
 }
 
-impl<'a, Dict: Dictionary> RuleExecution<'a, Dict> {
+impl<'a, Dict: Dictionary, LogicalTypes: LogicalTypeCollection>
+    RuleExecution<'a, Dict, LogicalTypes>
+{
     /// Create new [`RuleExecution`].
-    pub fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self {
+    pub fn initialize(rule: &'a Rule<LogicalTypes>, analysis: &'a RuleAnalysis) -> Self {
         Self {
             analysis,
-            body_strategy: <SeminaiveStrategy as BodyStrategy<Dict>>::initialize(rule, analysis),
-            head_strategy: <DatalogStrategy as HeadStrategy<Dict>>::initialize(rule, analysis),
+            body_strategy:
+                <SeminaiveStrategy<LogicalTypes> as BodyStrategy<Dict, LogicalTypes>>::initialize(
+                    rule, analysis,
+                ),
+            head_strategy: <DatalogStrategy as HeadStrategy<Dict, LogicalTypes>>::initialize(
+                rule, analysis,
+            ),
             _dict: PhantomData {},
         }
     }
 
     /// Execute the current rule.
     /// Returns the predicates which received new elements.
-    pub fn execute<LogicalTypes: LogicalTypeCollection>(
+    pub fn execute(
         &self,
         program: &Program<Dict, LogicalTypes>,
         table_manager: &mut TableManager<Dict, LogicalTypes>,

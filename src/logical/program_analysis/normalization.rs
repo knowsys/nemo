@@ -9,7 +9,7 @@ use crate::{
 // Transforms a given rule into a "normalized" form.
 // Applies equality filters, e.g., "a(x, y), b(z), y = z" will turn into "a(x, y), b(y)".
 // Also, turns literals like "a(x, 3, x)" into "a(x, y, z), y = 3, z = x".
-fn normalize_rule(rule: &mut Rule) {
+fn normalize_rule<LogicalTypes: LogicalTypeCollection>(rule: &mut Rule<LogicalTypes>) {
     // Apply all equality filters
 
     // We'll just remove everything from rules.filters and put stuff we want to keep here,

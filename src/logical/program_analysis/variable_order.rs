@@ -126,27 +126,27 @@ fn column_order_for(lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
     ColumnOrder::new(partial_col_order)
 }
 
-trait RuleVariableList {
+trait RuleVariableList<LogicalTypes: LogicalTypeCollection> {
     fn filter_cartesian_product(
         self,
         partial_var_order: &VariableOrder,
-        rule: &Rule,
+        rule: &Rule<LogicalTypes>,
     ) -> Vec<Variable>;
 
     fn filter_tries<P: FnMut(&Identifier) -> bool>(
         self,
         partial_var_order: &VariableOrder,
-        rule: &Rule,
+        rule: &Rule<LogicalTypes>,
         required_trie_column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
         predicate_filter: P,
     ) -> Vec<Variable>;
 }
 
-impl RuleVariableList for Vec<Variable> {
+impl<LogicalTypes: LogicalTypeCollection> RuleVariableList<LogicalTypes> for Vec<Variable> {
     fn filter_cartesian_product(
         self,
         partial_var_order: &VariableOrder,
-        rule: &Rule,
+        rule: &Rule<LogicalTypes>,
     ) -> Vec<Variable> {
         let result: Vec<Variable> = self
             .iter()
@@ -173,7 +173,7 @@ impl RuleVariableList for Vec<Variable> {
     fn filter_tries<P: FnMut(&Identifier) -> bool>(
         self,
         partial_var_order: &VariableOrder,
-        rule: &Rule,
+        rule: &Rule<LogicalTypes>,
         required_trie_column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
         mut predicate_filter: P,
     ) -> Vec<Variable> {
@@ -254,7 +254,10 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>
         builder.generate_variable_orders()
     }
 
-    fn get_already_present_idb_edb_count_for_rule_in_tries(&self, rule: &Rule) -> (usize, usize) {
+    fn get_already_present_idb_edb_count_for_rule_in_tries(
+        &self,
+        rule: &Rule<LogicalTypes>,
+    ) -> (usize, usize) {
         let preds_with_tries = rule.body().iter().filter_map(|lit| {
             let pred = lit.predicate();
             self.required_trie_column_orders
@@ -276,7 +279,7 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>
 
     fn generate_variable_orders(&mut self) -> Vec<VariableOrder> {
         // NOTE: We use a BTreeMap to determinise the iteration order for easier debugging; this should not be performance critical
-        let mut remaining_rules: BTreeMap<usize, &Rule> =
+        let mut remaining_rules: BTreeMap<usize, &Rule<LogicalTypes>> =
             self.program.rules().iter().enumerate().collect();
 
         let mut result: Vec<(usize, VariableOrder)> =
@@ -307,7 +310,7 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>
         result.into_iter().map(|(_, ord)| ord).collect()
     }
 
-    fn generate_variable_order_for_rule(&mut self, rule: &Rule) -> VariableOrder {
+    fn generate_variable_order_for_rule(&mut self, rule: &Rule<LogicalTypes>) -> VariableOrder {
         let mut variable_order: VariableOrder = VariableOrder::new();
         let mut remaining_vars = {
             let remaining_vars_unpermutated: Vec<Variable> = rule
@@ -365,7 +368,7 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>
         &mut self,
         variable_order: &VariableOrder,
         must_contain: HashSet<Variable>,
-        rule: &Rule,
+        rule: &Rule<LogicalTypes>,
     ) {
         let literals = rule.body().iter().filter(|lit| {
             let vars: Vec<Variable> = lit.variables().collect();
@@ -461,7 +464,11 @@ mod test {
     };
     use std::collections::{HashMap, HashSet};
 
-    type TestRuleSetWithAdditionalInfo = (Vec<Rule>, Vec<Vec<Variable>>, Vec<(Identifier, usize)>);
+    type TestRuleSetWithAdditionalInfo = (
+        Vec<Rule<DefaultLogicalTypeCollection>>,
+        Vec<Vec<Variable>>,
+        Vec<(Identifier, usize)>,
+    );
 
     impl VariableOrder {
         fn from_vec(vec: Vec<Variable>) -> Self {
@@ -512,7 +519,8 @@ mod test {
         assert_eq!(expected_6, results_6);
     }
 
-    fn get_test_rule_with_vars_where_predicates_are_different() -> (Rule, Vec<Variable>) {
+    fn get_test_rule_with_vars_where_predicates_are_different(
+    ) -> (Rule<DefaultLogicalTypeCollection>, Vec<Variable>) {
         let a = Identifier(11);
         let b = Identifier(12);
         let c = Identifier(13);
@@ -538,7 +546,8 @@ mod test {
         )
     }
 
-    fn get_test_rule_with_vars_where_predicates_are_the_same() -> (Rule, Vec<Variable>) {
+    fn get_test_rule_with_vars_where_predicates_are_the_same(
+    ) -> (Rule<DefaultLogicalTypeCollection>, Vec<Variable>) {
         let a = Identifier(11);
 
         let x = Variable::Universal(Identifier(21));
@@ -656,7 +665,7 @@ mod test {
 
     #[test]
     fn build_preferable_variable_orders_with_different_predicate_rule() {
-        let (rules, var_lists): (Vec<Rule>, Vec<Vec<Variable>>) =
+        let (rules, var_lists): (Vec<Rule<DefaultLogicalTypeCollection>>, Vec<Vec<Variable>>) =
             vec![get_test_rule_with_vars_where_predicates_are_different()]
                 .into_iter()
                 .unzip();
@@ -667,7 +676,7 @@ mod test {
             vec![],
             rules,
             vec![],
-            vec![],
+            HashMap::new(),
             PrefixedStringDictionary::default(),
         );
 
@@ -685,7 +694,7 @@ mod test {
 
     #[test]
     fn build_preferable_variable_orders_with_same_predicate_rule() {
-        let (rules, var_lists): (Vec<Rule>, Vec<Vec<Variable>>) =
+        let (rules, var_lists): (Vec<Rule<DefaultLogicalTypeCollection>>, Vec<Vec<Variable>>) =
             vec![get_test_rule_with_vars_where_predicates_are_the_same()]
                 .into_iter()
                 .unzip();
@@ -696,7 +705,7 @@ mod test {
             vec![],
             rules,
             vec![],
-            vec![],
+            HashMap::new(),
             PrefixedStringDictionary::default(),
         );
 
@@ -714,12 +723,13 @@ mod test {
 
     #[test]
     fn build_preferable_variable_orders_with_both_rules() {
-        let (rules, var_lists): (Vec<Rule>, Vec<Vec<Variable>>) = vec![
-            get_test_rule_with_vars_where_predicates_are_different(),
-            get_test_rule_with_vars_where_predicates_are_the_same(),
-        ]
-        .into_iter()
-        .unzip();
+        let (rules, var_lists): (Vec<Rule<DefaultLogicalTypeCollection>>, Vec<Vec<Variable>>) =
+            vec![
+                get_test_rule_with_vars_where_predicates_are_different(),
+                get_test_rule_with_vars_where_predicates_are_the_same(),
+            ]
+            .into_iter()
+            .unzip();
 
         let program = Program::<PrefixedStringDictionary, DefaultLogicalTypeCollection>::new(
             None,
@@ -727,7 +737,7 @@ mod test {
             vec![],
             rules,
             vec![],
-            vec![],
+            HashMap::new(),
             PrefixedStringDictionary::default(),
         );
 
@@ -882,7 +892,7 @@ mod test {
             ],
             rules,
             vec![],
-            vec![],
+            HashMap::new(),
             PrefixedStringDictionary::default(),
         );
 
@@ -1181,7 +1191,7 @@ mod test {
             ],
             rules,
             vec![],
-            vec![],
+            HashMap::new(),
             PrefixedStringDictionary::default(),
         );
 

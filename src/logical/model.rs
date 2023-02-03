@@ -313,28 +313,46 @@ impl Filter {
 }
 
 /// A rule.
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
-pub struct Rule {
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct Rule<LogicalTypes: LogicalTypeCollection> {
     /// Head atoms of the rule
     head: Vec<Atom>,
     /// Body literals of the rule
     body: Vec<Literal>,
     /// Filters applied to the body
     filters: Vec<Filter>,
+    /// Logical Types for variable positions
+    variable_types: HashMap<Variable, LogicalTypes>,
 }
 
-impl Rule {
+impl<LogicalTypes: LogicalTypeCollection> Rule<LogicalTypes> {
     /// Construct a new rule.
     pub fn new(head: Vec<Atom>, body: Vec<Literal>, filters: Vec<Filter>) -> Self {
         Self {
             head,
             body,
             filters,
+            variable_types: HashMap::new(), // TODO: do not set this empty; I'm just too lazy to adjust the test right now
+        }
+    }
+
+    /// Construct a new rule with types.
+    pub fn new_with_types(
+        head: Vec<Atom>,
+        body: Vec<Literal>,
+        filters: Vec<Filter>,
+        variable_types: HashMap<Variable, LogicalTypes>,
+    ) -> Self {
+        Self {
+            head,
+            body,
+            filters,
+            variable_types, // TODO: this should be the real new function
         }
     }
 
     /// Construct a new rule, validating constraints on variable usage.
-    pub(crate) fn new_validated<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
+    pub(crate) fn new_validated<Dict: Dictionary>(
         head: Vec<Atom>,
         body: Vec<Literal>,
         filters: Vec<Filter>,
@@ -403,10 +421,77 @@ impl Rule {
             ));
         }
 
+        // TODO: all of those checks and more should be done somewhere else but for a preliminary implementation, this should be alright...
+        // TODO: infering of types is also only done in the order in that rules are parsed, a different order may allow to infer more types...
+        // TODO: ground terms should probably also be considered for validation
+        // Check if type declarations are violated; add them if they do not exist
+        let mut type_declarations = parser.predicate_declarations.borrow_mut();
+        let mut variable_types: HashMap<Variable, LogicalTypes> = HashMap::new();
+
+        // FIRST: Assign Types to variables based on known predicate types
+        for (decl, term) in body
+            .iter()
+            .map(|lit| lit.atom())
+            .chain(head.iter())
+            .filter_map(|atom| {
+                type_declarations
+                    .get(&atom.predicate())
+                    .map(|decls| decls.iter().zip(atom.terms()))
+            })
+            .flatten()
+        {
+            if let Term::Variable(var) = term {
+                match variable_types.get(var) {
+                    Some(decl_occ) => {
+                        if decl != decl_occ {
+                            Err(ParseError::UnknownType("declaration mismatch".to_string()))?
+                            // TODO: introduce own error type for this
+                        }
+                    }
+                    None => {
+                        variable_types.insert(*var, *decl);
+                    }
+                }
+            }
+        }
+
+        // SECOND: Set unknown variable types to default type
+        body.iter()
+            .map(|lit| lit.atom())
+            .chain(head.iter())
+            .flat_map(|atom| atom.terms())
+            .for_each(|term| {
+                if let Term::Variable(var) = term {
+                    variable_types.entry(*var).or_insert(Default::default());
+                }
+            });
+
+        // THIRD: Update predicate types based on variable
+        body.iter()
+            .map(|lit| lit.atom())
+            .chain(head.iter())
+            .for_each(|atom| {
+                type_declarations.entry(atom.predicate()).or_insert(
+                    atom.terms()
+                        .iter()
+                        .map(|term| {
+                            if let Term::Variable(var) = term {
+                                *variable_types.get(var).expect(
+                                    "We made sure every variable has a type (possibly default).",
+                                )
+                            } else {
+                                Default::default() // TODO: we should not just treat the constant positions as default probably...
+                            }
+                        })
+                        .collect(),
+                );
+            });
+
         Ok(Rule {
             head,
             body,
             filters,
+            variable_types,
         })
     }
 
@@ -445,6 +530,12 @@ impl Rule {
     pub fn filters_mut(&mut self) -> &mut Vec<Filter> {
         &mut self.filters
     }
+
+    /// Return the variable_types of the rule - immutable.
+    #[must_use]
+    pub fn variable_types(&self) -> &HashMap<Variable, LogicalTypes> {
+        &self.variable_types
+    }
 }
 
 /// A (ground) fact.
@@ -452,12 +543,12 @@ impl Rule {
 pub struct Fact(pub Atom);
 
 /// A statement that can occur in the program.
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
-pub enum Statement {
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum Statement<LogicalTypes: LogicalTypeCollection> {
     /// A fact.
     Fact(Fact),
     /// A rule.
-    Rule(Rule),
+    Rule(Rule<LogicalTypes>),
 }
 
 /// A full program.
@@ -467,9 +558,9 @@ pub struct Program<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
     prefixes: HashMap<String, usize>,
     // TODO: sources and type_declarations could be unified; also sources do not need arities anymore since those can be derived from the type_declarations
     sources: Vec<DataSourceDeclaration>,
-    rules: Vec<Rule>,
+    rules: Vec<Rule<LogicalTypes>>,
     facts: Vec<Fact>,
-    type_declarations: Vec<PredicateTypeDeclaration<LogicalTypes>>,
+    type_declarations: HashMap<Identifier, Vec<LogicalTypes>>,
 
     names: Dict,
 }
@@ -480,9 +571,9 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> Program<Dict, Logica
         base: Option<usize>,
         prefixes: HashMap<String, usize>,
         sources: Vec<DataSourceDeclaration>,
-        rules: Vec<Rule>,
+        rules: Vec<Rule<LogicalTypes>>,
         facts: Vec<Fact>,
-        type_declarations: Vec<PredicateTypeDeclaration<LogicalTypes>>,
+        type_declarations: HashMap<Identifier, Vec<LogicalTypes>>,
         names: Dict,
     ) -> Self {
         Self {
@@ -504,13 +595,13 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> Program<Dict, Logica
 
     /// Return all rules in the program - immutable.
     #[must_use]
-    pub fn rules(&self) -> &Vec<Rule> {
+    pub fn rules(&self) -> &Vec<Rule<LogicalTypes>> {
         &self.rules
     }
 
     /// Return all rules in the program - mutable.
     #[must_use]
-    pub fn rules_mut(&mut self) -> &mut Vec<Rule> {
+    pub fn rules_mut(&mut self) -> &mut Vec<Rule<LogicalTypes>> {
         &mut self.rules
     }
 
@@ -522,7 +613,7 @@ impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> Program<Dict, Logica
 
     /// Return all type declarations in the program.
     #[must_use]
-    pub fn type_declarations(&self) -> &Vec<PredicateTypeDeclaration<LogicalTypes>> {
+    pub fn type_declarations(&self) -> &HashMap<Identifier, Vec<LogicalTypes>> {
         &self.type_declarations
     }
 
@@ -727,31 +818,5 @@ impl DataSourceDeclaration {
             arity,
             source,
         })
-    }
-}
-
-/// Type declarations for a predicate
-#[derive(Debug, Clone)]
-pub struct PredicateTypeDeclaration<LogicalTypes: LogicalTypeCollection> {
-    predicate: Identifier,
-    types: Vec<LogicalTypes>,
-}
-
-impl<LogicalTypes: LogicalTypeCollection> PredicateTypeDeclaration<LogicalTypes> {
-    /// Construct new PredicateTypeDeclaration from values for its fields
-    pub fn new(predicate: Identifier, types: Vec<LogicalTypes>) -> Self {
-        Self { predicate, types }
-    }
-
-    /// Get predicate of declaration
-    #[must_use]
-    pub fn predicate(&self) -> Identifier {
-        self.predicate
-    }
-
-    /// Get types of declaration
-    #[must_use]
-    pub fn types(&self) -> Vec<LogicalTypes> {
-        self.types.clone()
     }
 }

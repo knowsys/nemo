@@ -23,12 +23,12 @@ use crate::{
 use super::plan_util::{join_binding, BODY_JOIN};
 
 /// Strategies for calculating the newly derived tables.
-pub trait HeadStrategy<Dict: Dictionary> {
+pub trait HeadStrategy<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> {
     /// Do preparation work for the planning phase.
-    fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self;
+    fn initialize(rule: &Rule<LogicalTypes>, analysis: &RuleAnalysis) -> Self;
 
     /// Calculate the concrete plan given a variable order.
-    fn execution_tree<LogicalTypes: LogicalTypeCollection>(
+    fn execution_tree(
         &self,
         table_manager: &TableManager<Dict, LogicalTypes>,
         rule_info: &RuleInfo,
@@ -117,8 +117,10 @@ impl DatalogStrategy {
     }
 }
 
-impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
-    fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
+impl<Dict: Dictionary, LogicalTypes: LogicalTypeCollection> HeadStrategy<Dict, LogicalTypes>
+    for DatalogStrategy
+{
+    fn initialize(rule: &Rule<LogicalTypes>, analysis: &RuleAnalysis) -> Self {
         let mut predicate_to_atoms = HashMap::<Identifier, Vec<HeadInstruction>>::new();
 
         for head_atom in rule.head() {
@@ -137,7 +139,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
         }
     }
 
-    fn execution_tree<LogicalTypes: LogicalTypeCollection>(
+    fn execution_tree(
         &self,
         table_manager: &TableManager<Dict, LogicalTypes>,
         _rule_info: &RuleInfo,

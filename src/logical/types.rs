@@ -9,12 +9,14 @@ use std::{
 };
 
 use crate::physical::datatypes::{
-    DataTypeName, DataValueT, Double, Field, Float, HasDataTypeName, WrappableInDataValueT,
+    DataTypeName, DataValueT, Double, Field, HasDataTypeName, WrappableInDataValueT,
 };
 use crate::physical::dictionary::Dictionary;
 
-// TODO: have type for everything (rdfs:resource)
-// Generally: support rdf types
+use super::model::{NumericLiteral, Term};
+
+// TODO: Generally: support rdf types and have some kind of hierarchy
+// TODO: allow type names to be specified as IRIs
 
 /// Marker Trait for Type Parse Errors
 pub trait LogicalTypeParseError: Debug + Display {
@@ -51,7 +53,7 @@ impl LogicalTypeParseError for DefaultLogicalTypeParseError {
 
 /// Trait marking Enums representing a list of logical type names
 pub trait LogicalTypeCollection:
-    Clone + Debug + Display + Eq + FromStr<Err = Self::ParseTypeNameErr>
+    Copy + Clone + Debug + Default + Display + Eq + FromStr<Err = Self::ParseTypeNameErr>
 {
     /// Type that is essentially <Self as FromStr>::Err but we need to set a trait bound on it which I don't know how to set otherwise
     type ParseTypeNameErr: LogicalTypeParseError;
@@ -65,6 +67,12 @@ pub trait LogicalTypeCollection:
         s: &str,
         dict: &mut Dict,
     ) -> Result<Self::LogicalTypeEnum, String>; // TODO: error should not be a string
+
+    /// Convert Ground Term according to type respresented by self
+    fn convert_from_ground_term(&self, gt: &Term) -> Result<Self::LogicalTypeEnum, String>; // TODO: error should not be a string
+
+    /// Convert DataValueT according to type respresented by self
+    fn convert_from_data_value_t(&self, dvt: &DataValueT) -> Result<Self::LogicalTypeEnum, String>; // TODO: error should not be a string
 
     /// Get the corresponding physical data type name
     fn data_type_name(&self) -> DataTypeName;
@@ -80,6 +88,9 @@ pub trait LogicalTypeEnum: Debug {
 
     /// Get underlying physical value as DataValueT
     fn as_data_value_t(&self) -> DataValueT;
+
+    /// Write type into string (inverse of parsing)
+    fn write<Dict: Dictionary>(&self, dict: &Dict) -> String;
 }
 
 /// Trait of types in logical layer
@@ -95,6 +106,12 @@ pub trait LogicalType: Sized {
     /// Parse string according to type respresented by self
     fn parse<Dict: Dictionary>(s: &str, dict: &mut Dict) -> Result<Self, String>; // TODO: error should not be a string
 
+    /// Convert Ground Term according to type respresented by self
+    fn convert_from_ground_term(gt: &Term) -> Result<Self, String>; // TODO: error should not be a string
+
+    /// Convert DataValueT according to type respresented by self
+    fn convert_from_data_value_t(dvt: &DataValueT) -> Result<Self, String>; // TODO: error should not be a string
+
     /// Write type into string (inverse of parsing)
     fn write<Dict: Dictionary>(&self, dict: &Dict) -> String;
 }
@@ -102,7 +119,7 @@ pub trait LogicalType: Sized {
 /// Generate Logical Type Enums by specifying how type names map to actual logical type implementations
 #[macro_export]
 macro_rules! generate_type_collection_and_enum {
-    ([$collection_vis:vis] $name_collection:ident, [$enum_vis:vis] $name_enum:ident, $error_impl:ident, $(($variant_name:ident, $content:ty)),+) => {
+    ([$collection_vis:vis] $name_collection:ident, [$enum_vis:vis] $name_enum:ident, $error_impl:ident, $(($variant_name:ident, $content:ty)),+, $default_name:ident) => {
         /// Generated Logical Type Collection Type $name_collection
         #[derive(Copy, Clone, Debug, PartialEq, Eq)]
         $collection_vis enum $name_collection {
@@ -117,6 +134,12 @@ macro_rules! generate_type_collection_and_enum {
                 match self {
                     $(Self::$variant_name => write!(f, stringify!($variant_name))),+
                 }
+            }
+        }
+
+        impl Default for $name_collection {
+            fn default() -> Self {
+                Self::$default_name
             }
         }
 
@@ -138,6 +161,18 @@ macro_rules! generate_type_collection_and_enum {
             fn parse<Dict: Dictionary>(&self, s: &str, dict: &mut Dict) -> Result<Self::LogicalTypeEnum, String> { // TODO: error should not be a string
                 match self {
                     $(Self::$variant_name => <$content>::parse(s, dict).map(|val| val.as_logical_type_enum())),+ // TODO: error should not be a string
+                }
+            }
+
+            fn convert_from_ground_term(&self, gt: &Term) -> Result<Self::LogicalTypeEnum, String> { // TODO: error should not be a string
+                match self {
+                    $(Self::$variant_name => <$content>::convert_from_ground_term(gt).map(|val| val.as_logical_type_enum())),+ // TODO: error should not be a string
+                }
+            }
+
+            fn convert_from_data_value_t(&self, dvt: &DataValueT) -> Result<Self::LogicalTypeEnum, String> { // TODO: error should not be a string
+                match self {
+                    $(Self::$variant_name => <$content>::convert_from_data_value_t(dvt).map(|val| val.as_logical_type_enum())),+ // TODO: error should not be a string
                 }
             }
 
@@ -171,6 +206,12 @@ macro_rules! generate_type_collection_and_enum {
                     $(Self::$variant_name(val) => val.to_physical().wrap_in_data_value_t()),+
                 }
             }
+
+            fn write<Dict: Dictionary>(&self, dict: &Dict) -> String {
+                match self {
+                    $(Self::$variant_name(val) => val.write(dict)),+
+                }
+            }
         }
 
         $(
@@ -193,8 +234,8 @@ generate_type_collection_and_enum!(
     DefaultLogicalTypeParseError,
     (GenericEverything, GenericEverything),
     (UnsignedInteger, Number<u64>),
-    (Float, Number<Float>),
-    (Double, Number<Double>)
+    (Double, Number<Double>),
+    GenericEverything
 );
 
 /// Type similar to rdfs:resource able to capture every value as a string
@@ -228,6 +269,22 @@ impl LogicalType for GenericEverything {
                 "number of elements in dictionary should not overflow 64 bit unsinged integers",
             ),
         })
+    }
+
+    fn convert_from_ground_term(gt: &Term) -> Result<Self, String> {
+        match gt {
+            Term::Constant(constant) => Ok(Self::from_physical(&constant.to_constant_u64())),
+            // TODO: handle everything
+            _ => Err("only expecting constant in GenericEverything logical type at the moment (although we should support pretty much everything here)".to_string()),
+        }
+    }
+
+    fn convert_from_data_value_t(dvt: &DataValueT) -> Result<Self, String> {
+        match dvt {
+            DataValueT::U64(constant) => Ok(Self::from_physical(constant)),
+            // TODO: handle everything
+            _ => Err("only expecting constant in GenericEverything logical type at the moment (although we should support pretty much everything here)".to_string()),
+        }
     }
 
     fn write<Dict: Dictionary>(&self, dict: &Dict) -> String {
@@ -268,11 +325,8 @@ impl<T: PhysicalNumber> FromStr for Number<T> {
     }
 }
 
-impl<T: PhysicalNumber> LogicalType for Number<T>
-where
-    <T as FromStr>::Err: ToString,
-{
-    type PhysicalType = T;
+impl LogicalType for Number<u64> {
+    type PhysicalType = u64;
 
     fn from_physical(t: &Self::PhysicalType) -> Self {
         Self { physical: *t }
@@ -285,6 +339,64 @@ where
     fn parse<Dict: Dictionary>(s: &str, _dict: &mut Dict) -> Result<Self, String> {
         s.parse()
             .map_err(|err: <Self as FromStr>::Err| err.to_string())
+    }
+
+    // TODO: fix those conversions everywhere
+    fn convert_from_ground_term(gt: &Term) -> Result<Self, String> {
+        match gt {
+            Term::NumericLiteral(NumericLiteral::Integer(int)) => Ok(Self::from_physical(
+                &(*int)
+                    .try_into()
+                    .expect("we do not support singed integer at the moment"),
+            )),
+            // TODO: handle everything
+            _ => Err("only expecting numeric literal in Number logical type".to_string()),
+        }
+    }
+
+    fn convert_from_data_value_t(dvt: &DataValueT) -> Result<Self, String> {
+        match dvt {
+            DataValueT::U64(int) => Ok(Self::from_physical(int)),
+            // TODO: handle everything
+            _ => Err("only expecting numeric literal in Number logical type".to_string()),
+        }
+    }
+
+    fn write<Dict: Dictionary>(&self, _dict: &Dict) -> String {
+        self.to_string()
+    }
+}
+
+impl LogicalType for Number<Double> {
+    type PhysicalType = Double;
+
+    fn from_physical(t: &Self::PhysicalType) -> Self {
+        Self { physical: *t }
+    }
+
+    fn to_physical(&self) -> Self::PhysicalType {
+        self.physical
+    }
+
+    fn parse<Dict: Dictionary>(s: &str, _dict: &mut Dict) -> Result<Self, String> {
+        s.parse()
+            .map_err(|err: <Self as FromStr>::Err| err.to_string())
+    }
+
+    fn convert_from_ground_term(gt: &Term) -> Result<Self, String> {
+        match gt {
+            Term::NumericLiteral(NumericLiteral::Double(double)) => Ok(Self::from_physical(double)),
+            // TODO: handle everything
+            _ => Err("only expecting numeric literal in Number logical type".to_string()),
+        }
+    }
+
+    fn convert_from_data_value_t(dvt: &DataValueT) -> Result<Self, String> {
+        match dvt {
+            DataValueT::Double(double) => Ok(Self::from_physical(double)),
+            // TODO: handle everything
+            _ => Err("only expecting numeric literal in Number logical type".to_string()),
+        }
     }
 
     fn write<Dict: Dictionary>(&self, _dict: &Dict) -> String {

@@ -59,6 +59,8 @@ where
             log::trace!("imported row: {:?}", row);
 
             let parse_result = row.iter().enumerate().try_for_each(|(idx, item)| {
+                // TODO: it would be good to avoid checking the datatype in every row; however since we parse row-wise, I do not see a way to avoid it; maybe we can get rid of wrapping the individual values in enums though (but this is also not so simple)
+                // NOTE: we can only interact with the logical type enum through the trait so matching it is not even an option; maybe one could introduce methods like parse_as_u32, parse_as_u64 and so on for all physical datatypes on the logical enum
                 match datatypes[idx].parse(item, dictionary) {
                     Ok(val) => {
                         result[idx].push(&val.as_data_value_t());
@@ -140,17 +142,18 @@ impl CSVWriter<'_> {
     /// # Returns
     /// * [`Ok`][std::result::Result::Ok] if the predicate could be written to the csv-file
     /// * [`Error`] in case of any issues during writing the file
-    pub fn write_predicate<Dict: Dictionary>(
+    pub fn write_predicate<Dict: Dictionary, LogicalTypes: LogicalTypeCollection>(
         &self,
         pred: &str,
         trie: &Trie,
         dict: &Dict,
+        types: Option<&[LogicalTypes]>,
     ) -> Result<(), Error> {
         log::debug!("Writing {pred}");
         let mut file = self.create_file(pred)?;
         // TODO: we should use the logical types for writing, i.e. the physical type should be wrapped into its logical representation again
         // to let the logical type implementation decide how to make this into a string again
-        let content = trie.debug(dict);
+        let content = trie.debug(dict, types);
         if self.gzip {
             write!(GzEncoder::new(file, Compression::best()), "{}", &content)?;
         } else {
@@ -241,7 +244,7 @@ node03;123;123;13;55;123;invalid
                 DefaultLogicalTypeCollection::GenericEverything,
                 DefaultLogicalTypeCollection::UnsignedInteger,
                 DefaultLogicalTypeCollection::Double,
-                DefaultLogicalTypeCollection::Float,
+                DefaultLogicalTypeCollection::Double,
                 DefaultLogicalTypeCollection::UnsignedInteger,
                 DefaultLogicalTypeCollection::GenericEverything,
             ],
@@ -289,7 +292,7 @@ node03;123;123;13;55;123;invalid
                 DefaultLogicalTypeCollection::UnsignedInteger,
                 DefaultLogicalTypeCollection::Double,
                 DefaultLogicalTypeCollection::UnsignedInteger,
-                DefaultLogicalTypeCollection::Float,
+                DefaultLogicalTypeCollection::Double,
             ],
             &mut rdr,
             &mut dict,
