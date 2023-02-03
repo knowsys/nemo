@@ -565,7 +565,9 @@ impl<Dict: Dictionary> TableManager<Dict> {
     /// Load table from a given on-disk source
     /// TODO: This function should change when the type system gets introduced on the logical layer
     fn load_table(source: &DataSource, arity: usize, dict: &mut Dict) -> Result<Trie, Error> {
-        TimedCode::instance().sub("Reasoning/Execution/Load Table").start();
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table")
+            .start();
         log_load_table(source);
 
         let (trie, _name) = match source {
@@ -596,7 +598,9 @@ impl<Dict: Dictionary> TableManager<Dict> {
             DataSource::RdfFile(_) => todo!(),
             DataSource::SparqlQuery(_) => todo!(),
         };
-        TimedCode::instance().sub("Reasoning/Execution/Load Table").stop();
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table")
+            .stop();
 
         Ok(trie)
     }

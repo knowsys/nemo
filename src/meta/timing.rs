@@ -46,12 +46,11 @@ impl TimedCodeInfo {
 
 impl fmt::Debug for TimedCodeInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let run_msg;
-        if self.start_system.is_some() {
-            run_msg = "currently running";
+        let run_msg = if self.start_system.is_some() {
+            "currently running"
         } else {
-            run_msg = "currently not running";
-        }
+            "currently not running"
+        };
         write!(
             f,
             "TimedCodeInfo [totals (msec): {}/{}/{}, {:?} completed runs, {}]",
@@ -59,7 +58,7 @@ impl fmt::Debug for TimedCodeInfo {
             self.total_process_time.as_millis(),
             self.total_thread_time.as_millis(),
             self.runs,
-            run_msg
+            run_msg,
         )
     }
 }
