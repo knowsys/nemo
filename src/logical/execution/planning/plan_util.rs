@@ -9,7 +9,6 @@ use crate::{
     logical::{
         model::{Atom, Filter, Identifier, NumericLiteral, Term, Variable},
         program_analysis::variable_order::VariableOrder,
-        table_manager::TableKey,
         TableManager,
     },
     physical::{
@@ -184,15 +183,15 @@ pub(super) fn compute_filters(
 
 /// Compute the subtree that represents the union of a tables within a certain step range.
 pub(super) fn subtree_union<Dict: Dictionary>(
-    tree: &mut ExecutionTree<TableKey>,
+    tree: &mut ExecutionTree,
     manager: &TableManager<Dict>,
     predicate: Identifier,
     steps: Range<usize>,
     order: &Reordering,
-) -> ExecutionNodeRef<TableKey> {
+) -> ExecutionNodeRef {
     debug_assert!(order.is_permutation());
 
-    let base_tables: Vec<TableKey> = manager
+    let base_tables: Vec = manager
         .get_table_covering(predicate, steps)
         .into_iter()
         .map(|r| TableKey::new(predicate, r, order.clone().into()))

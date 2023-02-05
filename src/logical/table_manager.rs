@@ -9,7 +9,7 @@ use crate::{
         datatypes::DataTypeName,
         dictionary::Dictionary,
         management::{
-            database::{TableId, TableKeyType},
+            database::{TableId, TableName},
             execution_plan::{ExecutionNode, ExecutionNodeRef, ExecutionResult, ExecutionTree},
             DatabaseInstance, ExecutionPlan,
         },
@@ -167,42 +167,73 @@ pub enum TableRange {
 /// Name of a table.
 /// Consists of its predicate name and a range of steps.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
-pub struct TableName {
+pub struct ChaseTableName {
     /// Number associated with a predicate which corresponds to a table on user level.
     pub predicate: Identifier,
     /// Ranges of execution steps this table covers.
     pub range: TableRange,
 }
 
-impl TableName {
-    /// Create new [`TableName`].
+impl ChaseTableName {
+    /// Create new [`ChaseTableName`].
     pub fn new(predicate: Identifier, range: TableRange) -> Self {
         Self { predicate, range }
     }
 }
 
-/// Properties which identify a table.
+/// Representation of a table that is created during the chase.
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct TableKey {
+pub struct ChaseTable {
     /// Name of the table.
-    pub name: TableName,
+    pub name: ChaseTableName,
     /// Order of the columns.
     pub order: ColumnOrder,
+    /// Name of corresponding table in database instance
+    pub db_name: TableName,
 }
-impl TableKeyType for TableKey {}
 
-impl TableKey {
-    /// Create new [`TableKey`].
-    pub fn new(predicate: Identifier, range: TableRange, order: ColumnOrder) -> Self {
+impl ChaseTable {
+    /// Create new [`ChaseTable`].
+    pub fn new(
+        predicate: Identifier,
+        range: TableRange,
+        order: ColumnOrder,
+        db_name: TableName,
+    ) -> Self {
         Self {
-            name: TableName::new(predicate, range),
+            name: ChaseTableName::new(predicate, range),
             order,
+            db_name,
         }
     }
 
-    /// Create new [`TableKey`] given a [`TableName`].
-    pub fn from_name(name: TableName, order: ColumnOrder) -> Self {
-        Self { name, order }
+    /// Create new [`ChaseTable`], using a generated internal table name.
+    pub fn from_pred(predicate: Identifier, range: TableRange, order: ColumnOrder) -> Self {
+        Self {
+            name: ChaseTableName::new(predicate, range),
+            order,
+            db_name: TableName(ChaseTable::generate_table_name(predicate, range, order)),
+        }
+    }
+
+    /// Create new [`ChaseTable`] given a [`TableName`],  using a generated internal table name.
+    pub fn from_name(name: ChaseTableName, order: ColumnOrder) -> Self {
+        Self {
+            name,
+            order,
+            db_name: TableName(ChaseTable::generate_table_name(
+                name.predicate,
+                name.range,
+                order,
+            )),
+        }
+    }
+
+    /// Make an internal table name from the given inputs.
+    /// TODO: this is not a pretty name yet.
+    fn generate_table_name(predicate: Identifier, range: TableRange, order: ColumnOrder) -> String {
+        let table_name = format!("T{:?}-{:?}-{:?}", predicate, range, order);
+        table_name
     }
 }
 
@@ -214,7 +245,7 @@ enum TableStatus {
     OnDisk(DataSource),
     /// Table has the same contents as another table except for reordering.
     /// Meaning that "ThisTable = Project(ReferencedTable, Reordering)"
-    Reference(TableName, Reordering),
+    Reference(ChaseTableName, Reordering),
 }
 
 /// Manager object for handling tables that are the result
@@ -222,10 +253,10 @@ enum TableStatus {
 #[derive(Debug)]
 pub struct TableManager<Dict: Dictionary> {
     /// [`DatabaseInstance`] managing all existing tables.
-    database: DatabaseInstance<TableKey, Dict>,
+    database: DatabaseInstance<Dict>,
 
     /// Contains the status of each table.
-    status: HashMap<TableName, TableStatus>,
+    status: HashMap<ChaseTableName, TableStatus>,
 
     /// The arity associated with each predicate
     predicate_arity: HashMap<Identifier, usize>,
@@ -305,7 +336,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
     }
 
     /// Return all a list of all column orders associated with a table name.
-    pub fn get_table_orders(&self, name: &TableName) -> Vec<&ColumnOrder> {
+    pub fn get_table_orders(&self, name: &ChaseTableName) -> Vec<&ColumnOrder> {
         if let Some(TableStatus::InMemory(orders)) = self.status.get(name) {
             orders.iter().collect()
         } else {
@@ -326,7 +357,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
     }
 
     /// Returns whether there is at least one (non-empty) table with the given key.
-    pub fn contains_key(&self, key: &TableKey) -> bool {
+    pub fn contains_key(&self, key: &ChaseTable) -> bool {
         if let Some(status) = self.status.get(&key.name) {
             match status {
                 TableStatus::InMemory(orders) => {
@@ -347,28 +378,28 @@ impl<Dict: Dictionary> TableManager<Dict> {
     }
 
     /// Given a predicate and a range, return the corresponding [`TableName`]
-    pub fn get_table_name(&self, predicate: Identifier, range: Range<usize>) -> TableName {
+    pub fn get_table_name(&self, predicate: Identifier, range: Range<usize>) -> ChaseTableName {
         if let Some(steps) = self.predicate_to_steps.get(&predicate) {
             debug_assert!(!steps.is_empty());
             debug_assert!(steps.is_sorted());
 
             if range.start > *steps.last().unwrap() {
                 debug_assert!(range.len() == 1);
-                TableName::new(predicate, TableRange::Single(range.start))
+                ChaseTableName::new(predicate, TableRange::Single(range.start))
             } else {
-                TableName::new(
+                ChaseTableName::new(
                     predicate,
                     TableRange::Multiple(self.normalize_range(predicate, &range)),
                 )
             }
         } else {
             debug_assert!(range.len() == 1);
-            TableName::new(predicate, TableRange::Single(range.start))
+            ChaseTableName::new(predicate, TableRange::Single(range.start))
         }
     }
 
     /// Update all the auxiliary structures for a new table name.
-    fn register_name(&mut self, name: TableName, arity: usize) {
+    fn register_name(&mut self, name: ChaseTableName, arity: usize) {
         let prev_arity = self.predicate_arity.entry(name.predicate).or_insert(arity);
         debug_assert!(*prev_arity == arity);
 
@@ -398,7 +429,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
     }
 
     /// Update all auxillary structures for a new in-memory table.
-    fn register_table(&mut self, key: TableKey) {
+    fn register_table(&mut self, key: ChaseTable) {
         let arity = key.order.arity();
 
         let register = match self.status.entry(key.name) {
@@ -429,7 +460,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         predicate: Identifier,
         arity: usize,
         source: DataSource,
-    ) -> TableName {
+    ) -> ChaseTableName {
         const EDB_RANGE: Range<usize> = 0..1;
         let table_name = self.get_table_name(predicate, EDB_RANGE);
 
@@ -448,14 +479,16 @@ impl<Dict: Dictionary> TableManager<Dict> {
         order: ColumnOrder,
         schema: TableSchema,
         table: Trie,
-    ) -> TableKey {
-        let table_key = TableKey {
+        table_name: TableName,
+    ) -> ChaseTable {
+        let table_key = ChaseTable {
             name: self.get_table_name(predicate, range),
             order,
+            db_name: table_name,
         };
 
         self.register_table(table_key.clone());
-        self.database.add(table_key.clone(), table, schema);
+        self.database.add(table_name, table, schema);
 
         table_key
     }
@@ -467,9 +500,9 @@ impl<Dict: Dictionary> TableManager<Dict> {
         &mut self,
         predicate: Identifier,
         range: Range<usize>,
-        ref_name: TableName,
+        ref_name: ChaseTableName,
         ref_reorder: Reordering,
-    ) -> TableName {
+    ) -> ChaseTableName {
         debug_assert!(ref_reorder.is_permutation());
         log::info!(
             "Add reference {} -> {} ({:?})",
@@ -516,7 +549,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         output_predicate: Identifier,
         output_range: Range<usize>,
         output_order_opt: Option<ColumnOrder>,
-    ) -> Result<Option<TableKey>, Error> {
+    ) -> Result<Option<ChaseTable>, Error> {
         let input_covering = self.get_table_covering(input_predicate, input_ranges);
         let input_arity = match self.predicate_arity.get(&input_predicate) {
             Some(val) => *val,
@@ -530,7 +563,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         }
 
         let input_orders =
-            self.get_table_orders(&TableName::new(input_predicate, input_covering[0]));
+            self.get_table_orders(&ChaseTableName::new(input_predicate, input_covering[0]));
 
         let input_order = if input_orders.is_empty() {
             // This occurs when input table is just a reference
@@ -546,27 +579,27 @@ impl<Dict: Dictionary> TableManager<Dict> {
         };
 
         let output_name = self.get_table_name(output_predicate, output_range);
-        let output_key = TableKey::from_name(output_name, output_order);
-        let mut output_tree = ExecutionTree::<TableKey>::new(
+        let output_table = ChaseTable::from_name(output_name, output_order);
+        let mut output_tree = ExecutionTree::new(
             "Merge Tables".to_string(),
-            ExecutionResult::Save(output_key.clone()),
+            ExecutionResult::Save(output_table.db_name),
         );
 
-        let fetch_nodes: Vec<ExecutionNodeRef<TableKey>> = input_covering
+        let fetch_nodes: Vec<ExecutionNodeRef> = input_covering
             .into_iter()
             .map(|r| {
-                let key = TableKey::new(input_predicate, r, input_order.clone());
-                output_tree.fetch_table(key)
+                let key = ChaseTable::from_pred(input_predicate, r, input_order.clone());
+                output_tree.fetch_table(key.db_name)
             })
             .collect();
         let union_node = output_tree.union(fetch_nodes);
         output_tree.set_root(union_node);
 
-        let mut execution_plan = ExecutionPlan::<TableKey>::new();
+        let mut execution_plan = ExecutionPlan::new();
         execution_plan.push(output_tree);
 
         self.execute_plan(execution_plan)?;
-        Ok(Some(output_key))
+        Ok(Some(output_table))
     }
 
     /// Load table from a given on-disk source
@@ -613,33 +646,38 @@ impl<Dict: Dictionary> TableManager<Dict> {
         Ok(trie)
     }
 
-    // Basically, makes sure that the given [`TableKey`] will exist in the [`DatabaseInstance`]
-    // or alternatively, return a key that does and will contain the same entries as the requested table.
-    fn materialize_table(&mut self, key: TableKey) -> Result<TableKey, Error> {
+    /// Prepare a table for a known chase predicate to be loaded and available in the required order.
+    /// 
+    /// To this end, the table name is resolved by considering its [`TableStatus`], tracing back references
+    /// and thus finding the actual name of a chase table with that contents. For in-memory tables, a
+    /// re-ordering may or may not be needed to get the requested table; for on-disk tables, data might
+    /// first need to be loaded.
+    /// 
+    /// The function returns a chase table that can be used to access the requested data.
+    /// 
+    fn materialize_table(&mut self, table: ChaseTable) -> Result<ChaseTable, Error> {
+        // Check if the chase table is a reference to another table: 
         let (actual_name, reordering) = if let TableStatus::Reference(referenced_name, reordering) =
             &self
                 .status
-                .get(&key.name)
-                .expect("Function assumes that table is known.")
+                .get(&table.name)
+                .expect("Could not find status for chase table.")
         {
             (*referenced_name, reordering.clone())
         } else {
             (
-                key.name,
+                table.name,
                 Reordering::default(
                     *self
                         .predicate_arity
-                        .get(&key.name.predicate)
-                        .expect("Function assumes that predicate is not new."),
+                        .get(&table.name.predicate)
+                        .expect("Could not find predicate to determine its arity."),
                 ),
             )
         };
 
-        let required_order = ColumnOrder::new(reordering.inverse().apply_to(key.order.as_slice()));
-        let result_key = TableKey {
-            name: actual_name,
-            order: required_order.clone(),
-        };
+        let required_order = ColumnOrder::new(reordering.inverse().apply_to(table.order.as_slice()));
+        let result_table = ChaseTable::from_name(actual_name, required_order.clone());
 
         if let Entry::Occupied(mut entry) = self.status.entry(actual_name) {
             let status = entry.get_mut();
@@ -659,10 +697,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
                     }
 
                     if distance > 0 {
-                        Some(TableKey {
-                            name: actual_name,
-                            order: closest_order.clone(),
-                        })
+                        Some(ChaseTable::from_name(actual_name, closest_order.clone()))
                     } else {
                         // The required order is already present
                         None
@@ -682,16 +717,14 @@ impl<Dict: Dictionary> TableManager<Dict> {
                         schema.add_entry(type_name, false, false);
                     }
 
-                    let loaded_table_key = TableKey {
-                        name: actual_name,
-                        order: ColumnOrder::default(arity),
-                    };
+                    let loaded_table =
+                        ChaseTable::from_name(actual_name, ColumnOrder::default(arity));
 
-                    self.database.add(loaded_table_key.clone(), trie, schema);
-                    *status = TableStatus::InMemory(vec![loaded_table_key.order.clone()]);
+                    self.database.add(loaded_table.db_name, trie, schema);
+                    *status = TableStatus::InMemory(vec![loaded_table.order.clone()]);
 
                     if !required_order.is_default() {
-                        Some(loaded_table_key)
+                        Some(loaded_table)
                     } else {
                         // If the default order is required then we are in luck
                         None
@@ -707,15 +740,15 @@ impl<Dict: Dictionary> TableManager<Dict> {
                     required_order.as_slice(),
                 );
 
-                let mut project_tree = ExecutionTree::<TableKey>::new(
+                let mut project_tree = ExecutionTree::new(
                     "Required Reorder".to_string(),
-                    ExecutionResult::Save(result_key.clone()),
+                    ExecutionResult::Save(result_table.db_name),
                 );
-                let reordered_node = project_tree.fetch_table(reordered_table);
+                let reordered_node = project_tree.fetch_table(reordered_table.db_name);
                 let project_node = project_tree.project(reordered_node, projection_reordering);
                 project_tree.set_root(project_node);
 
-                let mut reorder_plan = ExecutionPlan::<TableKey>::new();
+                let mut reorder_plan = ExecutionPlan::new();
                 reorder_plan.push(project_tree);
 
                 self.execute_plan(reorder_plan)?;
@@ -724,22 +757,19 @@ impl<Dict: Dictionary> TableManager<Dict> {
             panic!("Function assumes that materialized table is known.");
         }
 
-        Ok(result_key)
+        Ok(result_table)
     }
 
-    fn execute_plan(
-        &mut self,
-        mut plan: ExecutionPlan<TableKey>,
-    ) -> Result<HashSet<Identifier>, Error> {
+    fn execute_plan(&mut self, mut plan: ExecutionPlan) -> Result<HashSet<Identifier>, Error> {
         // First, we need to make sure that every requested table is available or produce it if necessary
         // We exclude from this tables that will be produced during the execution of the plan
-        let mut produced_keys = HashSet::<TableKey>::new();
+        let mut produced_keys = HashSet::<ChaseTable>::new();
         for tree in &mut plan.trees {
             for fetch_node in tree.all_fetched_tables() {
                 let node_unpacked = &mut *fetch_node.0.borrow_mut();
                 if let ExecutionNode::FetchTable(key) = node_unpacked {
                     if !produced_keys.contains(key) {
-                        *key = self.materialize_table(key.clone())?;
+                        *key = self.materialize_table(key)?;
                     }
                 } else {
                     unreachable!()
@@ -765,7 +795,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
     /// Checks whether the tree is a union of continuous part of a single table.
     /// If so, returns the [`TableKey`] of the new table containing the result of this computation.
-    fn plan_recognize_simple_union(&self, tree: &ExecutionTree<TableKey>) -> Option<TableKey> {
+    fn plan_recognize_simple_union(&self, tree: &ExecutionTree) -> Option<ChaseTable> {
         if let ExecutionNode::Union(union) = &*tree.root()?.0.upgrade()?.as_ref().borrow() {
             let mut overall_cover = Vec::<usize>::new();
             let mut predicate_opt: Option<Identifier> = None;
@@ -814,7 +844,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             }
 
             if let Some(predicate) = predicate_opt {
-                return Some(TableKey::new(
+                return Some(ChaseTable::new(
                     predicate,
                     TableRange::Multiple(TableCover {
                         start: overall_cover[0],
@@ -833,8 +863,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
     /// If so, returns the reordering which would turn the referenced table into this one.
     fn plan_recognize_renaming(
         &self,
-        tree: &ExecutionTree<TableKey>,
-    ) -> Option<(TableName, Reordering)> {
+        tree: &ExecutionTree,
+    ) -> Option<(ChaseTableName, Reordering)> {
         match &*tree.root()?.0.upgrade()?.as_ref().borrow() {
             ExecutionNode::FetchTable(key) => {
                 let arity = *self.predicate_arity.get(&key.name.predicate)?;
@@ -864,7 +894,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
     /// Returns a list of those predicates that received new values.
     pub fn execute_plan_optimized(
         &mut self,
-        mut plan: ExecutionPlan<TableKey>,
+        mut plan: ExecutionPlan,
     ) -> Result<HashSet<Identifier>, Error> {
         let mut result = HashSet::<Identifier>::new();
 
@@ -879,11 +909,11 @@ impl<Dict: Dictionary> TableManager<Dict> {
         plan.simplify();
 
         // Save temporary table which compute a continuous union under a new name
-        let mut union_map = HashMap::<TableId, ExecutionNode<TableKey>>::new();
+        let mut union_map = HashMap::<TableId, ExecutionNode>::new();
         for tree in &mut plan.trees {
             if let ExecutionResult::Temp(id) = tree.result() {
                 if let Some(key) = self.plan_recognize_simple_union(tree) {
-                    union_map.insert(*id, ExecutionNode::FetchTable(key.clone()));
+                    union_map.insert(*id, ExecutionNode::FetchTable(key.db_name));
                 }
             }
 
@@ -895,7 +925,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         struct AddReference {
             from_predicate: Identifier,
             from_range: Range<usize>,
-            to: TableName,
+            to: ChaseTableName,
             reordering: Reordering,
         }
 
@@ -1007,7 +1037,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         &mut self,
         predicate: Identifier,
         step: usize,
-    ) -> Result<Option<TableKey>, Error> {
+    ) -> Result<Option<ChaseTable>, Error> {
         if !self.predicate_arity.contains_key(&predicate) {
             return Ok(None);
         }
@@ -1028,8 +1058,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
     }
 
     /// Return trie with the given key.
-    pub fn get_trie<'a>(&'a self, key: &TableKey) -> &'a Trie {
-        self.database.get_by_key(key)
+    pub fn get_trie<'a>(&'a self, key: &ChaseTable) -> &'a Trie {
+        self.database.get_by_key(&key.db_name)
     }
 
     /// Return the dictionary used in the database instance.

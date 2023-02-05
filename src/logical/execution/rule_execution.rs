@@ -73,7 +73,7 @@ impl<Dict: Dictionary> RuleExecution<Dict> {
         // TODO: Just because its the first doesn't mean its the best
         let best_variable_order = &self.promising_variable_orders[0];
 
-        let mut execution_plan = ExecutionPlan::<TableKey>::new();
+        let mut execution_plan = ExecutionPlan::new();
         let tree_body = self.body_strategy.execution_tree(
             table_manager,
             rule_info,

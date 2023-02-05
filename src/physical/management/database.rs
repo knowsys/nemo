@@ -1,4 +1,3 @@
-use core::hash::Hash;
 use std::collections::{hash_map::Entry, HashMap};
 use std::fmt::Debug;
 
@@ -28,27 +27,31 @@ use super::{
 };
 
 /// Type which represents table id.
+/// This should remain internal and not be used by external callers.
 pub type TableId = usize;
-/// Traits which have to be satisfied by a TableKey type.
-pub trait TableKeyType: Debug + Eq + Hash + Clone {}
+/// Type that represents the name of a table.
+/// This is how external callers can refer to tables.
+// pub type TableName = String;
+#[derive(Debug,Clone,Eq,Hash,PartialEq)]
+pub struct TableName(pub String);
 
 /// Struct that contains useful information about a trie
 /// as well as the actual owner of the trie.
 #[derive(Debug)]
-struct TableInfo<TableKey: TableKeyType> {
+struct TableInfo {
     /// The trie.
     pub trie: Trie,
     /// Associated key.
-    pub key: TableKey,
+    pub key: TableName,
     /// The schema of the table
     /// TODO: Use this
     #[allow(dead_code)]
     pub schema: TableSchema,
 }
 
-impl<TableKey: TableKeyType> TableInfo<TableKey> {
+impl TableInfo {
     /// Create new [`TableInfo`].
-    pub fn new(trie: Trie, key: TableKey, schema: TableSchema) -> Self {
+    pub fn new(trie: Trie, key: TableName, schema: TableSchema) -> Self {
         Self { trie, key, schema }
     }
 }
@@ -70,11 +73,11 @@ impl TempTableInfo {
 
 /// Represents a collection of tables
 #[derive(Debug)]
-pub struct DatabaseInstance<TableKey: TableKeyType, Dict: Dictionary> {
+pub struct DatabaseInstance<Dict: Dictionary> {
     /// Structure which owns all the tries; accessed through Id.
-    id_to_table: HashMap<TableId, TableInfo<TableKey>>,
-    /// Alternative access scheme through a TableKey.
-    key_to_tableid: HashMap<TableKey, TableId>,
+    id_to_table: HashMap<TableId, TableInfo>,
+    /// Alternative access scheme through a TableName.
+    key_to_tableid: HashMap<TableName, TableId>,
 
     /// Dictionary which stores the strings associates with abstract constants
     dict_constants: Dict,
@@ -87,7 +90,7 @@ pub struct DatabaseInstance<TableKey: TableKeyType, Dict: Dictionary> {
     current_id: usize,
 }
 
-impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> {
+impl<Dict: Dictionary> DatabaseInstance<Dict> {
     /// Create new [`DatabaseInstance`]
     pub fn new(dict_constants: Dict) -> Self {
         let current_null = 1 << 63; // TODO: Think about a robust null representation method
@@ -101,8 +104,8 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
         }
     }
 
-    /// Return whether a given [`TableKey`] is associated with a table.
-    pub fn table_exists(&self, key: &TableKey) -> bool {
+    /// Return whether a given [`TableName`] is associated with a table.
+    pub fn table_exists(&self, key: &TableName) -> bool {
         self.key_to_tableid.contains_key(key)
     }
 
@@ -113,13 +116,13 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
 
     /// Return the id of a table given a key.
     /// Panics if the key does not exist.
-    pub fn get_id(&self, key: &TableKey) -> TableId {
+    pub fn get_id(&self, key: &TableName) -> TableId {
         self.key_to_tableid.get(key).copied().unwrap()
     }
 
     /// Return the key of a table given its id.
     /// Panics if the id does not exist.
-    pub fn get_key(&self, id: TableId) -> TableKey {
+    pub fn get_key(&self, id: TableId) -> TableName {
         self.id_to_table.get(&id).unwrap().key.clone()
     }
 
@@ -135,30 +138,30 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
         self.id_to_table.get_mut(&id).map(|t| &mut t.trie).unwrap()
     }
 
-    /// Given a [`TableKey`] return a reference to the corresponding trie.
+    /// Given a [`TableName`] return a reference to the corresponding trie.
     /// Panics if the key does not exist.
-    pub fn get_by_key<'a>(&'a self, key: &TableKey) -> &'a Trie {
+    pub fn get_by_key<'a>(&'a self, key: &TableName) -> &'a Trie {
         let id = self.get_id(key);
         self.id_to_table.get(&id).map(|i| &i.trie).unwrap()
     }
 
-    /// Given a [`TableKey`] return a mutable reference to the corresponding trie.
+    /// Given a [`TableName`] return a mutable reference to the corresponding trie.
     /// Panics if the key does not exist.
-    pub fn get_by_key_mut<'a>(&'a mut self, key: &TableKey) -> &'a mut Trie {
+    pub fn get_by_key_mut<'a>(&'a mut self, key: &TableName) -> &'a mut Trie {
         let id = self.get_id(key);
         self.id_to_table.get_mut(&id).map(|t| &mut t.trie).unwrap()
     }
 
-    /// Return the schema of a table identified by the given [`TableKey`].
+    /// Return the schema of a table identified by the given [`TableName`].
     /// /// Panics if the key does not exist.
-    pub fn get_schema<'a>(&'a self, key: &TableKey) -> &'a TableSchema {
+    pub fn get_schema<'a>(&'a self, key: &TableName) -> &'a TableSchema {
         let id = self.get_id(key);
         self.id_to_table.get(&id).map(|i| &i.schema).unwrap()
     }
 
     /// Add the given trie to the instance under the given table key.
     /// Panics if the key is already used.
-    pub fn add(&mut self, key: TableKey, trie: Trie, schema: TableSchema) -> TableId {
+    pub fn add(&mut self, key: TableName, trie: Trie, schema: TableSchema) -> TableId {
         let used_id = self.current_id;
 
         let insert_result = self
@@ -178,7 +181,7 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
     /// Replace a trie (searched by key) with another.
     /// Will add a new trie if the key does not exist.
     /// Panics if the key is not already used.
-    pub fn update_by_key(&mut self, key: TableKey, trie: Trie) {
+    pub fn update_by_key(&mut self, key: TableName, trie: Trie) {
         let id = self.get_id(&key);
         self.id_to_table.get_mut(&id).unwrap().trie = trie;
     }
@@ -192,7 +195,7 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
 
     /// Delete a trie given its key.
     /// Panics if the table does not exist.
-    pub fn delete_by_key(&mut self, key: &TableKey) {
+    pub fn delete_by_key(&mut self, key: &TableName) {
         if let Entry::Occupied(key_entry) = self.key_to_tableid.entry(key.clone()) {
             let id = *key_entry.get();
             key_entry.remove();
@@ -232,7 +235,7 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
     // Helper function which checks whether the top level tree node is of type `AppendNulls`.
     // If this is the case returns the amount of null-columns that have been appended.
     // TODO: Nothing about this feels right; revise later
-    fn appends_nulls(node: ExecutionNodeRef<TableKey>) -> u64 {
+    fn appends_nulls(node: ExecutionNodeRef) -> u64 {
         let node_rc = node
             .0
             .upgrade()
@@ -246,11 +249,11 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
     }
 
     /// Executes a given [`ExecutionPlan`].
-    /// Returns the [`TableKey`]s of all new non-empty tables.
+    /// Returns the [`TableName`]s of all new non-empty tables.
     /// This may fail if certain operations are performed on tries with incompatible types
     /// or if the plan references tries that do not exist.
-    pub fn execute_plan(&mut self, plan: &ExecutionPlan<TableKey>) -> Result<Vec<TableKey>, Error> {
-        let mut new_tables = Vec::<TableKey>::new();
+    pub fn execute_plan(&mut self, plan: &ExecutionPlan) -> Result<Vec<TableName>, Error> {
+        let mut new_tables = Vec::<TableName>::new();
         let mut temp_tries = HashMap::<TableId, Option<TempTableInfo>>::new();
         let mut temp_types = HashMap::<TableId, TableSchema>::new();
 
@@ -332,7 +335,7 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
     /// that if materialized will turn into the resulting trie of the represented computation
     fn get_iterator_node<'a>(
         &'a self,
-        execution_node: ExecutionNodeRef<TableKey>,
+        execution_node: ExecutionNodeRef,
         type_node: &'a TypeTreeNode,
         temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
     ) -> Result<Option<TrieScanEnum>, Error> {
@@ -529,7 +532,7 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
     fn get_iterator_string_sub<'a>(
         &'a self,
         operation: &str,
-        subnodes: &Vec<&ExecutionNodeRef<TableKey>>,
+        subnodes: &Vec<&ExecutionNodeRef>,
         temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
     ) -> String {
         let mut result = String::from(operation);
@@ -551,7 +554,7 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
     /// Return a string which represents a execution tree (given its root).
     fn get_iterator_string<'a>(
         &'a self,
-        node: ExecutionNodeRef<TableKey>,
+        node: ExecutionNodeRef,
         temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
     ) -> String {
         let node_rc = node
@@ -606,7 +609,7 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
     }
 }
 
-impl<TableKey: TableKeyType, Dict: Dictionary> ByteSized for DatabaseInstance<TableKey, Dict> {
+impl<Dict: Dictionary> ByteSized for DatabaseInstance<Dict> {
     fn size_bytes(&self) -> ByteSize {
         self.id_to_table
             .iter()
@@ -634,12 +637,9 @@ mod test {
         util::make_column_with_intervals_t,
     };
 
-    use super::{DatabaseInstance, TableKeyType};
+    use super::{DatabaseInstance,TableName};
 
-    type StringKeyType = String;
-    impl TableKeyType for StringKeyType {}
-
-    #[test]
+     #[test]
     fn basic_add_delete() {
         let column_a = make_column_with_intervals_t(&[1, 2, 3], &[0]);
         let column_b = make_column_with_intervals_t(&[1, 2, 3, 4, 5, 6], &[0]);
@@ -647,14 +647,14 @@ mod test {
         let trie_a = Trie::new(vec![column_a]);
         let trie_b = Trie::new(vec![column_b]);
 
-        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
+        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
 
         let mut schema_a = TableSchema::new();
         schema_a.add_entry(DataTypeName::U64, false, false);
 
-        assert_eq!(instance.add(String::from("A"), trie_a.clone(), schema_a), 0);
-        assert_eq!(instance.get_key(0), String::from("A"));
-        assert_eq!(instance.get_id(&String::from("A")), 0);
+        assert_eq!(instance.add(TableName(String::from("A")), trie_a.clone(), schema_a), 0);
+        assert_eq!(instance.get_key(0), TableName(String::from("A")));
+        assert_eq!(instance.get_id(&TableName(String::from("A"))), 0);
         // TODO: Look into catch_unwind and Dict
         // assert!(std::panic::catch_unwind(|| instance.get_key(1)).is_err());
         // assert!(std::panic::catch_unwind(|| instance.get_id(&String::from("C"))).is_err());
@@ -665,19 +665,19 @@ mod test {
         let mut schema_b = TableSchema::new();
         schema_b.add_entry(DataTypeName::U64, false, false);
 
-        assert_eq!(instance.add(String::from("B"), trie_b, schema_b), 1);
+        assert_eq!(instance.add(TableName(String::from("B")), trie_b, schema_b), 1);
         assert!(instance.size_bytes() > last_size);
-        assert_eq!(instance.get_by_key(&String::from("B")).row_num(), 6);
+        assert_eq!(instance.get_by_key(&TableName(String::from("B"))).row_num(), 6);
 
         let last_size = instance.size_bytes();
 
-        instance.update_by_key(String::from("B"), trie_a);
-        assert_eq!(instance.get_by_key(&String::from("B")).row_num(), 3);
+        instance.update_by_key(TableName(String::from("B")), trie_a);
+        assert_eq!(instance.get_by_key(&TableName(String::from("B"))).row_num(), 3);
         assert!(instance.size_bytes() < last_size);
 
         let last_size = instance.size_bytes();
 
-        instance.delete_by_key(&String::from("A"));
+        instance.delete_by_key(&TableName(String::from("A")));
         // // assert!(std::panic::catch_unwind(|| instance.get_id(&String::from("A"))).is_err());
         assert!(instance.size_bytes() < last_size);
     }
@@ -690,7 +690,7 @@ mod test {
         }
     }
 
-    fn test_casting_execution_plan() -> ExecutionPlan<StringKeyType> {
+    fn test_casting_execution_plan() -> ExecutionPlan {
         // ExecutionPlan:
         // Union
         //  -> Minus
@@ -704,17 +704,17 @@ mod test {
         //          -> Trie_b [U32, U64]
         //          -> Trie_c [U32, U32]
 
-        let mut execution_tree = ExecutionTree::<StringKeyType>::new(
+        let mut execution_tree = ExecutionTree::new(
             String::from("Test"),
-            ExecutionResult::Save(String::from("TableResult")),
+            ExecutionResult::Save(TableName(String::from("TableResult"))),
         );
 
-        let node_load_a = execution_tree.fetch_table(String::from("TableA"));
-        let node_load_b_1 = execution_tree.fetch_table(String::from("TableB"));
-        let node_load_b_2 = execution_tree.fetch_table(String::from("TableB"));
-        let node_load_c = execution_tree.fetch_table(String::from("TableC"));
-        let node_load_x = execution_tree.fetch_table(String::from("TableX"));
-        let node_load_y = execution_tree.fetch_table(String::from("TableY"));
+        let node_load_a = execution_tree.fetch_table(TableName(String::from("TableA")));
+        let node_load_b_1 = execution_tree.fetch_table(TableName(String::from("TableB")));
+        let node_load_b_2 = execution_tree.fetch_table(TableName(String::from("TableB")));
+        let node_load_c = execution_tree.fetch_table(TableName(String::from("TableC")));
+        let node_load_x = execution_tree.fetch_table(TableName(String::from("TableX")));
+        let node_load_y = execution_tree.fetch_table(TableName(String::from("TableY")));
 
         let node_minus = execution_tree.minus(node_load_x, node_load_y);
 
@@ -729,7 +729,7 @@ mod test {
         let node_root = execution_tree.union(vec![node_join, node_minus]);
         execution_tree.set_root(node_root);
 
-        let mut execution_plan = ExecutionPlan::<StringKeyType>::new();
+        let mut execution_plan = ExecutionPlan::new();
         execution_plan.push(execution_tree);
 
         execution_plan
@@ -784,18 +784,18 @@ mod test {
             schema_entry(DataTypeName::U32),
         ]);
 
-        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
-        instance.add(String::from("TableA"), trie_a, schema_a);
-        instance.add(String::from("TableB"), trie_b, schema_b);
-        instance.add(String::from("TableC"), trie_c, schema_c);
-        instance.add(String::from("TableX"), trie_x, schema_x);
-        instance.add(String::from("TableY"), trie_y, schema_y);
+        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
+        instance.add(TableName(String::from("TableA")), trie_a, schema_a);
+        instance.add(TableName(String::from("TableB")), trie_b, schema_b);
+        instance.add(TableName(String::from("TableC")), trie_c, schema_c);
+        instance.add(TableName(String::from("TableX")), trie_x, schema_x);
+        instance.add(TableName(String::from("TableY")), trie_y, schema_y);
 
         let plan = test_casting_execution_plan();
         let result = instance.execute_plan(&plan);
         assert!(result.is_ok());
 
-        let result_trie = instance.get_by_key(&String::from("TableResult"));
+        let result_trie = instance.get_by_key(&TableName(String::from("TableResult")));
 
         let result_col_first = result_trie.get_column(0).as_u64().unwrap();
         let result_col_second = result_trie.get_column(1).as_u32().unwrap();

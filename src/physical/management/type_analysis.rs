@@ -17,7 +17,7 @@ use crate::{
 };
 
 use super::{
-    database::{TableId, TableKeyType},
+    database::TableId,
     execution_plan::{ExecutionNode, ExecutionNodeRef, ExecutionTree},
     DatabaseInstance,
 };
@@ -92,10 +92,10 @@ impl Display for TypeTree {
 
 impl TypeTree {
     /// Create a [`TypeTree`] from an [`ExecutionPlan`]
-    pub(super) fn from_execution_tree<TableKey: TableKeyType, Dict: Dictionary>(
-        instance: &DatabaseInstance<TableKey, Dict>,
+    pub(super) fn from_execution_tree<Dict: Dictionary>(
+        instance: &DatabaseInstance<Dict>,
         temp_schemas: &HashMap<TableId, TableSchema>,
-        tree: &ExecutionTree<TableKey>,
+        tree: &ExecutionTree,
     ) -> Result<Self, Error> {
         if let Some(tree_root) = tree.root() {
             let mut tree = Self::propagate_up(instance, temp_schemas, tree_root.clone())?;
@@ -108,10 +108,10 @@ impl TypeTree {
     }
 
     /// Types are propagated from bottom to top through the [`ExecutionTree`].
-    fn propagate_up<TableKey: TableKeyType, Dict: Dictionary>(
-        instance: &DatabaseInstance<TableKey, Dict>,
+    fn propagate_up<Dict: Dictionary>(
+        instance: &DatabaseInstance<Dict>,
         temp_schemas: &HashMap<TableId, TableSchema>,
-        node: ExecutionNodeRef<TableKey>,
+        node: ExecutionNodeRef,
     ) -> Result<TypeTreeNode, Error> {
         let node_rc = node
             .0
@@ -355,10 +355,10 @@ impl TypeTree {
     }
 
     // Propagates types from the top of a [`TypeTree`] to the bottom.
-    fn propagate_down<TableKey: TableKeyType>(
+    fn propagate_down(
         type_node: &mut TypeTreeNode,
         schema_map_opt: Option<HashMap<usize, TableSchemaEntry>>,
-        execution_node: ExecutionNodeRef<TableKey>,
+        execution_node: ExecutionNodeRef,
     ) {
         if type_node.schema.is_empty() {
             return;
@@ -558,7 +558,7 @@ mod test {
         datatypes::{DataTypeName, DataValueT},
         dictionary::StringDictionary,
         management::{
-            database::TableId,
+            database::{TableId,TableName},
             execution_plan::{ExecutionResult, ExecutionTree},
             DatabaseInstance,
         },
@@ -575,8 +575,6 @@ mod test {
 
     use super::{TypeTree, TypeTreeNode};
 
-    type StringKeyType = String;
-
     fn schema_entry(type_name: DataTypeName) -> TableSchemaEntry {
         TableSchemaEntry {
             type_name,
@@ -585,7 +583,7 @@ mod test {
         }
     }
 
-    fn build_execution_tree() -> ExecutionTree<StringKeyType> {
+    fn build_execution_tree() -> ExecutionTree {
         // ExecutionPlan:
         // Union
         //  -> Minus
@@ -601,13 +599,13 @@ mod test {
         //              -> Temp(0) [U32, U32]
 
         let mut execution_tree =
-            ExecutionTree::<StringKeyType>::new(String::from("Test"), ExecutionResult::Temp(1));
+            ExecutionTree::new(String::from("Test"), ExecutionResult::Temp(1));
 
-        let node_load_a = execution_tree.fetch_table(String::from("TableA"));
-        let node_load_b_1 = execution_tree.fetch_table(String::from("TableB"));
-        let node_load_b_2 = execution_tree.fetch_table(String::from("TableB"));
-        let node_load_c_1 = execution_tree.fetch_table(String::from("TableC"));
-        let node_load_c_2 = execution_tree.fetch_table(String::from("TableC"));
+        let node_load_a = execution_tree.fetch_table(TableName(String::from("TableA")));
+        let node_load_b_1 = execution_tree.fetch_table(TableName(String::from("TableB")));
+        let node_load_b_2 = execution_tree.fetch_table(TableName(String::from("TableB")));
+        let node_load_c_1 = execution_tree.fetch_table(TableName(String::from("TableC")));
+        let node_load_c_2 = execution_tree.fetch_table(TableName(String::from("TableC")));
         let node_load_temp = execution_tree.fetch_temp(0);
 
         let node_minus = execution_tree.minus(node_load_a, node_load_b_1);
@@ -827,10 +825,10 @@ mod test {
             schema_entry(DataTypeName::U32),
         ]);
 
-        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
-        instance.add(String::from("TableA"), trie_a, schema_a);
-        instance.add(String::from("TableB"), trie_b, schema_b);
-        instance.add(String::from("TableC"), trie_c, schema_c);
+        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
+        instance.add(TableName(String::from("TableA")), trie_a, schema_a);
+        instance.add(TableName(String::from("TableB")), trie_b, schema_b);
+        instance.add(TableName(String::from("TableC")), trie_c, schema_c);
 
         let mut temp_schemas = HashMap::<TableId, TableSchema>::new();
         temp_schemas.insert(0, schema_temp);
@@ -862,17 +860,17 @@ mod test {
             schema_entry(DataTypeName::U32),
         ]);
 
-        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
-        instance.add(String::from("TableA"), trie_a, schema_a);
-        instance.add(String::from("TableB"), trie_b, schema_b);
+        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
+        instance.add(TableName(String::from("TableA")), trie_a, schema_a);
+        instance.add(TableName(String::from("TableB")), trie_b, schema_b);
 
         let mut execution_tree = ExecutionTree::new(
             String::from("test"),
-            ExecutionResult::<StringKeyType>::Temp(1),
+            ExecutionResult::Temp(1),
         );
 
-        let fetch_a = execution_tree.fetch_table(String::from("TableA"));
-        let fetch_b = execution_tree.fetch_table(String::from("TableB"));
+        let fetch_a = execution_tree.fetch_table(TableName(String::from("TableA")));
+        let fetch_b = execution_tree.fetch_table(TableName(String::from("TableB")));
 
         let append_a = execution_tree.append_columns(
             fetch_a,
@@ -927,17 +925,17 @@ mod test {
             schema_entry(DataTypeName::U64),
         ]);
 
-        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
-        instance.add(String::from("TableA"), trie_a, schema_a);
-        instance.add(String::from("TableB"), trie_b, schema_b);
+        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
+        instance.add(TableName(String::from("TableA")), trie_a, schema_a);
+        instance.add(TableName(String::from("TableB")), trie_b, schema_b);
 
         let mut execution_tree = ExecutionTree::new(
             String::from("test"),
-            ExecutionResult::<StringKeyType>::Temp(1),
+            ExecutionResult::Temp(1),
         );
 
-        let fetch_a = execution_tree.fetch_table(String::from("TableA"));
-        let fetch_b = execution_tree.fetch_table(String::from("TableB"));
+        let fetch_a = execution_tree.fetch_table(TableName(String::from("TableA")));
+        let fetch_b = execution_tree.fetch_table(TableName(String::from("TableB")));
 
         let node_eq_col = execution_tree.select_equal(fetch_a, vec![vec![0, 1]]);
 

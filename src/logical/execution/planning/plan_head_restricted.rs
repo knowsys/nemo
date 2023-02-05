@@ -11,7 +11,6 @@ use crate::{
             analysis::RuleAnalysis, normalization::normalize_atom_vector,
             variable_order::VariableOrder,
         },
-        table_manager::{ColumnOrder, TableKey},
         TableManager,
     },
     physical::{
@@ -124,7 +123,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,
-    ) -> Vec<ExecutionTree<TableKey>> {
+    ) -> Vec<ExecutionTree> {
         // TODO: We need like three versions of the same variable order in this function
         // Clearly, some more thinking is needed
         let normalized_head_variable_order = compute_normalized_variable_order(
@@ -132,11 +131,11 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             variable_order.restrict_to(&self.analysis.head_variables),
         );
 
-        let mut trees = Vec::<ExecutionTree<TableKey>>::new();
+        let mut trees = Vec::<ExecutionTree>::new();
 
         // Resulting trie will contain all the non-satisfied body matches
         // Input from the generated head tables will be projected from this
-        let mut tree_unsatisfied = ExecutionTree::<TableKey>::new(
+        let mut tree_unsatisfied = ExecutionTree::new(
             String::from("Head (Restricted): Unsatisfied"),
             ExecutionResult::Temp(HEAD_UNSAT),
         );
@@ -173,7 +172,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         // 2. Compute the head matches projected to the frontier variables
 
         // Find the matches for the head by performing a seminaive join
-        let mut tree_head_join = ExecutionTree::<TableKey>::new(
+        let mut tree_head_join = ExecutionTree::new(
             String::from("Head (Restricted): Satisfied"),
             ExecutionResult::Temp(HEAD_JOIN),
         );
@@ -201,7 +200,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             step_number..step_number + 1,
         );
         let head_projected_key = TableKey::from_name(head_projected_name, head_projected_order);
-        let mut tree_head_projected = ExecutionTree::<TableKey>::new(
+        let mut tree_head_projected = ExecutionTree::new(
             "Head (Restricted): Sat. Frontier".to_string(),
             ExecutionResult::Save(head_projected_key.clone()),
         );
@@ -278,7 +277,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             let head_table_name =
                 table_manager.get_table_name(predicate, step_number..step_number + 1);
             let head_table_key = TableKey::from_name(head_table_name, head_order.clone());
-            let mut head_tree = ExecutionTree::<TableKey>::new(
+            let mut head_tree = ExecutionTree::new(
                 "Head (Restricted): Result Project".to_string(),
                 ExecutionResult::Save(head_table_key),
             );
@@ -298,7 +297,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             }
 
             let mut final_head_nodes =
-                Vec::<ExecutionNodeRef<TableKey>>::with_capacity(head_instructions.len());
+                Vec::<ExecutionNodeRef>::with_capacity(head_instructions.len());
             for head_instruction in head_instructions {
                 // TODO:
                 // This is just the `atom_binding` function. However you cannot use it, since it cannot deal with reduced atoms.
@@ -332,12 +331,12 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             } else {
                 // Duplicate elimination for atoms thats do not contain existential variables
                 // Same as in plan_head_datalog
-                let old_tables_keys: Vec<TableKey> = table_manager
+                let old_tables_keys: Vec = table_manager
                     .cover_whole_table(predicate)
                     .into_iter()
                     .map(|r| TableKey::new(predicate, r, head_order.clone()))
                     .collect();
-                let old_table_nodes: Vec<ExecutionNodeRef<TableKey>> = old_tables_keys
+                let old_table_nodes: Vec<ExecutionNodeRef> = old_tables_keys
                     .into_iter()
                     .map(|k| head_tree.fetch_table(k))
                     .collect();

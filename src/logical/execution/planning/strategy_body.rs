@@ -4,7 +4,7 @@
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo, program_analysis::variable_order::VariableOrder,
-        table_manager::TableKey, TableManager,
+        TableManager,
     },
     physical::{dictionary::Dictionary, management::execution_plan::ExecutionTree},
 };
@@ -19,5 +19,5 @@ pub trait BodyStrategy<Dict: Dictionary>: Debug {
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,
-    ) -> ExecutionTree<TableKey>;
+    ) -> ExecutionTree;
 }

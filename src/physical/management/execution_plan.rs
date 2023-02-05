@@ -15,31 +15,31 @@ use crate::physical::{
     util::Reordering,
 };
 
-use super::database::{TableId, TableKeyType};
+use super::database::{TableId, TableName};
 
 /// Wraps [`ExecutionNode`] into a `Rc<RefCell<_>>`
 #[derive(Debug)]
-pub struct ExecutionNodeOwned<TableKey: TableKeyType>(pub Rc<RefCell<ExecutionNode<TableKey>>>);
+pub struct ExecutionNodeOwned(pub Rc<RefCell<ExecutionNode>>);
 
-impl<TableKey: TableKeyType> ExecutionNodeOwned<TableKey> {
+impl ExecutionNodeOwned {
     /// Create new [`ExecutionNodeOwned`]
-    pub fn new(node: ExecutionNode<TableKey>) -> Self {
+    pub fn new(node: ExecutionNode) -> Self {
         Self(Rc::new(RefCell::new(node)))
     }
 
     /// Return a [`ExecutionNodeRef`] pointing to this node
-    pub fn get_ref(&self) -> ExecutionNodeRef<TableKey> {
+    pub fn get_ref(&self) -> ExecutionNodeRef {
         ExecutionNodeRef(Rc::downgrade(&self.0))
     }
 }
 
 /// Wraps [`ExecutionNode`] into a `Weak<RefCell<_>>`
 #[derive(Debug, Clone)]
-pub struct ExecutionNodeRef<TableKey: TableKeyType>(pub Weak<RefCell<ExecutionNode<TableKey>>>);
+pub struct ExecutionNodeRef(pub Weak<RefCell<ExecutionNode>>);
 
-impl<TableKey: TableKeyType> ExecutionNodeRef<TableKey> {
+impl ExecutionNodeRef {
     /// Add a sub node to a join or union node
-    pub fn add_subnode(&mut self, subnode: ExecutionNodeRef<TableKey>) {
+    pub fn add_subnode(&mut self, subnode: ExecutionNodeRef) {
         let self_rc = self
             .0
             .upgrade()
@@ -61,60 +61,60 @@ impl<TableKey: TableKeyType> ExecutionNodeRef<TableKey> {
 
 /// Represents a database operation that should be performed
 #[derive(Debug, Clone)]
-pub enum ExecutionNode<TableKey: TableKeyType> {
+pub enum ExecutionNode {
     /// Fetch table by key.
-    FetchTable(TableKey),
+    FetchTable(TableName),
     /// Fetch temporary table with the (temporary) id.
     FetchTemp(TableId),
     /// Join operation.
-    Join(Vec<ExecutionNodeRef<TableKey>>, JoinBinding),
+    Join(Vec<ExecutionNodeRef>, JoinBinding),
     /// Union operation.
-    Union(Vec<ExecutionNodeRef<TableKey>>),
+    Union(Vec<ExecutionNodeRef>),
     /// Table difference operation.
-    Minus(ExecutionNodeRef<TableKey>, ExecutionNodeRef<TableKey>),
+    Minus(ExecutionNodeRef, ExecutionNodeRef),
     /// Table project operation; can only be applied to a [`FetchTable`] or [`FetchTemp`] node.
-    Project(ExecutionNodeRef<TableKey>, Reordering),
+    Project(ExecutionNodeRef, Reordering),
     /// Only leave entries in that have a certain value.
-    SelectValue(ExecutionNodeRef<TableKey>, Vec<ValueAssignment>),
+    SelectValue(ExecutionNodeRef, Vec<ValueAssignment>),
     /// Only leave entries in that contain equal values in certain columns.
-    SelectEqual(ExecutionNodeRef<TableKey>, SelectEqualClasses),
+    SelectEqual(ExecutionNodeRef, SelectEqualClasses),
     /// Append certain columns to the trie.
-    AppendColumns(ExecutionNodeRef<TableKey>, Vec<Vec<AppendInstruction>>),
+    AppendColumns(ExecutionNodeRef, Vec<Vec<AppendInstruction>>),
     /// Append (the given number of) columns containing fresh nulls.
-    AppendNulls(ExecutionNodeRef<TableKey>, usize),
+    AppendNulls(ExecutionNodeRef, usize),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently.
 #[derive(Debug, Clone)]
-pub enum ExecutionResult<TableKey: TableKeyType> {
+pub enum ExecutionResult {
     /// Temporary table with the id.
     Temp(TableId),
     /// Permanent table tih the table key.
-    Save(TableKey),
+    Save(TableName),
 }
 
 /// Represents the plan for calculating a table
-pub struct ExecutionTree<TableKey: TableKeyType> {
+pub struct ExecutionTree {
     /// All the nodes in the tree.
-    nodes: Vec<ExecutionNodeOwned<TableKey>>,
+    nodes: Vec<ExecutionNodeOwned>,
     /// Root of the operation tree.
-    root: Option<ExecutionNodeRef<TableKey>>,
+    root: Option<ExecutionNodeRef>,
     /// How to save the resulting table.
-    result: ExecutionResult<TableKey>,
-    /// Name which identifies this operation for timing.
+    result: ExecutionResult,
+    /// Name which identifies this operation, e.g., for logging and timing.
     name: String,
 }
 
-impl<TableKey: TableKeyType> Debug for ExecutionTree<TableKey> {
+impl Debug for ExecutionTree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write_tree(f, &self.ascii_tree())
     }
 }
 
 /// Public interface for [`ExecutionTree`]
-impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
+impl ExecutionTree {
     /// Create new [`ExecutionTree`]
-    pub fn new(name: String, result: ExecutionResult<TableKey>) -> Self {
+    pub fn new(name: String, result: ExecutionResult) -> Self {
         Self {
             nodes: Vec::new(),
             root: None,
@@ -123,8 +123,9 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         }
     }
 
-    /// Return the result of this operation
-    pub fn result(&self) -> &ExecutionResult<TableKey> {
+    /// Returns the [`ExecutionResult`] of this operation.
+    /// It declares what should happen with the output, once computed.
+    pub fn result(&self) -> &ExecutionResult {
         &self.result
     }
 
@@ -134,32 +135,30 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     }
 
     /// Return the root of the trie.
-    pub fn root(&self) -> Option<ExecutionNodeRef<TableKey>> {
+    pub fn root(&self) -> Option<ExecutionNodeRef> {
         self.root.clone()
     }
 
     /// Set the root node of the tree.
-    pub fn set_root(&mut self, root: ExecutionNodeRef<TableKey>) {
+    pub fn set_root(&mut self, root: ExecutionNodeRef) {
         self.root = Some(root);
     }
 
     /// Set the result of the computation tree.
-    pub fn set_result(&mut self, result: ExecutionResult<TableKey>) {
+    pub fn set_result(&mut self, result: ExecutionResult) {
         self.result = result;
     }
 
     /// Return an iterator containing a mutable reference to all FetchTable nodes.
-    pub fn all_fetched_tables(
-        &mut self,
-    ) -> impl Iterator<Item = &mut ExecutionNodeOwned<TableKey>> {
+    pub fn all_fetched_tables(&mut self) -> impl Iterator<Item = &mut ExecutionNodeOwned> {
         self.nodes
             .iter_mut()
             .filter(|n| matches!(&*n.0.as_ref().borrow(), ExecutionNode::FetchTable(_)))
     }
 
     /// Return all table keys that have been fetched
-    pub fn all_fetched_keys(&self) -> HashSet<TableKey> {
-        let mut result = HashSet::<TableKey>::new();
+    pub fn all_fetched_keys(&self) -> HashSet<TableName> {
+        let mut result = HashSet::<TableName>::new();
 
         for node in &self.nodes {
             let node_ref = &*node.0.as_ref().borrow();
@@ -173,26 +172,26 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     }
 
     /// Push new node to list of all nodes and returns a reference.
-    fn push_and_return_ref(&mut self, node: ExecutionNode<TableKey>) -> ExecutionNodeRef<TableKey> {
+    fn push_and_return_ref(&mut self, node: ExecutionNode) -> ExecutionNodeRef {
         self.nodes.push(ExecutionNodeOwned::new(node));
         self.nodes.last().unwrap().get_ref()
     }
 
     /// Return [`ExecutionNodeRef`] for fetching a permanent table.
-    pub fn fetch_table(&mut self, key: TableKey) -> ExecutionNodeRef<TableKey> {
+    pub fn fetch_table(&mut self, key: TableName) -> ExecutionNodeRef {
         let new_node = ExecutionNode::FetchTable(key);
         self.push_and_return_ref(new_node)
     }
 
     /// Return [`ExecutionNodeRef`] for fetching a temporary table.
-    pub fn fetch_temp(&mut self, id: TableId) -> ExecutionNodeRef<TableKey> {
+    pub fn fetch_temp(&mut self, id: TableId) -> ExecutionNodeRef {
         let new_node = ExecutionNode::FetchTemp(id);
         self.push_and_return_ref(new_node)
     }
 
     /// Return [`ExecutionNodeRef`] for joining tables.
     /// Starts out empty; add subnodes with `add_subnode`.
-    pub fn join_empty(&mut self, binding: JoinBinding) -> ExecutionNodeRef<TableKey> {
+    pub fn join_empty(&mut self, binding: JoinBinding) -> ExecutionNodeRef {
         let new_node = ExecutionNode::Join(Vec::new(), binding);
         self.push_and_return_ref(new_node)
     }
@@ -200,16 +199,16 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     /// Return [`ExecutionNodeRef`] for joining tables.
     pub fn join(
         &mut self,
-        subtables: Vec<ExecutionNodeRef<TableKey>>,
+        subtables: Vec<ExecutionNodeRef>,
         binding: JoinBinding,
-    ) -> ExecutionNodeRef<TableKey> {
+    ) -> ExecutionNodeRef {
         let new_node = ExecutionNode::Join(subtables, binding);
         self.push_and_return_ref(new_node)
     }
 
     /// Return [`ExecutionNodeRef`] for the union of several tables.
     /// Starts out empty; add subnodes with `add_subnode`.
-    pub fn union_empty(&mut self) -> ExecutionNodeRef<TableKey> {
+    pub fn union_empty(&mut self) -> ExecutionNodeRef {
         let new_node = ExecutionNode::Union(Vec::new());
         self.nodes.push(ExecutionNodeOwned::new(new_node));
 
@@ -217,30 +216,19 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     }
 
     /// Return [`ExecutionNodeRef`] for joining tables.
-    pub fn union(
-        &mut self,
-        subtables: Vec<ExecutionNodeRef<TableKey>>,
-    ) -> ExecutionNodeRef<TableKey> {
+    pub fn union(&mut self, subtables: Vec<ExecutionNodeRef>) -> ExecutionNodeRef {
         let new_node = ExecutionNode::Union(subtables);
         self.push_and_return_ref(new_node)
     }
 
     /// Return [`ExecutionNodeRef`] for subtracting one table from another.
-    pub fn minus(
-        &mut self,
-        left: ExecutionNodeRef<TableKey>,
-        right: ExecutionNodeRef<TableKey>,
-    ) -> ExecutionNodeRef<TableKey> {
+    pub fn minus(&mut self, left: ExecutionNodeRef, right: ExecutionNodeRef) -> ExecutionNodeRef {
         let new_node = ExecutionNode::Minus(left, right);
         self.push_and_return_ref(new_node)
     }
 
     /// Return [`ExecutionNodeRef`] for applying project to a table.
-    pub fn project(
-        &mut self,
-        subnode: ExecutionNodeRef<TableKey>,
-        reorder: Reordering,
-    ) -> ExecutionNodeRef<TableKey> {
+    pub fn project(&mut self, subnode: ExecutionNodeRef, reorder: Reordering) -> ExecutionNodeRef {
         let new_node = ExecutionNode::Project(subnode, reorder);
         self.push_and_return_ref(new_node)
     }
@@ -248,9 +236,9 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     /// Return [`ExecutionNodeRef`] for restricing a column to a certain value.
     pub fn select_value(
         &mut self,
-        subnode: ExecutionNodeRef<TableKey>,
+        subnode: ExecutionNodeRef,
         assigments: Vec<ValueAssignment>,
-    ) -> ExecutionNodeRef<TableKey> {
+    ) -> ExecutionNodeRef {
         let new_node = ExecutionNode::SelectValue(subnode, assigments);
         self.push_and_return_ref(new_node)
     }
@@ -258,9 +246,9 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     /// Return [`ExecutionNodeRef`] for restricting a column to values of certain other columns.
     pub fn select_equal(
         &mut self,
-        subnode: ExecutionNodeRef<TableKey>,
+        subnode: ExecutionNodeRef,
         eq_classes: SelectEqualClasses,
-    ) -> ExecutionNodeRef<TableKey> {
+    ) -> ExecutionNodeRef {
         let new_node = ExecutionNode::SelectEqual(subnode, eq_classes);
         self.push_and_return_ref(new_node)
     }
@@ -268,9 +256,9 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     /// Return [`ExecutionNodeRef`] for appending columns to a trie.
     pub fn append_columns(
         &mut self,
-        subnode: ExecutionNodeRef<TableKey>,
+        subnode: ExecutionNodeRef,
         instructions: Vec<Vec<AppendInstruction>>,
-    ) -> ExecutionNodeRef<TableKey> {
+    ) -> ExecutionNodeRef {
         let new_node = ExecutionNode::AppendColumns(subnode, instructions);
         self.push_and_return_ref(new_node)
     }
@@ -278,14 +266,14 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     /// Return [`ExecutionNodeRef`] for appending null-columns to a trie.
     pub fn append_nulls(
         &mut self,
-        subnode: ExecutionNodeRef<TableKey>,
+        subnode: ExecutionNodeRef,
         num_nulls: usize,
-    ) -> ExecutionNodeRef<TableKey> {
+    ) -> ExecutionNodeRef {
         let new_node = ExecutionNode::AppendNulls(subnode, num_nulls);
         self.push_and_return_ref(new_node)
     }
 
-    fn ascii_tree_recursive(node: ExecutionNodeRef<TableKey>) -> Tree {
+    fn ascii_tree_recursive(node: ExecutionNodeRef) -> Tree {
         let node_rc = node
             .0
             .upgrade()
@@ -356,19 +344,19 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
-enum RemoveTable<TableKey: TableKeyType> {
+enum RemoveTable {
     Temp(TableId),
-    Permanent(TableKey),
+    Permanent(TableName),
 }
 
 /// Functionality for optimizing an [`ExecutionTree`]
-impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
+impl ExecutionTree {
     /// Implements the functionalily for `simplify` by recusively traversing the tree.
     fn simplify_recursive(
-        new_tree: &mut ExecutionTree<TableKey>,
-        node: ExecutionNodeRef<TableKey>,
-        removed_tables: &HashSet<RemoveTable<TableKey>>,
-    ) -> Option<ExecutionNodeRef<TableKey>> {
+        new_tree: &mut ExecutionTree,
+        node: ExecutionNodeRef,
+        removed_tables: &HashSet<RemoveTable>,
+    ) -> Option<ExecutionNodeRef> {
         let node_rc = node
             .0
             .upgrade()
@@ -395,8 +383,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                 }
             }
             ExecutionNode::Join(subnodes, binding) => {
-                let mut simplified_nodes =
-                    Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
+                let mut simplified_nodes = Vec::<ExecutionNodeRef>::with_capacity(subnodes.len());
                 for subnode in subnodes {
                     let simplified_opt =
                         Self::simplify_recursive(new_tree, subnode.clone(), removed_tables);
@@ -416,8 +403,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                 Some(new_tree.join(simplified_nodes, binding.clone()))
             }
             ExecutionNode::Union(subnodes) => {
-                let mut simplified_nodes =
-                    Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
+                let mut simplified_nodes = Vec::<ExecutionNodeRef>::with_capacity(subnodes.len());
                 for subnode in subnodes {
                     let simplified_opt =
                         Self::simplify_recursive(new_tree, subnode.clone(), removed_tables);
@@ -509,8 +495,8 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     /// Builds a new [`ExecutionTree`] which does not include superfluous operations,
     /// like, e.g., performing a join over one subtable.
     /// Will also exclude the supplied set of temporary tables.
-    fn simplify(&self, removed_temp_ids: &HashSet<RemoveTable<TableKey>>) -> Self {
-        let mut new_tree = ExecutionTree::<TableKey>::new(self.name.clone(), self.result.clone());
+    fn simplify(&self, removed_temp_ids: &HashSet<RemoveTable>) -> Self {
+        let mut new_tree = ExecutionTree::new(self.name.clone(), self.result.clone());
 
         if let Some(old_root) = self.root() {
             let new_root_opt = Self::simplify_recursive(&mut new_tree, old_root, removed_temp_ids);
@@ -523,7 +509,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     }
 
     /// Replace temporary ids in the tree as well as in the result with the given mapping.
-    pub fn replace_temp_ids(&mut self, map: &HashMap<TableId, ExecutionNode<TableKey>>) {
+    pub fn replace_temp_ids(&mut self, map: &HashMap<TableId, ExecutionNode>) {
         if let ExecutionResult::Temp(id_saved) = self.result {
             if let Some(node) = map.get(&id_saved) {
                 match node {
@@ -552,25 +538,25 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
 /// A series of execution plans
 /// Usually contains the information necessary for evaluating one rule
 #[derive(Debug, Default)]
-pub struct ExecutionPlan<TableKey: TableKeyType> {
+pub struct ExecutionPlan {
     /// The individual steps that will be executed
     /// Each step will result in either a temporary or a permanent table
-    pub trees: Vec<ExecutionTree<TableKey>>,
+    pub trees: Vec<ExecutionTree>,
 }
 
-impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
+impl ExecutionPlan {
     /// Create new [`ExecutionPlan`].
     pub fn new() -> Self {
         Self { trees: Vec::new() }
     }
 
     /// Append new [`ExecutionTree`] to the plan.
-    pub fn push(&mut self, tree: ExecutionTree<TableKey>) {
+    pub fn push(&mut self, tree: ExecutionTree) {
         self.trees.push(tree);
     }
 
     /// Append a list of [`ExecutionTree`] to the plan.
-    pub fn append(&mut self, mut trees: Vec<ExecutionTree<TableKey>>) {
+    pub fn append(&mut self, mut trees: Vec<ExecutionTree>) {
         self.trees.append(&mut trees);
     }
 
@@ -579,9 +565,9 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
     /// Renaming of temporary tables to other temporary tables will be applied exhaustively.
     /// I.e. if A -> B and B -> C then A -> C.
     fn update_renaming_map(
-        map: &mut HashMap<TableId, ExecutionNode<TableKey>>,
+        map: &mut HashMap<TableId, ExecutionNode>,
         from: TableId,
-        to: ExecutionNode<TableKey>,
+        to: ExecutionNode,
     ) {
         let actual_to = if let ExecutionNode::FetchTemp(to_id) = to {
             if let Some(actual_node) = map.get(&to_id) {
@@ -606,7 +592,7 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
     ///     * Removing computations that would result in an unused temporary table
     ///     * Removing temporary tables that are the same as other temporary tables
     pub fn simplify(&mut self) {
-        let mut removed_tables = HashSet::<RemoveTable<TableKey>>::new();
+        let mut removed_tables = HashSet::<RemoveTable>::new();
 
         let mut used_temp_ids = HashSet::<TableId>::new();
         let mut used_temp_in = HashMap::<TableId, HashSet<TableId>>::new();
@@ -646,7 +632,7 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
         // Keep only those trees which are not empty
         // and are actually used for computing a permanent table.
         // Also remove temporary tables which are the same as other tables and remember those.
-        let mut renamed_temp = HashMap::<TableId, ExecutionNode<TableKey>>::new();
+        let mut renamed_temp = HashMap::<TableId, ExecutionNode>::new();
         self.trees.retain(|t| {
             if let Some(root) = t.root() {
                 let node = root
@@ -709,8 +695,8 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
     }
 
     /// Return all table keys that have been fetched
-    pub fn all_fetched_keys(&self) -> HashSet<TableKey> {
-        let mut result = HashSet::<TableKey>::new();
+    pub fn all_fetched_keys(&self) -> HashSet<TableName> {
+        let mut result = HashSet::<TableName>::new();
 
         for tree in &self.trees {
             let tree_keys = tree.all_fetched_keys();
@@ -724,26 +710,29 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
 
 #[cfg(test)]
 mod test {
-    use crate::physical::management::database::{TableId, TableKeyType};
+    use crate::physical::management::database::TableName;
 
     use super::{ExecutionNodeRef, ExecutionPlan, ExecutionResult, ExecutionTree};
 
-    type MyTableKey = usize;
-    impl TableKeyType for MyTableKey {}
-
     #[test]
     fn general_use() {
-        let mut body_tree =
-            ExecutionTree::<MyTableKey>::new("Test".to_string(), ExecutionResult::Temp(0));
+        let mut body_tree = ExecutionTree::new("Test".to_string(), ExecutionResult::Temp(0));
 
         let mut seminaive_union_node = body_tree.union_empty();
         body_tree.set_root(seminaive_union_node.clone());
 
         for _body_index in 0..2 {
             let mut join_node = body_tree.join_empty(vec![vec![0, 1], vec![1, 2]]);
-            let tables: Vec<Vec<TableId>> = vec![vec![0, 1], vec![0, 4, 7, 12]];
+            let table_name_a = TableName(String::from("TableA"));
+            let table_name_b = TableName(String::from("TableB"));
+            let table_name_c = TableName(String::from("TableC"));
+            let table_name_d = TableName(String::from("TableD"));
+            let tables: Vec<Vec<TableName>> = vec![
+                vec![table_name_a, table_name_b],
+                vec![table_name_a, table_name_c, table_name_d],
+            ];
             for table_ids in tables {
-                let union_subnodes: Vec<ExecutionNodeRef<MyTableKey>> = table_ids
+                let union_subnodes: Vec<ExecutionNodeRef> = table_ids
                     .iter()
                     .map(|id| body_tree.fetch_table(*id))
                     .collect();

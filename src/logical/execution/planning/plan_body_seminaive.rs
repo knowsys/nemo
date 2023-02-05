@@ -7,7 +7,6 @@ use crate::{
         execution::execution_engine::RuleInfo,
         model::{Atom, Filter, Rule, Variable},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
-        table_manager::TableKey,
         TableManager,
     },
     physical::{
@@ -52,11 +51,9 @@ impl<Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy {
         rule_info: &RuleInfo,
         mut variable_order: VariableOrder,
         step_number: usize,
-    ) -> ExecutionTree<TableKey> {
-        let mut tree = ExecutionTree::<TableKey>::new(
-            "Body Join".to_string(),
-            ExecutionResult::Temp(BODY_JOIN),
-        );
+    ) -> ExecutionTree {
+        let mut tree =
+            ExecutionTree::new("Body Join".to_string(), ExecutionResult::Temp(BODY_JOIN));
 
         if self.is_existential {
             variable_order = variable_order.restrict_to(&self.body_variables);

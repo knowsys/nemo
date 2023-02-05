@@ -6,7 +6,6 @@ use crate::{
     logical::{
         model::{Atom, Filter, Variable},
         program_analysis::variable_order::VariableOrder,
-        table_manager::TableKey,
         TableManager,
     },
     physical::{
@@ -22,7 +21,7 @@ use super::plan_util::{atom_binding, compute_filters, order_atom, subtree_union}
 // Calculate a subtree consiting of join representing one variant of an seminaive evaluation.
 #[allow(clippy::too_many_arguments)]
 fn subtree_join<Dict: Dictionary>(
-    tree: &mut ExecutionTree<TableKey>,
+    tree: &mut ExecutionTree,
     manager: &TableManager<Dict>,
     side_atoms: &[&Atom],
     main_atoms: &[&Atom],
@@ -32,7 +31,7 @@ fn subtree_join<Dict: Dictionary>(
     overall_step: usize,
     mid: usize,
     join_binding: &JoinBinding,
-) -> ExecutionNodeRef<TableKey> {
+) -> ExecutionNodeRef {
     let mut join_node = tree.join_empty(join_binding.clone());
 
     // For every atom that did not receive any update since the last rule application take all available elements
@@ -93,7 +92,7 @@ fn subtree_join<Dict: Dictionary>(
 /// Note: The [`VariableOrder`] must only contain variables that occur in the `atoms` parameter.
 #[allow(clippy::too_many_arguments)]
 pub fn seminaive_join<Dict: Dictionary>(
-    tree: &mut ExecutionTree<TableKey>,
+    tree: &mut ExecutionTree,
     table_manager: &TableManager<Dict>,
     step_last_applied: usize,
     current_step_number: usize,

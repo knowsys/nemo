@@ -8,7 +8,7 @@ use crate::{
         execution::execution_engine::RuleInfo,
         model::{Identifier, Rule},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
-        table_manager::{ColumnOrder, TableKey},
+        table_manager::ColumnOrder,
         TableManager,
     },
     physical::{
@@ -59,8 +59,8 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
         _rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,
-    ) -> Vec<ExecutionTree<TableKey>> {
-        let mut trees = Vec::<ExecutionTree<TableKey>>::new();
+    ) -> Vec<ExecutionTree> {
+        let mut trees = Vec::<ExecutionTree>::new();
 
         for (&predicate, head_instructions) in self.predicate_to_atoms.iter() {
             let predicate_arity = head_instructions[0].arity;
@@ -71,13 +71,13 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
             let head_table_name =
                 table_manager.get_table_name(predicate, step_number..step_number + 1);
             let head_table_key = TableKey::from_name(head_table_name, head_order.clone());
-            let mut head_tree = ExecutionTree::<TableKey>::new(
+            let mut head_tree = ExecutionTree::new(
                 "Head (Datalog)".to_string(),
                 ExecutionResult::Save(head_table_key),
             );
 
             let mut project_append_nodes =
-                Vec::<ExecutionNodeRef<TableKey>>::with_capacity(head_instructions.len());
+                Vec::<ExecutionNodeRef>::with_capacity(head_instructions.len());
             for head_instruction in head_instructions {
                 let head_binding = atom_binding(
                     &head_instruction.reduced_atom,
@@ -97,12 +97,12 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
 
             let new_tables_union = head_tree.union(project_append_nodes);
 
-            let old_tables_keys: Vec<TableKey> = table_manager
+            let old_tables_keys: Vec = table_manager
                 .cover_whole_table(predicate)
                 .into_iter()
                 .map(|r| TableKey::new(predicate, r, head_order.clone()))
                 .collect();
-            let old_table_nodes: Vec<ExecutionNodeRef<TableKey>> = old_tables_keys
+            let old_table_nodes: Vec<ExecutionNodeRef> = old_tables_keys
                 .into_iter()
                 .map(|k| head_tree.fetch_table(k))
                 .collect();
