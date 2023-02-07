@@ -9,6 +9,7 @@ use crate::{
     logical::{
         model::{Atom, Filter, Identifier, NumericLiteral, Term, Variable},
         program_analysis::variable_order::VariableOrder,
+        table_manager::ChaseTable,
         TableManager,
     },
     physical::{
@@ -191,15 +192,15 @@ pub(super) fn subtree_union<Dict: Dictionary>(
 ) -> ExecutionNodeRef {
     debug_assert!(order.is_permutation());
 
-    let base_tables: Vec = manager
+    let base_tables: Vec<ChaseTable> = manager
         .get_table_covering(predicate, steps)
         .into_iter()
-        .map(|r| TableKey::new(predicate, r, order.clone().into()))
+        .map(|r| ChaseTable::from_pred(predicate, r, order.clone().into()))
         .collect();
 
     let mut union_node = tree.union_empty();
     for key in base_tables {
-        let base_node = tree.fetch_table(key);
+        let base_node = tree.fetch_table(key.db_name);
         union_node.add_subnode(base_node);
     }
 

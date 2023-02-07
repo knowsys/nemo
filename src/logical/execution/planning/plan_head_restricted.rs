@@ -11,6 +11,7 @@ use crate::{
             analysis::RuleAnalysis, normalization::normalize_atom_vector,
             variable_order::VariableOrder,
         },
+        table_manager::{ChaseTable, ColumnOrder},
         TableManager,
     },
     physical::{
@@ -199,10 +200,10 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             self.analysis.head_matches_identifier,
             step_number..step_number + 1,
         );
-        let head_projected_key = TableKey::from_name(head_projected_name, head_projected_order);
+        let head_projected_key = ChaseTable::from_name(head_projected_name, head_projected_order);
         let mut tree_head_projected = ExecutionTree::new(
             "Head (Restricted): Sat. Frontier".to_string(),
-            ExecutionResult::Save(head_projected_key.clone()),
+            ExecutionResult::Save(head_projected_key.db_name),
         );
 
         // Get a vector of all the normalized head variables but sorted in the variable order
@@ -254,7 +255,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         );
 
         // The above does not include the table computed in this iteration, so we need to load and include it
-        let node_fetch_sat = tree_unsatisfied.fetch_table(head_projected_key);
+        let node_fetch_sat = tree_unsatisfied.fetch_table(head_projected_key.db_name);
         node_satisfied.add_subnode(node_fetch_sat);
 
         let node_unsatisfied = tree_unsatisfied.minus(node_body_project, node_satisfied);
@@ -276,10 +277,10 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
 
             let head_table_name =
                 table_manager.get_table_name(predicate, step_number..step_number + 1);
-            let head_table_key = TableKey::from_name(head_table_name, head_order.clone());
+            let head_table_key = ChaseTable::from_name(head_table_name, head_order.clone());
             let mut head_tree = ExecutionTree::new(
                 "Head (Restricted): Result Project".to_string(),
-                ExecutionResult::Save(head_table_key),
+                ExecutionResult::Save(head_table_key.db_name),
             );
 
             let mut unsat_variable_order = VariableOrder::new();
@@ -331,14 +332,14 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             } else {
                 // Duplicate elimination for atoms thats do not contain existential variables
                 // Same as in plan_head_datalog
-                let old_tables_keys: Vec = table_manager
+                let old_tables_keys: Vec<ChaseTable> = table_manager
                     .cover_whole_table(predicate)
                     .into_iter()
-                    .map(|r| TableKey::new(predicate, r, head_order.clone()))
+                    .map(|r| ChaseTable::from_pred(predicate, r, head_order.clone()))
                     .collect();
                 let old_table_nodes: Vec<ExecutionNodeRef> = old_tables_keys
                     .into_iter()
-                    .map(|k| head_tree.fetch_table(k))
+                    .map(|k| head_tree.fetch_table(k.db_name))
                     .collect();
                 let old_table_union = head_tree.union(old_table_nodes);
 

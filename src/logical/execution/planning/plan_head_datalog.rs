@@ -8,7 +8,7 @@ use crate::{
         execution::execution_engine::RuleInfo,
         model::{Identifier, Rule},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
-        table_manager::ColumnOrder,
+        table_manager::{ChaseTable, ColumnOrder},
         TableManager,
     },
     physical::{
@@ -70,10 +70,10 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
 
             let head_table_name =
                 table_manager.get_table_name(predicate, step_number..step_number + 1);
-            let head_table_key = TableKey::from_name(head_table_name, head_order.clone());
+            let head_table_key = ChaseTable::from_name(head_table_name, head_order.clone());
             let mut head_tree = ExecutionTree::new(
                 "Head (Datalog)".to_string(),
-                ExecutionResult::Save(head_table_key),
+                ExecutionResult::Save(head_table_key.db_name),
             );
 
             let mut project_append_nodes =
@@ -97,14 +97,14 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
 
             let new_tables_union = head_tree.union(project_append_nodes);
 
-            let old_tables_keys: Vec = table_manager
+            let old_tables_keys: Vec<ChaseTable> = table_manager
                 .cover_whole_table(predicate)
                 .into_iter()
-                .map(|r| TableKey::new(predicate, r, head_order.clone()))
+                .map(|r| ChaseTable::from_pred(predicate, r, head_order.clone()))
                 .collect();
             let old_table_nodes: Vec<ExecutionNodeRef> = old_tables_keys
                 .into_iter()
-                .map(|k| head_tree.fetch_table(k))
+                .map(|k| head_tree.fetch_table(k.db_name))
                 .collect();
             let old_table_union = head_tree.union(old_table_nodes);
 
