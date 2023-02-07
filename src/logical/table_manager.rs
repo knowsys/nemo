@@ -844,7 +844,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             }
 
             if let Some(predicate) = predicate_opt {
-                return Some(ChaseTable::new(
+                return Some(ChaseTable::from_pred(
                     predicate,
                     TableRange::Multiple(TableCover {
                         start: overall_cover[0],
