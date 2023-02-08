@@ -303,7 +303,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                     .map(|n| Self::ascii_tree_recursive(n.clone()))
                     .collect();
 
-                Tree::Node(format!("Join {:?}", bindings), subtrees)
+                Tree::Node(format!("Join {bindings:?}"), subtrees)
             }
             ExecutionNode::Union(subnodes) => {
                 let subtrees = subnodes
@@ -322,27 +322,27 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
             ExecutionNode::Project(subnode, reorder) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
-                Tree::Node(format!("Project {:?}", reorder), vec![subtree])
+                Tree::Node(format!("Project {reorder:?}"), vec![subtree])
             }
             ExecutionNode::SelectValue(subnode, assignments) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
-                Tree::Node(format!("Select Value {:?}", assignments), vec![subtree])
+                Tree::Node(format!("Select Value {assignments:?}"), vec![subtree])
             }
             ExecutionNode::SelectEqual(subnode, classes) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
-                Tree::Node(format!("Select Equal {:?}", classes), vec![subtree])
+                Tree::Node(format!("Select Equal {classes:?}"), vec![subtree])
             }
             ExecutionNode::AppendColumns(subnode, instructions) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
-                Tree::Node(format!("Append Columns {:?}", instructions), vec![subtree])
+                Tree::Node(format!("Append Columns {instructions:?}"), vec![subtree])
             }
             ExecutionNode::AppendNulls(subnode, num_nulls) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
-                Tree::Node(format!("Append Nulls {}", num_nulls), vec![subtree])
+                Tree::Node(format!("Append Nulls {num_nulls}"), vec![subtree])
             }
         }
     }
