@@ -40,15 +40,18 @@ fn is_recursive(rule: &Rule) -> bool {
     })
 }
 
-fn count_existential(rule: &Rule) -> usize {
-    rule.head()
-        .iter()
-        .filter(|a| {
-            a.terms()
-                .iter()
-                .any(|t| matches!(t, Term::Variable(Variable::Existential(_))))
-        })
-        .count()
+fn count_distinct_existential_variables(rule: &Rule) -> usize {
+    let mut existentials = HashSet::<Variable>::new();
+
+    for head_atom in rule.head() {
+        for term in head_atom.terms() {
+            if let Term::Variable(Variable::Existential(id)) = term {
+                existentials.insert(Variable::Existential(*id));
+            }
+        }
+    }
+
+    existentials.len()
 }
 
 fn get_variables(atoms: &[&Atom]) -> HashSet<Variable> {
@@ -71,7 +74,7 @@ fn analyze_rule(
     let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
     let head_atoms: Vec<&Atom> = rule.head().iter().collect();
 
-    let num_existential = count_existential(rule);
+    let num_existential = count_distinct_existential_variables(rule);
 
     // TODO: This is a bit hacky, as we do not know whether if the dictionary has been altered after creating the program
     // (See the other hack for normalization)

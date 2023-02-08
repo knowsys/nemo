@@ -22,9 +22,7 @@ use crate::{
 };
 
 use super::{
-    plan_util::{
-        atom_binding, head_instruction_from_atom, subtree_union, HeadInstruction, BODY_JOIN,
-    },
+    plan_util::{head_instruction_from_atom, subtree_union, HeadInstruction, BODY_JOIN},
     seminaive_join, HeadStrategy,
 };
 
@@ -33,6 +31,7 @@ use super::{
 pub struct RestrictedChaseStrategy<'a> {
     normalized_head_atoms: Vec<Atom>,
     normalized_head_filters: Vec<Filter>,
+    normalized_head_variables: HashSet<Variable>,
 
     frontier_variables: HashSet<Variable>,
 
@@ -53,6 +52,14 @@ impl<'a> RestrictedChaseStrategy<'a> {
 
         let normalized_head =
             normalize_atom_vector(&rule.head().iter().by_ref().collect::<Vec<&Atom>>(), &[]);
+        let mut normalized_head_variables = HashSet::new();
+        for atom in &normalized_head.atoms {
+            for term in atom.terms() {
+                if let Term::Variable(v) = term {
+                    normalized_head_variables.insert(*v);
+                }
+            }
+        }
 
         let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
         let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();
@@ -78,6 +85,7 @@ impl<'a> RestrictedChaseStrategy<'a> {
             frontier_variables,
             normalized_head_atoms: normalized_head.atoms,
             normalized_head_filters: normalized_head.filters,
+            normalized_head_variables,
             predicate_to_instructions,
             predicate_to_full_existential,
             analysis,
@@ -156,7 +164,7 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
             rule_info.step_last_applied,
             step_number,
             &normalized_head_variable_order,
-            &self.analysis.head_variables,
+            &self.normalized_head_variables,
             &self
                 .normalized_head_atoms
                 .iter()
@@ -204,7 +212,7 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
                 .filter(|(_, v)| self.frontier_variables.contains(v))
                 .map(|(i, _)| i)
                 .collect(),
-            self.analysis.body_variables.len(),
+            head_variables_in_order.len(),
         );
 
         // Do the projection operation
@@ -264,8 +272,10 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
             );
 
             let mut unsat_variable_order = VariableOrder::new();
-            for &variable in &head_variables_in_order {
-                if matches!(variable, Variable::Universal(_)) {
+            for &variable in &body_variables_in_order {
+                if matches!(variable, Variable::Universal(_))
+                    && self.frontier_variables.contains(variable)
+                {
                     unsat_variable_order.push(*variable);
                 }
             }
@@ -278,11 +288,19 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
             let mut final_head_nodes =
                 Vec::<ExecutionNodeRef<TableKey>>::with_capacity(head_instructions.len());
             for head_instruction in head_instructions {
-                let head_binding = atom_binding(
-                    &head_instruction.reduced_atom,
-                    &Reordering::new(head_order.clone().into(), unsat_variable_order.len()),
-                    &unsat_variable_order,
-                );
+                // TODO:
+                // This is just the `atom_binding` function. However you cannot use it, since it cannot deal with reduced atoms.
+                let head_binding: Vec<usize> = head_instruction.reduced_atom.terms()
+                .iter()
+                .map(|t| {
+                    if let Term::Variable(variable) = t {
+                        *unsat_variable_order.get(variable).unwrap()
+                    } else {
+                        panic!("It is assumed that this function is only called on atoms which only contain variables.");
+                    }
+                })
+                .collect();
+
                 let head_reordering =
                     Reordering::new(head_binding.clone(), unsat_variable_order.len());
 

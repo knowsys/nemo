@@ -57,23 +57,24 @@ pub fn normalize_atom_vector(atoms: &[&Atom], filters: &[Filter]) -> Normalizati
         let mut atom_variables = HashSet::new();
 
         for term in atom.terms_mut() {
-            if let Term::Variable(variable) = term {
+            let add_filter = if let Term::Variable(variable) = term {
                 // If term is a variable we add a filter iff it has already occured
-                if !atom_variables.insert(*variable) {
-                    // Create fresh variable
-                    let new_variable = match variable {
-                        Variable::Universal(_) => Variable::Universal(Identifier(current_id)),
-                        Variable::Existential(_) => Variable::Existential(Identifier(current_id)),
-                    };
+                !atom_variables.insert(*variable)
+            } else {
+                // If term is not a variable then we need to add a filter
+                true
+            };
 
-                    current_id += 1;
+            if add_filter {
+                // Create fresh variable
+                let new_variable = Variable::Universal(Identifier(current_id));
+                current_id += 1;
 
-                    // Add new filter expression
-                    new_filters.push(Filter::new(FilterOperation::Equals, new_variable, *term));
+                // Add new filter expression
+                new_filters.push(Filter::new(FilterOperation::Equals, new_variable, *term));
 
-                    // Replace current term with the new variable
-                    *term = Term::Variable(new_variable);
-                }
+                // Replace current term with the new variable
+                *term = Term::Variable(new_variable);
             }
         }
     }

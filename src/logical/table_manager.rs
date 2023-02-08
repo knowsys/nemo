@@ -341,8 +341,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
                     false
                 }
-                TableStatus::OnDisk(_) => true,
-                TableStatus::Reference(_, _) => true,
+                TableStatus::OnDisk(_) => false, // TODO: Check the order here as well?
+                TableStatus::Reference(_, _) => false, // TODO: Check the order here as well?
             }
         } else {
             false
@@ -866,14 +866,12 @@ impl<Dict: Dictionary> TableManager<Dict> {
     ) -> Result<HashSet<Identifier>, Error> {
         let mut result = HashSet::<Identifier>::new();
 
-        // Remove trees that save tables under existing names
-        plan.trees.retain(|t| {
-            if let ExecutionResult::Save(key) = t.result() {
-                return !self.contains_key(key);
+        // Debug check whether we procude duplicate entries
+        for tree in &plan.trees {
+            if let ExecutionResult::Save(key) = tree.result() {
+                debug_assert!(!self.contains_key(key))
             }
-
-            true
-        });
+        }
 
         // Simplify plan
         plan.simplify();
