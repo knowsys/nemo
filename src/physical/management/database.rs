@@ -265,8 +265,6 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
             TimedCode::instance().sub(&timed_string).start();
             log_execution_title(tree);
 
-            println!("{:?}", tree);
-
             let type_tree = TypeTree::from_execution_tree(self, &temp_types, tree)?;
             let schema = type_tree.schema.clone();
             if let ExecutionResult::Temp(id) = tree.result() {
