@@ -293,10 +293,8 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         let node_ref = &*node_rc.as_ref().borrow();
 
         match node_ref {
-            ExecutionNode::FetchTable(key) => {
-                Tree::Leaf(vec![format!("Permanent Table: {:?}", key)])
-            }
-            ExecutionNode::FetchTemp(id) => Tree::Leaf(vec![format!("Temporary Table: {:}", id)]),
+            ExecutionNode::FetchTable(key) => Tree::Leaf(vec![format!("Permanent Table: {key:?}")]),
+            ExecutionNode::FetchTemp(id) => Tree::Leaf(vec![format!("Temporary Table: {id}")]),
             ExecutionNode::Join(subnodes, bindings) => {
                 let subtrees = subnodes
                     .iter()
