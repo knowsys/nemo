@@ -57,10 +57,8 @@ pub enum AppendInstruction {
     /// Add a column which only contains a constant.
     /// Must contain schema information.
     /// In this case whether the constant is associated with a dict
-    /// TODO: Maybe this wont be needed if dicts are moved out of the physical layer
+    /// TODO: Maybe the bool wont be needed if dicts are moved out of the physical layer
     Constant(DataValueT, bool),
-    /// Add a column which contains fresh nulls.
-    Null,
 }
 
 /// Appends columns to an existing trie and returns the modified trie.
@@ -177,7 +175,6 @@ pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> T
                         }
                     };
                 }
-                AppendInstruction::Null => todo!(),
             }
         }
 
@@ -191,7 +188,7 @@ pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> T
     Trie::new(Vec::<ColumnWithIntervalsT>::from(new_columns))
 }
 
-/// [`TrieScan`] which represents the result from joining a set of tries (given as [`TrieScan`]s),
+/// [`TrieScan`] which appends columns to an existing [`TrieScan`].
 #[derive(Debug)]
 pub struct TrieScanAppend<'a> {
     /// Trie scans to which new columns will be appended.
@@ -204,7 +201,7 @@ pub struct TrieScanAppend<'a> {
     target_types: TableColumnTypes,
 
     /// Layers in the current trie that point to layers in the base trie.
-    /// I.e. in which layers are the pass scans.
+    /// I.e. which `column_scans` are pass scans.
     base_indices: Vec<usize>,
     /// Pointer into the `base_indices` member.
     base_pointer: usize,
@@ -292,7 +289,6 @@ impl<'a> TrieScanAppend<'a> {
                             }
                         }
                     }
-                    AppendInstruction::Null => todo!(),
                 }
             }
 

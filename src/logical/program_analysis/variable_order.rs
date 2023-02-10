@@ -2,6 +2,7 @@
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
+use crate::logical::model::Term;
 use crate::logical::Permutator;
 use crate::physical::dictionary::Dictionary;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -36,6 +37,42 @@ impl VariableOrder {
     /// Check if variable is part of the [`VariableOrder`].
     pub fn contains(&self, variable: &Variable) -> bool {
         self.0.contains_key(variable)
+    }
+
+    /// Returns a [`VariableOrder`] which is restricted to the given variables (but preserve their order)
+    pub fn restrict_to(&self, variables: &HashSet<Variable>) -> Self {
+        let mut variable_vector = Vec::<Variable>::with_capacity(variables.len());
+        for variable in variables {
+            if self.0.get(variable).is_some() {
+                variable_vector.push(*variable);
+            }
+        }
+
+        variable_vector.sort_by(|a, b| {
+            variables
+                .get(a)
+                .unwrap()
+                .partial_cmp(variables.get(b).unwrap())
+                .unwrap()
+        });
+
+        let mut result = HashMap::<Variable, usize>::new();
+
+        for (index, variable) in variable_vector.into_iter().enumerate() {
+            result.insert(variable, index);
+        }
+
+        Self(result)
+    }
+
+    /// Returns the number of entries.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns whether it contains any entry.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     /// Return an iterator over all mapped variables.
@@ -271,6 +308,31 @@ impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
         (idb_count, edb_count)
     }
 
+    /// This is a hack to deal with existential rules
+    /// It just appends the existential variables to the end
+    /// TODO: Think about variable orders with existential rules
+    fn append_existentials(variable_order: &mut VariableOrder, rule: &Rule) {
+        // TODO: Pass a RuleAnalysis object and check if this would be useful in other places
+        let existential_variables: Vec<Variable> = rule
+            .head()
+            .iter()
+            .flat_map(|a| a.terms())
+            .filter_map(|t| {
+                if let Term::Variable(var) = t {
+                    Some(var)
+                } else {
+                    None
+                }
+            })
+            .filter(|&v| matches!(v, Variable::Existential(_)))
+            .copied()
+            .collect();
+
+        for variable in existential_variables {
+            variable_order.push(variable);
+        }
+    }
+
     fn generate_variable_orders(&mut self) -> Vec<VariableOrder> {
         // NOTE: We use a BTreeMap to determinise the iteration order for easier debugging; this should not be performance critical
         let mut remaining_rules: BTreeMap<usize, &Rule> =
@@ -295,7 +357,9 @@ impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
                 .expect("the remaining rules are never empty here");
 
             let next_index = *next_index;
-            let var_order = self.generate_variable_order_for_rule(next_rule);
+            let mut var_order = self.generate_variable_order_for_rule(next_rule);
+            Self::append_existentials(&mut var_order, next_rule);
+
             remaining_rules.remove(&next_index);
             result.push((next_index, var_order));
         }

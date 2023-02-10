@@ -37,6 +37,10 @@ pub use columnscan_constant::ColumnScanConstant;
 pub mod columnscan_copy;
 pub use columnscan_copy::ColumnScanCopy;
 
+/// Module for defining [`ColumnScanNulls`]
+pub mod columnscan_nulls;
+pub use columnscan_nulls::ColumnScanNulls;
+
 /// Module for defining [`ColumnScanCast`]
 pub mod columnscan_cast;
 pub use columnscan_cast::ColumnScanCast;

@@ -21,6 +21,11 @@ pub struct RuleAnalysis {
     pub body_variables: HashSet<Variable>,
     /// Variables occuring in the head.
     pub head_variables: HashSet<Variable>,
+    /// Number of existential variables.
+    pub num_existential: usize,
+
+    /// Table identifier for storing head matches for the restricted chase
+    pub head_matches_identifier: Identifier,
 
     /// Variable orders that are worth considering.
     pub promising_variable_orders: Vec<VariableOrder>,
@@ -35,12 +40,18 @@ fn is_recursive(rule: &Rule) -> bool {
     })
 }
 
-fn is_existential(rule: &Rule) -> bool {
-    rule.head().iter().any(|a| {
-        a.terms()
-            .iter()
-            .any(|t| matches!(t, Term::Variable(Variable::Existential(_))))
-    })
+fn count_distinct_existential_variables(rule: &Rule) -> usize {
+    let mut existentials = HashSet::<Variable>::new();
+
+    for head_atom in rule.head() {
+        for term in head_atom.terms() {
+            if let Term::Variable(Variable::Existential(id)) = term {
+                existentials.insert(Variable::Existential(*id));
+            }
+        }
+    }
+
+    existentials.len()
 }
 
 fn get_variables(atoms: &[&Atom]) -> HashSet<Variable> {
@@ -55,16 +66,29 @@ fn get_variables(atoms: &[&Atom]) -> HashSet<Variable> {
     result
 }
 
-fn analyze_rule(rule: &Rule, promising_variable_orders: Vec<VariableOrder>) -> RuleAnalysis {
+fn analyze_rule(
+    rule: &Rule,
+    promising_variable_orders: Vec<VariableOrder>,
+    fresh_id: &mut usize,
+) -> RuleAnalysis {
     let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
     let head_atoms: Vec<&Atom> = rule.head().iter().collect();
 
+    let num_existential = count_distinct_existential_variables(rule);
+
+    // TODO: This is a bit hacky, as we do not know whether if the dictionary has been altered after creating the program
+    // (See the other hack for normalization)
+    // This has to be fixed once the dictionary discussions have beeen completed
+    *fresh_id += 1;
+
     RuleAnalysis {
-        is_existential: is_existential(rule),
+        is_existential: num_existential > 0,
         is_recursive: is_recursive(rule),
         has_filters: !rule.filters().is_empty(),
         body_variables: get_variables(&body_atoms),
         head_variables: get_variables(&head_atoms),
+        num_existential,
+        head_matches_identifier: Identifier(*fresh_id),
         promising_variable_orders,
     }
 }
@@ -95,13 +119,14 @@ impl<Dict: Dictionary> Program<Dict> {
     /// Analyze itself and return a struct containing the results.
     pub fn analyze(&self) -> ProgramAnalysis {
         let variable_orders = build_preferable_variable_orders(self, None);
+        let mut fresh_id = self.first_unused_id_names();
 
         ProgramAnalysis {
             rule_analysis: self
                 .rules()
                 .iter()
                 .enumerate()
-                .map(|(i, r)| analyze_rule(r, variable_orders[i].clone()))
+                .map(|(i, r)| analyze_rule(r, variable_orders[i].clone(), &mut fresh_id.0))
                 .collect(),
             derived_predicates: self.get_head_predicates(),
         }

@@ -29,3 +29,7 @@ pub use triescan_join::TrieScanJoin;
 
 /// Module for defining append functionality
 pub mod triescan_append;
+
+/// Module for defining [`TrieScanNulls`]
+pub mod triescan_nulls;
+pub use triescan_nulls::TrieScanNulls;

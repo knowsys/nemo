@@ -126,6 +126,12 @@ impl From<Reordering> for ColumnOrder {
     }
 }
 
+impl From<ColumnOrder> for Vec<usize> {
+    fn from(order: ColumnOrder) -> Self {
+        order.0
+    }
+}
+
 /// Indicates that the table contains the union of successive tables.
 /// For example assume that for predicate p there were tables derived in steps 2, 4, 7, 10, 11.
 /// The range [4, 11) would be represented with TableCover { start: 1, len: 3 }.
@@ -335,8 +341,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
                     false
                 }
-                TableStatus::OnDisk(_) => true,
-                TableStatus::Reference(_, _) => true,
+                TableStatus::OnDisk(_) => false, // TODO: Check the order here as well?
+                TableStatus::Reference(_, _) => false, // TODO: Check the order here as well?
             }
         } else {
             false
@@ -860,14 +866,12 @@ impl<Dict: Dictionary> TableManager<Dict> {
     ) -> Result<HashSet<Identifier>, Error> {
         let mut result = HashSet::<Identifier>::new();
 
-        // Remove trees that save tables under existing names
-        plan.trees.retain(|t| {
-            if let ExecutionResult::Save(key) = t.result() {
-                return !self.contains_key(key);
+        // Debug check whether we procude duplicate entries
+        for tree in &plan.trees {
+            if let ExecutionResult::Save(key) = tree.result() {
+                debug_assert!(!self.contains_key(key))
             }
-
-            true
-        });
+        }
 
         // Simplify plan
         plan.simplify();

@@ -1,8 +1,11 @@
 use std::{
     cell::RefCell,
     collections::{hash_map::Entry, HashMap, HashSet},
+    fmt::Debug,
     rc::{Rc, Weak},
 };
+
+use ascii_tree::{write_tree, Tree};
 
 use crate::physical::{
     tabular::operations::{
@@ -49,11 +52,7 @@ impl<TableKey: TableKeyType> ExecutionNodeRef<TableKey> {
             ExecutionNode::FetchTable(_) | ExecutionNode::FetchTemp(_) => {
                 panic!("Can't add subnode to a leaf node")
             }
-            ExecutionNode::Minus(_, _)
-            | ExecutionNode::Project(_, _)
-            | ExecutionNode::SelectEqual(_, _)
-            | ExecutionNode::SelectValue(_, _)
-            | ExecutionNode::AppendColumns(_, _) => {
+            _ => {
                 panic!("Can only add subnodes to operations which can have arbitrary many of them")
             }
         }
@@ -81,6 +80,8 @@ pub enum ExecutionNode<TableKey: TableKeyType> {
     SelectEqual(ExecutionNodeRef<TableKey>, SelectEqualClasses),
     /// Append certain columns to the trie.
     AppendColumns(ExecutionNodeRef<TableKey>, Vec<Vec<AppendInstruction>>),
+    /// Append (the given number of) columns containing fresh nulls.
+    AppendNulls(ExecutionNodeRef<TableKey>, usize),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently.
@@ -93,7 +94,6 @@ pub enum ExecutionResult<TableKey: TableKeyType> {
 }
 
 /// Represents the plan for calculating a table
-#[derive(Debug)]
 pub struct ExecutionTree<TableKey: TableKeyType> {
     /// All the nodes in the tree.
     nodes: Vec<ExecutionNodeOwned<TableKey>>,
@@ -103,6 +103,12 @@ pub struct ExecutionTree<TableKey: TableKeyType> {
     result: ExecutionResult<TableKey>,
     /// Name which identifies this operation for timing.
     name: String,
+}
+
+impl<TableKey: TableKeyType> Debug for ExecutionTree<TableKey> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write_tree(f, &self.ascii_tree())
+    }
 }
 
 /// Public interface for [`ExecutionTree`]
@@ -268,6 +274,91 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         let new_node = ExecutionNode::AppendColumns(subnode, instructions);
         self.push_and_return_ref(new_node)
     }
+
+    /// Return [`ExecutionNodeRef`] for appending null-columns to a trie.
+    pub fn append_nulls(
+        &mut self,
+        subnode: ExecutionNodeRef<TableKey>,
+        num_nulls: usize,
+    ) -> ExecutionNodeRef<TableKey> {
+        let new_node = ExecutionNode::AppendNulls(subnode, num_nulls);
+        self.push_and_return_ref(new_node)
+    }
+
+    fn ascii_tree_recursive(node: ExecutionNodeRef<TableKey>) -> Tree {
+        let node_rc = node
+            .0
+            .upgrade()
+            .expect("Referenced execution node has been deleted");
+        let node_ref = &*node_rc.as_ref().borrow();
+
+        match node_ref {
+            ExecutionNode::FetchTable(key) => Tree::Leaf(vec![format!("Permanent Table: {key:?}")]),
+            ExecutionNode::FetchTemp(id) => Tree::Leaf(vec![format!("Temporary Table: {id}")]),
+            ExecutionNode::Join(subnodes, bindings) => {
+                let subtrees = subnodes
+                    .iter()
+                    .map(|n| Self::ascii_tree_recursive(n.clone()))
+                    .collect();
+
+                Tree::Node(format!("Join {bindings:?}"), subtrees)
+            }
+            ExecutionNode::Union(subnodes) => {
+                let subtrees = subnodes
+                    .iter()
+                    .map(|n| Self::ascii_tree_recursive(n.clone()))
+                    .collect();
+
+                Tree::Node(String::from("Union"), subtrees)
+            }
+            ExecutionNode::Minus(node_left, node_right) => {
+                let subtree_left = Self::ascii_tree_recursive(node_left.clone());
+                let subtree_right = Self::ascii_tree_recursive(node_right.clone());
+
+                Tree::Node(String::from("Minus"), vec![subtree_left, subtree_right])
+            }
+            ExecutionNode::Project(subnode, reorder) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(format!("Project {reorder:?}"), vec![subtree])
+            }
+            ExecutionNode::SelectValue(subnode, assignments) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(format!("Select Value {assignments:?}"), vec![subtree])
+            }
+            ExecutionNode::SelectEqual(subnode, classes) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(format!("Select Equal {classes:?}"), vec![subtree])
+            }
+            ExecutionNode::AppendColumns(subnode, instructions) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(format!("Append Columns {instructions:?}"), vec![subtree])
+            }
+            ExecutionNode::AppendNulls(subnode, num_nulls) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(format!("Append Nulls {num_nulls}"), vec![subtree])
+            }
+        }
+    }
+
+    /// Return an ascii tree representation of the [`ExecutionTree`]
+    pub fn ascii_tree(&self) -> Tree {
+        if let Some(root) = self.root() {
+            Self::ascii_tree_recursive(root)
+        } else {
+            Tree::Leaf(vec![])
+        }
+    }
+}
+
+#[derive(Debug, Hash, PartialEq, Eq)]
+enum RemoveTable<TableKey: TableKeyType> {
+    Temp(TableId),
+    Permanent(TableKey),
 }
 
 /// Functionality for optimizing an [`ExecutionTree`]
@@ -276,7 +367,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     fn simplify_recursive(
         new_tree: &mut ExecutionTree<TableKey>,
         node: ExecutionNodeRef<TableKey>,
-        removed_ids: &HashSet<TableId>,
+        removed_tables: &HashSet<RemoveTable<TableKey>>,
     ) -> Option<ExecutionNodeRef<TableKey>> {
         let node_rc = node
             .0
@@ -285,9 +376,19 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
         let node_ref = &*node_rc.as_ref().borrow();
 
         match node_ref {
-            ExecutionNode::FetchTable(key) => Some(new_tree.fetch_table(key.clone())),
+            ExecutionNode::FetchTable(key) => {
+                let remove = RemoveTable::Permanent(key.clone());
+
+                if removed_tables.contains(&remove) {
+                    None
+                } else {
+                    Some(new_tree.fetch_table(key.clone()))
+                }
+            }
             ExecutionNode::FetchTemp(id) => {
-                if removed_ids.contains(id) {
+                let remove = RemoveTable::Temp(*id);
+
+                if removed_tables.contains(&remove) {
                     None
                 } else {
                     Some(new_tree.fetch_temp(*id))
@@ -298,7 +399,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                     Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
                 for subnode in subnodes {
                     let simplified_opt =
-                        Self::simplify_recursive(new_tree, subnode.clone(), removed_ids);
+                        Self::simplify_recursive(new_tree, subnode.clone(), removed_tables);
 
                     if let Some(simplified) = simplified_opt {
                         simplified_nodes.push(simplified)
@@ -319,7 +420,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                     Vec::<ExecutionNodeRef<TableKey>>::with_capacity(subnodes.len());
                 for subnode in subnodes {
                     let simplified_opt =
-                        Self::simplify_recursive(new_tree, subnode.clone(), removed_ids);
+                        Self::simplify_recursive(new_tree, subnode.clone(), removed_tables);
 
                     if let Some(simplified) = simplified_opt {
                         simplified_nodes.push(simplified)
@@ -338,9 +439,9 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
             }
             ExecutionNode::Minus(left, right) => {
                 let simplified_left_opt =
-                    Self::simplify_recursive(new_tree, left.clone(), removed_ids);
+                    Self::simplify_recursive(new_tree, left.clone(), removed_tables);
                 let simplified_right_opt =
-                    Self::simplify_recursive(new_tree, right.clone(), removed_ids);
+                    Self::simplify_recursive(new_tree, right.clone(), removed_tables);
 
                 if let Some(simplified_left) = simplified_left_opt {
                     if let Some(simplififed_right) = simplified_right_opt {
@@ -353,7 +454,8 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                 None
             }
             ExecutionNode::Project(subnode, reorder) => {
-                let simplified = Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
+                let simplified =
+                    Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
                 if reorder.is_default() {
                     Some(simplified)
@@ -362,7 +464,8 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                 }
             }
             ExecutionNode::SelectValue(subnode, assignments) => {
-                let simplified = Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
+                let simplified =
+                    Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
                 if assignments.is_empty() {
                     Some(simplified)
@@ -371,7 +474,8 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                 }
             }
             ExecutionNode::SelectEqual(subnode, classes) => {
-                let simplified = Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
+                let simplified =
+                    Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
                 if classes.is_empty() {
                     Some(simplified)
@@ -380,12 +484,23 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
                 }
             }
             ExecutionNode::AppendColumns(subnode, instructions) => {
-                let simplified = Self::simplify_recursive(new_tree, subnode.clone(), removed_ids)?;
+                let simplified =
+                    Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
                 if instructions.iter().all(|i| i.is_empty()) {
                     Some(simplified)
                 } else {
                     Some(new_tree.append_columns(simplified, instructions.clone()))
+                }
+            }
+            ExecutionNode::AppendNulls(subnode, num_nulls) => {
+                let simplified =
+                    Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
+
+                if *num_nulls == 0 {
+                    Some(simplified)
+                } else {
+                    Some(new_tree.append_nulls(simplified, *num_nulls))
                 }
             }
         }
@@ -394,7 +509,7 @@ impl<TableKey: TableKeyType> ExecutionTree<TableKey> {
     /// Builds a new [`ExecutionTree`] which does not include superfluous operations,
     /// like, e.g., performing a join over one subtable.
     /// Will also exclude the supplied set of temporary tables.
-    fn simplify(&self, removed_temp_ids: &HashSet<TableId>) -> Self {
+    fn simplify(&self, removed_temp_ids: &HashSet<RemoveTable<TableKey>>) -> Self {
         let mut new_tree = ExecutionTree::<TableKey>::new(self.name.clone(), self.result.clone());
 
         if let Some(old_root) = self.root() {
@@ -456,7 +571,6 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
 
     /// Append a list of [`ExecutionTree`] to the plan.
     pub fn append(&mut self, mut trees: Vec<ExecutionTree<TableKey>>) {
-        debug_assert!(trees.iter().all(|t| t.root.is_some()));
         self.trees.append(&mut trees);
     }
 
@@ -492,7 +606,7 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
     ///     * Removing computations that would result in an unused temporary table
     ///     * Removing temporary tables that are the same as other temporary tables
     pub fn simplify(&mut self) {
-        let mut removed_temp_ids = HashSet::<TableId>::new();
+        let mut removed_tables = HashSet::<RemoveTable<TableKey>>::new();
 
         let mut used_temp_ids = HashSet::<TableId>::new();
         let mut used_temp_in = HashMap::<TableId, HashSet<TableId>>::new();
@@ -501,7 +615,7 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
         // We also remember which temporary tables are used to compute permanent tables
         // and also which temporary tables are used to compute which other temporary tables.
         for tree in &mut self.trees {
-            *tree = tree.simplify(&removed_temp_ids);
+            *tree = tree.simplify(&removed_tables);
 
             if tree.root().is_some() {
                 for fetch_instruction in &tree.nodes {
@@ -520,12 +634,12 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
                     }
                 }
             } else {
-                // Note: We only remove temporary tables and not empty permanent tables
-                // since there might already exist a table with the same name that will be loaded instead
-                // (It is assumed that tables with the same name will have the same contents)
-                if let ExecutionResult::Temp(id) = tree.result() {
-                    removed_temp_ids.insert(*id);
-                }
+                let removed_table = match tree.result() {
+                    ExecutionResult::Temp(id) => RemoveTable::Temp(*id),
+                    ExecutionResult::Save(key) => RemoveTable::Permanent(key.clone()),
+                };
+
+                removed_tables.insert(removed_table);
             }
         }
 
@@ -564,20 +678,18 @@ impl<TableKey: TableKeyType> ExecutionPlan<TableKey> {
 
                             return false;
                         }
-                        ExecutionResult::Save(key_saved) => {
-                            Self::update_renaming_map(
-                                &mut renamed_temp,
-                                *id_loaded,
-                                ExecutionNode::FetchTable(key_saved.clone()),
-                            );
-
+                        ExecutionResult::Save(_key_saved) => {
                             return true;
                         }
                     },
                     ExecutionNode::FetchTable(key_loaded) => {
                         if let ExecutionResult::Temp(id_saved) = t.result() {
-                            renamed_temp
-                                .insert(*id_saved, ExecutionNode::FetchTable(key_loaded.clone()));
+                            Self::update_renaming_map(
+                                &mut renamed_temp,
+                                *id_saved,
+                                ExecutionNode::FetchTable(key_loaded.clone()),
+                            );
+
                             return false;
                         }
                     }

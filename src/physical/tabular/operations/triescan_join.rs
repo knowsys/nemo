@@ -121,7 +121,7 @@ impl<'a> TrieScanJoin<'a> {
                             ColumnScanEnum::ColumnScanJoin(ColumnScanJoin::new(scans)),
                         ))))
                     } else {
-                        // If we have only one column then no join is neccessary and we use a [`PassScan`]
+                        // If we have only one column then no join is neccessary and we use a [`ColumnScanPass`]
                         let scan_index = scan_indices[0];
                         let column_index = merge_join_indices[var_index][0];
 
