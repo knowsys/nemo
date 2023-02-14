@@ -1,50 +1,83 @@
-use std::{fmt, ops::Index};
+use std::fmt;
 
 use crate::physical::util::Reordering;
 
 /// Type which represents the order of a table.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct ColumnOrder(Vec<usize>);
+pub enum ColumnOrder {
+    /// The default ordering.
+    Default,
+    /// Ordering that switches certain columns (relative to the default ordering).
+    Reordered(Vec<usize>),
+}
 
 impl ColumnOrder {
     /// Construct new [`ColumnOrder`].
-    pub fn new(order: Vec<usize>) -> Self {
-        debug_assert!(!order.is_empty());
-        debug_assert!(order.iter().all(|&r| r < order.len()));
+    pub fn reordered(reorder: Reordering) -> Self {
+        debug_assert!(reorder.is_permutation());
 
-        Self(order)
-    }
-
-    /// Construct the default [`ColumnOrder`].
-    pub fn default(arity: usize) -> Self {
-        Self::new((0..arity).collect())
-    }
-
-    /// Return the arity of the reordered table.
-    pub fn arity(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Return an iterator over the contents of this order.
-    pub fn iter(&self) -> impl Iterator<Item = &usize> {
-        self.0.iter()
+        if reorder.is_identity() {
+            Self::Default
+        } else {
+            Self::Reordered(reorder.to_vector())
+        }
     }
 
     /// Returns whether this is the default column order
     pub fn is_default(&self) -> bool {
-        self.iter()
-            .enumerate()
-            .all(|(index, element)| index == *element)
-    }
-
-    /// Returns a view into ordering vector.
-    pub fn as_slice(&self) -> &[usize] {
-        &self.0
+        matches!(self, Self::Default)
     }
 
     /// Return the [`ColumnOrder`] that results from applying the given [`Reordering`].
+    /// Assumes the the [`Reordering`] is a permutation.
     pub fn reorder(&self, reorder: &Reordering) -> Self {
-        Self::new(reorder.apply_to(&self.0))
+        debug_assert!(reorder.is_permutation());
+
+        if reorder.is_identity() {
+            return self.clone();
+        }
+
+        let source = &match self {
+            ColumnOrder::Default => (0..reorder.len_source()).collect(),
+            ColumnOrder::Reordered(column_reorder) => *column_reorder,
+        };
+
+        let result = reorder.apply_to(source);
+
+        if result
+            .iter()
+            .enumerate()
+            .all(|(index, element)| index == *element)
+        {
+            Self::Default
+        } else {
+            Self::Reordered(result)
+        }
+    }
+
+    /// Return [`Reordering`] corresponding to this order.
+    pub fn as_reordering(&self, arity: usize) -> Reordering {
+        match self {
+            ColumnOrder::Default => Reordering::default(arity),
+            ColumnOrder::Reordered(reorder) => {
+                debug_assert!(arity == reorder.len());
+                Reordering::new(*reorder, arity)
+            }
+        }
+    }
+
+    fn get(&self, index: usize) -> usize {
+        match self {
+            ColumnOrder::Default => index,
+            ColumnOrder::Reordered(reorder) => reorder[index],
+        }
+    }
+
+    fn find(&self, value: usize) -> Option<usize> {
+        match self {
+            ColumnOrder::Default => Some(value),
+            ColumnOrder::Reordered(reorder) => reorder.iter().position(|&o| o == value),
+        }
     }
 
     /// Provides a measure of how "difficult" it is to transform a column with this order into another.
@@ -54,14 +87,27 @@ impl ColumnOrder {
     /// Finally, we go one layer down to reach 0 (+-0).
     /// This gives us an overall score of 3.
     /// Returned value is 0 if and only if self == other.
-    fn distance(&self, to: &ColumnOrder) -> usize {
-        debug_assert!(to.arity() >= self.arity());
+    pub fn distance(&self, to: &ColumnOrder) -> usize {
+        if matches!(self, Self::Default) && matches!(self, Self::Default) {
+            return 0;
+        }
+
+        let arity = if let Self::Reordered(reorder) = self {
+            reorder.len()
+        } else {
+            match to {
+                ColumnOrder::Default => unreachable!(),
+                ColumnOrder::Reordered(reorder) => reorder.len(),
+            }
+        };
 
         let mut current_score: usize = 0;
         let mut current_position: usize = 0;
 
-        for &current_value in self.iter() {
-            let position_other = to.iter().position(|&o| o == current_value).expect(
+        for current_index in 0..arity {
+            let current_value = self.get(current_index);
+
+            let position_other = to.find(current_value).expect(
                 "If both objects are well-formed then other must contain every value of self.",
             );
 
@@ -81,28 +127,17 @@ impl ColumnOrder {
     }
 }
 
-impl Index<usize> for ColumnOrder {
-    type Output = usize;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
+impl Default for ColumnOrder {
+    fn default() -> Self {
+        Self::Default
     }
 }
 
 impl fmt::Debug for ColumnOrder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl From<Reordering> for ColumnOrder {
-    fn from(reordering: Reordering) -> Self {
-        ColumnOrder::new(reordering.iter().copied().collect())
-    }
-}
-
-impl From<ColumnOrder> for Vec<usize> {
-    fn from(order: ColumnOrder) -> Self {
-        order.0
+        match self {
+            ColumnOrder::Default => f.write_str("[default]"),
+            ColumnOrder::Reordered(reorder) => reorder.fmt(f),
+        }
     }
 }

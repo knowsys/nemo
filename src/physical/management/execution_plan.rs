@@ -6,6 +6,7 @@ use std::{
 };
 
 use ascii_tree::{write_tree, Tree};
+use linked_hash_map::LinkedHashMap;
 
 use crate::physical::{
     tabular::operations::{
@@ -39,27 +40,18 @@ pub struct ExecutionNodeRef(pub Weak<RefCell<ExecutionNode>>);
 
 impl ExecutionNodeRef {
     /// Return an referenced counted cell of an [`ExecutionNode`].
-    fn get_rc(&self) -> Rc<RefCell<ExecutionNode>> {
+    pub fn get_rc(&self) -> Rc<RefCell<ExecutionNode>> {
         self.0
             .upgrade()
             .expect("Referenced execution node has been deleted")
-    }
-
-    /// Borrow the [`ExecutionNode`].
-    pub fn borrow(&self) -> Ref<ExecutionNode> {
-        self.get_rc().borrow()
-    }
-
-    /// Mutably Borrow the [`ExecutionNode`].
-    pub fn borrow_mut(&self) -> RefMut<ExecutionNode> {
-        self.get_rc().borrow_mut()
     }
 }
 
 impl ExecutionNodeRef {
     /// Add a sub node to a join or union node
     pub fn add_subnode(&mut self, subnode: ExecutionNodeRef) {
-        let node_ref = &mut *subnode.borrow_mut();
+        let node_rc = subnode.get_rc();
+        let node_ref = &mut *node_rc.borrow_mut();
 
         match node_ref {
             ExecutionNode::Join(subnodes, _) => subnodes.push(subnode),
@@ -101,11 +93,11 @@ pub enum ExecutionNode {
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently.
 #[derive(Debug, Clone)]
-pub enum ExecutionResult {
+pub(super) enum ExecutionResult {
     /// Table will be dropped after the [`ExecutionPlan`] is finished.
-    Temorary,
+    Temporary,
     /// Table will be saved permanently in the database instance.
-    Permanent(String),
+    Permanent(ColumnOrder, String),
 }
 
 /// Represents the plan for calculating a table
@@ -128,14 +120,32 @@ impl Debug for ExecutionTree {
 
 /// Public interface for [`ExecutionTree`]
 impl ExecutionTree {
-    /// Create new [`ExecutionTree`]
-    pub fn new(name: String, result: ExecutionResult) -> Self {
+    /// Create a new [`ExecutionTree`].
+    fn new(tree_name: &str, result: ExecutionResult) -> Self {
         Self {
             nodes: Vec::new(),
             root: None,
             result,
-            name,
+            name: String::from(tree_name),
         }
+    }
+
+    /// Create a new [`ExecutionTree`] that will result in a temporary table.
+    pub fn new_temporary(tree_name: &str) -> Self {
+        Self::new(tree_name, ExecutionResult::Temporary)
+    }
+
+    /// Crate a new [`ExecutionTree`] that will result in a permanent table.
+    pub fn new_permanent(tree_name: &str, table_name: &str) -> Self {
+        Self::new_permanent_reordered(tree_name, table_name, ColumnOrder::default())
+    }
+
+    /// Create a new [`ExecutionTree`] that will result in a permanent table with an alternative [`ColumnOrder`]
+    pub fn new_permanent_reordered(tree_name: &str, table_name: &str, order: ColumnOrder) -> Self {
+        Self::new(
+            tree_name,
+            ExecutionResult::Permanent(order, String::from(table_name)),
+        )
     }
 
     /// Returns the [`ExecutionResult`] of this operation.
@@ -166,7 +176,17 @@ impl ExecutionTree {
     }
 
     /// Return [`ExecutionNodeRef`] for fetching a permanent table.
-    pub fn fetch_existing(&mut self, id: TableId, order: ColumnOrder) -> ExecutionNodeRef {
+    pub fn fetch_existing(&mut self, id: TableId) -> ExecutionNodeRef {
+        let new_node = ExecutionNode::FetchExisting(id, ColumnOrder::Default);
+        self.push_and_return_ref(new_node)
+    }
+
+    /// Return [`ExecutionNodeRef`] for fetching a permanent table.
+    pub fn fetch_existing_reordered(
+        &mut self,
+        id: TableId,
+        order: ColumnOrder,
+    ) -> ExecutionNodeRef {
         let new_node = ExecutionNode::FetchExisting(id, order);
         self.push_and_return_ref(new_node)
     }
@@ -262,11 +282,12 @@ impl ExecutionTree {
     }
 
     fn ascii_tree_recursive(node: ExecutionNodeRef) -> Tree {
-        let node_ref = &*node.borrow();
+        let node_rc = node.get_rc();
+        let node_ref = &*node_rc.borrow();
 
         match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
-                Tree::Leaf(vec![format!("Permanent Table: {id} {order:?}")])
+                Tree::Leaf(vec![format!("Permanent Table: {id} ({order:?})")])
             }
             ExecutionNode::FetchNew(index) => Tree::Leaf(vec![format!("Temporary Table: {index}")]),
             ExecutionNode::Join(subnodes, bindings) => {
@@ -322,7 +343,15 @@ impl ExecutionTree {
     /// Return an ascii tree representation of the [`ExecutionTree`]
     pub fn ascii_tree(&self) -> Tree {
         if let Some(root) = self.root() {
-            Self::ascii_tree_recursive(root)
+            let tree = Self::ascii_tree_recursive(root);
+            let top_level_name = match self.result() {
+                ExecutionResult::Temporary => format!("{} (Temporary)", self.name()),
+                ExecutionResult::Permanent(_, order) => {
+                    format!("{} (Permanent {order:?}", self.name())
+                }
+            };
+
+            Tree::Node(top_level_name, vec![tree])
         } else {
             Tree::Leaf(vec![])
         }
@@ -337,11 +366,12 @@ impl ExecutionTree {
         node: ExecutionNodeRef,
         removed_tables: &HashSet<usize>,
     ) -> Option<ExecutionNodeRef> {
-        let node_ref = &*node.borrow();
+        let node_rc = node.get_rc();
+        let node_ref = &*node_rc.borrow();
 
         match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
-                Some(new_tree.fetch_existing(*id, order.clone()))
+                Some(new_tree.fetch_existing_reordered(*id, order.clone()))
             }
             ExecutionNode::FetchNew(index) => {
                 if removed_tables.contains(index) {
@@ -414,8 +444,9 @@ impl ExecutionTree {
                 if reorder.is_default() {
                     Some(simplified)
                 } else {
-                    if let ExecutionNode::FetchExisting(id, order) = &*simplified.borrow() {
-                        Some(new_tree.fetch_existing(*id, order.reorder(reorder)))
+                    if let ExecutionNode::FetchExisting(id, order) = &*simplified.get_rc().borrow()
+                    {
+                        Some(new_tree.fetch_existing_reordered(*id, order.reorder(reorder)))
                     } else {
                         Some(new_tree.project(simplified, reorder.clone()))
                     }
@@ -468,7 +499,7 @@ impl ExecutionTree {
     /// like, e.g., performing a join over one subtable.
     /// Will also exclude the supplied set of temporary tables.
     fn simplify(&self, removed_temp_indices: &HashSet<usize>) -> Self {
-        let mut new_tree = ExecutionTree::new(self.name.clone(), self.result.clone());
+        let mut new_tree = ExecutionTree::new(&self.name, self.result.clone());
 
         if let Some(old_root) = self.root() {
             let new_root_opt =
@@ -482,29 +513,84 @@ impl ExecutionTree {
     }
 }
 
+/// Functionality for ensuring certain constraints
+impl ExecutionTree {
+    /// Alters the given [`ExecutionTree`] in such a way as to comply with the constraints of the leapfrog trie join algorithm
+    /// Specifically, this will reorder tables if necessary
+    pub fn satisfy_leapfrog_triejoin(&mut self) {}
+
+    /// Implements the functionality of `satisfy_leapfrog_triejoin` by traversing the tree recursively
+    fn satisfy_leapfrog_recurisve(&mut self, node: ExecutionNodeRef, reorder: Reordering) {
+        let node_rc = node.get_rc();
+        let node_ref = &mut *node_rc.borrow_mut();
+
+        match node_ref {
+            ExecutionNode::FetchExisting(id, order) => {
+                *node_ref = ExecutionNode::FetchExisting(*id, order.reorder(&reorder));
+            }
+            ExecutionNode::FetchNew(index) => {
+                let new_fetch = self.fetch_new(*index);
+                *node_ref = ExecutionNode::Project(new_fetch, reorder);
+            }
+            ExecutionNode::Project(subnode, project_reorder) => todo!(),
+            ExecutionNode::Join(subnodes, bindings) => todo!(),
+            ExecutionNode::Union(subnodes) => todo!(),
+            ExecutionNode::Minus(left, right) => todo!(),
+            ExecutionNode::SelectValue(subnode, _assignments) => todo!(),
+            ExecutionNode::SelectEqual(subnode, _classes) => todo!(),
+            ExecutionNode::AppendColumns(subnode, _) => todo!(),
+            ExecutionNode::AppendNulls(subnode, _) => todo!(),
+        }
+    }
+}
+
 /// A series of execution plans
 /// Usually contains the information necessary for evaluating one rule
 #[derive(Debug, Default)]
 pub struct ExecutionPlan {
-    /// The individual steps that will be executed
-    /// Each step will result in either a temporary or a permanent table
-    pub trees: Vec<ExecutionTree>,
+    trees: LinkedHashMap<usize, ExecutionTree>,
+    current_id: usize,
 }
 
 impl ExecutionPlan {
     /// Create new [`ExecutionPlan`].
     pub fn new() -> Self {
-        Self { trees: Vec::new() }
+        Self {
+            trees: LinkedHashMap::new(),
+            current_id: 0,
+        }
     }
 
     /// Append new [`ExecutionTree`] to the plan.
-    pub fn push(&mut self, tree: ExecutionTree) {
-        self.trees.push(tree);
+    /// Return the index assigned to the inserted tree.
+    pub fn push(&mut self, tree: ExecutionTree) -> usize {
+        let result = self.current_id;
+
+        self.trees.insert(self.current_id, tree);
+        self.current_id += 1;
+
+        result
     }
 
     /// Append a list of [`ExecutionTree`] to the plan.
-    pub fn append(&mut self, mut trees: Vec<ExecutionTree>) {
-        self.trees.append(&mut trees);
+    pub fn append(&mut self, trees: Vec<ExecutionTree>) {
+        for tree in trees {
+            self.push(tree);
+        }
+    }
+
+    /// Remove a [`ExecutionTree`] identified by its index.
+    /// This does not check whether the deleted tree is used later in some other tree.
+    /// Panics if the given index is not occupied.
+    pub fn remove(&mut self, index: usize) {
+        if self.trees.remove(&index).is_none() {
+            panic!("Tried to remove a non-existing index from an execution plan.");
+        }
+    }
+
+    /// Return an iterator which traverses the [`ExecutionTree`]s in order.
+    pub fn iter(&self) -> impl Iterator<Item = (&usize, &ExecutionTree)> {
+        self.trees.iter()
     }
 
     /// Simplifies the current [`ExecutionPlan`] by
@@ -515,11 +601,11 @@ impl ExecutionPlan {
         // Simplify all the trees idividually.
         // If a tree is empty (that is has no root) after simplification
         // then we record this information and use it to simplify further
-        for (index, tree) in self.trees.iter_mut().enumerate() {
+        for (index, tree) in self.trees.iter_mut() {
             *tree = tree.simplify(&removed_new_tables);
 
             if tree.root().is_none() {
-                removed_new_tables.insert(index);
+                removed_new_tables.insert(*index);
             }
         }
     }
@@ -527,12 +613,9 @@ impl ExecutionPlan {
 
 #[cfg(test)]
 mod test {
-    use crate::physical::{
-        management::{column_order::ColumnOrder, database::TableId},
-        util::Reordering,
-    };
+    use crate::physical::{management::database::TableId, util::Reordering};
 
-    use super::{ExecutionPlan, ExecutionResult, ExecutionTree};
+    use super::{ExecutionPlan, ExecutionTree};
 
     #[test]
     fn general_use() {
@@ -540,23 +623,19 @@ mod test {
         let mut current_id = TableId::default();
 
         // Create a tree that will only be available temporarily
-        let mut tree_temp = ExecutionTree::new(
-            "Computing Temporary table".to_string(),
-            ExecutionResult::Temorary,
-        );
+        let mut tree_temp = ExecutionTree::new_temporary("Computing Temporary table");
 
         // Create a union subnode and fill it later with subnodes
         let mut node_union_empty = tree_temp.union_empty();
         for _ in 0..3 {
-            let new_node =
-                tree_temp.fetch_existing(current_id.increment(), ColumnOrder::default(2));
+            let new_node = tree_temp.fetch_existing(current_id.increment());
             node_union_empty.add_subnode(new_node);
         }
 
         // Create a vector of subnodes and create a union node from that
         let subnode_vec = vec![
-            tree_temp.fetch_existing(current_id.increment(), ColumnOrder::default(2)),
-            tree_temp.fetch_existing(current_id.increment(), ColumnOrder::default(2)),
+            tree_temp.fetch_existing(current_id.increment()),
+            tree_temp.fetch_existing(current_id.increment()),
         ];
         let node_union_vec = tree_temp.union(subnode_vec);
 
@@ -569,17 +648,14 @@ mod test {
         // At the end, set the root of the tree
         tree_temp.set_root(node_join);
 
-        // Add the finished tree to the plan
-        test_plan.push(tree_temp);
+        // Add the finished tree to the plan and remember its id
+        let temp_id = test_plan.push(tree_temp);
 
         // Create tree the computation result of which will stay permanently
-        let mut tree_perm = ExecutionTree::new(
-            "Computing Projection".to_string(),
-            ExecutionResult::Permanent("Final Tree".to_string()),
-        );
+        let mut tree_perm = ExecutionTree::new_permanent("Computing Projection", "Final Tree");
 
-        // Load temporary table (since its the first its identified by the index 0)
-        let node_fetch_temp = tree_perm.fetch_new(0);
+        // Load temporary table using the id saved earlier
+        let node_fetch_temp = tree_perm.fetch_new(temp_id);
 
         // Project it
         let node_project = tree_perm.project(node_fetch_temp, Reordering::new(vec![0, 2], 3));

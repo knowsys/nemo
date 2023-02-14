@@ -30,10 +30,10 @@ impl TableSchema {
         }
     }
 
-    /// Construct a schema which is a reordered version of another schema
-    pub fn reordered(other: &Self, reorder: &Reordering) -> Self {
+    /// Construct a schema which is a reordered version of this schema
+    pub fn reordered(&self, reorder: &Reordering) -> Self {
         Self {
-            entries: reorder.apply_to(&other.entries),
+            entries: reorder.apply_to(&self.entries),
         }
     }
 

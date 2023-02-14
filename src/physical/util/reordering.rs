@@ -110,6 +110,21 @@ impl Reordering {
         true
     }
 
+    pub fn is_identity(&self) -> bool {
+        if self.len_source() != self.len_target() {
+            return false;
+        }
+
+        self.iter()
+            .enumerate()
+            .all(|(index, element)| index == *element)
+    }
+
+    /// Turn into a vector representation of the reordering.
+    pub fn to_vector(self) -> Vec<usize> {
+        self.reorder
+    }
+
     /// Chain together two [`Reordering`]s.
     /// Applying the result of this is equivalent to applying `other` after applying `this`.
     /// For example, `[1, 0, 2].chain([2, 0, 1]) = [2, 1, 0]`.
