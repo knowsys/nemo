@@ -1,8 +1,12 @@
 use std::collections::{hash_map::Entry, HashMap};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
+use std::path::PathBuf;
 
 use bytesize::ByteSize;
 
+use crate::meta::logging::log_add_reference;
+use crate::physical::datatypes::data_value::VecT;
+use crate::physical::util::Reordering;
 use crate::{
     error::Error,
     meta::TimedCode,
@@ -20,6 +24,7 @@ use crate::{
     },
 };
 
+use super::column_order::ColumnOrder;
 use super::{
     execution_plan::{ExecutionNode, ExecutionNodeRef, ExecutionResult},
     type_analysis::{TypeTree, TypeTreeNode},
@@ -27,22 +32,67 @@ use super::{
 };
 
 /// Type which represents table id.
-/// This should remain internal and not be used by external callers.
-pub type TableId = usize;
-/// Type that represents the name of a table.
-/// This is how external callers can refer to tables.
-// pub type TableName = String;
-#[derive(Debug,Clone,Eq,Hash,PartialEq)]
-pub struct TableName(pub String);
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct TableId(u64);
+
+impl Default for TableId {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
+impl Display for TableId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl TableId {
+    /// Increment the id by one.
+    /// Return the old (non-incremented) id.
+    pub fn increment(&mut self) -> Self {
+        let old = self;
+        self.0 = self.0 + 1;
+        old
+    }
+}
+
+/// A trie with its associated [`ColumnOrder`]
+#[derive(Debug)]
+struct OrderedTrie {
+    trie: Trie,
+    order: ColumnOrder,
+}
+
+/// Indicates the file format of a table stored on disc.
+#[derive(Debug)]
+pub enum TableSource {
+    /// Table is contained in csv file
+    CSV(PathBuf),
+    /// Table is stored as facts in an rls file
+    /// TODO: To not invoke the parser twice I just put the parsed "row-table" here. Does not seem quite right
+    RLS(Vec<VecT>),
+}
+
+#[derive(Debug)]
+enum TableStatus {
+    /// Table is materialized in memory in given following orders.
+    InMemory(Vec<OrderedTrie>),
+    /// Table has to be loaded from disk.
+    OnDisk(Vec<TableSource>),
+    /// Table has the same contents as another table except for reordering.
+    /// Meaning that "ThisTable = Project(ReferencedTable, Reordering)"
+    Reference(TableId, Reordering),
+}
 
 /// Struct that contains useful information about a trie
 /// as well as the actual owner of the trie.
 #[derive(Debug)]
 struct TableInfo {
-    /// The trie.
-    pub trie: Trie,
-    /// Associated key.
-    pub key: TableName,
+    /// The table.
+    pub status: TableStatus,
+    /// The name of the table.
+    pub name: String,
     /// The schema of the table
     /// TODO: Use this
     #[allow(dead_code)]
@@ -51,23 +101,12 @@ struct TableInfo {
 
 impl TableInfo {
     /// Create new [`TableInfo`].
-    pub fn new(trie: Trie, key: TableName, schema: TableSchema) -> Self {
-        Self { trie, key, schema }
-    }
-}
-
-/// Struct that contains useful information about a trie
-/// that is only available temporarily.
-#[derive(Debug)]
-pub(super) struct TempTableInfo {
-    /// The trie.
-    pub trie: Trie,
-}
-
-impl TempTableInfo {
-    /// Create new [`TempTableInfo`].
-    pub fn new(trie: Trie) -> Self {
-        Self { trie }
+    pub fn new(status: TableStatus, name: String, schema: TableSchema) -> Self {
+        Self {
+            status,
+            name,
+            schema,
+        }
     }
 }
 
@@ -76,8 +115,6 @@ impl TempTableInfo {
 pub struct DatabaseInstance<Dict: Dictionary> {
     /// Structure which owns all the tries; accessed through Id.
     id_to_table: HashMap<TableId, TableInfo>,
-    /// Alternative access scheme through a TableName.
-    key_to_tableid: HashMap<TableName, TableId>,
 
     /// Dictionary which stores the strings associates with abstract constants
     dict_constants: Dict,
@@ -87,7 +124,7 @@ pub struct DatabaseInstance<Dict: Dictionary> {
 
     /// The lowest unused TableId.
     /// Will be incremented for each new table and will never be reused.
-    current_id: usize,
+    current_id: TableId,
 }
 
 impl<Dict: Dictionary> DatabaseInstance<Dict> {
@@ -97,16 +134,10 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
         Self {
             id_to_table: HashMap::new(),
-            key_to_tableid: HashMap::new(),
             dict_constants,
             current_null,
-            current_id: 0,
+            current_id: TableId::default(),
         }
-    }
-
-    /// Return whether a given [`TableName`] is associated with a table.
-    pub fn table_exists(&self, key: &TableName) -> bool {
-        self.key_to_tableid.contains_key(key)
     }
 
     /// Return the current number of tables.
@@ -114,109 +145,100 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         self.id_to_table.len()
     }
 
-    /// Return the id of a table given a key.
-    /// Panics if the key does not exist.
-    pub fn get_id(&self, key: &TableName) -> TableId {
-        self.key_to_tableid.get(key).copied().unwrap()
-    }
-
-    /// Return the key of a table given its id.
+    /// Return the name of a table given its id.
     /// Panics if the id does not exist.
-    pub fn get_key(&self, id: TableId) -> TableName {
-        self.id_to_table.get(&id).unwrap().key.clone()
-    }
-
-    /// Given a id return a reference to the corresponding trie.
-    /// Panics if the id does not exist.
-    pub fn get_by_id(&self, id: TableId) -> &Trie {
-        self.id_to_table.get(&id).map(|t| &t.trie).unwrap()
-    }
-
-    /// Given a id return a mutable reference to the corresponding trie.
-    /// Panics if the id does not exist.
-    pub fn get_by_id_mut(&mut self, id: TableId) -> &mut Trie {
-        self.id_to_table.get_mut(&id).map(|t| &mut t.trie).unwrap()
-    }
-
-    /// Given a [`TableName`] return a reference to the corresponding trie.
-    /// Panics if the key does not exist.
-    pub fn get_by_key<'a>(&'a self, key: &TableName) -> &'a Trie {
-        let id = self.get_id(key);
-        self.id_to_table.get(&id).map(|i| &i.trie).unwrap()
-    }
-
-    /// Given a [`TableName`] return a mutable reference to the corresponding trie.
-    /// Panics if the key does not exist.
-    pub fn get_by_key_mut<'a>(&'a mut self, key: &TableName) -> &'a mut Trie {
-        let id = self.get_id(key);
-        self.id_to_table.get_mut(&id).map(|t| &mut t.trie).unwrap()
+    pub fn get_name(&self, id: TableId) -> &str {
+        &self.id_to_table.get(&id).unwrap().name
     }
 
     /// Return the schema of a table identified by the given [`TableName`].
-    /// /// Panics if the key does not exist.
-    pub fn get_schema<'a>(&'a self, key: &TableName) -> &'a TableSchema {
-        let id = self.get_id(key);
+    /// Panics if the id does not exist.
+    pub fn get_schema(&self, id: TableId) -> &TableSchema {
         self.id_to_table.get(&id).map(|i| &i.schema).unwrap()
     }
 
-    /// Add the given trie to the instance under the given table key.
-    /// Panics if the key is already used.
-    pub fn add(&mut self, key: TableName, trie: Trie, schema: TableSchema) -> TableId {
-        let used_id = self.current_id;
+    /// Add the given table to the instance with a name and schema.
+    fn add(&mut self, status: TableStatus, name: &str, schema: TableSchema) -> TableId {
+        let insert_result = self.id_to_table.insert(
+            self.current_id,
+            TableInfo::new(status, String::from(name), schema),
+        );
 
-        let insert_result = self
-            .id_to_table
-            .insert(self.current_id, TableInfo::new(trie, key.clone(), schema));
+        self.current_id.increment()
+    }
 
-        if insert_result.is_some() {
-            panic!("A table key should not be used twice");
+    /// Adds another order of a table.
+    /// Panics if the id does not exist or the table or the status is not in memory.
+    fn add_order(&mut self, id: TableId, trie: Trie, order: ColumnOrder) {
+        if let TableStatus::InMemory(orders) = &mut self.id_to_table.get_mut(&id).unwrap().status {
+            orders.push(OrderedTrie { trie, order });
         }
-
-        self.key_to_tableid.insert(key, self.current_id);
-
-        self.current_id += 1;
-        used_id
     }
 
-    /// Replace a trie (searched by key) with another.
-    /// Will add a new trie if the key does not exist.
-    /// Panics if the key is not already used.
-    pub fn update_by_key(&mut self, key: TableName, trie: Trie) {
-        let id = self.get_id(&key);
-        self.id_to_table.get_mut(&id).unwrap().trie = trie;
+    /// Add a new in-memory [`Trie`] to the database instance.
+    pub fn add_trie(
+        &mut self,
+        trie: Trie,
+        order: ColumnOrder,
+        name: &str,
+        schema: TableSchema,
+    ) -> TableId {
+        let status = TableStatus::InMemory(vec![OrderedTrie { trie, order }]);
+        self.add(status, name, schema)
     }
 
-    /// Replace a trie (searched by id) with another
-    /// Will add a new trie if the id does not exist
-    /// Returns true if the id existed
-    pub fn update_by_id(&mut self, id: TableId, trie: Trie) {
-        self.id_to_table.get_mut(&id).unwrap().trie = trie;
-    }
+    /// Add a new table as a reference to another table.
+    /// Panics if the referenced tables does not exist.
+    pub fn add_reference(
+        &mut self,
+        referenced_id: TableId,
+        new_name: &str,
+        reorder: Reordering,
+    ) -> TableId {
+        debug_assert!(reorder.is_permutation());
+        debug_assert!(reorder.len_source() == self.get_schema(referenced_id).arity());
 
-    /// Delete a trie given its key.
-    /// Panics if the table does not exist.
-    pub fn delete_by_key(&mut self, key: &TableName) {
-        if let Entry::Occupied(key_entry) = self.key_to_tableid.entry(key.clone()) {
-            let id = *key_entry.get();
-            key_entry.remove();
+        log_add_reference(self.get_name(referenced_id), new_name, &reorder);
 
-            if let Entry::Occupied(id_entry) = self.id_to_table.entry(id) {
-                id_entry.remove();
+        // If the referenced table is itself a reference to another table
+        // then we resolve the first reference and point the new table to the referenced table
+        let (final_id, final_reorder) =
+            if let TableStatus::Reference(another_table, another_order) = self
+                .id_to_table
+                .get(&referenced_id)
+                .expect("Function assumes that referenced table exists.")
+                .status
+            {
+                let combined_reorder = another_order.chain(&reorder);
+
+                (another_table, combined_reorder)
             } else {
-                // Both HashMap should contain the table
-                unreachable!()
-            }
-        } else {
-            panic!("Table to be deleted should exist.");
-        }
+                (referenced_id, reorder)
+            };
+
+        let new_schema = TableSchema::reordered(self.get_schema(final_id), &final_reorder);
+        let status = TableStatus::Reference(final_id, final_reorder);
+
+        self.add(status, new_name, new_schema)
     }
 
-    /// Delete a trie given its id.
+    /// Add a new table as a collection of file sources.
+    pub fn add_from_sources(
+        &mut self,
+        sources: Vec<TableSource>,
+        name: &str,
+        schema: TableSchema,
+    ) -> TableId {
+        let status = TableStatus::OnDisk(sources);
+        self.add(status, name, schema)
+    }
+
+    /// Deletes a table.
+    /// TODO: For now, this does not care about keeping references intact.
     /// Panics if the table does not exist.
-    pub fn delete_by_id(&mut self, id: TableId) {
-        if let Entry::Occupied(entry) = self.id_to_table.entry(id) {
-            self.key_to_tableid.remove(&entry.get().key);
-            entry.remove();
+    pub fn delete(&mut self, id: TableId) {
+        if let Entry::Occupied(key_entry) = self.id_to_table.entry(id) {
+            key_entry.remove();
         } else {
             panic!("Table to be deleted should exist.");
         }
@@ -637,9 +659,9 @@ mod test {
         util::make_column_with_intervals_t,
     };
 
-    use super::{DatabaseInstance,TableName};
+    use super::{DatabaseInstance, TableName};
 
-     #[test]
+    #[test]
     fn basic_add_delete() {
         let column_a = make_column_with_intervals_t(&[1, 2, 3], &[0]);
         let column_b = make_column_with_intervals_t(&[1, 2, 3, 4, 5, 6], &[0]);
@@ -652,7 +674,10 @@ mod test {
         let mut schema_a = TableSchema::new();
         schema_a.add_entry(DataTypeName::U64, false, false);
 
-        assert_eq!(instance.add(TableName(String::from("A")), trie_a.clone(), schema_a), 0);
+        assert_eq!(
+            instance.add(TableName(String::from("A")), trie_a.clone(), schema_a),
+            0
+        );
         assert_eq!(instance.get_key(0), TableName(String::from("A")));
         assert_eq!(instance.get_id(&TableName(String::from("A"))), 0);
         // TODO: Look into catch_unwind and Dict
@@ -665,14 +690,23 @@ mod test {
         let mut schema_b = TableSchema::new();
         schema_b.add_entry(DataTypeName::U64, false, false);
 
-        assert_eq!(instance.add(TableName(String::from("B")), trie_b, schema_b), 1);
+        assert_eq!(
+            instance.add(TableName(String::from("B")), trie_b, schema_b),
+            1
+        );
         assert!(instance.size_bytes() > last_size);
-        assert_eq!(instance.get_by_key(&TableName(String::from("B"))).row_num(), 6);
+        assert_eq!(
+            instance.get_by_key(&TableName(String::from("B"))).row_num(),
+            6
+        );
 
         let last_size = instance.size_bytes();
 
         instance.update_by_key(TableName(String::from("B")), trie_a);
-        assert_eq!(instance.get_by_key(&TableName(String::from("B"))).row_num(), 3);
+        assert_eq!(
+            instance.get_by_key(&TableName(String::from("B"))).row_num(),
+            3
+        );
         assert!(instance.size_bytes() < last_size);
 
         let last_size = instance.size_bytes();

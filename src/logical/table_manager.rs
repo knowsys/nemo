@@ -29,106 +29,6 @@ use std::{
     ops::{Index, Range},
 };
 
-/// Type which represents the order of a column.
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct ColumnOrder(Vec<usize>);
-
-impl ColumnOrder {
-    /// Construct new [`ColumnOrder`].
-    pub fn new(order: Vec<usize>) -> Self {
-        debug_assert!(!order.is_empty());
-        debug_assert!(order.iter().all(|&r| r < order.len()));
-
-        Self(order)
-    }
-
-    /// Construct the default [`ColumnOrder`].
-    pub fn default(arity: usize) -> Self {
-        Self::new((0..arity).collect())
-    }
-
-    /// Return the arity of the reordered table.
-    pub fn arity(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Return an iterator over the contents of this order.
-    pub fn iter(&self) -> impl Iterator<Item = &usize> {
-        self.0.iter()
-    }
-
-    /// Returns whether this is the default column order
-    pub fn is_default(&self) -> bool {
-        self.iter()
-            .enumerate()
-            .all(|(index, element)| index == *element)
-    }
-
-    /// Returns a view into ordering vector.
-    pub fn as_slice(&self) -> &[usize] {
-        &self.0
-    }
-
-    /// Provides a measure of how "difficult" it is to transform a column with this order into another.
-    /// Say, self = [2, 1, 0] and other = [1, 0, 2].
-    /// Starting from position 0 one needs to skip one layer to reach the 2 in other (+1).
-    /// Then we need to go back two layers to reach the one (+2)
-    /// Finally, we go one layer down to reach 0 (+-0).
-    /// This gives us an overall score of 3.
-    /// Returned value is 0 if and only if self == other.
-    fn distance(&self, to: &ColumnOrder) -> usize {
-        debug_assert!(to.arity() >= self.arity());
-
-        let mut current_score: usize = 0;
-        let mut current_position: usize = 0;
-
-        for &current_value in self.iter() {
-            let position_other = to.iter().position(|&o| o == current_value).expect(
-                "If both objects are well-formed then other must contain every value of self.",
-            );
-
-            let difference: isize = (position_other as isize) - (current_position as isize);
-            let penalty: usize = if difference <= 0 {
-                difference.unsigned_abs()
-            } else {
-                // Taking one forward step should not be punished
-                (difference - 1) as usize
-            };
-
-            current_score += penalty;
-            current_position = position_other;
-        }
-
-        current_score
-    }
-}
-
-impl Index<usize> for ColumnOrder {
-    type Output = usize;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
-    }
-}
-
-impl fmt::Debug for ColumnOrder {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl From<Reordering> for ColumnOrder {
-    fn from(reordering: Reordering) -> Self {
-        ColumnOrder::new(reordering.iter().copied().collect())
-    }
-}
-
-impl From<ColumnOrder> for Vec<usize> {
-    fn from(order: ColumnOrder) -> Self {
-        order.0
-    }
-}
-
 /// Indicates that the table contains the union of successive tables.
 /// For example assume that for predicate p there were tables derived in steps 2, 4, 7, 10, 11.
 /// The range [4, 11) would be represented with TableCover { start: 1, len: 3 }.
@@ -487,8 +387,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
             db_name: table_name,
         };
 
-        self.register_table(table_key.clone());
-        self.database.add(table_name, table, schema);
+        // self.register_table(table_key.clone());
+        // self.database.add(table_name, table, schema);
 
         table_key
     }
@@ -647,16 +547,16 @@ impl<Dict: Dictionary> TableManager<Dict> {
     }
 
     /// Prepare a table for a known chase predicate to be loaded and available in the required order.
-    /// 
+    ///
     /// To this end, the table name is resolved by considering its [`TableStatus`], tracing back references
     /// and thus finding the actual name of a chase table with that contents. For in-memory tables, a
     /// re-ordering may or may not be needed to get the requested table; for on-disk tables, data might
     /// first need to be loaded.
-    /// 
+    ///
     /// The function returns a chase table that can be used to access the requested data.
-    /// 
+    ///
     fn materialize_table(&mut self, table: ChaseTable) -> Result<ChaseTable, Error> {
-        // Check if the chase table is a reference to another table: 
+        // Check if the chase table is a reference to another table:
         let (actual_name, reordering) = if let TableStatus::Reference(referenced_name, reordering) =
             &self
                 .status
@@ -676,7 +576,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
             )
         };
 
-        let required_order = ColumnOrder::new(reordering.inverse().apply_to(table.order.as_slice()));
+        let required_order =
+            ColumnOrder::new(reordering.inverse().apply_to(table.order.as_slice()));
         let result_table = ChaseTable::from_name(actual_name, required_order.clone());
 
         if let Entry::Occupied(mut entry) = self.status.entry(actual_name) {
@@ -720,7 +621,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
                     let loaded_table =
                         ChaseTable::from_name(actual_name, ColumnOrder::default(arity));
 
-                    self.database.add(loaded_table.db_name, trie, schema);
+                    // self.database.add(loaded_table.db_name, trie, schema);
                     *status = TableStatus::InMemory(vec![loaded_table.order.clone()]);
 
                     if !required_order.is_default() {

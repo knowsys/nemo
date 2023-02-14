@@ -1,4 +1,4 @@
-use crate::physical::datatypes::DataTypeName;
+use crate::physical::{datatypes::DataTypeName, util::Reordering};
 use std::fmt::Debug;
 
 /// Type that stores the datatype used in each column of the table.
@@ -27,6 +27,13 @@ impl TableSchema {
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
+        }
+    }
+
+    /// Construct a schema which is a reordered version of another schema
+    pub fn reordered(other: &Self, reorder: &Reordering) -> Self {
+        Self {
+            entries: reorder.apply_to(&other.entries),
         }
     }
 
