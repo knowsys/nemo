@@ -16,7 +16,7 @@ use crate::{
 
 /// Given a TrieScan iterator, materialize its content into a trie
 /// If `picked_columns` is provided we will only store values for columns
-/// for which the resepective entry in this vector is set to true
+/// for which the respective entry in this vector is set to true
 /// If `check_empty` is set to true it will only try to find the first entry and then abort
 pub fn materialize_inner(
     trie_scan: &mut TrieScanEnum,

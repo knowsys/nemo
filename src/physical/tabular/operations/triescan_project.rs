@@ -52,7 +52,7 @@ fn shrink_position(column: &ColumnWithIntervalsT, pos: usize) -> usize {
     }
 }
 
-/// Iterator which can reorder and project away colums of a trie
+/// Iterator which can reorder and project away columns of a trie
 #[derive(Debug)]
 pub struct TrieScanProject<'a> {
     trie: &'a Trie,

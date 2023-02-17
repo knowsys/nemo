@@ -506,7 +506,7 @@ impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
                 // This `reset` is necessary because of the following scenario:
                 // Calling `up` at the first layer while the first layer still points to some position.
                 // Going `down` from there without the `reset` would lead to the first scan
-                // still pointing to the prvious position instead of starting at `None` as expected.
+                // still pointing to the previous position instead of starting at `None` as expected.
                 // This is not needed for the other path as calling `narrow` has a similar effect.
                 self.layers[0].get_mut().reset();
             }

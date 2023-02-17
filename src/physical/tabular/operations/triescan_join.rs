@@ -14,8 +14,8 @@ use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::iter::repeat;
 
-/// A [`JoinBinding`] is a vector of `<Vec<usize>` where binding[i]
-/// contains which layer of the ith subscan is bound to which variable
+/// A [`JoinBinding`] is a vector of [`Vec<usize>`] where `binding[i]`
+/// contains which layer of the `i`-th subscan is bound to which variable
 /// (Variables are represented by their index in the variable order)
 /// So the join R(a, b) S(b, c) T(a, c) with variable order [a, b, c] is represented
 /// with the binding [[0, 1], [1, 2], [0, 2]] (assuming trie_scans = [R, S, T])
@@ -33,7 +33,7 @@ pub struct TrieScanJoin<'a> {
     /// Layer we are currently at in the resulting trie
     current_layer: Option<usize>,
 
-    /// Indices of the sub tries which are assosiated with a given layer in the result
+    /// Indices of the sub tries which are associated with a given layer in the result
     /// E.g., given the join R(a, b), S(b, c), T(a, c) with variable order a, b, c
     /// we have layers_to_scans = [[R, T], [R, S], [S, T]]
     /// or rather layers_to_scans = [[0, 2], [0, 1], [1, 2]] if trie_scans = [R, S, T]
@@ -71,7 +71,7 @@ impl<'a> TrieScanJoin<'a> {
             acc.max(*v.iter().max().expect("Each binding should be non-empty."))
         });
 
-        // Indices of the sub tries which are assosiated with a given layer in the result
+        // Indices of the sub tries which are associated with a given layer in the result
         let mut layer_to_scans = repeat(Vec::new()).take(target_arity).collect::<Vec<_>>();
 
         // For each layer in the result trie, contains
@@ -99,6 +99,7 @@ impl<'a> TrieScanJoin<'a> {
 
         // This loop builds the [`ColumnScanJoin`] as suggested above
         for (var_index, scan_indices) in layer_to_scans.iter().enumerate() {
+            // Define join code once and generate it for all data types
             macro_rules! merge_join_for_datatype {
                 ($variant:ident, $type:ty) => {{
                     if scan_indices.len() > 1 {
@@ -121,7 +122,7 @@ impl<'a> TrieScanJoin<'a> {
                             ColumnScanEnum::ColumnScanJoin(ColumnScanJoin::new(scans)),
                         ))))
                     } else {
-                        // If we have only one column then no join is neccessary and we use a [`ColumnScanPass`]
+                        // If we have only one column then no join is necessary and we use a [`ColumnScanPass`]
                         let scan_index = scan_indices[0];
                         let column_index = merge_join_indices[var_index][0];
 

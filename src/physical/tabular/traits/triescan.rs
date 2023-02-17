@@ -16,9 +16,11 @@ use super::table_schema::TableColumnTypes;
 /// its current position as a [`ColumnScanT`] object.
 pub trait TrieScan<'a>: Debug {
     /// Return to the upper layer.
+    /// This may only be called if the trie scan is not already at the topmost layer. TODO: Is this restriction required? Check implementations if you want to change this
     fn up(&mut self);
 
     /// Enter the next layer based on the position of the iterator in the current layer.
+    /// This may only be called if the trie scan is not already at the deepest layer. TODO: Is this restriction required? Check implementations if you want to change this
     fn down(&mut self);
 
     /// Return the current position of the scan as a [`ColumnScanT`].
