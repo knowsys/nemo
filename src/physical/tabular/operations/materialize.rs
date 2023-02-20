@@ -1,16 +1,13 @@
-use crate::{
-    meta::logging::log_materialize,
-    physical::{
-        columnar::{
-            adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
-            column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-            traits::{columnbuilder::ColumnBuilder, columnscan::ColumnScan},
-        },
-        datatypes::{DataTypeName, Double, Float},
-        tabular::{
-            table_types::trie::Trie,
-            traits::triescan::{TrieScan, TrieScanEnum},
-        },
+use crate::physical::{
+    columnar::{
+        adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
+        column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+        traits::{columnbuilder::ColumnBuilder, columnscan::ColumnScan},
+    },
+    datatypes::{DataTypeName, Double, Float},
+    tabular::{
+        table_types::trie::Trie,
+        traits::triescan::{TrieScan, TrieScanEnum},
     },
 };
 
@@ -181,7 +178,12 @@ pub fn materialize_inner(
 
         let result = Trie::new(result_columns);
 
-        log_materialize(result.num_elements(), next_count);
+        log::info!(
+            "Materialize: Next: {next_count}, Elements: {}, Quotient: {}",
+            result.num_elements(),
+            num::ToPrimitive::to_f64(&next_count).unwrap()
+                / num::ToPrimitive::to_f64(&result.num_elements()).unwrap()
+        );
 
         return Some(result);
     }

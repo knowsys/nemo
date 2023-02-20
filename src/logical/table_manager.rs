@@ -4,10 +4,7 @@ use super::model::{DataSource, Identifier};
 use crate::{
     error::Error,
     io::csv::read,
-    meta::{
-        logging::{log_add_reference, log_load_table},
-        TimedCode,
-    },
+    meta::TimedCode,
     physical::{
         datatypes::DataTypeName,
         dictionary::Dictionary,
@@ -474,8 +471,12 @@ impl<Dict: Dictionary> TableManager<Dict> {
         ref_reorder: Reordering,
     ) -> TableName {
         debug_assert!(ref_reorder.is_permutation());
-
-        log_add_reference(predicate, ref_name.predicate, &ref_reorder);
+        log::info!(
+            "Add reference {} -> {} ({:?})",
+            predicate.0,
+            ref_name.predicate.0,
+            ref_reorder
+        );
 
         debug_assert!(
             ref_reorder.len_source() == *self.predicate_arity.get(&ref_name.predicate).unwrap()
@@ -574,7 +575,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
         TimedCode::instance()
             .sub("Reasoning/Execution/Load Table")
             .start();
-        log_load_table(source);
+
+        log::info!("Loading {:?}", source);
 
         let (trie, _name) = match source {
             DataSource::CsvFile(file) => {

@@ -10,7 +10,6 @@ use crate::{
         table_manager::TableKey,
         TableManager,
     },
-    meta::logging::{log_available_variable_order, log_choose_variable_order},
     physical::{dictionary::Dictionary, management::ExecutionPlan},
 };
 
@@ -54,10 +53,23 @@ impl<'a, Dict: Dictionary> RuleExecution<'a, Dict> {
         rule_info: &RuleInfo,
         step_number: usize,
     ) -> Result<HashSet<Identifier>, Error> {
-        log_available_variable_order(program, self.analysis);
+        log::info!(
+            "Available orders: {}",
+            self.analysis
+                .promising_variable_orders
+                .iter()
+                .enumerate()
+                .fold("".to_string(), |acc, (index, promising_order)| {
+                    format!(
+                        "{}\n   ({}) {})",
+                        acc,
+                        index,
+                        promising_order.debug(program.get_names())
+                    )
+                })
+        );
         // TODO: Just because its the first doesn't mean its the best
         let best_variable_order = &self.analysis.promising_variable_orders[0];
-        log_choose_variable_order(0);
 
         let mut execution_plan = ExecutionPlan::<TableKey>::new();
         let tree_body = self.body_strategy.execution_tree(

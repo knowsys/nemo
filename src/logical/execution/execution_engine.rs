@@ -10,13 +10,11 @@ use crate::{
         table_manager::ColumnOrder,
         TableManager,
     },
-    meta::{
-        logging::{log_apply_rule, log_fragmentation_combine, log_rule_duration},
-        TimedCode,
-    },
+    meta::TimedCode,
     physical::{
         datatypes::DataValueT,
         dictionary::Dictionary,
+        management::ByteSized,
         tabular::{
             table_types::trie::Trie,
             traits::{table::Table, table_schema::TableSchema},
@@ -153,7 +151,10 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         while without_derivation < self.program.rules().len() {
             let timing_string = format!("Reasoning/Rules/Rule {current_rule_index}");
             TimedCode::instance().sub(&timing_string).start();
-            log_apply_rule(&self.program, self.current_step, current_rule_index);
+            log::info!(
+                "<<< {0}: APPLYING RULE {current_rule_index} >>>",
+                self.current_step
+            );
 
             let current_info = &mut self.rule_infos[current_rule_index];
             let current_analysis = &self.analysis.rule_analysis[current_rule_index];
@@ -184,7 +185,7 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
             current_info.step_last_applied = self.current_step;
 
             let rule_duration = TimedCode::instance().sub(&timing_string).stop();
-            log_rule_duration(rule_duration);
+            log::info!("Rule duration: {} ms", rule_duration.as_millis());
 
             // We prevent fragmentation by periodically collecting single-step tables into larger ones
             for updated_pred in updated_predicates {
@@ -204,16 +205,16 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
 
                     let range = start..(self.current_step + 1);
 
-                    let new_key = self.table_manager.add_union_table(
+                    match self.table_manager.add_union_table(
                         updated_pred,
                         range.clone(),
                         updated_pred,
                         range.clone(),
                         None,
-                    )?;
-
-                    let new_table_opt = new_key.map(|key| self.table_manager.get_trie(&key));
-                    log_fragmentation_combine(updated_pred, new_table_opt);
+                    )?{
+                        Some(table_key) => log::info!("Combined multiple single-step tables for predicate {}: {} elements ({})", updated_pred.0,  self.table_manager.get_trie(&table_key).row_num(), self.table_manager.get_trie(&table_key).size_bytes()),
+                        None => log::warn!("Combined multiple single-step tables for predicate {}: Empty table", updated_pred.0),
+                    };
 
                     self.predicate_last_union
                         .insert(updated_pred, self.current_step);
