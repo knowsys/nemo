@@ -659,6 +659,24 @@ impl DataSource {
     pub fn sparql_query(query: SparqlQuery) -> Result<Self, ParseError> {
         Ok(Self::SparqlQuery(Box::new(query)))
     }
+
+    /// Returns the currents variants name
+    pub fn name(&self) -> String {
+        match self {
+            DataSource::CsvFile(_) => "CSV".to_string(),
+            DataSource::RdfFile(_) => "RDF".to_string(),
+            DataSource::SparqlQuery(_) => "SparqlQuery".to_string(),
+        }
+    }
+
+    /// Returns a path if applicable
+    pub fn path(&self) -> Option<Box<PathBuf>> {
+        match self {
+            DataSource::CsvFile(file) => Some(Box::clone(file)),
+            DataSource::RdfFile(file) => Some(Box::clone(file)),
+            DataSource::SparqlQuery(_) => None,
+        }
+    }
 }
 
 /// A Data source declaration.

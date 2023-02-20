@@ -2,5 +2,3 @@
 
 pub mod timing;
 pub use timing::TimedCode;
-
-pub mod logging;

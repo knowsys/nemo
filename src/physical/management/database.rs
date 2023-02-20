@@ -6,13 +6,7 @@ use bytesize::ByteSize;
 
 use crate::{
     error::Error,
-    meta::{
-        logging::{
-            log_empty_trie, log_execution_title, log_execution_tree, log_save_trie_perm,
-            log_save_trie_temp,
-        },
-        TimedCode,
-    },
+    meta::TimedCode,
     physical::{
         dictionary::Dictionary,
         tabular::{
@@ -263,7 +257,7 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
         for tree in &plan.trees {
             let timed_string = format!("Reasoning/Execution/{}", tree.name());
             TimedCode::instance().sub(&timed_string).start();
-            log_execution_title(tree);
+            log::info!("Executing plan \"{}\":", tree.name());
 
             let type_tree = TypeTree::from_execution_tree(self, &temp_types, tree)?;
             let schema = type_tree.schema.clone();
@@ -275,7 +269,10 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
 
             // Calculate the new trie
             let new_trie_opt = if let Some(root) = tree.root() {
-                log_execution_tree(&self.get_iterator_string(root.clone(), &temp_tries));
+                log::info!(
+                    "   -> {}",
+                    &self.get_iterator_string(root.clone(), &temp_tries)
+                );
 
                 num_null_columns = Self::appends_nulls(root.clone());
 
@@ -301,11 +298,19 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                 // Add new trie to the appropriate place
                 match tree.result() {
                     ExecutionResult::Temp(id) => {
-                        log_save_trie_temp(&new_trie);
+                        log::info!(
+                            "Saved temporary table: {} entries ({})",
+                            new_trie.row_num(),
+                            new_trie.size_bytes()
+                        );
                         temp_tries.insert(*id, Some(TempTableInfo::new(new_trie)));
                     }
                     ExecutionResult::Save(key) => {
-                        log_save_trie_perm(&new_trie);
+                        log::info!(
+                            "Saved permanent table: {} entries ({})",
+                            new_trie.row_num(),
+                            new_trie.size_bytes()
+                        );
                         self.add(key.clone(), new_trie, schema);
                         new_tables.push(key.clone());
                     }
@@ -314,8 +319,7 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                 if let ExecutionResult::Temp(id) = tree.result() {
                     temp_tries.insert(*id, None);
                 }
-
-                log_empty_trie();
+                log::info!("Trie does not contain any elements");
             }
 
             TimedCode::instance().sub(&timed_string).stop();
