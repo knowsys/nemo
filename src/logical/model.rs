@@ -634,7 +634,7 @@ impl SparqlQuery {
 }
 
 /// An external data source.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum DataSource {
     /// A CSV file data source with the given path.
     CsvFile(Box<PathBuf>),
@@ -659,22 +659,14 @@ impl DataSource {
     pub fn sparql_query(query: SparqlQuery) -> Result<Self, ParseError> {
         Ok(Self::SparqlQuery(Box::new(query)))
     }
+}
 
-    /// Returns the currents variants name
-    pub fn name(&self) -> String {
+impl std::fmt::Debug for DataSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DataSource::CsvFile(_) => "CSV".to_string(),
-            DataSource::RdfFile(_) => "RDF".to_string(),
-            DataSource::SparqlQuery(_) => "SparqlQuery".to_string(),
-        }
-    }
-
-    /// Returns a path if applicable
-    pub fn path(&self) -> Option<Box<PathBuf>> {
-        match self {
-            DataSource::CsvFile(file) => Some(Box::clone(file)),
-            DataSource::RdfFile(file) => Some(Box::clone(file)),
-            DataSource::SparqlQuery(_) => None,
+            Self::CsvFile(arg0) => f.debug_tuple("CSV-File").field(arg0).finish(),
+            Self::RdfFile(arg0) => f.debug_tuple("RDF-File").field(arg0).finish(),
+            Self::SparqlQuery(arg0) => f.debug_tuple("SparqlQuery").field(arg0).finish(),
         }
     }
 }

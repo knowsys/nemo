@@ -576,13 +576,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             .sub("Reasoning/Execution/Load Table")
             .start();
 
-        log::info!(
-            "Loading {}{}",
-            source.name(),
-            source
-                .path()
-                .map_or("".to_string(), |file| format!(" file: {:?}", file))
-        );
+        log::info!("Loading {:?}", source);
 
         let (trie, _name) = match source {
             DataSource::CsvFile(file) => {
