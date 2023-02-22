@@ -39,7 +39,7 @@ impl ColumnOrder {
 
         let source = &match self {
             ColumnOrder::Default => (0..reorder.len_source()).collect(),
-            ColumnOrder::Reordered(column_reorder) => *column_reorder,
+            ColumnOrder::Reordered(column_reorder) => column_reorder.clone(),
         };
 
         let result = reorder.apply_to(source);
@@ -61,7 +61,7 @@ impl ColumnOrder {
             ColumnOrder::Default => Reordering::default(arity),
             ColumnOrder::Reordered(reorder) => {
                 debug_assert!(arity == reorder.len());
-                Reordering::new(*reorder, arity)
+                Reordering::new(reorder.clone(), arity)
             }
         }
     }

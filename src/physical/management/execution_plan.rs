@@ -1,5 +1,5 @@
 use std::{
-    cell::{Ref, RefCell, RefMut},
+    cell::RefCell,
     collections::HashSet,
     fmt::Debug,
     rc::{Rc, Weak},
@@ -150,7 +150,7 @@ impl ExecutionTree {
 
     /// Returns the [`ExecutionResult`] of this operation.
     /// It declares what should happen with the output, once computed.
-    pub fn result(&self) -> &ExecutionResult {
+    pub(super) fn result(&self) -> &ExecutionResult {
         &self.result
     }
 

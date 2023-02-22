@@ -851,7 +851,7 @@ mod test {
         ];
 
         let picked_columns = Reordering::new(vec![1, 0, 2], 3);
-        let base_trie = Trie::from_rows(rows);
+        let base_trie = Trie::from_rows(&rows);
 
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
@@ -878,7 +878,7 @@ mod test {
         let rows = vec![vec![a, r, x], vec![b, r, y]];
 
         let picked_columns = Reordering::new(vec![1, 0, 2], 3);
-        let base_trie = Trie::from_rows(rows);
+        let base_trie = Trie::from_rows(&rows);
 
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));

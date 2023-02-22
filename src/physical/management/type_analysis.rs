@@ -793,9 +793,9 @@ mod test {
 
     #[test]
     fn test_from_execution_plan() {
-        let trie_a = Trie::from_rows(vec![vec![DataValueT::U64(1), DataValueT::U32(2)]]);
-        let trie_b = Trie::from_rows(vec![vec![DataValueT::U32(1), DataValueT::U32(2)]]);
-        let trie_c = Trie::from_rows(vec![vec![DataValueT::U32(1), DataValueT::U64(2)]]);
+        let trie_a = Trie::from_rows(&[vec![DataValueT::U64(1), DataValueT::U32(2)]]);
+        let trie_b = Trie::from_rows(&[vec![DataValueT::U32(1), DataValueT::U32(2)]]);
+        let trie_c = Trie::from_rows(&[vec![DataValueT::U32(1), DataValueT::U64(2)]]);
 
         let schema_a = TableSchema::from_vec(vec![
             schema_entry(DataTypeName::U64),
@@ -846,8 +846,8 @@ mod test {
 
     #[test]
     fn test_append() {
-        let trie_a = Trie::from_rows(vec![vec![DataValueT::U32(1)]]);
-        let trie_b = Trie::from_rows(vec![vec![DataValueT::U64(1 << 35), DataValueT::U32(2)]]);
+        let trie_a = Trie::from_rows(&[vec![DataValueT::U32(1)]]);
+        let trie_b = Trie::from_rows(&[vec![DataValueT::U64(1 << 35), DataValueT::U32(2)]]);
 
         let schema_a = TableSchema::from_vec(vec![schema_entry(DataTypeName::U32)]);
         let schema_b = TableSchema::from_vec(vec![
@@ -902,11 +902,8 @@ mod test {
 
     #[test]
     fn test_equal_col() {
-        let trie_a = Trie::from_rows(vec![vec![DataValueT::U32(1), DataValueT::U64(1 << 34)]]);
-        let trie_b = Trie::from_rows(vec![vec![
-            DataValueT::U64(1 << 35),
-            DataValueT::U64(1 << 36),
-        ]]);
+        let trie_a = Trie::from_rows(&[vec![DataValueT::U32(1), DataValueT::U64(1 << 34)]]);
+        let trie_b = Trie::from_rows(&[vec![DataValueT::U64(1 << 35), DataValueT::U64(1 << 36)]]);
 
         let schema_a = TableSchema::from_vec(vec![
             schema_entry(DataTypeName::U32),

@@ -13,7 +13,6 @@ use crate::{
     meta::TimedCode,
     physical::{
         datatypes::DataValueT,
-        management::database::TableName,
         dictionary::Dictionary,
         management::ByteSized,
         tabular::{
@@ -131,7 +130,14 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
 
             let table_name = TableName(predicate.name(program.get_names()).unwrap());
 
-            table_manager.add_table(predicate, 0..1, ColumnOrder::default(arity), schema, trie, table_name);
+            table_manager.add_table(
+                predicate,
+                0..1,
+                ColumnOrder::default(arity),
+                schema,
+                trie,
+                table_name,
+            );
         }
     }
 

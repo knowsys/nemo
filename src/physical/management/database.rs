@@ -164,16 +164,16 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
     /// Return the schema of a table identified by the given [`TableName`].
     /// Panics if the id does not exist.
-    pub fn get_schema(&self, id: TableId, order: &ColumnOrder) -> &TableSchema {
+    pub fn get_schema(&self, id: TableId, order: &ColumnOrder) -> TableSchema {
         self.id_to_table
             .get(&id)
-            .map(|i| &i.schema.reordered(&order.as_reordering(i.schema.arity())))
+            .map(|i| i.schema.reordered(&order.as_reordering(i.schema.arity())))
             .unwrap()
     }
 
     /// Add the given table to the instance with a name and schema.
     fn add(&mut self, status: TableStatus, name: &str, schema: TableSchema) -> TableId {
-        let insert_result = self.id_to_table.insert(
+        self.id_to_table.insert(
             self.current_id,
             TableInfo::new(status, String::from(name), schema),
         );
@@ -183,7 +183,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
     /// Adds another order of a table.
     /// Panics if the id does not exist or the table or the status is not in memory.
-    fn add_trie_order(&mut self, id: TableId, trie: Trie, order: ColumnOrder) {
+    pub fn add_trie_order(&mut self, id: TableId, trie: Trie, order: ColumnOrder) {
         if let TableStatus::InMemory(orders) = &mut self.id_to_table.get_mut(&id).unwrap().status {
             orders.push(OrderedTrie { trie, order });
         }
@@ -221,8 +221,8 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
         // If the referenced table is itself a reference to another table
         // then we resolve the first reference and point the new table to the referenced table
-        let (final_id, final_reorder) =
-            if let TableStatus::Reference(another_table, another_order) = self
+        let (&final_id, final_reorder) =
+            if let TableStatus::Reference(another_table, another_order) = &self
                 .id_to_table
                 .get(&referenced_id)
                 .expect("Function assumes that referenced table exists.")
@@ -232,7 +232,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
                 (another_table, combined_reorder)
             } else {
-                (referenced_id, reorder)
+                (&referenced_id, reorder)
             };
 
         let new_schema = self
@@ -293,7 +293,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
             let current_distance = ordered_trie.order.distance(order);
 
             if current_distance < distance {
-                closest_order = order;
+                closest_order = &ordered_trie.order;
                 distance = current_distance;
             }
         }
@@ -314,17 +314,17 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         }
     }
 
-    /// Return a reference to a [`Trie`] identified by the given [`TableId`] with a particular [`ColumnOrder`].
-    /// If the id exists, this function will not fail. This is accomplished by
+    /// Makes sure that the table identified by a [`TableId`] and [`ColumnOrder`] is present.
+    /// This is accomplished by
     ///     * Reordering the trie if the requested order is not available.
     ///     * Loading the trie from disk (and possibly reordering) if needed.
     ///     * Resolving references.
     /// Panics if the requested id does not exist.
-    pub fn get_trie<'a>(&'a mut self, id: TableId, order: &ColumnOrder) -> Result<&'a Trie, Error> {
+    fn load_into_memory<'a>(&'a mut self, id: TableId, order: &ColumnOrder) -> Result<(), Error> {
         let info = self.id_to_table.get_mut(&id).unwrap();
 
         // First we get we get the trie that was asked for in memory but maybe not in the right order
-        let (trie, order) = match info.status {
+        let (trie, order) = match &info.status {
             TableStatus::InMemory(ordered_tries) => {
                 todo!()
             }
@@ -334,7 +334,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 let loaded_order = ColumnOrder::default();
 
                 let new_trie = if sources.len() == 1 {
-                    self.load_from_disk(sources[0], &info.schema)?
+                    self.load_from_disk(&sources[0], &info.schema)?
                 } else {
                     // If the trie results form multiple sources then we load each source indivdually and then compute the union over all tries
 
@@ -369,12 +369,16 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
             TableStatus::Reference(_, _) => todo!(),
         };
 
-        Ok(trie)
+        Ok(())
     }
 
     /// Load table from a given on-disk source
     /// TODO: This function should change when the type system gets introduced on the logical layer
-    fn load_from_disk(&mut self, source: TableSource, schema: &TableSchema) -> Result<Trie, Error> {
+    fn load_from_disk(
+        &mut self,
+        source: &TableSource,
+        schema: &TableSchema,
+    ) -> Result<Trie, Error> {
         {
             TimedCode::instance()
                 .sub("Reasoning/Execution/Load Table")
@@ -458,7 +462,6 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
             let type_tree = TypeTree::from_execution_tree(self, &type_trees, tree)?;
             let schema = type_tree.schema.clone();
-            type_trees.insert(tree_index, type_tree);
 
             let mut num_null_columns = 0u64;
 
@@ -476,6 +479,8 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
             } else {
                 None
             };
+
+            type_trees.insert(tree_index, type_tree);
 
             if let Some(new_trie) = new_trie_opt {
                 // If trie appended nulls then we need to update our `current_null` value
@@ -526,9 +531,9 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     fn get_iterator_node<'a>(
         &'a self,
         execution_node: ExecutionNodeRef,
-        type_node: &'a TypeTreeNode,
+        type_node: &TypeTreeNode,
         computation_results: &'a HashMap<usize, ComputationResult>,
-    ) -> Result<Option<TrieScanEnum>, Error> {
+    ) -> Result<Option<TrieScanEnum<'a>>, Error> {
         if type_node.schema.is_empty() {
             // That there is no schema for this node implies that the table is empty
             return Ok(None);
@@ -539,7 +544,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
         return match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
-                let trie_ref = self.get_trie(*id, order)?;
+                let trie_ref = self.get_trie_unchecked(*id, order);
                 let schema = type_node.schema.get_column_types();
                 let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema);
 
@@ -639,7 +644,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 let subnode_ref = &*subnode_rc.borrow();
 
                 let trie = match subnode_ref {
-                    ExecutionNode::FetchExisting(id, order) => self.get_trie(*id, order)?,
+                    ExecutionNode::FetchExisting(id, order) => self.get_trie_unchecked(*id, order),
                     ExecutionNode::FetchNew(index) => {
                         let comp_result = computation_results.get(index).unwrap();
                         let trie_ref = match comp_result {
@@ -864,13 +869,13 @@ mod test {
 
     #[test]
     fn test_casting() {
-        let trie_a = Trie::from_rows(vec![vec![DataValueT::U32(1), DataValueT::U32(2)]]);
-        let trie_b = Trie::from_rows(vec![
+        let trie_a = Trie::from_rows(&[vec![DataValueT::U32(1), DataValueT::U32(2)]]);
+        let trie_b = Trie::from_rows(&[
             vec![DataValueT::U32(2), DataValueT::U64(1 << 35)],
             vec![DataValueT::U32(3), DataValueT::U64(2)],
         ]);
-        let trie_c = Trie::from_rows(vec![vec![DataValueT::U32(2), DataValueT::U64(4)]]);
-        let trie_x = Trie::from_rows(vec![
+        let trie_c = Trie::from_rows(&[vec![DataValueT::U32(2), DataValueT::U64(4)]]);
+        let trie_x = Trie::from_rows(&[
             vec![DataValueT::U64(1), DataValueT::U32(2), DataValueT::U64(4)],
             vec![DataValueT::U64(3), DataValueT::U32(2), DataValueT::U64(4)],
             vec![
@@ -879,7 +884,7 @@ mod test {
                 DataValueT::U64(12),
             ],
         ]);
-        let trie_y = Trie::from_rows(vec![
+        let trie_y = Trie::from_rows(&[
             vec![DataValueT::U32(1), DataValueT::U64(2), DataValueT::U32(4)],
             vec![
                 DataValueT::U32(2),

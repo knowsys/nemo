@@ -406,7 +406,7 @@ impl Table for Trie {
         )
     }
 
-    fn from_rows(rows: Vec<Vec<DataValueT>>) -> Self {
+    fn from_rows(rows: &[Vec<DataValueT>]) -> Self {
         debug_assert!(!rows.is_empty());
 
         let arity = rows[0].len();
@@ -632,7 +632,7 @@ mod test {
         let rows = get_test_table_as_rows();
         let expected_trie = get_test_table_as_trie();
 
-        let constructed_trie = Trie::from_rows(rows);
+        let constructed_trie = Trie::from_rows(&rows);
 
         assert_eq!(expected_trie, constructed_trie);
     }
