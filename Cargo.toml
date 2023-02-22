@@ -32,6 +32,7 @@ bytesize = "1.1.0"
 clap = {version = "4.0.32", features = [ "derive", "cargo", "env" ]}
 sanitise-file-name = "1.0.0"
 flate2 = "1.0.25"
+rustyline = {version = "11.0.0", features = [ "derive" ]}
 
 [dev-dependencies]
 test-log = "0.2"

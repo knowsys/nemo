@@ -27,7 +27,7 @@ use stage2::meta::TimedCode;
 
 fn main() {
     TimedCode::instance().start();
-    let mut app = app::CliApp::parse();
+    let mut app = app::App::parse();
     if let Err(err) = app.run() {
         eprintln!("Application Error: {err}");
         std::process::exit(1);

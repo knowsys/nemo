@@ -46,4 +46,7 @@ pub enum Error {
     /// IO Error
     #[error(transparent)]
     IO(#[from] std::io::Error),
+    /// Rustyline error
+    #[error(transparent)]
+    RustyLine(#[from] rustyline::error::ReadlineError),
 }
