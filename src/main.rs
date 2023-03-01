@@ -22,26 +22,50 @@ pub mod app;
 
 use clap::Parser;
 
-use stage2::meta::timing::TimedDisplay;
+use colored::*;
 use stage2::meta::TimedCode;
 
 fn main() {
     TimedCode::instance().start();
     let mut app = app::CliApp::parse();
-    if let Err(err) = app.run() {
-        eprintln!("Application Error: {err}");
-        std::process::exit(1);
-    }
+    let new_facts = match app.run() {
+        Ok(num_facts) => num_facts,
+        Err(err) => {
+            eprintln!("Application Error: {err}");
+            std::process::exit(1);
+        }
+    };
+
     TimedCode::instance().stop();
+
+    let reasoning_time = TimedCode::instance()
+        .sub("Reasoning")
+        .total_system_time()
+        .as_millis();
+    let loading_time = TimedCode::instance()
+        .sub("Reasoning/Execution/Load Table")
+        .total_system_time()
+        .as_millis();
+
+    let output_time = reasoning_time - loading_time;
+
+    println!("");
     println!(
-        "\n{}",
-        TimedCode::instance().create_tree_string(
-            "stage2",
-            &[
-                TimedDisplay::default(),
-                TimedDisplay::default(),
-                TimedDisplay::new(stage2::meta::timing::TimedSorting::LongestThreadTime, 0)
-            ]
-        )
-    );
+        "Finished Reasoning in {}{}. Derived {} facts.",
+        output_time.to_string().green().bold(),
+        "ms".green().bold(),
+        new_facts.to_string().green().bold()
+    )
+
+    // println!(
+    //     "\n{}",
+    //     TimedCode::instance().create_tree_string(
+    //         "stage2",
+    //         &[
+    //             TimedDisplay::default(),
+    //             TimedDisplay::default(),
+    //             TimedDisplay::new(stage2::meta::timing::TimedSorting::LongestThreadTime, 0)
+    //         ]
+    //     )
+    // );
 }

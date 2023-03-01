@@ -7,6 +7,7 @@ use stage2::logical::execution::ExecutionEngine;
 use stage2::logical::model::Program;
 use stage2::meta::TimedCode;
 use stage2::physical::dictionary::Dictionary;
+use stage2::physical::tabular::traits::table::Table;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
@@ -29,7 +30,7 @@ const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
 #[command(author, version, about)]
 pub struct CliApp {
     /// Sets the verbosity of logging if the flags -v and -q are not used
-    #[arg(long = "log", value_parser=clap::builder::PossibleValuesParser::new(["error", "warn", "info", "debug", "trace"]), group = "verbosity")]
+    #[arg(long = "log", default_value="info", value_parser=clap::builder::PossibleValuesParser::new(["error", "warn", "info", "debug", "trace"]), group = "verbosity")]
     log_level: Option<String>,
     /// Sets log verbosity (multiple times means more verbose)
     #[arg(short, long, action = clap::builder::ArgAction::Count, group = "verbosity")]
@@ -41,13 +42,13 @@ pub struct CliApp {
     #[arg(value_parser, required = true)]
     rules: Vec<PathBuf>,
     /// Save results
-    #[arg(short, long = "save-results")]
+    #[arg(short, long = "save-results", default_value = "true")]
     save_results: bool,
     /// output directory
     #[arg(short, long = "output", default_value = DEFAULT_OUTPUT_DIRECTORY)]
     output_directory: PathBuf,
     /// Overwrite existing files. This will remove all files in the given output directory
-    #[arg(long = "overwrite-results", default_value = "false")]
+    #[arg(long = "overwrite-results", default_value = "true")]
     overwrite: bool,
     /// Gzip output files
     #[arg(short, long = "gzip", default_value = "false")]
@@ -61,7 +62,7 @@ type Dict = stage2::physical::dictionary::PrefixedStringDictionary;
 
 impl CliApp {
     /// Application logic, based on the parsed data inside the [`CliApp`] object
-    pub fn run(&mut self) -> Result<(), Error> {
+    pub fn run(&mut self) -> Result<usize, Error> {
         TimedCode::instance().sub("Reading & Preprocessing").start();
         self.init_logging();
         log::info!("Version: {}", clap::crate_version!());
@@ -93,6 +94,8 @@ impl CliApp {
 
         TimedCode::instance().sub("Reasoning").stop();
 
+        let mut num_facts = 0;
+
         if self.save_results {
             TimedCode::instance()
                 .sub("Output & Final Materialization")
@@ -110,6 +113,7 @@ impl CliApp {
                     .name(&dict)
                     .expect("All predicates shall depend on the dictionary");
                 if let Some(trie) = trie {
+                    num_facts += trie.row_num();
                     csv_writer.write_predicate(&pred_name, trie, &dict)
                 } else {
                     csv_writer.create_file(&pred_name).map(|_| ())
@@ -120,7 +124,7 @@ impl CliApp {
                 .sub("Output & Final Materialization")
                 .stop();
         }
-        Ok(())
+        Ok(num_facts)
     }
 
     /// Initialising Logging
@@ -145,6 +149,7 @@ impl CliApp {
                 _ => log::LevelFilter::Warn,
             })
         };
+        let builder = builder.format_target(false);
         builder.init();
     }
 

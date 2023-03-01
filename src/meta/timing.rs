@@ -138,6 +138,11 @@ impl TimedCode {
         current_block
     }
 
+    /// Return the total system time this block took.
+    pub fn total_system_time(&self) -> Duration {
+        self.info.total_system_time
+    }
+
     /// Start the next measurement
     pub fn start(&mut self) {
         if cfg!(test) {
