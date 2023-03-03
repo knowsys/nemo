@@ -17,6 +17,7 @@
 )]
 #![feature(macro_metavar_expr)]
 #![feature(is_sorted)]
+#![feature(entry_insert)]
 
 pub mod app;
 

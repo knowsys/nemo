@@ -194,7 +194,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         trees.push(tree_head_join);
 
         // Project it to the frontier variables and save the result in an extra table (also removing duplicates)
-        let head_projected_order = ColumnOrder::default(self.frontier_variables.len());
+        let head_projected_order = ColumnOrder::default();
 
         let head_projected_name = table_manager.get_table_name(
             self.analysis.head_matches_identifier,
@@ -273,7 +273,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             let predicate_arity = head_instructions[0].arity;
             // We just pick the default order
             // TODO: Is there a better pick?
-            let head_order = ColumnOrder::default(predicate_arity);
+            let head_order = ColumnOrder::default()(predicate_arity);
 
             let head_table_name =
                 table_manager.get_table_name(predicate, step_number..step_number + 1);

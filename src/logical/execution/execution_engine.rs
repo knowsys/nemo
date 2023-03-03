@@ -133,7 +133,7 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
             table_manager.add_table(
                 predicate,
                 0..1,
-                ColumnOrder::default(arity),
+                ColumnOrder::default(),
                 schema,
                 trie,
                 table_name,

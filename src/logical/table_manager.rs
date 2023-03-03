@@ -467,7 +467,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
         let input_order = if input_orders.is_empty() {
             // This occurs when input table is just a reference
-            ColumnOrder::default(input_arity)
+            ColumnOrder::default()
         } else {
             input_orders[0].clone()
         };
@@ -619,7 +619,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
                     }
 
                     let loaded_table =
-                        ChaseTable::from_name(actual_name, ColumnOrder::default(arity));
+                        ChaseTable::from_name(actual_name, ColumnOrder::default()(arity));
 
                     // self.database.add(loaded_table.db_name, trie, schema);
                     *status = TableStatus::InMemory(vec![loaded_table.order.clone()]);
@@ -952,7 +952,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             0..step,
             predicate,
             0..step,
-            Some(ColumnOrder::default(arity)),
+            Some(ColumnOrder::default()),
         )?
         .map(|key| self.materialize_table(key))
         .transpose()

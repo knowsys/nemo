@@ -471,7 +471,7 @@ pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
         preds
             .map(|(p, a)| {
                 let mut set = HashSet::new();
-                set.insert(ColumnOrder::default(*a));
+                set.insert(ColumnOrder::default());
                 (*p, set)
             })
             .collect()

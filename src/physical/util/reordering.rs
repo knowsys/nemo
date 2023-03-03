@@ -6,7 +6,7 @@ use std::{
 
 /// Type which represents a reordering of some list of things.
 /// For example, `{ reorder: [2, 0], len_source: 4 }` would be interpreted as
-/// "Take the third then the first element (and ignore the second and fourth one)".
+/// "Take the third then the first element (and dont change the second and fourth one)".
 #[derive(PartialEq, Eq, Clone)]
 pub struct Reordering {
     reorder: Vec<usize>,
@@ -32,7 +32,7 @@ impl Reordering {
 
     /// Derive a [`Reordering`] that would transform a vector of elements into another.
     /// I.e. `this.apply_to(source) = target`
-    /// For example `[x, y, z, w].target([z, w, y, x]) = [2, 3, 1, 0]`.
+    /// For example `from_transformation([x, y, z, w], [z, w, y, x]) = [2, 3, 1, 0]`.
     pub fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
         Self::new(
             target
@@ -55,6 +55,15 @@ impl Reordering {
         self.iter().map(|&i| vec[i].clone()).collect()
     }
 
+    /// Apply the
+    pub fn apply_element(&self, element: usize) -> usize {
+        self.reorder[element]
+    }
+
+    pub fn apply_element_reverse(&self, value: usize) -> usize {
+        *self.reorder.iter().find(|&i| value == *i).unwrap()
+    }
+
     /// Returns the amount of elements before the reordering.
     pub fn len_source(&self) -> usize {
         self.len_source
@@ -70,31 +79,8 @@ impl Reordering {
         self.reorder.iter()
     }
 
-    /// Return true if this is the default order
-    pub fn is_default(&self) -> bool {
-        if self.len_source() != self.len_target() {
-            return false;
-        }
-
-        if self[0] != 0 {
-            return false;
-        }
-
-        for index in 1..self.reorder.len() {
-            if let Some(difference) = self[index].checked_sub(self[index - 1]) {
-                if difference != 1 {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-
-        true
-    }
-
     /// Returns whether or not this [`Reordering`] is a permutation.
-    /// I.e. wether source and target length a equal and every element is only used once.
+    /// I.e. whether source and target length a equal and every element is only used once.
     pub fn is_permutation(&self) -> bool {
         if self.len_source() != self.len_target() {
             return false;
@@ -110,6 +96,8 @@ impl Reordering {
         true
     }
 
+    /// Returns whether or not this [`Reordering`] is the identity function.
+    /// I.e. whether it maps every element to itself.
     pub fn is_identity(&self) -> bool {
         if self.len_source() != self.len_target() {
             return false;

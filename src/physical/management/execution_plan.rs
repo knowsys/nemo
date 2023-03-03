@@ -177,7 +177,7 @@ impl ExecutionTree {
 
     /// Return [`ExecutionNodeRef`] for fetching a permanent table.
     pub fn fetch_existing(&mut self, id: TableId) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::FetchExisting(id, ColumnOrder::Default);
+        let new_node = ExecutionNode::FetchExisting(id, ColumnOrder::default());
         self.push_and_return_ref(new_node)
     }
 
@@ -441,12 +441,12 @@ impl ExecutionTree {
                 let simplified =
                     Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
-                if reorder.is_default() {
+                if reorder.is_identity() {
                     Some(simplified)
                 } else {
                     if let ExecutionNode::FetchExisting(id, order) = &*simplified.get_rc().borrow()
                     {
-                        Some(new_tree.fetch_existing_reordered(*id, order.reorder(reorder)))
+                        Some(new_tree.fetch_existing_reordered(*id, order.apply_reorder(reorder)))
                     } else {
                         Some(new_tree.project(simplified, reorder.clone()))
                     }
@@ -511,13 +511,29 @@ impl ExecutionTree {
 
         new_tree
     }
+
+    /// Return a list of fetched tables that are required by this tree.
+    pub fn required_tables(&self) -> Vec<(TableId, ColumnOrder)> {
+        let mut result = Vec::<(TableId, ColumnOrder)>::new();
+        for node in &self.nodes {
+            if let ExecutionNode::FetchExisting(id, order) = &*node.0.as_ref().borrow() {
+                result.push((*id, order.clone()));
+            }
+        }
+
+        result
+    }
 }
 
 /// Functionality for ensuring certain constraints
 impl ExecutionTree {
     /// Alters the given [`ExecutionTree`] in such a way as to comply with the constraints of the leapfrog trie join algorithm
     /// Specifically, this will reorder tables if necessary
-    pub fn satisfy_leapfrog_triejoin(&mut self) {}
+    pub fn satisfy_leapfrog_triejoin(&mut self, arity: usize) {
+        if let Some(root) = self.root() {
+            self.satisfy_leapfrog_recurisve(root, Reordering::default(arity));
+        }
+    }
 
     /// Implements the functionality of `satisfy_leapfrog_triejoin` by traversing the tree recursively
     fn satisfy_leapfrog_recurisve(&mut self, node: ExecutionNodeRef, reorder: Reordering) {
@@ -526,20 +542,69 @@ impl ExecutionTree {
 
         match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
-                *node_ref = ExecutionNode::FetchExisting(*id, order.reorder(&reorder));
+                *node_ref = ExecutionNode::FetchExisting(*id, order.apply_reorder(&reorder));
             }
             ExecutionNode::FetchNew(index) => {
                 let new_fetch = self.fetch_new(*index);
                 *node_ref = ExecutionNode::Project(new_fetch, reorder);
             }
-            ExecutionNode::Project(subnode, project_reorder) => todo!(),
-            ExecutionNode::Join(subnodes, bindings) => todo!(),
-            ExecutionNode::Union(subnodes) => todo!(),
-            ExecutionNode::Minus(left, right) => todo!(),
-            ExecutionNode::SelectValue(subnode, _assignments) => todo!(),
-            ExecutionNode::SelectEqual(subnode, _classes) => todo!(),
-            ExecutionNode::AppendColumns(subnode, _) => todo!(),
-            ExecutionNode::AppendNulls(subnode, _) => todo!(),
+            ExecutionNode::Project(subnode, project_reorder) => {
+                let subnode_arity = project_reorder.len_source();
+
+                *project_reorder = project_reorder.chain(&reorder);
+
+                self.satisfy_leapfrog_recurisve(
+                    subnode.clone(),
+                    Reordering::default(subnode_arity),
+                );
+            }
+            ExecutionNode::Join(subnodes, bindings) => {
+                for (subnode, binding) in subnodes.iter().zip(bindings.iter()) {
+                    let mut sorted_binding = binding.clone();
+                    sorted_binding.sort();
+
+                    let binding_reorder = Reordering::from_transformation(&sorted_binding, binding);
+
+                    self.satisfy_leapfrog_recurisve(
+                        subnode.clone(),
+                        binding_reorder.chain(&reorder),
+                    );
+                }
+            }
+            ExecutionNode::Union(subnodes) => {
+                for subnode in subnodes {
+                    self.satisfy_leapfrog_recurisve(subnode.clone(), reorder.clone());
+                }
+            }
+            ExecutionNode::Minus(left, right) => {
+                self.satisfy_leapfrog_recurisve(left.clone(), reorder.clone());
+                self.satisfy_leapfrog_recurisve(right.clone(), reorder.clone());
+            }
+            ExecutionNode::SelectValue(subnode, assignments) => {
+                for assigment in assignments {
+                    assigment.column_idx = reorder.apply_element_reverse(assigment.column_idx);
+                }
+
+                self.satisfy_leapfrog_recurisve(subnode.clone(), reorder);
+            }
+            ExecutionNode::SelectEqual(subnode, _classes) => {
+                // TODO: A few other changes are needed to make this a bit simpler.
+                // Will update it then
+                assert!(reorder.is_identity());
+                self.satisfy_leapfrog_recurisve(subnode.clone(), reorder);
+            }
+            ExecutionNode::AppendColumns(subnode, _) => {
+                // TODO: A few other changes are needed to make this a bit simpler.
+                // Will update it then
+                assert!(reorder.is_identity());
+                self.satisfy_leapfrog_recurisve(subnode.clone(), reorder);
+            }
+            ExecutionNode::AppendNulls(subnode, _) => {
+                // TODO: A few other changes are needed to make this a bit simpler.
+                // Will update it then
+                assert!(reorder.is_identity());
+                self.satisfy_leapfrog_recurisve(subnode.clone(), reorder);
+            }
         }
     }
 }
@@ -589,8 +654,8 @@ impl ExecutionPlan {
     }
 
     /// Return an iterator which traverses the [`ExecutionTree`]s in order.
-    pub fn iter(&self) -> impl Iterator<Item = (&usize, &ExecutionTree)> {
-        self.trees.iter()
+    pub fn iter(&mut self) -> impl Iterator<Item = (&usize, &mut ExecutionTree)> {
+        self.trees.iter_mut()
     }
 
     /// Simplifies the current [`ExecutionPlan`] by

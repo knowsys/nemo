@@ -66,7 +66,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
             let predicate_arity = head_instructions[0].arity;
             // We just pick the default order
             // TODO: Is there a better pick?
-            let head_order = ColumnOrder::default(predicate_arity);
+            let head_order = ColumnOrder::default()(predicate_arity);
 
             let head_table_name =
                 table_manager.get_table_name(predicate, step_number..step_number + 1);

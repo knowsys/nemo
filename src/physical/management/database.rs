@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use bytesize::ByteSize;
 
 use crate::io::csv::read;
-use crate::meta::logging::{log_add_reference, log_load_table};
+use crate::meta::logging::log_load_table;
 use crate::physical::datatypes::{DataTypeName, DataValueT};
 use crate::physical::tabular::traits::table::Table;
 use crate::physical::util::Reordering;
@@ -54,17 +54,10 @@ impl TableId {
     /// Increment the id by one.
     /// Return the old (non-incremented) id.
     pub fn increment(&mut self) -> Self {
-        let old = self.clone();
+        let old = *self;
         self.0 = self.0 + 1;
         old
     }
-}
-
-/// A trie with its associated [`ColumnOrder`]
-#[derive(Debug)]
-struct OrderedTrie {
-    trie: Trie,
-    order: ColumnOrder,
 }
 
 /// Indicates the file format of a table stored on disc.
@@ -73,27 +66,287 @@ pub enum TableSource {
     /// Table is contained in csv file
     CSV(PathBuf),
     /// Table is stored as facts in an rls file
-    /// TODO: To not invoke the parser twice I just put the parsed "row-table" here. Does not seem quite right
+    /// TODO: To not invoke the parser twice I just put the parsed "row-table" here.
+    /// Does not seem quite right
     RLS(Vec<Vec<DataValueT>>),
+}
+
+/// Data which stores a trie, possibly not in memory.
+#[derive(Debug)]
+pub enum TableStorage {
+    /// Table is stored as a [`Trie`] in memory.
+    InMemory(Trie),
+    /// Table is stored on disk.
+    OnDisk(TableSchema, Vec<TableSource>),
+}
+
+impl TableStorage {
+    /// Load table from a given on-disk source
+    /// TODO: This function should change when the type system gets introduced on the logical layer
+    fn load_from_disk<Dict: Dictionary>(
+        source: &TableSource,
+        schema: &TableSchema,
+        dict: &mut Dict,
+    ) -> Result<Trie, Error> {
+        {
+            TimedCode::instance()
+                .sub("Reasoning/Execution/Load Table")
+                .start();
+            log_load_table(&source);
+
+            let trie = match source {
+                TableSource::CSV(file) => {
+                    // Using fallback solution to treat eveything as string for now (storing as u64 internally)
+                    let datatypes: Vec<Option<DataTypeName>> =
+                        (0..schema.arity()).map(|_| None).collect();
+
+                    let gz_decoder = flate2::read::GzDecoder::new(File::open(file.as_path())?);
+
+                    let col_table = if gz_decoder.header().is_some() {
+                        read(&datatypes, &mut crate::io::csv::reader(gz_decoder), dict)?
+                    } else {
+                        read(
+                            &datatypes,
+                            &mut crate::io::csv::reader(File::open(file.as_path())?),
+                            dict,
+                        )?
+                    };
+
+                    Trie::from_cols(col_table)
+                }
+                TableSource::RLS(table_rows) => Trie::from_rows(table_rows),
+            };
+
+            TimedCode::instance()
+                .sub("Reasoning/Execution/Load Table")
+                .stop();
+
+            Ok(trie)
+        }
+    }
+
+    /// Function that makes sure that underlying table is available in memory.
+    pub fn into_memory<'a, Dict: Dictionary>(
+        &'a mut self,
+        dict: &mut Dict,
+    ) -> Result<&'a Trie, Error> {
+        match self {
+            TableStorage::InMemory(_) => {}
+            TableStorage::OnDisk(schema, sources) => {
+                let new_trie = if sources.len() == 1 {
+                    Self::load_from_disk(&sources[0], schema, dict)?
+                } else {
+                    // If the trie results form multiple sources
+                    // we load each source indivdually and then compute the union over all tries
+
+                    let mut loaded_tries = Vec::<Trie>::with_capacity(sources.len());
+                    for source in sources {
+                        loaded_tries.push(Self::load_from_disk(source, schema, dict)?);
+                    }
+
+                    let loaded_tries_iters: Vec<TrieScanEnum> = loaded_tries
+                        .iter()
+                        .map(|t| TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(t)))
+                        .collect();
+                    let mut union_iter =
+                        TrieScanEnum::TrieScanUnion(TrieScanUnion::new(loaded_tries_iters));
+
+                    materialize(&mut union_iter).unwrap()
+                };
+
+                *self = TableStorage::InMemory(new_trie);
+            }
+        }
+
+        if let TableStorage::InMemory(trie) = self {
+            Ok(trie)
+        } else {
+            unreachable!();
+        }
+    }
+
+    /// Return a reference to the stored trie.
+    /// Pancics if the trie is not in memory.
+    pub fn trie_unchecked(&self) -> &Trie {
+        if let TableStorage::InMemory(trie) = self {
+            trie
+        } else {
+            panic!("Function assumes that trie is in memory");
+        }
+    }
+}
+
+impl ByteSized for TableStorage {
+    fn size_bytes(&self) -> ByteSize {
+        match self {
+            TableStorage::InMemory(trie) => trie.size_bytes(),
+            TableStorage::OnDisk(_, _) => ByteSize(0),
+        }
+    }
 }
 
 #[derive(Debug)]
 enum TableStatus {
-    /// Table is materialized in memory in given following orders.
-    InMemory(Vec<OrderedTrie>),
-    /// Table has to be loaded from disk.
-    OnDisk(Vec<TableSource>),
+    /// Table is present in different orders
+    Present(HashMap<ColumnOrder, TableStorage>),
     /// Table has the same contents as another table except for reordering.
-    /// Meaning that "ThisTable = Project(ReferencedTable, Reordering)"
     Reference(TableId, Reordering),
+}
+
+/// Manages tables under different orders.
+/// Also has the capability of representing a table as a reordered version of another.
+#[derive(Debug)]
+pub struct OrderedReferenceManager {
+    map: HashMap<TableId, TableStatus>,
+}
+
+/// Stores the result of a function that resolves table references (mutable version)
+struct TableResolvedMut<'a> {
+    /// Hashmap containing all the available orders of a table.
+    map: &'a mut HashMap<ColumnOrder, TableStorage>,
+    /// If the requested table is a reordered reference then this is the reordered requested column order
+    /// If no reordering was required then this is the original requested column order.
+    order: ColumnOrder,
+}
+
+/// Stores the result of a function that resolves table references
+struct TableResolved<'a> {
+    /// Hashmap containing all the available orders of a table.
+    map: &'a HashMap<ColumnOrder, TableStorage>,
+    /// If the requested table is a reordered reference then this is the reordered requested column order
+    /// If no reordering was required then this is the original requested column order.
+    order: ColumnOrder,
+}
+
+impl OrderedReferenceManager {
+    /// Tables are adressed with the combination of [`TableId`] and [`ColumnOrder`].
+    /// If the given table is just a reordered reference to another table,
+    /// this function will translate
+    fn resolve_reference_mut(
+        &mut self,
+        id: TableId,
+        order: &ColumnOrder,
+    ) -> Option<TableResolvedMut> {
+        if let TableStatus::Reference(ref_id, reorder) = &self.map.get(&id)? {
+            self.resolve_reference_mut(*ref_id, &order.apply_reorder(&reorder.inverse()))
+        } else {
+            if let TableStatus::Present(map) = self.map.get_mut(&id)? {
+                Some(TableResolvedMut {
+                    map,
+                    order: order.clone(),
+                })
+            } else {
+                unreachable!()
+            }
+        }
+    }
+
+    /// TODO: Description
+    fn resolve_reference(&self, id: TableId, order: &ColumnOrder) -> Option<TableResolved> {
+        match &self.map.get(&id)? {
+            TableStatus::Present(map) => Some(TableResolved {
+                map,
+                order: order.clone(),
+            }),
+            TableStatus::Reference(ref_id, reorder) => {
+                self.resolve_reference(*ref_id, &order.apply_reorder(&reorder.inverse()))
+            }
+        }
+    }
+
+    /// Add a new table (that is not a reference).
+    pub fn add_present(&mut self, id: TableId, order: ColumnOrder, storage: TableStorage) {
+        if let Some(resolved) = self.resolve_reference_mut(id, &order) {
+            resolved.map.insert(order, storage);
+        } else {
+            let mut new_order_map = HashMap::<ColumnOrder, TableStorage>::new();
+            new_order_map.insert(order, storage);
+
+            let status = TableStatus::Present(new_order_map);
+            self.map.insert(id, status);
+        }
+    }
+
+    /// Add a new reference to another table.
+    /// Panics if the given ids do not exist.
+    pub fn add_reference(&mut self, id: TableId, reference_id: TableId, reorder: Reordering) {
+        let (final_id, final_reorder) = if let TableStatus::Reference(ref_id, ref_reorder) =
+            &self.map.get(&reference_id).unwrap()
+        {
+            (*ref_id, ref_reorder.chain(&reorder))
+        } else {
+            (id, reorder)
+        };
+
+        let status = TableStatus::Reference(final_id, final_reorder);
+        self.map.insert(id, status);
+    }
+
+    /// Return a reference to the [`TableStorage`] associated with the given [`TableId`] and [`ColumnOrder`].
+    /// Panics if the requested table does not exist.
+    pub fn table_storage<'a>(&'a self, id: TableId, order: &ColumnOrder) -> &'a TableStorage {
+        let resolved = self.resolve_reference(id, order).unwrap();
+        resolved.map.get(&resolved.order).unwrap()
+    }
+
+    /// Return a mutable reference to the [`TableStorage`] associated with the given [`TableId`] and [`ColumnOrder`].
+    /// Pancis if the requested table does not exist.
+    pub fn table_storage_mut<'a>(
+        &'a mut self,
+        id: TableId,
+        order: &ColumnOrder,
+    ) -> &'a mut TableStorage {
+        let resolved = self.resolve_reference_mut(id, order).unwrap();
+        resolved.map.get_mut(&resolved.order).unwrap()
+    }
+
+    /// Return an iterator of all the available orders of a table.
+    /// Panics if the requested table does not exist.
+    pub fn available_orders<'a>(&'a self, id: TableId) -> impl Iterator<Item = &'a ColumnOrder> {
+        if let TableStatus::Present(order_map) = self.map.get(&id).unwrap() {
+            order_map.keys()
+        } else {
+            panic!("Function assumes that the given table exists.");
+        }
+    }
+
+    /// Delete the given table.
+    /// TODO: This does not check/fix references of tables.
+    pub fn delete_table(&mut self, id: &TableId) {
+        if let Entry::Occupied(entry) = self.map.entry(*id) {
+            entry.remove();
+        } else {
+            panic!("Table to be deleted should exist.");
+        }
+    }
+}
+
+impl Default for OrderedReferenceManager {
+    fn default() -> Self {
+        Self {
+            map: Default::default(),
+        }
+    }
+}
+
+impl ByteSized for OrderedReferenceManager {
+    fn size_bytes(&self) -> ByteSize {
+        self.map.iter().fold(ByteSize(0), |acc, (_, status)| {
+            acc + match &status {
+                TableStatus::Present(ordered_tries) => ordered_tries
+                    .iter()
+                    .map(|(_, s)| s.size_bytes())
+                    .fold(ByteSize(0), |acc, x| acc + x),
+                TableStatus::Reference(_, _) => ByteSize(0),
+            }
+        })
+    }
 }
 
 /// Struct that contains useful information about a trie
 /// as well as the actual owner of the trie.
 #[derive(Debug)]
 struct TableInfo {
-    /// The table.
-    pub status: TableStatus,
     /// The name of the table.
     pub name: String,
     /// The schema of the table
@@ -102,12 +355,8 @@ struct TableInfo {
 
 impl TableInfo {
     /// Create new [`TableInfo`].
-    pub fn new(status: TableStatus, name: String, schema: TableSchema) -> Self {
-        Self {
-            status,
-            name,
-            schema,
-        }
+    pub fn new(name: String, schema: TableSchema) -> Self {
+        Self { name, schema }
     }
 }
 
@@ -115,7 +364,9 @@ impl TableInfo {
 #[derive(Debug)]
 pub struct DatabaseInstance<Dict: Dictionary> {
     /// Structure which owns all the tries; accessed through Id.
-    id_to_table: HashMap<TableId, TableInfo>,
+    storage_handler: OrderedReferenceManager,
+    /// Map with additional infromation about the tables
+    table_infos: HashMap<TableId, TableInfo>,
 
     /// Dictionary which stores the strings associates with abstract constants
     dict_constants: Dict,
@@ -144,7 +395,8 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         let current_null = 1 << 63; // TODO: Think about a robust null representation method
 
         Self {
-            id_to_table: HashMap::new(),
+            storage_handler: OrderedReferenceManager::default(),
+            table_infos: HashMap::new(),
             dict_constants,
             current_null,
             current_id: TableId::default(),
@@ -153,271 +405,25 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
     /// Return the current number of tables.
     pub fn num_tables(&self) -> usize {
-        self.id_to_table.len()
+        self.table_infos.len()
     }
 
     /// Return the name of a table given its id.
     /// Panics if the id does not exist.
-    pub fn get_name(&self, id: TableId) -> &str {
-        &self.id_to_table.get(&id).unwrap().name
+    pub fn table_name(&self, id: TableId) -> &str {
+        &self.table_infos.get(&id).unwrap().name
     }
 
-    /// Return the schema of a table identified by the given [`TableName`].
+    /// Return the schema of a table identified by the given [`TableId`].
     /// Panics if the id does not exist.
-    pub fn get_schema(&self, id: TableId, order: &ColumnOrder) -> TableSchema {
-        self.id_to_table
-            .get(&id)
-            .map(|i| i.schema.reordered(&order.as_reordering(i.schema.arity())))
-            .unwrap()
+    pub fn table_schema(&self, id: TableId) -> &TableSchema {
+        &self.table_infos.get(&id).unwrap().schema
     }
 
-    /// Add the given table to the instance with a name and schema.
-    fn add(&mut self, status: TableStatus, name: &str, schema: TableSchema) -> TableId {
-        self.id_to_table.insert(
-            self.current_id,
-            TableInfo::new(status, String::from(name), schema),
-        );
-
-        self.current_id.increment()
-    }
-
-    /// Adds another order of a table.
-    /// Panics if the id does not exist or the table or the status is not in memory.
-    pub fn add_trie_order(&mut self, id: TableId, trie: Trie, order: ColumnOrder) {
-        if let TableStatus::InMemory(orders) = &mut self.id_to_table.get_mut(&id).unwrap().status {
-            orders.push(OrderedTrie { trie, order });
-        }
-    }
-
-    /// Add a new in-memory [`Trie`] to the database instance.
-    pub fn add_trie(
-        &mut self,
-        trie: Trie,
-        order: ColumnOrder,
-        name: &str,
-        schema: TableSchema,
-    ) -> TableId {
-        let status = TableStatus::InMemory(vec![OrderedTrie { trie, order }]);
-        self.add(status, name, schema)
-    }
-
-    /// Add a new table as a reference to another table.
-    /// Panics if the referenced tables does not exist.
-    pub fn add_reference(
-        &mut self,
-        referenced_id: TableId,
-        new_name: &str,
-        reorder: Reordering,
-    ) -> TableId {
-        debug_assert!(reorder.is_permutation());
-        debug_assert!(
-            reorder.len_source()
-                == self
-                    .get_schema(referenced_id, &ColumnOrder::default())
-                    .arity()
-        );
-
-        log_add_reference(self.get_name(referenced_id), new_name, &reorder);
-
-        // If the referenced table is itself a reference to another table
-        // then we resolve the first reference and point the new table to the referenced table
-        let (&final_id, final_reorder) =
-            if let TableStatus::Reference(another_table, another_order) = &self
-                .id_to_table
-                .get(&referenced_id)
-                .expect("Function assumes that referenced table exists.")
-                .status
-            {
-                let combined_reorder = another_order.chain(&reorder);
-
-                (another_table, combined_reorder)
-            } else {
-                (&referenced_id, reorder)
-            };
-
-        let new_schema = self
-            .get_schema(final_id, &ColumnOrder::default())
-            .reordered(&final_reorder);
-        let status = TableStatus::Reference(final_id, final_reorder);
-
-        self.add(status, new_name, new_schema)
-    }
-
-    /// Add a new table as a collection of file sources.
-    pub fn add_from_sources(
-        &mut self,
-        sources: Vec<TableSource>,
-        name: &str,
-        schema: TableSchema,
-    ) -> TableId {
-        let status = TableStatus::OnDisk(sources);
-        self.add(status, name, schema)
-    }
-
-    /// Deletes a table.
-    /// TODO: For now, this does not care about keeping references intact.
-    /// Panics if the table does not exist.
-    pub fn delete(&mut self, id: TableId) {
-        if let Entry::Occupied(key_entry) = self.id_to_table.entry(id) {
-            key_entry.remove();
-        } else {
-            panic!("Table to be deleted should exist.");
-        }
-    }
-
-    /// Helper function which looks through a slice of [`OrderedTrie`]
-    /// and returns a reference to the trie with the given order, if available.
-    fn search_ordered_tries<'a>(
-        ordered_tries: &'a [OrderedTrie],
-        order: &ColumnOrder,
-    ) -> Option<&'a Trie> {
-        for ordered_trie in ordered_tries {
-            if *order == ordered_trie.order {
-                return Some(&ordered_trie.trie);
-            }
-        }
-
-        None
-    }
-
-    /// Helper function whcih looks through a clide of [`OrderedTrie`]
-    /// and returns a reference to the [`ColumnOrder`] which is the closest to given one.
-    fn search_closest_order<'a>(
-        ordered_tries: &'a [OrderedTrie],
-        order: &ColumnOrder,
-    ) -> &'a ColumnOrder {
-        let mut closest_order = &ordered_tries[0].order;
-        let mut distance = usize::MAX;
-
-        for ordered_trie in ordered_tries.iter() {
-            let current_distance = ordered_trie.order.distance(order);
-
-            if current_distance < distance {
-                closest_order = &ordered_trie.order;
-                distance = current_distance;
-            }
-        }
-
-        closest_order
-    }
-
-    /// Return a reference to a [`Trie`] identified by the given [`TableId`] with a particular [`ColumnOrder`].
-    /// Panics if
-    ///     * the given id does not exist.
-    ///     * The trie is not available with the existing order.
-    ///     * The table is currently not in memory.
-    pub fn get_trie_unchecked<'a>(&'a self, id: TableId, order: &ColumnOrder) -> &'a Trie {
-        if let TableStatus::InMemory(ordered_tries) = &self.id_to_table.get(&id).unwrap().status {
-            Self::search_ordered_tries(ordered_tries, order).unwrap()
-        } else {
-            panic!("Requested trie is not in memory.");
-        }
-    }
-
-    /// Makes sure that the table identified by a [`TableId`] and [`ColumnOrder`] is present.
-    /// This is accomplished by
-    ///     * Reordering the trie if the requested order is not available.
-    ///     * Loading the trie from disk (and possibly reordering) if needed.
-    ///     * Resolving references.
-    /// Panics if the requested id does not exist.
-    fn load_into_memory<'a>(&'a mut self, id: TableId, order: &ColumnOrder) -> Result<(), Error> {
-        let info = self.id_to_table.get_mut(&id).unwrap();
-
-        // First we get we get the trie that was asked for in memory but maybe not in the right order
-        let (trie, order) = match &info.status {
-            TableStatus::InMemory(ordered_tries) => {
-                todo!()
-            }
-            TableStatus::OnDisk(sources) => {
-                debug_assert!(!sources.is_empty());
-
-                let loaded_order = ColumnOrder::default();
-
-                let new_trie = if sources.len() == 1 {
-                    self.load_from_disk(&sources[0], &info.schema)?
-                } else {
-                    // If the trie results form multiple sources then we load each source indivdually and then compute the union over all tries
-
-                    let mut loaded_tries = Vec::<Trie>::with_capacity(sources.len());
-                    for source in sources {
-                        loaded_tries.push(self.load_from_disk(source, &info.schema)?);
-                    }
-
-                    let loaded_tries_iters: Vec<TrieScanEnum> = loaded_tries
-                        .iter()
-                        .map(|t| TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(t)))
-                        .collect();
-                    let union_iter =
-                        TrieScanEnum::TrieScanUnion(TrieScanUnion::new(loaded_tries_iters));
-
-                    materialize(&mut union_iter).unwrap()
-                };
-
-                info.status = TableStatus::InMemory(vec![OrderedTrie {
-                    trie: new_trie,
-                    order: loaded_order.clone(),
-                }]);
-
-                let new_trie_ref = if let TableStatus::InMemory(ordered_tries) = info.status {
-                    &ordered_tries[0].trie
-                } else {
-                    unreachable!()
-                };
-
-                (new_trie_ref, loaded_order)
-            }
-            TableStatus::Reference(_, _) => todo!(),
-        };
-
-        Ok(())
-    }
-
-    /// Load table from a given on-disk source
-    /// TODO: This function should change when the type system gets introduced on the logical layer
-    fn load_from_disk(
-        &mut self,
-        source: &TableSource,
-        schema: &TableSchema,
-    ) -> Result<Trie, Error> {
-        {
-            TimedCode::instance()
-                .sub("Reasoning/Execution/Load Table")
-                .start();
-            log_load_table(&source);
-
-            let trie = match source {
-                TableSource::CSV(file) => {
-                    // Using fallback solution to treat eveything as string for now (storing as u64 internally)
-                    let datatypes: Vec<Option<DataTypeName>> =
-                        (0..schema.arity()).map(|_| None).collect();
-
-                    let gz_decoder = flate2::read::GzDecoder::new(File::open(file.as_path())?);
-
-                    let col_table = if gz_decoder.header().is_some() {
-                        read(
-                            &datatypes,
-                            &mut crate::io::csv::reader(gz_decoder),
-                            &mut self.dict_constants,
-                        )?
-                    } else {
-                        read(
-                            &datatypes,
-                            &mut crate::io::csv::reader(File::open(file.as_path())?),
-                            &mut self.dict_constants,
-                        )?
-                    };
-
-                    Trie::from_cols(col_table)
-                }
-                TableSource::RLS(table_rows) => Trie::from_rows(table_rows),
-            };
-
-            TimedCode::instance()
-                .sub("Reasoning/Execution/Load Table")
-                .stop();
-
-            Ok(trie)
-        }
+    /// Return the arity of a table identified by the given [`TableId`].
+    /// Panics if the id does not exist.
+    pub fn table_arity(&self, id: TableId) -> usize {
+        self.table_schema(id).arity()
     }
 
     /// Returns a mutable reference to the dictionary used for associating abstract constants with strings.
@@ -428,6 +434,104 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     /// Returns a reference to the dictionary used for associating abstract constants with strings.
     pub fn get_dict_constants(&self) -> &Dict {
         &self.dict_constants
+    }
+
+    /// Register a new table under a given name and schema.
+    /// Returns the [`TableId`] with which the new table can be addressed.
+    pub fn register_table(&mut self, name: &str, schema: TableSchema) -> TableId {
+        self.table_infos
+            .insert(self.current_id, TableInfo::new(String::from(name), schema));
+
+        self.current_id.increment()
+    }
+
+    /// Add a new trie.
+    pub fn add_trie(&mut self, id: TableId, order: ColumnOrder, trie: Trie) {
+        self.storage_handler
+            .add_present(id, order, TableStorage::InMemory(trie));
+    }
+
+    /// Register table and add a new trie.
+    pub fn register_add_trie(
+        &mut self,
+        name: &str,
+        schema: TableSchema,
+        order: ColumnOrder,
+        trie: Trie,
+    ) -> TableId {
+        let id = self.register_table(name, schema);
+        self.add_trie(id, order, trie);
+
+        id
+    }
+
+    /// Add the sources of a table currently stored on disk.
+    pub fn add_sources(&mut self, id: TableId, order: ColumnOrder, sources: Vec<TableSource>) {
+        let schema = self.table_schema(id).clone();
+        self.storage_handler
+            .add_present(id, order, TableStorage::OnDisk(schema, sources));
+    }
+
+    /// Add a new table that is a reordered version of an existing table.
+    /// Panics if referenced id does not exist.
+    pub fn add_reference(&mut self, id: TableId, reference_id: TableId, reorder: Reordering) {
+        self.storage_handler
+            .add_reference(id, reference_id, reorder);
+    }
+
+    /// Deletes a table with all its orders.
+    /// TODO: For now, this does not care about keeping references intact.
+    /// Panics if the table does not exist.
+    pub fn delete(&mut self, id: TableId) {
+        self.storage_handler.delete_table(&id);
+
+        if let Entry::Occupied(entry) = self.table_infos.entry(id) {
+            entry.remove();
+        } else {
+            panic!("Table to be deleted should exist.");
+        }
+    }
+
+    /// Helper function that iterates through a collection of [`ColumnOrder`]
+    /// to find the one that is "closest" to given one.
+    fn search_closest_order<'a, OrderIter: Iterator<Item = &'a ColumnOrder>>(
+        iter_orders: OrderIter,
+        order: &ColumnOrder,
+    ) -> Option<&'a ColumnOrder> {
+        iter_orders.min_by(|x, y| x.distance(order).cmp(&y.distance(order)))
+    }
+
+    /// Will ensure that the requested table will exist as a [`Trie`] in memory.
+    /// More precisely this will
+    ///     * Reorder an existing table if the table is not available in the requested order
+    ///     * Load a table from disk if it currently not in memory
+    /// Panics if the requested table does not exist.
+    fn make_available_in_memory<'a>(
+        &'a mut self,
+        id: TableId,
+        order: &ColumnOrder,
+    ) -> Result<(), Error> {
+        let arity = self.table_arity(id);
+        let closest_order =
+            Self::search_closest_order(self.storage_handler.available_orders(id), order).expect(
+                "This function assumes that there is at least one table under the given id.",
+            );
+        let reorder = order.reorder_to(closest_order, arity);
+
+        let trie_unordered = self
+            .storage_handler
+            .table_storage_mut(id, order)
+            .into_memory(&mut self.dict_constants)?;
+
+        if !reorder.is_identity() {
+            let mut scan_project =
+                TrieScanEnum::TrieScanProject(TrieScanProject::new(trie_unordered, reorder));
+            let trie_reordered = materialize(&mut scan_project).unwrap();
+
+            self.add_trie(id, order.clone(), trie_reordered);
+        }
+
+        Ok(())
     }
 
     // Helper function which checks whether the top level tree node is of type `AppendNulls`.
@@ -450,18 +554,28 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     /// Returns a map that assigns each permanent
     /// This may fail if certain operations are performed on tries with incompatible types
     /// or if the plan references tries that do not exist.
-    pub fn execute_plan(&mut self, plan: &ExecutionPlan) -> Result<HashMap<usize, TableId>, Error> {
+    pub fn execute_plan(
+        &mut self,
+        mut plan: ExecutionPlan,
+    ) -> Result<HashMap<usize, TableId>, Error> {
         let mut permanent_ids = HashMap::<usize, TableId>::new();
         let mut type_trees = HashMap::<usize, TypeTree>::new();
         let mut computation_results = HashMap::<usize, ComputationResult>::new();
 
         for (&tree_index, tree) in plan.iter() {
+            let type_tree = TypeTree::from_execution_tree(self, &type_trees, tree)?;
+            let schema = type_tree.schema.clone();
+            let arity = schema.arity();
+
+            tree.satisfy_leapfrog_triejoin(arity);
+
+            for (id, order) in tree.required_tables() {
+                self.make_available_in_memory(id, &order)?;
+            }
+
             let timed_string = format!("Reasoning/Execution/{}", tree.name());
             TimedCode::instance().sub(&timed_string).start();
             log::info!("Executing plan \"{}\":", tree.name());
-
-            let type_tree = TypeTree::from_execution_tree(self, &type_trees, tree)?;
-            let schema = type_tree.schema.clone();
 
             let mut num_null_columns = 0u64;
 
@@ -505,7 +619,8 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                             new_trie.size_bytes()
                         );
 
-                        let new_id = self.add_trie(new_trie, order.clone(), name, schema);
+                        let new_id = self.register_table(name, schema);
+                        self.add_trie(new_id, order.clone(), new_trie);
 
                         permanent_ids.insert(tree_index, new_id);
                         computation_results.insert(
@@ -524,6 +639,14 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         }
 
         Ok(permanent_ids)
+    }
+
+    fn get_trie_unchecked(&self, id: TableId, order: &ColumnOrder) -> &Trie {
+        if let TableStorage::InMemory(trie) = self.storage_handler.table_storage(id, order) {
+            trie
+        } else {
+            panic!("Function assumes that trie is in memory.");
+        }
     }
 
     /// Given a node in the execution tree returns the trie iterator
@@ -729,16 +852,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
 impl<Dict: Dictionary> ByteSized for DatabaseInstance<Dict> {
     fn size_bytes(&self) -> ByteSize {
-        self.id_to_table.iter().fold(ByteSize(0), |acc, (_, info)| {
-            acc + match &info.status {
-                TableStatus::InMemory(ordered_tries) => ordered_tries
-                    .iter()
-                    .map(|o| o.trie.size_bytes())
-                    .fold(ByteSize(0), |acc, x| acc + x),
-                TableStatus::OnDisk(_) => ByteSize(0),
-                TableStatus::Reference(_, _) => ByteSize(0),
-            }
-        })
+        self.storage_handler.size_bytes()
     }
 }
 
@@ -778,10 +892,11 @@ mod test {
         let mut schema_a = TableSchema::new();
         schema_a.add_entry(DataTypeName::U64, false, false);
 
-        let trie_a_id = instance.add_trie(trie_a, ColumnOrder::default(), "A", schema_a);
+        let trie_a_id = instance.register_table("A", schema_a);
+        instance.add_trie(trie_a_id, ColumnOrder::default(), trie_a);
 
         assert_eq!(trie_a_id, reference_id.increment());
-        assert_eq!(instance.get_name(trie_a_id), "A");
+        assert_eq!(instance.table_name(trie_a_id), "A");
         assert_eq!(
             instance
                 .get_trie_unchecked(trie_a_id, &ColumnOrder::default())
@@ -793,7 +908,9 @@ mod test {
 
         let mut schema_b = TableSchema::new();
         schema_b.add_entry(DataTypeName::U64, false, false);
-        let trie_b_id = instance.add_trie(trie_b, ColumnOrder::default(), "B", schema_b);
+
+        let trie_b_id = instance.register_table("B", schema_b);
+        instance.add_trie(trie_b_id, ColumnOrder::default(), trie_b);
 
         assert_eq!(trie_b_id, reference_id.increment());
         assert!(instance.size_bytes() > last_size);
@@ -917,14 +1034,14 @@ mod test {
         ]);
 
         let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
-        instance.add_trie(trie_a, ColumnOrder::default(), "TableA", schema_a);
-        instance.add_trie(trie_b, ColumnOrder::default(), "TableB", schema_b);
-        instance.add_trie(trie_c, ColumnOrder::default(), "TableC", schema_c);
-        instance.add_trie(trie_x, ColumnOrder::default(), "TableX", schema_x);
-        instance.add_trie(trie_y, ColumnOrder::default(), "TableY", schema_y);
+        instance.register_add_trie("TableA", schema_a, ColumnOrder::default(), trie_a);
+        instance.register_add_trie("TableB", schema_b, ColumnOrder::default(), trie_b);
+        instance.register_add_trie("TableC", schema_c, ColumnOrder::default(), trie_c);
+        instance.register_add_trie("TableX", schema_x, ColumnOrder::default(), trie_x);
+        instance.register_add_trie("TableY", schema_y, ColumnOrder::default(), trie_y);
 
         let plan = test_casting_execution_plan();
-        let result = instance.execute_plan(&plan);
+        let result = instance.execute_plan(plan);
         assert!(result.is_ok());
 
         let result_id = *result.unwrap().get(&0).unwrap();

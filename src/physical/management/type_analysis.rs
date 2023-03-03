@@ -117,7 +117,10 @@ impl TypeTree {
 
         match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
-                let schema = instance.get_schema(*id, order).clone();
+                let schema = instance.table_schema(*id).clone();
+
+                let arity = schema.arity();
+                let schema = schema.reordered(&order.as_reordering(arity));
                 Ok(TypeTreeNode::new(schema, vec![]))
             }
             ExecutionNode::FetchNew(index) => {
@@ -815,9 +818,9 @@ mod test {
         ]);
 
         let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
-        instance.add_trie(trie_a, ColumnOrder::default(), "TableA", schema_a);
-        instance.add_trie(trie_b, ColumnOrder::default(), "TableB", schema_b);
-        instance.add_trie(trie_c, ColumnOrder::default(), "TableC", schema_c);
+        instance.register_add_trie("TableA", schema_a, ColumnOrder::default(), trie_a);
+        instance.register_add_trie("TableB", schema_b, ColumnOrder::default(), trie_b);
+        instance.register_add_trie("TableC", schema_c, ColumnOrder::default(), trie_c);
 
         let mut type_trees = HashMap::<usize, TypeTree>::new();
         type_trees.insert(
@@ -856,8 +859,8 @@ mod test {
         ]);
 
         let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
-        let id_a = instance.add_trie(trie_a, ColumnOrder::default(), "TableA", schema_a);
-        let id_b = instance.add_trie(trie_b, ColumnOrder::default(), "TableB", schema_b);
+        let id_a = instance.register_add_trie("TableA", schema_a, ColumnOrder::default(), trie_a);
+        let id_b = instance.register_add_trie("TableB", schema_b, ColumnOrder::default(), trie_b);
 
         let mut execution_tree = ExecutionTree::new_temporary("test");
 
@@ -915,8 +918,8 @@ mod test {
         ]);
 
         let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
-        let id_a = instance.add_trie(trie_a, ColumnOrder::default(), "TableA", schema_a);
-        let id_b = instance.add_trie(trie_b, ColumnOrder::default(), "TableB", schema_b);
+        let id_a = instance.register_add_trie("TableA", schema_a, ColumnOrder::default(), trie_a);
+        let id_b = instance.register_add_trie("TableB", schema_b, ColumnOrder::default(), trie_b);
 
         let mut execution_tree = ExecutionTree::new_temporary("test");
 

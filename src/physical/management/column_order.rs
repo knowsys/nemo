@@ -4,79 +4,84 @@ use crate::physical::util::Reordering;
 
 /// Type which represents the order of a table.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub enum ColumnOrder {
-    /// The default ordering.
-    Default,
-    /// Ordering that switches certain columns (relative to the default ordering).
-    Reordered(Vec<usize>),
-}
+pub struct ColumnOrder(Vec<usize>);
 
 impl ColumnOrder {
+    /// Transform itself into a canonical representation
+    fn reduce(mut self) -> Self {
+        let mut cut_index = 0;
+
+        for (index, &item) in self.0.iter().enumerate().rev() {
+            if item != index {
+                cut_index = index;
+                break;
+            }
+        }
+
+        for _ in 0..cut_index {
+            self.0.pop();
+        }
+
+        self
+    }
+
     /// Construct new [`ColumnOrder`].
-    pub fn reordered(reorder: Reordering) -> Self {
+    pub fn new(order: Vec<usize>) -> Self {
+        debug_assert!(order.is_empty() || *order.iter().max().unwrap() == order.len() - 1);
+
+        Self(order).reduce()
+    }
+
+    /// Construct new [`ColumnOrder`] from a given [`Reordering`].
+    /// The reordering must be a permutation
+    pub fn from_reordering(reorder: Reordering) -> Self {
         debug_assert!(reorder.is_permutation());
 
-        if reorder.is_identity() {
-            Self::Default
-        } else {
-            Self::Reordered(reorder.to_vector())
-        }
+        Self(reorder.to_vector()).reduce()
     }
 
     /// Returns whether this is the default column order
     pub fn is_default(&self) -> bool {
-        matches!(self, Self::Default)
+        self.0.iter().enumerate().all(|(i, &j)| i == j)
+    }
+
+    /// Helper function that expands
+    fn expand(&self, arity: usize) -> Vec<usize> {
+        let mut result = self.0.clone();
+        for new_entry in self.0.len()..arity {
+            result.push(new_entry);
+        }
+
+        result
     }
 
     /// Return the [`ColumnOrder`] that results from applying the given [`Reordering`].
     /// Assumes the the [`Reordering`] is a permutation.
-    pub fn reorder(&self, reorder: &Reordering) -> Self {
-        debug_assert!(reorder.is_permutation());
+    pub fn apply_reorder(&self, reorder: &Reordering) -> Self {
+        let result = reorder.apply_to(&self.expand(reorder.len_source()));
 
-        if reorder.is_identity() {
-            return self.clone();
-        }
-
-        let source = &match self {
-            ColumnOrder::Default => (0..reorder.len_source()).collect(),
-            ColumnOrder::Reordered(column_reorder) => column_reorder.clone(),
-        };
-
-        let result = reorder.apply_to(source);
-
-        if result
-            .iter()
-            .enumerate()
-            .all(|(index, element)| index == *element)
-        {
-            Self::Default
-        } else {
-            Self::Reordered(result)
-        }
+        Self(result).reduce()
     }
 
     /// Return [`Reordering`] corresponding to this order.
     pub fn as_reordering(&self, arity: usize) -> Reordering {
-        match self {
-            ColumnOrder::Default => Reordering::default(arity),
-            ColumnOrder::Reordered(reorder) => {
-                debug_assert!(arity == reorder.len());
-                Reordering::new(reorder.clone(), arity)
-            }
-        }
+        let reordering = self.expand(arity);
+        Reordering::new(reordering, arity)
     }
 
     fn get(&self, index: usize) -> usize {
-        match self {
-            ColumnOrder::Default => index,
-            ColumnOrder::Reordered(reorder) => reorder[index],
+        if index < self.0.len() {
+            self.0[index]
+        } else {
+            index
         }
     }
 
-    fn find(&self, value: usize) -> Option<usize> {
-        match self {
-            ColumnOrder::Default => Some(value),
-            ColumnOrder::Reordered(reorder) => reorder.iter().position(|&o| o == value),
+    fn find(&self, value: usize) -> usize {
+        if let Some(found) = self.0.iter().position(|&o| o == value) {
+            found
+        } else {
+            value
         }
     }
 
@@ -88,30 +93,17 @@ impl ColumnOrder {
     /// This gives us an overall score of 3.
     /// Returned value is 0 if and only if self == other.
     pub fn distance(&self, to: &ColumnOrder) -> usize {
-        if matches!(self, Self::Default) && matches!(self, Self::Default) {
-            return 0;
-        }
-
-        let arity = if let Self::Reordered(reorder) = self {
-            reorder.len()
-        } else {
-            match to {
-                ColumnOrder::Default => unreachable!(),
-                ColumnOrder::Reordered(reorder) => reorder.len(),
-            }
-        };
-
         let mut current_score: usize = 0;
         let mut current_position: usize = 0;
 
-        for current_index in 0..arity {
+        let max_len = self.0.len().max(to.0.len());
+
+        for current_index in 0..max_len {
             let current_value = self.get(current_index);
 
-            let position_other = to.find(current_value).expect(
-                "If both objects are well-formed then other must contain every value of self.",
-            );
-
+            let position_other = to.find(current_value);
             let difference: isize = (position_other as isize) - (current_position as isize);
+
             let penalty: usize = if difference <= 0 {
                 difference.unsigned_abs()
             } else {
@@ -125,19 +117,26 @@ impl ColumnOrder {
 
         current_score
     }
+
+    /// Return the [`Reordering`] that is needed to transform this oder into the given one.
+    pub fn reorder_to(&self, to: &ColumnOrder, arity: usize) -> Reordering {
+        let mut reorder = Vec::<usize>::new();
+        for index in 0..arity {
+            reorder.push(to.find(self.get(index)));
+        }
+
+        Reordering::new(reorder, arity)
+    }
 }
 
 impl Default for ColumnOrder {
     fn default() -> Self {
-        Self::Default
+        Self(vec![])
     }
 }
 
 impl fmt::Debug for ColumnOrder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ColumnOrder::Default => f.write_str("[default]"),
-            ColumnOrder::Reordered(reorder) => reorder.fmt(f),
-        }
+        self.0.fmt(f)
     }
 }
