@@ -26,7 +26,7 @@ use super::{
 pub struct RuleExecution<'a, Dict: Dictionary> {
     analysis: &'a RuleAnalysis,
 
-    body_strategy: Box<dyn BodyStrategy<'a, Dict> + 'a>,
+    body_strategy: Box<dyn BodyStrategy<Dict> + 'a>,
     head_strategy: Box<dyn HeadStrategy<Dict> + 'a>,
 }
 

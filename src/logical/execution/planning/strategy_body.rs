@@ -11,7 +11,7 @@ use crate::{
 use std::fmt::Debug;
 
 /// Strategies for calculating all matches for a rule application.
-pub trait BodyStrategy<'a, Dict: Dictionary>: Debug {
+pub trait BodyStrategy<Dict: Dictionary>: Debug {
     /// Calculate the concrete plan given a variable order.
     fn execution_tree(
         &self,

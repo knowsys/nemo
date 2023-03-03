@@ -41,7 +41,7 @@ impl<'a> SeminaiveStrategy<'a> {
     }
 }
 
-impl<'a, Dict: Dictionary> BodyStrategy<'a, Dict> for SeminaiveStrategy<'a> {
+impl<'a, Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy<'a> {
     fn execution_tree(
         &self,
         table_manager: &TableManager<Dict>,
