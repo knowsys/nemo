@@ -55,15 +55,6 @@ impl Reordering {
         self.iter().map(|&i| vec[i].clone()).collect()
     }
 
-    /// Apply the
-    pub fn apply_element(&self, element: usize) -> usize {
-        self.reorder[element]
-    }
-
-    pub fn apply_element_reverse(&self, value: usize) -> usize {
-        *self.reorder.iter().find(|&i| value == *i).unwrap()
-    }
-
     /// Returns the amount of elements before the reordering.
     pub fn len_source(&self) -> usize {
         self.len_source

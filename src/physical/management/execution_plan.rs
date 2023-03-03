@@ -580,10 +580,13 @@ impl ExecutionTree {
                 self.satisfy_leapfrog_recurisve(left.clone(), reorder.clone());
                 self.satisfy_leapfrog_recurisve(right.clone(), reorder.clone());
             }
-            ExecutionNode::SelectValue(subnode, assignments) => {
-                for assigment in assignments {
-                    assigment.column_idx = reorder.apply_element_reverse(assigment.column_idx);
-                }
+            ExecutionNode::SelectValue(subnode, _assignments) => {
+                // TODO: A few other changes are needed to make this a bit simpler.
+                // Will update it then
+                assert!(reorder.is_identity());
+                // for assigment in assignments {
+                //     assigment.column_idx = reorder.apply_element_reverse(assigment.column_idx);
+                // }
 
                 self.satisfy_leapfrog_recurisve(subnode.clone(), reorder);
             }
