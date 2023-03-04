@@ -23,9 +23,9 @@ use super::{plan_util::BODY_JOIN, seminaive_join, BodyStrategy};
 pub struct SeminaiveStrategy {
     body: Vec<Atom>,
     filters: Vec<Filter>,
-    
+
     is_existential: bool,
-    body_variables: HashSet<Variable>
+    body_variables: HashSet<Variable>,
 }
 
 impl SeminaiveStrategy {
@@ -40,7 +40,7 @@ impl SeminaiveStrategy {
             body,
             filters,
             is_existential: analysis.is_existential,
-            body_variables: analysis.body_variables.clone()
+            body_variables: analysis.body_variables.clone(),
         }
     }
 }
