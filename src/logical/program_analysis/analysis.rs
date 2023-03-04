@@ -8,7 +8,7 @@ use crate::{
 use super::variable_order::{build_preferable_variable_orders, VariableOrder};
 
 /// Contains useful information for a (existential) rule
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RuleAnalysis {
     /// Whether it uses an existential variable in its head.
     pub is_existential: bool,

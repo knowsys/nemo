@@ -99,8 +99,8 @@ pub fn seminaive_join<Dict: Dictionary>(
     current_step_number: usize,
     variable_order: &VariableOrder,
     variables: &HashSet<Variable>,
-    atoms: &[&Atom],
-    filters: &[&Filter],
+    atoms: &[Atom],
+    filters: &[Filter],
 ) -> Option<ExecutionNodeRef<TableKey>> {
     // We divide the atoms of the body into two parts:
     //    * Main: Those atoms who received new elements since the last rule application
@@ -108,7 +108,7 @@ pub fn seminaive_join<Dict: Dictionary>(
     let mut body_side = Vec::<&Atom>::new();
     let mut body_main = Vec::<&Atom>::new();
 
-    for &atom in atoms {
+    for atom in atoms {
         if let Some(last_step) = table_manager.predicate_last_step(atom.predicate()) {
             if last_step < step_last_applied {
                 body_side.push(atom);

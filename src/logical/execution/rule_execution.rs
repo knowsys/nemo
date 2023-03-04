@@ -6,7 +6,7 @@ use crate::{
     error::Error,
     logical::{
         model::{Identifier, Program, Rule},
-        program_analysis::analysis::RuleAnalysis,
+        program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::TableKey,
         TableManager,
     },
@@ -23,24 +23,27 @@ use super::{
 
 /// Object responsible for executing a "normal" rule.
 #[derive(Debug)]
-pub struct RuleExecution<'a, Dict: Dictionary> {
-    analysis: &'a RuleAnalysis,
+pub struct RuleExecution<Dict: Dictionary> {
+    promising_variable_orders: Vec<VariableOrder>,
 
-    body_strategy: Box<dyn BodyStrategy<Dict> + 'a>,
-    head_strategy: Box<dyn HeadStrategy<Dict> + 'a>,
+    body_strategy: Box<dyn BodyStrategy<Dict>>,
+    head_strategy: Box<dyn HeadStrategy<Dict>>,
 }
 
-impl<'a, Dict: Dictionary> RuleExecution<'a, Dict> {
+impl<Dict: Dictionary> RuleExecution<Dict> {
     /// Create new [`RuleExecution`].
-    pub fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self {
+    pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
+        let body_strategy = Box::new(SeminaiveStrategy::initialize(rule, analysis));
+        let head_strategy: Box<dyn HeadStrategy<_>> = if analysis.is_existential {
+            Box::new(RestrictedChaseStrategy::initialize(rule, analysis))
+        } else {
+            Box::new(DatalogStrategy::initialize(rule, analysis))
+        };
+        let promising_variable_orders = analysis.promising_variable_orders.clone();
         Self {
-            analysis,
-            body_strategy: Box::new(SeminaiveStrategy::initialize(rule, analysis)),
-            head_strategy: if analysis.is_existential {
-                Box::new(RestrictedChaseStrategy::initialize(rule, analysis))
-            } else {
-                Box::new(DatalogStrategy::initialize(rule, analysis))
-            },
+            promising_variable_orders,
+            body_strategy,
+            head_strategy,
         }
     }
 
@@ -55,8 +58,7 @@ impl<'a, Dict: Dictionary> RuleExecution<'a, Dict> {
     ) -> Result<HashSet<Identifier>, Error> {
         log::info!(
             "Available orders: {}",
-            self.analysis
-                .promising_variable_orders
+            self.promising_variable_orders
                 .iter()
                 .enumerate()
                 .fold("".to_string(), |acc, (index, promising_order)| {
@@ -69,7 +71,7 @@ impl<'a, Dict: Dictionary> RuleExecution<'a, Dict> {
                 })
         );
         // TODO: Just because its the first doesn't mean its the best
-        let best_variable_order = &self.analysis.promising_variable_orders[0];
+        let best_variable_order = &self.promising_variable_orders[0];
 
         let mut execution_plan = ExecutionPlan::<TableKey>::new();
         let tree_body = self.body_strategy.execution_tree(

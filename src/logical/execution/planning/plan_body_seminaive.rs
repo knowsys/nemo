@@ -1,9 +1,11 @@
 //! Module defining the strategy for calculating all body matches for a rule application.
 
+use std::collections::HashSet;
+
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Atom, Filter, Rule},
+        model::{Atom, Filter, Rule, Variable},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::TableKey,
         TableManager,
@@ -18,30 +20,32 @@ use super::{plan_util::BODY_JOIN, seminaive_join, BodyStrategy};
 
 /// Implementation of the semi-naive existential rule evaluation strategy.
 #[derive(Debug)]
-pub struct SeminaiveStrategy<'a> {
-    body: Vec<&'a Atom>,
-    filters: Vec<&'a Filter>,
-
-    analysis: &'a RuleAnalysis,
+pub struct SeminaiveStrategy {
+    body: Vec<Atom>,
+    filters: Vec<Filter>,
+    
+    is_existential: bool,
+    body_variables: HashSet<Variable>
 }
 
-impl<'a> SeminaiveStrategy<'a> {
+impl SeminaiveStrategy {
     /// Create new [`SeminaiveStrategy`] object.
-    pub fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self {
+    pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
         // Since we don't support negation yet, we can just turn the literals into atoms
         // TODO: Think about negation here
-        let body: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
-        let filters = rule.filters().iter().collect::<Vec<&Filter>>();
+        let body: Vec<Atom> = rule.body().iter().map(|l| l.atom().clone()).collect();
+        let filters: Vec<Filter> = rule.filters().to_vec();
 
         Self {
             body,
             filters,
-            analysis,
+            is_existential: analysis.is_existential,
+            body_variables: analysis.body_variables.clone()
         }
     }
 }
 
-impl<'a, Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy<'a> {
+impl<Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy {
     fn execution_tree(
         &self,
         table_manager: &TableManager<Dict>,
@@ -54,8 +58,8 @@ impl<'a, Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy<'a> {
             ExecutionResult::Temp(BODY_JOIN),
         );
 
-        if self.analysis.is_existential {
-            variable_order = variable_order.restrict_to(&self.analysis.body_variables);
+        if self.is_existential {
+            variable_order = variable_order.restrict_to(&self.body_variables);
         }
 
         let node_seminaive = if let Some(node) = seminaive_join(
@@ -64,7 +68,7 @@ impl<'a, Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy<'a> {
             rule_info.step_last_applied,
             step_number,
             &variable_order,
-            &self.analysis.body_variables,
+            &self.body_variables,
             &self.body,
             &self.filters,
         ) {

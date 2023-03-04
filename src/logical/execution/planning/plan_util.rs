@@ -95,7 +95,7 @@ pub(super) fn atom_binding(
 pub(super) fn compute_filters(
     body_variables: &HashSet<Variable>,
     variable_order: &VariableOrder,
-    filters: &[&Filter],
+    filters: &[Filter],
 ) -> (SelectEqualClasses, Vec<ValueAssignment>) {
     let mut body_variables_sorted: Vec<Variable> = body_variables.clone().into_iter().collect();
     body_variables_sorted.sort_by(|a, b| variable_order.get(a).cmp(&variable_order.get(b)));
