@@ -166,7 +166,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             &normalized_head_variable_order,
             &self.normalized_head_variables,
             &self.normalized_head_atoms,
-            &self.normalized_head_filters
+            &self.normalized_head_filters,
         ) {
             tree_head_join.set_root(node_head_join);
         }

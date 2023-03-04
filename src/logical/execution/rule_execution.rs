@@ -58,17 +58,17 @@ impl<Dict: Dictionary> RuleExecution<Dict> {
     ) -> Result<HashSet<Identifier>, Error> {
         log::info!(
             "Available orders: {}",
-            self.promising_variable_orders
-                .iter()
-                .enumerate()
-                .fold("".to_string(), |acc, (index, promising_order)| {
+            self.promising_variable_orders.iter().enumerate().fold(
+                "".to_string(),
+                |acc, (index, promising_order)| {
                     format!(
                         "{}\n   ({}) {})",
                         acc,
                         index,
                         promising_order.debug(program.get_names())
                     )
-                })
+                }
+            )
         );
         // TODO: Just because its the first doesn't mean its the best
         let best_variable_order = &self.promising_variable_orders[0];
