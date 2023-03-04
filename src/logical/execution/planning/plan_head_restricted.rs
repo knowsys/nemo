@@ -28,7 +28,7 @@ use super::{
 
 /// Strategy for the restricted chase.
 #[derive(Debug)]
-pub struct RestrictedChaseStrategy<'a> {
+pub struct RestrictedChaseStrategy {
     normalized_head_atoms: Vec<Atom>,
     normalized_head_filters: Vec<Filter>,
     normalized_head_variables: HashSet<Variable>,
@@ -38,12 +38,12 @@ pub struct RestrictedChaseStrategy<'a> {
     predicate_to_instructions: HashMap<Identifier, Vec<HeadInstruction>>,
     predicate_to_full_existential: HashMap<Identifier, bool>,
 
-    analysis: &'a RuleAnalysis,
+    analysis: RuleAnalysis,
 }
 
-impl<'a> RestrictedChaseStrategy<'a> {
+impl RestrictedChaseStrategy {
     /// Create a new [`RestrictedChaseStrategy`] object.
-    pub fn initialize(rule: &'a Rule, analysis: &'a RuleAnalysis) -> Self {
+    pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
         let frontier_variables = analysis
             .body_variables
             .intersection(&analysis.head_variables)
@@ -88,7 +88,7 @@ impl<'a> RestrictedChaseStrategy<'a> {
             normalized_head_variables,
             predicate_to_instructions,
             predicate_to_full_existential,
-            analysis,
+            analysis: analysis.clone(),
         }
     }
 }
@@ -97,7 +97,7 @@ const HEAD_START: usize = BODY_JOIN + 1;
 const HEAD_JOIN: usize = HEAD_START;
 const HEAD_UNSAT: usize = HEAD_START + 2;
 
-impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
+impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
     fn execution_tree(
         &self,
         table_manager: &TableManager<Dict>,
@@ -165,16 +165,8 @@ impl<'a, Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy<'a> {
             step_number,
             &normalized_head_variable_order,
             &self.normalized_head_variables,
-            &self
-                .normalized_head_atoms
-                .iter()
-                .by_ref()
-                .collect::<Vec<&Atom>>(),
-            &self
-                .normalized_head_filters
-                .iter()
-                .by_ref()
-                .collect::<Vec<&Filter>>(),
+            &self.normalized_head_atoms,
+            &self.normalized_head_filters
         ) {
             tree_head_join.set_root(node_head_join);
         }

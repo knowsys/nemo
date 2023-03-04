@@ -141,8 +141,8 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
             .program
             .rules()
             .iter()
-            .enumerate()
-            .map(|(i, r)| RuleExecution::initialize(r, &self.analysis.rule_analysis[i]))
+            .zip(self.analysis.rule_analysis.iter())
+            .map(|(r, a)| RuleExecution::initialize(r, a))
             .collect();
 
         let mut without_derivation: usize = 0;
