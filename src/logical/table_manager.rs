@@ -384,7 +384,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         let schema = self
             .predicate_to_info
             .get(&predicate)
-            .expect("Predicate should be registered before callong this function")
+            .expect("Predicate should be registered before calling this function")
             .schema
             .clone();
         let name = self.generate_table_name(predicate, &edb_order, EDB_STEP);
@@ -406,7 +406,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         let schema = self
             .predicate_to_info
             .get(&predicate)
-            .expect("Predicate should be registered before callong this function")
+            .expect("Predicate should be registered before calling this function")
             .schema
             .clone();
         let name = self.generate_table_name(predicate, &order, step);
@@ -432,7 +432,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         let schema = self
             .predicate_to_info
             .get(&subtable.predicate)
-            .expect("Predicate should be registered before callong this function")
+            .expect("Predicate should be registered before calling this function")
             .schema
             .clone();
         let name = self.generate_table_name_reference(
@@ -454,7 +454,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         let subtable_handler = self
             .predicate_subtables
             .get(&predicate)
-            .expect("Predicate should be registered before callong this function");
+            .expect("Predicate should be registered before calling this function");
         subtable_handler.cover_range(range)
     }
 
@@ -489,7 +489,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
         self.predicate_subtables
             .get_mut(&predicate)
-            .expect("Predicate should be registered before callong this function")
+            .expect("Predicate should be registered before calling this function")
             .add_combined_table(&range, *table_id);
 
         Ok(Some(*table_id))
