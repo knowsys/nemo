@@ -4,20 +4,21 @@
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo, program_analysis::variable_order::VariableOrder,
-        TableManager,
+        table_manager::SubtableExecutionPlan, TableManager,
     },
-    physical::{dictionary::Dictionary, management::execution_plan::ExecutionTree},
+    physical::dictionary::Dictionary,
 };
 use std::fmt::Debug;
 
 /// Strategies for calculating all matches for a rule application.
 pub trait BodyStrategy<Dict: Dictionary>: Debug {
     /// Calculate the concrete plan given a variable order.
-    fn execution_tree(
+    fn add_body_tree(
         &self,
         table_manager: &TableManager<Dict>,
+        current_pan: &mut SubtableExecutionPlan,
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,
-    ) -> ExecutionTree;
+    ) -> usize;
 }

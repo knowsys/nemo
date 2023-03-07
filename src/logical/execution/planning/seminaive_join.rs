@@ -12,11 +12,10 @@ use crate::{
         dictionary::Dictionary,
         management::execution_plan::{ExecutionNodeRef, ExecutionTree},
         tabular::operations::triescan_join::JoinBinding,
-        util::Reordering,
     },
 };
 
-use super::plan_util::{atom_binding, compute_filters, order_atom, subtree_union};
+use super::plan_util::{atom_binding, compute_filters, subtree_union};
 
 // Calculate a subtree consiting of join representing one variant of an seminaive evaluation.
 #[allow(clippy::too_many_arguments)]
@@ -25,8 +24,6 @@ fn subtree_join<Dict: Dictionary>(
     manager: &TableManager<Dict>,
     side_atoms: &[&Atom],
     main_atoms: &[&Atom],
-    side_orders: &[Reordering],
-    main_orders: &[Reordering],
     rule_step: usize,
     overall_step: usize,
     mid: usize,
@@ -35,27 +32,15 @@ fn subtree_join<Dict: Dictionary>(
     let mut join_node = tree.join_empty(join_binding.clone());
 
     // For every atom that did not receive any update since the last rule application take all available elements
-    for (atom_index, atom) in side_atoms.iter().enumerate() {
-        let subnode = subtree_union(
-            tree,
-            manager,
-            atom.predicate(),
-            0..rule_step,
-            &side_orders[atom_index],
-        );
+    for atom in side_atoms {
+        let subnode = subtree_union(tree, manager, atom.predicate(), &(0..rule_step));
 
         join_node.add_subnode(subnode);
     }
 
     // For every atom before the mid point we take all the tables until the current `rule_step`
-    for (atom_index, atom) in main_atoms.iter().take(mid).enumerate() {
-        let subnode = subtree_union(
-            tree,
-            manager,
-            atom.predicate(),
-            0..overall_step,
-            &main_orders[atom_index],
-        );
+    for atom in main_atoms.iter().take(mid) {
+        let subnode = subtree_union(tree, manager, atom.predicate(), &(0..overall_step));
 
         join_node.add_subnode(subnode);
     }
@@ -65,21 +50,14 @@ fn subtree_join<Dict: Dictionary>(
         tree,
         manager,
         main_atoms[mid].predicate(),
-        rule_step..overall_step,
-        &main_orders[mid],
+        &(rule_step..overall_step),
     );
 
     join_node.add_subnode(midnode);
 
     // For every atom past the mid point we take only the old tables
-    for (atom_index, atom) in main_atoms.iter().enumerate().skip(mid + 1) {
-        let subnode = subtree_union(
-            tree,
-            manager,
-            atom.predicate(),
-            0..rule_step,
-            &main_orders[atom_index],
-        );
+    for atom in main_atoms.iter().skip(mid + 1) {
+        let subnode = subtree_union(tree, manager, atom.predicate(), &(0..rule_step));
 
         join_node.add_subnode(subnode);
     }
@@ -108,7 +86,7 @@ pub fn seminaive_join<Dict: Dictionary>(
     let mut body_main = Vec::<&Atom>::new();
 
     for atom in atoms {
-        if let Some(last_step) = table_manager.predicate_last_step(atom.predicate()) {
+        if let Some(last_step) = table_manager.last_step(atom.predicate()) {
             if last_step < step_last_applied {
                 body_side.push(atom);
             } else {
@@ -123,26 +101,9 @@ pub fn seminaive_join<Dict: Dictionary>(
         return None;
     }
 
-    // The variable order forces a specific [`ColumnOrder`] on each table
-    // Needs to be done for the main and side atoms
-    let main_orders: Vec<Reordering> = body_main
-        .iter()
-        .map(|&a| order_atom(a, variable_order))
-        .collect();
-    let side_orders: Vec<Reordering> = body_side
-        .iter()
-        .map(|&a| order_atom(a, variable_order))
-        .collect();
-
     // Join binding needs to be computed for both types of atoms as well
-    let side_binding = body_side
-        .iter()
-        .enumerate()
-        .map(|(i, &a)| atom_binding(a, &side_orders[i], variable_order));
-    let main_binding = body_main
-        .iter()
-        .enumerate()
-        .map(|(i, &a)| atom_binding(a, &main_orders[i], variable_order));
+    let side_binding = body_side.iter().map(|&a| atom_binding(a, variable_order));
+    let main_binding = body_main.iter().map(|&a| atom_binding(a, variable_order));
     // We then combine the bindings into one
     let join_binding: JoinBinding = side_binding.chain(main_binding).collect();
 
@@ -154,8 +115,6 @@ pub fn seminaive_join<Dict: Dictionary>(
             table_manager,
             &body_side,
             &body_main,
-            &side_orders,
-            &main_orders,
             step_last_applied,
             current_step_number,
             atom_index,

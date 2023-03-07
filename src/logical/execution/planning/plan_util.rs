@@ -9,57 +9,21 @@ use crate::{
     logical::{
         model::{Atom, Filter, Identifier, NumericLiteral, Term, Variable},
         program_analysis::variable_order::VariableOrder,
-        table_manager::ChaseTable,
         TableManager,
     },
     physical::{
         datatypes::DataValueT,
         dictionary::Dictionary,
-        management::execution_plan::{ExecutionNodeRef, ExecutionTree},
+        management::{
+            database::TableId,
+            execution_plan::{ExecutionNodeRef, ExecutionTree},
+        },
         tabular::operations::{
             triescan_append::AppendInstruction, triescan_select::SelectEqualClasses,
             ValueAssignment,
         },
-        util::Reordering,
     },
 };
-
-/// Constant which refers to the body join table
-pub(super) const BODY_JOIN: usize = 0;
-
-/// Calculates the [`ColumnOrder`] to transform the given [`Atom`]
-/// such that in complies with the given [`VariableOrder`].
-/// Say we have a(x, y, z) but variable_order = [x -> 1, y -> 2, z -> 0].
-/// Then the result would be [2, 0, 1].
-pub(super) fn order_atom(atom: &Atom, variable_order: &VariableOrder) -> Reordering {
-    let terms = atom.terms();
-    let mut reordering = (0..terms.len()).collect::<Vec<usize>>();
-    reordering.sort_by(|a, b| {
-        let variable_a = if let Term::Variable(var) = &terms[*a] {
-            var
-        } else {
-            // TODO: This shows why we need a separate encoding of rules for parsing and further processing
-            panic!("Normalized rule should not contain any other terms then atoms");
-        };
-
-        let variable_b = if let Term::Variable(var) = &terms[*b] {
-            var
-        } else {
-            panic!("Normalized rule should not contain any other terms then atoms");
-        };
-
-        let position_a = *variable_order
-            .get(variable_a)
-            .expect("VariableOrder should contain atom variables.");
-        let position_b = *variable_order
-            .get(variable_b)
-            .expect("VariableOrder should contain atom variables.");
-
-        position_a.cmp(&position_b)
-    });
-
-    Reordering::new(reordering, atom.terms().len())
-}
 
 /// This function replaces each variable in the atom with its position in the variable ordering
 /// while keeping in mind that the atom might be reordered.
@@ -73,21 +37,29 @@ pub(super) fn order_atom(atom: &Atom, variable_order: &VariableOrder) -> Reorder
 ///     * Calculating a projection/reordering for an atom:
 ///         - Example: Say you have a table t(x, y, z) and want to project to the last two columns and save the atom in the column order [1, 0]
 ///                    Then you'd obtain [2, 1]
-pub(super) fn atom_binding(
-    atom: &Atom,
-    column_order: &Reordering,
-    variable_order: &VariableOrder,
-) -> Vec<usize> {
-    column_order
-        .iter()
-        .map(|&i| {
-            if let Term::Variable(variable) = &atom.terms()[i] {
-                *variable_order.get(variable).unwrap()
-            } else {
-                panic!("It is assumed that this function is only called on atoms which only contain variables.");
-            }
-        })
-        .collect()
+// pub(super) fn atom_binding(
+//     atom: &Atom,
+//     column_order: &Reordering,
+//     variable_order: &VariableOrder,
+// ) -> Vec<usize> {
+//     column_order
+//         .iter()
+//         .map(|&i| {
+//             if let Term::Variable(variable) = &atom.terms()[i] {
+//                 *variable_order.get(variable).unwrap()
+//             } else {
+//                 panic!("It is assumed that this function is only called on atoms which only contain variables.");
+//             }
+//         })
+//         .collect()
+// }
+
+pub(super) fn atom_binding(atom: &Atom, variable_order: &VariableOrder) -> Vec<usize> {
+    atom.terms().iter().map(|t| if let Term::Variable(variable) = t {
+        *variable_order.get(variable).unwrap()
+    } else {
+        panic!("It is assumed that this function is only called on atoms which only contain variables.");
+    }).collect()
 }
 
 /// Calculate helper structures that define the filters that need to be applied.
@@ -187,20 +159,13 @@ pub(super) fn subtree_union<Dict: Dictionary>(
     tree: &mut ExecutionTree,
     manager: &TableManager<Dict>,
     predicate: Identifier,
-    steps: Range<usize>,
-    order: &Reordering,
+    steps: &Range<usize>,
 ) -> ExecutionNodeRef {
-    debug_assert!(order.is_permutation());
-
-    let base_tables: Vec<ChaseTable> = manager
-        .get_table_covering(predicate, steps)
-        .into_iter()
-        .map(|r| ChaseTable::from_pred(predicate, r, order.clone().into()))
-        .collect();
+    let base_tables: Vec<TableId> = manager.tables_in_range(predicate, steps);
 
     let mut union_node = tree.union_empty();
-    for key in base_tables {
-        let base_node = tree.fetch_table(key.db_name);
+    for table_id in base_tables.into_iter() {
+        let base_node = tree.fetch_existing(table_id);
         union_node.add_subnode(base_node);
     }
 
@@ -217,7 +182,7 @@ pub(super) struct HeadInstruction {
     /// The [`AppendInstruction`]s to get the original atom.
     pub append_instructions: Vec<Vec<AppendInstruction>>,
     /// The arity of the original atom.
-    pub arity: usize,
+    pub _arity: usize,
 }
 
 /// Given an atom, bring compute the corresponding [`HeadInstruction`].
@@ -278,6 +243,6 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
     HeadInstruction {
         reduced_atom,
         append_instructions,
-        arity,
+        _arity: arity,
     }
 }

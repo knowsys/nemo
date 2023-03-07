@@ -8,18 +8,21 @@ use crate::{
         execution::execution_engine::RuleInfo,
         model::{Identifier, Rule},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
-        table_manager::{ChaseTable, ColumnOrder},
+        table_manager::{SubtableExecutionPlan, SubtableIdentifier},
         TableManager,
     },
     physical::{
         dictionary::Dictionary,
-        management::execution_plan::{ExecutionNodeRef, ExecutionResult, ExecutionTree},
+        management::{
+            column_order::ColumnOrder,
+            execution_plan::{ExecutionNodeRef, ExecutionTree},
+        },
         util::Reordering,
     },
 };
 
 use super::{
-    plan_util::{atom_binding, head_instruction_from_atom, HeadInstruction, BODY_JOIN},
+    plan_util::{atom_binding, head_instruction_from_atom, HeadInstruction},
     HeadStrategy,
 };
 
@@ -53,41 +56,31 @@ impl DatalogStrategy {
 }
 
 impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
-    fn execution_tree(
+    fn add_head_trees(
         &self,
         table_manager: &TableManager<Dict>,
+        current_plan: &mut SubtableExecutionPlan,
+        body_id: usize,
         _rule_info: &RuleInfo,
         variable_order: VariableOrder,
-        step_number: usize,
-    ) -> Vec<ExecutionTree> {
-        let mut trees = Vec::<ExecutionTree>::new();
-
+        step: usize,
+    ) {
         for (&predicate, head_instructions) in self.predicate_to_atoms.iter() {
-            let predicate_arity = head_instructions[0].arity;
             // We just pick the default order
             // TODO: Is there a better pick?
-            let head_order = ColumnOrder::default()(predicate_arity);
+            let head_order = ColumnOrder::default();
+            let head_table_name = table_manager.generate_table_name(predicate, &head_order, step);
 
-            let head_table_name =
-                table_manager.get_table_name(predicate, step_number..step_number + 1);
-            let head_table_key = ChaseTable::from_name(head_table_name, head_order.clone());
-            let mut head_tree = ExecutionTree::new(
-                "Head (Datalog)".to_string(),
-                ExecutionResult::Save(head_table_key.db_name),
-            );
+            let mut head_tree = ExecutionTree::new_permanent("Head (Datalog)", &head_table_name);
 
             let mut project_append_nodes =
                 Vec::<ExecutionNodeRef>::with_capacity(head_instructions.len());
             for head_instruction in head_instructions {
-                let head_binding = atom_binding(
-                    &head_instruction.reduced_atom,
-                    &Reordering::default(head_instruction.reduced_atom.terms().len()),
-                    &variable_order,
-                );
+                let head_binding = atom_binding(&head_instruction.reduced_atom, &variable_order);
                 let head_reordering =
                     Reordering::new(head_binding.clone(), self.num_body_variables);
 
-                let fetch_node = head_tree.fetch_temp(BODY_JOIN);
+                let fetch_node = head_tree.fetch_new(body_id);
                 let project_node = head_tree.project(fetch_node, head_reordering);
                 let append_node = head_tree
                     .append_columns(project_node, head_instruction.append_instructions.clone());
@@ -97,23 +90,17 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
 
             let new_tables_union = head_tree.union(project_append_nodes);
 
-            let old_tables_keys: Vec<ChaseTable> = table_manager
-                .cover_whole_table(predicate)
+            let old_subtables = table_manager.tables_in_range(predicate, &(0..step));
+            let old_table_nodes: Vec<ExecutionNodeRef> = old_subtables
                 .into_iter()
-                .map(|r| ChaseTable::from_pred(predicate, r, head_order.clone()))
-                .collect();
-            let old_table_nodes: Vec<ExecutionNodeRef> = old_tables_keys
-                .into_iter()
-                .map(|k| head_tree.fetch_table(k.db_name))
+                .map(|id| head_tree.fetch_existing(id))
                 .collect();
             let old_table_union = head_tree.union(old_table_nodes);
 
             let remove_duplicate_node = head_tree.minus(new_tables_union, old_table_union);
             head_tree.set_root(remove_duplicate_node);
 
-            trees.push(head_tree);
+            current_plan.add_permanent_table(head_tree, SubtableIdentifier::new(predicate, step));
         }
-
-        trees
     }
 }

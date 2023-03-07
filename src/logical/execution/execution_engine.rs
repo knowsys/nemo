@@ -1,24 +1,20 @@
 //! Functionality which handles the execution of a program
 
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 
 use crate::{
     error::Error,
     logical::{
-        model::{Identifier, NumericLiteral, Program, Term},
+        model::{DataSource, Identifier, NumericLiteral, Program, Term},
         program_analysis::analysis::ProgramAnalysis,
-        table_manager::ColumnOrder,
         TableManager,
     },
     meta::TimedCode,
     physical::{
         datatypes::DataValueT,
         dictionary::Dictionary,
-        management::ByteSized,
-        tabular::{
-            table_types::trie::Trie,
-            traits::{table::Table, table_schema::TableSchema},
-        },
+        management::database::{TableId, TableSource},
+        tabular::table_types::trie::Trie,
     },
 };
 
@@ -65,15 +61,15 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         let analysis = program.analyze();
 
         let mut table_manager = TableManager::new(program.get_names().clone());
-
-        Self::add_input_sources(&mut table_manager, &program);
-        Self::add_input_facts(&mut table_manager, &program);
+        Self::add_sources(&mut table_manager, &program);
 
         let mut rule_infos = Vec::<RuleInfo>::new();
         program
             .rules()
             .iter()
             .for_each(|_| rule_infos.push(RuleInfo::new()));
+
+        // table_manager.register_predicate(predicate, arity);
 
         Self {
             program,
@@ -86,16 +82,26 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         }
     }
 
-    /// Add all the data source declarations from the program into the table manager.
-    fn add_input_sources(table_manager: &mut TableManager<Dict>, program: &Program<Dict>) {
-        for ((predicate, arity), source) in program.sources() {
-            table_manager.add_source(predicate, arity, source.clone());
-        }
-    }
+    fn add_sources(table_manager: &mut TableManager<Dict>, program: &Program<Dict>) {
+        let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
-    /// Add all input facts as tables into the table manager.
-    /// TODO: This function has to be revised when the new type system for the logical layer is introduced.
-    fn add_input_facts(table_manager: &mut TableManager<Dict>, program: &Program<Dict>) {
+        // Add all the data source declarations
+        for ((predicate, _), source) in program.sources() {
+            let new_source = match source {
+                DataSource::CsvFile(file) => TableSource::CSV(*file.clone()),
+                DataSource::RdfFile(_) => todo!(),
+                DataSource::SparqlQuery(_) => todo!(),
+            };
+
+            let sources = match predicate_to_sources.entry(predicate) {
+                Entry::Vacant(entry) => entry.insert(Vec::new()),
+                Entry::Occupied(entry) => entry.into_mut(),
+            };
+
+            sources.push(new_source);
+        }
+
+        // Add all the facts contained in the rule file as a source
         let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<DataValueT>>>::new();
 
         for fact in program.facts() {
@@ -120,24 +126,18 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         }
 
         for (predicate, rows) in predicate_to_rows.into_iter() {
-            let trie = Trie::from_rows(rows);
-            let arity = trie.get_types().len();
+            let sources = match predicate_to_sources.entry(predicate) {
+                Entry::Vacant(entry) => entry.insert(Vec::new()),
+                Entry::Occupied(entry) => entry.into_mut(),
+            };
 
-            let mut schema = TableSchema::new();
-            for &type_name in trie.get_types() {
-                schema.add_entry(type_name, false, false);
-            }
+            let new_source = TableSource::RLS(rows);
+            sources.push(new_source);
+        }
 
-            let table_name = TableName(predicate.name(program.get_names()).unwrap());
-
-            table_manager.add_table(
-                predicate,
-                0..1,
-                ColumnOrder::default(),
-                schema,
-                trie,
-                table_name,
-            );
+        // Add all the sources to the table mananager
+        for (predicate, sources) in predicate_to_sources {
+            table_manager.add_edb(predicate, sources);
         }
     }
 
@@ -214,19 +214,11 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
 
                     let range = start..(self.current_step + 1);
 
-                    match self.table_manager.add_union_table(
-                        updated_pred,
-                        range.clone(),
-                        updated_pred,
-                        range.clone(),
-                        None,
-                    )?{
-                        Some(table_key) => log::info!("Combined multiple single-step tables for predicate {}: {} elements ({})", updated_pred.0,  self.table_manager.get_trie(&table_key).row_num(), self.table_manager.get_trie(&table_key).size_bytes()),
-                        None => log::warn!("Combined multiple single-step tables for predicate {}: Empty table", updated_pred.0),
-                    };
+                    self.table_manager.combine_tables(updated_pred, range)?;
 
                     self.predicate_last_union
                         .insert(updated_pred, self.current_step);
+
                     *counter = 0;
                 }
             }
@@ -241,17 +233,16 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
 
     /// Return the output tries that resulted form the execution.
     pub fn get_results(&mut self) -> Result<Vec<(Identifier, &Trie)>, Error> {
-        let mut result = Vec::<(Identifier, &Trie)>::new();
-        let mut result_keys = Vec::new();
-        for &p in self.analysis.derived_predicates.iter() {
-            result_keys.push(self.table_manager.combine_predicate(p, self.current_step)?);
+        let mut result_ids = Vec::<(Identifier, TableId)>::new();
+        for &predicate in self.analysis.derived_predicates.iter() {
+            let combined_id = self.table_manager.combine_predicate(predicate)?;
+            result_ids.push((predicate, combined_id));
         }
 
-        for key_opt in result_keys {
-            if let Some(key) = &key_opt {
-                result.push((key.name.predicate, self.table_manager.get_trie(key)));
-            }
-        }
+        let result = result_ids
+            .into_iter()
+            .map(|(p, id)| (p, self.table_manager.table_from_id(id)))
+            .collect();
 
         Ok(result)
     }

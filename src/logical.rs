@@ -5,9 +5,9 @@ pub use permutator::Permutator;
 
 pub mod model;
 
-// pub mod program_analysis;
+pub mod program_analysis;
 
-// pub mod execution;
+pub mod execution;
 
-// pub mod table_manager;
-// pub use table_manager::TableManager;
+pub mod table_manager;
+pub use table_manager::TableManager;

@@ -7,15 +7,13 @@ use crate::{
         execution::execution_engine::RuleInfo,
         model::{Atom, Filter, Rule, Variable},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
+        table_manager::SubtableExecutionPlan,
         TableManager,
     },
-    physical::{
-        dictionary::Dictionary,
-        management::execution_plan::{ExecutionResult, ExecutionTree},
-    },
+    physical::{dictionary::Dictionary, management::execution_plan::ExecutionTree},
 };
 
-use super::{plan_util::BODY_JOIN, seminaive_join, BodyStrategy};
+use super::{seminaive_join, BodyStrategy};
 
 /// Implementation of the semi-naive existential rule evaluation strategy.
 #[derive(Debug)]
@@ -48,18 +46,18 @@ impl<Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy {
     fn execution_tree(
         &self,
         table_manager: &TableManager<Dict>,
+        current_pan: &mut SubtableExecutionPlan,
         rule_info: &RuleInfo,
         mut variable_order: VariableOrder,
         step_number: usize,
-    ) -> ExecutionTree {
-        let mut tree =
-            ExecutionTree::new("Body Join".to_string(), ExecutionResult::Temp(BODY_JOIN));
+    ) -> usize {
+        let mut tree = ExecutionTree::new_temporary("Body Join");
 
         if self.is_existential {
             variable_order = variable_order.restrict_to(&self.body_variables);
         }
 
-        let node_seminaive = if let Some(node) = seminaive_join(
+        let seminaive_node = seminaive_join(
             &mut tree,
             table_manager,
             rule_info.step_last_applied,
@@ -68,14 +66,12 @@ impl<Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy {
             &self.body_variables,
             &self.body,
             &self.filters,
-        ) {
-            node
-        } else {
-            return tree;
-        };
+        );
 
-        tree.set_root(node_seminaive);
+        if let Some(node) = seminaive_node {
+            tree.set_root(node);
+        }
 
-        tree
+        current_pan.add_temporary_table(tree)
     }
 }

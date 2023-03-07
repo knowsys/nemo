@@ -11,18 +11,22 @@ use crate::{
             analysis::RuleAnalysis, normalization::normalize_atom_vector,
             variable_order::VariableOrder,
         },
-        table_manager::{ChaseTable, ColumnOrder},
+        table_manager::{SubtableExecutionPlan, SubtableIdentifier},
         TableManager,
     },
     physical::{
         dictionary::Dictionary,
-        management::execution_plan::{ExecutionNodeRef, ExecutionResult, ExecutionTree},
+        management::{
+            column_order::ColumnOrder,
+            database::TableId,
+            execution_plan::{ExecutionNodeRef, ExecutionTree},
+        },
         util::Reordering,
     },
 };
 
 use super::{
-    plan_util::{head_instruction_from_atom, subtree_union, HeadInstruction, BODY_JOIN},
+    plan_util::{head_instruction_from_atom, subtree_union, HeadInstruction},
     seminaive_join, HeadStrategy,
 };
 
@@ -113,18 +117,16 @@ impl RestrictedChaseStrategy {
     }
 }
 
-const HEAD_START: usize = BODY_JOIN + 1;
-const HEAD_JOIN: usize = HEAD_START;
-const HEAD_UNSAT: usize = HEAD_START + 2;
-
 impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
-    fn execution_tree(
+    fn add_head_trees(
         &self,
         table_manager: &TableManager<Dict>,
+        current_plan: &mut SubtableExecutionPlan,
+        body_id: usize,
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
-        step_number: usize,
-    ) -> Vec<ExecutionTree> {
+        step: usize,
+    ) {
         // TODO: We need like three versions of the same variable order in this function
         // Clearly, some more thinking is needed
         let normalized_head_variable_order = compute_normalized_variable_order(
@@ -132,17 +134,12 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             variable_order.restrict_to(&self.analysis.head_variables),
         );
 
-        let mut trees = Vec::<ExecutionTree>::new();
-
         // Resulting trie will contain all the non-satisfied body matches
         // Input from the generated head tables will be projected from this
-        let mut tree_unsatisfied = ExecutionTree::new(
-            String::from("Head (Restricted): Unsatisfied"),
-            ExecutionResult::Temp(HEAD_UNSAT),
-        );
+        let mut tree_unsatisfied = ExecutionTree::new_temporary("Head (Restricted): Unsatisfied");
 
         // 0. Fetch the temporary table that represents all the matches for this rule application
-        let node_fetch_body = tree_unsatisfied.fetch_temp(BODY_JOIN);
+        let node_fetch_body = tree_unsatisfied.fetch_new(body_id);
 
         // 1. Compute the projection of the body join to the frontier variables
 
@@ -173,16 +170,13 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         // 2. Compute the head matches projected to the frontier variables
 
         // Find the matches for the head by performing a seminaive join
-        let mut tree_head_join = ExecutionTree::new(
-            String::from("Head (Restricted): Satisfied"),
-            ExecutionResult::Temp(HEAD_JOIN),
-        );
+        let mut tree_head_join = ExecutionTree::new_temporary("Head (Restricted): Satisfied");
 
         if let Some(node_head_join) = seminaive_join(
             &mut tree_head_join,
             table_manager,
             rule_info.step_last_applied,
-            step_number,
+            step,
             &normalized_head_variable_order,
             &self.normalized_head_variables,
             &self.normalized_head_atoms,
@@ -191,20 +185,18 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             tree_head_join.set_root(node_head_join);
         }
 
-        trees.push(tree_head_join);
+        let head_join_id = current_plan.add_temporary_table(tree_head_join);
 
         // Project it to the frontier variables and save the result in an extra table (also removing duplicates)
         let head_projected_order = ColumnOrder::default();
 
-        let head_projected_name = table_manager.get_table_name(
+        let head_projected_name = table_manager.generate_table_name(
             self.analysis.head_matches_identifier,
-            step_number..step_number + 1,
+            &head_projected_order,
+            step,
         );
-        let head_projected_key = ChaseTable::from_name(head_projected_name, head_projected_order);
-        let mut tree_head_projected = ExecutionTree::new(
-            "Head (Restricted): Sat. Frontier".to_string(),
-            ExecutionResult::Save(head_projected_key.db_name),
-        );
+        let mut tree_head_projected =
+            ExecutionTree::new_permanent("Head (Restricted): Sat. Frontier", &head_projected_name);
 
         // Get a vector of all the normalized head variables but sorted in the variable order
         let mut head_variables_in_order: Vec<&Variable> =
@@ -228,7 +220,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         );
 
         // Do the projection operation
-        let node_fetch_join = tree_head_projected.fetch_temp(HEAD_JOIN);
+        let node_fetch_join = tree_head_projected.fetch_new(head_join_id);
         let node_project = tree_head_projected.project(node_fetch_join, head_projection_reorder);
 
         // Remove the duplicates
@@ -236,26 +228,27 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             &mut tree_head_projected,
             table_manager,
             self.analysis.head_matches_identifier,
-            0..step_number,
-            &Reordering::default(self.frontier_variables.len()),
+            &(0..step),
         );
         let node_project_minus = tree_head_projected.minus(node_project, node_old_matches);
 
         // Add tree
         tree_head_projected.set_root(node_project_minus);
-        trees.push(tree_head_projected);
+        let head_projected_id = current_plan.add_permanent_table(
+            tree_head_projected,
+            SubtableIdentifier::new(self.analysis.head_matches_identifier, step),
+        );
 
         // 3.Compute the unsatisfied matches by taking the difference between the projected body and projected head matches
         let mut node_satisfied = subtree_union(
             &mut tree_unsatisfied,
             table_manager,
             self.analysis.head_matches_identifier,
-            0..step_number,
-            &Reordering::default(self.frontier_variables.len()),
+            &(0..step),
         );
 
         // The above does not include the table computed in this iteration, so we need to load and include it
-        let node_fetch_sat = tree_unsatisfied.fetch_table(head_projected_key.db_name);
+        let node_fetch_sat = tree_unsatisfied.fetch_new(head_projected_id);
         node_satisfied.add_subnode(node_fetch_sat);
 
         let node_unsatisfied = tree_unsatisfied.minus(node_body_project, node_satisfied);
@@ -266,22 +259,17 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
 
         // Add tree
         tree_unsatisfied.set_root(node_with_nulls);
-        trees.push(tree_unsatisfied);
+        let unsatisfied_id = current_plan.add_temporary_table(tree_unsatisfied);
 
         // 4. Project the new entries to each head atom
         for (&predicate, head_instructions) in self.predicate_to_instructions.iter() {
-            let predicate_arity = head_instructions[0].arity;
             // We just pick the default order
             // TODO: Is there a better pick?
-            let head_order = ColumnOrder::default()(predicate_arity);
+            let head_order = ColumnOrder::default();
 
-            let head_table_name =
-                table_manager.get_table_name(predicate, step_number..step_number + 1);
-            let head_table_key = ChaseTable::from_name(head_table_name, head_order.clone());
-            let mut head_tree = ExecutionTree::new(
-                "Head (Restricted): Result Project".to_string(),
-                ExecutionResult::Save(head_table_key.db_name),
-            );
+            let head_table_name = table_manager.generate_table_name(predicate, &head_order, step);
+            let mut head_tree =
+                ExecutionTree::new_permanent("Head (Restricted): Result Project", &head_table_name);
 
             let mut unsat_variable_order = VariableOrder::new();
             for &variable in &body_variables_in_order {
@@ -316,7 +304,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
                 let head_reordering =
                     Reordering::new(head_binding.clone(), unsat_variable_order.len());
 
-                let fetch_node = head_tree.fetch_temp(HEAD_UNSAT);
+                let fetch_node = head_tree.fetch_new(unsatisfied_id);
                 let project_node = head_tree.project(fetch_node, head_reordering);
                 let append_node = head_tree
                     .append_columns(project_node, head_instruction.append_instructions.clone());
@@ -332,14 +320,10 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             } else {
                 // Duplicate elimination for atoms thats do not contain existential variables
                 // Same as in plan_head_datalog
-                let old_tables_keys: Vec<ChaseTable> = table_manager
-                    .cover_whole_table(predicate)
+                let old_tables: Vec<TableId> = table_manager.tables_in_range(predicate, &(0..step));
+                let old_table_nodes: Vec<ExecutionNodeRef> = old_tables
                     .into_iter()
-                    .map(|r| ChaseTable::from_pred(predicate, r, head_order.clone()))
-                    .collect();
-                let old_table_nodes: Vec<ExecutionNodeRef> = old_tables_keys
-                    .into_iter()
-                    .map(|k| head_tree.fetch_table(k.db_name))
+                    .map(|id| head_tree.fetch_existing(id))
                     .collect();
                 let old_table_union = head_tree.union(old_table_nodes);
 
@@ -347,9 +331,8 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
                 head_tree.set_root(remove_duplicate_node);
             }
 
-            trees.push(head_tree);
+            current_plan.add_permanent_table(head_tree, SubtableIdentifier::new(predicate, step));
         }
-        trees
     }
 }
 

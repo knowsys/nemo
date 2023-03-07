@@ -138,7 +138,7 @@ pub fn cover_interval<'a>(vec: &'a [Range<usize>], target: &Range<usize>) -> Vec
             continue;
         }
 
-        // If starting point of current index <= start
+        // If starting point of current index > start
         if interval.start > start {
             // As the start point is now not covered, its a good time to add the best interval to result
             if let Some(best_interval) = promising_interval {
@@ -147,7 +147,7 @@ pub fn cover_interval<'a>(vec: &'a [Range<usize>], target: &Range<usize>) -> Vec
             }
 
             // Update the value of start
-            let end = end.expect("Branch at the stop should have happend before");
+            let end = end.expect("Branch at the top should have happend before");
             start = end - 1; // Note that ranges not not include the end
 
             // If the target interval is already covered or it is not possible to move then break the loop

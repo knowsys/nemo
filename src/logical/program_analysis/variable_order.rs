@@ -2,15 +2,12 @@
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
-use crate::logical::model::Term;
 use crate::logical::Permutator;
 use crate::physical::dictionary::Dictionary;
+use crate::{logical::model::Term, physical::management::column_order::ColumnOrder};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use super::super::{
-    model::{Identifier, Literal, Program, Rule, Variable},
-    table_manager::ColumnOrder,
-};
+use super::super::model::{Identifier, Literal, Program, Rule, Variable};
 
 /// Represents an ordering of variables as [`HashMap`].
 #[repr(transparent)]
@@ -469,7 +466,7 @@ pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
         let preds = fact_preds.union(&source_preds);
 
         preds
-            .map(|(p, a)| {
+            .map(|(p, _)| {
                 let mut set = HashSet::new();
                 set.insert(ColumnOrder::default());
                 (*p, set)
@@ -504,15 +501,14 @@ pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
 
 #[cfg(test)]
 mod test {
-    use crate::physical::dictionary::PrefixedStringDictionary;
+    use crate::physical::{
+        dictionary::PrefixedStringDictionary, management::column_order::ColumnOrder,
+    };
 
     use super::{
-        super::super::{
-            model::{
-                Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Program, Rule, Term,
-                Variable,
-            },
-            table_manager::ColumnOrder,
+        super::super::model::{
+            Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Program, Rule, Term,
+            Variable,
         },
         IterationOrder, RuleVariableList, VariableOrder,
     };

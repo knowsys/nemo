@@ -559,6 +559,8 @@ impl ExecutionTree {
                 );
             }
             ExecutionNode::Join(subnodes, bindings) => {
+                let mut sorted_bindings = Vec::<Vec<usize>>::with_capacity(bindings.len());
+
                 for (subnode, binding) in subnodes.iter().zip(bindings.iter()) {
                     let mut sorted_binding = binding.clone();
                     sorted_binding.sort();
@@ -569,7 +571,11 @@ impl ExecutionTree {
                         subnode.clone(),
                         binding_reorder.chain(&reorder),
                     );
+
+                    sorted_bindings.push(sorted_binding);
                 }
+
+                *bindings = sorted_bindings
             }
             ExecutionNode::Union(subnodes) => {
                 for subnode in subnodes {

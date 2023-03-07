@@ -641,12 +641,22 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         Ok(permanent_ids)
     }
 
-    fn get_trie_unchecked(&self, id: TableId, order: &ColumnOrder) -> &Trie {
+    /// Return a reference to a trie that is assumed to be in memory.
+    /// Panics if the trie is not in memory.
+    pub fn get_trie_inmemory<'a>(&'a self, id: TableId, order: &ColumnOrder) -> &'a Trie {
         if let TableStorage::InMemory(trie) = self.storage_handler.table_storage(id, order) {
             trie
         } else {
             panic!("Function assumes that trie is in memory.");
         }
+    }
+
+    /// Return a reference to a trie identified by its id and order.
+    /// If the trie is not available in memory, this function will laod it.
+    pub fn get_trie<'a>(&'a mut self, id: TableId, order: &ColumnOrder) -> Result<&'a Trie, Error> {
+        self.storage_handler
+            .table_storage_mut(id, order)
+            .into_memory(&mut self.dict_constants)
     }
 
     /// Given a node in the execution tree returns the trie iterator
@@ -667,7 +677,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
         return match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
-                let trie_ref = self.get_trie_unchecked(*id, order);
+                let trie_ref = self.get_trie_inmemory(*id, order);
                 let schema = type_node.schema.get_column_types();
                 let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema);
 
@@ -677,7 +687,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 let comp_result = computation_results.get(index).unwrap();
                 let trie_ref = match comp_result {
                     ComputationResult::Temporary(trie) => trie,
-                    ComputationResult::Permanent(id, order) => self.get_trie_unchecked(*id, order),
+                    ComputationResult::Permanent(id, order) => self.get_trie_inmemory(*id, order),
                     ComputationResult::Empty => return Ok(None),
                 };
 
@@ -767,13 +777,13 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 let subnode_ref = &*subnode_rc.borrow();
 
                 let trie = match subnode_ref {
-                    ExecutionNode::FetchExisting(id, order) => self.get_trie_unchecked(*id, order),
+                    ExecutionNode::FetchExisting(id, order) => self.get_trie_inmemory(*id, order),
                     ExecutionNode::FetchNew(index) => {
                         let comp_result = computation_results.get(index).unwrap();
                         let trie_ref = match comp_result {
                             ComputationResult::Temporary(trie) => trie,
                             ComputationResult::Permanent(id, order) => {
-                                self.get_trie_unchecked(*id, order)
+                                self.get_trie_inmemory(*id, order)
                             }
                             ComputationResult::Empty => return Ok(None),
                         };
@@ -899,7 +909,7 @@ mod test {
         assert_eq!(instance.table_name(trie_a_id), "A");
         assert_eq!(
             instance
-                .get_trie_unchecked(trie_a_id, &ColumnOrder::default())
+                .get_trie_inmemory(trie_a_id, &ColumnOrder::default())
                 .row_num(),
             3
         );
@@ -916,7 +926,7 @@ mod test {
         assert!(instance.size_bytes() > last_size);
         assert_eq!(
             instance
-                .get_trie_unchecked(trie_b_id, &ColumnOrder::default())
+                .get_trie_inmemory(trie_b_id, &ColumnOrder::default())
                 .row_num(),
             6
         );
@@ -1045,7 +1055,7 @@ mod test {
         assert!(result.is_ok());
 
         let result_id = *result.unwrap().get(&0).unwrap();
-        let result_trie = instance.get_trie_unchecked(result_id, &ColumnOrder::default());
+        let result_trie = instance.get_trie_inmemory(result_id, &ColumnOrder::default());
 
         let result_col_first = result_trie.get_column(0).as_u64().unwrap();
         let result_col_second = result_trie.get_column(1).as_u32().unwrap();
