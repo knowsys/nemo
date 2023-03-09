@@ -299,7 +299,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         let last_step = self
             .last_step(predicate)
             .expect("Function assumed that predicate has at least one subtable.");
-        let combined_id = self.combine_tables(predicate, 0..last_step)?;
+        let combined_id = self.combine_tables(predicate, 0..(last_step + 1))?;
 
         Ok(combined_id)
     }
@@ -489,7 +489,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         let name = self.generate_table_name_combined(predicate, &combined_order, &range);
 
         let mut plan = ExecutionPlan::new();
-        let mut union_tree = ExecutionTree::new_permanent("Defragmentaion", &name);
+        let mut union_tree = ExecutionTree::new_permanent("Combining Tables", &name);
         let fetch_nodes = tables
             .iter()
             .map(|id| union_tree.fetch_existing(*id))
