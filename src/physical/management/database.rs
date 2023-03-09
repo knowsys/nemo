@@ -75,6 +75,15 @@ pub enum TableSource {
     RLS(Vec<Vec<DataValueT>>),
 }
 
+impl Display for TableSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TableSource::CSV(path) => write!(f, "CSV file: {}", path.display()),
+            TableSource::RLS(_) => write!(f, "Rule file"),
+        }
+    }
+}
+
 /// Data which stores a trie, possibly not in memory.
 #[derive(Debug)]
 pub enum TableStorage {
@@ -96,7 +105,8 @@ impl TableStorage {
             TimedCode::instance()
                 .sub("Reasoning/Execution/Load Table")
                 .start();
-            log_load_table(&source);
+
+            log::info!("Loading source {source}");
 
             let trie = match source {
                 TableSource::CSV(file) => {
@@ -634,7 +644,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     }
                 }
             } else {
-                log_empty_trie();
+                log::info!("Trie does not contain any elements");
 
                 computation_results.insert(tree_index, ComputationResult::Empty);
             }
