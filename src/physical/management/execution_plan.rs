@@ -546,6 +546,7 @@ impl ExecutionTree {
 
         match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
+                let reordered_order = order.apply_reorder(&reorder);
                 *node_ref = ExecutionNode::FetchExisting(*id, order.apply_reorder(&reorder));
             }
             ExecutionNode::FetchNew(index) => {
@@ -571,7 +572,7 @@ impl ExecutionTree {
                     let mut sorted_binding = binding.clone();
                     sorted_binding.sort_by(|&x, &y| reorder.value(x).cmp(&reorder.value(y)));
 
-                    let binding_reorder = Reordering::from_transformation(&sorted_binding, binding);
+                    let binding_reorder = Reordering::from_transformation(binding, &sorted_binding);
 
                     self.satisfy_leapfrog_recurisve(subnode.clone(), binding_reorder);
 

@@ -146,16 +146,20 @@ impl SubtableHandler {
         for (range, id) in &self.combined {
             let (range_start, range_end) = range.start_end();
 
-            if range_start < target_start {
-                continue;
-            }
-
             if range_start > target_end {
                 break;
             }
 
+            if range_start < target_start {
+                continue;
+            }
+
             if range_start > current_start {
                 result.push(current_id);
+
+                for step in current_end + 1..range_start {
+                    result.push(self.single[step].1);
+                }
 
                 current_start = current_end + 1;
                 current_end = current_start;

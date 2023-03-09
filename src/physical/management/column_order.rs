@@ -9,21 +9,18 @@ pub struct ColumnOrder(Vec<usize>);
 impl ColumnOrder {
     /// Transform itself into a canonical representation
     fn reduce(mut self) -> Self {
-        let mut cut_index: Option<usize> = None;
+        let mut num_cuts = 0;
 
         for (index, &item) in self.0.iter().enumerate().rev() {
-            if item != index {
-                cut_index = Some(index);
+            if item == index {
+                num_cuts += 1;
+            } else {
                 break;
             }
         }
 
-        if let Some(cut) = cut_index {
-            for _ in 0..cut {
-                self.0.pop();
-            }
-        } else {
-            self.0.clear();
+        for _ in 0..num_cuts {
+            self.0.pop();
         }
 
         self
