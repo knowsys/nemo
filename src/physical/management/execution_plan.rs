@@ -546,7 +546,6 @@ impl ExecutionTree {
 
         match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
-                let reordered_order = order.apply_reorder(&reorder);
                 *node_ref = ExecutionNode::FetchExisting(*id, order.apply_reorder(&reorder));
             }
             ExecutionNode::FetchNew(index) => {
