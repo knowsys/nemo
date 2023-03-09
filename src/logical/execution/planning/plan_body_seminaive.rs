@@ -43,7 +43,7 @@ impl SeminaiveStrategy {
 }
 
 impl<Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy {
-    fn execution_tree(
+    fn add_body_tree(
         &self,
         table_manager: &TableManager<Dict>,
         current_pan: &mut SubtableExecutionPlan,

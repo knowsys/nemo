@@ -55,6 +55,11 @@ impl Reordering {
         self.iter().map(|&i| vec[i].clone()).collect()
     }
 
+    /// Returns the "function" value at a given input.
+    pub fn value(&self, input: usize) -> usize {
+        self.reorder[input]
+    }
+
     /// Returns the amount of elements before the reordering.
     pub fn len_source(&self) -> usize {
         self.len_source

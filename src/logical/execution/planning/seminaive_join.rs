@@ -78,7 +78,7 @@ pub fn seminaive_join<Dict: Dictionary>(
     variables: &HashSet<Variable>,
     atoms: &[Atom],
     filters: &[Filter],
-) -> Option<ExecutionNodeRef<TableKey>> {
+) -> Option<ExecutionNodeRef> {
     // We divide the atoms of the body into two parts:
     //    * Main: Those atoms who received new elements since the last rule application
     //    * Side: Those atoms which did not receive new elements since the last rule application

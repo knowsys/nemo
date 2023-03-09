@@ -50,7 +50,7 @@ impl ExecutionNodeRef {
 impl ExecutionNodeRef {
     /// Add a sub node to a join or union node
     pub fn add_subnode(&mut self, subnode: ExecutionNodeRef) {
-        let node_rc = subnode.get_rc();
+        let node_rc = self.get_rc();
         let node_ref = &mut *node_rc.borrow_mut();
 
         match node_ref {
@@ -530,6 +530,10 @@ impl ExecutionTree {
     /// Alters the given [`ExecutionTree`] in such a way as to comply with the constraints of the leapfrog trie join algorithm
     /// Specifically, this will reorder tables if necessary
     pub fn satisfy_leapfrog_triejoin(&mut self, arity: usize) {
+        if arity == 0 {
+            return;
+        }
+
         if let Some(root) = self.root() {
             self.satisfy_leapfrog_recurisve(root, Reordering::default(arity));
         }
@@ -545,8 +549,10 @@ impl ExecutionTree {
                 *node_ref = ExecutionNode::FetchExisting(*id, order.apply_reorder(&reorder));
             }
             ExecutionNode::FetchNew(index) => {
-                let new_fetch = self.fetch_new(*index);
-                *node_ref = ExecutionNode::Project(new_fetch, reorder);
+                if !reorder.is_identity() {
+                    let new_fetch = self.fetch_new(*index);
+                    *node_ref = ExecutionNode::Project(new_fetch, reorder);
+                }
             }
             ExecutionNode::Project(subnode, project_reorder) => {
                 let subnode_arity = project_reorder.len_source();
@@ -563,14 +569,11 @@ impl ExecutionTree {
 
                 for (subnode, binding) in subnodes.iter().zip(bindings.iter()) {
                     let mut sorted_binding = binding.clone();
-                    sorted_binding.sort();
+                    sorted_binding.sort_by(|&x, &y| reorder.value(x).cmp(&reorder.value(y)));
 
                     let binding_reorder = Reordering::from_transformation(&sorted_binding, binding);
 
-                    self.satisfy_leapfrog_recurisve(
-                        subnode.clone(),
-                        binding_reorder.chain(&reorder),
-                    );
+                    self.satisfy_leapfrog_recurisve(subnode.clone(), binding_reorder);
 
                     sorted_bindings.push(sorted_binding);
                 }
@@ -602,11 +605,16 @@ impl ExecutionTree {
                 assert!(reorder.is_identity());
                 self.satisfy_leapfrog_recurisve(subnode.clone(), reorder);
             }
-            ExecutionNode::AppendColumns(subnode, _) => {
+            ExecutionNode::AppendColumns(subnode, instructions) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(reorder.is_identity());
-                self.satisfy_leapfrog_recurisve(subnode.clone(), reorder);
+
+                let num_added_columns = instructions.iter().fold(0, |acc, x| acc + x.len());
+                let remaining = reorder.len_source() - num_added_columns;
+                let new_reorder = Reordering::default(remaining);
+
+                self.satisfy_leapfrog_recurisve(subnode.clone(), new_reorder);
             }
             ExecutionNode::AppendNulls(subnode, _) => {
                 // TODO: A few other changes are needed to make this a bit simpler.

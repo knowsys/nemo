@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use bytesize::ByteSize;
 
 use crate::io::csv::read;
-use crate::meta::logging::log_load_table;
 use crate::physical::datatypes::{DataTypeName, DataValueT};
 use crate::physical::tabular::traits::table::Table;
 use crate::physical::util::Reordering;
@@ -57,6 +56,11 @@ impl TableId {
         let old = *self;
         self.0 = self.0 + 1;
         old
+    }
+
+    /// Return the integer value that represents the id.
+    pub fn get(&self) -> u64 {
+        self.0
     }
 }
 
@@ -219,9 +223,6 @@ struct TableResolved<'a> {
 }
 
 impl OrderedReferenceManager {
-    /// Tables are adressed with the combination of [`TableId`] and [`ColumnOrder`].
-    /// If the given table is just a reordered reference to another table,
-    /// this function will translate
     fn resolve_reference_mut(
         &mut self,
         id: TableId,
@@ -241,7 +242,6 @@ impl OrderedReferenceManager {
         }
     }
 
-    /// TODO: Description
     fn resolve_reference(&self, id: TableId, order: &ColumnOrder) -> Option<TableResolved> {
         match &self.map.get(&id)? {
             TableStatus::Present(map) => Some(TableResolved {
@@ -439,6 +439,8 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     /// Register a new table under a given name and schema.
     /// Returns the [`TableId`] with which the new table can be addressed.
     pub fn register_table(&mut self, name: &str, schema: TableSchema) -> TableId {
+        debug_assert!(schema.arity() > 0);
+
         self.table_infos
             .insert(self.current_id, TableInfo::new(String::from(name), schema));
 
@@ -516,11 +518,11 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
             Self::search_closest_order(self.storage_handler.available_orders(id), order).expect(
                 "This function assumes that there is at least one table under the given id.",
             );
-        let reorder = order.reorder_to(closest_order, arity);
 
+        let reorder = order.reorder_to(closest_order, arity);
         let trie_unordered = self
             .storage_handler
-            .table_storage_mut(id, order)
+            .table_storage_mut(id, &closest_order.clone())
             .into_memory(&mut self.dict_constants)?;
 
         if !reorder.is_identity() {
@@ -551,7 +553,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     }
 
     /// Executes a given [`ExecutionPlan`].
-    /// Returns a map that assigns each permanent
+    /// Returns a map that assigns to each plan id of a permanenet table the [`TableId`] in the [`DatabaseInstance`]
     /// This may fail if certain operations are performed on tries with incompatible types
     /// or if the plan references tries that do not exist.
     pub fn execute_plan(
@@ -562,25 +564,29 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         let mut type_trees = HashMap::<usize, TypeTree>::new();
         let mut computation_results = HashMap::<usize, ComputationResult>::new();
 
-        for (&tree_index, tree) in plan.iter() {
-            let type_tree = TypeTree::from_execution_tree(self, &type_trees, tree)?;
+        for (&tree_index, execution_tree) in plan.iter() {
+            // This is a hack to get the arity of the over all tree beforehand ...
+            // TODO: Remove this
+            let type_tree = TypeTree::from_execution_tree(self, &type_trees, execution_tree)?;
+            let arity = type_tree.schema.arity();
+            execution_tree.satisfy_leapfrog_triejoin(arity);
+
+            let type_tree = TypeTree::from_execution_tree(self, &type_trees, execution_tree)?;
             let schema = type_tree.schema.clone();
-            let arity = schema.arity();
 
-            tree.satisfy_leapfrog_triejoin(arity);
+            println!("{execution_tree:?}");
 
-            for (id, order) in tree.required_tables() {
+            for (id, order) in execution_tree.required_tables() {
                 self.make_available_in_memory(id, &order)?;
             }
 
-            let timed_string = format!("Reasoning/Execution/{}", tree.name());
+            let timed_string = format!("Reasoning/Execution/{}", execution_tree.name());
             TimedCode::instance().sub(&timed_string).start();
-            log::info!("Executing plan \"{}\":", tree.name());
 
             let mut num_null_columns = 0u64;
 
             // Calculate the new trie
-            let new_trie_opt = if let Some(root) = tree.root() {
+            let new_trie_opt = if let Some(root) = execution_tree.root() {
                 num_null_columns = Self::appends_nulls(root.clone());
 
                 let iter_opt = self.get_iterator_node(root, &type_tree, &computation_results)?;
@@ -601,7 +607,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 self.current_null += new_trie.num_elements() as u64 * num_null_columns;
 
                 // Add new trie to the appropriate place
-                match tree.result() {
+                match execution_tree.result() {
                     ExecutionResult::Temporary => {
                         log::info!(
                             "Saved temporary table: {} entries ({})",
@@ -678,6 +684,10 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         return match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
                 let trie_ref = self.get_trie_inmemory(*id, order);
+                if trie_ref.num_elements() == 0 {
+                    return Ok(None);
+                }
+
                 let schema = type_node.schema.get_column_types();
                 let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema);
 

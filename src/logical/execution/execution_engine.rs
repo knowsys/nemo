@@ -58,9 +58,11 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
     /// Initialize [`ExecutionEngine`].
     pub fn initialize(mut program: Program<Dict>) -> Self {
         program.normalize();
+
         let analysis = program.analyze();
 
         let mut table_manager = TableManager::new(program.get_names().clone());
+        Self::register_all_predicates(&mut table_manager, &analysis);
         Self::add_sources(&mut table_manager, &program);
 
         let mut rule_infos = Vec::<RuleInfo>::new();
@@ -68,8 +70,6 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
             .rules()
             .iter()
             .for_each(|_| rule_infos.push(RuleInfo::new()));
-
-        // table_manager.register_predicate(predicate, arity);
 
         Self {
             program,
@@ -79,6 +79,12 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
             predicate_last_union: HashMap::new(),
             rule_infos,
             current_step: 1,
+        }
+    }
+
+    fn register_all_predicates(table_manager: &mut TableManager<Dict>, analysis: &ProgramAnalysis) {
+        for (predicate, arity) in &analysis.all_predicates {
+            table_manager.register_predicate(*predicate, *arity);
         }
     }
 
@@ -234,9 +240,10 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
     /// Return the output tries that resulted form the execution.
     pub fn get_results(&mut self) -> Result<Vec<(Identifier, &Trie)>, Error> {
         let mut result_ids = Vec::<(Identifier, TableId)>::new();
-        for &predicate in self.analysis.derived_predicates.iter() {
-            let combined_id = self.table_manager.combine_predicate(predicate)?;
-            result_ids.push((predicate, combined_id));
+        for &predicate in &self.analysis.derived_predicates {
+            if let Some(combined_id) = self.table_manager.combine_predicate(predicate)? {
+                result_ids.push((predicate, combined_id));
+            }
         }
 
         let result = result_ids

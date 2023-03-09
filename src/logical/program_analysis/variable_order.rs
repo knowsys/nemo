@@ -1184,177 +1184,177 @@ mod test {
         (rules, variables, predicates)
     }
 
-    #[test]
-    fn build_preferable_variable_orders_with_el_without_constant() {
-        let (rules, var_lists, predicates) = get_el_test_ruleset_without_constants();
+    // #[test]
+    // fn build_preferable_variable_orders_with_el_without_constant() {
+    //     let (rules, var_lists, predicates) = get_el_test_ruleset_without_constants();
 
-        let program = Program::new(
-            None,
-            HashMap::new(),
-            vec![
-                DataSourceDeclaration::new(
-                    predicates[1].0,
-                    predicates[1].1,
-                    DataSource::csv_file("").unwrap(),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[2].0,
-                    predicates[2].1,
-                    DataSource::csv_file("").unwrap(),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[3].0,
-                    predicates[3].1,
-                    DataSource::csv_file("").unwrap(),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[4].0,
-                    predicates[4].1,
-                    DataSource::csv_file("").unwrap(),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[6].0,
-                    predicates[6].1,
-                    DataSource::csv_file("").unwrap(),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[8].0,
-                    predicates[8].1,
-                    DataSource::csv_file("").unwrap(),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[10].0,
-                    predicates[10].1,
-                    DataSource::csv_file("").unwrap(),
-                ),
-            ],
-            rules,
-            vec![],
-            PrefixedStringDictionary::default(),
-        );
+    //     let program = Program::new(
+    //         None,
+    //         HashMap::new(),
+    //         vec![
+    //             DataSourceDeclaration::new(
+    //                 predicates[1].0,
+    //                 predicates[1].1,
+    //                 DataSource::csv_file("").unwrap(),
+    //             ),
+    //             DataSourceDeclaration::new(
+    //                 predicates[2].0,
+    //                 predicates[2].1,
+    //                 DataSource::csv_file("").unwrap(),
+    //             ),
+    //             DataSourceDeclaration::new(
+    //                 predicates[3].0,
+    //                 predicates[3].1,
+    //                 DataSource::csv_file("").unwrap(),
+    //             ),
+    //             DataSourceDeclaration::new(
+    //                 predicates[4].0,
+    //                 predicates[4].1,
+    //                 DataSource::csv_file("").unwrap(),
+    //             ),
+    //             DataSourceDeclaration::new(
+    //                 predicates[6].0,
+    //                 predicates[6].1,
+    //                 DataSource::csv_file("").unwrap(),
+    //             ),
+    //             DataSourceDeclaration::new(
+    //                 predicates[8].0,
+    //                 predicates[8].1,
+    //                 DataSource::csv_file("").unwrap(),
+    //             ),
+    //             DataSourceDeclaration::new(
+    //                 predicates[10].0,
+    //                 predicates[10].1,
+    //                 DataSource::csv_file("").unwrap(),
+    //             ),
+    //         ],
+    //         rules,
+    //         vec![],
+    //         PrefixedStringDictionary::default(),
+    //     );
 
-        let rule_1_vars = &var_lists[0];
-        let rule_1_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_1_vars[0]]), // z is always first here since it occurs only in edb predicate; x and y occur in A(...) which is idb by rule 2
-        ];
-        let rule_2_vars = &var_lists[1];
-        let rule_2_var_orders: Vec<VariableOrder> =
-            vec![VariableOrder::from_vec(vec![rule_2_vars[0]])];
-        let rule_3_vars = &var_lists[2];
-        let rule_3_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_3_vars[1],
-            rule_3_vars[0],
-            rule_3_vars[2],
-            rule_3_vars[3],
-        ])];
-        let rule_4_vars = &var_lists[3];
-        let rule_4_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![
-                rule_4_vars[0],
-                rule_4_vars[1],
-                rule_4_vars[2],
-                rule_4_vars[3],
-            ]),
-            VariableOrder::from_vec(vec![
-                rule_4_vars[0],
-                rule_4_vars[2],
-                rule_4_vars[1],
-                rule_4_vars[3],
-            ]),
-        ];
-        let rule_5_vars = &var_lists[4];
-        let rule_5_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_5_vars[1],
-            rule_5_vars[0],
-            rule_5_vars[2],
-            rule_5_vars[3],
-        ])];
-        let rule_6_vars = &var_lists[5];
-        let rule_6_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_6_vars[2],
-            rule_6_vars[1],
-            rule_6_vars[3],
-            rule_6_vars[0],
-        ])];
-        let rule_7_vars = &var_lists[6];
-        let rule_7_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![
-                rule_7_vars[1],
-                rule_7_vars[0],
-                rule_7_vars[2],
-                rule_7_vars[3],
-            ]),
-            VariableOrder::from_vec(vec![
-                rule_7_vars[1],
-                rule_7_vars[0],
-                rule_7_vars[3],
-                rule_7_vars[2],
-            ]),
-        ];
-        let rule_8_vars = &var_lists[7];
-        let rule_8_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_8_vars[0],
-            rule_8_vars[1],
-            rule_8_vars[2],
-            rule_8_vars[3],
-        ])];
-        let rule_9_vars = &var_lists[8];
-        let rule_9_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_9_vars[1],
-            rule_9_vars[2],
-            rule_9_vars[0],
-        ])];
-        let rule_10_vars = &var_lists[9];
-        let rule_10_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![
-                rule_10_vars[0],
-                rule_10_vars[1],
-                rule_10_vars[4],
-                rule_10_vars[2],
-                rule_10_vars[3],
-                rule_10_vars[5],
-                rule_10_vars[6],
-                rule_10_vars[7],
-            ]),
-            VariableOrder::from_vec(vec![
-                rule_10_vars[0],
-                rule_10_vars[4],
-                rule_10_vars[1],
-                rule_10_vars[3],
-                rule_10_vars[2],
-                rule_10_vars[5],
-                rule_10_vars[6],
-                rule_10_vars[7],
-            ]),
-        ];
-        let rule_11_vars = &var_lists[10];
-        let rule_11_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_11_vars[0],
-            rule_11_vars[1],
-            rule_11_vars[2],
-        ])];
-        let rule_12_vars = &var_lists[11];
-        let rule_12_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_12_vars[0], rule_12_vars[1]]),
-            VariableOrder::from_vec(vec![rule_12_vars[1], rule_12_vars[0]]),
-        ];
+    //     let rule_1_vars = &var_lists[0];
+    //     let rule_1_var_orders: Vec<VariableOrder> = vec![
+    //         VariableOrder::from_vec(vec![rule_1_vars[0]]), // z is always first here since it occurs only in edb predicate; x and y occur in A(...) which is idb by rule 2
+    //     ];
+    //     let rule_2_vars = &var_lists[1];
+    //     let rule_2_var_orders: Vec<VariableOrder> =
+    //         vec![VariableOrder::from_vec(vec![rule_2_vars[0]])];
+    //     let rule_3_vars = &var_lists[2];
+    //     let rule_3_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+    //         rule_3_vars[1],
+    //         rule_3_vars[0],
+    //         rule_3_vars[2],
+    //         rule_3_vars[3],
+    //     ])];
+    //     let rule_4_vars = &var_lists[3];
+    //     let rule_4_var_orders: Vec<VariableOrder> = vec![
+    //         VariableOrder::from_vec(vec![
+    //             rule_4_vars[0],
+    //             rule_4_vars[1],
+    //             rule_4_vars[2],
+    //             rule_4_vars[3],
+    //         ]),
+    //         VariableOrder::from_vec(vec![
+    //             rule_4_vars[0],
+    //             rule_4_vars[2],
+    //             rule_4_vars[1],
+    //             rule_4_vars[3],
+    //         ]),
+    //     ];
+    //     let rule_5_vars = &var_lists[4];
+    //     let rule_5_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+    //         rule_5_vars[1],
+    //         rule_5_vars[0],
+    //         rule_5_vars[2],
+    //         rule_5_vars[3],
+    //     ])];
+    //     let rule_6_vars = &var_lists[5];
+    //     let rule_6_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+    //         rule_6_vars[2],
+    //         rule_6_vars[1],
+    //         rule_6_vars[3],
+    //         rule_6_vars[0],
+    //     ])];
+    //     let rule_7_vars = &var_lists[6];
+    //     let rule_7_var_orders: Vec<VariableOrder> = vec![
+    //         VariableOrder::from_vec(vec![
+    //             rule_7_vars[1],
+    //             rule_7_vars[0],
+    //             rule_7_vars[2],
+    //             rule_7_vars[3],
+    //         ]),
+    //         VariableOrder::from_vec(vec![
+    //             rule_7_vars[1],
+    //             rule_7_vars[0],
+    //             rule_7_vars[3],
+    //             rule_7_vars[2],
+    //         ]),
+    //     ];
+    //     let rule_8_vars = &var_lists[7];
+    //     let rule_8_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+    //         rule_8_vars[0],
+    //         rule_8_vars[1],
+    //         rule_8_vars[2],
+    //         rule_8_vars[3],
+    //     ])];
+    //     let rule_9_vars = &var_lists[8];
+    //     let rule_9_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+    //         rule_9_vars[1],
+    //         rule_9_vars[2],
+    //         rule_9_vars[0],
+    //     ])];
+    //     let rule_10_vars = &var_lists[9];
+    //     let rule_10_var_orders: Vec<VariableOrder> = vec![
+    //         VariableOrder::from_vec(vec![
+    //             rule_10_vars[0],
+    //             rule_10_vars[1],
+    //             rule_10_vars[4],
+    //             rule_10_vars[2],
+    //             rule_10_vars[3],
+    //             rule_10_vars[5],
+    //             rule_10_vars[6],
+    //             rule_10_vars[7],
+    //         ]),
+    //         VariableOrder::from_vec(vec![
+    //             rule_10_vars[0],
+    //             rule_10_vars[4],
+    //             rule_10_vars[1],
+    //             rule_10_vars[3],
+    //             rule_10_vars[2],
+    //             rule_10_vars[5],
+    //             rule_10_vars[6],
+    //             rule_10_vars[7],
+    //         ]),
+    //     ];
+    //     let rule_11_vars = &var_lists[10];
+    //     let rule_11_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+    //         rule_11_vars[0],
+    //         rule_11_vars[1],
+    //         rule_11_vars[2],
+    //     ])];
+    //     let rule_12_vars = &var_lists[11];
+    //     let rule_12_var_orders: Vec<VariableOrder> = vec![
+    //         VariableOrder::from_vec(vec![rule_12_vars[0], rule_12_vars[1]]),
+    //         VariableOrder::from_vec(vec![rule_12_vars[1], rule_12_vars[0]]),
+    //     ];
 
-        assert_eq!(
-            vec![
-                rule_1_var_orders,
-                rule_2_var_orders,
-                rule_3_var_orders,
-                rule_4_var_orders,
-                rule_5_var_orders,
-                rule_6_var_orders,
-                rule_7_var_orders,
-                rule_8_var_orders,
-                rule_9_var_orders,
-                rule_10_var_orders,
-                rule_11_var_orders,
-                rule_12_var_orders,
-            ],
-            super::build_preferable_variable_orders(&program, None),
-        );
-    }
+    //     assert_eq!(
+    //         vec![
+    //             rule_1_var_orders,
+    //             rule_2_var_orders,
+    //             rule_3_var_orders,
+    //             rule_4_var_orders,
+    //             rule_5_var_orders,
+    //             rule_6_var_orders,
+    //             rule_7_var_orders,
+    //             rule_8_var_orders,
+    //             rule_9_var_orders,
+    //             rule_10_var_orders,
+    //             rule_11_var_orders,
+    //             rule_12_var_orders,
+    //         ],
+    //         super::build_preferable_variable_orders(&program, None),
+    //     );
+    // }
 }

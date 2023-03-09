@@ -98,8 +98,10 @@ fn analyze_rule(
 pub struct ProgramAnalysis {
     /// Analysis result for each rule.
     pub rule_analysis: Vec<RuleAnalysis>,
-    /// Set of all the predicates which potentially contain new information
+    /// Set of all the predicates that are derived in the chase along with their arity.
     pub derived_predicates: HashSet<Identifier>,
+    /// Set of all predicates and their arity.
+    pub all_predicates: HashSet<(Identifier, usize)>,
 }
 
 impl<Dict: Dictionary> Program<Dict> {
@@ -116,19 +118,68 @@ impl<Dict: Dictionary> Program<Dict> {
         result
     }
 
+    /// Collect all predicates occurring in the program.
+    fn get_all_predicates(&self, rule_analysis: &[RuleAnalysis]) -> HashSet<(Identifier, usize)> {
+        let mut result = HashSet::<(Identifier, usize)>::new();
+
+        // Predicates in source statments
+        for ((predicate, arity), _) in self.sources() {
+            result.insert((predicate, arity));
+        }
+
+        // Predicates in rules
+        for rule in self.rules() {
+            for body_atom in rule.body() {
+                result.insert((body_atom.predicate(), body_atom.terms().len()));
+            }
+
+            for head_atom in rule.head() {
+                result.insert((head_atom.predicate(), head_atom.terms().len()));
+            }
+        }
+
+        // Predicates in facts
+        for fact in self.facts() {
+            result.insert((fact.0.predicate(), fact.0.terms().len()));
+        }
+
+        // Additional predicates for existential rules
+        for analysis in rule_analysis {
+            if !analysis.is_existential {
+                continue;
+            }
+
+            let predicate = analysis.head_matches_identifier;
+            let arity = analysis
+                .head_variables
+                .difference(&analysis.body_variables)
+                .count();
+
+            result.insert((predicate, arity));
+        }
+
+        result
+    }
+
     /// Analyze itself and return a struct containing the results.
     pub fn analyze(&self) -> ProgramAnalysis {
         let variable_orders = build_preferable_variable_orders(self, None);
         let mut fresh_id = self.first_unused_id_names();
 
+        let rule_analysis: Vec<RuleAnalysis> = self
+            .rules()
+            .iter()
+            .enumerate()
+            .map(|(i, r)| analyze_rule(r, variable_orders[i].clone(), &mut fresh_id.0))
+            .collect();
+
+        let derived_predicates = self.get_head_predicates();
+        let all_predicates = self.get_all_predicates(&rule_analysis);
+
         ProgramAnalysis {
-            rule_analysis: self
-                .rules()
-                .iter()
-                .enumerate()
-                .map(|(i, r)| analyze_rule(r, variable_orders[i].clone(), &mut fresh_id.0))
-                .collect(),
-            derived_predicates: self.get_head_predicates(),
+            rule_analysis,
+            derived_predicates,
+            all_predicates,
         }
     }
 }

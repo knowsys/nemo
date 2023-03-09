@@ -16,12 +16,7 @@ use crate::{
         util::Reordering,
     },
 };
-use std::{
-    cmp::Ordering,
-    collections::{hash_map::Entry, HashMap},
-    hash::Hash,
-    ops::Range,
-};
+use std::{cmp::Ordering, collections::HashMap, hash::Hash, ops::Range};
 
 /// Indicates that the table contains the union of successive tables.
 /// For example assume that for predicate p there were tables derived in steps 2, 4, 7, 10, 11.
@@ -35,7 +30,7 @@ pub struct SubtableRange {
 impl SubtableRange {
     /// Return the start and (the included) end point of this range.
     pub fn start_end(&self) -> (usize, usize) {
-        (self.start, self.start + self.len)
+        (self.start, self.start + self.len - 1)
     }
 }
 
@@ -129,22 +124,31 @@ impl SubtableHandler {
 
     pub fn cover_range(&self, range: &Range<usize>) -> Vec<TableId> {
         let mut result = Vec::<TableId>::new();
-        if self.single.is_empty() || self.single[0].0 > range.start {
+        if self.single.is_empty() {
             return result;
         }
 
-        let (target_start, target_end) = self.normalize_range(range).start_end();
+        let normalized_range = self.normalize_range(range);
+        if normalized_range.len == 0 {
+            return result;
+        }
+
+        let (target_start, target_end) = normalized_range.start_end();
 
         // Algorithm is inspired by:
         // https://www.geeksforgeeks.org/minimum-number-of-intervals-to-cover-the-target-interval
 
         let mut current_start = target_start;
-        let mut current_end = target_start + 1;
+        let mut current_end = target_start;
         let mut current_id = self.single[current_start].1;
 
         // Iterate over all the intervals
         for (range, id) in &self.combined {
             let (range_start, range_end) = range.start_end();
+
+            if range_start < target_start {
+                continue;
+            }
 
             if range_start > target_end {
                 break;
@@ -153,8 +157,8 @@ impl SubtableHandler {
             if range_start > current_start {
                 result.push(current_id);
 
-                current_start = current_end;
-                current_end = current_start + 1;
+                current_start = current_end + 1;
+                current_end = current_start;
                 current_id = self.single[current_start].1;
             }
 
@@ -164,8 +168,13 @@ impl SubtableHandler {
             }
         }
 
-        result.push(current_id);
+        if current_end <= target_end {
+            result.push(current_id);
+        }
 
+        for step in current_end + 1..=target_end {
+            result.push(self.single[step].1);
+        }
         result
     }
 }
@@ -282,13 +291,11 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
     /// Combine all subtables of a predicate into one table
     /// and return the [`TableId`] of that new table.
-    pub fn combine_predicate(&mut self, predicate: Identifier) -> Result<TableId, Error> {
+    pub fn combine_predicate(&mut self, predicate: Identifier) -> Result<Option<TableId>, Error> {
         let last_step = self
             .last_step(predicate)
             .expect("Function assumed that predicate has at least one subtable.");
-        let combined_id = self
-            .combine_tables(predicate, 0..last_step)?
-            .expect("Function assumed that predicate has at least one subtable.");
+        let combined_id = self.combine_tables(predicate, 0..last_step)?;
 
         Ok(combined_id)
     }
@@ -355,8 +362,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
         schema
     }
 
-    /// Sets information
-    /// Must be done before
+    /// Intitializes helper structures that are needed for handling the table associated with the predicate.
+    /// Must be done before calling functions that add tables to that predicate.
     pub fn register_predicate(&mut self, predicate: Identifier, arity: usize) {
         // TODO: Change this once type system is integrated
         let predicate_info = PredicateInfo {
@@ -364,19 +371,21 @@ impl<Dict: Dictionary> TableManager<Dict> {
         };
 
         self.predicate_to_info.insert(predicate, predicate_info);
+        self.predicate_subtables
+            .insert(predicate, SubtableHandler::default());
     }
 
     fn add_subtable(&mut self, subtable: SubtableIdentifier, table_id: TableId) {
-        let subtable_handler = match self.predicate_subtables.entry(subtable.predicate) {
-            Entry::Occupied(occupied) => occupied.into_mut(),
-            Entry::Vacant(vacant) => vacant.insert(SubtableHandler::default()),
-        };
+        let subtable_handler = self
+            .predicate_subtables
+            .get_mut(&subtable.predicate)
+            .expect("Predicate should be registered before calling this function");
 
         subtable_handler.add_single_table(subtable.step, table_id);
     }
 
     /// Add a table that represents the input facts for some predicate for the chase procedure.
-    /// This function also registers the new predicate.
+    /// Predicate must be registered before calling this function.
     pub fn add_edb(&mut self, predicate: Identifier, sources: Vec<TableSource>) {
         let edb_order = ColumnOrder::default();
         const EDB_STEP: usize = 0;
@@ -395,7 +404,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
         self.add_subtable(SubtableIdentifier::new(predicate, EDB_STEP), table_id)
     }
 
-    /// Add a [`Trie`].
+    /// Add a [`Trie`] as a subtable of a predicate.
+    /// Predicate must be registered before calling this function.
     pub fn add_table(
         &mut self,
         predicate: Identifier,
@@ -416,7 +426,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
     }
 
     /// Add a reference to another table under a new name.
-    /// This function will register the new table.
+    /// Predicate must be registered before calling this function and referenced table must exist.
     pub fn add_reference(
         &mut self,
         subtable: SubtableIdentifier,
@@ -451,11 +461,11 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
     /// Return the ids of all subtables of a predicate within a certain range of steps.
     pub fn tables_in_range(&self, predicate: Identifier, range: &Range<usize>) -> Vec<TableId> {
-        let subtable_handler = self
-            .predicate_subtables
-            .get(&predicate)
-            .expect("Predicate should be registered before calling this function");
-        subtable_handler.cover_range(range)
+        if let Some(subtable_handler) = self.predicate_subtables.get(&predicate) {
+            return subtable_handler.cover_range(range);
+        }
+
+        vec![]
     }
 
     /// Combine subtables in a certain range into one larger table.
@@ -489,7 +499,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
         self.predicate_subtables
             .get_mut(&predicate)
-            .expect("Predicate should be registered before calling this function")
+            .expect("Function should have been left earlier if this is the case.")
             .add_combined_table(&range, *table_id);
 
         Ok(Some(*table_id))
@@ -518,5 +528,72 @@ impl<Dict: Dictionary> TableManager<Dict> {
     /// TODO: Remove this once proper Dictionary support is implemented in the physical layer.
     pub fn get_dict(&self) -> &Dict {
         self.database.get_dict_constants()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::ops::Range;
+
+    use crate::physical::management::database::TableId;
+
+    use super::SubtableHandler;
+
+    fn handler_form_vec(intervals: &[Range<usize>]) -> SubtableHandler {
+        let mut handler = SubtableHandler::default();
+        let mut id = TableId::default();
+
+        for interval in intervals {
+            if interval.len() == 1 {
+                handler.add_single_table(interval.start, id.increment());
+            } else {
+                handler.add_combined_table(interval, id.increment());
+            }
+        }
+
+        handler
+    }
+
+    fn compare_covering(intervals: &[Range<usize>], target: &Range<usize>, expected: Vec<u64>) {
+        let answer: Vec<u64> = handler_form_vec(intervals)
+            .cover_range(target)
+            .iter()
+            .map(|i| i.get())
+            .collect();
+
+        assert_eq!(answer, expected);
+    }
+
+    #[test]
+    fn test_cover() {
+        let vec = vec![1..2, 2..3, 4..5, 10..11, 1..6, 2..11];
+        let target = 1..11;
+        compare_covering(&vec, &target, vec![4, 3]);
+
+        let target = 1..13;
+        compare_covering(&vec, &target, vec![4, 3]);
+
+        let target = 0..11;
+        compare_covering(&vec, &target, vec![4, 3]);
+
+        let vec = vec![0..1, 1..2];
+        let target = 0..2;
+        compare_covering(&vec, &target, vec![0, 1]);
+
+        let vec = vec![1..2, 4..5, 6..7, 7..8, 12..13, 4..8, 6..13, 1..5];
+        let target = 0..5;
+        compare_covering(&vec, &target, vec![7]);
+
+        let target = 3..5;
+        compare_covering(&vec, &target, vec![1]);
+
+        let target = 3..13;
+        compare_covering(&vec, &target, vec![5, 4]);
+
+        let target = 0..30;
+        compare_covering(&vec, &target, vec![7, 6]);
+
+        let target = 6..8;
+        compare_covering(&vec, &target, vec![2, 3]);
     }
 }

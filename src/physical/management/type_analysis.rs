@@ -593,11 +593,15 @@ mod test {
 
         let mut execution_tree = ExecutionTree::new_temporary("Test");
 
-        let node_load_a = execution_tree.fetch_existing(current_id.increment());
-        let node_load_b_1 = execution_tree.fetch_existing(current_id.increment());
-        let node_load_b_2 = execution_tree.fetch_existing(current_id.increment());
-        let node_load_c_1 = execution_tree.fetch_existing(current_id.increment());
-        let node_load_c_2 = execution_tree.fetch_existing(current_id.increment());
+        let id_a = current_id.increment();
+        let id_b = current_id.increment();
+        let id_c = current_id.increment();
+
+        let node_load_a = execution_tree.fetch_existing(id_a);
+        let node_load_b_1 = execution_tree.fetch_existing(id_b);
+        let node_load_b_2 = execution_tree.fetch_existing(id_b);
+        let node_load_c_1 = execution_tree.fetch_existing(id_c);
+        let node_load_c_2 = execution_tree.fetch_existing(id_c);
         let node_load_temp = execution_tree.fetch_new(0);
 
         let node_minus = execution_tree.minus(node_load_a, node_load_b_1);

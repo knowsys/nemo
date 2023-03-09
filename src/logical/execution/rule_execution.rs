@@ -4,7 +4,7 @@ use crate::{
     error::Error,
     logical::{
         model::{Identifier, Program, Rule},
-        program_analysis::analysis::RuleAnalysis,
+        program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::SubtableExecutionPlan,
         TableManager,
     },
