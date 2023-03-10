@@ -4,6 +4,8 @@
 pub mod reordering;
 pub use reordering::Reordering;
 
+pub mod mapping;
+
 /// Module for utility functions used in tests
 #[cfg(test)]
 pub mod test_util;
