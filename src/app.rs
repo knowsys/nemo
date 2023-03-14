@@ -30,7 +30,7 @@ const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
 #[command(author, version, about)]
 pub struct CliApp {
     /// Sets the verbosity of logging if the flags -v and -q are not used
-    #[arg(long = "log", default_value="info", value_parser=clap::builder::PossibleValuesParser::new(["error", "warn", "info", "debug", "trace"]), group = "verbosity")]
+    #[arg(long = "log", default_value="error", value_parser=clap::builder::PossibleValuesParser::new(["error", "warn", "info", "debug", "trace"]), group = "verbosity")]
     log_level: Option<String>,
     /// Sets log verbosity (multiple times means more verbose)
     #[arg(short, long, action = clap::builder::ArgAction::Count, group = "verbosity")]
@@ -42,7 +42,7 @@ pub struct CliApp {
     #[arg(value_parser, required = true)]
     rules: Vec<PathBuf>,
     /// Save results
-    #[arg(short, long = "save-results", default_value = "true")]
+    #[arg(short, long = "save-results", default_value = "false")]
     save_results: bool,
     /// output directory
     #[arg(short, long = "output", default_value = DEFAULT_OUTPUT_DIRECTORY)]
