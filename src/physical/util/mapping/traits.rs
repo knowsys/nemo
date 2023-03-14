@@ -1,18 +1,11 @@
 //! Module defining traits for representing functions.
 
-use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 
 use super::permutation::Permutation;
 
 /// Trait that represents a function from a subset of natural numbers to the set of natural numbers.
 pub trait NatMapping: Debug + Display + PartialEq + Eq {
-    /// Return an instance of the function from a vector representation where the input `i` is mapped to `vec[i]`.
-    fn from_vector(vec: Vec<usize>) -> Self;
-
-    /// Return an instance of the function from a hash map representation where the input `i` is mapped to `map.get(i)`.
-    fn from_map(map: HashMap<usize, usize>) -> Self;
-
     /// Return the value of the function for a given input.
     /// Panics if the input is outside of the function's domain.
     fn get(&self, input: usize) -> usize;

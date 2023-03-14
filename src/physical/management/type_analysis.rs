@@ -1,8 +1,4 @@
-use std::{
-    cmp::Ordering,
-    collections::{hash_map::Entry, HashMap},
-    fmt::Display,
-};
+use std::{cmp::Ordering, collections::HashMap, fmt::Display};
 
 use crate::{
     error::Error,
@@ -117,10 +113,8 @@ impl TypeTree {
 
         match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
-                let schema = instance.table_schema(*id).clone();
+                let schema = instance.table_schema(*id).permuted(order);
 
-                let arity = schema.arity();
-                let schema = schema.reordered(&order.as_reordering(arity));
                 Ok(TypeTreeNode::new(schema, vec![]))
             }
             ExecutionNode::FetchNew(index) => {
@@ -128,6 +122,8 @@ impl TypeTree {
                 Ok(TypeTreeNode::new(schema, vec![]))
             }
             ExecutionNode::Join(subtrees, bindings) => {
+                debug_assert!(subtrees.len() == bindings.num_relations());
+
                 let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(subtrees.len());
                 for subtree in subtrees {
                     let subtype_node =
@@ -140,43 +136,38 @@ impl TypeTree {
                     subtype_nodes.push(subtype_node);
                 }
 
-                // The following will take the minimum type of all joined positions
-                // E.g. bindings = [[0, 1], [1, 0]]; subtype_nodes =  [[U32, U32], [U64, U64]
-                // result -> [U32, U32, U64]
-                let mut position_type_map = HashMap::<usize, &TableSchemaEntry>::new();
-                for (subnode_index, binding) in bindings.iter().enumerate() {
-                    for (column_index, value) in binding.iter().enumerate() {
-                        let current_entry =
-                            subtype_nodes[subnode_index].schema.get_entry(column_index);
+                let mut result_schema = Vec::<TableSchemaEntry>::with_capacity(subtrees.len());
 
-                        match position_type_map.entry(*value) {
-                            Entry::Occupied(mut entry) => {
-                                *entry.get_mut() = if let Some(min_entry) =
-                                    Self::entry_min(entry.get(), current_entry)
-                                {
-                                    min_entry
-                                } else {
-                                    return Err(Error::InvalidExecutionPlan);
-                                }
-                            }
-                            Entry::Vacant(vacant) => {
-                                vacant.insert(current_entry);
-                            }
+                for output_index in 0..bindings.num_output_columns() {
+                    let mut min_entry_opt: Option<TableSchemaEntry> = None;
+
+                    for column in bindings.joined_columns(output_index) {
+                        let current_entry = subtype_nodes[column.relation]
+                            .schema
+                            .get_entry(column.column);
+
+                        if let Some(min_entry) = min_entry_opt {
+                            let current_min = if let Some(current) =
+                                Self::entry_min(&min_entry, &current_entry)
+                            {
+                                current
+                            } else {
+                                return Err(Error::InvalidExecutionPlan);
+                            };
+
+                            min_entry_opt = Some(*current_min);
+                        } else {
+                            min_entry_opt = Some(*current_entry);
                         }
                     }
-                }
-                let placeholder_entry = TableSchemaEntry {
-                    type_name: DataTypeName::U64,
-                    dict: false,
-                    nullable: false,
-                };
-                let mut result_schema_entries = vec![placeholder_entry; position_type_map.len()];
-                for (postion, entry) in position_type_map {
-                    result_schema_entries[postion] = *entry;
+
+                    result_schema.push(min_entry_opt.expect(
+                        "There must be at least one column that is joined at this positon.",
+                    ));
                 }
 
                 Ok(TypeTreeNode::new(
-                    TableSchema::from_vec(result_schema_entries),
+                    TableSchema::from_vec(result_schema),
                     subtype_nodes,
                 ))
             }
@@ -262,9 +253,7 @@ impl TypeTree {
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
 
                 let new_schema = if !subtype_node.schema.is_empty() {
-                    let result_schema_enries =
-                        reordering.apply_to(subtype_node.schema.get_entries());
-                    TableSchema::from_vec(result_schema_enries)
+                    subtype_node.schema.reordered(&reordering)
                 } else {
                     TableSchema::default()
                 };
@@ -372,12 +361,19 @@ impl TypeTree {
             ExecutionNode::FetchExisting(_, _) => {}
             ExecutionNode::FetchNew(_) => {}
             ExecutionNode::Join(subtrees, bindings) => {
-                for (tree_index, binding) in bindings.iter().enumerate() {
-                    let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
-                    for (column_index, value) in binding.iter().enumerate() {
-                        schema_map.insert(column_index, *type_node.schema.get_entry(*value));
-                    }
+                let mut subtype_map =
+                    vec![HashMap::<usize, TableSchemaEntry>::new(); bindings.num_relations()];
 
+                for output_index in 0..bindings.num_output_columns() {
+                    for input_column in bindings.joined_columns(output_index) {
+                        subtype_map[input_column.relation].insert(
+                            input_column.column,
+                            *type_node.schema.get_entry(output_index),
+                        );
+                    }
+                }
+
+                for (tree_index, schema_map) in subtype_map.into_iter().enumerate() {
                     Self::propagate_down(
                         &mut type_node.subnodes[tree_index],
                         Some(schema_map),
@@ -419,8 +415,8 @@ impl TypeTree {
             }
             ExecutionNode::Project(subtree, reordering) => {
                 let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
-                for (index, value) in reordering.iter().enumerate() {
-                    schema_map.insert(*value, *type_node.schema.get_entry(index));
+                for (index, value) in reordering.iter() {
+                    schema_map.insert(*value, *type_node.schema.get_entry(*index));
                 }
 
                 Self::propagate_down(
@@ -550,18 +546,21 @@ mod test {
         datatypes::{DataTypeName, DataValueT},
         dictionary::StringDictionary,
         management::{
-            column_order::ColumnOrder, database::TableId, execution_plan::ExecutionTree,
+            database::{ColumnOrder, TableId},
+            execution_plan::ExecutionTree,
             DatabaseInstance,
         },
         tabular::{
-            operations::triescan_append::AppendInstruction,
+            operations::{
+                triescan_append::AppendInstruction, triescan_project::ProjectReordering,
+                JoinBindings,
+            },
             table_types::trie::Trie,
             traits::{
                 table::Table,
                 table_schema::{TableSchema, TableSchemaEntry},
             },
         },
-        util::Reordering,
     };
 
     use super::{TypeTree, TypeTreeNode};
@@ -611,10 +610,11 @@ mod test {
 
         let node_join = execution_tree.join(
             vec![node_left_union, node_right_union],
-            vec![vec![0, 1], vec![1, 2]],
+            JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         );
 
-        let node_project = execution_tree.project(node_join, Reordering::new(vec![0, 2], 3));
+        let node_project =
+            execution_tree.project(node_join, ProjectReordering::from_vector(vec![0, 2]));
 
         let node_root = execution_tree.union(vec![node_project, node_minus]);
         execution_tree.set_root(node_root);
@@ -932,8 +932,10 @@ mod test {
 
         let node_eq_col = execution_tree.select_equal(fetch_a, vec![vec![0, 1]]);
 
-        let node_join =
-            execution_tree.join(vec![node_eq_col, fetch_b], vec![vec![0, 1], vec![1, 2]]);
+        let node_join = execution_tree.join(
+            vec![node_eq_col, fetch_b],
+            JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
+        );
 
         execution_tree.set_root(node_join);
 

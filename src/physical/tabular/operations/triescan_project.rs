@@ -10,7 +10,7 @@ use crate::physical::{
     datatypes::{ColumnDataType, DataTypeName},
     tabular::traits::{table::Table, triescan::TrieScan},
     tabular::{table_types::trie::Trie, traits::table_schema::TableColumnTypes},
-    util::Reordering,
+    util::mapping::finite_injective::FiniteInjective,
 };
 
 use std::cell::UnsafeCell;
@@ -52,26 +52,43 @@ fn shrink_position(column: &ColumnWithIntervalsT, pos: usize) -> usize {
     }
 }
 
+/// Type that represents a projection and reordering of an input table.
+pub type ProjectReordering = FiniteInjective;
+
 /// Iterator which can reorder and project away columns of a trie
 #[derive(Debug)]
 pub struct TrieScanProject<'a> {
     trie: &'a Trie,
     current_layer: Option<usize>,
     target_types: TableColumnTypes,
-    picked_columns: Reordering,
+    layer_to_input: Vec<usize>,
     reorder_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> TrieScanProject<'a> {
+    fn reverse_reordering(project_reordering: &ProjectReordering) -> Vec<usize> {
+        let mut result = Vec::new();
+
+        for (input, value) in project_reordering.iter() {
+            for _ in result.len()..=*value {
+                result.push(0);
+            }
+
+            result[*value] = *input;
+        }
+
+        result
+    }
+
     /// Create new TrieScanProject object
-    pub fn new(trie: &'a Trie, picked_columns: Reordering) -> Self {
+    pub fn new(trie: &'a Trie, project_reordering: ProjectReordering) -> Self {
         let input_types = trie.get_types();
+        let layer_to_input = Self::reverse_reordering(&project_reordering);
 
-        let mut reorder_scans =
-            Vec::<UnsafeCell<ColumnScanT>>::with_capacity(picked_columns.len_target());
+        let mut reorder_scans = Vec::<UnsafeCell<ColumnScanT>>::with_capacity(layer_to_input.len());
 
-        let mut target_types = Vec::<DataTypeName>::with_capacity(picked_columns.len_target());
-        for &col_index in picked_columns.iter() {
+        let mut target_types = Vec::<DataTypeName>::with_capacity(layer_to_input.len());
+        for &col_index in &layer_to_input {
             let current_datatype = input_types[col_index];
 
             target_types.push(current_datatype);
@@ -105,7 +122,7 @@ impl<'a> TrieScanProject<'a> {
             trie,
             current_layer: None,
             target_types,
-            picked_columns,
+            layer_to_input,
             reorder_scans,
         }
     }
@@ -128,7 +145,7 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
 
         debug_assert!(next_layer < self.target_types.len());
 
-        let next_column = self.trie.get_column(self.picked_columns[next_layer]);
+        let next_column = self.trie.get_column(self.layer_to_input[next_layer]);
 
         macro_rules! down_for_datatype {
             ($variant:ident) => {{
@@ -143,11 +160,11 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
                     vec![0..next_column.len()]
                 } else {
                     // [0..self.current_layer.unwrap()]
-                    let layer_for_comparison = self.picked_columns.iter()
+                    let layer_for_comparison = self.layer_to_input.iter()
                         .take(self.current_layer.unwrap())
                         .copied()
                         .enumerate()
-                        .filter(|(_, col_i)| *col_i >= self.picked_columns[self.current_layer.unwrap()])
+                        .filter(|(_, col_i)| *col_i >= self.layer_to_input[self.current_layer.unwrap()])
                         .max_by_key(|(_, col_i)| *col_i)
                         .map(|(i, _)| i)
                         .unwrap_or(self.current_layer.unwrap());
@@ -171,7 +188,7 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
                             .into_iter()
                             .flat_map(|c| {
                                 let mut cursor_range = c..(c+1);
-                                for expand_index in ((self.picked_columns[self.current_layer.unwrap()] + 1)..=self.picked_columns[layer_for_comparison]) {
+                                for expand_index in (self.layer_to_input[self.current_layer.unwrap()] + 1)..=self.layer_to_input[layer_for_comparison] {
                                     cursor_range = expand_range(self.trie.get_column(expand_index), cursor_range);
                                 }
 
@@ -182,15 +199,15 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
 
 
                     log::debug!("CURRENT_CURSORS after filtering {:?}", current_cursors);
-                    log::debug!("PICKED_COLUMNS {:?} {:?} {:?}", layer_for_comparison, next_layer, self.picked_columns);
+                    log::debug!("PICKED_COLUMNS {:?} {:?} {:?}", layer_for_comparison, next_layer, self.layer_to_input);
 
-                    if self.picked_columns[layer_for_comparison] < self.picked_columns[next_layer] {
+                    if self.layer_to_input[layer_for_comparison] < self.layer_to_input[next_layer] {
                         let mut ranges = Vec::<Range<usize>>::new();
                         for current_cursor in current_cursors {
                             let mut range = current_cursor..(current_cursor + 1);
 
-                            for expand_index in (self.picked_columns[layer_for_comparison] + 1)
-                                ..=self.picked_columns[next_layer]
+                            for expand_index in (self.layer_to_input[layer_for_comparison] + 1)
+                                ..=self.layer_to_input[next_layer]
                             {
                                 log::debug!("EXPAND_INDEX {:?}", expand_index);
                                 range = expand_range(self.trie.get_column(expand_index), range);
@@ -204,8 +221,8 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
                         let mut ranges = Vec::<Range<usize>>::new();
                         for current_cursor in current_cursors {
                             let mut value = current_cursor;
-                            for shrink_index in (self.picked_columns[next_layer] + 1
-                                ..=(self.picked_columns[layer_for_comparison]))
+                            for shrink_index in (self.layer_to_input[next_layer] + 1
+                                ..=(self.layer_to_input[layer_for_comparison]))
                                 .rev()
                             {
                                 log::debug!("VALUE {value:?}");
@@ -268,10 +285,10 @@ mod test {
     use crate::physical::datatypes::DataValueT;
     use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
     use crate::physical::tabular::operations::materialize;
+    use crate::physical::tabular::operations::triescan_project::ProjectReordering;
     use crate::physical::tabular::table_types::trie::Trie;
     use crate::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
     use crate::physical::util::test_util::make_column_with_intervals_t;
-    use crate::physical::util::Reordering;
     use test_log::test;
 
     #[test]
@@ -286,17 +303,17 @@ mod test {
 
         let trie_no_first = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            Reordering::new(vec![1, 2], 3),
+            ProjectReordering::from_vector(vec![1, 2]),
         )))
         .unwrap();
         let trie_no_middle = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            Reordering::new(vec![0, 2], 3),
+            ProjectReordering::from_vector(vec![0, 2]),
         )))
         .unwrap();
         let trie_no_last = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            Reordering::new(vec![0, 1], 3),
+            ProjectReordering::from_vector(vec![0, 1]),
         )))
         .unwrap();
 
@@ -435,7 +452,7 @@ mod test {
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            Reordering::new(vec![0, 3, 5], 6),
+            ProjectReordering::from_vector(vec![0, 3, 5]),
         )))
         .unwrap();
 
@@ -503,7 +520,7 @@ mod test {
 
         let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            Reordering::new(vec![2, 0, 1], 3),
+            ProjectReordering::from_vector(vec![2, 0, 1]),
         )))
         .unwrap();
 
@@ -579,7 +596,7 @@ mod test {
 
         let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            Reordering::new(vec![2, 0], 3),
+            ProjectReordering::from_vector(vec![2, 0]),
         )))
         .unwrap();
 
@@ -638,7 +655,7 @@ mod test {
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            Reordering::new(vec![0, 2, 4, 1], 5),
+            ProjectReordering::from_vector(vec![0, 2, 4, 1]),
         )))
         .unwrap();
 
@@ -727,7 +744,7 @@ mod test {
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            Reordering::new(vec![2, 0, 3], 4),
+            ProjectReordering::from_vector(vec![2, 0, 3]),
         )))
         .unwrap();
 
@@ -805,7 +822,7 @@ mod test {
 
         let columns = vec![first, second, third];
 
-        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
+        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2]);
         let base_trie = Trie::new(columns);
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
@@ -850,7 +867,7 @@ mod test {
             vec![e, r, z],
         ];
 
-        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
+        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2]);
         let base_trie = Trie::from_rows(&rows);
 
         let mut project =
@@ -877,7 +894,7 @@ mod test {
 
         let rows = vec![vec![a, r, x], vec![b, r, y]];
 
-        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
+        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2]);
         let base_trie = Trie::from_rows(&rows);
 
         let mut project =
@@ -914,7 +931,7 @@ mod test {
 
         let columns = vec![first, second, third];
 
-        let picked_columns = Reordering::new(vec![1, 0, 2], 3);
+        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2]);
         let base_trie = Trie::new(columns);
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));

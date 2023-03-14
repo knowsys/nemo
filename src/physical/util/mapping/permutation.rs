@@ -9,7 +9,7 @@ use std::{
 use super::traits::NatMapping;
 
 /// Represents a permutation on the set of natural numbers.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Permutation {
     // The function represented by this object will map `i` to `map.get(i)`.
     // All inputs that are not keys in this map are implicitly mapped to themselves.
@@ -17,6 +17,51 @@ pub struct Permutation {
 }
 
 impl Permutation {
+    /// Return an instance of the function from a vector representation where the input `i` is mapped to `vec[i]`.
+    pub fn from_vector(vec: Vec<usize>) -> Self {
+        let mut map = HashMap::<usize, usize>::new();
+
+        for (input, value) in vec.iter().enumerate() {
+            if input == *value {
+                // Values that map to themselves will be represented implicitly
+                // This also allows us to have a canonical representation such that we can easily check for equality
+                continue;
+            }
+
+            map.insert(input, *value);
+        }
+
+        let result = Self { map };
+        debug_assert!(result.is_valid());
+
+        result
+    }
+
+    /// Return an instance of the function from a hash map representation where the input `i` is mapped to `map.get(i)`.
+    pub fn from_map(mut map: HashMap<usize, usize>) -> Self {
+        // Values that map to themselves will be represented implicitly
+        // This also allows us to have a canonical representation such that we can easily check for equality
+        map.retain(|i, v| *i != *v);
+
+        let result = Self { map };
+        debug_assert!(result.is_valid());
+
+        result
+    }
+
+    /// Return a [`Permutation`] that when applied to the given slice of values would put them in ascending order.
+    pub fn from_unsorted<T: Ord>(values: &[T]) -> Self {
+        let mut result: Vec<usize> = (0..values.len()).collect();
+        result.sort_by(|&a, &b| values[a].cmp(&values[b]));
+
+        Self::from_vector(result)
+    }
+
+    /// Return the largest input value that is not mapped to itself.
+    pub fn last_mapped(&self) -> Option<usize> {
+        self.map.keys().max().copied()
+    }
+
     /// In order for the internal representation to be a valid permutation we need to check
     /// that no two inputs map to the same value.
     fn is_valid(&self) -> bool {
@@ -85,20 +130,21 @@ impl Permutation {
 
     /// Derive a [`Permutation`] that would transform a vector of elements into another.
     /// I.e. `this.permute(source) = target`
-    /// For example `from_transformation([x, y, z, w], [z, w, y, x]) = [2, 3, 1, 0]`.
+    /// For example `from_transformation([x, y, z, w], [z, w, y, x]) = {0->3, 1->2, 2->0, 3->1}`.
     pub fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
         debug_assert!(source.len() == target.len());
-        let permutation_vec: Vec<usize> = target
-            .iter()
-            .map(|t| {
-                source
-                    .iter()
-                    .position(|s| *s == *t)
-                    .expect("We expect that target only uses elements from source.")
-            })
-            .collect();
 
-        Self::from_vector(permutation_vec)
+        let mut map = HashMap::<usize, usize>::new();
+        for (input_index, source_value) in source.iter().enumerate() {
+            let target_index = target
+                .iter()
+                .position(|t| *source_value == *t)
+                .expect("We expect that target only uses elements from source.");
+
+            map.insert(input_index, target_index);
+        }
+
+        Self::from_map(map)
     }
 
     /// Return a new [`Permutation`] that is the inverse of this.
@@ -112,48 +158,18 @@ impl Permutation {
         Self { map }
     }
 
-    /// Iterate over the function values.
-    fn iter<'a>(&'a self) -> impl Iterator<Item = usize> + 'a {
-        (0..).map(|i| self.get(i))
-    }
-
     /// Apply this permutation to a slice of things.
-    pub fn permutate<T: Clone>(&self, vec: &[T]) -> Vec<T> {
-        self.iter().map(|i| vec[i].clone()).collect()
+    pub fn permute<T: Clone>(&self, vec: &[T]) -> Vec<T> {
+        let mut result: Vec<T> = vec.iter().cloned().collect();
+        for (input, value) in self.map.iter() {
+            result[*value] = vec[*input].clone();
+        }
+
+        result
     }
 }
 
 impl NatMapping for Permutation {
-    fn from_vector(vec: Vec<usize>) -> Self {
-        let mut map = HashMap::<usize, usize>::new();
-
-        for (input, value) in vec.iter().enumerate() {
-            if input == *value {
-                // Values that map to themselves will be represented implicitly
-                // This also allows us to have a canonical representation such that we can easily check for equality
-                continue;
-            }
-
-            map.insert(input, *value);
-        }
-
-        let result = Self { map };
-        debug_assert!(result.is_valid());
-
-        result
-    }
-
-    fn from_map(mut map: HashMap<usize, usize>) -> Self {
-        // Values that map to themselves will be represented implicitly
-        // This also allows us to have a canonical representation such that we can easily check for equality
-        map.retain(|i, v| *i != *v);
-
-        let result = Self { map };
-        debug_assert!(result.is_valid());
-
-        result
-    }
-
     fn get(&self, input: usize) -> usize {
         if let Some(value) = self.map.get(&input) {
             *value
@@ -172,6 +188,9 @@ impl NatMapping for Permutation {
 
         for (input, value) in &self.map {
             let chained_value = permutation.get(*value);
+            if chained_value == *input {
+                continue;
+            }
 
             result_map.insert(*input, chained_value);
             used_inputs.insert(*input);

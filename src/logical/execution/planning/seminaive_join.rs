@@ -11,7 +11,7 @@ use crate::{
     physical::{
         dictionary::Dictionary,
         management::execution_plan::{ExecutionNodeRef, ExecutionTree},
-        tabular::operations::triescan_join::JoinBinding,
+        tabular::operations::JoinBindings,
     },
 };
 
@@ -27,7 +27,7 @@ fn subtree_join<Dict: Dictionary>(
     rule_step: usize,
     overall_step: usize,
     mid: usize,
-    join_binding: &JoinBinding,
+    join_binding: &JoinBindings,
 ) -> ExecutionNodeRef {
     let mut join_node = tree.join_empty(join_binding.clone());
 
@@ -105,7 +105,7 @@ pub fn seminaive_join<Dict: Dictionary>(
     let side_binding = body_side.iter().map(|&a| atom_binding(a, variable_order));
     let main_binding = body_main.iter().map(|&a| atom_binding(a, variable_order));
     // We then combine the bindings into one
-    let join_binding: JoinBinding = side_binding.chain(main_binding).collect();
+    let join_binding = JoinBindings::new(side_binding.chain(main_binding).collect());
 
     // Now we can finally calculate the execution tree
     let mut seminaive_union = tree.union_empty();

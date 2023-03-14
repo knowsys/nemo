@@ -4,7 +4,7 @@
 
 use crate::logical::Permutator;
 use crate::physical::dictionary::Dictionary;
-use crate::{logical::model::Term, physical::management::column_order::ColumnOrder};
+use crate::{logical::model::Term, physical::management::database::ColumnOrder};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::super::model::{Identifier, Literal, Program, Rule, Variable};
@@ -156,7 +156,8 @@ fn column_order_for(lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
 
     partial_col_order.append(&mut remaining_vars);
 
-    ColumnOrder::new(partial_col_order)
+    // TODO (Alex): There probably a direct way to calculate this but I'm not sure what the above code does exactly.
+    ColumnOrder::from_vector(partial_col_order).invert()
 }
 
 trait RuleVariableList {
@@ -502,7 +503,7 @@ pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
 #[cfg(test)]
 mod test {
     use crate::physical::{
-        dictionary::PrefixedStringDictionary, management::column_order::ColumnOrder,
+        dictionary::PrefixedStringDictionary, management::database::ColumnOrder,
     };
 
     use super::{

@@ -7,13 +7,12 @@ use crate::{
         datatypes::DataTypeName,
         dictionary::Dictionary,
         management::{
-            column_order::ColumnOrder,
-            database::{TableId, TableSource},
+            database::{ColumnOrder, TableId, TableSource},
             execution_plan::ExecutionTree,
             DatabaseInstance, ExecutionPlan,
         },
         tabular::{table_types::trie::Trie, traits::table_schema::TableSchema},
-        util::Reordering,
+        util::mapping::permutation::Permutation,
     },
 };
 use std::{cmp::Ordering, collections::HashMap, hash::Hash, ops::Range};
@@ -347,7 +346,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         predicate: Identifier,
         step: usize,
         referenced_table_id: TableId,
-        reorder: &Reordering,
+        permutation: &Permutation,
     ) -> String {
         let predicate_name = self
             .database
@@ -356,7 +355,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             .unwrap();
         let referenced_table_name = self.database.table_name(referenced_table_id);
 
-        format!("{predicate_name} ({step}) -> {referenced_table_name} {reorder:?}")
+        format!("{predicate_name} ({step}) -> {referenced_table_name} {permutation}")
     }
 
     fn generate_table_schema(arity: usize) -> TableSchema {
@@ -435,10 +434,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
         &mut self,
         subtable: SubtableIdentifier,
         referenced_subtable: SubtableIdentifier,
-        reorder: Reordering,
+        permutation: Permutation,
     ) {
-        debug_assert!(reorder.is_permutation());
-
         let referenced_id = self
             .table_id(&referenced_subtable)
             .expect("Referenced table does not exist.");
@@ -453,12 +450,12 @@ impl<Dict: Dictionary> TableManager<Dict> {
             subtable.predicate,
             subtable.step,
             referenced_id,
-            &reorder,
+            &permutation,
         );
 
         let table_id = self.database.register_table(&name, schema);
         self.database
-            .add_reference(table_id, referenced_id, reorder);
+            .add_reference(table_id, referenced_id, permutation);
 
         self.add_subtable(subtable, table_id);
     }

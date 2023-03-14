@@ -25,6 +25,7 @@ pub use triescan_union::TrieScanUnion;
 
 /// Module for defining [`TrieScanJoin`]
 pub mod triescan_join;
+pub use triescan_join::JoinBindings;
 pub use triescan_join::TrieScanJoin;
 
 /// Module for defining append functionality

@@ -15,6 +15,3 @@ pub use execution_plan::ExecutionPlan;
 
 /// Module containing functionality for type analysis
 pub mod type_analysis;
-
-/// Module defining [`ColumnOrder`]
-pub mod column_order;

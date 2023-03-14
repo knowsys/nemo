@@ -17,11 +17,10 @@ use crate::{
     physical::{
         dictionary::Dictionary,
         management::{
-            column_order::ColumnOrder,
-            database::TableId,
+            database::{ColumnOrder, TableId},
             execution_plan::{ExecutionNodeRef, ExecutionTree},
         },
-        util::Reordering,
+        tabular::operations::triescan_project::ProjectReordering,
     },
 };
 
@@ -154,14 +153,13 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         });
 
         // Get the appropriate `Reordering` object that projects from the body join to the frontier variables
-        let body_projection_reorder = Reordering::new(
+        let body_projection_reorder = ProjectReordering::from_vector(
             body_variables_in_order
                 .iter()
                 .enumerate()
                 .filter(|(_, v)| self.frontier_variables.contains(v))
                 .map(|(i, _)| i)
                 .collect(),
-            self.analysis.body_variables.len(),
         );
 
         // Build the project node
@@ -209,14 +207,13 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         });
 
         // Get the appropriate `Reordering` object that projects the head join down to the frontier variables
-        let head_projection_reorder = Reordering::new(
+        let head_projection_reorder = ProjectReordering::from_vector(
             head_variables_in_order
                 .iter()
                 .enumerate()
                 .filter(|(_, v)| self.frontier_variables.contains(v))
                 .map(|(i, _)| i)
                 .collect(),
-            head_variables_in_order.len(),
         );
 
         // Do the projection operation
@@ -301,8 +298,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
                 })
                 .collect();
 
-                let head_reordering =
-                    Reordering::new(head_binding.clone(), unsat_variable_order.len());
+                let head_reordering = ProjectReordering::from_vector(head_binding.clone());
 
                 let fetch_node = head_tree.fetch_new(unsatisfied_id);
                 let project_node = head_tree.project(fetch_node, head_reordering);

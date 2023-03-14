@@ -7,8 +7,10 @@ use bytesize::ByteSize;
 
 use crate::io::csv::read;
 use crate::physical::datatypes::{DataTypeName, DataValueT};
+use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::traits::table::Table;
-use crate::physical::util::Reordering;
+use crate::physical::util::mapping::permutation::Permutation;
+use crate::physical::util::mapping::traits::NatMapping;
 use crate::{
     error::Error,
     meta::TimedCode,
@@ -26,12 +28,16 @@ use crate::{
     },
 };
 
-use super::column_order::ColumnOrder;
 use super::{
     execution_plan::{ExecutionNode, ExecutionNodeRef, ExecutionResult},
     type_analysis::{TypeTree, TypeTreeNode},
     ByteSized, ExecutionPlan,
 };
+
+/// Type that represents a reordering of the columns of a table.
+/// It is given in form of a permutation which encodes the transformation
+/// that is needed to get from the original column order to this one.
+pub type ColumnOrder = Permutation;
 
 /// Type which represents table id.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -204,7 +210,8 @@ enum TableStatus {
     /// Table is present in different orders
     Present(HashMap<ColumnOrder, TableStorage>),
     /// Table has the same contents as another table except for reordering.
-    Reference(TableId, Reordering),
+    /// The permutation is the transformation needed to get from the referenced table to this one.
+    Reference(TableId, Permutation),
 }
 
 /// Manages tables under different orders.
@@ -238,8 +245,8 @@ impl OrderedReferenceManager {
         id: TableId,
         order: &ColumnOrder,
     ) -> Option<TableResolvedMut> {
-        if let TableStatus::Reference(ref_id, reorder) = &self.map.get(&id)? {
-            self.resolve_reference_mut(*ref_id, &order.apply_reorder(&reorder.inverse()))
+        if let TableStatus::Reference(ref_id, permutation) = &self.map.get(&id)? {
+            self.resolve_reference_mut(*ref_id, &order.chain_permutation(&permutation.invert()))
         } else {
             if let TableStatus::Present(map) = self.map.get_mut(&id)? {
                 Some(TableResolvedMut {
@@ -258,8 +265,8 @@ impl OrderedReferenceManager {
                 map,
                 order: order.clone(),
             }),
-            TableStatus::Reference(ref_id, reorder) => {
-                self.resolve_reference(*ref_id, &order.apply_reorder(&reorder.inverse()))
+            TableStatus::Reference(ref_id, permutation) => {
+                self.resolve_reference(*ref_id, &order.chain_permutation(&permutation.invert()))
             }
         }
     }
@@ -279,16 +286,16 @@ impl OrderedReferenceManager {
 
     /// Add a new reference to another table.
     /// Panics if the given ids do not exist.
-    pub fn add_reference(&mut self, id: TableId, reference_id: TableId, reorder: Reordering) {
-        let (final_id, final_reorder) = if let TableStatus::Reference(ref_id, ref_reorder) =
+    pub fn add_reference(&mut self, id: TableId, reference_id: TableId, permutation: Permutation) {
+        let (final_id, final_permutation) = if let TableStatus::Reference(ref_id, ref_permutation) =
             &self.map.get(&reference_id).unwrap()
         {
-            (*ref_id, ref_reorder.chain(&reorder))
+            (*ref_id, ref_permutation.chain_permutation(&permutation))
         } else {
-            (id, reorder)
+            (id, permutation)
         };
 
-        let status = TableStatus::Reference(final_id, final_reorder);
+        let status = TableStatus::Reference(final_id, final_permutation);
         self.map.insert(id, status);
     }
 
@@ -486,9 +493,9 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
     /// Add a new table that is a reordered version of an existing table.
     /// Panics if referenced id does not exist.
-    pub fn add_reference(&mut self, id: TableId, reference_id: TableId, reorder: Reordering) {
+    pub fn add_reference(&mut self, id: TableId, reference_id: TableId, permutation: Permutation) {
         self.storage_handler
-            .add_reference(id, reference_id, reorder);
+            .add_reference(id, reference_id, permutation);
     }
 
     /// Deletes a table with all its orders.
@@ -504,13 +511,70 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         }
     }
 
+    /// Provides a measure of how "difficult" it is to transform a column with this order into another.
+    /// Say, `from = {0->2, 1->1, 2->0}` and `to = {0->1, 1->0, 2->2}`.
+    /// Starting from position 0 in "from" one needs to skip one layer to reach the 2 in "to" (+1).
+    /// Then we need to go back two layers to reach the 1 (+2)
+    /// Finally, we go one layer down to reach 0 (+-0).
+    /// This gives us an overall score of 3.
+    /// Returned value is 0 if and only if from == to.
+    fn distance(from: &ColumnOrder, to: &ColumnOrder) -> usize {
+        let max_len = if let Some(max) = from.last_mapped().max(to.last_mapped()) {
+            max
+        } else {
+            return 0;
+        };
+
+        let to_inverted = to.invert();
+
+        let mut current_score: usize = 0;
+        let mut current_position_from: usize = 0;
+
+        for position_to in 0..max_len {
+            let current_value = to_inverted.get(position_to);
+
+            let position_from = from.get(current_value);
+            let difference: isize = (position_from as isize) - (current_position_from as isize);
+
+            let penalty: usize = if difference <= 0 {
+                difference.unsigned_abs()
+            } else {
+                // Taking one forward step should not be punished
+                (difference - 1) as usize
+            };
+
+            current_score += penalty;
+            current_position_from = position_from;
+        }
+
+        current_score
+    }
+
     /// Helper function that iterates through a collection of [`ColumnOrder`]
     /// to find the one that is "closest" to given one.
     fn search_closest_order<'a, OrderIter: Iterator<Item = &'a ColumnOrder>>(
         iter_orders: OrderIter,
         order: &ColumnOrder,
     ) -> Option<&'a ColumnOrder> {
-        iter_orders.min_by(|x, y| x.distance(order).cmp(&y.distance(order)))
+        iter_orders.min_by(|x, y| Self::distance(x, order).cmp(&Self::distance(y, order)))
+    }
+
+    /// Return a [`ProjectReordering`] that will turn a table given in some [`ColumnOrder`] into the same table in another [`ColumnOrder`].
+    pub fn reorder_to(
+        source_order: &ColumnOrder,
+        target_order: &ColumnOrder,
+        arity: usize,
+    ) -> ProjectReordering {
+        let mut result_map = HashMap::<usize, usize>::new();
+
+        for input in 0..arity {
+            let source_output = source_order.get(input);
+            let target_output = target_order.get(input);
+
+            result_map.insert(source_output, target_output);
+        }
+
+        ProjectReordering::from_map(result_map)
     }
 
     /// Will ensure that the requested table will exist as a [`Trie`] in memory.
@@ -529,7 +593,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 "This function assumes that there is at least one table under the given id.",
             );
 
-        let reorder = order.reorder_to(closest_order, arity);
+        let reorder = Self::reorder_to(&order, &closest_order, arity);
         let trie_unordered = self
             .storage_handler
             .table_storage_mut(id, &closest_order.clone())
@@ -575,11 +639,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         let mut computation_results = HashMap::<usize, ComputationResult>::new();
 
         for (&tree_index, execution_tree) in plan.iter() {
-            // This is a hack to get the arity of the over all tree beforehand ...
-            // TODO: Remove this
-            let type_tree = TypeTree::from_execution_tree(self, &type_trees, execution_tree)?;
-            let arity = type_tree.schema.arity();
-            execution_tree.satisfy_leapfrog_triejoin(arity);
+            execution_tree.satisfy_leapfrog_triejoin();
 
             let type_tree = TypeTree::from_execution_tree(self, &type_trees, execution_tree)?;
             let schema = type_tree.schema.clone();
@@ -790,7 +850,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     Ok(None)
                 }
             }
-            ExecutionNode::Project(subnode, sorting) => {
+            ExecutionNode::Project(subnode, reorder) => {
                 let subnode_rc = subnode.get_rc();
                 let subnode_ref = &*subnode_rc.borrow();
 
@@ -813,7 +873,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     }
                 };
 
-                let project_scan = TrieScanProject::new(trie, sorting.clone());
+                let project_scan = TrieScanProject::new(trie, reorder.clone());
 
                 Ok(Some(TrieScanEnum::TrieScanProject(project_scan)))
             }
@@ -891,10 +951,12 @@ mod test {
         datatypes::{DataTypeName, DataValueT},
         dictionary::StringDictionary,
         management::{
-            column_order::ColumnOrder, database::TableId, execution_plan::ExecutionTree, ByteSized,
-            ExecutionPlan,
+            database::{ColumnOrder, TableId},
+            execution_plan::ExecutionTree,
+            ByteSized, ExecutionPlan,
         },
         tabular::{
+            operations::JoinBindings,
             table_types::trie::Trie,
             traits::{
                 table::Table,
@@ -1000,7 +1062,7 @@ mod test {
 
         let node_join = execution_tree.join(
             vec![node_left_union, node_right_union],
-            vec![vec![0, 1], vec![1, 2]],
+            JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         );
 
         let node_root = execution_tree.union(vec![node_join, node_minus]);

@@ -10,13 +10,13 @@ use linked_hash_map::LinkedHashMap;
 
 use crate::physical::{
     tabular::operations::{
-        triescan_append::AppendInstruction, triescan_join::JoinBinding,
-        triescan_select::SelectEqualClasses, ValueAssignment,
+        triescan_append::AppendInstruction, triescan_join::JoinBindings,
+        triescan_project::ProjectReordering, triescan_select::SelectEqualClasses, ValueAssignment,
     },
-    util::Reordering,
+    util::mapping::{permutation::Permutation, traits::NatMapping},
 };
 
-use super::{column_order::ColumnOrder, database::TableId};
+use super::database::{ColumnOrder, TableId};
 
 /// Wraps [`ExecutionNode`] into a `Rc<RefCell<_>>`
 #[derive(Debug)]
@@ -74,13 +74,13 @@ pub enum ExecutionNode {
     /// Fetch a table that is computed as part of the [`ExecutionPlan`] this tree is part of.
     FetchNew(usize),
     /// Join operation.
-    Join(Vec<ExecutionNodeRef>, JoinBinding),
+    Join(Vec<ExecutionNodeRef>, JoinBindings),
     /// Union operation.
     Union(Vec<ExecutionNodeRef>),
     /// Table difference operation.
     Minus(ExecutionNodeRef, ExecutionNodeRef),
     /// Table project operation; can only be applied to a [`FetchTable`] or [`FetchTemp`] node.
-    Project(ExecutionNodeRef, Reordering),
+    Project(ExecutionNodeRef, ProjectReordering),
     /// Only leave entries in that have a certain value.
     SelectValue(ExecutionNodeRef, Vec<ValueAssignment>),
     /// Only leave entries in that contain equal values in certain columns.
@@ -199,8 +199,8 @@ impl ExecutionTree {
 
     /// Return [`ExecutionNodeRef`] for joining tables.
     /// Starts out empty; add subnodes with `add_subnode`.
-    pub fn join_empty(&mut self, binding: JoinBinding) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::Join(Vec::new(), binding);
+    pub fn join_empty(&mut self, bindings: JoinBindings) -> ExecutionNodeRef {
+        let new_node = ExecutionNode::Join(Vec::new(), bindings);
         self.push_and_return_ref(new_node)
     }
 
@@ -208,9 +208,9 @@ impl ExecutionTree {
     pub fn join(
         &mut self,
         subtables: Vec<ExecutionNodeRef>,
-        binding: JoinBinding,
+        bindings: JoinBindings,
     ) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::Join(subtables, binding);
+        let new_node = ExecutionNode::Join(subtables, bindings);
         self.push_and_return_ref(new_node)
     }
 
@@ -236,8 +236,12 @@ impl ExecutionTree {
     }
 
     /// Return [`ExecutionNodeRef`] for applying project to a table.
-    pub fn project(&mut self, subnode: ExecutionNodeRef, reorder: Reordering) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::Project(subnode, reorder);
+    pub fn project(
+        &mut self,
+        subnode: ExecutionNodeRef,
+        project_reordering: ProjectReordering,
+    ) -> ExecutionNodeRef {
+        let new_node = ExecutionNode::Project(subnode, project_reordering);
         self.push_and_return_ref(new_node)
     }
 
@@ -446,7 +450,14 @@ impl ExecutionTree {
                 } else {
                     if let ExecutionNode::FetchExisting(id, order) = &*simplified.get_rc().borrow()
                     {
-                        Some(new_tree.fetch_existing_reordered(*id, order.apply_reorder(reorder)))
+                        if reorder.is_permutation() {
+                            Some(new_tree.fetch_existing_reordered(
+                                *id,
+                                order.chain_permutation(&reorder.into_permutation()),
+                            ))
+                        } else {
+                            Some(new_tree.project(simplified, reorder.clone()))
+                        }
                     } else {
                         Some(new_tree.project(simplified, reorder.clone()))
                     }
@@ -529,98 +540,83 @@ impl ExecutionTree {
 impl ExecutionTree {
     /// Alters the given [`ExecutionTree`] in such a way as to comply with the constraints of the leapfrog trie join algorithm
     /// Specifically, this will reorder tables if necessary
-    pub fn satisfy_leapfrog_triejoin(&mut self, arity: usize) {
-        if arity == 0 {
-            return;
-        }
-
+    pub fn satisfy_leapfrog_triejoin(&mut self) {
         if let Some(root) = self.root() {
-            self.satisfy_leapfrog_recurisve(root, Reordering::default(arity));
+            self.satisfy_leapfrog_recurisve(root, Permutation::default());
         }
     }
 
     /// Implements the functionality of `satisfy_leapfrog_triejoin` by traversing the tree recursively
-    fn satisfy_leapfrog_recurisve(&mut self, node: ExecutionNodeRef, reorder: Reordering) {
+    fn satisfy_leapfrog_recurisve(&mut self, node: ExecutionNodeRef, permutation: Permutation) {
         let node_rc = node.get_rc();
         let node_ref = &mut *node_rc.borrow_mut();
 
         match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
-                *node_ref = ExecutionNode::FetchExisting(*id, order.apply_reorder(&reorder));
+                *node_ref =
+                    ExecutionNode::FetchExisting(*id, order.chain_permutation(&permutation));
             }
-            ExecutionNode::FetchNew(index) => {
-                if !reorder.is_identity() {
-                    let new_fetch = self.fetch_new(*index);
-                    *node_ref = ExecutionNode::Project(new_fetch, reorder);
+            ExecutionNode::FetchNew(_index) => {
+                if !permutation.is_identity() {
+                    // TODO: One cannot infer a ProjectReordering from a Permutation
+                    // Since this Case will go away after chaning the ExecutionTrees it is perhaps not needed
+
+                    // let new_fetch = self.fetch_new(*index);
+                    // *node_ref = ExecutionNode::Project(new_fetch, permutation);
+
+                    panic!("Automatic reordering of new tables currently not supported");
                 }
             }
             ExecutionNode::Project(subnode, project_reorder) => {
-                let subnode_arity = project_reorder.len_source();
+                *project_reorder = project_reorder.chain_permutation(&permutation);
 
-                *project_reorder = project_reorder.chain(&reorder);
-
-                self.satisfy_leapfrog_recurisve(
-                    subnode.clone(),
-                    Reordering::default(subnode_arity),
-                );
+                self.satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
             }
             ExecutionNode::Join(subnodes, bindings) => {
-                let mut sorted_bindings = Vec::<Vec<usize>>::with_capacity(bindings.len());
+                bindings.apply_permutation(&permutation);
+                let subpermutations = bindings.comply_with_leapfrog();
 
-                for (subnode, binding) in subnodes.iter().zip(bindings.iter()) {
-                    let mut sorted_binding = binding.clone();
-                    sorted_binding.sort_by(|&x, &y| reorder.value(x).cmp(&reorder.value(y)));
-
-                    let binding_reorder = Reordering::from_transformation(binding, &sorted_binding);
-
-                    self.satisfy_leapfrog_recurisve(subnode.clone(), binding_reorder);
-
-                    sorted_bindings.push(sorted_binding);
+                for (subnode, subpermutation) in subnodes.iter().zip(subpermutations.into_iter()) {
+                    self.satisfy_leapfrog_recurisve(subnode.clone(), subpermutation)
                 }
-
-                *bindings = sorted_bindings
             }
             ExecutionNode::Union(subnodes) => {
                 for subnode in subnodes {
-                    self.satisfy_leapfrog_recurisve(subnode.clone(), reorder.clone());
+                    self.satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
                 }
             }
             ExecutionNode::Minus(left, right) => {
-                self.satisfy_leapfrog_recurisve(left.clone(), reorder.clone());
-                self.satisfy_leapfrog_recurisve(right.clone(), reorder.clone());
+                self.satisfy_leapfrog_recurisve(left.clone(), permutation.clone());
+                self.satisfy_leapfrog_recurisve(right.clone(), permutation.clone());
             }
             ExecutionNode::SelectValue(subnode, _assignments) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
-                assert!(reorder.is_identity());
+                assert!(permutation.is_identity());
                 // for assigment in assignments {
                 //     assigment.column_idx = reorder.apply_element_reverse(assigment.column_idx);
                 // }
 
-                self.satisfy_leapfrog_recurisve(subnode.clone(), reorder);
+                self.satisfy_leapfrog_recurisve(subnode.clone(), permutation);
             }
             ExecutionNode::SelectEqual(subnode, _classes) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
-                assert!(reorder.is_identity());
-                self.satisfy_leapfrog_recurisve(subnode.clone(), reorder);
+                assert!(permutation.is_identity());
+                self.satisfy_leapfrog_recurisve(subnode.clone(), permutation);
             }
-            ExecutionNode::AppendColumns(subnode, instructions) => {
+            ExecutionNode::AppendColumns(subnode, _instructions) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
-                assert!(reorder.is_identity());
+                assert!(permutation.is_identity());
 
-                let num_added_columns = instructions.iter().fold(0, |acc, x| acc + x.len());
-                let remaining = reorder.len_source() - num_added_columns;
-                let new_reorder = Reordering::default(remaining);
-
-                self.satisfy_leapfrog_recurisve(subnode.clone(), new_reorder);
+                self.satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
             }
             ExecutionNode::AppendNulls(subnode, _) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
-                assert!(reorder.is_identity());
-                self.satisfy_leapfrog_recurisve(subnode.clone(), reorder);
+                assert!(permutation.is_identity());
+                self.satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
             }
         }
     }
@@ -695,7 +691,10 @@ impl ExecutionPlan {
 
 #[cfg(test)]
 mod test {
-    use crate::physical::{management::database::TableId, util::Reordering};
+    use crate::physical::{
+        management::database::TableId,
+        tabular::operations::{triescan_project::ProjectReordering, JoinBindings},
+    };
 
     use super::{ExecutionPlan, ExecutionTree};
 
@@ -724,7 +723,7 @@ mod test {
         // Join both unions
         let node_join = tree_temp.join(
             vec![node_union_empty, node_union_vec],
-            vec![vec![0, 1], vec![1, 0]],
+            JoinBindings::new(vec![vec![0, 1], vec![1, 0]]),
         );
 
         // At the end, set the root of the tree
@@ -740,7 +739,8 @@ mod test {
         let node_fetch_temp = tree_perm.fetch_new(temp_id);
 
         // Project it
-        let node_project = tree_perm.project(node_fetch_temp, Reordering::new(vec![0, 2], 3));
+        let node_project =
+            tree_perm.project(node_fetch_temp, ProjectReordering::from_vector(vec![0, 2]));
 
         // Set root and add it to the plan
         tree_perm.set_root(node_project);
