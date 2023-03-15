@@ -602,7 +602,14 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         if !reorder.is_identity() {
             let mut scan_project =
                 TrieScanEnum::TrieScanProject(TrieScanProject::new(trie_unordered, reorder));
+
+            TimedCode::instance()
+                .sub("Reasoning/Execution/Required Reorder")
+                .start();
             let trie_reordered = materialize(&mut scan_project).unwrap();
+            TimedCode::instance()
+                .sub("Reasoning/Execution/Required Reorder")
+                .stop();
 
             self.add_trie(id, order.clone(), trie_reordered);
         }
