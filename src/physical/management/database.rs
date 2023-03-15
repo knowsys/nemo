@@ -574,7 +574,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
             result_map.insert(source_output, target_output);
         }
 
-        ProjectReordering::from_map(result_map)
+        ProjectReordering::from_map(result_map, arity)
     }
 
     /// Will ensure that the requested table will exist as a [`Trie`] in memory.
@@ -752,7 +752,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         return match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
                 let trie_ref = self.get_trie_inmemory(*id, order);
-                if trie_ref.num_elements() == 0 {
+                if trie_ref.row_num() == 0 {
                     return Ok(None);
                 }
 
@@ -768,6 +768,10 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     ComputationResult::Permanent(id, order) => self.get_trie_inmemory(*id, order),
                     ComputationResult::Empty => return Ok(None),
                 };
+
+                if trie_ref.row_num() == 0 {
+                    return Ok(None);
+                }
 
                 let schema = type_node.schema.get_column_types();
                 let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema);

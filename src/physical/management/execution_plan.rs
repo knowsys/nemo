@@ -291,7 +291,7 @@ impl ExecutionTree {
 
         match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
-                Tree::Leaf(vec![format!("Permanent Table: {id} ({order:?})")])
+                Tree::Leaf(vec![format!("Permanent Table: {id} ({order})")])
             }
             ExecutionNode::FetchNew(index) => Tree::Leaf(vec![format!("Temporary Table: {index}")]),
             ExecutionNode::Join(subnodes, bindings) => {
@@ -350,8 +350,8 @@ impl ExecutionTree {
             let tree = Self::ascii_tree_recursive(root);
             let top_level_name = match self.result() {
                 ExecutionResult::Temporary => format!("{} (Temporary)", self.name()),
-                ExecutionResult::Permanent(_, order) => {
-                    format!("{} (Permanent {order:?}", self.name())
+                ExecutionResult::Permanent(order, name) => {
+                    format!("{} (Permanent {order}", name)
                 }
             };
 
@@ -739,8 +739,10 @@ mod test {
         let node_fetch_temp = tree_perm.fetch_new(temp_id);
 
         // Project it
-        let node_project =
-            tree_perm.project(node_fetch_temp, ProjectReordering::from_vector(vec![0, 2]));
+        let node_project = tree_perm.project(
+            node_fetch_temp,
+            ProjectReordering::from_vector(vec![0, 2], 3),
+        );
 
         // Set root and add it to the plan
         tree_perm.set_root(node_project);

@@ -17,18 +17,18 @@ pub struct Permutation {
 }
 
 impl Permutation {
-    /// Return an instance of the function from a vector representation where the input `i` is mapped to `vec[i]`.
+    /// Return an instance of the function from a vector representation where the input `vec[i]` is mapped to `i`.
     pub fn from_vector(vec: Vec<usize>) -> Self {
         let mut map = HashMap::<usize, usize>::new();
 
-        for (input, value) in vec.iter().enumerate() {
-            if input == *value {
+        for (value, input) in vec.into_iter().enumerate() {
+            if input == value {
                 // Values that map to themselves will be represented implicitly
                 // This also allows us to have a canonical representation such that we can easily check for equality
                 continue;
             }
 
-            map.insert(input, *value);
+            map.insert(input, value);
         }
 
         let result = Self { map };

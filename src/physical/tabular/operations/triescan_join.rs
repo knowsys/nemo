@@ -179,6 +179,8 @@ pub struct TrieScanJoin<'a> {
     /// borrow checker.  TODO: find a nicer solution for this that
     /// doesn't expose [`UnsafeCell`] as part of the API.
     merge_joins: Vec<UnsafeCell<ColumnScanT<'a>>>,
+
+    _bindings: JoinBindings,
 }
 
 impl<'a> TrieScanJoin<'a> {
@@ -261,6 +263,7 @@ impl<'a> TrieScanJoin<'a> {
             current_layer: None,
             layers_to_scans,
             merge_joins,
+            _bindings: bindings.clone(),
         }
     }
 }

@@ -10,7 +10,7 @@ use crate::physical::{
     datatypes::{ColumnDataType, DataTypeName},
     tabular::traits::{table::Table, triescan::TrieScan},
     tabular::{table_types::trie::Trie, traits::table_schema::TableColumnTypes},
-    util::mapping::finite_injective::FiniteInjective,
+    util::mapping::ordered_choice::SortedChoice,
 };
 
 use std::cell::UnsafeCell;
@@ -53,7 +53,7 @@ fn shrink_position(column: &ColumnWithIntervalsT, pos: usize) -> usize {
 }
 
 /// Type that represents a projection and reordering of an input table.
-pub type ProjectReordering = FiniteInjective;
+pub type ProjectReordering = SortedChoice;
 
 /// Iterator which can reorder and project away columns of a trie
 #[derive(Debug)]
@@ -303,17 +303,17 @@ mod test {
 
         let trie_no_first = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            ProjectReordering::from_vector(vec![1, 2]),
+            ProjectReordering::from_vector(vec![1, 2], 3),
         )))
         .unwrap();
         let trie_no_middle = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            ProjectReordering::from_vector(vec![0, 2]),
+            ProjectReordering::from_vector(vec![0, 2], 3),
         )))
         .unwrap();
         let trie_no_last = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            ProjectReordering::from_vector(vec![0, 1]),
+            ProjectReordering::from_vector(vec![0, 1], 3),
         )))
         .unwrap();
 
@@ -452,7 +452,7 @@ mod test {
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            ProjectReordering::from_vector(vec![0, 3, 5]),
+            ProjectReordering::from_vector(vec![0, 3, 5], 6),
         )))
         .unwrap();
 
@@ -520,7 +520,7 @@ mod test {
 
         let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            ProjectReordering::from_vector(vec![2, 0, 1]),
+            ProjectReordering::from_vector(vec![2, 0, 1], 3),
         )))
         .unwrap();
 
@@ -596,7 +596,7 @@ mod test {
 
         let trie_reordered = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            ProjectReordering::from_vector(vec![2, 0]),
+            ProjectReordering::from_vector(vec![2, 0], 3),
         )))
         .unwrap();
 
@@ -655,7 +655,7 @@ mod test {
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            ProjectReordering::from_vector(vec![0, 2, 4, 1]),
+            ProjectReordering::from_vector(vec![0, 2, 4, 1], 5),
         )))
         .unwrap();
 
@@ -744,7 +744,7 @@ mod test {
 
         let trie_projected = materialize(&mut TrieScanEnum::TrieScanProject(TrieScanProject::new(
             &trie,
-            ProjectReordering::from_vector(vec![2, 0, 3]),
+            ProjectReordering::from_vector(vec![2, 0, 3], 4),
         )))
         .unwrap();
 
@@ -822,7 +822,7 @@ mod test {
 
         let columns = vec![first, second, third];
 
-        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2]);
+        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2], 3);
         let base_trie = Trie::new(columns);
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));
@@ -867,7 +867,7 @@ mod test {
             vec![e, r, z],
         ];
 
-        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2]);
+        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2], 3);
         let base_trie = Trie::from_rows(&rows);
 
         let mut project =
@@ -894,7 +894,7 @@ mod test {
 
         let rows = vec![vec![a, r, x], vec![b, r, y]];
 
-        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2]);
+        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2], 3);
         let base_trie = Trie::from_rows(&rows);
 
         let mut project =
@@ -931,7 +931,7 @@ mod test {
 
         let columns = vec![first, second, third];
 
-        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2]);
+        let picked_columns = ProjectReordering::from_vector(vec![1, 0, 2], 3);
         let base_trie = Trie::new(columns);
         let mut project =
             TrieScanEnum::TrieScanProject(TrieScanProject::new(&base_trie, picked_columns));

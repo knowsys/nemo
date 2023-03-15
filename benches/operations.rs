@@ -154,7 +154,7 @@ fn benchmark_project(c: &mut Criterion) {
     group_ours.sample_size(10);
     group_ours.bench_function("trie_project_hole", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&join_trie, ProjectReordering::from_vector(vec![0, 3])),
+            || TrieScanProject::new(&join_trie, ProjectReordering::from_vector(vec![0, 3], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -162,7 +162,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_project_beginning", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&join_trie, ProjectReordering::from_vector(vec![0, 1])),
+            || TrieScanProject::new(&join_trie, ProjectReordering::from_vector(vec![0, 1], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -170,7 +170,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_project_end", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&join_trie, ProjectReordering::from_vector(vec![2, 3])),
+            || TrieScanProject::new(&join_trie, ProjectReordering::from_vector(vec![2, 3], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -179,7 +179,7 @@ fn benchmark_project(c: &mut Criterion) {
 
     group_ours.bench_function("trie_reorder_1", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&trie_b, ProjectReordering::from_vector(vec![0, 2, 1])),
+            || TrieScanProject::new(&trie_b, ProjectReordering::from_vector(vec![0, 2, 1], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -187,7 +187,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_reorder_2", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&trie_b, ProjectReordering::from_vector(vec![1, 0, 2])),
+            || TrieScanProject::new(&trie_b, ProjectReordering::from_vector(vec![1, 0, 2], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },
@@ -195,7 +195,7 @@ fn benchmark_project(c: &mut Criterion) {
     });
     group_ours.bench_function("trie_reorder_3", |b| {
         b.iter_with_setup(
-            || TrieScanProject::new(&trie_b, ProjectReordering::from_vector(vec![2, 1, 0])),
+            || TrieScanProject::new(&trie_b, ProjectReordering::from_vector(vec![2, 1, 0], 4)),
             |project_iter| {
                 let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
             },

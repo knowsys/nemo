@@ -160,6 +160,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
                 .filter(|(_, v)| self.frontier_variables.contains(v))
                 .map(|(i, _)| i)
                 .collect(),
+            self.analysis.body_variables.len(),
         );
 
         // Build the project node
@@ -214,6 +215,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
                 .filter(|(_, v)| self.frontier_variables.contains(v))
                 .map(|(i, _)| i)
                 .collect(),
+            head_variables_in_order.len(),
         );
 
         // Do the projection operation
@@ -298,7 +300,10 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
                 })
                 .collect();
 
-                let head_reordering = ProjectReordering::from_vector(head_binding.clone());
+                let head_reordering = ProjectReordering::from_vector(
+                    head_binding.clone(),
+                    unsat_variable_order.len(),
+                );
 
                 let fetch_node = head_tree.fetch_new(unsatisfied_id);
                 let project_node = head_tree.project(fetch_node, head_reordering);

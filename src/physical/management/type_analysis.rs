@@ -416,7 +416,7 @@ impl TypeTree {
             ExecutionNode::Project(subtree, reordering) => {
                 let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
                 for (index, value) in reordering.iter() {
-                    schema_map.insert(*value, *type_node.schema.get_entry(*index));
+                    schema_map.insert(*index, *type_node.schema.get_entry(*value));
                 }
 
                 Self::propagate_down(
@@ -614,7 +614,7 @@ mod test {
         );
 
         let node_project =
-            execution_tree.project(node_join, ProjectReordering::from_vector(vec![0, 2]));
+            execution_tree.project(node_join, ProjectReordering::from_vector(vec![0, 2], 3));
 
         let node_root = execution_tree.union(vec![node_project, node_minus]);
         execution_tree.set_root(node_root);

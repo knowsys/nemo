@@ -1,4 +1,4 @@
-//! Module for representing an injective function mapping a finite subset of the set of natural numbers the first n natural numbers.
+//! Module for defining a function that represents an ordered choosing from a sorted collection.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -7,23 +7,26 @@ use std::{
 
 use super::{permutation::Permutation, traits::NatMapping};
 
-/// Injective function mapping a finite subset of the set of natural numbers the first n natural numbers.
+/// Function that representes an ordered choosing from a sorted collection.
+/// In a mathematical sense, may be viewed as an partial function [n] -> [n] that is injective.
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct FiniteInjective {
+pub struct SortedChoice {
     /// Function is represented by a [`HashMap`] mapping the input `i` to `map.get(i)`.
     /// Every input not present in this map is considered not part of this function's domain.
     map: HashMap<usize, usize>,
+    /// Size of the domain. All inputs must be smaller than this.
+    domain_size: usize,
 }
 
-impl FiniteInjective {
+impl SortedChoice {
     /// Return an instance of the function from a vector representation where the input `vec[i]` is mapped to `i`.
-    pub fn from_vector(vec: Vec<usize>) -> Self {
+    pub fn from_vector(vec: Vec<usize>, domain_size: usize) -> Self {
         let mut map = HashMap::<usize, usize>::new();
         for (value, input) in vec.into_iter().enumerate() {
             map.insert(input, value);
         }
 
-        let result = Self { map };
+        let result = Self { map, domain_size };
 
         debug_assert!(result.is_valid());
 
@@ -31,8 +34,8 @@ impl FiniteInjective {
     }
 
     /// Return an instance of the function from a hash map representation where the input `i` is mapped to `map.get(i)`.
-    pub fn from_map(map: HashMap<usize, usize>) -> Self {
-        let result = Self { map };
+    pub fn from_map(map: HashMap<usize, usize>, domain_size: usize) -> Self {
+        let result = Self { map, domain_size };
         debug_assert!(result.is_valid());
 
         result
@@ -43,11 +46,10 @@ impl FiniteInjective {
         self.map.iter()
     }
 
-    /// Check whether this function is a permu
+    /// Check whether this partial function is a permutation.
+    /// This is equivalent to checking whether every input is assigned to a value.
     pub fn is_permutation(&self) -> bool {
-        // Since this function is finite and injective, it is also surjective.
-        // It remains to be checked whether the input domain is the same is the range.
-        self.iter().all(|(input, _)| *input < self.map.len())
+        self.map.len() == self.domain_size
     }
 
     /// Turn this function into a permutation.
@@ -86,7 +88,7 @@ impl FiniteInjective {
     }
 }
 
-impl NatMapping for FiniteInjective {
+impl NatMapping for SortedChoice {
     fn get(&self, input: usize) -> usize {
         *self.map.get(&input).unwrap()
     }
@@ -101,7 +103,7 @@ impl NatMapping for FiniteInjective {
             *value = permutation.get(*value);
         }
 
-        Self::from_map(result_map)
+        Self::from_map(result_map, self.domain_size)
     }
 
     fn domain_contains(&self, input: usize) -> bool {
@@ -109,11 +111,15 @@ impl NatMapping for FiniteInjective {
     }
 
     fn is_identity(&self) -> bool {
+        if !self.is_permutation() {
+            return false;
+        }
+
         self.map.iter().all(|(i, v)| *i == *v)
     }
 }
 
-impl Display for FiniteInjective {
+impl Display for SortedChoice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[")?;
 
