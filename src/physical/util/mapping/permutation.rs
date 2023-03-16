@@ -86,10 +86,13 @@ impl Permutation {
     /// A cycle is a list of inputs such that the (i+1)th results from applying the permutation to the ith element.
     /// and the first can be obtained by applying it to the last.
     fn find_cycles(&self) -> Vec<Vec<usize>> {
-        let result = Vec::<Vec<usize>>::new();
+        let mut result = Vec::<Vec<usize>>::new();
 
         let mut input_set: HashSet<usize> = self.map.keys().cloned().collect();
         while let Some(start) = input_set.iter().next().cloned() {
+            let mut current_cycle = Vec::<usize>::new();
+            current_cycle.push(start);
+
             input_set.remove(&start);
 
             let mut current_value = start;
@@ -102,7 +105,11 @@ impl Permutation {
                 if current_value == start {
                     break;
                 }
+
+                current_cycle.push(current_value);
             }
+
+            result.push(current_cycle);
         }
 
         result

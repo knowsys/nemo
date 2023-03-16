@@ -528,13 +528,13 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         let to_inverted = to.invert();
 
         let mut current_score: usize = 0;
-        let mut current_position_from: usize = 0;
+        let mut current_position_from: isize = -1;
 
-        for position_to in 0..max_len {
+        for position_to in 0..=max_len {
             let current_value = to_inverted.get(position_to);
 
             let position_from = from.get(current_value);
-            let difference: isize = (position_from as isize) - (current_position_from as isize);
+            let difference: isize = (position_from as isize) - current_position_from;
 
             let penalty: usize = if difference <= 0 {
                 difference.unsigned_abs()
@@ -544,7 +544,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
             };
 
             current_score += penalty;
-            current_position_from = position_from;
+            current_position_from = position_from as isize;
         }
 
         current_score
