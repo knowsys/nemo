@@ -447,20 +447,19 @@ impl ExecutionTree {
 
                 if reorder.is_identity() {
                     Some(simplified)
-                } else {
-                    if let ExecutionNode::FetchExisting(id, order) = &*simplified.get_rc().borrow()
-                    {
-                        if reorder.is_permutation() {
-                            Some(new_tree.fetch_existing_reordered(
-                                *id,
-                                order.chain_permutation(&reorder.into_permutation()),
-                            ))
-                        } else {
-                            Some(new_tree.project(simplified, reorder.clone()))
-                        }
+                } else if let ExecutionNode::FetchExisting(id, order) =
+                    &*simplified.get_rc().borrow()
+                {
+                    if reorder.is_permutation() {
+                        Some(new_tree.fetch_existing_reordered(
+                            *id,
+                            order.chain_permutation(&reorder.into_permutation()),
+                        ))
                     } else {
                         Some(new_tree.project(simplified, reorder.clone()))
                     }
+                } else {
+                    Some(new_tree.project(simplified, reorder.clone()))
                 }
             }
             ExecutionNode::SelectValue(subnode, assignments) => {
@@ -542,12 +541,12 @@ impl ExecutionTree {
     /// Specifically, this will reorder tables if necessary
     pub fn satisfy_leapfrog_triejoin(&mut self) {
         if let Some(root) = self.root() {
-            self.satisfy_leapfrog_recurisve(root, Permutation::default());
+            Self::satisfy_leapfrog_recurisve(root, Permutation::default());
         }
     }
 
     /// Implements the functionality of `satisfy_leapfrog_triejoin` by traversing the tree recursively
-    fn satisfy_leapfrog_recurisve(&mut self, node: ExecutionNodeRef, permutation: Permutation) {
+    fn satisfy_leapfrog_recurisve(node: ExecutionNodeRef, permutation: Permutation) {
         let node_rc = node.get_rc();
         let node_ref = &mut *node_rc.borrow_mut();
 
@@ -570,24 +569,24 @@ impl ExecutionTree {
             ExecutionNode::Project(subnode, project_reorder) => {
                 *project_reorder = project_reorder.chain_permutation(&permutation);
 
-                self.satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
+                Self::satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
             }
             ExecutionNode::Join(subnodes, bindings) => {
                 bindings.apply_permutation(&permutation);
                 let subpermutations = bindings.comply_with_leapfrog();
 
                 for (subnode, subpermutation) in subnodes.iter().zip(subpermutations.into_iter()) {
-                    self.satisfy_leapfrog_recurisve(subnode.clone(), subpermutation)
+                    Self::satisfy_leapfrog_recurisve(subnode.clone(), subpermutation)
                 }
             }
             ExecutionNode::Union(subnodes) => {
                 for subnode in subnodes {
-                    self.satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
+                    Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
                 }
             }
             ExecutionNode::Minus(left, right) => {
-                self.satisfy_leapfrog_recurisve(left.clone(), permutation.clone());
-                self.satisfy_leapfrog_recurisve(right.clone(), permutation.clone());
+                Self::satisfy_leapfrog_recurisve(left.clone(), permutation.clone());
+                Self::satisfy_leapfrog_recurisve(right.clone(), permutation.clone());
             }
             ExecutionNode::SelectValue(subnode, _assignments) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
@@ -597,26 +596,26 @@ impl ExecutionTree {
                 //     assigment.column_idx = reorder.apply_element_reverse(assigment.column_idx);
                 // }
 
-                self.satisfy_leapfrog_recurisve(subnode.clone(), permutation);
+                Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation);
             }
             ExecutionNode::SelectEqual(subnode, _classes) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
-                self.satisfy_leapfrog_recurisve(subnode.clone(), permutation);
+                Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation);
             }
             ExecutionNode::AppendColumns(subnode, _instructions) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
 
-                self.satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
+                Self::satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
             }
             ExecutionNode::AppendNulls(subnode, _) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
-                self.satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
+                Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
             }
         }
     }

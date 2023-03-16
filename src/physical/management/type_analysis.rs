@@ -147,13 +147,12 @@ impl TypeTree {
                             .get_entry(column.column);
 
                         if let Some(min_entry) = min_entry_opt {
-                            let current_min = if let Some(current) =
-                                Self::entry_min(&min_entry, &current_entry)
-                            {
-                                current
-                            } else {
-                                return Err(Error::InvalidExecutionPlan);
-                            };
+                            let current_min =
+                                if let Some(current) = Self::entry_min(&min_entry, current_entry) {
+                                    current
+                                } else {
+                                    return Err(Error::InvalidExecutionPlan);
+                                };
 
                             min_entry_opt = Some(*current_min);
                         } else {
@@ -253,7 +252,7 @@ impl TypeTree {
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
 
                 let new_schema = if !subtype_node.schema.is_empty() {
-                    subtype_node.schema.reordered(&reordering)
+                    subtype_node.schema.reordered(reordering)
                 } else {
                     TableSchema::default()
                 };

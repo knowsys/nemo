@@ -9,7 +9,7 @@ use std::{
 use super::traits::NatMapping;
 
 /// Represents a permutation on the set of natural numbers.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, Eq, Clone)]
 pub struct Permutation {
     // The function represented by this object will map `i` to `map.get(i)`.
     // All inputs that are not keys in this map are implicitly mapped to themselves.
@@ -116,7 +116,7 @@ impl Permutation {
     }
 
     /// Return a vector represenation of the permutation.
-    fn into_vec(&self) -> Vec<usize> {
+    fn to_vector(&self) -> Vec<usize> {
         let mut result = Vec::<usize>::new();
 
         let mut used_map_keys = 0usize;
@@ -167,7 +167,7 @@ impl Permutation {
 
     /// Apply this permutation to a slice of things.
     pub fn permute<T: Clone>(&self, vec: &[T]) -> Vec<T> {
-        let mut result: Vec<T> = vec.iter().cloned().collect();
+        let mut result: Vec<T> = vec.to_vec();
         for (input, value) in self.map.iter() {
             result[*value] = vec[*input].clone();
         }
@@ -252,16 +252,14 @@ impl Display for Permutation {
     }
 }
 
-impl Default for Permutation {
-    fn default() -> Self {
-        Self {
-            map: Default::default(),
-        }
+impl Hash for Permutation {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.to_vector().hash(state);
     }
 }
 
-impl Hash for Permutation {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.into_vec().hash(state);
+impl PartialEq for Permutation {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_vector() == other.to_vector()
     }
 }

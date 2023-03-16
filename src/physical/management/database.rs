@@ -40,14 +40,8 @@ use super::{
 pub type ColumnOrder = Permutation;
 
 /// Type which represents table id.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct TableId(u64);
-
-impl Default for TableId {
-    fn default() -> Self {
-        Self(0)
-    }
-}
 
 impl Display for TableId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -60,7 +54,7 @@ impl TableId {
     /// Return the old (non-incremented) id.
     pub fn increment(&mut self) -> Self {
         let old = *self;
-        self.0 = self.0 + 1;
+        self.0 += 1;
         old
     }
 
@@ -216,7 +210,7 @@ enum TableStatus {
 
 /// Manages tables under different orders.
 /// Also has the capability of representing a table as a reordered version of another.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct OrderedReferenceManager {
     map: HashMap<TableId, TableStatus>,
 }
@@ -247,15 +241,13 @@ impl OrderedReferenceManager {
     ) -> Option<TableResolvedMut> {
         if let TableStatus::Reference(ref_id, permutation) = &self.map.get(&id)? {
             self.resolve_reference_mut(*ref_id, &order.chain_permutation(&permutation.invert()))
+        } else if let TableStatus::Present(map) = self.map.get_mut(&id)? {
+            Some(TableResolvedMut {
+                map,
+                order: order.clone(),
+            })
         } else {
-            if let TableStatus::Present(map) = self.map.get_mut(&id)? {
-                Some(TableResolvedMut {
-                    map,
-                    order: order.clone(),
-                })
-            } else {
-                unreachable!()
-            }
+            unreachable!()
         }
     }
 
@@ -319,7 +311,7 @@ impl OrderedReferenceManager {
 
     /// Return an iterator of all the available orders of a table.
     /// Panics if the requested table does not exist.
-    pub fn available_orders<'a>(&'a self, id: TableId) -> impl Iterator<Item = &'a ColumnOrder> {
+    pub fn available_orders(&self, id: TableId) -> impl Iterator<Item = &ColumnOrder> {
         if let TableStatus::Present(order_map) = self.map.get(&id).unwrap() {
             order_map.keys()
         } else {
@@ -334,14 +326,6 @@ impl OrderedReferenceManager {
             entry.remove();
         } else {
             panic!("Table to be deleted should exist.");
-        }
-    }
-}
-
-impl Default for OrderedReferenceManager {
-    fn default() -> Self {
-        Self {
-            map: Default::default(),
         }
     }
 }
@@ -582,18 +566,14 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     ///     * Reorder an existing table if the table is not available in the requested order
     ///     * Load a table from disk if it currently not in memory
     /// Panics if the requested table does not exist.
-    fn make_available_in_memory<'a>(
-        &'a mut self,
-        id: TableId,
-        order: &ColumnOrder,
-    ) -> Result<(), Error> {
+    fn make_available_in_memory(&mut self, id: TableId, order: &ColumnOrder) -> Result<(), Error> {
         let arity = self.table_arity(id);
         let closest_order =
             Self::search_closest_order(self.storage_handler.available_orders(id), order).expect(
                 "This function assumes that there is at least one table under the given id.",
             );
 
-        let reorder = Self::reorder_to(&order, &closest_order, arity);
+        let reorder = Self::reorder_to(order, closest_order, arity);
         let trie_unordered = self
             .storage_handler
             .table_storage_mut(id, &closest_order.clone())

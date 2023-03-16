@@ -50,7 +50,7 @@ impl PartialOrd for SubtableRange {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct SubtableHandler {
     single: Vec<(usize, TableId)>,
     combined: Vec<(SubtableRange, TableId)>,
@@ -182,15 +182,6 @@ impl SubtableHandler {
     }
 }
 
-impl Default for SubtableHandler {
-    fn default() -> Self {
-        Self {
-            single: Vec::default(),
-            combined: Vec::default(),
-        }
-    }
-}
-
 #[derive(Debug)]
 struct PredicateInfo {
     schema: TableSchema,
@@ -211,7 +202,7 @@ impl SubtableIdentifier {
 }
 
 /// A execution plan that will result in the creation of new chase subtables.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SubtableExecutionPlan {
     /// The execution plan.
     execution_plan: ExecutionPlan,
@@ -226,7 +217,7 @@ impl SubtableExecutionPlan {
         self.execution_plan.push(tree)
     }
 
-    /// ADd a permanent table ot the plan-
+    /// Add a permanent table ot the plan-
     pub fn add_permanent_table(
         &mut self,
         tree: ExecutionTree,
@@ -236,15 +227,6 @@ impl SubtableExecutionPlan {
         self.map_subtrees.insert(plan_id, subtable_id);
 
         plan_id
-    }
-}
-
-impl Default for SubtableExecutionPlan {
-    fn default() -> Self {
-        Self {
-            execution_plan: Default::default(),
-            map_subtrees: Default::default(),
-        }
     }
 }
 

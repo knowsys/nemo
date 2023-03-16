@@ -70,8 +70,8 @@ impl<'a> TrieScanProject<'a> {
         let mut result = Vec::new();
 
         for (input, value) in project_reordering.iter() {
-            for _ in result.len()..=*value {
-                result.push(0);
+            if *value >= result.len() {
+                result.resize(*value + 1, 0);
             }
 
             result[*value] = *input;
