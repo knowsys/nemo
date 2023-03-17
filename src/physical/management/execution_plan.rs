@@ -172,7 +172,10 @@ impl ExecutionTree {
     /// Push new node to list of all nodes and returns a reference.
     fn push_and_return_ref(&mut self, node: ExecutionNode) -> ExecutionNodeRef {
         self.nodes.push(ExecutionNodeOwned::new(node));
-        self.nodes.last().unwrap().get_ref()
+        self.nodes
+            .last()
+            .expect("New node has been added above.")
+            .get_ref()
     }
 
     /// Return [`ExecutionNodeRef`] for fetching a permanent table.
@@ -220,7 +223,10 @@ impl ExecutionTree {
         let new_node = ExecutionNode::Union(Vec::new());
         self.nodes.push(ExecutionNodeOwned::new(new_node));
 
-        self.nodes.last().unwrap().get_ref()
+        self.nodes
+            .last()
+            .expect("New node has been added above.")
+            .get_ref()
     }
 
     /// Return [`ExecutionNodeRef`] for joining tables.

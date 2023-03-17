@@ -147,12 +147,8 @@ impl TypeTree {
                             .get_entry(column.column);
 
                         if let Some(min_entry) = min_entry_opt {
-                            let current_min =
-                                if let Some(current) = Self::entry_min(&min_entry, current_entry) {
-                                    current
-                                } else {
-                                    return Err(Error::InvalidExecutionPlan);
-                                };
+                            let current_min = Self::entry_min(&min_entry, current_entry)
+                                .ok_or(Error::InvalidExecutionPlan)?;
 
                             min_entry_opt = Some(*current_min);
                         } else {

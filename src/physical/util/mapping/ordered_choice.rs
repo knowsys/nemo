@@ -89,12 +89,8 @@ impl SortedChoice {
 }
 
 impl NatMapping for SortedChoice {
-    fn get(&self, input: usize) -> usize {
-        *self.map.get(&input).unwrap()
-    }
-
-    fn get_many(&self, inputs: &[usize]) -> Vec<usize> {
-        inputs.iter().map(|&i| self.get(i)).collect()
+    fn get_partial(&self, input: usize) -> Option<usize> {
+        self.map.get(&input).cloned()
     }
 
     fn chain_permutation(&self, permutation: &Permutation) -> Self {

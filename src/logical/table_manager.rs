@@ -240,7 +240,7 @@ pub struct TableManager<Dict: Dictionary> {
     /// Map containg all the ids of all the sub tables associated with a predicate.
     predicate_subtables: HashMap<Identifier, SubtableHandler>,
 
-    /// Mapping predicate identifiers to their arity.
+    /// Mapping predicate identifiers to a [`PredicateInfo`] which contains relevant information.
     predicate_to_info: HashMap<Identifier, PredicateInfo>,
 }
 
@@ -270,19 +270,21 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
     /// Return a reference to a [`Trie`] that is associated with the given id.
     /// Uses the default [`ColumnOrder`]
+    /// Panics if there is no trie associated with the given id.
     pub fn table_from_id(&self, id: TableId) -> &Trie {
-        self.database.get_trie_inmemory(id, &ColumnOrder::default())
+        self.database.get_trie(id, &ColumnOrder::default())
     }
 
     /// Combine all subtables of a predicate into one table
     /// and return the [`TableId`] of that new table.
     pub fn combine_predicate(&mut self, predicate: Identifier) -> Result<Option<TableId>, Error> {
-        let last_step = self
-            .last_step(predicate)
-            .expect("Function assumed that predicate has at least one subtable.");
-        let combined_id = self.combine_tables(predicate, 0..(last_step + 1))?;
+        let last_step = if let Some(step) = self.last_step(predicate) {
+            step
+        } else {
+            return Ok(None);
+        };
 
-        Ok(combined_id)
+        self.combine_tables(predicate, 0..(last_step + 1))
     }
 
     /// Generates an appropriate table name for subtable.
@@ -340,6 +342,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
         format!("{predicate_name} ({step}) -> {referenced_table_name} {permutation}")
     }
 
+    /// Workaround because of the missing type system.
+    /// We assume for now that every table is a U64 table.
     fn generate_table_schema(arity: usize) -> TableSchema {
         let mut schema = TableSchema::new();
         (0..arity).for_each(|_| schema.add_entry(DataTypeName::U64, false, false));
@@ -444,11 +448,10 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
     /// Return the ids of all subtables of a predicate within a certain range of steps.
     pub fn tables_in_range(&self, predicate: Identifier, range: &Range<usize>) -> Vec<TableId> {
-        if let Some(subtable_handler) = self.predicate_subtables.get(&predicate) {
-            return subtable_handler.cover_range(range);
-        }
-
-        vec![]
+        self.predicate_subtables
+            .get(&predicate)
+            .map(|handler| handler.cover_range(range))
+            .unwrap_or_default()
     }
 
     /// Combine subtables in a certain range into one larger table.
@@ -478,7 +481,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
         let plan_id = plan.push(union_tree);
         let execution_result = self.database.execute_plan(plan)?;
-        let table_id = execution_result.get(&plan_id).unwrap();
+        let table_id = execution_result.get(&plan_id).expect("Execution of Plan on Database with the plan-id has succeeded, so the plan_id should exist in the result");
 
         self.predicate_subtables
             .get_mut(&predicate)
@@ -516,67 +519,97 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
 #[cfg(test)]
 mod test {
-    use std::ops::Range;
+    use std::{collections::HashSet, ops::Range};
 
     use crate::physical::management::database::TableId;
 
     use super::SubtableHandler;
 
-    fn handler_form_vec(intervals: &[Range<usize>]) -> SubtableHandler {
+    fn handler_from_table_steps(
+        steps: &[usize],
+        ranges: &[Range<usize>],
+        expected_ranges: &[Range<usize>],
+    ) -> (SubtableHandler, HashSet<TableId>) {
+        let expected_set: HashSet<Range<usize>> = expected_ranges.iter().cloned().collect();
+
         let mut handler = SubtableHandler::default();
+        let mut expected_ids = HashSet::<TableId>::new();
         let mut id = TableId::default();
 
+        let intervals = steps
+            .iter()
+            .map(|&s| s..(s + 1))
+            .chain(ranges.iter().cloned());
+
         for interval in intervals {
+            let id = id.increment();
+
             if interval.len() == 1 {
-                handler.add_single_table(interval.start, id.increment());
+                handler.add_single_table(interval.start, id);
             } else {
-                handler.add_combined_table(interval, id.increment());
+                handler.add_combined_table(&interval, id);
+            }
+
+            if expected_set.contains(&interval) {
+                expected_ids.insert(id);
             }
         }
 
-        handler
+        (handler, expected_ids)
     }
 
-    fn compare_covering(intervals: &[Range<usize>], target: &Range<usize>, expected: Vec<u64>) {
-        let answer: Vec<u64> = handler_form_vec(intervals)
-            .cover_range(target)
-            .iter()
-            .map(|i| i.get())
-            .collect();
+    fn compare_covering(
+        steps: &[usize],
+        ranges: &[Range<usize>],
+        expected_ranges: &[Range<usize>],
+        target: &Range<usize>,
+    ) {
+        let (handler, expected_ids) = handler_from_table_steps(steps, ranges, expected_ranges);
+        let answer: HashSet<TableId> = handler.cover_range(target).iter().cloned().collect();
 
-        assert_eq!(answer, expected);
+        assert_eq!(answer, expected_ids);
     }
 
     #[test]
     fn test_cover() {
-        let vec = vec![1..2, 2..3, 4..5, 10..11, 1..6, 2..11];
+        let steps = vec![1, 2, 4, 10];
+        let ranges = vec![1..6, 2..11];
         let target = 1..11;
-        compare_covering(&vec, &target, vec![4, 3]);
+        let expected_ranges = vec![1..6, 10..11];
+        compare_covering(&steps, &ranges, &expected_ranges, &target);
 
         let target = 1..13;
-        compare_covering(&vec, &target, vec![4, 3]);
+        compare_covering(&steps, &ranges, &expected_ranges, &target);
 
         let target = 0..11;
-        compare_covering(&vec, &target, vec![4, 3]);
+        compare_covering(&steps, &ranges, &expected_ranges, &target);
 
-        let vec = vec![0..1, 1..2];
+        let steps = vec![0, 1];
+        let ranges = vec![];
+        let expected_ranges = vec![0..1, 1..2];
         let target = 0..2;
-        compare_covering(&vec, &target, vec![0, 1]);
+        compare_covering(&steps, &ranges, &expected_ranges, &target);
 
-        let vec = vec![1..2, 4..5, 6..7, 7..8, 12..13, 4..8, 6..13, 1..5];
+        let steps = vec![1, 4, 6, 7, 12];
+        let ranges = vec![4..8, 6..13, 1..5];
         let target = 0..5;
-        compare_covering(&vec, &target, vec![7]);
+        let expected_ranges = vec![1..5];
+        compare_covering(&steps, &ranges, &expected_ranges, &target);
 
         let target = 3..5;
-        compare_covering(&vec, &target, vec![1]);
+        let expected_ranges = vec![4..5];
+        compare_covering(&steps, &ranges, &expected_ranges, &target);
 
         let target = 3..13;
-        compare_covering(&vec, &target, vec![5, 4]);
+        let expected_ranges = vec![4..8, 12..13];
+        compare_covering(&steps, &ranges, &expected_ranges, &target);
 
         let target = 0..30;
-        compare_covering(&vec, &target, vec![7, 6]);
+        let expected_ranges = vec![1..5, 6..13];
+        compare_covering(&steps, &ranges, &expected_ranges, &target);
 
         let target = 6..8;
-        compare_covering(&vec, &target, vec![2, 3]);
+        let expected_ranges = vec![6..7, 7..8];
+        compare_covering(&steps, &ranges, &expected_ranges, &target);
     }
 }

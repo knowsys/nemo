@@ -1,6 +1,6 @@
 //! Functionality which handles the execution of a program
 
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
 
 use crate::{
     error::Error,
@@ -95,16 +95,16 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         for ((predicate, _), source) in program.sources() {
             let new_source = match source {
                 DataSource::CsvFile(file) => TableSource::CSV(*file.clone()),
-                DataSource::RdfFile(_) => todo!(),
-                DataSource::SparqlQuery(_) => todo!(),
+                DataSource::RdfFile(_) => todo!("RDF data sources are not yet implemented"),
+                DataSource::SparqlQuery(_) => {
+                    todo!("SPARQL query data sources are not yet implemented")
+                }
             };
 
-            let sources = match predicate_to_sources.entry(predicate) {
-                Entry::Vacant(entry) => entry.insert(Vec::new()),
-                Entry::Occupied(entry) => entry.into_mut(),
-            };
-
-            sources.push(new_source);
+            predicate_to_sources
+                .entry(predicate)
+                .or_default()
+                .push(new_source)
         }
 
         // Add all the facts contained in the rule file as a source
@@ -132,13 +132,10 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         }
 
         for (predicate, rows) in predicate_to_rows.into_iter() {
-            let sources = match predicate_to_sources.entry(predicate) {
-                Entry::Vacant(entry) => entry.insert(Vec::new()),
-                Entry::Occupied(entry) => entry.into_mut(),
-            };
-
-            let new_source = TableSource::RLS(rows);
-            sources.push(new_source);
+            predicate_to_sources
+                .entry(predicate)
+                .or_default()
+                .push(TableSource::RLS(rows));
         }
 
         // Add all the sources to the table mananager

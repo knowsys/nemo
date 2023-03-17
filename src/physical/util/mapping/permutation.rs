@@ -174,19 +174,21 @@ impl Permutation {
 
         result
     }
+
+    /// Return the value of the function for a given input.
+    pub fn get(&self, input: usize) -> usize {
+        self.get_partial(input)
+            .expect("Permutations map each value")
+    }
 }
 
 impl NatMapping for Permutation {
-    fn get(&self, input: usize) -> usize {
+    fn get_partial(&self, input: usize) -> Option<usize> {
         if let Some(value) = self.map.get(&input) {
-            *value
+            Some(*value)
         } else {
-            input
+            Some(input)
         }
-    }
-
-    fn get_many(&self, inputs: &[usize]) -> Vec<usize> {
-        inputs.iter().map(|&i| self.get(i)).collect()
     }
 
     fn chain_permutation(&self, permutation: &Permutation) -> Self {

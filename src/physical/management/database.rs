@@ -1,4 +1,4 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::fs::File;
 use std::path::PathBuf;
@@ -172,20 +172,18 @@ impl TableStorage {
             }
         }
 
-        if let TableStorage::InMemory(trie) = self {
-            Ok(trie)
-        } else {
-            unreachable!();
-        }
+        Ok(self
+            .get_trie()
+            .expect("Trie has been loaded into memory above."))
     }
 
     /// Return a reference to the stored trie.
-    /// Pancics if the trie is not in memory.
-    pub fn trie_unchecked(&self) -> &Trie {
+    /// Returns `None` if trie is not in memory.
+    pub fn get_trie(&self) -> Option<&Trie> {
         if let TableStorage::InMemory(trie) = self {
-            trie
+            Some(trie)
         } else {
-            panic!("Function assumes that trie is in memory");
+            None
         }
     }
 }
@@ -239,16 +237,27 @@ impl OrderedReferenceManager {
         id: TableId,
         order: &ColumnOrder,
     ) -> Option<TableResolvedMut> {
-        if let TableStatus::Reference(ref_id, permutation) = &self.map.get(&id)? {
-            self.resolve_reference_mut(*ref_id, &order.chain_permutation(&permutation.invert()))
-        } else if let TableStatus::Present(map) = self.map.get_mut(&id)? {
-            Some(TableResolvedMut {
-                map,
-                order: order.clone(),
-            })
-        } else {
-            unreachable!()
+        match &self.map.get(&id)? {
+            TableStatus::Present(_) => {}
+            TableStatus::Reference(ref_id, permutation) => {
+                return self.resolve_reference_mut(
+                    *ref_id,
+                    &order.chain_permutation(&permutation.invert()),
+                )
+            }
         }
+
+        match self.map.get_mut(&id)? {
+            TableStatus::Present(map) => {
+                return Some(TableResolvedMut {
+                    map,
+                    order: order.clone(),
+                })
+            }
+            TableStatus::Reference(_, _) => {}
+        }
+
+        unreachable!("Each case should have been handled by one of the above matches.")
     }
 
     fn resolve_reference(&self, id: TableId, order: &ColumnOrder) -> Option<TableResolved> {
@@ -277,10 +286,13 @@ impl OrderedReferenceManager {
     }
 
     /// Add a new reference to another table.
-    /// Panics if the given ids do not exist.
+    /// Panics if the id of the referenced table does not exist.
     pub fn add_reference(&mut self, id: TableId, reference_id: TableId, permutation: Permutation) {
         let (final_id, final_permutation) = if let TableStatus::Reference(ref_id, ref_permutation) =
-            &self.map.get(&reference_id).unwrap()
+            &self
+                .map
+                .get(&reference_id)
+                .expect("Referenced id should exist.")
         {
             (*ref_id, ref_permutation.chain_permutation(&permutation))
         } else {
@@ -292,41 +304,39 @@ impl OrderedReferenceManager {
     }
 
     /// Return a reference to the [`TableStorage`] associated with the given [`TableId`] and [`ColumnOrder`].
-    /// Panics if the requested table does not exist.
-    pub fn table_storage<'a>(&'a self, id: TableId, order: &ColumnOrder) -> &'a TableStorage {
-        let resolved = self.resolve_reference(id, order).unwrap();
-        resolved.map.get(&resolved.order).unwrap()
+    /// Returns `None` if there is no table with that id or order.
+    pub fn table_storage<'a>(
+        &'a self,
+        id: TableId,
+        order: &ColumnOrder,
+    ) -> Option<&'a TableStorage> {
+        let resolved = self.resolve_reference(id, order)?;
+        resolved.map.get(&resolved.order)
     }
 
     /// Return a mutable reference to the [`TableStorage`] associated with the given [`TableId`] and [`ColumnOrder`].
-    /// Pancis if the requested table does not exist.
+    /// Returns `None` if there is no table with that id or order.
     pub fn table_storage_mut<'a>(
         &'a mut self,
         id: TableId,
         order: &ColumnOrder,
-    ) -> &'a mut TableStorage {
-        let resolved = self.resolve_reference_mut(id, order).unwrap();
-        resolved.map.get_mut(&resolved.order).unwrap()
+    ) -> Option<&'a mut TableStorage> {
+        let resolved = self.resolve_reference_mut(id, order)?;
+        resolved.map.get_mut(&resolved.order)
     }
 
     /// Return an iterator of all the available orders of a table.
-    /// Panics if the requested table does not exist.
-    pub fn available_orders(&self, id: TableId) -> impl Iterator<Item = &ColumnOrder> {
-        if let TableStatus::Present(order_map) = self.map.get(&id).unwrap() {
-            order_map.keys()
-        } else {
-            panic!("Function assumes that the given table exists.");
-        }
+    /// Returns `None` if there is no table with the given id.
+    pub fn available_orders(&self, id: TableId) -> Option<impl Iterator<Item = &ColumnOrder>> {
+        let resolved = self.resolve_reference(id, &ColumnOrder::default())?;
+        Some(resolved.map.keys())
     }
 
     /// Delete the given table.
+    /// Return `None` if there is no table with the given id.
     /// TODO: This does not check/fix references of tables.
-    pub fn delete_table(&mut self, id: &TableId) {
-        if let Entry::Occupied(entry) = self.map.entry(*id) {
-            entry.remove();
-        } else {
-            panic!("Table to be deleted should exist.");
-        }
+    pub fn delete_table(&mut self, id: &TableId) -> Option<()> {
+        self.map.remove(id).map(|_| ())
     }
 }
 
@@ -486,13 +496,12 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     /// TODO: For now, this does not care about keeping references intact.
     /// Panics if the table does not exist.
     pub fn delete(&mut self, id: TableId) {
-        self.storage_handler.delete_table(&id);
-
-        if let Entry::Occupied(entry) = self.table_infos.entry(id) {
-            entry.remove();
-        } else {
-            panic!("Table to be deleted should exist.");
-        }
+        self.storage_handler
+            .delete_table(&id)
+            .expect("Table to be deleted should exist.");
+        self.table_infos
+            .remove(&id)
+            .expect("Table to be deleted should exist.");
     }
 
     /// Provides a measure of how "difficult" it is to transform a column with this order into another.
@@ -503,11 +512,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     /// This gives us an overall score of 3.
     /// Returned value is 0 if and only if from == to.
     fn distance(from: &ColumnOrder, to: &ColumnOrder) -> usize {
-        let max_len = if let Some(max) = from.last_mapped().max(to.last_mapped()) {
-            max
-        } else {
-            return 0;
-        };
+        let max_len = from.last_mapped().max(to.last_mapped()).unwrap_or(0);
 
         let to_inverted = to.invert();
 
@@ -536,6 +541,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
     /// Helper function that iterates through a collection of [`ColumnOrder`]
     /// to find the one that is "closest" to given one.
+    /// Returns `None` if the given iterator is empty.
     fn search_closest_order<'a, OrderIter: Iterator<Item = &'a ColumnOrder>>(
         iter_orders: OrderIter,
         order: &ColumnOrder,
@@ -568,15 +574,19 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     /// Panics if the requested table does not exist.
     fn make_available_in_memory(&mut self, id: TableId, order: &ColumnOrder) -> Result<(), Error> {
         let arity = self.table_arity(id);
-        let closest_order =
-            Self::search_closest_order(self.storage_handler.available_orders(id), order).expect(
-                "This function assumes that there is at least one table under the given id.",
-            );
+        let closest_order = Self::search_closest_order(
+            self.storage_handler
+                .available_orders(id)
+                .expect("Table with given id should exist."),
+            order,
+        )
+        .expect("This function assumes that there is at least one table under the given id.");
 
         let reorder = Self::reorder_to(order, closest_order, arity);
         let trie_unordered = self
             .storage_handler
             .table_storage_mut(id, &closest_order.clone())
+            .expect("Call to search_closest_ordered should give us an existing order")
             .into_memory(&mut self.dict_constants)?;
 
         if !reorder.is_identity() {
@@ -702,21 +712,31 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         Ok(permanent_ids)
     }
 
-    /// Return a reference to a trie that is assumed to be in memory.
-    /// Panics if the trie is not in memory.
-    pub fn get_trie_inmemory<'a>(&'a self, id: TableId, order: &ColumnOrder) -> &'a Trie {
-        if let TableStorage::InMemory(trie) = self.storage_handler.table_storage(id, order) {
-            trie
-        } else {
-            panic!("Function assumes that trie is in memory.");
-        }
+    /// Return a reference to a trie with the given id and order.
+    /// Panics if no table under the given id and order exists.
+    /// Panics if trie is not available in memory.
+    pub fn get_trie<'a>(&'a self, id: TableId, order: &ColumnOrder) -> &'a Trie {
+        let storage = self
+            .storage_handler
+            .table_storage(id, order)
+            .expect("Function assumes that there is a table with the given id and order.");
+
+        storage
+            .get_trie()
+            .expect("Function assumes that trie is in memory.")
     }
 
     /// Return a reference to a trie identified by its id and order.
     /// If the trie is not available in memory, this function will laod it.
-    pub fn get_trie<'a>(&'a mut self, id: TableId, order: &ColumnOrder) -> Result<&'a Trie, Error> {
+    /// Panics if no table under the given id and order exists.
+    pub fn get_trie_or_load<'a>(
+        &'a mut self,
+        id: TableId,
+        order: &ColumnOrder,
+    ) -> Result<&'a Trie, Error> {
         self.storage_handler
             .table_storage_mut(id, order)
+            .expect("Function assumes that there is a table with the given id and order.")
             .into_memory(&mut self.dict_constants)
     }
 
@@ -738,7 +758,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
         return match node_ref {
             ExecutionNode::FetchExisting(id, order) => {
-                let trie_ref = self.get_trie_inmemory(*id, order);
+                let trie_ref = self.get_trie(*id, order);
                 if trie_ref.row_num() == 0 {
                     return Ok(None);
                 }
@@ -752,7 +772,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 let comp_result = computation_results.get(index).unwrap();
                 let trie_ref = match comp_result {
                     ComputationResult::Temporary(trie) => trie,
-                    ComputationResult::Permanent(id, order) => self.get_trie_inmemory(*id, order),
+                    ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
                     ComputationResult::Empty => return Ok(None),
                 };
 
@@ -846,14 +866,12 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 let subnode_ref = &*subnode_rc.borrow();
 
                 let trie = match subnode_ref {
-                    ExecutionNode::FetchExisting(id, order) => self.get_trie_inmemory(*id, order),
+                    ExecutionNode::FetchExisting(id, order) => self.get_trie(*id, order),
                     ExecutionNode::FetchNew(index) => {
                         let comp_result = computation_results.get(index).unwrap();
                         let trie_ref = match comp_result {
                             ComputationResult::Temporary(trie) => trie,
-                            ComputationResult::Permanent(id, order) => {
-                                self.get_trie_inmemory(*id, order)
-                            }
+                            ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
                             ComputationResult::Empty => return Ok(None),
                         };
 
@@ -980,7 +998,7 @@ mod test {
         assert_eq!(instance.table_name(trie_a_id), "A");
         assert_eq!(
             instance
-                .get_trie_inmemory(trie_a_id, &ColumnOrder::default())
+                .get_trie(trie_a_id, &ColumnOrder::default())
                 .row_num(),
             3
         );
@@ -997,7 +1015,7 @@ mod test {
         assert!(instance.size_bytes() > last_size);
         assert_eq!(
             instance
-                .get_trie_inmemory(trie_b_id, &ColumnOrder::default())
+                .get_trie(trie_b_id, &ColumnOrder::default())
                 .row_num(),
             6
         );
@@ -1126,7 +1144,7 @@ mod test {
         assert!(result.is_ok());
 
         let result_id = *result.unwrap().get(&0).unwrap();
-        let result_trie = instance.get_trie_inmemory(result_id, &ColumnOrder::default());
+        let result_trie = instance.get_trie(result_id, &ColumnOrder::default());
 
         let result_col_first = result_trie.get_column(0).as_u64().unwrap();
         let result_col_second = result_trie.get_column(1).as_u32().unwrap();
