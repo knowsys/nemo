@@ -184,11 +184,7 @@ impl Permutation {
 
 impl NatMapping for Permutation {
     fn get_partial(&self, input: usize) -> Option<usize> {
-        if let Some(value) = self.map.get(&input) {
-            Some(*value)
-        } else {
-            Some(input)
-        }
+        Some(*self.map.get(&input).unwrap_or(&input))
     }
 
     fn chain_permutation(&self, permutation: &Permutation) -> Self {

@@ -481,7 +481,9 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
         let plan_id = plan.push(union_tree);
         let execution_result = self.database.execute_plan(plan)?;
-        let table_id = execution_result.get(&plan_id).expect("Execution of Plan on Database with the plan-id has succeeded, so the plan_id should exist in the result");
+        let table_id = execution_result
+            .get(&plan_id)
+            .expect("Combining multiple non-empty tables should result in a non-empty table.");
 
         self.predicate_subtables
             .get_mut(&predicate)

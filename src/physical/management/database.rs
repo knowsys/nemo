@@ -336,7 +336,8 @@ impl OrderedReferenceManager {
     /// Return `None` if there is no table with the given id.
     /// TODO: This does not check/fix references of tables.
     pub fn delete_table(&mut self, id: &TableId) -> Option<()> {
-        self.map.remove(id).map(|_| ())
+        self.map.remove(id)?;
+        Some(())
     }
 }
 
