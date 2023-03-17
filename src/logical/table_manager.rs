@@ -278,13 +278,10 @@ impl<Dict: Dictionary> TableManager<Dict> {
     /// Combine all subtables of a predicate into one table
     /// and return the [`TableId`] of that new table.
     pub fn combine_predicate(&mut self, predicate: Identifier) -> Result<Option<TableId>, Error> {
-        let last_step = if let Some(step) = self.last_step(predicate) {
-            step
-        } else {
-            return Ok(None);
-        };
-
-        self.combine_tables(predicate, 0..(last_step + 1))
+        match self.last_step(predicate) {
+            Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)),
+            None => Ok(None),
+        }
     }
 
     /// Generates an appropriate table name for subtable.
