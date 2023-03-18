@@ -17,118 +17,102 @@ use crate::{
 
 use super::plan_util::{atom_binding, compute_filters, subtree_union};
 
-// Calculate a subtree consiting of join representing one variant of an seminaive evaluation.
-#[allow(clippy::too_many_arguments)]
-fn subtree_join<Dict: Dictionary>(
-    tree: &mut ExecutionTree,
-    manager: &TableManager<Dict>,
-    side_atoms: &[&Atom],
-    main_atoms: &[&Atom],
-    rule_step: usize,
-    overall_step: usize,
-    mid: usize,
-    join_binding: &JoinBindings,
-) -> ExecutionNodeRef {
-    let mut join_node = tree.join_empty(join_binding.clone());
-
-    // For every atom that did not receive any update since the last rule application take all available elements
-    for atom in side_atoms {
-        let subnode = subtree_union(tree, manager, atom.predicate(), &(0..rule_step));
-
-        join_node.add_subnode(subnode);
-    }
-
-    // For every atom before the mid point we take all the tables until the current `rule_step`
-    for atom in main_atoms.iter().take(mid) {
-        let subnode = subtree_union(tree, manager, atom.predicate(), &(0..overall_step));
-
-        join_node.add_subnode(subnode);
-    }
-
-    // For the middle atom we only take the new tables
-    let midnode = subtree_union(
-        tree,
-        manager,
-        main_atoms[mid].predicate(),
-        &(rule_step..overall_step),
-    );
-
-    join_node.add_subnode(midnode);
-
-    // For every atom past the mid point we take only the old tables
-    for atom in main_atoms.iter().skip(mid + 1) {
-        let subnode = subtree_union(tree, manager, atom.predicate(), &(0..rule_step));
-
-        join_node.add_subnode(subnode);
-    }
-
-    join_node
+/// Generator creating excution trees for seminaive joins of a fixed set of [`Atom`]s and [`Filter`]s
+#[derive(Debug)]
+pub struct SeminaiveJoinGenerator {
+    /// the variables as determined by the rule analysis
+    pub variables: HashSet<Variable>,
+    /// the atoms to join
+    pub atoms: Vec<Atom>,
+    /// the filters to apply
+    pub filters: Vec<Filter>,
 }
 
-/// Given a list of atoms and filters compute the appropriate execution tree to perform the join of those atoms
-/// with the seminaive evaluation strategy.
-/// Note: The [`VariableOrder`] must only contain variables that occur in the `atoms` parameter.
-#[allow(clippy::too_many_arguments)]
-pub fn seminaive_join<Dict: Dictionary>(
-    tree: &mut ExecutionTree,
-    table_manager: &TableManager<Dict>,
-    step_last_applied: usize,
-    current_step_number: usize,
-    variable_order: &VariableOrder,
-    variables: &HashSet<Variable>,
-    atoms: &[Atom],
-    filters: &[Filter],
-) -> Option<ExecutionNodeRef> {
-    // We divide the atoms of the body into two parts:
-    //    * Main: Those atoms who received new elements since the last rule application
-    //    * Side: Those atoms which did not receive new elements since the last rule application
-    let mut body_side = Vec::<&Atom>::new();
-    let mut body_main = Vec::<&Atom>::new();
+impl SeminaiveJoinGenerator {
+    /// Compute the appropriate execution tree to perform the join with the seminaive evaluation strategy.
+    /// Note: The [`VariableOrder`] must only contain variables that occur in the `atoms` parameter.
+    pub fn seminaive_join<Dict: Dictionary>(
+        &self,
+        tree: &mut ExecutionTree,
+        table_manager: &TableManager<Dict>,
+        step_last_applied: usize,
+        current_step_number: usize,
+        variable_order: &VariableOrder,
+    ) -> Option<ExecutionNodeRef> {
+        // We divide the atoms of the body into two parts:
+        //    * Main: Those atoms who received new elements since the last rule application
+        //    * Side: Those atoms which did not receive new elements since the last rule application
+        let mut side_atoms = Vec::new();
+        let mut main_atoms = Vec::new();
 
-    for atom in atoms {
-        if let Some(last_step) = table_manager.last_step(atom.predicate()) {
+        let mut side_binding = Vec::new();
+        let mut main_binding = Vec::new();
+
+        for atom in &self.atoms {
+            let last_step = table_manager.last_step(atom.predicate())?;
+            let binding = atom_binding(atom, variable_order);
+
             if last_step < step_last_applied {
-                body_side.push(atom);
+                side_binding.push(binding);
+                side_atoms.push(atom.predicate());
             } else {
-                body_main.push(atom);
+                main_binding.push(binding);
+                main_atoms.push(atom.predicate());
             }
-        } else {
+        }
+
+        if main_atoms.is_empty() {
             return None;
         }
+
+        // We then combine the bindings into one
+        let join_binding: JoinBindings = side_binding.into_iter().chain(main_binding).collect();
+
+        // Now we can finally calculate the execution tree
+        let mut seminaive_union = tree.union_empty();
+        for atom_index in 0..main_atoms.len() {
+            let mut seminaive_node = tree.join_empty(join_binding.clone());
+
+            // For every atom that did not receive any update since the last rule application take all available elements
+            for predicate in side_atoms.iter() {
+                let subnode =
+                    subtree_union(tree, table_manager, *predicate, &(0..step_last_applied));
+                seminaive_node.add_subnode(subnode);
+            }
+
+            // For every atom before the mid point we take all the tables until the current `rule_step`
+            for predicate in main_atoms.iter().take(atom_index) {
+                let subnode =
+                    subtree_union(tree, table_manager, *predicate, &(0..current_step_number));
+                seminaive_node.add_subnode(subnode);
+            }
+
+            // For the middle atom we only take the new tables
+            let midnode = subtree_union(
+                tree,
+                table_manager,
+                main_atoms[atom_index],
+                &(step_last_applied..current_step_number),
+            );
+            seminaive_node.add_subnode(midnode);
+
+            // For every atom past the mid point we take only the old tables
+            for predicate in main_atoms.iter().skip(atom_index + 1) {
+                let subnode =
+                    subtree_union(tree, table_manager, *predicate, &(0..step_last_applied));
+                seminaive_node.add_subnode(subnode);
+            }
+
+            seminaive_union.add_subnode(seminaive_node);
+        }
+
+        // Apply filters
+        let (filter_classes, filter_assignments) =
+            compute_filters(&self.variables, variable_order, &self.filters);
+
+        let node_select_value = tree.select_value(seminaive_union, filter_assignments);
+        let node_select_equal = tree.select_equal(node_select_value, filter_classes);
+
+        Some(node_select_equal)
     }
-
-    if body_main.is_empty() {
-        return None;
-    }
-
-    // Join binding needs to be computed for both types of atoms as well
-    let side_binding = body_side.iter().map(|&a| atom_binding(a, variable_order));
-    let main_binding = body_main.iter().map(|&a| atom_binding(a, variable_order));
-    // We then combine the bindings into one
-    let join_binding = JoinBindings::new(side_binding.chain(main_binding).collect());
-
-    // Now we can finally calculate the execution tree
-    let mut seminaive_union = tree.union_empty();
-    for atom_index in 0..body_main.len() {
-        let seminaive_node = subtree_join(
-            tree,
-            table_manager,
-            &body_side,
-            &body_main,
-            step_last_applied,
-            current_step_number,
-            atom_index,
-            &join_binding,
-        );
-
-        seminaive_union.add_subnode(seminaive_node);
-    }
-
-    // Apply filters
-    let (filter_classes, filter_assignments) = compute_filters(variables, variable_order, filters);
-
-    let node_select_value = tree.select_value(seminaive_union, filter_assignments);
-    let node_select_equal = tree.select_equal(node_select_value, filter_classes);
-
-    Some(node_select_equal)
 }
