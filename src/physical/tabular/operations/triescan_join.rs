@@ -8,18 +8,148 @@ use crate::physical::{
         table_schema::TableColumnTypes,
         triescan::{TrieScan, TrieScanEnum},
     },
+    util::mapping::{permutation::Permutation, traits::NatMapping},
 };
 
-use std::cell::UnsafeCell;
-use std::fmt::Debug;
-use std::iter::repeat;
+use std::{cell::UnsafeCell, collections::HashMap};
+use std::{collections::hash_map::Entry, fmt::Debug};
+
+/// Identifies a column from a vector of given relations by its relation index and column index.
+#[derive(Debug, Clone, Copy)]
+pub struct JoinColumnIndex {
+    /// The index of the relation this column belons to.
+    pub relation: usize,
+    /// The index of this column within the relation.
+    pub column: usize,
+}
+
+/// Contains the information needed to compute a join over a list of relations.
+/// This includes:
+///     * What columns need to be joined with what other columns
+///     * In which order do the output columns appear in
+#[derive(Debug, Clone)]
+pub struct JoinBindings {
+    /// The column that is present at index `i` results from joining every every column in `bindings[i]`.
+    bindings: Vec<Vec<JoinColumnIndex>>,
+    /// Number of input relations.
+    num_relations: usize,
+}
+
+impl JoinBindings {
+    /// Create new [`JoinBindings`].
+    /// The function argument represents the join as a vector of [`Vec<usize>`]
+    /// where `r = argument[i][j]` means that the jth column of relation i will be joined
+    /// and contribute to the column r in the resulting table.
+    /// Assumes that at least one table is joined.
+    pub fn new(relations: Vec<Vec<usize>>) -> Self {
+        debug_assert!(!relations.is_empty());
+
+        let num_relations = relations.len();
+        let mut bindings_map = HashMap::<usize, Vec<JoinColumnIndex>>::new();
+
+        for (relation_index, relation_bindings) in relations.into_iter().enumerate() {
+            for (column_index, binding) in relation_bindings.into_iter().enumerate() {
+                let binding_vec = match bindings_map.entry(binding) {
+                    Entry::Occupied(entry) => entry.into_mut(),
+                    Entry::Vacant(entry) => entry.insert(Vec::new()),
+                };
+
+                binding_vec.push(JoinColumnIndex {
+                    relation: relation_index,
+                    column: column_index,
+                });
+            }
+        }
+
+        let mut bindings = vec![vec![]; bindings_map.len()];
+        for (result, binding) in bindings_map.into_iter() {
+            bindings[result] = binding;
+        }
+
+        debug_assert!(bindings.iter().all(|b| !b.is_empty()));
+
+        Self {
+            bindings,
+            num_relations,
+        }
+    }
+
+    /// Return the number of relation that are joined.
+    pub fn num_relations(&self) -> usize {
+        self.num_relations
+    }
+
+    /// Return the number of output columns in the resulting table.
+    pub fn num_output_columns(&self) -> usize {
+        self.bindings.len()
+    }
+
+    /// Return whether a join is required on some given output column index
+    pub fn is_join_needed(&self, index: usize) -> bool {
+        self.bindings[index].len() > 1
+    }
+
+    /// For a given output column index an iterator of the indices of the input columns that need to be joined.
+    pub fn joined_columns(&self, index: usize) -> impl Iterator<Item = &JoinColumnIndex> {
+        self.bindings[index].iter()
+    }
+
+    /// Change the bindings such as to take into account a reordering of the output table.
+    pub fn apply_permutation(&mut self, permutation: &Permutation) {
+        self.bindings = permutation.permute(&self.bindings);
+    }
+
+    fn binding_vector(&self) -> Vec<Vec<usize>> {
+        let mut result = vec![vec![]; self.num_relations];
+
+        for (output_index, input_columns) in self.bindings.iter().enumerate() {
+            for input_column in input_columns {
+                for _ in result[input_column.relation].len()..=input_column.column {
+                    result[input_column.relation].push(0);
+                }
+
+                result[input_column.relation][input_column.column] = output_index;
+            }
+        }
+
+        result
+    }
+
+    fn sort_input_relations(&self) -> Vec<Permutation> {
+        let bindings_vector = self.binding_vector();
+        bindings_vector
+            .into_iter()
+            .map(|v| Permutation::from_unsorted(&v))
+            .collect()
+    }
+
+    /// Returns whether or not this binding is compatible with the leapfrog triejoin algorithm.
+    pub fn is_leapfrog_compatible(&self) -> bool {
+        self.sort_input_relations().iter().all(|p| p.is_identity())
+    }
+
+    /// This function makes sure that the join is possible to execute with the leapfrog triejoin algorithm.
+    /// It returns a list of permutations where the ith entry indicates the needed reordering for the ith input table.
+    pub fn comply_with_leapfrog(&mut self) -> Vec<Permutation> {
+        let sort_permutations = self.sort_input_relations();
+
+        for input_columns in self.bindings.iter_mut() {
+            for input_column in input_columns {
+                input_column.column =
+                    sort_permutations[input_column.relation].get(input_column.column);
+            }
+        }
+
+        sort_permutations.into_iter().map(|p| p.invert()).collect()
+    }
+}
 
 /// A [`JoinBinding`] is a vector of [`Vec<usize>`] where `binding[i]`
 /// contains which layer of the `i`-th subscan is bound to which variable
 /// (Variables are represented by their index in the variable order)
 /// So the join R(a, b) S(b, c) T(a, c) with variable order [a, b, c] is represented
 /// with the binding [[0, 1], [1, 2], [0, 2]] (assuming trie_scans = [R, S, T])
-pub type JoinBinding = Vec<Vec<usize>>;
+// pub type JoinBinding = Vec<Vec<usize>>;
 
 /// [`TrieScan`] which represents the result from joining a set of tries (given as [`TrieScan`]s),
 #[derive(Debug)]
@@ -35,9 +165,9 @@ pub struct TrieScanJoin<'a> {
 
     /// Indices of the sub tries which are associated with a given layer in the result
     /// E.g., given the join R(a, b), S(b, c), T(a, c) with variable order a, b, c
-    /// we have layers_to_scans = [[R, T], [R, S], [S, T]]
-    /// or rather layers_to_scans = [[0, 2], [0, 1], [1, 2]] if trie_scans = [R, S, T]
-    layer_to_scans: Vec<Vec<usize>>,
+    /// we have `layers_to_scans = [[R, T], [R, S], [S, T]]`
+    /// or rather `layers_to_scans = [[0, 2], [0, 1], [1, 2]]` if `trie_scans = [R, S, T]`
+    layers_to_scans: Vec<Vec<usize>>,
 
     /// For each layer in the resulting trie, contains a [`ColumnScan`] for the intersection
     /// of the relevant scans in the sub tries.
@@ -49,66 +179,42 @@ pub struct TrieScanJoin<'a> {
     /// borrow checker.  TODO: find a nicer solution for this that
     /// doesn't expose [`UnsafeCell`] as part of the API.
     merge_joins: Vec<UnsafeCell<ColumnScanT<'a>>>,
+
+    _bindings: JoinBindings,
 }
 
 impl<'a> TrieScanJoin<'a> {
     /// Construct new [`TrieScanJoin`] object.
     /// Assumes that each entry in `bindings``is sorted and does not contain duplicates
-    pub fn new(trie_scans: Vec<TrieScanEnum<'a>>, bindings: &JoinBinding) -> Self {
-        debug_assert!(bindings.len() == trie_scans.len());
-        debug_assert!(trie_scans
-            .iter()
-            .enumerate()
-            .all(
-                |(scan_index, scan_enum)| bindings[scan_index].len() == scan_enum.get_types().len()
-            ));
-        debug_assert!(bindings
-            .iter()
-            .all(|binding| !binding.is_empty() && binding.is_sorted()));
+    pub fn new(trie_scans: Vec<TrieScanEnum<'a>>, bindings: &JoinBindings) -> Self {
+        debug_assert!(bindings.is_leapfrog_compatible());
 
-        // Calculate the arity of the result trie
-        let target_arity = 1 + bindings.iter().fold(0, |acc, v| {
-            acc.max(*v.iter().max().expect("Each binding should be non-empty."))
-        });
-
-        // Indices of the sub tries which are associated with a given layer in the result
-        let mut layer_to_scans = repeat(Vec::new()).take(target_arity).collect::<Vec<_>>();
-
-        // For each layer in the result trie, contains
-        let mut merge_join_indices: Vec<Vec<_>> =
-            repeat(Vec::new()).take(target_arity).collect::<Vec<_>>();
-
-        // Types of the columns in the result trie
-        let mut target_types = vec![DataTypeName::U64; target_arity];
-
-        // Continuing the example from above we obtain
-        // layers_to_scans = [[0, 2], [0, 1], [1, 2]] and
-        // merge_join_indices = [[0, 0], [1, 0], [1, 1]]
-        // Combining this information gives you e.g. that for the second layer in the result
-        // you need to join the second column of the first scan with the first column of the second scan
-        for (scan_index, binding) in bindings.iter().enumerate() {
-            for (col_index, &var_index) in binding.iter().enumerate() {
-                layer_to_scans[var_index].push(scan_index);
-                merge_join_indices[var_index].push(col_index);
-
-                target_types[var_index] = trie_scans[scan_index].get_types()[col_index];
-            }
-        }
-
+        let mut target_types = Vec::<DataTypeName>::new();
+        let mut layers_to_scans = Vec::<Vec<usize>>::new();
         let mut merge_joins: Vec<UnsafeCell<ColumnScanT<'a>>> = Vec::new();
 
-        // This loop builds the [`ColumnScanJoin`] as suggested above
-        for (var_index, scan_indices) in layer_to_scans.iter().enumerate() {
-            // Define join code once and generate it for all data types
+        for output_index in 0..bindings.num_output_columns() {
+            let first_joined_column = bindings
+                .joined_columns(output_index)
+                .next()
+                .expect("There must be at least one column that is being joined");
+            let output_type =
+                trie_scans[first_joined_column.relation].get_types()[first_joined_column.column];
+
+            layers_to_scans.push(Vec::new());
+            let layer_to_scans = layers_to_scans.last_mut().unwrap();
+
+            let join_needed = bindings.is_join_needed(output_index);
             macro_rules! merge_join_for_datatype {
                 ($variant:ident, $type:ty) => {{
-                    if scan_indices.len() > 1 {
+                    if join_needed {
                         let mut scans = Vec::<&ColumnScanCell<$type>>::new();
-                        for (index, &scan_index) in scan_indices.iter().enumerate() {
-                            let column_index = merge_join_indices[var_index][index];
+                        for input_column in bindings.joined_columns(output_index) {
+                            layer_to_scans.push(input_column.relation);
+
                             unsafe {
                                 let column_scan =
-                                    &*trie_scans[scan_index].get_scan(column_index).unwrap().get();
+                                    &*trie_scans[input_column.relation].get_scan(input_column.column).unwrap().get();
 
                                 if let ColumnScanT::$variant(cs) = column_scan {
                                     scans.push(cs);
@@ -123,12 +229,11 @@ impl<'a> TrieScanJoin<'a> {
                         ))))
                     } else {
                         // If we have only one column then no join is necessary and we use a [`ColumnScanPass`]
-                        let scan_index = scan_indices[0];
-                        let column_index = merge_join_indices[var_index][0];
-
                         unsafe {
+                            layer_to_scans.push(first_joined_column.relation);
+
                             let column_scan =
-                                &*trie_scans[scan_index].get_scan(column_index).unwrap().get();
+                                &*trie_scans[first_joined_column.relation].get_scan(first_joined_column.column).unwrap().get();
 
                             if let ColumnScanT::$variant(cs) = column_scan {
                                 merge_joins.push(UnsafeCell::new(ColumnScanT::$variant(ColumnScanCell::new(
@@ -142,20 +247,23 @@ impl<'a> TrieScanJoin<'a> {
                 }};
             }
 
-            match target_types[var_index] {
+            match output_type {
                 DataTypeName::U32 => merge_join_for_datatype!(U32, u32),
                 DataTypeName::U64 => merge_join_for_datatype!(U64, u64),
                 DataTypeName::Float => merge_join_for_datatype!(Float, Float),
                 DataTypeName::Double => merge_join_for_datatype!(Double, Double),
             }
+
+            target_types.push(output_type);
         }
 
         Self {
             trie_scans,
             target_types,
             current_layer: None,
-            layer_to_scans,
+            layers_to_scans,
             merge_joins,
+            _bindings: bindings.clone(),
         }
     }
 }
@@ -164,7 +272,7 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
         let current_layer = self.current_layer.unwrap();
-        let current_scans = &self.layer_to_scans[current_layer];
+        let current_scans = &self.layers_to_scans[current_layer];
 
         for &scan_index in current_scans {
             self.trie_scans[scan_index].up();
@@ -183,7 +291,7 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
 
         debug_assert!(current_layer < self.target_types.len());
 
-        let current_scans = &self.layer_to_scans[current_layer];
+        let current_scans = &self.layers_to_scans[current_layer];
 
         for &scan_index in current_scans {
             self.trie_scans[scan_index].down();
@@ -223,6 +331,7 @@ mod test {
         columnscan::ColumnScanT,
     };
     use crate::physical::tabular::operations::materialize;
+    use crate::physical::tabular::operations::triescan_join::JoinBindings;
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
 
@@ -265,7 +374,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
-            &vec![vec![0, 1], vec![1, 2]],
+            &JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         );
 
         join_iter.down();
@@ -337,7 +446,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
-            &vec![vec![0, 1], vec![1, 2]],
+            &JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         );
 
         let mut join_iter_abc = TrieScanJoin::new(
@@ -345,7 +454,7 @@ mod test {
                 TrieScanEnum::TrieScanJoin(join_iter_ab),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_c)),
             ],
-            &vec![vec![0, 1, 2], vec![0, 1]],
+            &JoinBindings::new(vec![vec![0, 1, 2], vec![0, 1]]),
         );
 
         join_iter_abc.down();
@@ -398,7 +507,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie)),
             ],
-            &vec![vec![0, 1], vec![1, 2]],
+            &JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         );
 
         join_iter.down();
@@ -474,7 +583,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_inv)),
             ],
-            &vec![vec![0, 2], vec![1, 2]],
+            &JoinBindings::new(vec![vec![0, 2], vec![1, 2]]),
         );
 
         let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
@@ -525,7 +634,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_new)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_old)),
             ],
-            &vec![vec![0, 1], vec![1, 2]],
+            &JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         );
 
         let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
@@ -584,7 +693,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
-            &vec![vec![1, 2], vec![0, 1]],
+            &JoinBindings::new(vec![vec![1, 2], vec![0, 1]]),
         );
 
         let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
@@ -641,7 +750,7 @@ mod test {
             vec![TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(
                 &my_trie,
             ))],
-            &vec![vec![0]],
+            &JoinBindings::new(vec![vec![0]]),
         );
 
         my_join_iter.down();

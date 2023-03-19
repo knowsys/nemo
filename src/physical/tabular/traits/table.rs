@@ -9,7 +9,7 @@ pub trait Table: Debug {
     fn from_cols(cols: Vec<VecT>) -> Self;
 
     /// Build table from a list of rows.
-    fn from_rows(rows: Vec<Vec<DataValueT>>) -> Self;
+    fn from_rows(rows: &[Vec<DataValueT>]) -> Self;
 
     /// Returns the number of rows in the table.
     fn row_num(&self) -> usize;

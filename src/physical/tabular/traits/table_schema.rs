@@ -1,4 +1,7 @@
-use crate::physical::datatypes::DataTypeName;
+use crate::physical::{
+    datatypes::DataTypeName, tabular::operations::triescan_project::ProjectReordering,
+    util::mapping::permutation::Permutation,
+};
 use std::fmt::Debug;
 
 /// Type that stores the datatype used in each column of the table.
@@ -27,6 +30,20 @@ impl TableSchema {
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
+        }
+    }
+
+    /// Construct a new [`TableSchema`]  which is a reordered version of this schema
+    pub fn reordered(&self, reordering: &ProjectReordering) -> Self {
+        Self {
+            entries: reordering.transform(&self.entries),
+        }
+    }
+
+    /// Contruct a new [`TableSchema`] which is a permuted version of this schema.
+    pub fn permuted(&self, permutation: &Permutation) -> Self {
+        Self {
+            entries: permutation.permute(&self.entries),
         }
     }
 

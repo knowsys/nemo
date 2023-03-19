@@ -1,16 +1,14 @@
 //! This module contains functionality for applying a rule.
 
-use std::collections::HashSet;
-
 use crate::{
     error::Error,
     logical::{
         model::{Identifier, Program, Rule},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
-        table_manager::TableKey,
+        table_manager::SubtableExecutionPlan,
         TableManager,
     },
-    physical::{dictionary::Dictionary, management::ExecutionPlan},
+    physical::dictionary::Dictionary,
 };
 
 use super::{
@@ -55,7 +53,7 @@ impl<Dict: Dictionary> RuleExecution<Dict> {
         table_manager: &mut TableManager<Dict>,
         rule_info: &RuleInfo,
         step_number: usize,
-    ) -> Result<HashSet<Identifier>, Error> {
+    ) -> Result<Vec<Identifier>, Error> {
         log::info!(
             "Available orders: {}",
             self.promising_variable_orders.iter().enumerate().fold(
@@ -73,23 +71,23 @@ impl<Dict: Dictionary> RuleExecution<Dict> {
         // TODO: Just because its the first doesn't mean its the best
         let best_variable_order = &self.promising_variable_orders[0];
 
-        let mut execution_plan = ExecutionPlan::<TableKey>::new();
-        let tree_body = self.body_strategy.execution_tree(
+        let mut subtable_execution_plan = SubtableExecutionPlan::default();
+        let body_tree_id = self.body_strategy.add_body_tree(
             table_manager,
+            &mut subtable_execution_plan,
             rule_info,
             best_variable_order.clone(),
             step_number,
         );
-        let trees_head = self.head_strategy.execution_tree(
+        self.head_strategy.add_head_trees(
             table_manager,
+            &mut subtable_execution_plan,
+            body_tree_id,
             rule_info,
             best_variable_order.clone(),
             step_number,
         );
 
-        execution_plan.push(tree_body);
-        execution_plan.append(trees_head);
-
-        table_manager.execute_plan_optimized(execution_plan)
+        table_manager.execute_plan(subtable_execution_plan)
     }
 }

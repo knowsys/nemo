@@ -1,9 +1,16 @@
-use core::hash::Hash;
-use std::collections::{hash_map::Entry, HashMap};
-use std::fmt::Debug;
+use std::collections::HashMap;
+use std::fmt::{Debug, Display};
+use std::fs::File;
+use std::path::PathBuf;
 
 use bytesize::ByteSize;
 
+use crate::io::csv::read;
+use crate::physical::datatypes::{DataTypeName, DataValueT};
+use crate::physical::tabular::operations::triescan_project::ProjectReordering;
+use crate::physical::tabular::traits::table::Table;
+use crate::physical::util::mapping::permutation::Permutation;
+use crate::physical::util::mapping::traits::NatMapping;
 use crate::{
     error::Error,
     meta::TimedCode,
@@ -16,7 +23,7 @@ use crate::{
                 TrieScanSelectValue, TrieScanUnion,
             },
             table_types::trie::{Trie, TrieScanGeneric},
-            traits::{table::Table, table_schema::TableSchema, triescan::TrieScanEnum},
+            traits::{table_schema::TableSchema, triescan::TrieScanEnum},
         },
     },
 };
@@ -27,54 +34,351 @@ use super::{
     ByteSized, ExecutionPlan,
 };
 
-/// Type which represents table id.
-pub type TableId = usize;
-/// Traits which have to be satisfied by a TableKey type.
-pub trait TableKeyType: Debug + Eq + Hash + Clone {}
+/// Type that represents a reordering of the columns of a table.
+/// It is given in form of a permutation which encodes the transformation
+/// that is needed to get from the original column order to this one.
+pub type ColumnOrder = Permutation;
 
-/// Struct that contains useful information about a trie
-/// as well as the actual owner of the trie.
-#[derive(Debug)]
-struct TableInfo<TableKey: TableKeyType> {
-    /// The trie.
-    pub trie: Trie,
-    /// Associated key.
-    pub key: TableKey,
-    /// The schema of the table
-    /// TODO: Use this
-    #[allow(dead_code)]
-    pub schema: TableSchema,
+/// Type which represents table id.
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct TableId(u64);
+
+impl Display for TableId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
 }
 
-impl<TableKey: TableKeyType> TableInfo<TableKey> {
-    /// Create new [`TableInfo`].
-    pub fn new(trie: Trie, key: TableKey, schema: TableSchema) -> Self {
-        Self { trie, key, schema }
+impl TableId {
+    /// Increment the id by one.
+    /// Return the old (non-incremented) id.
+    pub fn increment(&mut self) -> Self {
+        let old = *self;
+        self.0 += 1;
+        old
+    }
+
+    /// Return the integer value that represents the id.
+    pub fn get(&self) -> u64 {
+        self.0
+    }
+}
+
+/// Indicates the file format of a table stored on disc.
+#[derive(Debug)]
+pub enum TableSource {
+    /// Table is contained in csv file
+    CSV(PathBuf),
+    /// Table is stored as facts in an rls file
+    /// TODO: To not invoke the parser twice I just put the parsed "row-table" here.
+    /// Does not seem quite right
+    RLS(Vec<Vec<DataValueT>>),
+}
+
+impl Display for TableSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TableSource::CSV(path) => write!(f, "CSV file: {}", path.display()),
+            TableSource::RLS(_) => write!(f, "Rule file"),
+        }
+    }
+}
+
+/// Data which stores a trie, possibly not in memory.
+#[derive(Debug)]
+pub enum TableStorage {
+    /// Table is stored as a [`Trie`] in memory.
+    InMemory(Trie),
+    /// Table is stored on disk.
+    OnDisk(TableSchema, Vec<TableSource>),
+}
+
+impl TableStorage {
+    /// Load table from a given on-disk source
+    /// TODO: This function should change when the type system gets introduced on the logical layer
+    fn load_from_disk<Dict: Dictionary>(
+        source: &TableSource,
+        schema: &TableSchema,
+        dict: &mut Dict,
+    ) -> Result<Trie, Error> {
+        {
+            TimedCode::instance()
+                .sub("Reasoning/Execution/Load Table")
+                .start();
+
+            log::info!("Loading source {source}");
+
+            let trie = match source {
+                TableSource::CSV(file) => {
+                    // Using fallback solution to treat eveything as string for now (storing as u64 internally)
+                    let datatypes: Vec<Option<DataTypeName>> =
+                        (0..schema.arity()).map(|_| None).collect();
+
+                    let gz_decoder = flate2::read::GzDecoder::new(File::open(file.as_path())?);
+
+                    let col_table = if gz_decoder.header().is_some() {
+                        read(&datatypes, &mut crate::io::csv::reader(gz_decoder), dict)?
+                    } else {
+                        read(
+                            &datatypes,
+                            &mut crate::io::csv::reader(File::open(file.as_path())?),
+                            dict,
+                        )?
+                    };
+
+                    Trie::from_cols(col_table)
+                }
+                TableSource::RLS(table_rows) => Trie::from_rows(table_rows),
+            };
+
+            TimedCode::instance()
+                .sub("Reasoning/Execution/Load Table")
+                .stop();
+
+            Ok(trie)
+        }
+    }
+
+    /// Function that makes sure that underlying table is available in memory.
+    pub fn into_memory<'a, Dict: Dictionary>(
+        &'a mut self,
+        dict: &mut Dict,
+    ) -> Result<&'a Trie, Error> {
+        match self {
+            TableStorage::InMemory(_) => {}
+            TableStorage::OnDisk(schema, sources) => {
+                let new_trie = if sources.len() == 1 {
+                    Self::load_from_disk(&sources[0], schema, dict)?
+                } else {
+                    // If the trie results form multiple sources
+                    // we load each source indivdually and then compute the union over all tries
+
+                    let mut loaded_tries = Vec::<Trie>::with_capacity(sources.len());
+                    for source in sources {
+                        loaded_tries.push(Self::load_from_disk(source, schema, dict)?);
+                    }
+
+                    let loaded_tries_iters: Vec<TrieScanEnum> = loaded_tries
+                        .iter()
+                        .map(|t| TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(t)))
+                        .collect();
+                    let mut union_iter =
+                        TrieScanEnum::TrieScanUnion(TrieScanUnion::new(loaded_tries_iters));
+
+                    materialize(&mut union_iter).unwrap()
+                };
+
+                *self = TableStorage::InMemory(new_trie);
+            }
+        }
+
+        Ok(self
+            .get_trie()
+            .expect("Trie has been loaded into memory above."))
+    }
+
+    /// Return a reference to the stored trie.
+    /// Returns `None` if trie is not in memory.
+    pub fn get_trie(&self) -> Option<&Trie> {
+        if let TableStorage::InMemory(trie) = self {
+            Some(trie)
+        } else {
+            None
+        }
+    }
+}
+
+impl ByteSized for TableStorage {
+    fn size_bytes(&self) -> ByteSize {
+        match self {
+            TableStorage::InMemory(trie) => trie.size_bytes(),
+            TableStorage::OnDisk(_, _) => ByteSize(0),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum TableStatus {
+    /// Table is present in different orders
+    Present(HashMap<ColumnOrder, TableStorage>),
+    /// Table has the same contents as another table except for reordering.
+    /// The permutation is the transformation needed to get from the referenced table to this one.
+    Reference(TableId, Permutation),
+}
+
+/// Manages tables under different orders.
+/// Also has the capability of representing a table as a reordered version of another.
+#[derive(Debug, Default)]
+pub struct OrderedReferenceManager {
+    map: HashMap<TableId, TableStatus>,
+}
+
+/// Stores the result of a function that resolves table references (mutable version)
+struct TableResolvedMut<'a> {
+    /// Hashmap containing all the available orders of a table.
+    map: &'a mut HashMap<ColumnOrder, TableStorage>,
+    /// If the requested table is a reordered reference then this is the reordered requested column order
+    /// If no reordering was required then this is the original requested column order.
+    order: ColumnOrder,
+}
+
+/// Stores the result of a function that resolves table references
+struct TableResolved<'a> {
+    /// Hashmap containing all the available orders of a table.
+    map: &'a HashMap<ColumnOrder, TableStorage>,
+    /// If the requested table is a reordered reference then this is the reordered requested column order
+    /// If no reordering was required then this is the original requested column order.
+    order: ColumnOrder,
+}
+
+impl OrderedReferenceManager {
+    fn resolve_reference_mut(
+        &mut self,
+        id: TableId,
+        order: &ColumnOrder,
+    ) -> Option<TableResolvedMut> {
+        match &self.map.get(&id)? {
+            TableStatus::Present(_) => {}
+            TableStatus::Reference(ref_id, permutation) => {
+                return self.resolve_reference_mut(
+                    *ref_id,
+                    &order.chain_permutation(&permutation.invert()),
+                )
+            }
+        }
+
+        match self.map.get_mut(&id)? {
+            TableStatus::Present(map) => {
+                return Some(TableResolvedMut {
+                    map,
+                    order: order.clone(),
+                })
+            }
+            TableStatus::Reference(_, _) => {}
+        }
+
+        unreachable!("Each case should have been handled by one of the above matches.")
+    }
+
+    fn resolve_reference(&self, id: TableId, order: &ColumnOrder) -> Option<TableResolved> {
+        match &self.map.get(&id)? {
+            TableStatus::Present(map) => Some(TableResolved {
+                map,
+                order: order.clone(),
+            }),
+            TableStatus::Reference(ref_id, permutation) => {
+                self.resolve_reference(*ref_id, &order.chain_permutation(&permutation.invert()))
+            }
+        }
+    }
+
+    /// Add a new table (that is not a reference).
+    pub fn add_present(&mut self, id: TableId, order: ColumnOrder, storage: TableStorage) {
+        if let Some(resolved) = self.resolve_reference_mut(id, &order) {
+            resolved.map.insert(order, storage);
+        } else {
+            let mut new_order_map = HashMap::<ColumnOrder, TableStorage>::new();
+            new_order_map.insert(order, storage);
+
+            let status = TableStatus::Present(new_order_map);
+            self.map.insert(id, status);
+        }
+    }
+
+    /// Add a new reference to another table.
+    /// Panics if the id of the referenced table does not exist.
+    pub fn add_reference(&mut self, id: TableId, reference_id: TableId, permutation: Permutation) {
+        let (final_id, final_permutation) = if let TableStatus::Reference(ref_id, ref_permutation) =
+            &self
+                .map
+                .get(&reference_id)
+                .expect("Referenced id should exist.")
+        {
+            (*ref_id, ref_permutation.chain_permutation(&permutation))
+        } else {
+            (id, permutation)
+        };
+
+        let status = TableStatus::Reference(final_id, final_permutation);
+        self.map.insert(id, status);
+    }
+
+    /// Return a reference to the [`TableStorage`] associated with the given [`TableId`] and [`ColumnOrder`].
+    /// Returns `None` if there is no table with that id or order.
+    pub fn table_storage<'a>(
+        &'a self,
+        id: TableId,
+        order: &ColumnOrder,
+    ) -> Option<&'a TableStorage> {
+        let resolved = self.resolve_reference(id, order)?;
+        resolved.map.get(&resolved.order)
+    }
+
+    /// Return a mutable reference to the [`TableStorage`] associated with the given [`TableId`] and [`ColumnOrder`].
+    /// Returns `None` if there is no table with that id or order.
+    pub fn table_storage_mut<'a>(
+        &'a mut self,
+        id: TableId,
+        order: &ColumnOrder,
+    ) -> Option<&'a mut TableStorage> {
+        let resolved = self.resolve_reference_mut(id, order)?;
+        resolved.map.get_mut(&resolved.order)
+    }
+
+    /// Return an iterator of all the available orders of a table.
+    /// Returns `None` if there is no table with the given id.
+    pub fn available_orders(&self, id: TableId) -> Option<impl Iterator<Item = &ColumnOrder>> {
+        let resolved = self.resolve_reference(id, &ColumnOrder::default())?;
+        Some(resolved.map.keys())
+    }
+
+    /// Delete the given table.
+    /// Return `None` if there is no table with the given id.
+    /// TODO: This does not check/fix references of tables.
+    pub fn delete_table(&mut self, id: &TableId) -> Option<()> {
+        self.map.remove(id)?;
+        Some(())
+    }
+}
+
+impl ByteSized for OrderedReferenceManager {
+    fn size_bytes(&self) -> ByteSize {
+        self.map.iter().fold(ByteSize(0), |acc, (_, status)| {
+            acc + match &status {
+                TableStatus::Present(ordered_tries) => ordered_tries
+                    .iter()
+                    .map(|(_, s)| s.size_bytes())
+                    .fold(ByteSize(0), |acc, x| acc + x),
+                TableStatus::Reference(_, _) => ByteSize(0),
+            }
+        })
     }
 }
 
 /// Struct that contains useful information about a trie
-/// that is only available temporarily.
+/// as well as the actual owner of the trie.
 #[derive(Debug)]
-pub(super) struct TempTableInfo {
-    /// The trie.
-    pub trie: Trie,
+struct TableInfo {
+    /// The name of the table.
+    pub name: String,
+    /// The schema of the table
+    pub schema: TableSchema,
 }
 
-impl TempTableInfo {
-    /// Create new [`TempTableInfo`].
-    pub fn new(trie: Trie) -> Self {
-        Self { trie }
+impl TableInfo {
+    /// Create new [`TableInfo`].
+    pub fn new(name: String, schema: TableSchema) -> Self {
+        Self { name, schema }
     }
 }
 
 /// Represents a collection of tables
 #[derive(Debug)]
-pub struct DatabaseInstance<TableKey: TableKeyType, Dict: Dictionary> {
+pub struct DatabaseInstance<Dict: Dictionary> {
     /// Structure which owns all the tries; accessed through Id.
-    id_to_table: HashMap<TableId, TableInfo<TableKey>>,
-    /// Alternative access scheme through a TableKey.
-    key_to_tableid: HashMap<TableKey, TableId>,
+    storage_handler: OrderedReferenceManager,
+    /// Map with additional infromation about the tables
+    table_infos: HashMap<TableId, TableInfo>,
 
     /// Dictionary which stores the strings associates with abstract constants
     dict_constants: Dict,
@@ -84,139 +388,54 @@ pub struct DatabaseInstance<TableKey: TableKeyType, Dict: Dictionary> {
 
     /// The lowest unused TableId.
     /// Will be incremented for each new table and will never be reused.
-    current_id: usize,
+    current_id: TableId,
 }
 
-impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> {
+/// Result of executing an [`ExecutionTree`].
+enum ComputationResult {
+    /// Resulting trie is only stored temporarily within this object.
+    Temporary(Trie),
+    /// Trie is stored permanently under a [`TableId`] and [`ColumnOrder`].
+    Permanent(TableId, ColumnOrder),
+    /// The computation resulted in an empty trie.
+    Empty,
+}
+
+impl<Dict: Dictionary> DatabaseInstance<Dict> {
     /// Create new [`DatabaseInstance`]
     pub fn new(dict_constants: Dict) -> Self {
         let current_null = 1 << 63; // TODO: Think about a robust null representation method
 
         Self {
-            id_to_table: HashMap::new(),
-            key_to_tableid: HashMap::new(),
+            storage_handler: OrderedReferenceManager::default(),
+            table_infos: HashMap::new(),
             dict_constants,
             current_null,
-            current_id: 0,
+            current_id: TableId::default(),
         }
-    }
-
-    /// Return whether a given [`TableKey`] is associated with a table.
-    pub fn table_exists(&self, key: &TableKey) -> bool {
-        self.key_to_tableid.contains_key(key)
     }
 
     /// Return the current number of tables.
     pub fn num_tables(&self) -> usize {
-        self.id_to_table.len()
+        self.table_infos.len()
     }
 
-    /// Return the id of a table given a key.
-    /// Panics if the key does not exist.
-    pub fn get_id(&self, key: &TableKey) -> TableId {
-        self.key_to_tableid.get(key).copied().unwrap()
-    }
-
-    /// Return the key of a table given its id.
+    /// Return the name of a table given its id.
     /// Panics if the id does not exist.
-    pub fn get_key(&self, id: TableId) -> TableKey {
-        self.id_to_table.get(&id).unwrap().key.clone()
+    pub fn table_name(&self, id: TableId) -> &str {
+        &self.table_infos.get(&id).unwrap().name
     }
 
-    /// Given a id return a reference to the corresponding trie.
+    /// Return the schema of a table identified by the given [`TableId`].
     /// Panics if the id does not exist.
-    pub fn get_by_id(&self, id: TableId) -> &Trie {
-        self.id_to_table.get(&id).map(|t| &t.trie).unwrap()
+    pub fn table_schema(&self, id: TableId) -> &TableSchema {
+        &self.table_infos.get(&id).unwrap().schema
     }
 
-    /// Given a id return a mutable reference to the corresponding trie.
+    /// Return the arity of a table identified by the given [`TableId`].
     /// Panics if the id does not exist.
-    pub fn get_by_id_mut(&mut self, id: TableId) -> &mut Trie {
-        self.id_to_table.get_mut(&id).map(|t| &mut t.trie).unwrap()
-    }
-
-    /// Given a [`TableKey`] return a reference to the corresponding trie.
-    /// Panics if the key does not exist.
-    pub fn get_by_key<'a>(&'a self, key: &TableKey) -> &'a Trie {
-        let id = self.get_id(key);
-        self.id_to_table.get(&id).map(|i| &i.trie).unwrap()
-    }
-
-    /// Given a [`TableKey`] return a mutable reference to the corresponding trie.
-    /// Panics if the key does not exist.
-    pub fn get_by_key_mut<'a>(&'a mut self, key: &TableKey) -> &'a mut Trie {
-        let id = self.get_id(key);
-        self.id_to_table.get_mut(&id).map(|t| &mut t.trie).unwrap()
-    }
-
-    /// Return the schema of a table identified by the given [`TableKey`].
-    /// /// Panics if the key does not exist.
-    pub fn get_schema<'a>(&'a self, key: &TableKey) -> &'a TableSchema {
-        let id = self.get_id(key);
-        self.id_to_table.get(&id).map(|i| &i.schema).unwrap()
-    }
-
-    /// Add the given trie to the instance under the given table key.
-    /// Panics if the key is already used.
-    pub fn add(&mut self, key: TableKey, trie: Trie, schema: TableSchema) -> TableId {
-        let used_id = self.current_id;
-
-        let insert_result = self
-            .id_to_table
-            .insert(self.current_id, TableInfo::new(trie, key.clone(), schema));
-
-        if insert_result.is_some() {
-            panic!("A table key should not be used twice");
-        }
-
-        self.key_to_tableid.insert(key, self.current_id);
-
-        self.current_id += 1;
-        used_id
-    }
-
-    /// Replace a trie (searched by key) with another.
-    /// Will add a new trie if the key does not exist.
-    /// Panics if the key is not already used.
-    pub fn update_by_key(&mut self, key: TableKey, trie: Trie) {
-        let id = self.get_id(&key);
-        self.id_to_table.get_mut(&id).unwrap().trie = trie;
-    }
-
-    /// Replace a trie (searched by id) with another
-    /// Will add a new trie if the id does not exist
-    /// Returns true if the id existed
-    pub fn update_by_id(&mut self, id: TableId, trie: Trie) {
-        self.id_to_table.get_mut(&id).unwrap().trie = trie;
-    }
-
-    /// Delete a trie given its key.
-    /// Panics if the table does not exist.
-    pub fn delete_by_key(&mut self, key: &TableKey) {
-        if let Entry::Occupied(key_entry) = self.key_to_tableid.entry(key.clone()) {
-            let id = *key_entry.get();
-            key_entry.remove();
-
-            if let Entry::Occupied(id_entry) = self.id_to_table.entry(id) {
-                id_entry.remove();
-            } else {
-                // Both HashMap should contain the table
-                unreachable!()
-            }
-        } else {
-            panic!("Table to be deleted should exist.");
-        }
-    }
-
-    /// Delete a trie given its id.
-    /// Panics if the table does not exist.
-    pub fn delete_by_id(&mut self, id: TableId) {
-        if let Entry::Occupied(entry) = self.id_to_table.entry(id) {
-            self.key_to_tableid.remove(&entry.get().key);
-            entry.remove();
-        } else {
-            panic!("Table to be deleted should exist.");
-        }
+    pub fn table_arity(&self, id: TableId) -> usize {
+        self.table_schema(id).arity()
     }
 
     /// Returns a mutable reference to the dictionary used for associating abstract constants with strings.
@@ -229,10 +448,170 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
         &self.dict_constants
     }
 
+    /// Register a new table under a given name and schema.
+    /// Returns the [`TableId`] with which the new table can be addressed.
+    pub fn register_table(&mut self, name: &str, schema: TableSchema) -> TableId {
+        debug_assert!(schema.arity() > 0);
+
+        self.table_infos
+            .insert(self.current_id, TableInfo::new(String::from(name), schema));
+
+        self.current_id.increment()
+    }
+
+    /// Add a new trie.
+    pub fn add_trie(&mut self, id: TableId, order: ColumnOrder, trie: Trie) {
+        self.storage_handler
+            .add_present(id, order, TableStorage::InMemory(trie));
+    }
+
+    /// Register table and add a new trie.
+    pub fn register_add_trie(
+        &mut self,
+        name: &str,
+        schema: TableSchema,
+        order: ColumnOrder,
+        trie: Trie,
+    ) -> TableId {
+        let id = self.register_table(name, schema);
+        self.add_trie(id, order, trie);
+
+        id
+    }
+
+    /// Add the sources of a table currently stored on disk.
+    pub fn add_sources(&mut self, id: TableId, order: ColumnOrder, sources: Vec<TableSource>) {
+        let schema = self.table_schema(id).clone();
+        self.storage_handler
+            .add_present(id, order, TableStorage::OnDisk(schema, sources));
+    }
+
+    /// Add a new table that is a reordered version of an existing table.
+    /// Panics if referenced id does not exist.
+    pub fn add_reference(&mut self, id: TableId, reference_id: TableId, permutation: Permutation) {
+        self.storage_handler
+            .add_reference(id, reference_id, permutation);
+    }
+
+    /// Deletes a table with all its orders.
+    /// TODO: For now, this does not care about keeping references intact.
+    /// Panics if the table does not exist.
+    pub fn delete(&mut self, id: TableId) {
+        self.storage_handler
+            .delete_table(&id)
+            .expect("Table to be deleted should exist.");
+        self.table_infos
+            .remove(&id)
+            .expect("Table to be deleted should exist.");
+    }
+
+    /// Provides a measure of how "difficult" it is to transform a column with this order into another.
+    /// Say, `from = {0->2, 1->1, 2->0}` and `to = {0->1, 1->0, 2->2}`.
+    /// Starting from position 0 in "from" one needs to skip one layer to reach the 2 in "to" (+1).
+    /// Then we need to go back two layers to reach the 1 (+2)
+    /// Finally, we go one layer down to reach 0 (+-0).
+    /// This gives us an overall score of 3.
+    /// Returned value is 0 if and only if from == to.
+    fn distance(from: &ColumnOrder, to: &ColumnOrder) -> usize {
+        let max_len = from.last_mapped().max(to.last_mapped()).unwrap_or(0);
+
+        let to_inverted = to.invert();
+
+        let mut current_score: usize = 0;
+        let mut current_position_from: isize = -1;
+
+        for position_to in 0..=max_len {
+            let current_value = to_inverted.get(position_to);
+
+            let position_from = from.get(current_value);
+            let difference: isize = (position_from as isize) - current_position_from;
+
+            let penalty: usize = if difference <= 0 {
+                difference.unsigned_abs()
+            } else {
+                // Taking one forward step should not be punished
+                (difference - 1) as usize
+            };
+
+            current_score += penalty;
+            current_position_from = position_from as isize;
+        }
+
+        current_score
+    }
+
+    /// Helper function that iterates through a collection of [`ColumnOrder`]
+    /// to find the one that is "closest" to given one.
+    /// Returns `None` if the given iterator is empty.
+    fn search_closest_order<'a, OrderIter: Iterator<Item = &'a ColumnOrder>>(
+        iter_orders: OrderIter,
+        order: &ColumnOrder,
+    ) -> Option<&'a ColumnOrder> {
+        iter_orders.min_by(|x, y| Self::distance(x, order).cmp(&Self::distance(y, order)))
+    }
+
+    /// Return a [`ProjectReordering`] that will turn a table given in some [`ColumnOrder`] into the same table in another [`ColumnOrder`].
+    pub fn reorder_to(
+        source_order: &ColumnOrder,
+        target_order: &ColumnOrder,
+        arity: usize,
+    ) -> ProjectReordering {
+        let mut result_map = HashMap::<usize, usize>::new();
+
+        for input in 0..arity {
+            let source_output = source_order.get(input);
+            let target_output = target_order.get(input);
+
+            result_map.insert(source_output, target_output);
+        }
+
+        ProjectReordering::from_map(result_map, arity)
+    }
+
+    /// Will ensure that the requested table will exist as a [`Trie`] in memory.
+    /// More precisely this will
+    ///     * Reorder an existing table if the table is not available in the requested order
+    ///     * Load a table from disk if it currently not in memory
+    /// Panics if the requested table does not exist.
+    fn make_available_in_memory(&mut self, id: TableId, order: &ColumnOrder) -> Result<(), Error> {
+        let arity = self.table_arity(id);
+        let closest_order = Self::search_closest_order(
+            self.storage_handler
+                .available_orders(id)
+                .expect("Table with given id should exist."),
+            order,
+        )
+        .expect("This function assumes that there is at least one table under the given id.");
+
+        let reorder = Self::reorder_to(order, closest_order, arity);
+        let trie_unordered = self
+            .storage_handler
+            .table_storage_mut(id, &closest_order.clone())
+            .expect("Call to search_closest_ordered should give us an existing order")
+            .into_memory(&mut self.dict_constants)?;
+
+        if !reorder.is_identity() {
+            let mut scan_project =
+                TrieScanEnum::TrieScanProject(TrieScanProject::new(trie_unordered, reorder));
+
+            TimedCode::instance()
+                .sub("Reasoning/Execution/Required Reorder")
+                .start();
+            let trie_reordered = materialize(&mut scan_project).unwrap();
+            TimedCode::instance()
+                .sub("Reasoning/Execution/Required Reorder")
+                .stop();
+
+            self.add_trie(id, order.clone(), trie_reordered);
+        }
+
+        Ok(())
+    }
+
     // Helper function which checks whether the top level tree node is of type `AppendNulls`.
     // If this is the case returns the amount of null-columns that have been appended.
     // TODO: Nothing about this feels right; revise later
-    fn appends_nulls(node: ExecutionNodeRef<TableKey>) -> u64 {
+    fn appends_nulls(node: ExecutionNodeRef) -> u64 {
         let node_rc = node
             .0
             .upgrade()
@@ -246,37 +625,37 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
     }
 
     /// Executes a given [`ExecutionPlan`].
-    /// Returns the [`TableKey`]s of all new non-empty tables.
+    /// Returns a map that assigns to each plan id of a permanenet table the [`TableId`] in the [`DatabaseInstance`]
     /// This may fail if certain operations are performed on tries with incompatible types
     /// or if the plan references tries that do not exist.
-    pub fn execute_plan(&mut self, plan: &ExecutionPlan<TableKey>) -> Result<Vec<TableKey>, Error> {
-        let mut new_tables = Vec::<TableKey>::new();
-        let mut temp_tries = HashMap::<TableId, Option<TempTableInfo>>::new();
-        let mut temp_types = HashMap::<TableId, TableSchema>::new();
+    pub fn execute_plan(
+        &mut self,
+        mut plan: ExecutionPlan,
+    ) -> Result<HashMap<usize, TableId>, Error> {
+        let mut permanent_ids = HashMap::<usize, TableId>::new();
+        let mut type_trees = HashMap::<usize, TypeTree>::new();
+        let mut computation_results = HashMap::<usize, ComputationResult>::new();
 
-        for tree in &plan.trees {
-            let timed_string = format!("Reasoning/Execution/{}", tree.name());
-            TimedCode::instance().sub(&timed_string).start();
-            log::info!("Executing plan \"{}\":", tree.name());
+        for (&tree_index, execution_tree) in plan.iter() {
+            execution_tree.satisfy_leapfrog_triejoin();
 
-            let type_tree = TypeTree::from_execution_tree(self, &temp_types, tree)?;
+            let type_tree = TypeTree::from_execution_tree(self, &type_trees, execution_tree)?;
             let schema = type_tree.schema.clone();
-            if let ExecutionResult::Temp(id) = tree.result() {
-                temp_types.insert(*id, schema.clone());
+
+            for (id, order) in execution_tree.required_tables() {
+                self.make_available_in_memory(id, &order)?;
             }
+
+            let timed_string = format!("Reasoning/Execution/{}", execution_tree.name());
+            TimedCode::instance().sub(&timed_string).start();
 
             let mut num_null_columns = 0u64;
 
             // Calculate the new trie
-            let new_trie_opt = if let Some(root) = tree.root() {
-                log::info!(
-                    "   -> {}",
-                    &self.get_iterator_string(root.clone(), &temp_tries)
-                );
-
+            let new_trie_opt = if let Some(root) = execution_tree.root() {
                 num_null_columns = Self::appends_nulls(root.clone());
 
-                let iter_opt = self.get_iterator_node(root, &type_tree, &temp_tries)?;
+                let iter_opt = self.get_iterator_node(root, &type_tree, &computation_results)?;
 
                 if let Some(mut iter) = iter_opt {
                     materialize(&mut iter)
@@ -287,92 +666,125 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                 None
             };
 
-            if let Some(new_trie) = new_trie_opt {
-                if new_trie.row_num() == 0 {
-                    panic!("Empty trie that is not None");
-                }
+            type_trees.insert(tree_index, type_tree);
 
+            if let Some(new_trie) = new_trie_opt {
                 // If trie appended nulls then we need to update our `current_null` value
                 self.current_null += new_trie.num_elements() as u64 * num_null_columns;
 
                 // Add new trie to the appropriate place
-                match tree.result() {
-                    ExecutionResult::Temp(id) => {
+                match execution_tree.result() {
+                    ExecutionResult::Temporary => {
                         log::info!(
                             "Saved temporary table: {} entries ({})",
                             new_trie.row_num(),
                             new_trie.size_bytes()
                         );
-                        temp_tries.insert(*id, Some(TempTableInfo::new(new_trie)));
+
+                        computation_results
+                            .insert(tree_index, ComputationResult::Temporary(new_trie));
                     }
-                    ExecutionResult::Save(key) => {
+                    ExecutionResult::Permanent(order, name) => {
                         log::info!(
                             "Saved permanent table: {} entries ({})",
                             new_trie.row_num(),
                             new_trie.size_bytes()
                         );
-                        self.add(key.clone(), new_trie, schema);
-                        new_tables.push(key.clone());
+
+                        let new_id = self.register_table(name, schema);
+                        self.add_trie(new_id, order.clone(), new_trie);
+
+                        permanent_ids.insert(tree_index, new_id);
+                        computation_results.insert(
+                            tree_index,
+                            ComputationResult::Permanent(new_id, order.clone()),
+                        );
                     }
                 }
             } else {
-                if let ExecutionResult::Temp(id) = tree.result() {
-                    temp_tries.insert(*id, None);
-                }
                 log::info!("Trie does not contain any elements");
+
+                computation_results.insert(tree_index, ComputationResult::Empty);
             }
 
             TimedCode::instance().sub(&timed_string).stop();
         }
 
-        Ok(new_tables)
+        Ok(permanent_ids)
+    }
+
+    /// Return a reference to a trie with the given id and order.
+    /// Panics if no table under the given id and order exists.
+    /// Panics if trie is not available in memory.
+    pub fn get_trie<'a>(&'a self, id: TableId, order: &ColumnOrder) -> &'a Trie {
+        let storage = self
+            .storage_handler
+            .table_storage(id, order)
+            .expect("Function assumes that there is a table with the given id and order.");
+
+        storage
+            .get_trie()
+            .expect("Function assumes that trie is in memory.")
+    }
+
+    /// Return a reference to a trie identified by its id and order.
+    /// If the trie is not available in memory, this function will laod it.
+    /// Panics if no table under the given id and order exists.
+    pub fn get_trie_or_load<'a>(
+        &'a mut self,
+        id: TableId,
+        order: &ColumnOrder,
+    ) -> Result<&'a Trie, Error> {
+        self.storage_handler
+            .table_storage_mut(id, order)
+            .expect("Function assumes that there is a table with the given id and order.")
+            .into_memory(&mut self.dict_constants)
     }
 
     /// Given a node in the execution tree returns the trie iterator
     /// that if materialized will turn into the resulting trie of the represented computation
     fn get_iterator_node<'a>(
         &'a self,
-        execution_node: ExecutionNodeRef<TableKey>,
-        type_node: &'a TypeTreeNode,
-        temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
-    ) -> Result<Option<TrieScanEnum>, Error> {
+        execution_node: ExecutionNodeRef,
+        type_node: &TypeTreeNode,
+        computation_results: &'a HashMap<usize, ComputationResult>,
+    ) -> Result<Option<TrieScanEnum<'a>>, Error> {
         if type_node.schema.is_empty() {
             // That there is no schema for this node implies that the table is empty
             return Ok(None);
         }
 
-        let node_rc = execution_node
-            .0
-            .upgrade()
-            .expect("Referenced execution node has been deleted");
-        let node_ref = &*node_rc.as_ref().borrow();
+        let node_rc = execution_node.get_rc();
+        let node_ref = &*node_rc.borrow();
 
         return match node_ref {
-            ExecutionNode::FetchTemp(id) => {
-                if let Some(Some(info)) = temp_tries.get(id) {
-                    Ok(Some(TrieScanEnum::TrieScanGeneric(
-                        TrieScanGeneric::new_cast(&info.trie, type_node.schema.get_column_types()),
-                    )))
-                } else {
-                    // Referenced trie is empty or does not exist
-                    // The latter is not an error, since it could happen that the referenced trie
-                    // would have been produced by this plan but was just empty
-                    Ok(None)
-                }
-            }
-            ExecutionNode::FetchTable(key) => {
-                if !self.table_exists(key) {
+            ExecutionNode::FetchExisting(id, order) => {
+                let trie_ref = self.get_trie(*id, order);
+                if trie_ref.row_num() == 0 {
                     return Ok(None);
                 }
 
-                let trie = self.get_by_key(key);
-                if trie.row_num() == 0 {
-                    return Ok(None);
-                }
                 let schema = type_node.schema.get_column_types();
+                let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema);
 
-                let interval_triescan = TrieScanGeneric::new_cast(trie, schema);
-                Ok(Some(TrieScanEnum::TrieScanGeneric(interval_triescan)))
+                Ok(Some(TrieScanEnum::TrieScanGeneric(trie_scan)))
+            }
+            ExecutionNode::FetchNew(index) => {
+                let comp_result = computation_results.get(index).unwrap();
+                let trie_ref = match comp_result {
+                    ComputationResult::Temporary(trie) => trie,
+                    ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
+                    ComputationResult::Empty => return Ok(None),
+                };
+
+                if trie_ref.row_num() == 0 {
+                    return Ok(None);
+                }
+
+                let schema = type_node.schema.get_column_types();
+                let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema);
+
+                Ok(Some(TrieScanEnum::TrieScanGeneric(trie_scan)))
             }
             ExecutionNode::Join(subtables, bindings) => {
                 let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
@@ -380,7 +792,7 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                     let subiterator_opt = self.get_iterator_node(
                         subtable.clone(),
                         &type_node.subnodes[table_index],
-                        temp_tries,
+                        computation_results,
                     )?;
 
                     if let Some(subiterator) = subiterator_opt {
@@ -407,7 +819,7 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                     let subiterator_opt = self.get_iterator_node(
                         subtable.clone(),
                         &type_node.subnodes[table_index],
-                        temp_tries,
+                        computation_results,
                     )?;
 
                     if let Some(subiterator) = subiterator_opt {
@@ -433,12 +845,12 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                 if let Some(left_scan) = self.get_iterator_node(
                     subtable_left.clone(),
                     &type_node.subnodes[0],
-                    temp_tries,
+                    computation_results,
                 )? {
                     if let Some(right_scan) = self.get_iterator_node(
                         subtable_right.clone(),
                         &type_node.subnodes[1],
-                        temp_tries,
+                        computation_results,
                     )? {
                         Ok(Some(TrieScanEnum::TrieScanMinus(TrieScanMinus::new(
                             left_scan, right_scan,
@@ -450,37 +862,37 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                     Ok(None)
                 }
             }
-            ExecutionNode::Project(subnode, sorting) => {
-                let subnode_rc = subnode
-                    .0
-                    .upgrade()
-                    .expect("Referenced execution node has been deleted");
-                let subnode_ref = &*subnode_rc.as_ref().borrow();
+            ExecutionNode::Project(subnode, reorder) => {
+                let subnode_rc = subnode.get_rc();
+                let subnode_ref = &*subnode_rc.borrow();
 
                 let trie = match subnode_ref {
-                    ExecutionNode::FetchTable(key) => self.get_by_key(key),
-                    ExecutionNode::FetchTemp(id) => {
-                        if let Some(temp_trie_info) = temp_tries
-                            .get(id)
-                            .expect("Referenced temporary table should exist.")
-                        {
-                            &temp_trie_info.trie
-                        } else {
-                            return Ok(None);
-                        }
+                    ExecutionNode::FetchExisting(id, order) => self.get_trie(*id, order),
+                    ExecutionNode::FetchNew(index) => {
+                        let comp_result = computation_results.get(index).unwrap();
+                        let trie_ref = match comp_result {
+                            ComputationResult::Temporary(trie) => trie,
+                            ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
+                            ComputationResult::Empty => return Ok(None),
+                        };
+
+                        trie_ref
                     }
                     _ => {
                         panic!("Project node has to have a Fetch node as its child.");
                     }
                 };
 
-                let project_scan = TrieScanProject::new(trie, sorting.clone());
+                let project_scan = TrieScanProject::new(trie, reorder.clone());
 
                 Ok(Some(TrieScanEnum::TrieScanProject(project_scan)))
             }
             ExecutionNode::SelectValue(subtable, assignments) => {
-                let subiterator_opt =
-                    self.get_iterator_node(subtable.clone(), &type_node.subnodes[0], temp_tries)?;
+                let subiterator_opt = self.get_iterator_node(
+                    subtable.clone(),
+                    &type_node.subnodes[0],
+                    computation_results,
+                )?;
 
                 if let Some(subiterator) = subiterator_opt {
                     let select_scan = TrieScanSelectValue::new(subiterator, assignments);
@@ -490,8 +902,11 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                 }
             }
             ExecutionNode::SelectEqual(subtable, classes) => {
-                let subiterator_opt =
-                    self.get_iterator_node(subtable.clone(), &type_node.subnodes[0], temp_tries)?;
+                let subiterator_opt = self.get_iterator_node(
+                    subtable.clone(),
+                    &type_node.subnodes[0],
+                    computation_results,
+                )?;
 
                 if let Some(subiterator) = subiterator_opt {
                     let select_scan = TrieScanSelectEqual::new(subiterator, classes);
@@ -501,8 +916,11 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                 }
             }
             ExecutionNode::AppendColumns(subtable, instructions) => {
-                let subiterator_opt =
-                    self.get_iterator_node(subtable.clone(), &type_node.subnodes[0], temp_tries)?;
+                let subiterator_opt = self.get_iterator_node(
+                    subtable.clone(),
+                    &type_node.subnodes[0],
+                    computation_results,
+                )?;
                 let target_types = type_node.schema.get_column_types();
 
                 if let Some(subiterator) = subiterator_opt {
@@ -513,8 +931,11 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
                 }
             }
             ExecutionNode::AppendNulls(subtable, num_nulls) => {
-                let subiterator_opt =
-                    self.get_iterator_node(subtable.clone(), &type_node.subnodes[0], temp_tries)?;
+                let subiterator_opt = self.get_iterator_node(
+                    subtable.clone(),
+                    &type_node.subnodes[0],
+                    computation_results,
+                )?;
 
                 if let Some(subiterator) = subiterator_opt {
                     let nulls_scan = TrieScanNulls::new(subiterator, *num_nulls, self.current_null);
@@ -525,92 +946,11 @@ impl<TableKey: TableKeyType, Dict: Dictionary> DatabaseInstance<TableKey, Dict> 
             }
         };
     }
-
-    fn get_iterator_string_sub<'a>(
-        &'a self,
-        operation: &str,
-        subnodes: &Vec<&ExecutionNodeRef<TableKey>>,
-        temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
-    ) -> String {
-        let mut result = String::from(operation);
-        result += "(";
-
-        for (index, &sub) in subnodes.iter().enumerate() {
-            result += &self.get_iterator_string(sub.clone(), temp_tries);
-
-            if index < subnodes.len() - 1 {
-                result += ", ";
-            }
-        }
-
-        result += ")";
-
-        result
-    }
-
-    /// Return a string which represents a execution tree (given its root).
-    fn get_iterator_string<'a>(
-        &'a self,
-        node: ExecutionNodeRef<TableKey>,
-        temp_tries: &'a HashMap<TableId, Option<TempTableInfo>>,
-    ) -> String {
-        let node_rc = node
-            .0
-            .upgrade()
-            .expect("Referenced execution node has been deleted");
-        let node_ref = &*node_rc.as_ref().borrow();
-
-        match node_ref {
-            ExecutionNode::FetchTemp(id) => {
-                if let Some(Some(info)) = temp_tries.get(id) {
-                    info.trie.row_num().to_string()
-                } else {
-                    // Referenced trie is empty or does not exist
-                    String::from("")
-                }
-            }
-            ExecutionNode::FetchTable(key) => {
-                if !self.table_exists(key) {
-                    return String::from("");
-                }
-
-                let trie = self.get_by_key(key);
-
-                trie.row_num().to_string()
-            }
-            ExecutionNode::Join(sub, _) => {
-                self.get_iterator_string_sub("Join", &sub.iter().collect(), temp_tries)
-            }
-            ExecutionNode::Union(sub) => {
-                self.get_iterator_string_sub("Union", &sub.iter().collect(), temp_tries)
-            }
-            ExecutionNode::Minus(left, right) => {
-                self.get_iterator_string_sub("Minus", &vec![left, right], temp_tries)
-            }
-            ExecutionNode::Project(subnode, _) => {
-                self.get_iterator_string_sub("Project", &vec![subnode], temp_tries)
-            }
-            ExecutionNode::SelectValue(sub, _) => {
-                self.get_iterator_string_sub("SelectValue", &vec![sub], temp_tries)
-            }
-            ExecutionNode::SelectEqual(sub, _) => {
-                self.get_iterator_string_sub("SelectEqual", &vec![sub], temp_tries)
-            }
-            ExecutionNode::AppendColumns(sub, _) => {
-                self.get_iterator_string_sub("AppendColumns", &vec![sub], temp_tries)
-            }
-            ExecutionNode::AppendNulls(sub, _) => {
-                self.get_iterator_string_sub("AppendNulls", &vec![sub], temp_tries)
-            }
-        }
-    }
 }
 
-impl<TableKey: TableKeyType, Dict: Dictionary> ByteSized for DatabaseInstance<TableKey, Dict> {
+impl<Dict: Dictionary> ByteSized for DatabaseInstance<Dict> {
     fn size_bytes(&self) -> ByteSize {
-        self.id_to_table
-            .iter()
-            .fold(ByteSize(0), |acc, (_, info)| acc + info.trie.size_bytes())
+        self.storage_handler.size_bytes()
     }
 }
 
@@ -621,10 +961,12 @@ mod test {
         datatypes::{DataTypeName, DataValueT},
         dictionary::StringDictionary,
         management::{
-            execution_plan::{ExecutionResult, ExecutionTree},
+            database::{ColumnOrder, TableId},
+            execution_plan::ExecutionTree,
             ByteSized, ExecutionPlan,
         },
         tabular::{
+            operations::JoinBindings,
             table_types::trie::Trie,
             traits::{
                 table::Table,
@@ -634,10 +976,7 @@ mod test {
         util::make_column_with_intervals_t,
     };
 
-    use super::{DatabaseInstance, TableKeyType};
-
-    type StringKeyType = String;
-    impl TableKeyType for StringKeyType {}
+    use super::DatabaseInstance;
 
     #[test]
     fn basic_add_delete() {
@@ -647,38 +986,44 @@ mod test {
         let trie_a = Trie::new(vec![column_a]);
         let trie_b = Trie::new(vec![column_b]);
 
-        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
+        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
+        let mut reference_id = TableId::default();
 
         let mut schema_a = TableSchema::new();
         schema_a.add_entry(DataTypeName::U64, false, false);
 
-        assert_eq!(instance.add(String::from("A"), trie_a.clone(), schema_a), 0);
-        assert_eq!(instance.get_key(0), String::from("A"));
-        assert_eq!(instance.get_id(&String::from("A")), 0);
-        // TODO: Look into catch_unwind and Dict
-        // assert!(std::panic::catch_unwind(|| instance.get_key(1)).is_err());
-        // assert!(std::panic::catch_unwind(|| instance.get_id(&String::from("C"))).is_err());
-        assert_eq!(instance.get_by_id(0).row_num(), 3);
+        let trie_a_id = instance.register_table("A", schema_a);
+        instance.add_trie(trie_a_id, ColumnOrder::default(), trie_a);
+
+        assert_eq!(trie_a_id, reference_id.increment());
+        assert_eq!(instance.table_name(trie_a_id), "A");
+        assert_eq!(
+            instance
+                .get_trie(trie_a_id, &ColumnOrder::default())
+                .row_num(),
+            3
+        );
 
         let last_size = instance.size_bytes();
 
         let mut schema_b = TableSchema::new();
         schema_b.add_entry(DataTypeName::U64, false, false);
 
-        assert_eq!(instance.add(String::from("B"), trie_b, schema_b), 1);
+        let trie_b_id = instance.register_table("B", schema_b);
+        instance.add_trie(trie_b_id, ColumnOrder::default(), trie_b);
+
+        assert_eq!(trie_b_id, reference_id.increment());
         assert!(instance.size_bytes() > last_size);
-        assert_eq!(instance.get_by_key(&String::from("B")).row_num(), 6);
+        assert_eq!(
+            instance
+                .get_trie(trie_b_id, &ColumnOrder::default())
+                .row_num(),
+            6
+        );
 
         let last_size = instance.size_bytes();
 
-        instance.update_by_key(String::from("B"), trie_a);
-        assert_eq!(instance.get_by_key(&String::from("B")).row_num(), 3);
-        assert!(instance.size_bytes() < last_size);
-
-        let last_size = instance.size_bytes();
-
-        instance.delete_by_key(&String::from("A"));
-        // // assert!(std::panic::catch_unwind(|| instance.get_id(&String::from("A"))).is_err());
+        instance.delete(trie_a_id);
         assert!(instance.size_bytes() < last_size);
     }
 
@@ -690,7 +1035,7 @@ mod test {
         }
     }
 
-    fn test_casting_execution_plan() -> ExecutionPlan<StringKeyType> {
+    fn test_casting_execution_plan() -> ExecutionPlan {
         // ExecutionPlan:
         // Union
         //  -> Minus
@@ -704,17 +1049,21 @@ mod test {
         //          -> Trie_b [U32, U64]
         //          -> Trie_c [U32, U32]
 
-        let mut execution_tree = ExecutionTree::<StringKeyType>::new(
-            String::from("Test"),
-            ExecutionResult::Save(String::from("TableResult")),
-        );
+        let mut table_id = TableId::default();
+        let id_a = table_id.increment();
+        let id_b = table_id.increment();
+        let id_c = table_id.increment();
+        let id_x = table_id.increment();
+        let id_y = table_id.increment();
 
-        let node_load_a = execution_tree.fetch_table(String::from("TableA"));
-        let node_load_b_1 = execution_tree.fetch_table(String::from("TableB"));
-        let node_load_b_2 = execution_tree.fetch_table(String::from("TableB"));
-        let node_load_c = execution_tree.fetch_table(String::from("TableC"));
-        let node_load_x = execution_tree.fetch_table(String::from("TableX"));
-        let node_load_y = execution_tree.fetch_table(String::from("TableY"));
+        let mut execution_tree = ExecutionTree::new_permanent("Test", "TableResult");
+
+        let node_load_a = execution_tree.fetch_existing(id_a);
+        let node_load_b_1 = execution_tree.fetch_existing(id_b);
+        let node_load_b_2 = execution_tree.fetch_existing(id_b);
+        let node_load_c = execution_tree.fetch_existing(id_c);
+        let node_load_x = execution_tree.fetch_existing(id_x);
+        let node_load_y = execution_tree.fetch_existing(id_y);
 
         let node_minus = execution_tree.minus(node_load_x, node_load_y);
 
@@ -723,13 +1072,13 @@ mod test {
 
         let node_join = execution_tree.join(
             vec![node_left_union, node_right_union],
-            vec![vec![0, 1], vec![1, 2]],
+            JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         );
 
         let node_root = execution_tree.union(vec![node_join, node_minus]);
         execution_tree.set_root(node_root);
 
-        let mut execution_plan = ExecutionPlan::<StringKeyType>::new();
+        let mut execution_plan = ExecutionPlan::new();
         execution_plan.push(execution_tree);
 
         execution_plan
@@ -737,13 +1086,13 @@ mod test {
 
     #[test]
     fn test_casting() {
-        let trie_a = Trie::from_rows(vec![vec![DataValueT::U32(1), DataValueT::U32(2)]]);
-        let trie_b = Trie::from_rows(vec![
+        let trie_a = Trie::from_rows(&[vec![DataValueT::U32(1), DataValueT::U32(2)]]);
+        let trie_b = Trie::from_rows(&[
             vec![DataValueT::U32(2), DataValueT::U64(1 << 35)],
             vec![DataValueT::U32(3), DataValueT::U64(2)],
         ]);
-        let trie_c = Trie::from_rows(vec![vec![DataValueT::U32(2), DataValueT::U64(4)]]);
-        let trie_x = Trie::from_rows(vec![
+        let trie_c = Trie::from_rows(&[vec![DataValueT::U32(2), DataValueT::U64(4)]]);
+        let trie_x = Trie::from_rows(&[
             vec![DataValueT::U64(1), DataValueT::U32(2), DataValueT::U64(4)],
             vec![DataValueT::U64(3), DataValueT::U32(2), DataValueT::U64(4)],
             vec![
@@ -752,7 +1101,7 @@ mod test {
                 DataValueT::U64(12),
             ],
         ]);
-        let trie_y = Trie::from_rows(vec![
+        let trie_y = Trie::from_rows(&[
             vec![DataValueT::U32(1), DataValueT::U64(2), DataValueT::U32(4)],
             vec![
                 DataValueT::U32(2),
@@ -784,18 +1133,19 @@ mod test {
             schema_entry(DataTypeName::U32),
         ]);
 
-        let mut instance = DatabaseInstance::<StringKeyType, _>::new(StringDictionary::default());
-        instance.add(String::from("TableA"), trie_a, schema_a);
-        instance.add(String::from("TableB"), trie_b, schema_b);
-        instance.add(String::from("TableC"), trie_c, schema_c);
-        instance.add(String::from("TableX"), trie_x, schema_x);
-        instance.add(String::from("TableY"), trie_y, schema_y);
+        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
+        instance.register_add_trie("TableA", schema_a, ColumnOrder::default(), trie_a);
+        instance.register_add_trie("TableB", schema_b, ColumnOrder::default(), trie_b);
+        instance.register_add_trie("TableC", schema_c, ColumnOrder::default(), trie_c);
+        instance.register_add_trie("TableX", schema_x, ColumnOrder::default(), trie_x);
+        instance.register_add_trie("TableY", schema_y, ColumnOrder::default(), trie_y);
 
         let plan = test_casting_execution_plan();
-        let result = instance.execute_plan(&plan);
+        let result = instance.execute_plan(plan);
         assert!(result.is_ok());
 
-        let result_trie = instance.get_by_key(&String::from("TableResult"));
+        let result_id = *result.unwrap().get(&0).unwrap();
+        let result_trie = instance.get_trie(result_id, &ColumnOrder::default());
 
         let result_col_first = result_trie.get_column(0).as_u64().unwrap();
         let result_col_second = result_trie.get_column(1).as_u32().unwrap();

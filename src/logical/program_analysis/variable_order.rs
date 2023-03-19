@@ -2,15 +2,12 @@
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
-use crate::logical::model::Term;
 use crate::logical::Permutator;
 use crate::physical::dictionary::Dictionary;
+use crate::{logical::model::Term, physical::management::database::ColumnOrder};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use super::super::{
-    model::{Identifier, Literal, Program, Rule, Variable},
-    table_manager::ColumnOrder,
-};
+use super::super::model::{Identifier, Literal, Program, Rule, Variable};
 
 /// Represents an ordering of variables as [`HashMap`].
 #[repr(transparent)]
@@ -159,7 +156,8 @@ fn column_order_for(lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
 
     partial_col_order.append(&mut remaining_vars);
 
-    ColumnOrder::new(partial_col_order)
+    // TODO (Alex): There probably a direct way to calculate this but I'm not sure what the above code does exactly.
+    ColumnOrder::from_vector(partial_col_order).invert()
 }
 
 trait RuleVariableList {
@@ -469,9 +467,9 @@ pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
         let preds = fact_preds.union(&source_preds);
 
         preds
-            .map(|(p, a)| {
+            .map(|(p, _)| {
                 let mut set = HashSet::new();
-                set.insert(ColumnOrder::default(*a));
+                set.insert(ColumnOrder::default());
                 (*p, set)
             })
             .collect()
@@ -504,15 +502,14 @@ pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
 
 #[cfg(test)]
 mod test {
-    use crate::physical::dictionary::PrefixedStringDictionary;
+    use crate::physical::{
+        dictionary::PrefixedStringDictionary, management::database::ColumnOrder,
+    };
 
     use super::{
-        super::super::{
-            model::{
-                Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Program, Rule, Term,
-                Variable,
-            },
-            table_manager::ColumnOrder,
+        super::super::model::{
+            Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Program, Rule, Term,
+            Variable,
         },
         IterationOrder, RuleVariableList, VariableOrder,
     };

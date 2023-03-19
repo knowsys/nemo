@@ -152,7 +152,7 @@ impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
 mod test {
     use super::TrieScanUnion;
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
-    use crate::physical::tabular::operations::TrieScanJoin;
+    use crate::physical::tabular::operations::{JoinBindings, TrieScanJoin};
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_column_with_intervals_t;
@@ -541,7 +541,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
-            &vec![vec![0, 1], vec![1, 2]],
+            &JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         ));
 
         let join_cd_iter = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
@@ -549,7 +549,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_c)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_d)),
             ],
-            &vec![vec![0, 1], vec![1, 2]],
+            &JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         ));
 
         let mut union_iter = TrieScanUnion::new(vec![join_ab_iter, join_cd_iter]);

@@ -218,7 +218,7 @@ pub fn materialize_subset(
 mod test {
     use super::materialize;
     use crate::physical::columnar::traits::column::Column;
-    use crate::physical::tabular::operations::TrieScanJoin;
+    use crate::physical::tabular::operations::{JoinBindings, TrieScanJoin};
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::TrieScanEnum;
     use crate::physical::util::test_util::make_column_with_intervals_t;
@@ -308,7 +308,7 @@ mod test {
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
             ],
-            &vec![vec![0, 1], vec![1, 2]],
+            &JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         ));
 
         let materialized_join = materialize(&mut join_iter).unwrap();
