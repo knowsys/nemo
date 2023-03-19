@@ -45,6 +45,12 @@ impl ExecutionNodeRef {
             .upgrade()
             .expect("Referenced execution node has been deleted")
     }
+
+    /// Return the id which identifies the referenced node
+    pub fn id(&self) -> usize {
+        let node_rc = self.get_rc();
+        node_rc.borrow().id
+    }
 }
 
 impl ExecutionNodeRef {
@@ -109,75 +115,36 @@ pub(super) enum ExecutionResult {
     Permanent(ColumnOrder, String),
 }
 
-/// Represents the plan for calculating a table
-pub struct ExecutionTree {
-    /// All the nodes in the tree.
-    nodes: Vec<ExecutionNodeOwned>,
-    /// Root of the operation tree.
-    root: Option<ExecutionNodeRef>,
+/// Marker for nodes within a [`ExecutionPlan`] that are materialized into their own tables.
+#[derive(Debug)]
+struct ExecutionOutNode {
+    /// The execution node
+    node: ExecutionNodeRef,
     /// How to save the resulting table.
     result: ExecutionResult,
     /// Name which identifies this operation, e.g., for logging and timing.
     name: String,
 }
 
-impl Debug for ExecutionTree {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write_tree(f, &self.ascii_tree())
+/// A DAG representing instructions for generating new tables.
+#[derive(Debug)]
+pub struct ExecutionPlan {
+    /// All the nodes in the tree.
+    nodes: Vec<ExecutionNodeOwned>,
+    /// A list that marks all nodes that will be materialized into their own tables.
+    out_nodes: Vec<ExecutionOutNode>,
+}
+
+impl Default for ExecutionPlan {
+    fn default() -> Self {
+        Self {
+            nodes: Default::default(),
+            out_nodes: Default::default(),
+        }
     }
 }
 
-/// Public interface for [`ExecutionTree`]
-impl ExecutionTree {
-    /// Create a new [`ExecutionTree`].
-    fn new(tree_name: &str, result: ExecutionResult) -> Self {
-        Self {
-            nodes: Vec::new(),
-            root: None,
-            result,
-            name: String::from(tree_name),
-        }
-    }
-
-    /// Create a new [`ExecutionTree`] that will result in a temporary table.
-    pub fn new_temporary(tree_name: &str) -> Self {
-        Self::new(tree_name, ExecutionResult::Temporary)
-    }
-
-    /// Crate a new [`ExecutionTree`] that will result in a permanent table.
-    pub fn new_permanent(tree_name: &str, table_name: &str) -> Self {
-        Self::new_permanent_reordered(tree_name, table_name, ColumnOrder::default())
-    }
-
-    /// Create a new [`ExecutionTree`] that will result in a permanent table with an alternative [`ColumnOrder`]
-    pub fn new_permanent_reordered(tree_name: &str, table_name: &str, order: ColumnOrder) -> Self {
-        Self::new(
-            tree_name,
-            ExecutionResult::Permanent(order, String::from(table_name)),
-        )
-    }
-
-    /// Returns the [`ExecutionResult`] of this operation.
-    /// It declares what should happen with the output, once computed.
-    pub(super) fn result(&self) -> &ExecutionResult {
-        &self.result
-    }
-
-    /// Return the name of this tree.
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Return the root of the trie.
-    pub fn root(&self) -> Option<ExecutionNodeRef> {
-        self.root.clone()
-    }
-
-    /// Set the root node of the tree.
-    pub fn set_root(&mut self, root: ExecutionNodeRef) {
-        self.root = Some(root);
-    }
-
+impl ExecutionPlan {
     /// Push new node to list of all nodes and returns a reference.
     fn push_and_return_ref(&mut self, operation: ExecutionOperation) -> ExecutionNodeRef {
         let id = self.nodes.len();
@@ -298,6 +265,84 @@ impl ExecutionTree {
         self.push_and_return_ref(new_operation)
     }
 
+    /// Designate a [`ExecutionNode`] as an "output" node that will result in a materialized table.
+    fn push_out_node(
+        &mut self,
+        node: ExecutionNodeRef,
+        result: ExecutionResult,
+        name: &str,
+    ) -> usize {
+        let id = node.id();
+
+        self.out_nodes.push(ExecutionOutNode {
+            node,
+            result,
+            name: String::from(name),
+        });
+
+        id
+    }
+
+    /// Designate a [`ExecutionNode`] as an "output" node that will produce a temporary table.
+    /// Returns an id which will later be associated with the result of the computation.
+    pub fn write_temporary(&mut self, node: ExecutionNodeRef, tree_name: &str) -> usize {
+        self.push_out_node(node, ExecutionResult::Temporary, tree_name)
+    }
+
+    /// Designate a [`ExecutionNode`] as an "output" node that will produce a permament table (in its default order).
+    /// Returns an id which will later be associated with the result of the computation.
+    pub fn write_permanent(
+        &mut self,
+        node: ExecutionNodeRef,
+        tree_name: &str,
+        table_name: &str,
+    ) -> usize {
+        self.write_permanent_reordered(node, tree_name, table_name, ColumnOrder::default())
+    }
+
+    /// Designate a [`ExecutionNode`] as an "output" node that will produce a permament table.
+    /// Returns an id which will later be associated with the result of the computation.
+    pub fn write_permanent_reordered(
+        &mut self,
+        node: ExecutionNodeRef,
+        tree_name: &str,
+        table_name: &str,
+        order: ColumnOrder,
+    ) -> usize {
+        self.push_out_node(
+            node,
+            ExecutionResult::Permanent(order, String::from(table_name)),
+            tree_name,
+        )
+    }
+}
+
+/// Represents a subtree of a [`ExecutionPlan`]
+/// Contains an [`ExecutionPlan`] with a designated root node.
+pub(super) struct ExecutionTree(ExecutionPlan);
+
+impl Debug for ExecutionTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write_tree(f, &self.ascii_tree())
+    }
+}
+
+impl ExecutionTree {
+    /// Returns the [`ExecutionResult`] of this tree.
+    pub(super) fn result(&self) -> &ExecutionResult {
+        &self.0.out_nodes[0].result
+    }
+
+    /// Return the name of this tree.
+    pub fn name(&self) -> &str {
+        &self.0.out_nodes[0].name
+    }
+
+    /// Return the root of the trie.
+    pub fn root(&self) -> ExecutionNodeRef {
+        self.0.out_nodes[0].node.clone()
+    }
+
     fn ascii_tree_recursive(node: ExecutionNodeRef) -> Tree {
         let node_rc = node.get_rc();
         let node_operation = &node_rc.borrow().operation;
@@ -361,19 +406,15 @@ impl ExecutionTree {
 
     /// Return an ascii tree representation of the [`ExecutionTree`]
     pub fn ascii_tree(&self) -> Tree {
-        if let Some(root) = self.root() {
-            let tree = Self::ascii_tree_recursive(root);
-            let top_level_name = match self.result() {
-                ExecutionResult::Temporary => format!("{} (Temporary)", self.name()),
-                ExecutionResult::Permanent(order, name) => {
-                    format!("{} (Permanent {order}", name)
-                }
-            };
+        let tree = Self::ascii_tree_recursive(self.root());
+        let top_level_name = match self.result() {
+            ExecutionResult::Temporary => format!("{} (Temporary)", self.name()),
+            ExecutionResult::Permanent(order, name) => {
+                format!("{} (Permanent {order}", name)
+            }
+        };
 
-            Tree::Node(top_level_name, vec![tree])
-        } else {
-            Tree::Leaf(vec![])
-        }
+        Tree::Node(top_level_name, vec![tree])
     }
 }
 
@@ -381,7 +422,7 @@ impl ExecutionTree {
 impl ExecutionTree {
     /// Implements the functionalily for `simplify` by recusively traversing the tree.
     fn simplify_recursive(
-        new_tree: &mut ExecutionTree,
+        new_tree: &mut ExecutionPlan,
         node: ExecutionNodeRef,
         removed_tables: &HashSet<usize>,
     ) -> Option<ExecutionNodeRef> {
@@ -523,16 +564,9 @@ impl ExecutionTree {
     /// Builds a new [`ExecutionTree`] which does not include superfluous operations,
     /// like, e.g., performing a join over one subtable.
     /// Will also exclude the supplied set of temporary tables.
-    fn simplify(&self, removed_temp_indices: &HashSet<usize>) -> Self {
-        let mut new_tree = ExecutionTree::new(&self.name, self.result.clone());
-
-        if let Some(old_root) = self.root() {
-            let new_root_opt =
-                Self::simplify_recursive(&mut new_tree, old_root, removed_temp_indices);
-            if let Some(new_root) = new_root_opt {
-                new_tree.set_root(new_root);
-            }
-        }
+    /// Returns `None` if the simplified tree results in a no-op.
+    fn simplify(&self, removed_temp_indices: &HashSet<usize>) -> Option<Self> {
+        let new_root_opt = Self::simplify_recursive(&mut new_tree, old_root, removed_temp_indices);
 
         new_tree
     }
@@ -638,72 +672,72 @@ impl ExecutionTree {
     }
 }
 
-/// A series of execution plans
-/// Usually contains the information necessary for evaluating one rule
-#[derive(Debug, Default)]
-pub struct ExecutionPlan {
-    trees: LinkedHashMap<usize, ExecutionTree>,
-    current_id: usize,
-}
+// /// A series of execution plans
+// /// Usually contains the information necessary for evaluating one rule
+// #[derive(Debug, Default)]
+// pub struct ExecutionPlan {
+//     trees: LinkedHashMap<usize, ExecutionTree>,
+//     current_id: usize,
+// }
 
-impl ExecutionPlan {
-    /// Create new [`ExecutionPlan`].
-    pub fn new() -> Self {
-        Self {
-            trees: LinkedHashMap::new(),
-            current_id: 0,
-        }
-    }
+// impl ExecutionPlan {
+//     /// Create new [`ExecutionPlan`].
+//     pub fn new() -> Self {
+//         Self {
+//             trees: LinkedHashMap::new(),
+//             current_id: 0,
+//         }
+//     }
 
-    /// Append new [`ExecutionTree`] to the plan.
-    /// Return the index assigned to the inserted tree.
-    pub fn push(&mut self, tree: ExecutionTree) -> usize {
-        let result = self.current_id;
+//     /// Append new [`ExecutionTree`] to the plan.
+//     /// Return the index assigned to the inserted tree.
+//     pub fn push(&mut self, tree: ExecutionTree) -> usize {
+//         let result = self.current_id;
 
-        self.trees.insert(self.current_id, tree);
-        self.current_id += 1;
+//         self.trees.insert(self.current_id, tree);
+//         self.current_id += 1;
 
-        result
-    }
+//         result
+//     }
 
-    /// Append a list of [`ExecutionTree`] to the plan.
-    pub fn append(&mut self, trees: Vec<ExecutionTree>) {
-        for tree in trees {
-            self.push(tree);
-        }
-    }
+//     /// Append a list of [`ExecutionTree`] to the plan.
+//     pub fn append(&mut self, trees: Vec<ExecutionTree>) {
+//         for tree in trees {
+//             self.push(tree);
+//         }
+//     }
 
-    /// Remove a [`ExecutionTree`] identified by its index.
-    /// This does not check whether the deleted tree is used later in some other tree.
-    /// Panics if the given index is not occupied.
-    pub fn remove(&mut self, index: usize) {
-        if self.trees.remove(&index).is_none() {
-            panic!("Tried to remove a non-existing index from an execution plan.");
-        }
-    }
+//     /// Remove a [`ExecutionTree`] identified by its index.
+//     /// This does not check whether the deleted tree is used later in some other tree.
+//     /// Panics if the given index is not occupied.
+//     pub fn remove(&mut self, index: usize) {
+//         if self.trees.remove(&index).is_none() {
+//             panic!("Tried to remove a non-existing index from an execution plan.");
+//         }
+//     }
 
-    /// Return an iterator which traverses the [`ExecutionTree`]s in order.
-    pub fn iter(&mut self) -> impl Iterator<Item = (&usize, &mut ExecutionTree)> {
-        self.trees.iter_mut()
-    }
+//     /// Return an iterator which traverses the [`ExecutionTree`]s in order.
+//     pub fn iter(&mut self) -> impl Iterator<Item = (&usize, &mut ExecutionTree)> {
+//         self.trees.iter_mut()
+//     }
 
-    /// Simplifies the current [`ExecutionPlan`] by
-    /// removing superfluous operations like empty unions or default projects
-    pub fn simplify(&mut self) {
-        let mut removed_new_tables = HashSet::<usize>::new();
+//     /// Simplifies the current [`ExecutionPlan`] by
+//     /// removing superfluous operations like empty unions or default projects
+//     pub fn simplify(&mut self) {
+//         let mut removed_new_tables = HashSet::<usize>::new();
 
-        // Simplify all the trees idividually.
-        // If a tree is empty (that is has no root) after simplification
-        // then we record this information and use it to simplify further
-        for (index, tree) in self.trees.iter_mut() {
-            *tree = tree.simplify(&removed_new_tables);
+//         // Simplify all the trees idividually.
+//         // If a tree is empty (that is has no root) after simplification
+//         // then we record this information and use it to simplify further
+//         for (index, tree) in self.trees.iter_mut() {
+//             *tree = tree.simplify(&removed_new_tables);
 
-            if tree.root().is_none() {
-                removed_new_tables.insert(*index);
-            }
-        }
-    }
-}
+//             if tree.root().is_none() {
+//                 removed_new_tables.insert(*index);
+//             }
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod test {
