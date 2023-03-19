@@ -13,7 +13,7 @@ use crate::{
 };
 
 use super::{
-    execution_plan::{ExecutionNode, ExecutionNodeRef, ExecutionTree},
+    execution_plan::{ExecutionNodeRef, ExecutionOperation, ExecutionTree},
     DatabaseInstance,
 };
 
@@ -109,19 +109,19 @@ impl TypeTree {
         node: ExecutionNodeRef,
     ) -> Result<TypeTreeNode, Error> {
         let node_rc = node.get_rc();
-        let node_ref = &*node_rc.borrow();
+        let node_opertation = &node_rc.borrow().operation;
 
-        match node_ref {
-            ExecutionNode::FetchExisting(id, order) => {
+        match node_opertation {
+            ExecutionOperation::FetchExisting(id, order) => {
                 let schema = instance.table_schema(*id).permuted(order);
 
                 Ok(TypeTreeNode::new(schema, vec![]))
             }
-            ExecutionNode::FetchNew(index) => {
+            ExecutionOperation::FetchNew(index) => {
                 let schema = previous_trees.get(index).unwrap().schema.clone();
                 Ok(TypeTreeNode::new(schema, vec![]))
             }
-            ExecutionNode::Join(subtrees, bindings) => {
+            ExecutionOperation::Join(subtrees, bindings) => {
                 debug_assert!(subtrees.len() == bindings.num_relations());
 
                 let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(subtrees.len());
@@ -166,7 +166,7 @@ impl TypeTree {
                     subtype_nodes,
                 ))
             }
-            ExecutionNode::Union(subtrees) => {
+            ExecutionOperation::Union(subtrees) => {
                 let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(subtrees.len());
                 for subtree in subtrees {
                     let subtype_node =
@@ -213,7 +213,7 @@ impl TypeTree {
                     subtype_nodes,
                 ))
             }
-            ExecutionNode::Minus(left, right) => {
+            ExecutionOperation::Minus(left, right) => {
                 let subtypenode_left = Self::propagate_up(instance, previous_trees, left.clone())?;
                 let subtypenode_right =
                     Self::propagate_up(instance, previous_trees, right.clone())?;
@@ -244,7 +244,7 @@ impl TypeTree {
 
                 Ok(TypeTreeNode::new(result_schema, subtype_nodes))
             }
-            ExecutionNode::Project(subtree, reordering) => {
+            ExecutionOperation::Project(subtree, reordering) => {
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
 
                 let new_schema = if !subtype_node.schema.is_empty() {
@@ -255,14 +255,14 @@ impl TypeTree {
 
                 Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
-            ExecutionNode::SelectValue(subtree, _assignments) => {
+            ExecutionOperation::SelectValue(subtree, _assignments) => {
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
                 Ok(TypeTreeNode::new(
                     subtype_node.schema.clone(),
                     vec![subtype_node],
                 ))
             }
-            ExecutionNode::SelectEqual(subtree, classes) => {
+            ExecutionOperation::SelectEqual(subtree, classes) => {
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
 
                 let mut new_schema = subtype_node.schema.clone();
@@ -290,7 +290,7 @@ impl TypeTree {
 
                 Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
-            ExecutionNode::AppendColumns(subtree, instructions) => {
+            ExecutionOperation::AppendColumns(subtree, instructions) => {
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
                 let mut new_schema = TableSchema::new();
 
@@ -317,7 +317,7 @@ impl TypeTree {
 
                 Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
-            ExecutionNode::AppendNulls(subtree, num_nulls) => {
+            ExecutionOperation::AppendNulls(subtree, num_nulls) => {
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
                 let mut new_schema = subtype_node.schema.clone();
 
@@ -350,12 +350,12 @@ impl TypeTree {
         }
 
         let node_rc = execution_node.get_rc();
-        let node_ref = &*node_rc.borrow();
+        let node_operation = &node_rc.borrow().operation;
 
-        match node_ref {
-            ExecutionNode::FetchExisting(_, _) => {}
-            ExecutionNode::FetchNew(_) => {}
-            ExecutionNode::Join(subtrees, bindings) => {
+        match node_operation {
+            ExecutionOperation::FetchExisting(_, _) => {}
+            ExecutionOperation::FetchNew(_) => {}
+            ExecutionOperation::Join(subtrees, bindings) => {
                 let mut subtype_map =
                     vec![HashMap::<usize, TableSchemaEntry>::new(); bindings.num_relations()];
 
@@ -376,7 +376,7 @@ impl TypeTree {
                     );
                 }
             }
-            ExecutionNode::Union(subtrees) => {
+            ExecutionOperation::Union(subtrees) => {
                 let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
                 for (column_index, schema_entry) in
                     type_node.schema.get_entries().iter().enumerate()
@@ -392,7 +392,7 @@ impl TypeTree {
                     );
                 }
             }
-            ExecutionNode::Minus(left, right) => {
+            ExecutionOperation::Minus(left, right) => {
                 let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
                 for (column_index, schema_entry) in
                     type_node.schema.get_entries().iter().enumerate()
@@ -408,7 +408,7 @@ impl TypeTree {
 
                 Self::propagate_down(&mut type_node.subnodes[1], Some(schema_map), right.clone());
             }
-            ExecutionNode::Project(subtree, reordering) => {
+            ExecutionOperation::Project(subtree, reordering) => {
                 let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
                 for (index, value) in reordering.iter() {
                     schema_map.insert(*index, *type_node.schema.get_entry(*value));
@@ -420,7 +420,7 @@ impl TypeTree {
                     subtree.clone(),
                 );
             }
-            ExecutionNode::SelectValue(subtree, _assignments) => {
+            ExecutionOperation::SelectValue(subtree, _assignments) => {
                 let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
                 for (column_index, schema_entry) in
                     type_node.schema.get_entries().iter().enumerate()
@@ -434,7 +434,7 @@ impl TypeTree {
                     subtree.clone(),
                 );
             }
-            ExecutionNode::SelectEqual(subtree, _classes) => {
+            ExecutionOperation::SelectEqual(subtree, _classes) => {
                 let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
                 for (column_index, schema_entry) in
                     type_node.schema.get_entries().iter().enumerate()
@@ -448,7 +448,7 @@ impl TypeTree {
                     subtree.clone(),
                 );
             }
-            ExecutionNode::AppendColumns(subtree, instructions) => {
+            ExecutionOperation::AppendColumns(subtree, instructions) => {
                 let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
                 let mut not_appended_index: usize = 0;
 
@@ -466,7 +466,7 @@ impl TypeTree {
                     subtree.clone(),
                 );
             }
-            ExecutionNode::AppendNulls(subtree, num_nulls) => {
+            ExecutionOperation::AppendNulls(subtree, num_nulls) => {
                 let mut schema_map = HashMap::<usize, TableSchemaEntry>::new();
 
                 for (index, schema_entry) in type_node

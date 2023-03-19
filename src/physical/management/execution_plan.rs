@@ -20,7 +20,7 @@ use super::database::{ColumnOrder, TableId};
 
 /// Wraps [`ExecutionNode`] into a `Rc<RefCell<_>>`
 #[derive(Debug)]
-pub struct ExecutionNodeOwned(pub Rc<RefCell<ExecutionNode>>);
+struct ExecutionNodeOwned(Rc<RefCell<ExecutionNode>>);
 
 impl ExecutionNodeOwned {
     /// Create new [`ExecutionNodeOwned`]
@@ -36,7 +36,7 @@ impl ExecutionNodeOwned {
 
 /// Wraps [`ExecutionNode`] into a `Weak<RefCell<_>>`
 #[derive(Debug, Clone)]
-pub struct ExecutionNodeRef(pub Weak<RefCell<ExecutionNode>>);
+pub struct ExecutionNodeRef(Weak<RefCell<ExecutionNode>>);
 
 impl ExecutionNodeRef {
     /// Return an referenced counted cell of an [`ExecutionNode`].
@@ -51,12 +51,12 @@ impl ExecutionNodeRef {
     /// Add a sub node to a join or union node
     pub fn add_subnode(&mut self, subnode: ExecutionNodeRef) {
         let node_rc = self.get_rc();
-        let node_ref = &mut *node_rc.borrow_mut();
+        let node_operation = &mut node_rc.borrow_mut().operation;
 
-        match node_ref {
-            ExecutionNode::Join(subnodes, _) => subnodes.push(subnode),
-            ExecutionNode::Union(subnodes) => subnodes.push(subnode),
-            ExecutionNode::FetchExisting(_, _) | ExecutionNode::FetchNew(_) => {
+        match node_operation {
+            ExecutionOperation::Join(subnodes, _) => subnodes.push(subnode),
+            ExecutionOperation::Union(subnodes) => subnodes.push(subnode),
+            ExecutionOperation::FetchExisting(_, _) | ExecutionOperation::FetchNew(_) => {
                 panic!("Can't add subnode to a leaf node.")
             }
             _ => {
@@ -66,9 +66,18 @@ impl ExecutionNodeRef {
     }
 }
 
-/// Represents a database operation that should be performed
+/// Represents a node in a [`ExecutionPlan`]
+#[derive(Debug)]
+pub struct ExecutionNode {
+    /// The operation that should be performed on this node.
+    pub operation: ExecutionOperation,
+    /// Identifier of the node.
+    pub id: usize,
+}
+
 #[derive(Debug, Clone)]
-pub enum ExecutionNode {
+/// Represents an operation in [`ExecutionPlan`]
+pub enum ExecutionOperation {
     /// Fetch a table that is already present in the database instance.
     FetchExisting(TableId, ColumnOrder),
     /// Fetch a table that is computed as part of the [`ExecutionPlan`] this tree is part of.
@@ -170,7 +179,10 @@ impl ExecutionTree {
     }
 
     /// Push new node to list of all nodes and returns a reference.
-    fn push_and_return_ref(&mut self, node: ExecutionNode) -> ExecutionNodeRef {
+    fn push_and_return_ref(&mut self, operation: ExecutionOperation) -> ExecutionNodeRef {
+        let id = self.nodes.len();
+        let node = ExecutionNode { operation, id };
+
         self.nodes.push(ExecutionNodeOwned::new(node));
         self.nodes
             .last()
@@ -180,8 +192,8 @@ impl ExecutionTree {
 
     /// Return [`ExecutionNodeRef`] for fetching a permanent table.
     pub fn fetch_existing(&mut self, id: TableId) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::FetchExisting(id, ColumnOrder::default());
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::FetchExisting(id, ColumnOrder::default());
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for fetching a permanent table.
@@ -190,21 +202,21 @@ impl ExecutionTree {
         id: TableId,
         order: ColumnOrder,
     ) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::FetchExisting(id, order);
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::FetchExisting(id, order);
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for fetching a temporary table.
     pub fn fetch_new(&mut self, index: usize) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::FetchNew(index);
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::FetchNew(index);
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for joining tables.
     /// Starts out empty; add subnodes with `add_subnode`.
     pub fn join_empty(&mut self, bindings: JoinBindings) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::Join(Vec::new(), bindings);
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::Join(Vec::new(), bindings);
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for joining tables.
@@ -213,32 +225,27 @@ impl ExecutionTree {
         subtables: Vec<ExecutionNodeRef>,
         bindings: JoinBindings,
     ) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::Join(subtables, bindings);
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::Join(subtables, bindings);
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for the union of several tables.
     /// Starts out empty; add subnodes with `add_subnode`.
     pub fn union_empty(&mut self) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::Union(Vec::new());
-        self.nodes.push(ExecutionNodeOwned::new(new_node));
-
-        self.nodes
-            .last()
-            .expect("New node has been added above.")
-            .get_ref()
+        let new_operation = ExecutionOperation::Union(Vec::new());
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for joining tables.
     pub fn union(&mut self, subtables: Vec<ExecutionNodeRef>) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::Union(subtables);
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::Union(subtables);
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for subtracting one table from another.
     pub fn minus(&mut self, left: ExecutionNodeRef, right: ExecutionNodeRef) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::Minus(left, right);
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::Minus(left, right);
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for applying project to a table.
@@ -247,8 +254,8 @@ impl ExecutionTree {
         subnode: ExecutionNodeRef,
         project_reordering: ProjectReordering,
     ) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::Project(subnode, project_reordering);
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::Project(subnode, project_reordering);
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for restricing a column to a certain value.
@@ -257,8 +264,8 @@ impl ExecutionTree {
         subnode: ExecutionNodeRef,
         assigments: Vec<ValueAssignment>,
     ) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::SelectValue(subnode, assigments);
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::SelectValue(subnode, assigments);
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for restricting a column to values of certain other columns.
@@ -267,8 +274,8 @@ impl ExecutionTree {
         subnode: ExecutionNodeRef,
         eq_classes: SelectEqualClasses,
     ) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::SelectEqual(subnode, eq_classes);
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::SelectEqual(subnode, eq_classes);
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for appending columns to a trie.
@@ -277,8 +284,8 @@ impl ExecutionTree {
         subnode: ExecutionNodeRef,
         instructions: Vec<Vec<AppendInstruction>>,
     ) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::AppendColumns(subnode, instructions);
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::AppendColumns(subnode, instructions);
+        self.push_and_return_ref(new_operation)
     }
 
     /// Return [`ExecutionNodeRef`] for appending null-columns to a trie.
@@ -287,20 +294,22 @@ impl ExecutionTree {
         subnode: ExecutionNodeRef,
         num_nulls: usize,
     ) -> ExecutionNodeRef {
-        let new_node = ExecutionNode::AppendNulls(subnode, num_nulls);
-        self.push_and_return_ref(new_node)
+        let new_operation = ExecutionOperation::AppendNulls(subnode, num_nulls);
+        self.push_and_return_ref(new_operation)
     }
 
     fn ascii_tree_recursive(node: ExecutionNodeRef) -> Tree {
         let node_rc = node.get_rc();
-        let node_ref = &*node_rc.borrow();
+        let node_operation = &node_rc.borrow().operation;
 
-        match node_ref {
-            ExecutionNode::FetchExisting(id, order) => {
+        match node_operation {
+            ExecutionOperation::FetchExisting(id, order) => {
                 Tree::Leaf(vec![format!("Permanent Table: {id} ({order})")])
             }
-            ExecutionNode::FetchNew(index) => Tree::Leaf(vec![format!("Temporary Table: {index}")]),
-            ExecutionNode::Join(subnodes, bindings) => {
+            ExecutionOperation::FetchNew(index) => {
+                Tree::Leaf(vec![format!("Temporary Table: {index}")])
+            }
+            ExecutionOperation::Join(subnodes, bindings) => {
                 let subtrees = subnodes
                     .iter()
                     .map(|n| Self::ascii_tree_recursive(n.clone()))
@@ -308,7 +317,7 @@ impl ExecutionTree {
 
                 Tree::Node(format!("Join {bindings:?}"), subtrees)
             }
-            ExecutionNode::Union(subnodes) => {
+            ExecutionOperation::Union(subnodes) => {
                 let subtrees = subnodes
                     .iter()
                     .map(|n| Self::ascii_tree_recursive(n.clone()))
@@ -316,33 +325,33 @@ impl ExecutionTree {
 
                 Tree::Node(String::from("Union"), subtrees)
             }
-            ExecutionNode::Minus(node_left, node_right) => {
+            ExecutionOperation::Minus(node_left, node_right) => {
                 let subtree_left = Self::ascii_tree_recursive(node_left.clone());
                 let subtree_right = Self::ascii_tree_recursive(node_right.clone());
 
                 Tree::Node(String::from("Minus"), vec![subtree_left, subtree_right])
             }
-            ExecutionNode::Project(subnode, reorder) => {
+            ExecutionOperation::Project(subnode, reorder) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
                 Tree::Node(format!("Project {reorder:?}"), vec![subtree])
             }
-            ExecutionNode::SelectValue(subnode, assignments) => {
+            ExecutionOperation::SelectValue(subnode, assignments) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
                 Tree::Node(format!("Select Value {assignments:?}"), vec![subtree])
             }
-            ExecutionNode::SelectEqual(subnode, classes) => {
+            ExecutionOperation::SelectEqual(subnode, classes) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
                 Tree::Node(format!("Select Equal {classes:?}"), vec![subtree])
             }
-            ExecutionNode::AppendColumns(subnode, instructions) => {
+            ExecutionOperation::AppendColumns(subnode, instructions) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
                 Tree::Node(format!("Append Columns {instructions:?}"), vec![subtree])
             }
-            ExecutionNode::AppendNulls(subnode, num_nulls) => {
+            ExecutionOperation::AppendNulls(subnode, num_nulls) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
                 Tree::Node(format!("Append Nulls {num_nulls}"), vec![subtree])
@@ -377,20 +386,20 @@ impl ExecutionTree {
         removed_tables: &HashSet<usize>,
     ) -> Option<ExecutionNodeRef> {
         let node_rc = node.get_rc();
-        let node_ref = &*node_rc.borrow();
+        let node_operation = &node_rc.borrow().operation;
 
-        match node_ref {
-            ExecutionNode::FetchExisting(id, order) => {
+        match node_operation {
+            ExecutionOperation::FetchExisting(id, order) => {
                 Some(new_tree.fetch_existing_reordered(*id, order.clone()))
             }
-            ExecutionNode::FetchNew(index) => {
+            ExecutionOperation::FetchNew(index) => {
                 if removed_tables.contains(index) {
                     None
                 } else {
                     Some(new_tree.fetch_new(*index))
                 }
             }
-            ExecutionNode::Join(subnodes, binding) => {
+            ExecutionOperation::Join(subnodes, binding) => {
                 let mut simplified_nodes = Vec::<ExecutionNodeRef>::with_capacity(subnodes.len());
                 for subnode in subnodes {
                     let simplified_opt =
@@ -410,7 +419,7 @@ impl ExecutionTree {
 
                 Some(new_tree.join(simplified_nodes, binding.clone()))
             }
-            ExecutionNode::Union(subnodes) => {
+            ExecutionOperation::Union(subnodes) => {
                 let mut simplified_nodes = Vec::<ExecutionNodeRef>::with_capacity(subnodes.len());
                 for subnode in subnodes {
                     let simplified_opt =
@@ -431,7 +440,7 @@ impl ExecutionTree {
 
                 Some(new_tree.union(simplified_nodes))
             }
-            ExecutionNode::Minus(left, right) => {
+            ExecutionOperation::Minus(left, right) => {
                 let simplified_left_opt =
                     Self::simplify_recursive(new_tree, left.clone(), removed_tables);
                 let simplified_right_opt =
@@ -447,14 +456,14 @@ impl ExecutionTree {
 
                 None
             }
-            ExecutionNode::Project(subnode, reorder) => {
+            ExecutionOperation::Project(subnode, reorder) => {
                 let simplified =
                     Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
                 if reorder.is_identity() {
                     Some(simplified)
-                } else if let ExecutionNode::FetchExisting(id, order) =
-                    &*simplified.get_rc().borrow()
+                } else if let ExecutionOperation::FetchExisting(id, order) =
+                    &simplified.get_rc().borrow().operation
                 {
                     if reorder.is_permutation() {
                         Some(new_tree.fetch_existing_reordered(
@@ -468,7 +477,7 @@ impl ExecutionTree {
                     Some(new_tree.project(simplified, reorder.clone()))
                 }
             }
-            ExecutionNode::SelectValue(subnode, assignments) => {
+            ExecutionOperation::SelectValue(subnode, assignments) => {
                 let simplified =
                     Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
@@ -478,7 +487,7 @@ impl ExecutionTree {
                     Some(new_tree.select_value(simplified, assignments.clone()))
                 }
             }
-            ExecutionNode::SelectEqual(subnode, classes) => {
+            ExecutionOperation::SelectEqual(subnode, classes) => {
                 let simplified =
                     Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
@@ -488,7 +497,7 @@ impl ExecutionTree {
                     Some(new_tree.select_equal(simplified, classes.clone()))
                 }
             }
-            ExecutionNode::AppendColumns(subnode, instructions) => {
+            ExecutionOperation::AppendColumns(subnode, instructions) => {
                 let simplified =
                     Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
@@ -498,7 +507,7 @@ impl ExecutionTree {
                     Some(new_tree.append_columns(simplified, instructions.clone()))
                 }
             }
-            ExecutionNode::AppendNulls(subnode, num_nulls) => {
+            ExecutionOperation::AppendNulls(subnode, num_nulls) => {
                 let simplified =
                     Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
@@ -532,7 +541,9 @@ impl ExecutionTree {
     pub fn required_tables(&self) -> Vec<(TableId, ColumnOrder)> {
         let mut result = Vec::<(TableId, ColumnOrder)>::new();
         for node in &self.nodes {
-            if let ExecutionNode::FetchExisting(id, order) = &*node.0.as_ref().borrow() {
+            if let ExecutionOperation::FetchExisting(id, order) =
+                &node.0.as_ref().borrow().operation
+            {
                 result.push((*id, order.clone()));
             }
         }
@@ -554,30 +565,30 @@ impl ExecutionTree {
     /// Implements the functionality of `satisfy_leapfrog_triejoin` by traversing the tree recursively
     fn satisfy_leapfrog_recurisve(node: ExecutionNodeRef, permutation: Permutation) {
         let node_rc = node.get_rc();
-        let node_ref = &mut *node_rc.borrow_mut();
+        let node_operation = &mut node_rc.borrow_mut().operation;
 
-        match node_ref {
-            ExecutionNode::FetchExisting(id, order) => {
-                *node_ref =
-                    ExecutionNode::FetchExisting(*id, order.chain_permutation(&permutation));
+        match node_operation {
+            ExecutionOperation::FetchExisting(id, order) => {
+                *node_operation =
+                    ExecutionOperation::FetchExisting(*id, order.chain_permutation(&permutation));
             }
-            ExecutionNode::FetchNew(_index) => {
+            ExecutionOperation::FetchNew(_index) => {
                 if !permutation.is_identity() {
                     // TODO: One cannot infer a ProjectReordering from a Permutation
                     // Since this Case will go away after chaning the ExecutionTrees it is perhaps not needed
 
                     // let new_fetch = self.fetch_new(*index);
-                    // *node_ref = ExecutionNode::Project(new_fetch, permutation);
+                    // *node_operation = ExecutionOperation::Project(new_fetch, permutation);
 
                     panic!("Automatic reordering of new tables currently not supported");
                 }
             }
-            ExecutionNode::Project(subnode, project_reorder) => {
+            ExecutionOperation::Project(subnode, project_reorder) => {
                 *project_reorder = project_reorder.chain_permutation(&permutation);
 
                 Self::satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
             }
-            ExecutionNode::Join(subnodes, bindings) => {
+            ExecutionOperation::Join(subnodes, bindings) => {
                 bindings.apply_permutation(&permutation);
                 let subpermutations = bindings.comply_with_leapfrog();
 
@@ -585,16 +596,16 @@ impl ExecutionTree {
                     Self::satisfy_leapfrog_recurisve(subnode.clone(), subpermutation)
                 }
             }
-            ExecutionNode::Union(subnodes) => {
+            ExecutionOperation::Union(subnodes) => {
                 for subnode in subnodes {
                     Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
                 }
             }
-            ExecutionNode::Minus(left, right) => {
+            ExecutionOperation::Minus(left, right) => {
                 Self::satisfy_leapfrog_recurisve(left.clone(), permutation.clone());
                 Self::satisfy_leapfrog_recurisve(right.clone(), permutation.clone());
             }
-            ExecutionNode::SelectValue(subnode, _assignments) => {
+            ExecutionOperation::SelectValue(subnode, _assignments) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
@@ -604,20 +615,20 @@ impl ExecutionTree {
 
                 Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation);
             }
-            ExecutionNode::SelectEqual(subnode, _classes) => {
+            ExecutionOperation::SelectEqual(subnode, _classes) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
                 Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation);
             }
-            ExecutionNode::AppendColumns(subnode, _instructions) => {
+            ExecutionOperation::AppendColumns(subnode, _instructions) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
 
                 Self::satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
             }
-            ExecutionNode::AppendNulls(subnode, _) => {
+            ExecutionOperation::AppendNulls(subnode, _) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());

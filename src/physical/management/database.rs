@@ -28,8 +28,9 @@ use crate::{
     },
 };
 
+use super::execution_plan::ExecutionOperation;
 use super::{
-    execution_plan::{ExecutionNode, ExecutionNodeRef, ExecutionResult},
+    execution_plan::{ExecutionNodeRef, ExecutionResult},
     type_analysis::{TypeTree, TypeTreeNode},
     ByteSized, ExecutionPlan,
 };
@@ -612,14 +613,11 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     // If this is the case returns the amount of null-columns that have been appended.
     // TODO: Nothing about this feels right; revise later
     fn appends_nulls(node: ExecutionNodeRef) -> u64 {
-        let node_rc = node
-            .0
-            .upgrade()
-            .expect("Referenced execution node has been deleted");
-        let node_ref = &*node_rc.as_ref().borrow();
+        let node_rc = node.get_rc();
+        let node_operation = &node_rc.borrow().operation;
 
-        match node_ref {
-            ExecutionNode::AppendNulls(_subnode, num_nulls) => *num_nulls as u64,
+        match node_operation {
+            ExecutionOperation::AppendNulls(_subnode, num_nulls) => *num_nulls as u64,
             _ => 0,
         }
     }
@@ -755,10 +753,10 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         }
 
         let node_rc = execution_node.get_rc();
-        let node_ref = &*node_rc.borrow();
+        let node_operation = &node_rc.borrow().operation;
 
-        return match node_ref {
-            ExecutionNode::FetchExisting(id, order) => {
+        return match node_operation {
+            ExecutionOperation::FetchExisting(id, order) => {
                 let trie_ref = self.get_trie(*id, order);
                 if trie_ref.row_num() == 0 {
                     return Ok(None);
@@ -769,7 +767,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
                 Ok(Some(TrieScanEnum::TrieScanGeneric(trie_scan)))
             }
-            ExecutionNode::FetchNew(index) => {
+            ExecutionOperation::FetchNew(index) => {
                 let comp_result = computation_results.get(index).unwrap();
                 let trie_ref = match comp_result {
                     ComputationResult::Temporary(trie) => trie,
@@ -786,7 +784,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
                 Ok(Some(TrieScanEnum::TrieScanGeneric(trie_scan)))
             }
-            ExecutionNode::Join(subtables, bindings) => {
+            ExecutionOperation::Join(subtables, bindings) => {
                 let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
                 for (table_index, subtable) in subtables.iter().enumerate() {
                     let subiterator_opt = self.get_iterator_node(
@@ -813,7 +811,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     bindings,
                 ))))
             }
-            ExecutionNode::Union(subtables) => {
+            ExecutionOperation::Union(subtables) => {
                 let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
                 for (table_index, subtable) in subtables.iter().enumerate() {
                     let subiterator_opt = self.get_iterator_node(
@@ -841,7 +839,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
                 Ok(Some(TrieScanEnum::TrieScanUnion(union_scan)))
             }
-            ExecutionNode::Minus(subtable_left, subtable_right) => {
+            ExecutionOperation::Minus(subtable_left, subtable_right) => {
                 if let Some(left_scan) = self.get_iterator_node(
                     subtable_left.clone(),
                     &type_node.subnodes[0],
@@ -862,13 +860,13 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     Ok(None)
                 }
             }
-            ExecutionNode::Project(subnode, reorder) => {
+            ExecutionOperation::Project(subnode, reorder) => {
                 let subnode_rc = subnode.get_rc();
-                let subnode_ref = &*subnode_rc.borrow();
+                let subnode_operation = &subnode_rc.borrow().operation;
 
-                let trie = match subnode_ref {
-                    ExecutionNode::FetchExisting(id, order) => self.get_trie(*id, order),
-                    ExecutionNode::FetchNew(index) => {
+                let trie = match subnode_operation {
+                    ExecutionOperation::FetchExisting(id, order) => self.get_trie(*id, order),
+                    ExecutionOperation::FetchNew(index) => {
                         let comp_result = computation_results.get(index).unwrap();
                         let trie_ref = match comp_result {
                             ComputationResult::Temporary(trie) => trie,
@@ -887,7 +885,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
                 Ok(Some(TrieScanEnum::TrieScanProject(project_scan)))
             }
-            ExecutionNode::SelectValue(subtable, assignments) => {
+            ExecutionOperation::SelectValue(subtable, assignments) => {
                 let subiterator_opt = self.get_iterator_node(
                     subtable.clone(),
                     &type_node.subnodes[0],
@@ -901,7 +899,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     Ok(None)
                 }
             }
-            ExecutionNode::SelectEqual(subtable, classes) => {
+            ExecutionOperation::SelectEqual(subtable, classes) => {
                 let subiterator_opt = self.get_iterator_node(
                     subtable.clone(),
                     &type_node.subnodes[0],
@@ -915,7 +913,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     Ok(None)
                 }
             }
-            ExecutionNode::AppendColumns(subtable, instructions) => {
+            ExecutionOperation::AppendColumns(subtable, instructions) => {
                 let subiterator_opt = self.get_iterator_node(
                     subtable.clone(),
                     &type_node.subnodes[0],
@@ -930,7 +928,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     Ok(None)
                 }
             }
-            ExecutionNode::AppendNulls(subtable, num_nulls) => {
+            ExecutionOperation::AppendNulls(subtable, num_nulls) => {
                 let subiterator_opt = self.get_iterator_node(
                     subtable.clone(),
                     &type_node.subnodes[0],
