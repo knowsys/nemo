@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::fs::File;
 use std::path::PathBuf;
@@ -626,47 +626,46 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     /// Returns a map that assigns to each plan id of a permanenet table the [`TableId`] in the [`DatabaseInstance`]
     /// This may fail if certain operations are performed on tries with incompatible types
     /// or if the plan references tries that do not exist.
-    pub fn execute_plan(
-        &mut self,
-        mut plan: ExecutionPlan,
-    ) -> Result<HashMap<usize, TableId>, Error> {
+    pub fn execute_plan(&mut self, plan: ExecutionPlan) -> Result<HashMap<usize, TableId>, Error> {
+        let execution_trees = plan.split_at_write_nodes();
+
+        // The variables below associate the write node ids of the given plan with some additional information
         let mut permanent_ids = HashMap::<usize, TableId>::new();
         let mut type_trees = HashMap::<usize, TypeTree>::new();
         let mut computation_results = HashMap::<usize, ComputationResult>::new();
+        let mut removed_temp_ids = HashSet::<usize>::new();
 
-        for (&tree_index, execution_tree) in plan.iter() {
+        for (tree_id, mut execution_tree) in execution_trees {
+            let timed_string = format!("Reasoning/Execution/{}", execution_tree.name());
+            TimedCode::instance().sub(&timed_string).start();
+
+            if let Some(simplified_tree) = execution_tree.simplify(&removed_temp_ids) {
+                execution_tree = simplified_tree;
+            } else {
+                removed_temp_ids.insert(tree_id);
+                continue;
+            }
+
             execution_tree.satisfy_leapfrog_triejoin();
 
-            let type_tree = TypeTree::from_execution_tree(self, &type_trees, execution_tree)?;
+            let type_tree = TypeTree::from_execution_tree(self, &type_trees, &execution_tree)?;
             let schema = type_tree.schema.clone();
 
             for (id, order) in execution_tree.required_tables() {
                 self.make_available_in_memory(id, &order)?;
             }
 
-            let timed_string = format!("Reasoning/Execution/{}", execution_tree.name());
-            TimedCode::instance().sub(&timed_string).start();
-
-            let mut num_null_columns = 0u64;
+            let num_null_columns = Self::appends_nulls(execution_tree.root());
 
             // Calculate the new trie
-            let new_trie_opt = if let Some(root) = execution_tree.root() {
-                num_null_columns = Self::appends_nulls(root.clone());
+            let iter_opt =
+                self.get_iterator_node(execution_tree.root(), &type_tree, &computation_results)?;
 
-                let iter_opt = self.get_iterator_node(root, &type_tree, &computation_results)?;
-
-                if let Some(mut iter) = iter_opt {
-                    materialize(&mut iter)
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-
-            type_trees.insert(tree_index, type_tree);
+            let new_trie_opt = iter_opt.and_then(|mut iter| materialize(&mut iter));
 
             if let Some(new_trie) = new_trie_opt {
+                type_trees.insert(tree_id, type_tree);
+
                 // If trie appended nulls then we need to update our `current_null` value
                 self.current_null += new_trie.num_elements() as u64 * num_null_columns;
 
@@ -679,8 +678,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                             new_trie.size_bytes()
                         );
 
-                        computation_results
-                            .insert(tree_index, ComputationResult::Temporary(new_trie));
+                        computation_results.insert(tree_id, ComputationResult::Temporary(new_trie));
                     }
                     ExecutionResult::Permanent(order, name) => {
                         log::info!(
@@ -692,17 +690,15 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                         let new_id = self.register_table(name, schema);
                         self.add_trie(new_id, order.clone(), new_trie);
 
-                        permanent_ids.insert(tree_index, new_id);
-                        computation_results.insert(
-                            tree_index,
-                            ComputationResult::Permanent(new_id, order.clone()),
-                        );
+                        permanent_ids.insert(tree_id, new_id);
+                        computation_results
+                            .insert(tree_id, ComputationResult::Permanent(new_id, order.clone()));
                     }
                 }
             } else {
                 log::info!("Trie does not contain any elements");
 
-                computation_results.insert(tree_index, ComputationResult::Empty);
+                computation_results.insert(tree_id, ComputationResult::Empty);
             }
 
             TimedCode::instance().sub(&timed_string).stop();
@@ -960,7 +956,6 @@ mod test {
         dictionary::StringDictionary,
         management::{
             database::{ColumnOrder, TableId},
-            execution_plan::ExecutionTree,
             ByteSized, ExecutionPlan,
         },
         tabular::{
@@ -1054,7 +1049,7 @@ mod test {
         let id_x = table_id.increment();
         let id_y = table_id.increment();
 
-        let mut execution_tree = ExecutionTree::new_permanent("Test", "TableResult");
+        let mut execution_tree = ExecutionPlan::default();
 
         let node_load_a = execution_tree.fetch_existing(id_a);
         let node_load_b_1 = execution_tree.fetch_existing(id_b);
@@ -1074,12 +1069,9 @@ mod test {
         );
 
         let node_root = execution_tree.union(vec![node_join, node_minus]);
-        execution_tree.set_root(node_root);
+        execution_tree.write_temporary(node_root, "Test");
 
-        let mut execution_plan = ExecutionPlan::new();
-        execution_plan.push(execution_tree);
-
-        execution_plan
+        execution_tree
     }
 
     #[test]

@@ -92,14 +92,10 @@ impl TypeTree {
         previous_trees: &HashMap<usize, TypeTree>,
         tree: &ExecutionTree,
     ) -> Result<Self, Error> {
-        if let Some(tree_root) = tree.root() {
-            let mut tree = Self::propagate_up(instance, previous_trees, tree_root.clone())?;
-            Self::propagate_down(&mut tree, None, tree_root);
+        let mut type_tree = Self::propagate_up(instance, previous_trees, tree.root())?;
+        Self::propagate_down(&mut type_tree, None, tree.root());
 
-            Ok(tree)
-        } else {
-            Ok(TypeTree::default())
-        }
+        Ok(type_tree)
     }
 
     /// Types are propagated from bottom to top through the [`ExecutionTree`].
@@ -543,7 +539,7 @@ mod test {
         management::{
             database::{ColumnOrder, TableId},
             execution_plan::ExecutionTree,
-            DatabaseInstance,
+            DatabaseInstance, ExecutionPlan,
         },
         tabular::{
             operations::{
@@ -585,7 +581,7 @@ mod test {
 
         let mut current_id = TableId::default();
 
-        let mut execution_tree = ExecutionTree::new_temporary("Test");
+        let mut execution_tree = ExecutionPlan::default();
 
         let id_a = current_id.increment();
         let id_b = current_id.increment();
@@ -612,9 +608,9 @@ mod test {
             execution_tree.project(node_join, ProjectReordering::from_vector(vec![0, 2], 3));
 
         let node_root = execution_tree.union(vec![node_project, node_minus]);
-        execution_tree.set_root(node_root);
+        execution_tree.write_temporary(node_root, "Test Tree");
 
-        execution_tree
+        ExecutionTree(execution_tree)
     }
 
     fn build_expected_type_tree_up() -> TypeTree {
@@ -832,8 +828,7 @@ mod test {
 
         let execution_tree = build_execution_tree();
 
-        let type_tree_up =
-            TypeTree::propagate_up(&instance, &type_trees, execution_tree.root().unwrap());
+        let type_tree_up = TypeTree::propagate_up(&instance, &type_trees, execution_tree.root());
         assert!(type_tree_up.is_ok());
 
         let type_tree_up = type_tree_up.unwrap();
@@ -861,7 +856,7 @@ mod test {
         let id_a = instance.register_add_trie("TableA", schema_a, ColumnOrder::default(), trie_a);
         let id_b = instance.register_add_trie("TableB", schema_b, ColumnOrder::default(), trie_b);
 
-        let mut execution_tree = ExecutionTree::new_temporary("test");
+        let mut execution_tree = ExecutionPlan::default();
 
         let fetch_a = execution_tree.fetch_existing(id_a);
         let fetch_b = execution_tree.fetch_existing(id_b);
@@ -872,7 +867,8 @@ mod test {
         );
 
         let union = execution_tree.union(vec![append_a, fetch_b]);
-        execution_tree.set_root(union);
+        execution_tree.write_temporary(union, "Test");
+        let execution_tree = ExecutionTree(execution_tree);
 
         let type_trees = HashMap::<usize, TypeTree>::new();
         let type_tree = TypeTree::from_execution_tree(&instance, &type_trees, &execution_tree);
@@ -920,7 +916,7 @@ mod test {
         let id_a = instance.register_add_trie("TableA", schema_a, ColumnOrder::default(), trie_a);
         let id_b = instance.register_add_trie("TableB", schema_b, ColumnOrder::default(), trie_b);
 
-        let mut execution_tree = ExecutionTree::new_temporary("test");
+        let mut execution_tree = ExecutionPlan::default();
 
         let fetch_a = execution_tree.fetch_existing(id_a);
         let fetch_b = execution_tree.fetch_existing(id_b);
@@ -932,7 +928,8 @@ mod test {
             JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         );
 
-        execution_tree.set_root(node_join);
+        execution_tree.write_temporary(node_join, "Test");
+        let execution_tree = ExecutionTree(execution_tree);
 
         let type_trees = HashMap::<usize, TypeTree>::new();
         let type_tree = TypeTree::from_execution_tree(&instance, &type_trees, &execution_tree);

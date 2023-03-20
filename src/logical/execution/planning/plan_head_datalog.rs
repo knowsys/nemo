@@ -13,10 +13,7 @@ use crate::{
     },
     physical::{
         dictionary::Dictionary,
-        management::{
-            database::ColumnOrder,
-            execution_plan::{ExecutionNodeRef, ExecutionTree},
-        },
+        management::{database::ColumnOrder, execution_plan::ExecutionNodeRef},
         tabular::operations::triescan_project::ProjectReordering,
     },
 };
@@ -56,11 +53,11 @@ impl DatalogStrategy {
 }
 
 impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
-    fn add_head_trees(
+    fn add_plan_head(
         &self,
         table_manager: &TableManager<Dict>,
         current_plan: &mut SubtableExecutionPlan,
-        body_id: usize,
+        body: ExecutionNodeRef,
         _rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step: usize,
@@ -71,7 +68,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
             let head_order = ColumnOrder::default();
             let head_table_name = table_manager.generate_table_name(predicate, &head_order, step);
 
-            let mut head_tree = ExecutionTree::new_permanent("Head (Datalog)", &head_table_name);
+            let execution_plan = current_plan.plan_mut();
 
             let mut project_append_nodes =
                 Vec::<ExecutionNodeRef>::with_capacity(head_instructions.len());
@@ -80,27 +77,30 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
                 let head_reordering =
                     ProjectReordering::from_vector(head_binding.clone(), self.num_body_variables);
 
-                let fetch_node = head_tree.fetch_new(body_id);
-                let project_node = head_tree.project(fetch_node, head_reordering);
-                let append_node = head_tree
+                let project_node = execution_plan.project(body.clone(), head_reordering);
+                let append_node = execution_plan
                     .append_columns(project_node, head_instruction.append_instructions.clone());
 
                 project_append_nodes.push(append_node);
             }
 
-            let new_tables_union = head_tree.union(project_append_nodes);
+            let new_tables_union = execution_plan.union(project_append_nodes);
 
             let old_subtables = table_manager.tables_in_range(predicate, &(0..step));
             let old_table_nodes: Vec<ExecutionNodeRef> = old_subtables
                 .into_iter()
-                .map(|id| head_tree.fetch_existing(id))
+                .map(|id| execution_plan.fetch_existing(id))
                 .collect();
-            let old_table_union = head_tree.union(old_table_nodes);
+            let old_table_union = execution_plan.union(old_table_nodes);
 
-            let remove_duplicate_node = head_tree.minus(new_tables_union, old_table_union);
-            head_tree.set_root(remove_duplicate_node);
+            let remove_duplicate_node = execution_plan.minus(new_tables_union, old_table_union);
 
-            current_plan.add_permanent_table(head_tree, SubtableIdentifier::new(predicate, step));
+            current_plan.add_permanent_table(
+                remove_duplicate_node,
+                "Head (Datalog)",
+                &head_table_name,
+                SubtableIdentifier::new(predicate, step),
+            );
         }
     }
 }

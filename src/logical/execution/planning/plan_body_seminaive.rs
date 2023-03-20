@@ -8,7 +8,7 @@ use crate::{
         table_manager::SubtableExecutionPlan,
         TableManager,
     },
-    physical::{dictionary::Dictionary, management::execution_plan::ExecutionTree},
+    physical::{dictionary::Dictionary, management::execution_plan::ExecutionNodeRef},
 };
 
 use super::{BodyStrategy, SeminaiveJoinGenerator};
@@ -42,30 +42,32 @@ impl SeminaiveStrategy {
 }
 
 impl<Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy {
-    fn add_body_tree(
+    fn add_plan_body(
         &self,
         table_manager: &TableManager<Dict>,
-        current_pan: &mut SubtableExecutionPlan,
+        current_plan: &mut SubtableExecutionPlan,
         rule_info: &RuleInfo,
         mut variable_order: VariableOrder,
         step_number: usize,
-    ) -> usize {
-        let mut tree = ExecutionTree::new_temporary("Body Join");
+    ) -> Option<ExecutionNodeRef> {
+        // let mut tree = ExecutionTree::new_temporary("Body Join");
 
         if self.is_existential {
             variable_order = variable_order.restrict_to(&self.join_generator.variables);
         }
 
-        if let Some(node_seminaive) = self.join_generator.seminaive_join(
-            &mut tree,
+        let node_seminaive = self.join_generator.seminaive_join(
+            &mut current_plan.plan_mut(),
             table_manager,
             rule_info.step_last_applied,
             step_number,
             &variable_order,
-        ) {
-            tree.set_root(node_seminaive);
-        };
+        );
 
-        current_pan.add_temporary_table(tree)
+        if let Some(node) = node_seminaive.clone() {
+            current_plan.add_temporary_table(node, "Body Join");
+        }
+
+        node_seminaive
     }
 }

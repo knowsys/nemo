@@ -8,7 +8,7 @@ use crate::{
         dictionary::Dictionary,
         management::{
             database::{ColumnOrder, TableId, TableSource},
-            execution_plan::ExecutionTree,
+            execution_plan::ExecutionNodeRef,
             DatabaseInstance, ExecutionPlan,
         },
         tabular::{table_types::trie::Trie, traits::table_schema::TableSchema},
@@ -213,20 +213,34 @@ pub struct SubtableExecutionPlan {
 
 impl SubtableExecutionPlan {
     /// Add a temporary table to the plan.
-    pub fn add_temporary_table(&mut self, tree: ExecutionTree) -> usize {
-        self.execution_plan.push(tree)
+    pub fn add_temporary_table(&mut self, node: ExecutionNodeRef, tree_name: &str) -> usize {
+        self.execution_plan.write_temporary(node, tree_name)
     }
 
     /// Add a permanent table ot the plan-
     pub fn add_permanent_table(
         &mut self,
-        tree: ExecutionTree,
+        node: ExecutionNodeRef,
+        tree_name: &str,
+        table_name: &str,
         subtable_id: SubtableIdentifier,
     ) -> usize {
-        let plan_id = self.execution_plan.push(tree);
-        self.map_subtrees.insert(plan_id, subtable_id);
+        let node_id = self
+            .execution_plan
+            .write_permanent(node, tree_name, table_name);
+        self.map_subtrees.insert(node_id, subtable_id);
 
-        plan_id
+        node_id
+    }
+
+    /// Return a reference to the underlying [`ExecutionPlan`].
+    pub fn plan(&self) -> &ExecutionPlan {
+        &self.execution_plan
+    }
+
+    /// Return a mutable reference to the underlying [`ExecutionPlan`].
+    pub fn plan_mut(&mut self) -> &mut ExecutionPlan {
+        &mut self.execution_plan
     }
 }
 
@@ -467,17 +481,15 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
         let name = self.generate_table_name_combined(predicate, &combined_order, &range);
 
-        let mut plan = ExecutionPlan::new();
-        let mut union_tree = ExecutionTree::new_permanent("Combining Tables", &name);
+        let mut union_plan = ExecutionPlan::default();
         let fetch_nodes = tables
             .iter()
-            .map(|id| union_tree.fetch_existing(*id))
+            .map(|id| union_plan.fetch_existing(*id))
             .collect();
-        let union_node = union_tree.union(fetch_nodes);
-        union_tree.set_root(union_node);
+        let union_node = union_plan.union(fetch_nodes);
+        let plan_id = union_plan.write_permanent(union_node, "Combinding Tables", &name);
 
-        let plan_id = plan.push(union_tree);
-        let execution_result = self.database.execute_plan(plan)?;
+        let execution_result = self.database.execute_plan(union_plan)?;
         let table_id = execution_result
             .get(&plan_id)
             .expect("Combining multiple non-empty tables should result in a non-empty table.");
@@ -493,9 +505,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
     /// Execute a plan and add the results as subtables to the manager.
     pub fn execute_plan(
         &mut self,
-        mut subtable_plan: SubtableExecutionPlan,
+        subtable_plan: SubtableExecutionPlan,
     ) -> Result<Vec<Identifier>, Error> {
-        subtable_plan.execution_plan.simplify();
         let result = self.database.execute_plan(subtable_plan.execution_plan)?;
 
         let mut updated_predicates = Vec::new();
