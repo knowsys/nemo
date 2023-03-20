@@ -1,11 +1,9 @@
 //! Module defining the strategy for calculating all body matches for a rule application.
 
-use std::collections::HashSet;
-
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Atom, Filter, Rule, Variable},
+        model::{Atom, Filter, Rule},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::SubtableExecutionPlan,
         TableManager,
@@ -13,16 +11,13 @@ use crate::{
     physical::{dictionary::Dictionary, management::execution_plan::ExecutionTree},
 };
 
-use super::{seminaive_join, BodyStrategy};
+use super::{BodyStrategy, SeminaiveJoinGenerator};
 
 /// Implementation of the semi-naive existential rule evaluation strategy.
 #[derive(Debug)]
 pub struct SeminaiveStrategy {
-    body: Vec<Atom>,
-    filters: Vec<Filter>,
-
     is_existential: bool,
-    body_variables: HashSet<Variable>,
+    join_generator: SeminaiveJoinGenerator,
 }
 
 impl SeminaiveStrategy {
@@ -30,14 +25,18 @@ impl SeminaiveStrategy {
     pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
         // Since we don't support negation yet, we can just turn the literals into atoms
         // TODO: Think about negation here
-        let body: Vec<Atom> = rule.body().iter().map(|l| l.atom().clone()).collect();
+        let atoms: Vec<Atom> = rule.body().iter().map(|l| l.atom().clone()).collect();
         let filters: Vec<Filter> = rule.filters().to_vec();
 
-        Self {
-            body,
+        let join_generator = SeminaiveJoinGenerator {
+            atoms,
             filters,
+            variables: analysis.body_variables.clone(),
+        };
+
+        Self {
             is_existential: analysis.is_existential,
-            body_variables: analysis.body_variables.clone(),
+            join_generator,
         }
     }
 }
@@ -54,23 +53,18 @@ impl<Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy {
         let mut tree = ExecutionTree::new_temporary("Body Join");
 
         if self.is_existential {
-            variable_order = variable_order.restrict_to(&self.body_variables);
+            variable_order = variable_order.restrict_to(&self.join_generator.variables);
         }
 
-        let seminaive_node = seminaive_join(
+        if let Some(node_seminaive) = self.join_generator.seminaive_join(
             &mut tree,
             table_manager,
             rule_info.step_last_applied,
             step_number,
             &variable_order,
-            &self.body_variables,
-            &self.body,
-            &self.filters,
-        );
-
-        if let Some(node) = seminaive_node {
-            tree.set_root(node);
-        }
+        ) {
+            tree.set_root(node_seminaive);
+        };
 
         current_pan.add_temporary_table(tree)
     }

@@ -144,6 +144,12 @@ impl JoinBindings {
     }
 }
 
+impl FromIterator<Vec<usize>> for JoinBindings {
+    fn from_iter<T: IntoIterator<Item = Vec<usize>>>(iter: T) -> Self {
+        JoinBindings::new(iter.into_iter().collect())
+    }
+}
+
 /// A [`JoinBinding`] is a vector of [`Vec<usize>`] where `binding[i]`
 /// contains which layer of the `i`-th subscan is bound to which variable
 /// (Variables are represented by their index in the variable order)

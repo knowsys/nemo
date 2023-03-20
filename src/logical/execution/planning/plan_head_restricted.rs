@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Atom, Filter, Identifier, Rule, Term, Variable},
+        model::{Atom, Identifier, Rule, Term, Variable},
         program_analysis::{
             analysis::RuleAnalysis, normalization::normalize_atom_vector,
             variable_order::VariableOrder,
@@ -26,16 +26,13 @@ use crate::{
 
 use super::{
     plan_util::{head_instruction_from_atom, subtree_union, HeadInstruction},
-    seminaive_join, HeadStrategy,
+    HeadStrategy, SeminaiveJoinGenerator,
 };
 
 /// Strategy for the restricted chase.
 #[derive(Debug)]
 pub struct RestrictedChaseStrategy {
-    normalized_head_atoms: Vec<Atom>,
-    normalized_head_filters: Vec<Filter>,
-    normalized_head_variables: HashSet<Variable>,
-
+    join_generator: SeminaiveJoinGenerator,
     frontier_variables: HashSet<Variable>,
 
     predicate_to_instructions: HashMap<Identifier, Vec<HeadInstruction>>,
@@ -84,31 +81,15 @@ impl RestrictedChaseStrategy {
             *is_full_existential &= is_existential;
         }
 
-        let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
-        let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();
-
-        for head_atom in rule.head() {
-            let is_existential = head_atom
-                .terms()
-                .iter()
-                .any(|t| matches!(t, Term::Variable(Variable::Existential(_))));
-
-            let instructions = predicate_to_instructions
-                .entry(head_atom.predicate())
-                .or_insert(Vec::new());
-            instructions.push(head_instruction_from_atom(head_atom));
-
-            let is_full_existential = predicate_to_full_existential
-                .entry(head_atom.predicate())
-                .or_insert(true);
-            *is_full_existential &= is_existential;
-        }
+        let join_generator = SeminaiveJoinGenerator {
+            variables: normalized_head_variables,
+            atoms: normalized_head.atoms,
+            filters: normalized_head.filters,
+        };
 
         RestrictedChaseStrategy {
             frontier_variables,
-            normalized_head_atoms: normalized_head.atoms,
-            normalized_head_filters: normalized_head.filters,
-            normalized_head_variables,
+            join_generator,
             predicate_to_instructions,
             predicate_to_full_existential,
             analysis: analysis.clone(),
@@ -129,7 +110,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         // TODO: We need like three versions of the same variable order in this function
         // Clearly, some more thinking is needed
         let normalized_head_variable_order = compute_normalized_variable_order(
-            &self.normalized_head_atoms,
+            &self.join_generator.atoms,
             variable_order.restrict_to(&self.analysis.head_variables),
         );
 
@@ -171,15 +152,12 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         // Find the matches for the head by performing a seminaive join
         let mut tree_head_join = ExecutionTree::new_temporary("Head (Restricted): Satisfied");
 
-        if let Some(node_head_join) = seminaive_join(
+        if let Some(node_head_join) = self.join_generator.seminaive_join(
             &mut tree_head_join,
             table_manager,
             rule_info.step_last_applied,
             step,
             &normalized_head_variable_order,
-            &self.normalized_head_variables,
-            &self.normalized_head_atoms,
-            &self.normalized_head_filters,
         ) {
             tree_head_join.set_root(node_head_join);
         }
