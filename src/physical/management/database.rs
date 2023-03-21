@@ -597,7 +597,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 .sub("Reasoning/Execution/Required Reorder")
                 .start();
 
-            let trie_reordered = project_and_reorder(&trie_unordered, &reorder);
+            let trie_reordered = project_and_reorder(trie_unordered, &reorder);
 
             TimedCode::instance()
                 .sub("Reasoning/Execution/Required Reorder")
@@ -665,7 +665,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
             }
         } else {
             let iter_opt =
-                self.get_iterator_node(execution_tree.root(), &type_tree, &computation_results)?;
+                self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
 
             Ok(iter_opt.and_then(|mut iter| materialize(&mut iter)))
         }
