@@ -128,21 +128,12 @@ struct ExecutionOutNode {
 }
 
 /// A DAG representing instructions for generating new tables.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ExecutionPlan {
     /// All the nodes in the tree.
     nodes: Vec<ExecutionNodeOwned>,
     /// A list that marks all nodes that will be materialized into their own tables.
     out_nodes: Vec<ExecutionOutNode>,
-}
-
-impl Default for ExecutionPlan {
-    fn default() -> Self {
-        Self {
-            nodes: Default::default(),
-            out_nodes: Default::default(),
-        }
-    }
 }
 
 impl ExecutionPlan {
@@ -332,7 +323,7 @@ impl ExecutionPlan {
 
         match node_operation {
             ExecutionOperation::FetchExisting(id, order) => {
-                new_plan.fetch_existing_reordered(id.clone(), order.clone())
+                new_plan.fetch_existing_reordered(*id, order.clone())
             }
             ExecutionOperation::FetchNew(index) => new_plan.fetch_new(*index),
             ExecutionOperation::Join(subnodes, bindings) => {

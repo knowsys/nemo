@@ -57,7 +57,7 @@ impl<Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy {
         }
 
         let node_seminaive = self.join_generator.seminaive_join(
-            &mut current_plan.plan_mut(),
+            current_plan.plan_mut(),
             table_manager,
             rule_info.step_last_applied,
             step_number,

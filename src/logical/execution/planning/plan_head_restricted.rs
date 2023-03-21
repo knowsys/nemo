@@ -140,7 +140,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         // Build the project node
         let node_body_project = current_plan
             .plan_mut()
-            .project(body.clone(), body_projection_reorder);
+            .project(body, body_projection_reorder);
 
         // 2. Compute the head matches projected to the frontier variables
 
@@ -208,7 +208,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             step,
         );
         current_plan.add_permanent_table(
-            node_project_minus.clone(),
+            node_project_minus,
             "Head (Restricted): Sat. Frontier",
             &head_projected_name,
             SubtableIdentifier::new(self.analysis.head_matches_identifier, step),
@@ -291,8 +291,6 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             // TODO: Is there a better pick?
             let head_order = ColumnOrder::default();
             let head_table_name = table_manager.generate_table_name(predicate, &head_order, step);
-            // let mut head_tree =
-            // ExecutionTree::new_permanent("Head (Restricted): Result Project", &head_table_name);
 
             if *self.predicate_to_full_existential.get(&predicate).unwrap() {
                 // Since every new entry will contain a fresh null no duplcate elimination is needed
