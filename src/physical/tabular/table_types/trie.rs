@@ -83,6 +83,7 @@ impl Trie {
         if self.columns.is_empty() {
             return Vec::new();
         }
+
         // outer vecs are build in reverse order
         let mut last_interval_lengths: Vec<usize> = self
             .columns
@@ -92,19 +93,36 @@ impl Trie {
             .map(|_| 1)
             .collect();
 
-        let mut result_columns: Vec<VecT> = vec![VecT::U64(
-            self.columns
-                .last()
-                .expect("we return early if columns are empty")
-                .iter()
-                .map(|val| match val {
-                    DataValueT::U64(constant) => constant,
-                    _ => panic!("Unsupported type"),
-                })
-                .collect(),
-        )];
+        macro_rules! last_column_for_datatype {
+            ($variant:ident) => {{
+                vec![VecT::$variant(
+                    self.columns
+                        .last()
+                        .expect("we return early if columns are empty")
+                        .iter()
+                        .map(|val| match val {
+                            DataValueT::$variant(constant) => constant,
+                            _ => panic!("Unsupported type"),
+                        })
+                        .collect(),
+                )]
+            }};
+        }
+
+        let mut result_columns: Vec<VecT> = match self
+            .types
+            .last()
+            .expect("we return early if columns are empty")
+        {
+            DataTypeName::U32 => last_column_for_datatype!(U32),
+            DataTypeName::U64 => last_column_for_datatype!(U64),
+            DataTypeName::Float => last_column_for_datatype!(Float),
+            DataTypeName::Double => last_column_for_datatype!(Double),
+        };
+
         for column_index in (0..(self.columns.len() - 1)).rev() {
             let current_column = &self.columns[column_index];
+            let current_type = self.types[column_index];
             let last_column = &self.columns[column_index + 1];
 
             let current_interval_lengths: Vec<usize> = (0..current_column.len())
@@ -118,25 +136,36 @@ impl Trie {
 
             let padding_lengths = current_interval_lengths.iter().map(|length| length - 1);
 
-            result_columns.push(VecT::U64(
-                current_column
-                    .iter()
-                    .zip(padding_lengths)
-                    .flat_map(|(val, pl)| {
-                        iter::once(match val {
-                            DataValueT::U64(constant) => constant,
-                            _ => panic!("Unsupported type"),
-                        })
-                        .chain(
-                            iter::repeat(match val {
-                                DataValueT::U64(constant) => constant,
-                                _ => panic!("Unsupported type"),
+            macro_rules! push_column_for_datatype {
+                ($variant:ident) => {{
+                    result_columns.push(VecT::$variant(
+                        current_column
+                            .iter()
+                            .zip(padding_lengths)
+                            .flat_map(|(val, pl)| {
+                                iter::once(match val {
+                                    DataValueT::$variant(constant) => constant,
+                                    _ => panic!("Unsupported type"),
+                                })
+                                .chain(
+                                    iter::repeat(match val {
+                                        DataValueT::$variant(constant) => constant,
+                                        _ => panic!("Unsupported type"),
+                                    })
+                                    .take(pl),
+                                )
                             })
-                            .take(pl),
-                        )
-                    })
-                    .collect(),
-            ));
+                            .collect(),
+                    ));
+                }};
+            }
+
+            match current_type {
+                DataTypeName::U32 => push_column_for_datatype!(U32),
+                DataTypeName::U64 => push_column_for_datatype!(U64),
+                DataTypeName::Float => push_column_for_datatype!(Float),
+                DataTypeName::Double => push_column_for_datatype!(Double),
+            };
 
             last_interval_lengths = current_interval_lengths;
         }
