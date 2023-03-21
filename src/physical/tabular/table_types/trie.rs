@@ -83,7 +83,6 @@ impl Trie {
         if self.columns.is_empty() {
             return Vec::new();
         }
-
         // outer vecs are build in reverse order
         let mut last_interval_lengths: Vec<usize> = self
             .columns
