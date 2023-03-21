@@ -68,8 +68,6 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
             let head_order = ColumnOrder::default();
             let head_table_name = table_manager.generate_table_name(predicate, &head_order, step);
 
-            let execution_plan = current_plan.plan_mut();
-
             let mut project_append_nodes =
                 Vec::<ExecutionNodeRef>::with_capacity(head_instructions.len());
             for head_instruction in head_instructions {
@@ -77,27 +75,34 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
                 let head_reordering =
                     ProjectReordering::from_vector(head_binding.clone(), self.num_body_variables);
 
-                let project_node = execution_plan.project(body.clone(), head_reordering);
-                let append_node = execution_plan
+                let project_node = current_plan
+                    .plan_mut()
+                    .project(body.clone(), head_reordering);
+                let append_node = current_plan
+                    .plan_mut()
                     .append_columns(project_node, head_instruction.append_instructions.clone());
 
-                project_append_nodes.push(append_node);
+                project_append_nodes.push(append_node.clone());
+
+                current_plan.add_temporary_table(append_node, "Head Projection (Datalog)");
             }
 
-            let new_tables_union = execution_plan.union(project_append_nodes);
+            let new_tables_union = current_plan.plan_mut().union(project_append_nodes);
 
             let old_subtables = table_manager.tables_in_range(predicate, &(0..step));
             let old_table_nodes: Vec<ExecutionNodeRef> = old_subtables
                 .into_iter()
-                .map(|id| execution_plan.fetch_existing(id))
+                .map(|id| current_plan.plan_mut().fetch_existing(id))
                 .collect();
-            let old_table_union = execution_plan.union(old_table_nodes);
+            let old_table_union = current_plan.plan_mut().union(old_table_nodes);
 
-            let remove_duplicate_node = execution_plan.minus(new_tables_union, old_table_union);
+            let remove_duplicate_node = current_plan
+                .plan_mut()
+                .minus(new_tables_union, old_table_union);
 
             current_plan.add_permanent_table(
                 remove_duplicate_node,
-                "Head (Datalog)",
+                "Duplicate Elimination (Datalog)",
                 &head_table_name,
                 SubtableIdentifier::new(predicate, step),
             );
