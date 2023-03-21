@@ -114,7 +114,10 @@ impl TypeTree {
                 Ok(TypeTreeNode::new(schema, vec![]))
             }
             ExecutionOperation::FetchNew(index) => {
-                let schema = previous_trees.get(index).unwrap().schema.clone();
+                let schema = previous_trees
+                    .get(index)
+                    .map_or(TableSchema::default(), |t| t.schema.clone());
+
                 Ok(TypeTreeNode::new(schema, vec![]))
             }
             ExecutionOperation::Join(subtrees, bindings) => {

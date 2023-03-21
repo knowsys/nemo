@@ -393,8 +393,14 @@ impl ExecutionPlan {
             let id = out_node.node.id();
             let mut subtree = ExecutionPlan::default();
 
-            let root_node =
-                Self::copy_subgraph(&mut subtree, out_node.node.clone(), &write_node_ids);
+            let mut write_node_ids_without_this = write_node_ids.clone();
+            write_node_ids_without_this.remove(&id);
+
+            let root_node = Self::copy_subgraph(
+                &mut subtree,
+                out_node.node.clone(),
+                &write_node_ids_without_this,
+            );
             subtree.out_nodes.push(ExecutionOutNode {
                 node: root_node,
                 result: out_node.result.clone(),

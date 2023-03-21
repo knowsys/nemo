@@ -657,15 +657,13 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
             let num_null_columns = Self::appends_nulls(execution_tree.root());
 
-            // Calculate the new trie
             let iter_opt =
                 self.get_iterator_node(execution_tree.root(), &type_tree, &computation_results)?;
 
+            type_trees.insert(tree_id, type_tree);
+
             let new_trie_opt = iter_opt.and_then(|mut iter| materialize(&mut iter));
-
             if let Some(new_trie) = new_trie_opt {
-                type_trees.insert(tree_id, type_tree);
-
                 // If trie appended nulls then we need to update our `current_null` value
                 self.current_null += new_trie.num_elements() as u64 * num_null_columns;
 
