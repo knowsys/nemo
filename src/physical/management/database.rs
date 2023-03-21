@@ -1026,7 +1026,7 @@ mod test {
         }
     }
 
-    fn test_casting_execution_plan() -> ExecutionPlan {
+    fn test_casting_execution_plan() -> (ExecutionPlan, usize) {
         // ExecutionPlan:
         // Union
         //  -> Minus
@@ -1067,9 +1067,9 @@ mod test {
         );
 
         let node_root = execution_tree.union(vec![node_join, node_minus]);
-        execution_tree.write_temporary(node_root, "Test");
+        let result_id = execution_tree.write_permanent(node_root, "Test", "Test");
 
-        execution_tree
+        (execution_tree, result_id)
     }
 
     #[test]
@@ -1128,11 +1128,11 @@ mod test {
         instance.register_add_trie("TableX", schema_x, ColumnOrder::default(), trie_x);
         instance.register_add_trie("TableY", schema_y, ColumnOrder::default(), trie_y);
 
-        let plan = test_casting_execution_plan();
+        let (plan, node_id) = test_casting_execution_plan();
         let result = instance.execute_plan(plan);
         assert!(result.is_ok());
 
-        let result_id = *result.unwrap().get(&0).unwrap();
+        let result_id = *result.unwrap().get(&node_id).unwrap();
         let result_trie = instance.get_trie(result_id, &ColumnOrder::default());
 
         let result_col_first = result_trie.get_column(0).as_u64().unwrap();
