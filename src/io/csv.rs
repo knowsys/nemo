@@ -211,7 +211,7 @@ Boston;United States;4628910
 
         let mut dict = PrefixedStringDictionary::default();
         let x = read(
-            &[Some(str.clone()), Some(str.clone()), Some(str.clone())],
+            &[Some(str), Some(str), Some(str)],
             &mut rdr,
             &mut dict,
             true,
