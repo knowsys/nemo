@@ -16,6 +16,9 @@ pub enum Error {
     /// Error occurred during parsing of Float values
     #[error(transparent)]
     ParseFloat(#[from] std::num::ParseFloatError),
+    /// TryFromInt error
+    #[error(transparent)]
+    TryFromInt(#[from] std::num::TryFromIntError),
     /// Error which implies a needed Rollback
     #[error("Rollback due to csv-error")]
     RollBack(usize),

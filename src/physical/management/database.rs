@@ -6,9 +6,10 @@ use std::path::PathBuf;
 use bytesize::ByteSize;
 
 use crate::io::csv::read;
-use crate::physical::datatypes::{DataTypeName, DataValueT};
+use crate::physical::datatypes::DataValueT;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::traits::table::Table;
+use crate::physical::tabular::traits::table_schema::TableSchemaEntry;
 use crate::physical::util::mapping::permutation::Permutation;
 use crate::physical::util::mapping::traits::NatMapping;
 use crate::{
@@ -111,18 +112,25 @@ impl TableStorage {
             let trie = match source {
                 TableSource::CSV(file) => {
                     // Using fallback solution to treat eveything as string for now (storing as u64 internally)
-                    let datatypes: Vec<Option<DataTypeName>> =
-                        (0..schema.arity()).map(|_| None).collect();
+                    let str_schemas: Vec<Option<TableSchemaEntry>> = (0..schema.arity())
+                        .map(|_| Some(TableSchemaEntry::string()))
+                        .collect();
 
                     let gz_decoder = flate2::read::GzDecoder::new(File::open(file.as_path())?);
 
                     let col_table = if gz_decoder.header().is_some() {
-                        read(&datatypes, &mut crate::io::csv::reader(gz_decoder), dict)?
+                        read(
+                            &str_schemas,
+                            &mut crate::io::csv::reader(gz_decoder),
+                            dict,
+                            true,
+                        )?
                     } else {
                         read(
-                            &datatypes,
+                            &str_schemas,
                             &mut crate::io::csv::reader(File::open(file.as_path())?),
                             dict,
+                            true,
                         )?
                     };
 

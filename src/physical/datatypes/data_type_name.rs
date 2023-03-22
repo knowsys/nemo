@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::error::Error;
+use crate::{error::Error, physical::dictionary::Dictionary};
 
 use super::DataValueT;
 
@@ -25,6 +25,24 @@ impl DataTypeName {
             DataTypeName::U64 => DataValueT::U64(string.parse::<u64>()?),
             DataTypeName::Float => DataValueT::Float(super::Float::new(string.parse::<f32>()?)?),
             DataTypeName::Double => DataValueT::Double(super::Double::new(string.parse::<f64>()?)?),
+        })
+    }
+
+    /// Puts a string into a Dictionary and returns the index in the according Datatype
+    pub fn parse_dict<Dict: Dictionary>(
+        &self,
+        dictionary: &mut Dict,
+        string: &str,
+    ) -> Result<DataValueT, Error> {
+        Ok(match self {
+            DataTypeName::U32 => DataValueT::U32(dictionary.add(string.to_string()).try_into()?),
+            DataTypeName::U64 => DataValueT::U64(dictionary.add(string.to_string()).try_into()?),
+            DataTypeName::Float => {
+                unimplemented!("Float indices for dictionaries do not make sense")
+            }
+            DataTypeName::Double => {
+                unimplemented!("Float indices for dictionaries do not make sense")
+            }
         })
     }
 }

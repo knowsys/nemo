@@ -18,6 +18,18 @@ pub struct TableSchemaEntry {
     pub nullable: bool,
 }
 
+impl TableSchemaEntry {
+    /// How is a String internally represented
+    /// TODO: Reconsider this after typesystem got revised
+    pub(crate) fn string() -> Self {
+        Self {
+            type_name: DataTypeName::U64,
+            dict: true,
+            nullable: false,
+        }
+    }
+}
+
 /// Schema for a particular relation (table).
 /// Each column has a datatype.
 #[derive(Debug, Default, Clone, Eq, PartialEq)]

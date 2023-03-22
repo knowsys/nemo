@@ -5,9 +5,10 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use crate::error::Error;
-use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
+use crate::physical::datatypes::{data_value::VecT, DataTypeName};
 use crate::physical::dictionary::Dictionary;
 use crate::physical::tabular::table_types::trie::Trie;
+use crate::physical::tabular::traits::table_schema::TableSchemaEntry;
 use csv::{Reader, ReaderBuilder};
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -34,74 +35,74 @@ where
 /// # Behaviour
 /// If a given datatype from `datatypes` is not matching the value in the field (i.e. it cannot be parsed into such a value), the whole line will be ignored and an error message is emitted to the log.
 pub fn read<T, Dict: Dictionary>(
-    datatypes: &[Option<DataTypeName>], // If no datatype (i.e. None) is specified, we treat the column as string (for now); TODO: discuss this
+    columns: &[Option<TableSchemaEntry>],
     csv_reader: &mut Reader<T>,
     dictionary: &mut Dict,
+    ignore_on_error: bool,
 ) -> Result<Vec<VecT>, Error>
 where
     T: Read,
 {
     let mut result: Vec<Option<VecT>> = Vec::new();
 
-    datatypes.iter().for_each(|dtype| {
-        result.push(
-            dtype
-                .map(|dt| match dt {
-                    DataTypeName::U32 => VecT::U32(Vec::new()),
-                    DataTypeName::U64 => VecT::U64(Vec::new()),
-                    DataTypeName::Float => VecT::Float(Vec::new()),
-                    DataTypeName::Double => VecT::Double(Vec::new()),
-                })
-                .or_else(|| {
-                    // TODO: not sure if we actually want to handle everything as string which is not specified
-                    // but let's just do this on for now
-                    // (we use u64 with a dictionary for strings)
-                    Some(VecT::U64(Vec::new()))
-                }),
-        );
+    columns.iter().for_each(|table_schema_entry| {
+        result.push(table_schema_entry.map(|tse| match tse.type_name {
+            DataTypeName::U32 => VecT::U32(Vec::new()),
+            DataTypeName::U64 => VecT::U64(Vec::new()),
+            DataTypeName::Float => VecT::Float(Vec::new()),
+            DataTypeName::Double => VecT::Double(Vec::new()),
+        }));
     });
-    csv_reader.records().for_each(|rec| {
+
+    csv_reader.records().try_for_each(|rec| {
         if let Ok(row) = rec {
-            log::trace!("imported row: {:?}", row);
-            if let Err(Error::RollBack(rollback)) =
-                row.iter().enumerate().try_for_each(|(idx, item)| {
-                    if let Some(datatype) = datatypes[idx] {
-                        match datatype.parse(item) {
-                            Ok(val) => {
-                                result[idx].as_mut().map(|vect| {
-                                    vect.push(&val);
-                                    Some(())
-                                });
-                                Ok(())
-                            }
-                            Err(e) => {
-                                log::error!("Ignoring line {:?}, parsing failed: {}", row, e);
-                                Err(Error::RollBack(idx))
-                            }
-                        }
+            log::trace!("imported row: {row:?}");
+            let row_result = row.iter().enumerate().try_for_each(|(idx, item)| {
+                if let Some(table_schema_entry) = columns[idx] {
+                    let parse_result = if table_schema_entry.dict {
+                        table_schema_entry.type_name.parse_dict(dictionary, item)
                     } else {
-                        // TODO: not sure if we actually want to handle everything as string which is not specified
-                        // but let's just do this for now
-                        // (we use u64 with a dictionary for strings)
-
-                        let u64_equivalent =
-                            DataValueT::U64(dictionary.add(item.to_string()).try_into().unwrap());
-                        if let Some(result_col) = result[idx].as_mut() {
-                            result_col.push(&u64_equivalent);
+                        table_schema_entry.type_name.parse(item)
+                    };
+                    match parse_result {
+                        Ok(val) => {
+                            result[idx].as_mut().map(|vect| {
+                                vect.push(&val);
+                                Some(())
+                            });
+                            Ok(())
                         }
-
-                        Ok(())
+                        Err(e) => {
+                            if ignore_on_error {
+                                log::error!(
+                                    "Ignoring line {row:?}, parsing failed with error: {e}"
+                                );
+                                Err(Error::RollBack(idx))
+                            } else {
+                                Err(e)
+                            }
+                        }
                     }
-                })
-            {
-                for item in result.iter_mut().take(rollback) {
-                    if let Some(vec) = item.as_mut() {
-                        vec.pop()
-                    }
+                } else {
+                    Ok(())
                 }
+            });
+            match row_result {
+                Ok(_) => Ok(()),
+                Err(Error::RollBack(rollback)) => {
+                    for item in result.iter_mut().take(rollback) {
+                        if let Some(vec) = item.as_mut() {
+                            vec.pop()
+                        }
+                    }
+                    Ok(())
+                }
+                Err(e) => Err(e),
             }
+        } else {
+            Ok(())
         }
-    });
+    })?;
     Ok(result.into_iter().flatten().collect())
 }
 
@@ -202,8 +203,19 @@ Boston;United States;4628910
             .delimiter(b';')
             .from_reader(data.as_bytes());
 
+        let str = TableSchemaEntry {
+            type_name: DataTypeName::U64,
+            dict: true,
+            nullable: false,
+        };
+
         let mut dict = PrefixedStringDictionary::default();
-        let x = read(&[None, None, None], &mut rdr, &mut dict);
+        let x = read(
+            &[Some(str.clone()), Some(str.clone()), Some(str.clone())],
+            &mut rdr,
+            &mut dict,
+            true,
+        );
         assert!(x.is_ok());
 
         let x = x.unwrap();
@@ -252,23 +264,45 @@ node03;123;123;13;55;123;invalid
             .has_headers(false)
             .from_reader(data.as_bytes());
 
+        let u_64 = TableSchemaEntry {
+            type_name: DataTypeName::U64,
+            dict: false,
+            nullable: false,
+        };
+        let dbl = TableSchemaEntry {
+            type_name: DataTypeName::Double,
+            dict: false,
+            nullable: false,
+        };
+        let flt = TableSchemaEntry {
+            type_name: DataTypeName::Float,
+            dict: false,
+            nullable: false,
+        };
         let mut dict = PrefixedStringDictionary::default();
         let imported = read(
-            &[
-                None,
-                Some(DataTypeName::U64),
-                Some(DataTypeName::Double),
-                Some(DataTypeName::Float),
-                Some(DataTypeName::U64),
-                None,
-            ],
+            &[None, Some(u_64), Some(dbl), Some(flt), Some(u_64), None],
             &mut rdr,
             &mut dict,
+            true,
         );
 
         assert!(imported.is_ok());
-        assert_eq!(imported.as_ref().unwrap().len(), 6);
+        assert_eq!(imported.as_ref().unwrap().len(), 4);
         assert_eq!(imported.as_ref().unwrap()[1].len(), 3);
+
+        let mut rdr = ReaderBuilder::new()
+            .delimiter(b';')
+            .has_headers(false)
+            .from_reader(data.as_bytes());
+        let mut dict = PrefixedStringDictionary::default();
+        let imported = read(
+            &[None, Some(u_64), Some(dbl), Some(flt), Some(u_64), None],
+            &mut rdr,
+            &mut dict,
+            false,
+        );
+        assert!(imported.is_err());
     }
 
     #[quickcheck]
@@ -301,16 +335,27 @@ node03;123;123;13;55;123;invalid
             .delimiter(b',')
             .has_headers(false)
             .from_reader(csv.as_bytes());
+        let u_64 = TableSchemaEntry {
+            type_name: DataTypeName::U64,
+            dict: false,
+            nullable: false,
+        };
+        let dbl = TableSchemaEntry {
+            type_name: DataTypeName::Double,
+            dict: false,
+            nullable: false,
+        };
+        let flt = TableSchemaEntry {
+            type_name: DataTypeName::Float,
+            dict: false,
+            nullable: false,
+        };
         let mut dict = PrefixedStringDictionary::default();
         let imported = read(
-            &[
-                Some(DataTypeName::U64),
-                Some(DataTypeName::Double),
-                Some(DataTypeName::U64),
-                Some(DataTypeName::Float),
-            ],
+            &[Some(u_64), Some(dbl), Some(u_64), Some(flt)],
             &mut rdr,
             &mut dict,
+            true,
         );
 
         assert!(imported.is_ok());
