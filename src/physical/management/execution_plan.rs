@@ -502,7 +502,7 @@ impl ExecutionTree {
         let top_level_name = match self.result() {
             ExecutionResult::Temporary => format!("{} (Temporary)", self.name()),
             ExecutionResult::Permanent(order, name) => {
-                format!("{} (Permanent {order}", name)
+                format!("{name} (Permanent {order}")
             }
         };
 

@@ -13,8 +13,8 @@ use crate::{
     physical::{
         datatypes::DataValueT,
         dictionary::Dictionary,
-        management::database::{TableId, TableSource},
-        tabular::table_types::trie::Trie,
+        management::database::{Dict, Mapper, TableId, TableSource},
+        tabular::table_types::trie::DebugTrie,
     },
 };
 
@@ -41,11 +41,11 @@ impl RuleInfo {
 
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
-pub struct ExecutionEngine<Dict: Dictionary> {
-    program: Program<Dict>,
+pub struct ExecutionEngine {
+    program: Program,
     analysis: ProgramAnalysis,
 
-    table_manager: TableManager<Dict>,
+    table_manager: TableManager,
 
     predicate_fragmentation: HashMap<Identifier, usize>,
     predicate_last_union: HashMap<Identifier, usize>,
@@ -54,14 +54,14 @@ pub struct ExecutionEngine<Dict: Dictionary> {
     current_step: usize,
 }
 
-impl<Dict: Dictionary> ExecutionEngine<Dict> {
+impl ExecutionEngine {
     /// Initialize [`ExecutionEngine`].
-    pub fn initialize(mut program: Program<Dict>) -> Self {
+    pub fn initialize(mut program: Program) -> Self {
         program.normalize();
 
         let analysis = program.analyze();
 
-        let mut table_manager = TableManager::new(program.get_names().clone());
+        let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
         Self::add_sources(&mut table_manager, &program);
 
@@ -82,13 +82,13 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         }
     }
 
-    fn register_all_predicates(table_manager: &mut TableManager<Dict>, analysis: &ProgramAnalysis) {
+    fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {
         for (predicate, arity) in &analysis.all_predicates {
-            table_manager.register_predicate(*predicate, *arity);
+            table_manager.register_predicate(predicate.clone(), *arity);
         }
     }
 
-    fn add_sources(table_manager: &mut TableManager<Dict>, program: &Program<Dict>) {
+    fn add_sources(table_manager: &mut TableManager, program: &Program) {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the data source declarations
@@ -102,26 +102,35 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
             };
 
             predicate_to_sources
-                .entry(predicate)
+                .entry(predicate.clone())
                 .or_default()
                 .push(new_source)
         }
 
         // Add all the facts contained in the rule file as a source
-        let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<DataValueT>>>::new();
+        let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<Box<dyn Mapper>>>>::new();
 
         for fact in program.facts() {
-            let new_row: Vec<DataValueT> = fact
+            let new_row: Vec<Box<dyn Mapper>> = fact
                 .0
                 .terms()
                 .iter()
-                .map(|t| match t {
-                    Term::NumericLiteral(nl) => match nl {
-                        NumericLiteral::Integer(i) => DataValueT::U64((*i).try_into().unwrap()),
-                        _ => unimplemented!(),
-                    },
-                    Term::Constant(identifier) => DataValueT::U64(identifier.to_constant_u64()),
-                    _ => unimplemented!(),
+                .map(|t| {
+                    let t_cloned = t.clone();
+                    let boxed_mapper: Box<dyn Mapper> =
+                        Box::new(move |dict: &mut Dict| match t_cloned.clone() {
+                            Term::NumericLiteral(nl) => match nl {
+                                NumericLiteral::Integer(i) => {
+                                    DataValueT::U64(i.try_into().unwrap())
+                                }
+                                _ => unimplemented!(),
+                            },
+                            Term::Constant(Identifier(s)) => {
+                                DataValueT::U64(dict.add(s).try_into().unwrap())
+                            }
+                            _ => unimplemented!(),
+                        });
+                    boxed_mapper
                 })
                 .collect();
 
@@ -149,7 +158,7 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
-        let rule_execution: Vec<RuleExecution<Dict>> = self
+        let rule_execution: Vec<RuleExecution> = self
             .program
             .rules()
             .iter()
@@ -174,7 +183,6 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
             let current_execution = &rule_execution[current_rule_index];
 
             let updated_predicates = current_execution.execute(
-                &self.program,
                 &mut self.table_manager,
                 current_info,
                 self.current_step,
@@ -204,7 +212,7 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
             for updated_pred in updated_predicates {
                 let counter = self
                     .predicate_fragmentation
-                    .entry(updated_pred)
+                    .entry(updated_pred.clone())
                     .or_insert(0);
                 *counter += 1;
 
@@ -218,7 +226,8 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
 
                     let range = start..(self.current_step + 1);
 
-                    self.table_manager.combine_tables(updated_pred, range)?;
+                    self.table_manager
+                        .combine_tables(updated_pred.clone(), range)?;
 
                     self.predicate_last_union
                         .insert(updated_pred, self.current_step);
@@ -236,11 +245,11 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
     }
 
     /// Return the output tries that resulted form the execution.
-    pub fn get_results(&mut self) -> Result<Vec<(Identifier, &Trie)>, Error> {
+    pub fn get_results(&mut self) -> Result<Vec<(Identifier, DebugTrie)>, Error> {
         let mut result_ids = Vec::<(Identifier, TableId)>::new();
-        for &predicate in &self.analysis.derived_predicates {
-            if let Some(combined_id) = self.table_manager.combine_predicate(predicate)? {
-                result_ids.push((predicate, combined_id));
+        for predicate in &self.analysis.derived_predicates {
+            if let Some(combined_id) = self.table_manager.combine_predicate(predicate.clone())? {
+                result_ids.push((predicate.clone(), combined_id));
             }
         }
 
@@ -252,22 +261,16 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
         Ok(result)
     }
 
-    /// Return the dictionary used in the database instance.
-    /// TODO: Remove this once proper Dictionary support is implemented on the physical layer.
-    pub fn get_dict(&self) -> &Dict {
-        self.table_manager.get_dict()
-    }
-
     /// Iterator over all IDB predicates, with Tries if present.
     pub fn idb_predicates(
         &mut self,
-    ) -> Result<impl Iterator<Item = (Identifier, Option<&Trie>)>, Error> {
+    ) -> Result<impl Iterator<Item = (Identifier, Option<DebugTrie>)>, Error> {
         let idbs = self.program.idb_predicates();
-        let tables = self.get_results()?.into_iter().collect::<HashMap<_, _>>();
+        let mut tables = self.get_results()?.into_iter().collect::<HashMap<_, _>>();
         let mut result = Vec::new();
 
         for predicate in idbs {
-            let table = tables.get(&predicate).copied();
+            let table = tables.remove(&predicate);
             result.push((predicate, table));
         }
 

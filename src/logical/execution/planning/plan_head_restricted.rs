@@ -15,7 +15,6 @@ use crate::{
         TableManager,
     },
     physical::{
-        dictionary::Dictionary,
         management::{
             database::{ColumnOrder, TableId},
             execution_plan::ExecutionNodeRef,
@@ -56,7 +55,7 @@ impl RestrictedChaseStrategy {
         for atom in &normalized_head.atoms {
             for term in atom.terms() {
                 if let Term::Variable(v) = term {
-                    normalized_head_variables.insert(*v);
+                    normalized_head_variables.insert(v.clone());
                 }
             }
         }
@@ -97,10 +96,10 @@ impl RestrictedChaseStrategy {
     }
 }
 
-impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
+impl HeadStrategy for RestrictedChaseStrategy {
     fn add_plan_head(
         &self,
-        table_manager: &TableManager<Dict>,
+        table_manager: &TableManager,
         current_plan: &mut SubtableExecutionPlan,
         node_matches: ExecutionNodeRef,
         rule_info: &RuleInfo,
@@ -179,7 +178,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         let node_old_satisfied_matches_frontier = subplan_union(
             current_plan.plan_mut(),
             table_manager,
-            self.analysis.head_matches_identifier,
+            self.analysis.head_matches_identifier.clone(),
             &(0..step),
         );
         let node_new_satisfied_matches_frontier = current_plan.plan_mut().minus(
@@ -191,7 +190,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             node_new_satisfied_matches_frontier.clone(),
             "Head (Restricted): Sat. Frontier",
             "Restricted Chase Helper Table",
-            SubtableIdentifier::new(self.analysis.head_matches_identifier, step),
+            SubtableIdentifier::new(self.analysis.head_matches_identifier.clone(), step),
         );
 
         let mut node_satisfied_matches_frontier = current_plan.plan_mut().union_empty();
@@ -238,7 +237,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         );
 
         // 6. For each head atom project from "Unsatisfied Matches Nulls"
-        for (&predicate, head_instructions) in self.predicate_to_instructions.iter() {
+        for (predicate, head_instructions) in self.predicate_to_instructions.iter() {
             let mut final_head_nodes =
                 Vec::<ExecutionNodeRef>::with_capacity(head_instructions.len());
 
@@ -268,10 +267,10 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             // TODO: Is there a better pick?
             let result_order = ColumnOrder::default();
             let result_table_name =
-                table_manager.generate_table_name(predicate, &result_order, step);
-            let result_subtable_id = SubtableIdentifier::new(predicate, step);
+                table_manager.generate_table_name(predicate.clone(), &result_order, step);
+            let result_subtable_id = SubtableIdentifier::new(predicate.clone(), step);
 
-            if *self.predicate_to_full_existential.get(&predicate).unwrap() {
+            if *self.predicate_to_full_existential.get(predicate).unwrap() {
                 // Since every new entry will contain a fresh null no duplcate elimination is needed
                 current_plan.add_permanent_table(
                     new_tables_union,
@@ -282,7 +281,8 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             } else {
                 // Duplicate elimination for atoms thats do not contain existential variables
                 // Same as in plan_head_datalog
-                let old_tables: Vec<TableId> = table_manager.tables_in_range(predicate, &(0..step));
+                let old_tables: Vec<TableId> =
+                    table_manager.tables_in_range(predicate.clone(), &(0..step));
                 let old_table_nodes: Vec<ExecutionNodeRef> = old_tables
                     .into_iter()
                     .map(|id| current_plan.plan_mut().fetch_existing(id))
@@ -310,7 +310,7 @@ fn append_unknown_variables(atoms: &[Atom], mut order: VariableOrder) -> Variabl
         for term in atom.terms() {
             if let Term::Variable(variable) = term {
                 if order.get(variable).is_none() {
-                    order.push(*variable);
+                    order.push(variable.clone());
                 }
             }
         }
@@ -325,7 +325,7 @@ fn append_existential_at_the_end(
 ) -> VariableOrder {
     for variable in variables {
         if matches!(variable, Variable::Existential(_)) {
-            order.push(*variable);
+            order.push(variable.clone());
         }
     }
 

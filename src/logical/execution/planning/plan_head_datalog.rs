@@ -12,7 +12,6 @@ use crate::{
         TableManager,
     },
     physical::{
-        dictionary::Dictionary,
         management::{database::ColumnOrder, execution_plan::ExecutionNodeRef},
         tabular::operations::triescan_project::ProjectReordering,
     },
@@ -52,21 +51,22 @@ impl DatalogStrategy {
     }
 }
 
-impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
+impl HeadStrategy for DatalogStrategy {
     fn add_plan_head(
         &self,
-        table_manager: &TableManager<Dict>,
+        table_manager: &TableManager,
         current_plan: &mut SubtableExecutionPlan,
         body: ExecutionNodeRef,
         _rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step: usize,
     ) {
-        for (&predicate, head_instructions) in self.predicate_to_atoms.iter() {
+        for (predicate, head_instructions) in self.predicate_to_atoms.iter() {
             // We just pick the default order
             // TODO: Is there a better pick?
             let head_order = ColumnOrder::default();
-            let head_table_name = table_manager.generate_table_name(predicate, &head_order, step);
+            let head_table_name =
+                table_manager.generate_table_name(predicate.clone(), &head_order, step);
 
             let mut project_append_nodes =
                 Vec::<ExecutionNodeRef>::with_capacity(head_instructions.len());
@@ -90,7 +90,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
 
             let new_tables_union = current_plan.plan_mut().union(project_append_nodes);
 
-            let old_subtables = table_manager.tables_in_range(predicate, &(0..step));
+            let old_subtables = table_manager.tables_in_range(predicate.clone(), &(0..step));
             let old_table_nodes: Vec<ExecutionNodeRef> = old_subtables
                 .into_iter()
                 .map(|id| current_plan.plan_mut().fetch_existing(id))
@@ -105,7 +105,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
                 remove_duplicate_node,
                 "Duplicate Elimination (Datalog)",
                 &head_table_name,
-                SubtableIdentifier::new(predicate, step),
+                SubtableIdentifier::new(predicate.clone(), step),
             );
         }
     }

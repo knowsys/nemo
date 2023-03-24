@@ -1,9 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{
-    logical::model::{Atom, Identifier, Program, Rule, Term, Variable},
-    physical::dictionary::Dictionary,
-};
+use crate::logical::model::{Atom, Identifier, Program, Rule, Term, Variable};
 
 use super::variable_order::{build_preferable_variable_orders, VariableOrder};
 
@@ -46,7 +43,7 @@ fn count_distinct_existential_variables(rule: &Rule) -> usize {
     for head_atom in rule.head() {
         for term in head_atom.terms() {
             if let Term::Variable(Variable::Existential(id)) = term {
-                existentials.insert(Variable::Existential(*id));
+                existentials.insert(Variable::Existential(id.clone()));
             }
         }
     }
@@ -59,7 +56,7 @@ fn get_variables(atoms: &[&Atom]) -> HashSet<Variable> {
     for atom in atoms {
         for term in atom.terms() {
             if let Term::Variable(v) = term {
-                result.insert(*v);
+                result.insert(v.clone());
             }
         }
     }
@@ -69,17 +66,12 @@ fn get_variables(atoms: &[&Atom]) -> HashSet<Variable> {
 fn analyze_rule(
     rule: &Rule,
     promising_variable_orders: Vec<VariableOrder>,
-    fresh_id: &mut usize,
+    rule_index: usize,
 ) -> RuleAnalysis {
     let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
     let head_atoms: Vec<&Atom> = rule.head().iter().collect();
 
     let num_existential = count_distinct_existential_variables(rule);
-
-    // TODO: This is a bit hacky, as we do not know whether if the dictionary has been altered after creating the program
-    // (See the other hack for normalization)
-    // This has to be fixed once the dictionary discussions have beeen completed
-    *fresh_id += 1;
 
     RuleAnalysis {
         is_existential: num_existential > 0,
@@ -88,7 +80,10 @@ fn analyze_rule(
         body_variables: get_variables(&body_atoms),
         head_variables: get_variables(&head_atoms),
         num_existential,
-        head_matches_identifier: Identifier(*fresh_id),
+        // TODO: not sure if this is a good way to introduce a fresh head identifier; I'm not quite sute why it is even required
+        head_matches_identifier: Identifier(format!(
+            "FRESH_HEAD_MATCHES_IDENTIFIER_FOR_RULE_{rule_index}"
+        )),
         promising_variable_orders,
     }
 }
@@ -104,7 +99,7 @@ pub struct ProgramAnalysis {
     pub all_predicates: HashSet<(Identifier, usize)>,
 }
 
-impl<Dict: Dictionary> Program<Dict> {
+impl Program {
     /// Collect all predicates that appear in a head atom into a [`HashSet`]
     fn get_head_predicates(&self) -> HashSet<Identifier> {
         let mut result = HashSet::<Identifier>::new();
@@ -124,7 +119,7 @@ impl<Dict: Dictionary> Program<Dict> {
 
         // Predicates in source statments
         for ((predicate, arity), _) in self.sources() {
-            result.insert((predicate, arity));
+            result.insert((predicate.clone(), arity));
         }
 
         // Predicates in rules
@@ -149,7 +144,7 @@ impl<Dict: Dictionary> Program<Dict> {
                 continue;
             }
 
-            let predicate = analysis.head_matches_identifier;
+            let predicate = analysis.head_matches_identifier.clone();
             let arity = analysis
                 .head_variables
                 .difference(&analysis.body_variables)
@@ -164,13 +159,12 @@ impl<Dict: Dictionary> Program<Dict> {
     /// Analyze itself and return a struct containing the results.
     pub fn analyze(&self) -> ProgramAnalysis {
         let variable_orders = build_preferable_variable_orders(self, None);
-        let mut fresh_id = self.first_unused_id_names();
 
         let rule_analysis: Vec<RuleAnalysis> = self
             .rules()
             .iter()
             .enumerate()
-            .map(|(i, r)| analyze_rule(r, variable_orders[i].clone(), &mut fresh_id.0))
+            .map(|(i, r)| analyze_rule(r, variable_orders[i].clone(), i))
             .collect();
 
         let derived_predicates = self.get_head_predicates();

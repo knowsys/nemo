@@ -3,12 +3,11 @@
 use crate::{
     error::Error,
     logical::{
-        model::{Identifier, Program, Rule},
+        model::{Identifier, Rule},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::SubtableExecutionPlan,
         TableManager,
     },
-    physical::dictionary::Dictionary,
 };
 
 use super::{
@@ -21,18 +20,18 @@ use super::{
 
 /// Object responsible for executing a "normal" rule.
 #[derive(Debug)]
-pub struct RuleExecution<Dict: Dictionary> {
+pub struct RuleExecution {
     promising_variable_orders: Vec<VariableOrder>,
 
-    body_strategy: Box<dyn BodyStrategy<Dict>>,
-    head_strategy: Box<dyn HeadStrategy<Dict>>,
+    body_strategy: Box<dyn BodyStrategy>,
+    head_strategy: Box<dyn HeadStrategy>,
 }
 
-impl<Dict: Dictionary> RuleExecution<Dict> {
+impl RuleExecution {
     /// Create new [`RuleExecution`].
     pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
         let body_strategy = Box::new(SeminaiveStrategy::initialize(rule, analysis));
-        let head_strategy: Box<dyn HeadStrategy<_>> = if analysis.is_existential {
+        let head_strategy: Box<dyn HeadStrategy> = if analysis.is_existential {
             Box::new(RestrictedChaseStrategy::initialize(rule, analysis))
         } else {
             Box::new(DatalogStrategy::initialize(rule, analysis))
@@ -49,8 +48,7 @@ impl<Dict: Dictionary> RuleExecution<Dict> {
     /// Returns the predicates which received new elements.
     pub fn execute(
         &self,
-        program: &Program<Dict>,
-        table_manager: &mut TableManager<Dict>,
+        table_manager: &mut TableManager,
         rule_info: &RuleInfo,
         step_number: usize,
     ) -> Result<Vec<Identifier>, Error> {
@@ -59,12 +57,7 @@ impl<Dict: Dictionary> RuleExecution<Dict> {
             self.promising_variable_orders.iter().enumerate().fold(
                 "".to_string(),
                 |acc, (index, promising_order)| {
-                    format!(
-                        "{}\n   ({}) {})",
-                        acc,
-                        index,
-                        promising_order.debug(program.get_names())
-                    )
+                    format!("{}\n   ({}) {})", acc, index, promising_order.debug())
                 }
             )
         );

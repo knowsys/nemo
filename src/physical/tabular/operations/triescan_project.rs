@@ -283,7 +283,8 @@ mod test {
     use super::TrieScanProject;
     use crate::physical::columnar::traits::column::Column;
     use crate::physical::datatypes::DataValueT;
-    use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
+    use crate::physical::dictionary::Dictionary;
+    use crate::physical::management::database::Dict;
     use crate::physical::tabular::operations::materialize;
     use crate::physical::tabular::operations::triescan_project::ProjectReordering;
     use crate::physical::tabular::table_types::trie::Trie;
@@ -526,8 +527,8 @@ mod test {
 
         log::debug!(
             "\n{}\n\n{}",
-            trie.debug(&PrefixedStringDictionary::default()),
-            trie_reordered.debug(&PrefixedStringDictionary::default())
+            trie.debug(Dict::default()),
+            trie_reordered.debug(Dict::default())
         );
 
         assert_eq!(trie.row_num(), trie_reordered.row_num());
@@ -805,7 +806,7 @@ mod test {
     /// reordering a table with 2 rows results in a table with 4 rows.
     #[test]
     fn spurious_tuples_in_reorder_bug() {
-        let mut dict = PrefixedStringDictionary::default();
+        let mut dict = Dict::default();
         let x = dict.add("72".to_owned()).try_into().unwrap();
         let a = dict.add("139".to_owned()).try_into().unwrap();
         let b = dict.add("141".to_owned()).try_into().unwrap();
@@ -837,7 +838,7 @@ mod test {
     /// reordering a table with 10 rows results in a table with 30 rows.
     #[test]
     fn spurious_tuples_in_reorder_mk2_bug() {
-        let mut dict = PrefixedStringDictionary::default();
+        let mut dict = Dict::default();
         let mut intern =
             |term: &str| DataValueT::U64(dict.add(term.to_owned()).try_into().unwrap());
 
@@ -882,7 +883,7 @@ mod test {
     /// but minimised to a table of 2 rows resulting in four rows.
     #[test]
     fn spurious_tuples_in_reorder_mk2_minimised_bug() {
-        let mut dict = PrefixedStringDictionary::default();
+        let mut dict = Dict::default();
         let mut intern =
             |term: &str| DataValueT::U64(dict.add(term.to_owned()).try_into().unwrap());
 
@@ -907,7 +908,7 @@ mod test {
 
     #[test]
     fn spurious_tuples_in_reorder_bug2() {
-        let mut dict = PrefixedStringDictionary::default();
+        let mut dict = Dict::default();
 
         let rg = dict.add("RoleGroup".to_owned()).try_into().unwrap();
         let a = dict.add("4_1_6".to_owned()).try_into().unwrap();

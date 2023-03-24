@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use crate::error::Error;
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::Dictionary;
-use crate::physical::tabular::table_types::trie::Trie;
+use crate::physical::tabular::table_types::trie::DebugTrie;
 use csv::{Reader, ReaderBuilder};
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -165,15 +165,10 @@ impl CSVWriter<'_> {
     /// # Returns
     /// * [`Ok`][std::result::Result::Ok] if the predicate could be written to the csv-file
     /// * [`Error`] in case of any issues during writing the file
-    pub fn write_predicate<Dict: Dictionary>(
-        &self,
-        pred: &str,
-        trie: &Trie,
-        dict: &Dict,
-    ) -> Result<(), Error> {
+    pub fn write_predicate(&self, pred: &str, trie: DebugTrie) -> Result<(), Error> {
         log::debug!("Writing {pred}");
         let mut file = self.create_file(pred)?;
-        let content = trie.debug(dict);
+        let content = trie;
         if self.gzip {
             write!(GzEncoder::new(file, Compression::best()), "{}", &content)?;
         } else {

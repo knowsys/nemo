@@ -15,6 +15,7 @@ use crate::physical::columnar::{
 };
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::Dictionary;
+use crate::physical::management::database::Dict;
 use crate::physical::management::ByteSized;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::traits::table_schema::TableColumnTypes;
@@ -61,7 +62,7 @@ impl Trie {
     }
 
     /// Return a [`DebugTrie`] from the [`Trie`]
-    pub fn debug<'a, Dict: Dictionary>(&'a self, dict: &'a Dict) -> DebugTrie<'a, Dict> {
+    pub fn debug(&self, dict: Dict) -> DebugTrie {
         DebugTrie { trie: self, dict }
     }
 
@@ -175,11 +176,7 @@ impl Trie {
     }
 
     // TODO: unify this with Display Trait implementation
-    pub(crate) fn format_as_csv<Dict: Dictionary>(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-        dict: &Dict,
-    ) -> fmt::Result {
+    pub(crate) fn format_as_csv(&self, f: &mut fmt::Formatter<'_>, dict: &Dict) -> fmt::Result {
         if self
             .columns
             .first()
@@ -281,14 +278,14 @@ impl ByteSized for Trie {
 
 /// [`Trie`] which also contains an associated dictionary for displaying proper names
 #[derive(Debug)]
-pub struct DebugTrie<'a, Dict: Dictionary> {
+pub struct DebugTrie<'a> {
     trie: &'a Trie,
-    dict: &'a Dict,
+    dict: Dict,
 }
 
-impl<Dict: Dictionary> fmt::Display for DebugTrie<'_, Dict> {
+impl fmt::Display for DebugTrie<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.trie.format_as_csv(f, self.dict)
+        self.trie.format_as_csv(f, &self.dict)
     }
 }
 

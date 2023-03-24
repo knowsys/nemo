@@ -18,6 +18,7 @@ use crate::{
             },
         },
         datatypes::{DataTypeName, DataValueT},
+        management::database::{Dict, Mapper},
         tabular::{
             table_types::trie::Trie,
             traits::{
@@ -50,7 +51,7 @@ fn expand_range(columns: &[ColumnWithIntervalsT], range: Range<usize>) -> Range<
 }
 
 /// Enum which represents an instruction to modify a trie by appending certain columns.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum AppendInstruction {
     /// Add column which has the same entries as another existing column.
     RepeatColumn(usize),
@@ -58,7 +59,7 @@ pub enum AppendInstruction {
     /// Must contain schema information.
     /// In this case whether the constant is associated with a dict
     /// TODO: Maybe the bool wont be needed if dicts are moved out of the physical layer
-    Constant(DataValueT, bool),
+    Constant(Box<dyn Mapper>, DataTypeName, bool),
 }
 
 /// Appends columns to an existing trie and returns the modified trie.
@@ -69,7 +70,11 @@ pub enum AppendInstruction {
 /// [[Constant(2)], [RepeatColumn(0)], [Constant(3), Constant(4)], [RepeatColumn(1), Constant(1), RepeatColumn(2)]]
 /// results in a trie with "schema" 2xxy34zy1z
 /// TODO: Maybe this version of append is not needed.
-pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> Trie {
+pub fn trie_append(
+    dict: &mut Dict,
+    mut trie: Trie,
+    instructions: &[Vec<AppendInstruction>],
+) -> Trie {
     let arity = trie.get_types().len();
 
     debug_assert!(instructions.len() == arity + 1);
@@ -78,8 +83,8 @@ pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> T
         .enumerate()
         .all(|(i, v)| v
             .iter()
-            .all(|&a| if let AppendInstruction::RepeatColumn(e) = a {
-                e <= i
+            .all(|a| if let AppendInstruction::RepeatColumn(e) = a {
+                *e <= i
             } else {
                 true
             })));
@@ -141,7 +146,7 @@ pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> T
                         }
                     };
                 }
-                AppendInstruction::Constant(value_t, _) => {
+                AppendInstruction::Constant(mapper, _, _) => {
                     macro_rules! append_columns_for_datatype {
                         ($value:ident, $variant:ident, $type:ty) => {{
                             let target_length = gap_index
@@ -164,7 +169,7 @@ pub fn trie_append(mut trie: Trie, instructions: &[Vec<AppendInstruction>]) -> T
                         }};
                     }
 
-                    match *value_t {
+                    match mapper(dict) {
                         DataValueT::U32(value) => append_columns_for_datatype!(value, U32, u32),
                         DataValueT::U64(value) => append_columns_for_datatype!(value, U64, u64),
                         DataValueT::Float(value) => {
@@ -220,6 +225,7 @@ impl<'a> TrieScanAppend<'a> {
     /// results in a trie with "schema" 2xxy34zy1z
     /// Note: This also receives type information. This is important because copied columns might require different types.
     pub fn new(
+        dict: &mut Dict,
         trie_scan: TrieScanEnum<'a>,
         instructions: &[Vec<AppendInstruction>],
         target_types: TableColumnTypes,
@@ -232,8 +238,8 @@ impl<'a> TrieScanAppend<'a> {
             .enumerate()
             .all(|(i, v)| v
                 .iter()
-                .all(|&a| if let AppendInstruction::RepeatColumn(e) = a {
-                    e <= i
+                .all(|a| if let AppendInstruction::RepeatColumn(e) = a {
+                    *e <= i
                 } else {
                     true
                 })));
@@ -267,7 +273,7 @@ impl<'a> TrieScanAppend<'a> {
                             DataTypeName::Double => append_repeat_for_datatype!(Double),
                         }
                     },
-                    AppendInstruction::Constant(constant, _) => {
+                    AppendInstruction::Constant(mapper, _, _) => {
                         macro_rules! append_constant_for_datatype {
                             ($variant:ident, $value: expr) => {{
                                 column_scans.push(UnsafeCell::new(ColumnScanT::$variant(
@@ -278,14 +284,14 @@ impl<'a> TrieScanAppend<'a> {
                             }};
                         }
 
-                        match constant {
-                            DataValueT::U32(value) => append_constant_for_datatype!(U32, *value),
-                            DataValueT::U64(value) => append_constant_for_datatype!(U64, *value),
+                        match mapper(dict) {
+                            DataValueT::U32(value) => append_constant_for_datatype!(U32, value),
+                            DataValueT::U64(value) => append_constant_for_datatype!(U64, value),
                             DataValueT::Float(value) => {
-                                append_constant_for_datatype!(Float, *value)
+                                append_constant_for_datatype!(Float, value)
                             }
                             DataValueT::Double(value) => {
-                                append_constant_for_datatype!(Double, *value)
+                                append_constant_for_datatype!(Double, value)
                             }
                         }
                     }
@@ -421,6 +427,7 @@ mod test {
     use crate::physical::{
         columnar::traits::columnscan::ColumnScanT,
         datatypes::{DataTypeName, DataValueT},
+        management::database::Dict,
         tabular::{
             operations::triescan_append::{AppendInstruction, TrieScanAppend},
             table_types::trie::{Trie, TrieScanGeneric},
@@ -456,16 +463,34 @@ mod test {
         let trie = Trie::new(vec![column_x, column_y, column_z]);
         let trie_generic = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
+        let mut dict = Dict::default();
         let mut trie_iter = TrieScanAppend::new(
+            &mut dict,
             trie_generic,
             &[
-                vec![AppendInstruction::Constant(DataValueT::U64(2), false)],
+                vec![AppendInstruction::Constant(
+                    Box::new(|_| DataValueT::U64(2)),
+                    DataTypeName::U64,
+                    false,
+                )],
                 vec![],
                 vec![
-                    AppendInstruction::Constant(DataValueT::U64(3), false),
-                    AppendInstruction::Constant(DataValueT::U64(4), false),
+                    AppendInstruction::Constant(
+                        Box::new(|_| DataValueT::U64(3)),
+                        DataTypeName::U64,
+                        false,
+                    ),
+                    AppendInstruction::Constant(
+                        Box::new(|_| DataValueT::U64(4)),
+                        DataTypeName::U64,
+                        false,
+                    ),
                 ],
-                vec![AppendInstruction::Constant(DataValueT::U64(1), false)],
+                vec![AppendInstruction::Constant(
+                    Box::new(|_| DataValueT::U64(1)),
+                    DataTypeName::U64,
+                    false,
+                )],
             ],
             vec![
                 DataTypeName::U64,
@@ -766,7 +791,9 @@ mod test {
         let trie = Trie::new(vec![column_a, column_b, column_c, column_d, column_e]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
+        let mut dict = Dict::default();
         let mut trie_iter = TrieScanAppend::new(
+            &mut dict,
             trie_iter,
             &[
                 vec![],
