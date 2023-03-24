@@ -89,6 +89,10 @@ impl VariableOrder {
         variable_vector.resize_with(self.0.len(), || Variable::Universal(Identifier(0)));
 
         for (variable, index) in &self.0 {
+            if *index >= variable_vector.len() {
+                return String::from("TODO: Fix this function");
+            }
+
             variable_vector[*index] = *variable;
         }
 
