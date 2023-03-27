@@ -695,6 +695,8 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 execution_tree = simplified_tree;
             } else {
                 removed_temp_ids.insert(tree_id);
+
+                TimedCode::instance().sub(&timed_string).stop();
                 continue;
             }
 
