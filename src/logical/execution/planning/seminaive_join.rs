@@ -116,8 +116,7 @@ impl SeminaiveJoinGenerator {
             compute_filters(&self.variables, variable_order, &self.filters);
 
         let node_select_value = plan.select_value(seminaive_union, filter_assignments);
-        let node_select_equal = plan.select_equal(node_select_value, filter_classes);
 
-        node_select_equal
+        plan.select_equal(node_select_value, filter_classes)
     }
 }

@@ -183,7 +183,7 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
             &(0..step),
         );
         let node_new_satisfied_matches_frontier = current_plan.plan_mut().minus(
-            node_new_satisfied_matches_frontier.clone(),
+            node_new_satisfied_matches_frontier,
             node_old_satisfied_matches_frontier.clone(),
         );
 
@@ -325,7 +325,7 @@ fn append_existential_at_the_end(
 ) -> VariableOrder {
     for variable in variables {
         if matches!(variable, Variable::Existential(_)) {
-            order.push(variable.clone());
+            order.push(*variable);
         }
     }
 
