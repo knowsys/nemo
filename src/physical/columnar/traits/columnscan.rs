@@ -379,7 +379,7 @@ where
     }
 
     /// Forward `get_smallest_scans` to the underlying [`ColumnScanEnum`].
-    pub fn get_smallest_scans(&self) -> &Vec<bool> {
+    pub fn get_smallest_scans(&mut self) -> &Vec<bool> {
         unsafe { &mut *self.0.get() }.get_smallest_scans()
     }
 
@@ -442,7 +442,7 @@ impl<'a> ColumnScanT<'a> {
 
     /// Assumes that column scan is a [`ColumnScanUnion`]
     /// and returns a vector containing the positions of the scans with the smallest values
-    pub fn get_smallest_scans(&self) -> &Vec<bool> {
+    pub fn get_smallest_scans(&mut self) -> &Vec<bool> {
         forward_to_columnscan_cell!(self, get_smallest_scans)
     }
 
