@@ -623,6 +623,9 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     }
 
     /// Produces a new [`Trie`] from an [`ExecutionTree`].
+    /// # Panics
+    /// Panics if the tables that are being loaded by the [`ExecutionTree`] are not available in memory.
+    /// Also panics if the [`ExecutionTree`] wants to perform a project/reorder operation on a non-materialized trie.
     fn produce_new_trie(
         &self,
         execution_tree: &ExecutionTree,

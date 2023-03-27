@@ -39,6 +39,8 @@ pub struct ExecutionNodeRef(Weak<RefCell<ExecutionNode>>);
 
 impl ExecutionNodeRef {
     /// Return an referenced counted cell of an [`ExecutionNode`].
+    /// # Panics
+    /// Throws a panic if the referenced [`ExecutionNode`] does not exist.
     pub fn get_rc(&self) -> Rc<RefCell<ExecutionNode>> {
         self.0
             .upgrade()
@@ -46,6 +48,8 @@ impl ExecutionNodeRef {
     }
 
     /// Return the id which identifies the referenced node
+    /// # Panics
+    /// Throws a panic if borrowing the current [`ExecutionNode`] is already mutably borrowed.
     pub fn id(&self) -> usize {
         let node_rc = self.get_rc();
         let node_borrow = node_rc.borrow();
