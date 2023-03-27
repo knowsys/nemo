@@ -13,7 +13,7 @@ use std::fmt::Debug;
 /// Strategies for calculating all matches for a rule application.
 pub trait BodyStrategy<Dict: Dictionary>: Debug {
     /// Calculate the concrete plan given a variable order.
-    /// Returns the root node of the tree that represents the calculation for the body, if it is not empty.
+    /// Returns the root node of the tree that represents the calculation for the body.
     fn add_plan_body(
         &self,
         table_manager: &TableManager<Dict>,
@@ -21,5 +21,5 @@ pub trait BodyStrategy<Dict: Dictionary>: Debug {
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,
-    ) -> Option<ExecutionNodeRef>;
+    ) -> ExecutionNodeRef;
 }

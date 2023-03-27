@@ -42,6 +42,25 @@ impl SortedChoice {
         result
     }
 
+    /// Derive a [`SortedChoice`] that would transform a vector of elements into another.
+    /// I.e. `this.permute(source) = target`
+    /// For example `from_transformation([x, y, z, w], [z, w, x]) = {0->2, 2->0, 3->1}`.
+    pub fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
+        debug_assert!(source.len() >= target.len());
+
+        let mut map = HashMap::<usize, usize>::new();
+        for (target_index, target_value) in target.iter().enumerate() {
+            let source_index = source
+                .iter()
+                .position(|s| *target_value == *s)
+                .expect("We expect that target only uses elements from source.");
+
+            map.insert(source_index, target_index);
+        }
+
+        Self::from_map(map, source.len())
+    }
+
     /// Return a vector representation of the function
     /// such that the ith entry in the vector contains that element which gets mapped to position i by this function.
     /// E.g. `{10 -> 0, 20 -> 1}` will result in `[10, 20]`

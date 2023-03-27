@@ -78,13 +78,14 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for DatalogStrategy {
                 let project_node = current_plan
                     .plan_mut()
                     .project(body.clone(), head_reordering);
+
+                current_plan.add_temporary_table(project_node.clone(), "Head Projection (Datalog)");
+
                 let append_node = current_plan
                     .plan_mut()
                     .append_columns(project_node, head_instruction.append_instructions.clone());
 
                 project_append_nodes.push(append_node.clone());
-
-                current_plan.add_temporary_table(append_node, "Head Projection (Datalog)");
             }
 
             let new_tables_union = current_plan.plan_mut().union(project_append_nodes);

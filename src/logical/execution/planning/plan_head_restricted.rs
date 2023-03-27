@@ -25,7 +25,7 @@ use crate::{
 };
 
 use super::{
-    plan_util::{head_instruction_from_atom, subplan_union, HeadInstruction},
+    plan_util::{atom_binding, head_instruction_from_atom, subplan_union, HeadInstruction},
     HeadStrategy, SeminaiveJoinGenerator,
 };
 
@@ -102,182 +102,159 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
         &self,
         table_manager: &TableManager<Dict>,
         current_plan: &mut SubtableExecutionPlan,
-        body: ExecutionNodeRef,
+        node_matches: ExecutionNodeRef,
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step: usize,
     ) {
-        // TODO: We need like three versions of the same variable order in this function
-        // Clearly, some more thinking is needed
-        let normalized_head_variable_order = compute_normalized_variable_order(
+        // High-level description of the strategy:
+        //   * We take as a given that a node representing all the new matches for this application
+        //     is given as input to this function
+        //     [We refer to this subtable as "Matches"]
+        //   * In order to compute the matches that are not satisfied, we need to project "Matches" to the frontier variables
+        //     [We refer to this subtable as "Matches Frontier"]
+        //   * We maintain a table of frontier matches that are already satisfied by the head
+        //     [We refer to this subtable as "Satisfied Matches Frontier"]
+        //   * The above table is computed in a seminaive fashion similar to the body matches,
+        //     whereby the join is only executed with the part of the head tables that are new
+        //     since the last application of the rule
+        //     [We refer to the table containing the currently computed satisifed matches as "New Satisfied Matches"]
+        //     [We refer to the tables containing the satisifed matches for previous rule applications as "Old Satisfied Matches"].
+        //   * The difference of "Matches Frontier" and "Satisfied Matches Frontier"
+        //     results in a table that contains the frontier assignments for the current unsatsified matches
+        //     [We refer to this subtable as "Unsatisfied Matches Frontier"]
+        //   * We append to "Unsatisfied Matches Frontier" a number of columns with null values
+        //     [We refer to this subtable as "Unsatisfied Matches Nulls"]
+        //   * For each atom in the head:
+        //     If it contains an existential varianormalize_atom_veble: Project from "Unsatisfied Matches Nulls" and append constants when needed
+        //     If it does not contain an existential: Project from "Unsatisfied Matches Nulls", append constants and perform duplicate elimation
+
+        // 1. Compute the table "New Satisfied Matches"
+
+        // For this we will need to compute the seminaive join of the CQ expressed in the head of the rule
+        // The problem is that the join assumes that the atom vector is "normalized", i.e.
+        // does not contain any contants or repeat variable within one atom.
+        // Hence we normalize the head in the constructor of this object.
+        // However the variable order does not know about the potential new variables introduced during normalization
+        // Hence we compute a new one
+        let normalized_head_variable_order = append_unknown_variables(
             &self.join_generator.atoms,
             variable_order.restrict_to(&self.analysis.head_variables),
         );
 
-        // 1. Compute the projection of the body join to the frontier variables
-
-        // Get a vector of all the body variables but sorted in the variable order
-        let mut body_variables_in_order: Vec<&Variable> =
-            self.analysis.body_variables.iter().collect();
-        body_variables_in_order.sort_by(|a, b| {
-            variable_order
-                .get(a)
-                .unwrap()
-                .cmp(variable_order.get(b).unwrap())
-        });
-
-        // Get the appropriate `Reordering` object that projects from the body join to the frontier variables
-        let body_projection_reorder = ProjectReordering::from_vector(
-            body_variables_in_order
-                .iter()
-                .enumerate()
-                .filter(|(_, v)| self.frontier_variables.contains(v))
-                .map(|(i, _)| i)
-                .collect(),
-            self.analysis.body_variables.len(),
-        );
-
-        // Build the project node
-        let node_body_project = current_plan
-            .plan_mut()
-            .project(body, body_projection_reorder);
-
-        // 2. Compute the head matches projected to the frontier variables
-
-        // Find the matches for the head by performing a seminaive join
-        // let mut tree_head_join = ExecutionTree::new_temporary("Head (Restricted): Satisfied");
-
-        let node_head_join = if let Some(node) = self.join_generator.seminaive_join(
+        let node_new_satisfied_matches = self.join_generator.seminaive_join(
             current_plan.plan_mut(),
             table_manager,
             rule_info.step_last_applied,
             step,
             &normalized_head_variable_order,
-        ) {
-            node
-        } else {
-            return;
-        };
-
-        current_plan.add_temporary_table(node_head_join.clone(), "Head (Restricted): Satisifed");
-
-        // Project it to the frontier variables and save the result in an extra table (also removing duplicates)
-
-        // Get a vector of all the normalized head variables but sorted in the variable order
-        let mut head_variables_in_order: Vec<&Variable> =
-            normalized_head_variable_order.iter().collect();
-        head_variables_in_order.sort_by(|a, b| {
-            normalized_head_variable_order
-                .get(a)
-                .unwrap()
-                .cmp(normalized_head_variable_order.get(b).unwrap())
-        });
-
-        // Get the appropriate `Reordering` object that projects the head join down to the frontier variables
-        let head_projection_reorder = ProjectReordering::from_vector(
-            head_variables_in_order
-                .iter()
-                .enumerate()
-                .filter(|(_, v)| self.frontier_variables.contains(v))
-                .map(|(i, _)| i)
-                .collect(),
-            head_variables_in_order.len(),
         );
 
-        // Do the projection operation
-        let node_head_project = current_plan
-            .plan_mut()
-            .project(node_head_join, head_projection_reorder);
+        current_plan.add_temporary_table(
+            node_new_satisfied_matches.clone(),
+            "Head (Restricted): Satisifed",
+        );
 
-        // Remove the duplicates
-        let node_old_matches = subplan_union(
+        // 2. Compute the table "Satisfied Matches Frontier"
+
+        // The order of variables in the table "Satisfied Matches"
+        let variables_satisifed_matches = normalized_head_variable_order.as_ordered_list();
+        // The above order but without non-fronier variables
+        let variables_satisifed_matches_frontier = normalized_head_variable_order
+            .restrict_to(&self.frontier_variables)
+            .as_ordered_list();
+        // Below is the reordering that would project the non-fronier columns away
+        let satisfied_matches_frontier_reordering = ProjectReordering::from_transformation(
+            &variables_satisifed_matches,
+            &variables_satisifed_matches_frontier,
+        );
+
+        let node_new_satisfied_matches_frontier = current_plan.plan_mut().project(
+            node_new_satisfied_matches,
+            satisfied_matches_frontier_reordering,
+        );
+
+        // The above node represents the new satisfied matches which might still contain duplicates
+        // In the following they are removed
+        let node_old_satisfied_matches_frontier = subplan_union(
             current_plan.plan_mut(),
             table_manager,
             self.analysis.head_matches_identifier,
             &(0..step),
         );
-        let node_project_minus = current_plan
-            .plan_mut()
-            .minus(node_head_project.clone(), node_old_matches);
-
-        // Marking the node as a permanent output
-        let head_projected_order = ColumnOrder::default();
-        let head_projected_name = table_manager.generate_table_name(
-            self.analysis.head_matches_identifier,
-            &head_projected_order,
-            step,
+        let node_new_satisfied_matches_frontier = current_plan.plan_mut().minus(
+            node_new_satisfied_matches_frontier.clone(),
+            node_old_satisfied_matches_frontier.clone(),
         );
+
         current_plan.add_permanent_table(
-            node_project_minus,
+            node_new_satisfied_matches_frontier.clone(),
             "Head (Restricted): Sat. Frontier",
-            &head_projected_name,
+            "Restricted Chase Helper Table",
             SubtableIdentifier::new(self.analysis.head_matches_identifier, step),
         );
 
-        // 3.Compute the unsatisfied matches by taking the difference between the projected body and projected head matches
-        let mut node_satisfied = subplan_union(
-            current_plan.plan_mut(),
-            table_manager,
-            self.analysis.head_matches_identifier,
-            &(0..step),
+        let mut node_satisfied_matches_frontier = current_plan.plan_mut().union_empty();
+        node_satisfied_matches_frontier.add_subnode(node_old_satisfied_matches_frontier);
+        node_satisfied_matches_frontier.add_subnode(node_new_satisfied_matches_frontier);
+
+        // 3. Compute "Matches Frontier"
+
+        let variables_matches = variable_order
+            .restrict_to(&self.analysis.body_variables)
+            .as_ordered_list();
+        let variables_matches_frontier = variable_order
+            .restrict_to(&self.frontier_variables)
+            .as_ordered_list();
+        let matches_frontier_reordering =
+            ProjectReordering::from_transformation(&variables_matches, &variables_matches_frontier);
+
+        let node_matches_frontier = current_plan
+            .plan_mut()
+            .project(node_matches, matches_frontier_reordering);
+
+        // 4. Compute "Unsatisfied Matches Frontier"
+
+        // Matches that are not satisfied are unsatisfied
+        let node_unsatisfied_matches_frontier = current_plan
+            .plan_mut()
+            .minus(node_matches_frontier, node_satisfied_matches_frontier);
+
+        // 5. Compute "Unsatisfied Matches Nulls"
+
+        let node_unsatisfied_matches_nulls = current_plan.plan_mut().append_nulls(
+            node_unsatisfied_matches_frontier,
+            self.analysis.num_existential,
         );
 
-        // The above does not include the table computed in this iteration, so we need to load and include it
-        // let node_fetch_sat = tree_unsatisfied.fetch_new(head_projected_id);
-        node_satisfied.add_subnode(node_head_project);
+        current_plan.add_temporary_table(
+            node_unsatisfied_matches_nulls.clone(),
+            "Head (Restricted): Unsat. Matches",
+        );
 
-        let node_unsatisfied = current_plan
-            .plan_mut()
-            .minus(node_body_project, node_satisfied);
+        let variables_unsatisfied_matches_nulls = append_existential_at_the_end(
+            variable_order.restrict_to(&self.frontier_variables),
+            &self.analysis.head_variables,
+        );
 
-        // Append new nulls
-        let node_with_nulls = current_plan
-            .plan_mut()
-            .append_nulls(node_unsatisfied, self.analysis.num_existential);
-
-        // Add tree
-        current_plan.add_temporary_table(node_with_nulls.clone(), "Head (Restricted): Unsatisfied");
-
-        // 4. Project the new entries to each head atom
+        // 6. For each head atom project from "Unsatisfied Matches Nulls"
         for (&predicate, head_instructions) in self.predicate_to_instructions.iter() {
-            let mut unsat_variable_order = VariableOrder::new();
-            for &variable in &body_variables_in_order {
-                if matches!(variable, Variable::Universal(_))
-                    && self.frontier_variables.contains(variable)
-                {
-                    unsat_variable_order.push(*variable);
-                }
-            }
-            for &variable in &head_variables_in_order {
-                if matches!(variable, Variable::Existential(_)) {
-                    unsat_variable_order.push(*variable);
-                }
-            }
-
             let mut final_head_nodes =
                 Vec::<ExecutionNodeRef>::with_capacity(head_instructions.len());
-            for head_instruction in head_instructions {
-                // TODO:
-                // This is just the `atom_binding` function. However you cannot use it, since it cannot deal with reduced atoms.
-                let head_binding: Vec<usize> = head_instruction.reduced_atom.terms()
-                .iter()
-                .map(|t| {
-                    if let Term::Variable(variable) = t {
-                        *unsat_variable_order.get(variable).unwrap()
-                    } else {
-                        panic!("It is assumed that this function is only called on atoms which only contain variables.");
-                    }
-                })
-                .collect();
 
+            for head_instruction in head_instructions {
+                let head_binding = atom_binding(
+                    &head_instruction.reduced_atom,
+                    &variables_unsatisfied_matches_nulls,
+                );
                 let head_reordering = ProjectReordering::from_vector(
                     head_binding.clone(),
-                    unsat_variable_order.len(),
+                    variables_unsatisfied_matches_nulls.len(),
                 );
 
                 let project_node = current_plan
                     .plan_mut()
-                    .project(node_with_nulls.clone(), head_reordering);
+                    .project(node_unsatisfied_matches_nulls.clone(), head_reordering);
                 let append_node = current_plan
                     .plan_mut()
                     .append_columns(project_node, head_instruction.append_instructions.clone());
@@ -289,16 +266,18 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
 
             // We just pick the default order
             // TODO: Is there a better pick?
-            let head_order = ColumnOrder::default();
-            let head_table_name = table_manager.generate_table_name(predicate, &head_order, step);
+            let result_order = ColumnOrder::default();
+            let result_table_name =
+                table_manager.generate_table_name(predicate, &result_order, step);
+            let result_subtable_id = SubtableIdentifier::new(predicate, step);
 
             if *self.predicate_to_full_existential.get(&predicate).unwrap() {
                 // Since every new entry will contain a fresh null no duplcate elimination is needed
                 current_plan.add_permanent_table(
                     new_tables_union,
                     "Head (Restricted): Result Project",
-                    &head_table_name,
-                    SubtableIdentifier::new(predicate, step),
+                    &result_table_name,
+                    result_subtable_id,
                 );
             } else {
                 // Duplicate elimination for atoms thats do not contain existential variables
@@ -317,16 +296,16 @@ impl<Dict: Dictionary> HeadStrategy<Dict> for RestrictedChaseStrategy {
                 current_plan.add_permanent_table(
                     remove_duplicate_node,
                     "Head (Restricted): Result Project",
-                    &head_table_name,
-                    SubtableIdentifier::new(predicate, step),
+                    &result_table_name,
+                    result_subtable_id,
                 );
             }
         }
     }
 }
 
-/// Helper function to compute a variable order for a normalized
-fn compute_normalized_variable_order(atoms: &[Atom], mut order: VariableOrder) -> VariableOrder {
+/// Helper function that puts variables not already contained in the given variable order at the end of it.
+fn append_unknown_variables(atoms: &[Atom], mut order: VariableOrder) -> VariableOrder {
     for atom in atoms {
         for term in atom.terms() {
             if let Term::Variable(variable) = term {
@@ -334,6 +313,19 @@ fn compute_normalized_variable_order(atoms: &[Atom], mut order: VariableOrder) -
                     order.push(*variable);
                 }
             }
+        }
+    }
+
+    order
+}
+
+fn append_existential_at_the_end(
+    mut order: VariableOrder,
+    variables: &HashSet<Variable>,
+) -> VariableOrder {
+    for variable in variables {
+        if matches!(variable, Variable::Existential(_)) {
+            order.push(variable.clone());
         }
     }
 

@@ -38,7 +38,7 @@ impl SeminaiveJoinGenerator {
         step_last_applied: usize,
         current_step_number: usize,
         variable_order: &VariableOrder,
-    ) -> Option<ExecutionNodeRef> {
+    ) -> ExecutionNodeRef {
         // We divide the atoms of the body into two parts:
         //    * Main: Those atoms who received new elements since the last rule application
         //    * Side: Those atoms which did not receive new elements since the last rule application
@@ -49,7 +49,12 @@ impl SeminaiveJoinGenerator {
         let mut main_binding = Vec::new();
 
         for atom in &self.atoms {
-            let last_step = table_manager.last_step(atom.predicate())?;
+            let last_step = if let Some(step) = table_manager.last_step(atom.predicate()) {
+                step
+            } else {
+                return plan.union_empty();
+            };
+
             let binding = atom_binding(atom, variable_order);
 
             if last_step < step_last_applied {
@@ -62,7 +67,7 @@ impl SeminaiveJoinGenerator {
         }
 
         if main_atoms.is_empty() {
-            return None;
+            return plan.union_empty();
         }
 
         // We then combine the bindings into one
@@ -113,6 +118,6 @@ impl SeminaiveJoinGenerator {
         let node_select_value = plan.select_value(seminaive_union, filter_assignments);
         let node_select_equal = plan.select_equal(node_select_value, filter_classes);
 
-        Some(node_select_equal)
+        node_select_equal
     }
 }
