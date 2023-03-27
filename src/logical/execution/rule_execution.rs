@@ -72,21 +72,24 @@ impl<Dict: Dictionary> RuleExecution<Dict> {
         let best_variable_order = &self.promising_variable_orders[0];
 
         let mut subtable_execution_plan = SubtableExecutionPlan::default();
-        let body_tree_id = self.body_strategy.add_body_tree(
+        let body_tree_opt = self.body_strategy.add_plan_body(
             table_manager,
             &mut subtable_execution_plan,
             rule_info,
             best_variable_order.clone(),
             step_number,
         );
-        self.head_strategy.add_head_trees(
-            table_manager,
-            &mut subtable_execution_plan,
-            body_tree_id,
-            rule_info,
-            best_variable_order.clone(),
-            step_number,
-        );
+
+        if let Some(body_tree) = body_tree_opt {
+            self.head_strategy.add_plan_head(
+                table_manager,
+                &mut subtable_execution_plan,
+                body_tree,
+                rule_info,
+                best_variable_order.clone(),
+                step_number,
+            );
+        }
 
         table_manager.execute_plan(subtable_execution_plan)
     }

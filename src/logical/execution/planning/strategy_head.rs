@@ -6,18 +6,18 @@ use crate::{
         execution::execution_engine::RuleInfo, program_analysis::variable_order::VariableOrder,
         table_manager::SubtableExecutionPlan, TableManager,
     },
-    physical::dictionary::Dictionary,
+    physical::{dictionary::Dictionary, management::execution_plan::ExecutionNodeRef},
 };
 use std::fmt::Debug;
 
 /// Strategies for calculating the newly derived tables.
 pub trait HeadStrategy<Dict: Dictionary>: Debug {
     /// Calculate the concrete plan given a variable order.
-    fn add_head_trees(
+    fn add_plan_head(
         &self,
         table_manager: &TableManager<Dict>,
         current_plan: &mut SubtableExecutionPlan,
-        body_id: usize,
+        body: ExecutionNodeRef,
         rule_info: &RuleInfo,
         variable_order: VariableOrder,
         step_number: usize,

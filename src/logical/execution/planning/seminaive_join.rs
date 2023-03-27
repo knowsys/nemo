@@ -10,12 +10,12 @@ use crate::{
     },
     physical::{
         dictionary::Dictionary,
-        management::execution_plan::{ExecutionNodeRef, ExecutionTree},
+        management::execution_plan::{ExecutionNodeRef, ExecutionPlan},
         tabular::operations::JoinBindings,
     },
 };
 
-use super::plan_util::{atom_binding, compute_filters, subtree_union};
+use super::plan_util::{atom_binding, compute_filters, subplan_union};
 
 /// Generator creating excution trees for seminaive joins of a fixed set of [`Atom`]s and [`Filter`]s
 #[derive(Debug)]
@@ -33,7 +33,7 @@ impl SeminaiveJoinGenerator {
     /// Note: The [`VariableOrder`] must only contain variables that occur in the `atoms` parameter.
     pub fn seminaive_join<Dict: Dictionary>(
         &self,
-        tree: &mut ExecutionTree,
+        plan: &mut ExecutionPlan,
         table_manager: &TableManager<Dict>,
         step_last_applied: usize,
         current_step_number: usize,
@@ -69,27 +69,27 @@ impl SeminaiveJoinGenerator {
         let join_binding: JoinBindings = side_binding.into_iter().chain(main_binding).collect();
 
         // Now we can finally calculate the execution tree
-        let mut seminaive_union = tree.union_empty();
+        let mut seminaive_union = plan.union_empty();
         for atom_index in 0..main_atoms.len() {
-            let mut seminaive_node = tree.join_empty(join_binding.clone());
+            let mut seminaive_node = plan.join_empty(join_binding.clone());
 
             // For every atom that did not receive any update since the last rule application take all available elements
             for predicate in side_atoms.iter() {
                 let subnode =
-                    subtree_union(tree, table_manager, *predicate, &(0..step_last_applied));
+                    subplan_union(plan, table_manager, *predicate, &(0..step_last_applied));
                 seminaive_node.add_subnode(subnode);
             }
 
             // For every atom before the mid point we take all the tables until the current `rule_step`
             for predicate in main_atoms.iter().take(atom_index) {
                 let subnode =
-                    subtree_union(tree, table_manager, *predicate, &(0..current_step_number));
+                    subplan_union(plan, table_manager, *predicate, &(0..current_step_number));
                 seminaive_node.add_subnode(subnode);
             }
 
             // For the middle atom we only take the new tables
-            let midnode = subtree_union(
-                tree,
+            let midnode = subplan_union(
+                plan,
                 table_manager,
                 main_atoms[atom_index],
                 &(step_last_applied..current_step_number),
@@ -99,7 +99,7 @@ impl SeminaiveJoinGenerator {
             // For every atom past the mid point we take only the old tables
             for predicate in main_atoms.iter().skip(atom_index + 1) {
                 let subnode =
-                    subtree_union(tree, table_manager, *predicate, &(0..step_last_applied));
+                    subplan_union(plan, table_manager, *predicate, &(0..step_last_applied));
                 seminaive_node.add_subnode(subnode);
             }
 
@@ -110,8 +110,8 @@ impl SeminaiveJoinGenerator {
         let (filter_classes, filter_assignments) =
             compute_filters(&self.variables, variable_order, &self.filters);
 
-        let node_select_value = tree.select_value(seminaive_union, filter_assignments);
-        let node_select_equal = tree.select_equal(node_select_value, filter_classes);
+        let node_select_value = plan.select_value(seminaive_union, filter_assignments);
+        let node_select_equal = plan.select_equal(node_select_value, filter_classes);
 
         Some(node_select_equal)
     }

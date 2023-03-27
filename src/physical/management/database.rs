@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::fs::File;
 use std::path::PathBuf;
@@ -28,8 +28,9 @@ use crate::{
     },
 };
 
+use super::execution_plan::ExecutionOperation;
 use super::{
-    execution_plan::{ExecutionNode, ExecutionNodeRef, ExecutionResult},
+    execution_plan::{ExecutionNodeRef, ExecutionResult},
     type_analysis::{TypeTree, TypeTreeNode},
     ByteSized, ExecutionPlan,
 };
@@ -612,14 +613,11 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     // If this is the case returns the amount of null-columns that have been appended.
     // TODO: Nothing about this feels right; revise later
     fn appends_nulls(node: ExecutionNodeRef) -> u64 {
-        let node_rc = node
-            .0
-            .upgrade()
-            .expect("Referenced execution node has been deleted");
-        let node_ref = &*node_rc.as_ref().borrow();
+        let node_rc = node.get_rc();
+        let node_operation = &node_rc.borrow().operation;
 
-        match node_ref {
-            ExecutionNode::AppendNulls(_subnode, num_nulls) => *num_nulls as u64,
+        match node_operation {
+            ExecutionOperation::AppendNulls(_subnode, num_nulls) => *num_nulls as u64,
             _ => 0,
         }
     }
@@ -628,46 +626,43 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     /// Returns a map that assigns to each plan id of a permanenet table the [`TableId`] in the [`DatabaseInstance`]
     /// This may fail if certain operations are performed on tries with incompatible types
     /// or if the plan references tries that do not exist.
-    pub fn execute_plan(
-        &mut self,
-        mut plan: ExecutionPlan,
-    ) -> Result<HashMap<usize, TableId>, Error> {
+    pub fn execute_plan(&mut self, plan: ExecutionPlan) -> Result<HashMap<usize, TableId>, Error> {
+        let execution_trees = plan.split_at_write_nodes();
+
+        // The variables below associate the write node ids of the given plan with some additional information
         let mut permanent_ids = HashMap::<usize, TableId>::new();
         let mut type_trees = HashMap::<usize, TypeTree>::new();
         let mut computation_results = HashMap::<usize, ComputationResult>::new();
+        let mut removed_temp_ids = HashSet::<usize>::new();
 
-        for (&tree_index, execution_tree) in plan.iter() {
+        for (tree_id, mut execution_tree) in execution_trees {
+            let timed_string = format!("Reasoning/Execution/{}", execution_tree.name());
+            TimedCode::instance().sub(&timed_string).start();
+
+            if let Some(simplified_tree) = execution_tree.simplify(&removed_temp_ids) {
+                execution_tree = simplified_tree;
+            } else {
+                removed_temp_ids.insert(tree_id);
+                continue;
+            }
+
             execution_tree.satisfy_leapfrog_triejoin();
 
-            let type_tree = TypeTree::from_execution_tree(self, &type_trees, execution_tree)?;
+            let type_tree = TypeTree::from_execution_tree(self, &type_trees, &execution_tree)?;
             let schema = type_tree.schema.clone();
 
             for (id, order) in execution_tree.required_tables() {
                 self.make_available_in_memory(id, &order)?;
             }
 
-            let timed_string = format!("Reasoning/Execution/{}", execution_tree.name());
-            TimedCode::instance().sub(&timed_string).start();
+            let num_null_columns = Self::appends_nulls(execution_tree.root());
 
-            let mut num_null_columns = 0u64;
+            let iter_opt =
+                self.get_iterator_node(execution_tree.root(), &type_tree, &computation_results)?;
 
-            // Calculate the new trie
-            let new_trie_opt = if let Some(root) = execution_tree.root() {
-                num_null_columns = Self::appends_nulls(root.clone());
+            type_trees.insert(tree_id, type_tree);
 
-                let iter_opt = self.get_iterator_node(root, &type_tree, &computation_results)?;
-
-                if let Some(mut iter) = iter_opt {
-                    materialize(&mut iter)
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-
-            type_trees.insert(tree_index, type_tree);
-
+            let new_trie_opt = iter_opt.and_then(|mut iter| materialize(&mut iter));
             if let Some(new_trie) = new_trie_opt {
                 // If trie appended nulls then we need to update our `current_null` value
                 self.current_null += new_trie.num_elements() as u64 * num_null_columns;
@@ -681,8 +676,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                             new_trie.size_bytes()
                         );
 
-                        computation_results
-                            .insert(tree_index, ComputationResult::Temporary(new_trie));
+                        computation_results.insert(tree_id, ComputationResult::Temporary(new_trie));
                     }
                     ExecutionResult::Permanent(order, name) => {
                         log::info!(
@@ -694,17 +688,15 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                         let new_id = self.register_table(name, schema);
                         self.add_trie(new_id, order.clone(), new_trie);
 
-                        permanent_ids.insert(tree_index, new_id);
-                        computation_results.insert(
-                            tree_index,
-                            ComputationResult::Permanent(new_id, order.clone()),
-                        );
+                        permanent_ids.insert(tree_id, new_id);
+                        computation_results
+                            .insert(tree_id, ComputationResult::Permanent(new_id, order.clone()));
                     }
                 }
             } else {
                 log::info!("Trie does not contain any elements");
 
-                computation_results.insert(tree_index, ComputationResult::Empty);
+                computation_results.insert(tree_id, ComputationResult::Empty);
             }
 
             TimedCode::instance().sub(&timed_string).stop();
@@ -755,10 +747,10 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         }
 
         let node_rc = execution_node.get_rc();
-        let node_ref = &*node_rc.borrow();
+        let node_operation = &node_rc.borrow().operation;
 
-        return match node_ref {
-            ExecutionNode::FetchExisting(id, order) => {
+        return match node_operation {
+            ExecutionOperation::FetchExisting(id, order) => {
                 let trie_ref = self.get_trie(*id, order);
                 if trie_ref.row_num() == 0 {
                     return Ok(None);
@@ -769,7 +761,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
                 Ok(Some(TrieScanEnum::TrieScanGeneric(trie_scan)))
             }
-            ExecutionNode::FetchNew(index) => {
+            ExecutionOperation::FetchNew(index) => {
                 let comp_result = computation_results.get(index).unwrap();
                 let trie_ref = match comp_result {
                     ComputationResult::Temporary(trie) => trie,
@@ -786,7 +778,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
                 Ok(Some(TrieScanEnum::TrieScanGeneric(trie_scan)))
             }
-            ExecutionNode::Join(subtables, bindings) => {
+            ExecutionOperation::Join(subtables, bindings) => {
                 let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
                 for (table_index, subtable) in subtables.iter().enumerate() {
                     let subiterator_opt = self.get_iterator_node(
@@ -813,7 +805,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     bindings,
                 ))))
             }
-            ExecutionNode::Union(subtables) => {
+            ExecutionOperation::Union(subtables) => {
                 let mut subiterators = Vec::<TrieScanEnum>::with_capacity(subtables.len());
                 for (table_index, subtable) in subtables.iter().enumerate() {
                     let subiterator_opt = self.get_iterator_node(
@@ -841,7 +833,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
                 Ok(Some(TrieScanEnum::TrieScanUnion(union_scan)))
             }
-            ExecutionNode::Minus(subtable_left, subtable_right) => {
+            ExecutionOperation::Minus(subtable_left, subtable_right) => {
                 if let Some(left_scan) = self.get_iterator_node(
                     subtable_left.clone(),
                     &type_node.subnodes[0],
@@ -862,13 +854,13 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     Ok(None)
                 }
             }
-            ExecutionNode::Project(subnode, reorder) => {
+            ExecutionOperation::Project(subnode, reorder) => {
                 let subnode_rc = subnode.get_rc();
-                let subnode_ref = &*subnode_rc.borrow();
+                let subnode_operation = &subnode_rc.borrow().operation;
 
-                let trie = match subnode_ref {
-                    ExecutionNode::FetchExisting(id, order) => self.get_trie(*id, order),
-                    ExecutionNode::FetchNew(index) => {
+                let trie = match subnode_operation {
+                    ExecutionOperation::FetchExisting(id, order) => self.get_trie(*id, order),
+                    ExecutionOperation::FetchNew(index) => {
                         let comp_result = computation_results.get(index).unwrap();
                         let trie_ref = match comp_result {
                             ComputationResult::Temporary(trie) => trie,
@@ -887,7 +879,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
                 Ok(Some(TrieScanEnum::TrieScanProject(project_scan)))
             }
-            ExecutionNode::SelectValue(subtable, assignments) => {
+            ExecutionOperation::SelectValue(subtable, assignments) => {
                 let subiterator_opt = self.get_iterator_node(
                     subtable.clone(),
                     &type_node.subnodes[0],
@@ -901,7 +893,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     Ok(None)
                 }
             }
-            ExecutionNode::SelectEqual(subtable, classes) => {
+            ExecutionOperation::SelectEqual(subtable, classes) => {
                 let subiterator_opt = self.get_iterator_node(
                     subtable.clone(),
                     &type_node.subnodes[0],
@@ -915,7 +907,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     Ok(None)
                 }
             }
-            ExecutionNode::AppendColumns(subtable, instructions) => {
+            ExecutionOperation::AppendColumns(subtable, instructions) => {
                 let subiterator_opt = self.get_iterator_node(
                     subtable.clone(),
                     &type_node.subnodes[0],
@@ -930,7 +922,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                     Ok(None)
                 }
             }
-            ExecutionNode::AppendNulls(subtable, num_nulls) => {
+            ExecutionOperation::AppendNulls(subtable, num_nulls) => {
                 let subiterator_opt = self.get_iterator_node(
                     subtable.clone(),
                     &type_node.subnodes[0],
@@ -962,7 +954,6 @@ mod test {
         dictionary::StringDictionary,
         management::{
             database::{ColumnOrder, TableId},
-            execution_plan::ExecutionTree,
             ByteSized, ExecutionPlan,
         },
         tabular::{
@@ -1035,7 +1026,7 @@ mod test {
         }
     }
 
-    fn test_casting_execution_plan() -> ExecutionPlan {
+    fn test_casting_execution_plan() -> (ExecutionPlan, usize) {
         // ExecutionPlan:
         // Union
         //  -> Minus
@@ -1056,7 +1047,7 @@ mod test {
         let id_x = table_id.increment();
         let id_y = table_id.increment();
 
-        let mut execution_tree = ExecutionTree::new_permanent("Test", "TableResult");
+        let mut execution_tree = ExecutionPlan::default();
 
         let node_load_a = execution_tree.fetch_existing(id_a);
         let node_load_b_1 = execution_tree.fetch_existing(id_b);
@@ -1076,12 +1067,9 @@ mod test {
         );
 
         let node_root = execution_tree.union(vec![node_join, node_minus]);
-        execution_tree.set_root(node_root);
+        let result_id = execution_tree.write_permanent(node_root, "Test", "Test");
 
-        let mut execution_plan = ExecutionPlan::new();
-        execution_plan.push(execution_tree);
-
-        execution_plan
+        (execution_tree, result_id)
     }
 
     #[test]
@@ -1140,11 +1128,11 @@ mod test {
         instance.register_add_trie("TableX", schema_x, ColumnOrder::default(), trie_x);
         instance.register_add_trie("TableY", schema_y, ColumnOrder::default(), trie_y);
 
-        let plan = test_casting_execution_plan();
+        let (plan, node_id) = test_casting_execution_plan();
         let result = instance.execute_plan(plan);
         assert!(result.is_ok());
 
-        let result_id = *result.unwrap().get(&0).unwrap();
+        let result_id = *result.unwrap().get(&node_id).unwrap();
         let result_trie = instance.get_trie(result_id, &ColumnOrder::default());
 
         let result_col_first = result_trie.get_column(0).as_u64().unwrap();

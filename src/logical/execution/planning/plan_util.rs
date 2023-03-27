@@ -16,7 +16,7 @@ use crate::{
         dictionary::Dictionary,
         management::{
             database::TableId,
-            execution_plan::{ExecutionNodeRef, ExecutionTree},
+            execution_plan::{ExecutionNodeRef, ExecutionPlan},
         },
         tabular::operations::{
             triescan_append::AppendInstruction, triescan_select::SelectEqualClasses,
@@ -130,18 +130,18 @@ pub(super) fn compute_filters(
     (filter_classes, filter_assignments)
 }
 
-/// Compute the subtree that represents the union of a tables within a certain step range.
-pub(super) fn subtree_union<Dict: Dictionary>(
-    tree: &mut ExecutionTree,
+/// Compute the subplan that represents the union of a tables within a certain step range.
+pub(super) fn subplan_union<Dict: Dictionary>(
+    plan: &mut ExecutionPlan,
     manager: &TableManager<Dict>,
     predicate: Identifier,
     steps: &Range<usize>,
 ) -> ExecutionNodeRef {
     let base_tables: Vec<TableId> = manager.tables_in_range(predicate, steps);
 
-    let mut union_node = tree.union_empty();
+    let mut union_node = plan.union_empty();
     for table_id in base_tables.into_iter() {
-        let base_node = tree.fetch_existing(table_id);
+        let base_node = plan.fetch_existing(table_id);
         union_node.add_subnode(base_node);
     }
 
