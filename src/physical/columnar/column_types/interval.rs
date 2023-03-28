@@ -1,14 +1,14 @@
 use bytesize::ByteSize;
 
 use crate::generate_datatype_forwarder;
-use crate::physical::datatypes::DataTypeName;
+use crate::physical::datatypes::StorageTypeName;
 use crate::physical::management::ByteSized;
 use crate::physical::{
     columnar::traits::{
         column::{Column, ColumnEnum},
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::{ColumnDataType, DataValueT, Double, Float},
+    datatypes::{ColumnDataType, Double, Float, StorageValueT},
 };
 use std::mem::size_of;
 use std::{fmt::Debug, ops::Range};
@@ -121,12 +121,12 @@ impl ColumnWithIntervalsT {
     }
 
     /// Return the data type name of the column.
-    pub fn get_type(&self) -> DataTypeName {
+    pub fn get_type(&self) -> StorageTypeName {
         match self {
-            Self::U32(_) => DataTypeName::U32,
-            Self::U64(_) => DataTypeName::U64,
-            Self::Float(_) => DataTypeName::Float,
-            Self::Double(_) => DataTypeName::Double,
+            Self::U32(_) => StorageTypeName::U32,
+            Self::U64(_) => StorageTypeName::U64,
+            Self::Float(_) => StorageTypeName::Float,
+            Self::Double(_) => StorageTypeName::Double,
         }
     }
 
@@ -147,7 +147,7 @@ impl ColumnWithIntervalsT {
     }
 }
 
-impl<'a> Column<'a, DataValueT> for ColumnWithIntervalsT {
+impl<'a> Column<'a, StorageValueT> for ColumnWithIntervalsT {
     type Scan = ColumnScanT<'a>;
 
     fn len(&self) -> usize {
@@ -156,7 +156,7 @@ impl<'a> Column<'a, DataValueT> for ColumnWithIntervalsT {
     fn is_empty(&self) -> bool {
         forward_to_interval_column!(self, is_empty)
     }
-    fn get(&self, index: usize) -> DataValueT {
+    fn get(&self, index: usize) -> StorageValueT {
         forward_to_interval_column!(self, get(index).as_variant_of(DataValueT))
     }
 

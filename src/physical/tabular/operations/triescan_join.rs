@@ -3,7 +3,7 @@ use crate::physical::{
         operations::{ColumnScanJoin, ColumnScanPass},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::{DataTypeName, Double, Float},
+    datatypes::{Double, Float, StorageTypeName},
     tabular::traits::{
         table_schema::TableColumnTypes,
         triescan::{TrieScan, TrieScanEnum},
@@ -195,7 +195,7 @@ impl<'a> TrieScanJoin<'a> {
     pub fn new(trie_scans: Vec<TrieScanEnum<'a>>, bindings: &JoinBindings) -> Self {
         debug_assert!(bindings.is_leapfrog_compatible());
 
-        let mut target_types = Vec::<DataTypeName>::new();
+        let mut target_types = Vec::<StorageTypeName>::new();
         let mut layers_to_scans = Vec::<Vec<usize>>::new();
         let mut merge_joins: Vec<UnsafeCell<ColumnScanT<'a>>> = Vec::new();
 
@@ -254,10 +254,10 @@ impl<'a> TrieScanJoin<'a> {
             }
 
             match output_type {
-                DataTypeName::U32 => merge_join_for_datatype!(U32, u32),
-                DataTypeName::U64 => merge_join_for_datatype!(U64, u64),
-                DataTypeName::Float => merge_join_for_datatype!(Float, Float),
-                DataTypeName::Double => merge_join_for_datatype!(Double, Double),
+                StorageTypeName::U32 => merge_join_for_datatype!(U32, u32),
+                StorageTypeName::U64 => merge_join_for_datatype!(U64, u64),
+                StorageTypeName::Float => merge_join_for_datatype!(Float, Float),
+                StorageTypeName::Double => merge_join_for_datatype!(Double, Double),
             }
 
             target_types.push(output_type);

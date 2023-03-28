@@ -1,4 +1,4 @@
-use crate::physical::datatypes::{ColumnDataType, DataTypeName, DataValueT, Double, Float};
+use crate::physical::datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT};
 use std::fmt::Debug;
 
 use super::column_types::{rle::ColumnBuilderRle, vector::ColumnVector};
@@ -182,24 +182,24 @@ pub enum ColumnBuilderAdaptiveT {
 impl ColumnBuilderAdaptiveT {
     /// Creates a new empty ColumnBuilderAdaptiveT for the given DataTypeName
     pub fn new(
-        dtn: DataTypeName,
+        dtn: StorageTypeName,
         decision_threshold: ColumnImplDecisionThreshold,
         target_min_length_for_rle_elements: TargetMinLengthForRleElements,
     ) -> Self {
         match dtn {
-            DataTypeName::U32 => Self::U32(ColumnBuilderAdaptive::new(
+            StorageTypeName::U32 => Self::U32(ColumnBuilderAdaptive::new(
                 decision_threshold,
                 target_min_length_for_rle_elements,
             )),
-            DataTypeName::U64 => Self::U64(ColumnBuilderAdaptive::new(
+            StorageTypeName::U64 => Self::U64(ColumnBuilderAdaptive::new(
                 decision_threshold,
                 target_min_length_for_rle_elements,
             )),
-            DataTypeName::Float => Self::Float(ColumnBuilderAdaptive::new(
+            StorageTypeName::Float => Self::Float(ColumnBuilderAdaptive::new(
                 decision_threshold,
                 target_min_length_for_rle_elements,
             )),
-            DataTypeName::Double => Self::Double(ColumnBuilderAdaptive::new(
+            StorageTypeName::Double => Self::Double(ColumnBuilderAdaptive::new(
                 decision_threshold,
                 target_min_length_for_rle_elements,
             )),
@@ -207,31 +207,31 @@ impl ColumnBuilderAdaptiveT {
     }
 
     /// Adds value of arbitrary type to the column builder
-    pub fn add(&mut self, value: DataValueT) {
+    pub fn add(&mut self, value: StorageValueT) {
         match self {
             Self::U32(cb) => {
-                if let DataValueT::U32(v) = value {
+                if let StorageValueT::U32(v) = value {
                     cb.add(v);
                 } else {
                     panic!("value does not match AdaptiveColumn type");
                 }
             }
             Self::U64(cb) => {
-                if let DataValueT::U64(v) = value {
+                if let StorageValueT::U64(v) = value {
                     cb.add(v);
                 } else {
                     panic!("value does not match AdaptiveColumn type");
                 }
             }
             Self::Float(cb) => {
-                if let DataValueT::Float(v) = value {
+                if let StorageValueT::Float(v) = value {
                     cb.add(v);
                 } else {
                     panic!("value does not match AdaptiveColumn type");
                 }
             }
             Self::Double(cb) => {
-                if let DataValueT::Double(v) = value {
+                if let StorageValueT::Double(v) = value {
                     cb.add(v);
                 } else {
                     panic!("value does not match AdaptiveColumn type");
@@ -251,17 +251,17 @@ impl ColumnBuilderAdaptiveT {
     }
 }
 
-impl FromIterator<DataValueT> for ColumnBuilderAdaptiveT {
+impl FromIterator<StorageValueT> for ColumnBuilderAdaptiveT {
     fn from_iter<T>(iter: T) -> Self
     where
-        T: IntoIterator<Item = DataValueT>,
+        T: IntoIterator<Item = StorageValueT>,
     {
         let mut peekable = iter.into_iter().peekable();
         let mut builder = Self::new(
             peekable
                 .peek()
                 .map(|dv| dv.get_type())
-                .unwrap_or(DataTypeName::U64),
+                .unwrap_or(StorageTypeName::U64),
             Default::default(),
             Default::default(),
         );

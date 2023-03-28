@@ -1,4 +1,4 @@
-use crate::physical::datatypes::{data_value::VecT, DataValueT};
+use crate::physical::datatypes::{storage_value::VecT, StorageValueT};
 use std::fmt::Debug;
 
 use super::table_schema::TableColumnTypes;
@@ -9,7 +9,7 @@ pub trait Table: Debug {
     fn from_cols(cols: Vec<VecT>) -> Self;
 
     /// Build table from a list of rows.
-    fn from_rows(rows: &[Vec<DataValueT>]) -> Self;
+    fn from_rows(rows: &[Vec<StorageValueT>]) -> Self;
 
     /// Returns the number of rows in the table.
     fn row_num(&self) -> usize;

@@ -17,7 +17,7 @@ use crate::{
                 columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
             },
         },
-        datatypes::{DataTypeName, DataValueT},
+        datatypes::{StorageTypeName, StorageValueT},
         management::database::{Dict, Mapper},
         tabular::{
             table_types::trie::Trie,
@@ -59,7 +59,7 @@ pub enum AppendInstruction {
     /// Must contain schema information.
     /// In this case whether the constant is associated with a dict
     /// TODO: Maybe the bool wont be needed if dicts are moved out of the physical layer
-    Constant(Box<dyn Mapper>, DataTypeName, bool),
+    Constant(Box<dyn Mapper>, StorageTypeName, bool),
 }
 
 /// Appends columns to an existing trie and returns the modified trie.
@@ -136,12 +136,12 @@ pub fn trie_append(
                     }
 
                     match trie.get_types()[*repeat_index] {
-                        DataTypeName::U32 => append_column_for_datatype!(U32, u32),
-                        DataTypeName::U64 => append_column_for_datatype!(U64, u64),
-                        DataTypeName::Float => {
+                        StorageTypeName::U32 => append_column_for_datatype!(U32, u32),
+                        StorageTypeName::U64 => append_column_for_datatype!(U64, u64),
+                        StorageTypeName::Float => {
                             append_column_for_datatype!(Float, Float)
                         }
-                        DataTypeName::Double => {
+                        StorageTypeName::Double => {
                             append_column_for_datatype!(Double, Double)
                         }
                     };
@@ -170,12 +170,12 @@ pub fn trie_append(
                     }
 
                     match mapper(dict) {
-                        DataValueT::U32(value) => append_columns_for_datatype!(value, U32, u32),
-                        DataValueT::U64(value) => append_columns_for_datatype!(value, U64, u64),
-                        DataValueT::Float(value) => {
+                        StorageValueT::U32(value) => append_columns_for_datatype!(value, U32, u32),
+                        StorageValueT::U64(value) => append_columns_for_datatype!(value, U64, u64),
+                        StorageValueT::Float(value) => {
                             append_columns_for_datatype!(value, Float, Float)
                         }
-                        DataValueT::Double(value) => {
+                        StorageValueT::Double(value) => {
                             append_columns_for_datatype!(value, Double, Double)
                         }
                     };
@@ -267,10 +267,10 @@ impl<'a> TrieScanAppend<'a> {
                         }
 
                         match trie_scan.get_types()[*repeat_index] {
-                            DataTypeName::U32 => append_repeat_for_datatype!(U32),
-                            DataTypeName::U64 => append_repeat_for_datatype!(U64),
-                            DataTypeName::Float => append_repeat_for_datatype!(Float),
-                            DataTypeName::Double => append_repeat_for_datatype!(Double),
+                            StorageTypeName::U32 => append_repeat_for_datatype!(U32),
+                            StorageTypeName::U64 => append_repeat_for_datatype!(U64),
+                            StorageTypeName::Float => append_repeat_for_datatype!(Float),
+                            StorageTypeName::Double => append_repeat_for_datatype!(Double),
                         }
                     },
                     AppendInstruction::Constant(mapper, _, _) => {
@@ -285,12 +285,12 @@ impl<'a> TrieScanAppend<'a> {
                         }
 
                         match mapper(dict) {
-                            DataValueT::U32(value) => append_constant_for_datatype!(U32, value),
-                            DataValueT::U64(value) => append_constant_for_datatype!(U64, value),
-                            DataValueT::Float(value) => {
+                            StorageValueT::U32(value) => append_constant_for_datatype!(U32, value),
+                            StorageValueT::U64(value) => append_constant_for_datatype!(U64, value),
+                            StorageValueT::Float(value) => {
                                 append_constant_for_datatype!(Float, value)
                             }
-                            DataValueT::Double(value) => {
+                            StorageValueT::Double(value) => {
                                 append_constant_for_datatype!(Double, value)
                             }
                         }
@@ -321,10 +321,10 @@ impl<'a> TrieScanAppend<'a> {
                     }
 
                     let reference_scan = match trie_scan.get_types()[gap_index] {
-                        DataTypeName::U32 => append_pass_for_datatype!(U32),
-                        DataTypeName::U64 => append_pass_for_datatype!(U64),
-                        DataTypeName::Float => append_pass_for_datatype!(Float),
-                        DataTypeName::Double => append_pass_for_datatype!(Double),
+                        StorageTypeName::U32 => append_pass_for_datatype!(U32),
+                        StorageTypeName::U64 => append_pass_for_datatype!(U64),
+                        StorageTypeName::Float => append_pass_for_datatype!(Float),
+                        StorageTypeName::Double => append_pass_for_datatype!(Double),
                     };
 
                     if src_type == dst_type {
@@ -426,7 +426,7 @@ impl<'a> TrieScan<'a> for TrieScanAppend<'a> {
 mod test {
     use crate::physical::{
         columnar::traits::columnscan::ColumnScanT,
-        datatypes::{DataTypeName, DataValueT},
+        datatypes::{StorageTypeName, StorageValueT},
         management::database::Dict,
         tabular::{
             operations::triescan_append::{AppendInstruction, TrieScanAppend},
@@ -469,37 +469,37 @@ mod test {
             trie_generic,
             &[
                 vec![AppendInstruction::Constant(
-                    Box::new(|_| DataValueT::U64(2)),
-                    DataTypeName::U64,
+                    Box::new(|_| StorageValueT::U64(2)),
+                    StorageTypeName::U64,
                     false,
                 )],
                 vec![],
                 vec![
                     AppendInstruction::Constant(
-                        Box::new(|_| DataValueT::U64(3)),
-                        DataTypeName::U64,
+                        Box::new(|_| StorageValueT::U64(3)),
+                        StorageTypeName::U64,
                         false,
                     ),
                     AppendInstruction::Constant(
-                        Box::new(|_| DataValueT::U64(4)),
-                        DataTypeName::U64,
+                        Box::new(|_| StorageValueT::U64(4)),
+                        StorageTypeName::U64,
                         false,
                     ),
                 ],
                 vec![AppendInstruction::Constant(
-                    Box::new(|_| DataValueT::U64(1)),
-                    DataTypeName::U64,
+                    Box::new(|_| StorageValueT::U64(1)),
+                    StorageTypeName::U64,
                     false,
                 )],
             ],
             vec![
-                DataTypeName::U64,
-                DataTypeName::U64,
-                DataTypeName::U64,
-                DataTypeName::U64,
-                DataTypeName::U64,
-                DataTypeName::U64,
-                DataTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
             ],
         );
 
@@ -804,13 +804,13 @@ mod test {
                 vec![],
             ],
             vec![
-                DataTypeName::U64,
-                DataTypeName::U64,
-                DataTypeName::U64,
-                DataTypeName::U64,
-                DataTypeName::U64,
-                DataTypeName::U64,
-                DataTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
             ],
         );
 

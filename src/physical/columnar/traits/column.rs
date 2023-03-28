@@ -3,7 +3,7 @@ use bytesize::ByteSize;
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::{
-        datatypes::{ColumnDataType, DataValueT, Double, Float},
+        datatypes::{ColumnDataType, Double, Float, StorageValueT},
         management::ByteSized,
     },
 };
@@ -106,7 +106,7 @@ impl ColumnT {
     ///
     /// # Panics
     /// Panics if `index` is out of bounds.
-    pub fn get(&self, index: usize) -> DataValueT {
+    pub fn get(&self, index: usize) -> StorageValueT {
         forward_to_column_enum!(self, get(index).as_variant_of(DataValueT))
     }
 

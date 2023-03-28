@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use super::{DataTypeName, Double, Float};
+use super::{Double, Float, StorageTypeName};
 
 /// Implicitlly castable values are those which essentially use the same number representation format
 /// but where the range of representable values of one is a subset of the range of values of the other.
@@ -277,27 +277,27 @@ implicit_cast_incompatible!(Float, Double);
 
 /// Represents which data types can be implicitly cast into another.
 /// E.g. U32 <= U64.
-impl PartialOrd for DataTypeName {
+impl PartialOrd for StorageTypeName {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match self {
-            DataTypeName::U32 => match other {
-                DataTypeName::U32 => Some(Ordering::Equal),
-                DataTypeName::U64 => Some(Ordering::Less),
-                DataTypeName::Float => None,
-                DataTypeName::Double => None,
+            StorageTypeName::U32 => match other {
+                StorageTypeName::U32 => Some(Ordering::Equal),
+                StorageTypeName::U64 => Some(Ordering::Less),
+                StorageTypeName::Float => None,
+                StorageTypeName::Double => None,
             },
-            DataTypeName::U64 => match other {
-                DataTypeName::U32 => Some(Ordering::Greater),
-                DataTypeName::U64 => Some(Ordering::Equal),
-                DataTypeName::Float => None,
-                DataTypeName::Double => None,
+            StorageTypeName::U64 => match other {
+                StorageTypeName::U32 => Some(Ordering::Greater),
+                StorageTypeName::U64 => Some(Ordering::Equal),
+                StorageTypeName::Float => None,
+                StorageTypeName::Double => None,
             },
-            DataTypeName::Float => match other {
-                DataTypeName::Float => Some(Ordering::Equal),
+            StorageTypeName::Float => match other {
+                StorageTypeName::Float => Some(Ordering::Equal),
                 _ => None,
             },
-            DataTypeName::Double => match other {
-                DataTypeName::Double => Some(Ordering::Equal),
+            StorageTypeName::Double => match other {
+                StorageTypeName::Double => Some(Ordering::Equal),
                 _ => None,
             },
         }

@@ -1,17 +1,17 @@
 use crate::physical::{
-    datatypes::DataTypeName, tabular::operations::triescan_project::ProjectReordering,
+    datatypes::StorageTypeName, tabular::operations::triescan_project::ProjectReordering,
     util::mapping::permutation::Permutation,
 };
 use std::fmt::Debug;
 
 /// Type that stores the datatype used in each column of the table.
-pub type TableColumnTypes = Vec<DataTypeName>;
+pub type TableColumnTypes = Vec<StorageTypeName>;
 
 /// Contains information about a column in table.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct TableSchemaEntry {
     /// The data type in which the data is stored for this column.
-    pub type_name: DataTypeName,
+    pub type_name: StorageTypeName,
     /// Whether the entries in the column are the key for some dictionary.
     pub dict: bool,
     /// Whether this column may contain nulls.
@@ -60,7 +60,7 @@ impl TableSchema {
     }
 
     /// Add new entry to the schema.
-    pub fn add_entry(&mut self, type_name: DataTypeName, dict: bool, nullable: bool) {
+    pub fn add_entry(&mut self, type_name: StorageTypeName, dict: bool, nullable: bool) {
         self.entries.push(TableSchemaEntry {
             type_name,
             dict,

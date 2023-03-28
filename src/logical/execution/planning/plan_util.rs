@@ -12,7 +12,7 @@ use crate::{
         TableManager,
     },
     physical::{
-        datatypes::{DataTypeName, DataValueT},
+        datatypes::{StorageTypeName, StorageValueT},
         dictionary::Dictionary,
         management::{
             database::{Dict, TableId},
@@ -191,8 +191,8 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
             Term::NumericLiteral(nl) => match *nl {
                 NumericLiteral::Integer(i) => {
                     let instruction = AppendInstruction::Constant(
-                        Box::new(move |_dict| DataValueT::U64(i.try_into().unwrap())),
-                        DataTypeName::U64,
+                        Box::new(move |_dict| StorageValueT::U64(i.try_into().unwrap())),
+                        StorageTypeName::U64,
                         false,
                     );
                     current_append_vector.push(instruction);
@@ -204,9 +204,9 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
 
                 let instruction = AppendInstruction::Constant(
                     Box::new(move |dict| {
-                        DataValueT::U64(dict.add(id_name.clone()).try_into().unwrap())
+                        StorageValueT::U64(dict.add(id_name.clone()).try_into().unwrap())
                     }),
-                    DataTypeName::U64,
+                    StorageTypeName::U64,
                     true,
                 );
                 current_append_vector.push(instruction);

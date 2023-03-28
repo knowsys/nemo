@@ -11,7 +11,7 @@ use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::ops::Range;
 
-use crate::{error::Error, physical::datatypes::data_value::VecT};
+use crate::{error::Error, physical::datatypes::storage_value::VecT};
 
 /// Allows one to define a logical permutation of content of index-based data structures
 #[derive(Debug, Clone)]

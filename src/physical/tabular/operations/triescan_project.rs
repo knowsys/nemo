@@ -7,7 +7,7 @@ use crate::physical::{
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         },
     },
-    datatypes::{ColumnDataType, DataTypeName},
+    datatypes::{ColumnDataType, StorageTypeName},
     tabular::traits::{table::Table, triescan::TrieScan},
     tabular::{table_types::trie::Trie, traits::table_schema::TableColumnTypes},
     util::mapping::ordered_choice::SortedChoice,
@@ -87,7 +87,7 @@ impl<'a> TrieScanProject<'a> {
 
         let mut reorder_scans = Vec::<UnsafeCell<ColumnScanT>>::with_capacity(layer_to_input.len());
 
-        let mut target_types = Vec::<DataTypeName>::with_capacity(layer_to_input.len());
+        let mut target_types = Vec::<StorageTypeName>::with_capacity(layer_to_input.len());
         for &col_index in &layer_to_input {
             let current_datatype = input_types[col_index];
 
@@ -111,10 +111,10 @@ impl<'a> TrieScanProject<'a> {
             }
 
             match current_datatype {
-                DataTypeName::U32 => init_scans_for_datatype!(U32),
-                DataTypeName::U64 => init_scans_for_datatype!(U64),
-                DataTypeName::Float => init_scans_for_datatype!(Float),
-                DataTypeName::Double => init_scans_for_datatype!(Double),
+                StorageTypeName::U32 => init_scans_for_datatype!(U32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double),
             }
         }
 
@@ -282,7 +282,7 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
 mod test {
     use super::TrieScanProject;
     use crate::physical::columnar::traits::column::Column;
-    use crate::physical::datatypes::DataValueT;
+    use crate::physical::datatypes::StorageValueT;
     use crate::physical::dictionary::Dictionary;
     use crate::physical::management::database::Dict;
     use crate::physical::tabular::operations::materialize;
@@ -840,7 +840,7 @@ mod test {
     fn spurious_tuples_in_reorder_mk2_bug() {
         let mut dict = Dict::default();
         let mut intern =
-            |term: &str| DataValueT::U64(dict.add(term.to_owned()).try_into().unwrap());
+            |term: &str| StorageValueT::U64(dict.add(term.to_owned()).try_into().unwrap());
 
         let a = intern("genid:cc18ce3a-be8a-3445-8b68-2027a2e1b1be");
         let b = intern("genid:0f18d187-7a4f-35c6-b645-c57ee51d277d");
@@ -885,7 +885,7 @@ mod test {
     fn spurious_tuples_in_reorder_mk2_minimised_bug() {
         let mut dict = Dict::default();
         let mut intern =
-            |term: &str| DataValueT::U64(dict.add(term.to_owned()).try_into().unwrap());
+            |term: &str| StorageValueT::U64(dict.add(term.to_owned()).try_into().unwrap());
 
         let a = intern("genid:cc18ce3a-be8a-3445-8b68-2027a2e1b1be");
         let b = intern("genid:0f18d187-7a4f-35c6-b645-c57ee51d277d");

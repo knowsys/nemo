@@ -3,7 +3,7 @@ use crate::physical::{
         operations::{ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanPass},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::{DataTypeName, DataValueT},
+    datatypes::{StorageTypeName, StorageValueT},
     management::database::{Dict, Mapper},
     tabular::traits::{
         table_schema::TableColumnTypes,
@@ -65,10 +65,10 @@ impl<'a> TrieScanSelectEqual<'a> {
             }
 
             match col_type {
-                DataTypeName::U32 => init_scans_for_datatype!(U32),
-                DataTypeName::U64 => init_scans_for_datatype!(U64),
-                DataTypeName::Float => init_scans_for_datatype!(Float),
-                DataTypeName::Double => init_scans_for_datatype!(Double),
+                StorageTypeName::U32 => init_scans_for_datatype!(U32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double),
             };
         }
 
@@ -111,10 +111,10 @@ impl<'a> TrieScanSelectEqual<'a> {
                 }
 
                 match column_types[current_member_idx] {
-                    DataTypeName::U32 => init_scans_for_datatype!(U32),
-                    DataTypeName::U64 => init_scans_for_datatype!(U64),
-                    DataTypeName::Float => init_scans_for_datatype!(Float),
-                    DataTypeName::Double => init_scans_for_datatype!(Double),
+                    StorageTypeName::U32 => init_scans_for_datatype!(U32),
+                    StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                    StorageTypeName::Float => init_scans_for_datatype!(Float),
+                    StorageTypeName::Double => init_scans_for_datatype!(Double),
                 }
             }
         }
@@ -218,10 +218,10 @@ impl<'a> TrieScanSelectValue<'a> {
             }
 
             match col_type {
-                DataTypeName::U32 => init_scans_for_datatype!(U32),
-                DataTypeName::U64 => init_scans_for_datatype!(U64),
-                DataTypeName::Float => init_scans_for_datatype!(Float),
-                DataTypeName::Double => init_scans_for_datatype!(Double),
+                StorageTypeName::U32 => init_scans_for_datatype!(U32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double),
             }
         }
 
@@ -254,10 +254,10 @@ impl<'a> TrieScanSelectValue<'a> {
                 };
             }
             match column_types[assignemnt.column_idx] {
-                DataTypeName::U32 => init_scans_for_datatype!(U32),
-                DataTypeName::U64 => init_scans_for_datatype!(U64),
-                DataTypeName::Float => init_scans_for_datatype!(Float),
-                DataTypeName::Double => init_scans_for_datatype!(Double),
+                StorageTypeName::U32 => init_scans_for_datatype!(U32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double),
             }
         }
 
@@ -308,7 +308,7 @@ impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
 mod test {
     use super::{TrieScanSelectEqual, TrieScanSelectValue, ValueAssignment};
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
-    use crate::physical::datatypes::DataValueT;
+    use crate::physical::datatypes::StorageValueT;
     use crate::physical::management::database::Dict;
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
@@ -419,11 +419,11 @@ mod test {
             &[
                 ValueAssignment {
                     column_idx: 1,
-                    value_mapper: Box::new(|_| DataValueT::U64(4)),
+                    value_mapper: Box::new(|_| StorageValueT::U64(4)),
                 },
                 ValueAssignment {
                     column_idx: 3,
-                    value_mapper: Box::new(|_| DataValueT::U64(7)),
+                    value_mapper: Box::new(|_| StorageValueT::U64(7)),
                 },
             ],
         );

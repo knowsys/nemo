@@ -3,7 +3,7 @@ use std::{cmp::Ordering, collections::HashMap, fmt::Display};
 use crate::{
     error::Error,
     physical::{
-        datatypes::DataTypeName,
+        datatypes::StorageTypeName,
         tabular::{
             operations::triescan_append::AppendInstruction,
             traits::table_schema::{TableSchema, TableSchemaEntry},
@@ -322,7 +322,7 @@ impl TypeTree {
                 if !subtype_node.schema.is_empty() {
                     for _ in 0..*num_nulls {
                         // TODO: Revise this once type system is complete
-                        new_schema.add_entry(DataTypeName::U64, false, true);
+                        new_schema.add_entry(StorageTypeName::U64, false, true);
                     }
                 }
 
@@ -536,7 +536,7 @@ mod test {
     use std::collections::HashMap;
 
     use crate::physical::{
-        datatypes::{DataTypeName, DataValueT},
+        datatypes::{StorageTypeName, StorageValueT},
         management::{
             database::{ColumnOrder, TableId},
             execution_plan::ExecutionTree,
@@ -557,7 +557,7 @@ mod test {
 
     use super::{TypeTree, TypeTreeNode};
 
-    fn schema_entry(type_name: DataTypeName) -> TableSchemaEntry {
+    fn schema_entry(type_name: StorageTypeName) -> TableSchemaEntry {
         TableSchemaEntry {
             type_name,
             dict: false,
@@ -616,50 +616,50 @@ mod test {
 
     fn build_expected_type_tree_up() -> TypeTree {
         let schema_a = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U32),
         ]);
         let schema_b = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U32),
         ]);
         let schema_c = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
         let schema_temp = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U32),
         ]);
 
         let schema_union_left = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
         let schema_union_right = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         let schema_join = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         let schema_project = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         let schema_minus = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U32),
         ]);
 
         let schema_root = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         TypeTreeNode::new(
@@ -700,58 +700,58 @@ mod test {
 
     fn build_expected_type_tree_down() -> TypeTree {
         let schema_a = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U64),
         ]);
         let schema_b_minus = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U64),
         ]);
         let schema_b_union = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U32),
         ]);
         let schema_c_left = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U32),
         ]);
         let schema_c_right = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
         let schema_temp = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         let schema_union_left = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U32),
         ]);
         let schema_union_right = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         let schema_join = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         let schema_project = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         let schema_minus = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         let schema_root = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         TypeTreeNode::new(
@@ -792,25 +792,25 @@ mod test {
 
     #[test]
     fn test_from_execution_plan() {
-        let trie_a = Trie::from_rows(&[vec![DataValueT::U64(1), DataValueT::U32(2)]]);
-        let trie_b = Trie::from_rows(&[vec![DataValueT::U32(1), DataValueT::U32(2)]]);
-        let trie_c = Trie::from_rows(&[vec![DataValueT::U32(1), DataValueT::U64(2)]]);
+        let trie_a = Trie::from_rows(&[vec![StorageValueT::U64(1), StorageValueT::U32(2)]]);
+        let trie_b = Trie::from_rows(&[vec![StorageValueT::U32(1), StorageValueT::U32(2)]]);
+        let trie_c = Trie::from_rows(&[vec![StorageValueT::U32(1), StorageValueT::U64(2)]]);
 
         let schema_a = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U32),
         ]);
         let schema_b = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U32),
         ]);
         let schema_c = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
         let schema_temp = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U32),
         ]);
 
         let mut instance = DatabaseInstance::new();
@@ -844,13 +844,13 @@ mod test {
 
     #[test]
     fn test_append() {
-        let trie_a = Trie::from_rows(&[vec![DataValueT::U32(1)]]);
-        let trie_b = Trie::from_rows(&[vec![DataValueT::U64(1 << 35), DataValueT::U32(2)]]);
+        let trie_a = Trie::from_rows(&[vec![StorageValueT::U32(1)]]);
+        let trie_b = Trie::from_rows(&[vec![StorageValueT::U64(1 << 35), StorageValueT::U32(2)]]);
 
-        let schema_a = TableSchema::from_vec(vec![schema_entry(DataTypeName::U32)]);
+        let schema_a = TableSchema::from_vec(vec![schema_entry(StorageTypeName::U32)]);
         let schema_b = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U32),
         ]);
 
         let mut instance = DatabaseInstance::new();
@@ -874,18 +874,18 @@ mod test {
         let type_trees = HashMap::<usize, TypeTree>::new();
         let type_tree = TypeTree::from_execution_tree(&instance, &type_trees, &execution_tree);
 
-        let expect_a = TableSchema::from_vec(vec![schema_entry(DataTypeName::U64)]);
+        let expect_a = TableSchema::from_vec(vec![schema_entry(StorageTypeName::U64)]);
         let expect_b = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U32),
         ]);
         let expect_append = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U32),
         ]);
         let expect_union = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U32),
         ]);
 
         let expected_type_tree = TypeTreeNode::new(
@@ -901,16 +901,19 @@ mod test {
 
     #[test]
     fn test_equal_col() {
-        let trie_a = Trie::from_rows(&[vec![DataValueT::U32(1), DataValueT::U64(1 << 34)]]);
-        let trie_b = Trie::from_rows(&[vec![DataValueT::U64(1 << 35), DataValueT::U64(1 << 36)]]);
+        let trie_a = Trie::from_rows(&[vec![StorageValueT::U32(1), StorageValueT::U64(1 << 34)]]);
+        let trie_b = Trie::from_rows(&[vec![
+            StorageValueT::U64(1 << 35),
+            StorageValueT::U64(1 << 36),
+        ]]);
 
         let schema_a = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
         let schema_b = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U64),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         let mut instance = DatabaseInstance::new();
@@ -936,21 +939,21 @@ mod test {
         let type_tree = TypeTree::from_execution_tree(&instance, &type_trees, &execution_tree);
 
         let expect_a = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U32),
         ]);
         let expect_b = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
         let expect_eq = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U32),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U32),
         ]);
         let expect_join = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U32),
+            schema_entry(StorageTypeName::U64),
         ]);
 
         let expected_type_tree = TypeTreeNode::new(

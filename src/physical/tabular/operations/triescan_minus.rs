@@ -3,7 +3,7 @@ use crate::physical::{
         operations::{ColumnScanFollow, ColumnScanMinus},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::DataTypeName,
+    datatypes::StorageTypeName,
     tabular::traits::{
         table_schema::TableColumnTypes,
         triescan::{TrieScan, TrieScanEnum},
@@ -88,10 +88,10 @@ impl<'a> TrieScanMinus<'a> {
             }
 
             match target_type {
-                DataTypeName::U32 => init_scans_for_datatype!(U32),
-                DataTypeName::U64 => init_scans_for_datatype!(U64),
-                DataTypeName::Float => init_scans_for_datatype!(Float),
-                DataTypeName::Double => init_scans_for_datatype!(Double),
+                StorageTypeName::U32 => init_scans_for_datatype!(U32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double),
             };
         }
 

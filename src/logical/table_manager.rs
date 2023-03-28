@@ -4,7 +4,7 @@ use super::model::Identifier;
 use crate::{
     error::Error,
     physical::{
-        datatypes::DataTypeName,
+        datatypes::StorageTypeName,
         management::{
             database::{ColumnOrder, TableId, TableSource},
             execution_plan::ExecutionNodeRef,
@@ -353,7 +353,7 @@ impl TableManager {
     /// We assume for now that every table is a U64 table.
     fn generate_table_schema(arity: usize) -> TableSchema {
         let mut schema = TableSchema::new();
-        (0..arity).for_each(|_| schema.add_entry(DataTypeName::U64, false, false));
+        (0..arity).for_each(|_| schema.add_entry(StorageTypeName::U64, false, false));
 
         schema
     }

@@ -13,14 +13,14 @@ use stage2::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
 use stage2::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
 use stage2::{
     logical::model::DataSource,
-    physical::{datatypes::DataTypeName, dictionary::PrefixedStringDictionary},
+    physical::{datatypes::StorageTypeName, dictionary::PrefixedStringDictionary},
 };
 
 fn load_trie(source: &DataSource, arity: usize, dict: &mut PrefixedStringDictionary) -> Trie {
     match source {
         DataSource::CsvFile(file) => {
             // Using fallback solution to treat eveything as string for now (storing as u64 internally)
-            let datatypes: Vec<Option<DataTypeName>> = (0..arity).map(|_| None).collect();
+            let datatypes: Vec<Option<StorageTypeName>> = (0..arity).map(|_| None).collect();
 
             let mut reader = ReaderBuilder::new()
                 .delimiter(b',')

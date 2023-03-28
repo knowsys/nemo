@@ -1,11 +1,11 @@
 //! This module collects functionality specific to the supported primitive datatypes.
 
 /// Module for defining [`DataTypeName`]
-pub mod data_type_name;
-pub use data_type_name::DataTypeName;
+pub mod storage_type_name;
+pub use storage_type_name::StorageTypeName;
 /// Module for defining [`DataValueT`]
-pub mod data_value;
-pub use data_value::DataValueT;
+pub mod storage_value;
+pub use storage_value::StorageValueT;
 /// Module for defining [`Double`]
 pub mod double;
 pub use double::Double;

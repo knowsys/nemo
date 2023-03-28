@@ -3,7 +3,7 @@ use crate::physical::{
         operations::ColumnScanUnion,
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::{DataTypeName, Double, Float},
+    datatypes::{Double, Float, StorageTypeName},
     tabular::traits::table_schema::TableColumnTypes,
     tabular::traits::triescan::{TrieScan, TrieScanEnum},
 };
@@ -67,10 +67,10 @@ impl<'a> TrieScanUnion<'a> {
             }
 
             match column_types[layer_index] {
-                DataTypeName::U32 => init_scans_for_datatype!(U32, u32),
-                DataTypeName::U64 => init_scans_for_datatype!(U64, u64),
-                DataTypeName::Float => init_scans_for_datatype!(Float, Float),
-                DataTypeName::Double => init_scans_for_datatype!(Double, Double),
+                StorageTypeName::U32 => init_scans_for_datatype!(U32, u32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64, u64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float, Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double, Double),
             };
         }
 
