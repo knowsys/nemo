@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    physical::{datatypes::ColumnDataType, dictionary::Dictionary},
+    physical::{dictionary::Dictionary},
 };
 
 use super::{
@@ -8,20 +8,23 @@ use super::{
     traits::columnbuilder::ColumnBuilder,
 };
 
+#[cfg(feature = "no-prefixed-string-dictionary")]
+/// Dictionary Implementation used in the current configuration
+pub type Dict = crate::physical::dictionary::StringDictionary;
+#[cfg(not(feature = "no-prefixed-string-dictionary"))]
+/// Dictionary Implementation used in the current configuration
+pub type Dict = crate::physical::dictionary::PrefixedStringDictionary;
+
 /// Trait for a Proxy builder, which handles the parsing and translation from [`string`] to [`StorageType`][crate::physical::datatypes::StorageType] Column elements
-pub trait ProxyBuilder: Default + std::fmt::Debug {
-    /// Prepare another value to be added to the ColumnBuilder. If another value is already prepared, this one is actually added to the ColumnBuilder
-    fn add<Dict: Dictionary>(
-        &mut self,
-        string: &str,
-        dictionary: Option<&mut Dict>,
-    ) -> Result<(), Error>;
+pub trait ProxyBuilder: std::fmt::Debug {
+    /// Prepare another value to be added to the ColumnBuilder. If another value is already prepared, this one is actually added to the ColumnBuilder before the new value is checked
+    fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error>;
     /// Forgets an already prepared value, to rollback that information
     fn rollback(&mut self);
     /// Writes a prepared value to the ColumnBuilder, if one exists
     fn write(&mut self);
     /// Writes the remaining prepared value and returns an Adaptive Column Builder
-    fn finalize(self) -> ColumnBuilderAdaptiveT;
+    fn finalize(self: Box<Self>) -> ColumnBuilderAdaptiveT;
 }
 
 /// ProxyBuilder to add Strings
@@ -32,11 +35,7 @@ pub struct ProxyStringBuilder {
 }
 
 impl ProxyBuilder for ProxyStringBuilder {
-    fn add<Dict: Dictionary>(
-        &mut self,
-        string: &str,
-        dictionary: Option<&mut Dict>,
-    ) -> Result<(), Error> {
+    fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.write();
         self.value = Some(
             dictionary
@@ -52,8 +51,8 @@ impl ProxyBuilder for ProxyStringBuilder {
         self.value = None;
     }
 
-    fn finalize(mut self) -> ColumnBuilderAdaptiveT {
-        self.write();
+    fn finalize(mut self: Box<Self>) -> ColumnBuilderAdaptiveT {
+        self.as_mut().write();
         ColumnBuilderAdaptiveT::U64(self.column_builder)
     }
 
