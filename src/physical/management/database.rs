@@ -113,8 +113,13 @@ impl TableId {
 /// Indicates the file format of a table stored on disc.
 #[derive(Debug)]
 pub enum TableSource {
-    /// Table is contained in csv file
-    CSV(PathBuf),
+    /// Table is contained in a DSV (delimiter-separated values) file
+    DSV {
+        /// the path to the DSV file
+        file: PathBuf,
+        /// the delimiter separating values
+        delimiter: u8,
+    },
     /// Table is stored as facts in an rls file
     /// TODO: To not invoke the parser twice I just put the parsed "row-table" here.
     /// Does not seem quite right
@@ -124,7 +129,19 @@ pub enum TableSource {
 impl Display for TableSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TableSource::CSV(path) => write!(f, "CSV file: {}", path.display()),
+            TableSource::DSV {
+                file,
+                delimiter: b',',
+            } => write!(f, "CSV file: {}", file.display()),
+            TableSource::DSV {
+                file,
+                delimiter: b'\t',
+            } => write!(f, "TSV file: {}", file.display()),
+            TableSource::DSV { file, delimiter } => write!(
+                f,
+                "DSV file with delimiter {delimiter:?}: {}",
+                file.display()
+            ),
             TableSource::RLS(_) => write!(f, "Rule file"),
         }
     }
@@ -155,19 +172,23 @@ impl TableStorage {
             log::info!("Loading source {source}");
 
             let trie = match source {
-                TableSource::CSV(file) => {
-                    // Using fallback solution to treat eveything as string for now (storing as u64 internally)
+                TableSource::DSV { file, delimiter } => {
+                    // Using fallback solution to treat everything as string for now (storing as u64 internally)
                     let datatypes: Vec<Option<DataTypeName>> =
                         (0..schema.arity()).map(|_| None).collect();
 
                     let gz_decoder = flate2::read::GzDecoder::new(File::open(file.as_path())?);
 
                     let col_table = if gz_decoder.header().is_some() {
-                        read(&datatypes, &mut crate::io::csv::reader(gz_decoder), dict)?
+                        read(
+                            &datatypes,
+                            &mut crate::io::csv::reader(gz_decoder, *delimiter),
+                            dict,
+                        )?
                     } else {
                         read(
                             &datatypes,
-                            &mut crate::io::csv::reader(File::open(file.as_path())?),
+                            &mut crate::io::csv::reader(File::open(file.as_path())?, *delimiter),
                             dict,
                         )?
                     };

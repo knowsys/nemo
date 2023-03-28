@@ -18,12 +18,12 @@ use stage2::{
 
 fn load_trie(source: &DataSource, arity: usize, dict: &mut PrefixedStringDictionary) -> Trie {
     match source {
-        DataSource::CsvFile(file) => {
-            // Using fallback solution to treat eveything as string for now (storing as u64 internally)
+        DataSource::DsvFile { file, delimiter } => {
+            // Using fallback solution to treat everything as string for now (storing as u64 internally)
             let datatypes: Vec<Option<DataTypeName>> = (0..arity).map(|_| None).collect();
 
             let mut reader = ReaderBuilder::new()
-                .delimiter(b',')
+                .delimiter(*delimiter)
                 .has_headers(false)
                 .from_reader(File::open(file.as_path()).unwrap());
 
