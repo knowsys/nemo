@@ -466,7 +466,7 @@ impl<'a> Iterator for ColumnScanT<'a> {
     type Item = StorageValueT;
 
     fn next(&mut self) -> Option<Self::Item> {
-        forward_to_columnscan_cell!(self, next.map_to(DataValueT))
+        forward_to_columnscan_cell!(self, next.map_to(StorageValueT))
     }
 }
 
@@ -493,7 +493,7 @@ impl<'a> ColumnScan for ColumnScanT<'a> {
     }
 
     fn current(&self) -> Option<Self::Item> {
-        forward_to_columnscan_cell!(self, current.map_to(DataValueT))
+        forward_to_columnscan_cell!(self, current.map_to(StorageValueT))
     }
 
     fn reset(&mut self) {

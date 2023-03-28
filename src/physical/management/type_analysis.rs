@@ -496,7 +496,7 @@ impl TypeTree {
         entry_a.type_name.partial_cmp(&entry_b.type_name).is_some() && entry_a.dict == entry_b.dict
     }
 
-    /// Of the given [`TableSchemaEntry`] returns the one which contains the greater [`DataTypeName`]
+    /// Of the given [`TableSchemaEntry`] returns the one which contains the greater [`StorageTypeName`]
     /// or `None` if the entries are not compatible (see function `compatible`).
     fn entry_max<'a>(
         entry_a: &'a TableSchemaEntry,
@@ -513,7 +513,7 @@ impl TypeTree {
         }
     }
 
-    /// Of the given [`TableSchemaEntry`] returns the one which contains the smaller [`DataTypeName`]
+    /// Of the given [`TableSchemaEntry`] returns the one which contains the smaller [`StorageTypeName`]
     /// or `None` if the entries are not compatible (see function `compatible`).
     fn entry_min<'a>(
         entry_a: &'a TableSchemaEntry,

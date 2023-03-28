@@ -33,9 +33,9 @@ pub use test_util::make_column_with_intervals_t;
 /// }
 ///
 /// /// The following will map the return value of the forwarded
-/// /// `returns()` call to the appropriate variant of [`DataValueT`]:
-/// fn returns(&mut self) -> DataValueT {
-///     forward_to_scan!(self, returns.map_to(DataValueT))
+/// /// `returns()` call to the appropriate variant of [`StorageValueT`]:
+/// fn returns(&mut self) -> StorageValueT {
+///     forward_to_scan!(self, returns.map_to(StorageValueT))
 /// }
 ///
 /// /// The return value can be suppressed by adding a semicolon, this
@@ -88,7 +88,7 @@ macro_rules! generate_forwarder {
 }
 
 /// A specialised version of [`generate_forwarder`] for the possible
-/// variants of [`crate::physical::datatypes::data_value::DataValueT`].
+/// variants of [`crate::physical::datatypes::data_value::StorageValueT`].
 #[macro_export]
 macro_rules! generate_datatype_forwarder {
     ($name:ident) => {

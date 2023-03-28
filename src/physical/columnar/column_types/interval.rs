@@ -157,7 +157,7 @@ impl<'a> Column<'a, StorageValueT> for ColumnWithIntervalsT {
         forward_to_interval_column!(self, is_empty)
     }
     fn get(&self, index: usize) -> StorageValueT {
-        forward_to_interval_column!(self, get(index).as_variant_of(DataValueT))
+        forward_to_interval_column!(self, get(index).as_variant_of(StorageValueT))
     }
 
     fn iter(&'a self) -> Self::Scan {

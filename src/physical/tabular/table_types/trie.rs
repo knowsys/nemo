@@ -102,7 +102,7 @@ impl Trie {
                         .expect("we return early if columns are empty")
                         .iter()
                         .map(|val| match val {
-                            DataValueT::$variant(constant) => constant,
+                            StorageValueT::$variant(constant) => constant,
                             _ => panic!("Unsupported type"),
                         })
                         .collect(),
@@ -145,12 +145,12 @@ impl Trie {
                             .zip(padding_lengths)
                             .flat_map(|(val, pl)| {
                                 iter::once(match val {
-                                    DataValueT::$variant(constant) => constant,
+                                    StorageValueT::$variant(constant) => constant,
                                     _ => panic!("Unsupported type"),
                                 })
                                 .chain(
                                     iter::repeat(match val {
-                                        DataValueT::$variant(constant) => constant,
+                                        StorageValueT::$variant(constant) => constant,
                                         _ => panic!("Unsupported type"),
                                     })
                                     .take(pl),

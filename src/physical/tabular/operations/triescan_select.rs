@@ -229,12 +229,13 @@ impl<'a> TrieScanSelectValue<'a> {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
                     unsafe {
-                        let value =
-                            if let DataValueT::$variant(value) = (assignemnt.value_mapper)(dict) {
-                                value
-                            } else {
-                                panic!("Expected a column scan of type {}", stringify!($variant));
-                            };
+                        let value = if let StorageValueT::$variant(value) =
+                            (assignemnt.value_mapper)(dict)
+                        {
+                            value
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        };
 
                         let scan_enum = if let ColumnScanT::$variant(scan) =
                             &*base_trie.get_scan(assignemnt.column_idx).unwrap().get()

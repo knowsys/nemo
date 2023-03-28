@@ -180,7 +180,7 @@ pub enum ColumnBuilderAdaptiveT {
 }
 
 impl ColumnBuilderAdaptiveT {
-    /// Creates a new empty ColumnBuilderAdaptiveT for the given DataTypeName
+    /// Creates a new empty ColumnBuilderAdaptiveT for the given StorageTypeName
     pub fn new(
         dtn: StorageTypeName,
         decision_threshold: ColumnImplDecisionThreshold,

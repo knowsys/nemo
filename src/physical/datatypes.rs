@@ -1,9 +1,9 @@
 //! This module collects functionality specific to the supported primitive datatypes.
 
-/// Module for defining [`DataTypeName`]
+/// Module for defining [`StorageTypeName`]
 pub mod storage_type_name;
 pub use storage_type_name::StorageTypeName;
-/// Module for defining [`DataValueT`]
+/// Module for defining [`StorageValueT`]
 pub mod storage_value;
 pub use storage_value::StorageValueT;
 /// Module for defining [`Double`]

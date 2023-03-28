@@ -27,10 +27,10 @@ where
 }
 
 /// Imports a csv file
-/// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
+/// Needs a list of Options of [StorageTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
 /// # Parameters
-/// * `datatypes` this is a list of [`DataTypeName`] options, which needs to match the number of fields in the csv-file.
-///   If the Option is [`None`] the field will be ignored. [`Some(DataTypeName)`] describes the datatype of the field in the csv-file.
+/// * `datatypes` this is a list of [`StorageTypeName`] options, which needs to match the number of fields in the csv-file.
+///   If the Option is [`None`] the field will be ignored. [`Some(StorageTypeName)`] describes the datatype of the field in the csv-file.
 /// # Behaviour
 /// If a given datatype from `datatypes` is not matching the value in the field (i.e. it cannot be parsed into such a value), the whole line will be ignored and an error message is emitted to the log.
 pub fn read<T, Dict: Dictionary>(

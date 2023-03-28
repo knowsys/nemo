@@ -318,16 +318,16 @@ impl PartialOrd for StorageTypeName {
 macro_rules! generate_cast_statements {
     ($cast_macro:ident; $src_type:expr, $dst_type:expr) => {
         match $src_type {
-            DataTypeName::U32 => match $dst_type {
-                DataTypeName::U64 => $cast_macro!(U32, U64, u32, u64),
+            StorageTypeName::U32 => match $dst_type {
+                StorageTypeName::U64 => $cast_macro!(U32, U64, u32, u64),
                 _ => panic!("Unsupported cast."),
             },
-            DataTypeName::U64 => match $dst_type {
-                DataTypeName::U32 => $cast_macro!(U64, U32, u64, u32),
+            StorageTypeName::U64 => match $dst_type {
+                StorageTypeName::U32 => $cast_macro!(U64, U32, u64, u32),
                 _ => panic!("Unsupported cast."),
             },
-            DataTypeName::Float => panic!("Unsupported cast."),
-            DataTypeName::Double => panic!("Unsupported cast."),
+            StorageTypeName::Float => panic!("Unsupported cast."),
+            StorageTypeName::Double => panic!("Unsupported cast."),
         }
     };
 }

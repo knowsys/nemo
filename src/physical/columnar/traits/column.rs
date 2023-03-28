@@ -102,12 +102,12 @@ impl ColumnT {
         forward_to_column_enum!(self, len)
     }
 
-    /// Returns the value, wrapped in a [`DataValueT`][crate::physical::datatypes::DataValueT], at a given index.
+    /// Returns the value, wrapped in a [`StorageValueT`][crate::physical::datatypes::StorageValueT], at a given index.
     ///
     /// # Panics
     /// Panics if `index` is out of bounds.
     pub fn get(&self, index: usize) -> StorageValueT {
-        forward_to_column_enum!(self, get(index).as_variant_of(DataValueT))
+        forward_to_column_enum!(self, get(index).as_variant_of(StorageValueT))
     }
 
     /// Returns [`true`] iff the column is empty
