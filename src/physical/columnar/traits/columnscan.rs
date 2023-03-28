@@ -379,7 +379,10 @@ where
     }
 
     /// Forward `get_smallest_scans` to the underlying [`ColumnScanEnum`].
-    pub fn get_smallest_scans(&self) -> &Vec<bool> {
+    /// This takes an exclusive reference as opposed to an immutable one, so that none of the
+    /// mutating methods on &self can be called while the result is still available
+    /// (see https://github.com/knowsys/stage2/issues/137)
+    pub fn get_smallest_scans(&mut self) -> &Vec<bool> {
         unsafe { &mut *self.0.get() }.get_smallest_scans()
     }
 
@@ -442,7 +445,7 @@ impl<'a> ColumnScanT<'a> {
 
     /// Assumes that column scan is a [`ColumnScanUnion`]
     /// and returns a vector containing the positions of the scans with the smallest values
-    pub fn get_smallest_scans(&self) -> &Vec<bool> {
+    pub fn get_smallest_scans(&mut self) -> &Vec<bool> {
         forward_to_columnscan_cell!(self, get_smallest_scans)
     }
 
