@@ -7,6 +7,7 @@ use bytesize::ByteSize;
 
 use crate::io::csv::read;
 use crate::physical::datatypes::{DataTypeName, DataValueT};
+use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::traits::table::Table;
 use crate::physical::util::mapping::permutation::Permutation;
@@ -28,7 +29,7 @@ use crate::{
     },
 };
 
-use super::execution_plan::ExecutionOperation;
+use super::execution_plan::{ExecutionOperation, ExecutionTree};
 use super::{
     execution_plan::{ExecutionNodeRef, ExecutionResult},
     type_analysis::{TypeTree, TypeTreeNode},
@@ -592,13 +593,12 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
             .into_memory(&mut self.dict_constants)?;
 
         if !reorder.is_identity() {
-            let mut scan_project =
-                TrieScanEnum::TrieScanProject(TrieScanProject::new(trie_unordered, reorder));
-
             TimedCode::instance()
                 .sub("Reasoning/Execution/Required Reorder")
                 .start();
-            let trie_reordered = materialize(&mut scan_project).unwrap();
+
+            let trie_reordered = project_and_reorder(trie_unordered, &reorder);
+
             TimedCode::instance()
                 .sub("Reasoning/Execution/Required Reorder")
                 .stop();
@@ -619,6 +619,58 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         match node_operation {
             ExecutionOperation::AppendNulls(_subnode, num_nulls) => *num_nulls as u64,
             _ => 0,
+        }
+    }
+
+    /// Produces a new [`Trie`] from an [`ExecutionTree`].
+    /// # Panics
+    /// Panics if the tables that are being loaded by the [`ExecutionTree`] are not available in memory.
+    /// Also panics if the [`ExecutionTree`] wants to perform a project/reorder operation on a non-materialized trie.
+    fn produce_new_trie(
+        &self,
+        execution_tree: &ExecutionTree,
+        type_tree: &TypeTree,
+        computation_results: &HashMap<usize, ComputationResult>,
+    ) -> Result<Option<Trie>, Error> {
+        let root_rc = execution_tree.root().get_rc();
+        let root_operation = &root_rc.borrow().operation;
+
+        if let ExecutionOperation::Project(subnode, reordering) = root_operation {
+            let subnode_rc = subnode.get_rc();
+            let subnode_operation = &subnode_rc.borrow().operation;
+
+            match subnode_operation {
+                ExecutionOperation::FetchExisting(id, order) => {
+                    let trie_ref = self.get_trie(*id, order);
+                    if trie_ref.row_num() == 0 {
+                        return Ok(None);
+                    }
+
+                    Ok(Some(project_and_reorder(trie_ref, reordering)))
+                }
+                ExecutionOperation::FetchNew(index) => {
+                    let comp_result = computation_results.get(index).unwrap();
+                    let trie_ref = match comp_result {
+                        ComputationResult::Temporary(trie) => trie,
+                        ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
+                        ComputationResult::Empty => return Ok(None),
+                    };
+
+                    if trie_ref.row_num() == 0 {
+                        return Ok(None);
+                    }
+
+                    Ok(Some(project_and_reorder(trie_ref, reordering)))
+                }
+                _ => panic!(
+                    "The project/reorder operation can only be applied to materialized tries."
+                ),
+            }
+        } else {
+            let iter_opt =
+                self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
+
+            Ok(iter_opt.and_then(|mut iter| materialize(&mut iter)))
         }
     }
 
@@ -657,12 +709,10 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
 
             let num_null_columns = Self::appends_nulls(execution_tree.root());
 
-            let iter_opt =
-                self.get_iterator_node(execution_tree.root(), &type_tree, &computation_results)?;
-
+            let new_trie_opt =
+                self.produce_new_trie(&execution_tree, &type_tree, &computation_results)?;
             type_trees.insert(tree_id, type_tree);
 
-            let new_trie_opt = iter_opt.and_then(|mut iter| materialize(&mut iter));
             if let Some(new_trie) = new_trie_opt {
                 // If trie appended nulls then we need to update our `current_null` value
                 self.current_null += new_trie.num_elements() as u64 * num_null_columns;

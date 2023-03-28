@@ -3,6 +3,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    ptr,
 };
 
 use super::{permutation::Permutation, traits::NatMapping};
@@ -41,6 +42,19 @@ impl SortedChoice {
         result
     }
 
+    /// Return a vector representation of the function
+    /// such that the ith entry in the vector contains that element which gets mapped to position i by this function.
+    /// E.g. `{10 -> 0, 20 -> 1}` will result in `[10, 20]`
+    pub fn to_vector(&self) -> Vec<usize> {
+        let mut result = vec![0; self.map.len()];
+
+        for (input, value) in self.iter() {
+            result[*value] = *input;
+        }
+
+        result
+    }
+
     /// Return an iterator over all input/value pairs that are mapped in this funciton.
     pub fn iter(&self) -> impl Iterator<Item = (&usize, &usize)> {
         self.map.iter()
@@ -59,7 +73,26 @@ impl SortedChoice {
         Permutation::from_map(self.map.clone())
     }
 
-    /// Transform the given slice according to this function.
+    /// Transform the given vector of elements according to this mapping.
+    /// This will avoid copying the underlying data.
+    pub fn transform_consumed<T: Default>(&self, mut vec: Vec<T>) -> Vec<T> {
+        let mut result = std::iter::repeat_with(|| T::default())
+            .take(self.map.len())
+            .collect::<Vec<_>>();
+
+        for (&input, &value) in self.iter() {
+            unsafe {
+                let input_element: *mut T = &mut vec[input];
+                let output_element: *mut T = &mut result[value];
+
+                ptr::swap(input_element, output_element);
+            }
+        }
+
+        result
+    }
+
+    /// Transform the given slice according to this mapping.
     pub fn transform<T: Clone>(&self, vec: &[T]) -> Vec<T> {
         let mut result: Vec<T> = vec.iter().take(self.map.len()).cloned().collect();
         for (input, value) in self.map.iter() {

@@ -16,6 +16,7 @@ use crate::physical::columnar::{
 use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
 use crate::physical::dictionary::Dictionary;
 use crate::physical::management::ByteSized;
+use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::traits::table_schema::TableColumnTypes;
 use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
 use std::cell::UnsafeCell;
@@ -73,6 +74,104 @@ impl Trie {
         }
 
         result
+    }
+
+    /// Convert the trie into a vector of columns with equal length.
+    /// This will also reorder or leave out columns according to the given [`ProjectReordering`]
+    /// TODO: unify this with Display Trait implementation and `format_as_csv` function
+    pub fn as_column_vector(&self, project_reordering: &ProjectReordering) -> Vec<VecT> {
+        if self.columns.is_empty() {
+            return Vec::new();
+        }
+
+        // outer vecs are build in reverse order
+        let mut last_interval_lengths: Vec<usize> = self
+            .columns
+            .last()
+            .expect("we return early if columns are empty")
+            .iter()
+            .map(|_| 1)
+            .collect();
+
+        macro_rules! last_column_for_datatype {
+            ($variant:ident) => {{
+                vec![VecT::$variant(
+                    self.columns
+                        .last()
+                        .expect("we return early if columns are empty")
+                        .iter()
+                        .map(|val| match val {
+                            DataValueT::$variant(constant) => constant,
+                            _ => panic!("Unsupported type"),
+                        })
+                        .collect(),
+                )]
+            }};
+        }
+
+        let mut result_columns: Vec<VecT> = match self
+            .types
+            .last()
+            .expect("we return early if columns are empty")
+        {
+            DataTypeName::U32 => last_column_for_datatype!(U32),
+            DataTypeName::U64 => last_column_for_datatype!(U64),
+            DataTypeName::Float => last_column_for_datatype!(Float),
+            DataTypeName::Double => last_column_for_datatype!(Double),
+        };
+
+        for column_index in (0..(self.columns.len() - 1)).rev() {
+            let current_column = &self.columns[column_index];
+            let current_type = self.types[column_index];
+            let last_column = &self.columns[column_index + 1];
+
+            let current_interval_lengths: Vec<usize> = (0..current_column.len())
+                .map(|element_index_in_current_column| {
+                    last_column
+                        .int_bounds(element_index_in_current_column)
+                        .map(|index_in_interval| last_interval_lengths[index_in_interval])
+                        .sum()
+                })
+                .collect();
+
+            let padding_lengths = current_interval_lengths.iter().map(|length| length - 1);
+
+            macro_rules! push_column_for_datatype {
+                ($variant:ident) => {{
+                    result_columns.push(VecT::$variant(
+                        current_column
+                            .iter()
+                            .zip(padding_lengths)
+                            .flat_map(|(val, pl)| {
+                                iter::once(match val {
+                                    DataValueT::$variant(constant) => constant,
+                                    _ => panic!("Unsupported type"),
+                                })
+                                .chain(
+                                    iter::repeat(match val {
+                                        DataValueT::$variant(constant) => constant,
+                                        _ => panic!("Unsupported type"),
+                                    })
+                                    .take(pl),
+                                )
+                            })
+                            .collect(),
+                    ));
+                }};
+            }
+
+            match current_type {
+                DataTypeName::U32 => push_column_for_datatype!(U32),
+                DataTypeName::U64 => push_column_for_datatype!(U64),
+                DataTypeName::Float => push_column_for_datatype!(Float),
+                DataTypeName::Double => push_column_for_datatype!(Double),
+            };
+
+            last_interval_lengths = current_interval_lengths;
+        }
+
+        result_columns.reverse();
+        project_reordering.transform_consumed(result_columns)
     }
 
     // TODO: unify this with Display Trait implementation
@@ -295,7 +394,7 @@ impl Table for Trie {
 
         let permutator = Permutator::sort_from_multiple_vec(&cols)
             .expect("debug assert above ensures that cols have the same length");
-        let mut sorted_cols: Vec<VecT> =
+        let sorted_cols: Vec<VecT> =
             cols.iter()
                 .map(|col| match col {
                     VecT::U32(vec) => VecT::U32(permutator.permutate(vec).expect(
@@ -321,7 +420,7 @@ impl Table for Trie {
         let mut condensed_data_builders: Vec<ColumnBuilderAdaptiveT> = vec![];
         let mut condensed_interval_starts_builders: Vec<ColumnBuilderAdaptive<usize>> = vec![];
 
-        for sorted_col in sorted_cols.iter().take(sorted_cols.len() - 1) {
+        for sorted_col in sorted_cols.iter() {
             let mut current_uncondensed_interval_starts = vec![0];
             let mut current_condensed_data: ColumnBuilderAdaptiveT = ColumnBuilderAdaptiveT::new(
                 sorted_col.get_type(),
@@ -369,19 +468,6 @@ impl Table for Trie {
             last_uncondensed_interval_starts = current_uncondensed_interval_starts;
             condensed_data_builders.push(current_condensed_data);
             condensed_interval_starts_builders.push(current_condensed_interval_starts_builder);
-        }
-        // the last column always stays as is
-        if let Some(last_col) = sorted_cols.pop() {
-            condensed_data_builders.push(
-                (0..last_col.len())
-                    .map(|i| last_col.get(i).expect("index is guaranteed to be in range"))
-                    .collect::<ColumnBuilderAdaptiveT>(),
-            );
-            condensed_interval_starts_builders.push(
-                last_uncondensed_interval_starts
-                    .into_iter()
-                    .collect::<ColumnBuilderAdaptive<usize>>(),
-            );
         }
 
         macro_rules! build_interval_column {

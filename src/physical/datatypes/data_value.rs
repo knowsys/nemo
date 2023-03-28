@@ -99,6 +99,12 @@ pub enum VecT {
     Double(Vec<Double>),
 }
 
+impl Default for VecT {
+    fn default() -> Self {
+        Self::U64(Vec::<u64>::default())
+    }
+}
+
 generate_datatype_forwarder!(forward_to_vec);
 
 impl VecT {

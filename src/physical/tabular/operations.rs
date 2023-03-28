@@ -34,3 +34,6 @@ pub mod triescan_append;
 /// Module for defining [`TrieScanNulls`]
 pub mod triescan_nulls;
 pub use triescan_nulls::TrieScanNulls;
+
+/// Module implementing functionality for projecting and reordering tries.
+pub mod project_reorder;
