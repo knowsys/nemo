@@ -105,6 +105,7 @@ impl DSVReader {
                 })
             {
                 builder.iter_mut().enumerate().for_each(|(idx, builder)| {
+                    // We need to write the last line, if one exists
                     if idx > rollback {
                         builder.write();
                     }
