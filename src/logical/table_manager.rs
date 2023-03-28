@@ -309,7 +309,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
             .database
             .get_dict_constants()
             .entry(predicate.0)
-            .unwrap();
+            .unwrap_or(String::from("Unnamed"));
+
         let order_string = format!("{order:?}");
 
         format!("{predicate_name} ({step}) {order_string}")
@@ -326,7 +327,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             .database
             .get_dict_constants()
             .entry(predicate.0)
-            .unwrap();
+            .unwrap_or(String::from("Unnamed"));
         let order_string = format!("{order:?}");
 
         format!(
@@ -347,7 +348,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             .database
             .get_dict_constants()
             .entry(predicate.0)
-            .unwrap();
+            .unwrap_or(String::from("Unnamed"));
         let referenced_table_name = self.database.table_name(referenced_table_id);
 
         format!("{predicate_name} ({step}) -> {referenced_table_name} {permutation}")
@@ -475,8 +476,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
 
         let tables = self.tables_in_range(predicate, &range);
 
-        if tables.len() <= 1 {
-            return Ok(tables.first().cloned());
+        if tables.is_empty() {
+            return Ok(None);
         }
 
         let name = self.generate_table_name_combined(predicate, &combined_order, &range);

@@ -49,7 +49,7 @@ impl<Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy {
         rule_info: &RuleInfo,
         mut variable_order: VariableOrder,
         step_number: usize,
-    ) -> Option<ExecutionNodeRef> {
+    ) -> ExecutionNodeRef {
         // let mut tree = ExecutionTree::new_temporary("Body Join");
 
         if self.is_existential {
@@ -64,9 +64,7 @@ impl<Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy {
             &variable_order,
         );
 
-        if let Some(node) = node_seminaive.clone() {
-            current_plan.add_temporary_table(node, "Body Join");
-        }
+        current_plan.add_temporary_table(node_seminaive.clone(), "Body Join");
 
         node_seminaive
     }

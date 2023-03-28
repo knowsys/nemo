@@ -100,8 +100,10 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        if self.current_value? >= value {
-            return self.current_value;
+        if let Some(current_value) = self.current_value {
+            if value < current_value {
+                return self.current_value;
+            }
         }
         while value > self.next()? {}
 

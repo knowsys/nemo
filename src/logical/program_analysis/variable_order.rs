@@ -83,6 +83,14 @@ impl VariableOrder {
         vars.into_iter()
     }
 
+    /// Return a vector which puts the variables in the order prescribed by `self`.
+    pub fn as_ordered_list(&self) -> Vec<Variable> {
+        let mut variables: Vec<Variable> = self.iter().cloned().collect();
+        variables.sort_by(|a, b| self.get(a).unwrap().cmp(self.get(b).unwrap()));
+
+        variables
+    }
+
     /// Return [`String`] with the contents of this object for debugging.
     pub fn debug<Dict: Dictionary>(&self, dict: &Dict) -> String {
         let mut variable_vector = Vec::<Variable>::new();

@@ -162,6 +162,7 @@ impl<Dict: Dictionary> ExecutionEngine<Dict> {
 
         while without_derivation < self.program.rules().len() {
             let timing_string = format!("Reasoning/Rules/Rule {current_rule_index}");
+
             TimedCode::instance().sub(&timing_string).start();
             log::info!(
                 "<<< {0}: APPLYING RULE {current_rule_index} >>>",
