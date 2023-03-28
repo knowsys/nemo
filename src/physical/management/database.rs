@@ -6,7 +6,8 @@ use std::path::PathBuf;
 
 use bytesize::ByteSize;
 
-use crate::io::csv::read;
+use crate::io::csv::{read, DSVReader};
+use crate::physical::columnar::proxy_builder;
 use crate::physical::datatypes::{StorageTypeName, StorageValueT};
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
@@ -156,6 +157,10 @@ impl TableStorage {
 
             let trie = match source {
                 TableSource::CSV(file) => {
+                    // TODO branch will be reduced to these two lines
+                    // let csv_reader = DSVReader::csv(file.clone());
+                    // csv_reader.read(schema, dict)
+
                     // Using fallback solution to treat eveything as string for now (storing as u64 internally)
                     let datatypes: Vec<Option<StorageTypeName>> =
                         (0..schema.arity()).map(|_| None).collect();
