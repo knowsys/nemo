@@ -5,13 +5,136 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use crate::error::Error;
+use crate::physical::columnar::adaptive_column_builder::ColumnBuilderAdaptiveT;
+use crate::physical::columnar::proxy_builder::{self, ProxyBuilder, ProxyStringBuilder};
 use crate::physical::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
 use crate::physical::dictionary::Dictionary;
 use crate::physical::tabular::table_types::trie::DebugTrie;
+use crate::physical::tabular::table_types::trie::Trie;
+use crate::physical::tabular::traits::table_schema::TableSchema;
 use csv::{Reader, ReaderBuilder};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use sanitise_file_name::{sanitise_with_options, Options};
+
+/// A reader Object, which allows to read a DSV (delimiter separated) file
+#[derive(Debug, Clone)]
+pub struct DSVReader {
+    file: PathBuf,
+    delimiter: u8,
+    escape: Option<u8>,
+}
+
+impl DSVReader {
+    pub(crate) fn csv(file: PathBuf) -> Self {
+        Self {
+            file,
+            delimiter: b',',
+            escape: Some(b'\\'),
+        }
+    }
+
+    pub(crate) fn tsv(file: PathBuf) -> Self {
+        Self {
+            file,
+            delimiter: b'\t',
+            escape: Some(b'\\'),
+        }
+    }
+
+    fn reader<R>(rdr: R, delimiter: u8, escape: Option<u8>) -> Reader<R>
+    where
+        R: Read,
+    {
+        ReaderBuilder::new()
+            .delimiter(delimiter)
+            .escape(escape)
+            .has_headers(false)
+            .double_quote(true)
+            .from_reader(rdr)
+    }
+    /// todo
+    pub fn read(
+        self,
+        schema: &TableSchema,
+        dictionary: &mut proxy_builder::Dict,
+    ) -> Result<Vec<ColumnBuilderAdaptiveT>, Error> {
+        let gz_decoder = flate2::read::GzDecoder::new(File::open(self.file.as_path())?);
+        let builder = self.compute_proxies(schema);
+        if gz_decoder.header().is_some() {
+            self.read_with_reader(
+                builder,
+                &mut Self::reader(gz_decoder, self.delimiter, self.escape),
+                dictionary,
+            )
+        } else {
+            self.read_with_reader(
+                builder,
+                &mut Self::reader(
+                    File::open(self.file.as_path())?,
+                    self.delimiter,
+                    self.escape,
+                ),
+                dictionary,
+            )
+        }
+    }
+
+    fn read_with_reader<R>(
+        &self,
+        mut builder: Vec<Box<dyn ProxyBuilder>>,
+        reader: &mut Reader<R>,
+        dictionary: &mut proxy_builder::Dict,
+    ) -> Result<Vec<ColumnBuilderAdaptiveT>, Error>
+    where
+        R: Read,
+    {
+        for row in reader.records().flatten() {
+            if let Err(Error::RollBack(rollback)) =
+                row.iter().enumerate().try_for_each(|(idx, item)| {
+                    if idx < builder.len() {
+                        if let Err(column_err) = builder[idx].add(item, Some(dictionary)) {
+                            log::info!("Ignoring line {row:?}, parsing failed with: {column_err}");
+                            Err(Error::RollBack(idx))
+                        } else {
+                            Ok(())
+                        }
+                    } else {
+                        Err(Error::RollBack(idx - 1))
+                    }
+                })
+            {
+                builder.iter_mut().enumerate().for_each(|(idx, builder)| {
+                    if idx > rollback {
+                        builder.write();
+                    }
+                    builder.rollback();
+                });
+            }
+        }
+        let mut result = Vec::with_capacity(builder.len());
+        while let Some(b) = builder.pop() {
+            result.push(b.finalize());
+        }
+        Ok(result)
+    }
+
+    fn compute_proxies(&self, schema: &TableSchema) -> Vec<Box<dyn ProxyBuilder>> {
+        schema
+            .get_entries()
+            .iter()
+            .map(|schema_entry| -> Box<dyn ProxyBuilder> {
+                if schema_entry.dict {
+                    // assume it is just a string for now
+                    // TODO: implement for all proxies and types
+                    Box::<ProxyStringBuilder>::default()
+                } else {
+                    unimplemented!("needs to be implemented for all variants!")
+                }
+            })
+            .collect()
+    }
+}
 
 /// Creates a [csv::Reader], based on any `Reader` which implements the [std::io::Read] trait
 pub(crate) fn reader<R>(rdr: R, delimiter: u8) -> Reader<R>
