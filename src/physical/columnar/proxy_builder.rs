@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    physical::{dictionary::Dictionary},
+    physical::{datatypes::storage_value::VecT, dictionary::Dictionary},
 };
 
 use super::{
@@ -25,13 +25,17 @@ pub trait ProxyBuilder: std::fmt::Debug {
     fn write(&mut self);
     /// Writes the remaining prepared value and returns an Adaptive Column Builder
     fn finalize(self: Box<Self>) -> ColumnBuilderAdaptiveT;
+    /// Writes the remaining prepared value and returns a VecT
+    fn finalize_vec(self: Box<Self>) -> VecT;
 }
 
 /// ProxyBuilder to add Strings
 #[derive(Default, Debug)]
 pub struct ProxyStringBuilder {
     value: Option<u64>,
+    // TODO: decide which approach to use
     column_builder: ColumnBuilderAdaptive<u64>,
+    vec: Vec<u64>,
 }
 
 impl ProxyBuilder for ProxyStringBuilder {
@@ -56,9 +60,15 @@ impl ProxyBuilder for ProxyStringBuilder {
         ColumnBuilderAdaptiveT::U64(self.column_builder)
     }
 
+    fn finalize_vec(mut self: Box<Self>) -> VecT {
+        self.as_mut().write();
+        VecT::U64(self.vec)
+    }
+
     fn write(&mut self) {
         if let Some(value) = self.value {
             self.column_builder.add(value);
+            self.vec.push(value);
         }
     }
 }
