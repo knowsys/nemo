@@ -558,8 +558,13 @@ impl SparqlQuery {
 /// An external data source.
 #[derive(Clone, PartialEq, Eq)]
 pub enum DataSource {
-    /// A CSV file data source with the given path.
-    CsvFile(Box<PathBuf>),
+    /// A DSV (delimiter-separated values) file data source with the given path and delimiter.
+    DsvFile {
+        /// the DSV file
+        file: Box<PathBuf>,
+        /// the delimiter separating the values
+        delimiter: u8,
+    },
     /// An RDF file data source with the given path.
     RdfFile(Box<PathBuf>),
     /// A SPARQL query data source.
@@ -569,7 +574,18 @@ pub enum DataSource {
 impl DataSource {
     /// Construct a new CSV file data source from a given path.
     pub fn csv_file(path: &str) -> Result<Self, ParseError> {
-        Ok(Self::CsvFile(Box::new(PathBuf::from(path))))
+        Ok(Self::DsvFile {
+            file: Box::new(PathBuf::from(path)),
+            delimiter: b',',
+        })
+    }
+
+    /// Construct a new TSV file data source from a given path.
+    pub fn tsv_file(path: &str) -> Result<Self, ParseError> {
+        Ok(Self::DsvFile {
+            file: Box::new(PathBuf::from(path)),
+            delimiter: b'\t',
+        })
     }
 
     /// Construct a new RDF file data source from a given path.
@@ -586,8 +602,19 @@ impl DataSource {
 impl std::fmt::Debug for DataSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::CsvFile(arg0) => f.debug_tuple("CSV-File").field(arg0).finish(),
-            Self::RdfFile(arg0) => f.debug_tuple("RDF-File").field(arg0).finish(),
+            Self::DsvFile {
+                file,
+                delimiter: b',',
+            } => f.debug_tuple("CSV file").field(file).finish(),
+            Self::DsvFile {
+                file,
+                delimiter: b'\t',
+            } => f.debug_tuple("TSV file").field(file).finish(),
+            Self::DsvFile { file, delimiter } => {
+                let description = format!("DSV file with delimiter {delimiter:?}");
+                f.debug_tuple(&description).field(file).finish()
+            }
+            Self::RdfFile(arg0) => f.debug_tuple("RDF file").field(arg0).finish(),
             Self::SparqlQuery(arg0) => f.debug_tuple("SparqlQuery").field(arg0).finish(),
         }
     }
@@ -618,7 +645,10 @@ impl DataSourceDeclaration {
         source: DataSource,
     ) -> Result<Self, ParseError> {
         match source {
-            DataSource::CsvFile(_) => (), // no validation for CSV files
+            DataSource::DsvFile {
+                file: _,
+                delimiter: _,
+            } => (), // no validation for CSV files
             DataSource::RdfFile(ref path) => {
                 if arity != 3 {
                     return Err(ParseError::RdfSourceInvalidArity(

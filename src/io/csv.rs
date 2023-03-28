@@ -14,12 +14,12 @@ use flate2::Compression;
 use sanitise_file_name::{sanitise_with_options, Options};
 
 /// Creates a [csv::Reader], based on any `Reader` which implements the [std::io::Read] trait
-pub(crate) fn reader<R>(rdr: R) -> Reader<R>
+pub(crate) fn reader<R>(rdr: R, delimiter: u8) -> Reader<R>
 where
     R: Read,
 {
     ReaderBuilder::new()
-        .delimiter(b',')
+        .delimiter(delimiter)
         .escape(Some(b'\\'))
         .has_headers(false)
         .double_quote(true)
