@@ -48,7 +48,7 @@ pub type Dict = crate::physical::dictionary::PrefixedStringDictionary;
 pub type ColumnOrder = Permutation;
 
 // Traits allowing to clone boxed with closures
-// heaviliy inspired by https://stackoverflow.com/a/30353928/6105522
+// heavily inspired by https://stackoverflow.com/a/30353928/6105522
 
 /// Closure type mapping logical type from context to DataValueT optionally using the Dictionary
 pub trait Mapper: MapperClone + Fn(&mut Dict) -> DataValueT {}

@@ -561,7 +561,7 @@ impl<'a> RuleParser<'a> {
             let (remainder, _) = many0(self.parse_source())(remainder)?;
             let (remainder, statements) = many0(self.parse_statement())(remainder)?;
 
-            let base = self.base().map(|base| base.to_owned());
+            let base = self.base().map(String::from);
             let prefixes = self
                 .prefixes
                 .borrow()

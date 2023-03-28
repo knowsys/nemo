@@ -188,9 +188,8 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
 
     for (term_index, term) in atom.terms().iter().enumerate() {
         match term {
-            Term::NumericLiteral(nl) => match nl {
+            Term::NumericLiteral(nl) => match *nl {
                 NumericLiteral::Integer(i) => {
-                    let i = *i;
                     let instruction = AppendInstruction::Constant(
                         Box::new(move |_dict| DataValueT::U64(i.try_into().unwrap())),
                         DataTypeName::U64,
@@ -198,7 +197,7 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
                     );
                     current_append_vector.push(instruction);
                 }
-                _ => unimplemented!(),
+                _ => todo!(),
             },
             Term::Constant(identifier) => {
                 let id_name = identifier.name();
@@ -230,7 +229,7 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
                     current_append_vector = append_instructions.last_mut().unwrap();
                 }
             }
-            Term::RdfLiteral(_) => unimplemented!(),
+            Term::RdfLiteral(_) => todo!(),
         }
     }
 

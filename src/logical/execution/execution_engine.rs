@@ -123,12 +123,12 @@ impl ExecutionEngine {
                                 NumericLiteral::Integer(i) => {
                                     DataValueT::U64(i.try_into().unwrap())
                                 }
-                                _ => unimplemented!(),
+                                _ => todo!(),
                             },
                             Term::Constant(Identifier(s)) => {
                                 DataValueT::U64(dict.add(s).try_into().unwrap())
                             }
-                            _ => unimplemented!(),
+                            _ => todo!(),
                         });
                     boxed_mapper
                 })
