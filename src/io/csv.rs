@@ -5,9 +5,12 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use crate::error::Error;
-use crate::physical::columnar::proxy_builder::{ProxyColumnBuilder, ProxyStringColumnBuilder};
-use crate::physical::datatypes::DataTypeName;
+use crate::physical::columnar::proxy_builder::{
+    ProxyColumnBuilder, ProxyDoubleColumnBuilder, ProxyFloatColumnBuilder,
+    ProxyStringColumnBuilder, ProxyU32ColumnBuilder, ProxyU64ColumnBuilder,
+};
 use crate::physical::datatypes::storage_value::VecT;
+use crate::physical::datatypes::{DataTypeName, StorageTypeName};
 use crate::physical::management::database::Dict;
 use crate::physical::tabular::table_types::trie::DebugTrie;
 use crate::physical::tabular::traits::table_schema::TableSchema;
@@ -132,7 +135,12 @@ impl DSVReader {
                     // TODO: implement for all proxies and types
                     Box::<ProxyStringColumnBuilder>::default()
                 } else {
-                    unimplemented!("needs to be implemented for all variants!")
+                    match schema_entry.type_name {
+                        StorageTypeName::U32 => Box::<ProxyU32ColumnBuilder>::default(),
+                        StorageTypeName::U64 => Box::<ProxyU64ColumnBuilder>::default(),
+                        StorageTypeName::Float => Box::<ProxyFloatColumnBuilder>::default(),
+                        StorageTypeName::Double => Box::<ProxyDoubleColumnBuilder>::default(),
+                    }
                 }
             })
             .collect()
@@ -214,7 +222,10 @@ impl CSVWriter<'_> {
 
 #[cfg(test)]
 mod test {
-    use crate::physical::dictionary::PrefixedStringDictionary;
+    use crate::physical::{
+        dictionary::{Dictionary, PrefixedStringDictionary},
+        tabular::traits::table_schema::TableSchemaEntry,
+    };
 
     use super::*;
     use csv::ReaderBuilder;
@@ -227,43 +238,6 @@ mod test {
 city;country;pop
 Boston;United States;4628910
 ";
-        let mut rdr = ReaderBuilder::new()
-            .delimiter(b';')
-            .from_reader(data.as_bytes());
-
-        let mut dict = PrefixedStringDictionary::default();
-        let x = read(&[None, None, None], &mut rdr, &mut dict);
-        assert!(x.is_ok());
-
-        let x = x.unwrap();
-
-        assert_eq!(x.len(), 3);
-        assert!(x.iter().all(|vect| vect.len() == 1));
-
-        assert_eq!(
-            x[0].get(0)
-                .and_then(|dvt| dvt.as_u64())
-                .and_then(|u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.entry(usize))
-                .unwrap(),
-            "Boston"
-        );
-        assert_eq!(
-            x[1].get(0)
-                .and_then(|dvt| dvt.as_u64())
-                .and_then(|u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.entry(usize))
-                .unwrap(),
-            "United States"
-        );
-        assert_eq!(
-            x[2].get(0)
-                .and_then(|dvt| dvt.as_u64())
-                .and_then(|u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.entry(usize))
-                .unwrap(),
-            "4628910"
-        );
 
         let mut rdr = ReaderBuilder::new()
             .delimiter(b';')
@@ -345,18 +319,40 @@ node03;123;123;13;55;123;invalid
             .from_reader(data.as_bytes());
 
         let mut dict = PrefixedStringDictionary::default();
-        let imported = read(
-            &[
-                None,
-                Some(StorageTypeName::U64),
-                Some(StorageTypeName::Double),
-                Some(StorageTypeName::Float),
-                Some(StorageTypeName::U64),
-                None,
-            ],
-            &mut rdr,
-            &mut dict,
-        );
+        let csvreader = DSVReader::csv("test".into());
+        let builder = csvreader.compute_proxies(&TableSchema::from_vec(vec![
+            TableSchemaEntry {
+                type_name: StorageTypeName::U64,
+                dict: true,
+                nullable: false,
+            },
+            TableSchemaEntry {
+                type_name: StorageTypeName::U64,
+                dict: false,
+                nullable: false,
+            },
+            TableSchemaEntry {
+                type_name: StorageTypeName::Double,
+                dict: false,
+                nullable: false,
+            },
+            TableSchemaEntry {
+                type_name: StorageTypeName::Float,
+                dict: false,
+                nullable: false,
+            },
+            TableSchemaEntry {
+                type_name: StorageTypeName::U64,
+                dict: false,
+                nullable: false,
+            },
+            TableSchemaEntry {
+                type_name: StorageTypeName::U64,
+                dict: true,
+                nullable: false,
+            },
+        ]));
+        let imported = csvreader.read_with_reader(builder, &mut rdr, &mut dict);
 
         assert!(imported.is_ok());
         assert_eq!(imported.as_ref().unwrap().len(), 6);
@@ -394,16 +390,31 @@ node03;123;123;13;55;123;invalid
             .has_headers(false)
             .from_reader(csv.as_bytes());
         let mut dict = PrefixedStringDictionary::default();
-        let imported = read(
-            &[
-                Some(StorageTypeName::U64),
-                Some(StorageTypeName::Double),
-                Some(StorageTypeName::U64),
-                Some(StorageTypeName::Float),
-            ],
-            &mut rdr,
-            &mut dict,
-        );
+        let csvreader = DSVReader::csv("test".into());
+        let builder = csvreader.compute_proxies(&TableSchema::from_vec(vec![
+            TableSchemaEntry {
+                type_name: StorageTypeName::U64,
+                dict: false,
+                nullable: false,
+            },
+            TableSchemaEntry {
+                type_name: StorageTypeName::Double,
+                dict: false,
+                nullable: false,
+            },
+            TableSchemaEntry {
+                type_name: StorageTypeName::U64,
+                dict: false,
+                nullable: false,
+            },
+            TableSchemaEntry {
+                type_name: StorageTypeName::Float,
+                dict: false,
+                nullable: false,
+            },
+        ]));
+
+        let imported = csvreader.read_with_reader(builder, &mut rdr, &mut dict);
 
         assert!(imported.is_ok());
         assert_eq!(imported.as_ref().unwrap().len(), 4);
