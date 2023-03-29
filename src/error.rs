@@ -18,7 +18,7 @@ pub enum Error {
     ParseFloat(#[from] std::num::ParseFloatError),
     /// Error which implies a needed Rollback
     #[error("Rollback due to csv-error")]
-    RollBack(usize),
+    Rollback(usize),
     /// Permutation shall be sorted, but the input data is of different length
     #[error("The provided data-structures do not have the same length: {0:?}")]
     PermutationSortLen(Vec<usize>),
