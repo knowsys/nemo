@@ -28,7 +28,7 @@ impl ProxyColumnBuilder for ProxyStringColumnBuilder {
         self.write();
         self.value = Some(
             dictionary
-                .expect("ProxyStringBuilder expects a Dictionary to be provided!")
+                .expect("ProxyStringColumnBuilder expects a Dictionary to be provided!")
                 .add(string.to_string())
                 .try_into()?,
         );
