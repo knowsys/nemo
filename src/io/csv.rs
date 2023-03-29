@@ -29,7 +29,7 @@ pub struct DSVReader {
 
 impl DSVReader {
     /// Instantiate a [DSVReader] for CSV files
-    pub(crate) fn csv(file: PathBuf) -> Self {
+    pub fn csv(file: PathBuf) -> Self {
         Self {
             file,
             delimiter: b',',
@@ -38,7 +38,7 @@ impl DSVReader {
     }
 
     /// Instantiate a [DSVReader] for TSV files
-    pub(crate) fn tsv(file: PathBuf) -> Self {
+    pub fn tsv(file: PathBuf) -> Self {
         Self {
             file,
             delimiter: b'\t',
