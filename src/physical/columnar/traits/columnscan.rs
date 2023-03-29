@@ -7,7 +7,7 @@ use super::super::operations::{
 use crate::physical::columnar::operations::{ColumnScanConstant, ColumnScanCopy, ColumnScanNulls};
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
-    physical::datatypes::{ColumnDataType, DataValueT, Double, Float},
+    physical::datatypes::{ColumnDataType, Double, Float, StorageValueT},
 };
 use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
@@ -463,10 +463,10 @@ impl<'a> ColumnScanT<'a> {
 }
 
 impl<'a> Iterator for ColumnScanT<'a> {
-    type Item = DataValueT;
+    type Item = StorageValueT;
 
     fn next(&mut self) -> Option<Self::Item> {
-        forward_to_columnscan_cell!(self, next.map_to(DataValueT))
+        forward_to_columnscan_cell!(self, next.map_to(StorageValueT))
     }
 }
 
@@ -474,26 +474,26 @@ impl<'a> ColumnScan for ColumnScanT<'a> {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
         match self {
             Self::U32(cs) => match value {
-                Self::Item::U32(val) => cs.seek(val).map(DataValueT::U32),
+                Self::Item::U32(val) => cs.seek(val).map(StorageValueT::U32),
                 _ => None,
             },
             Self::U64(cs) => match value {
-                Self::Item::U64(val) => cs.seek(val).map(DataValueT::U64),
+                Self::Item::U64(val) => cs.seek(val).map(StorageValueT::U64),
                 _ => None,
             },
             Self::Float(cs) => match value {
-                Self::Item::Float(val) => cs.seek(val).map(DataValueT::Float),
+                Self::Item::Float(val) => cs.seek(val).map(StorageValueT::Float),
                 _ => None,
             },
             Self::Double(cs) => match value {
-                Self::Item::Double(val) => cs.seek(val).map(DataValueT::Double),
+                Self::Item::Double(val) => cs.seek(val).map(StorageValueT::Double),
                 _ => None,
             },
         }
     }
 
     fn current(&self) -> Option<Self::Item> {
-        forward_to_columnscan_cell!(self, current.map_to(DataValueT))
+        forward_to_columnscan_cell!(self, current.map_to(StorageValueT))
     }
 
     fn reset(&mut self) {

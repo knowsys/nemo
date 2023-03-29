@@ -5,11 +5,8 @@ use crate::physical::{
         operations::{ColumnScanNulls, ColumnScanPass},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::DataTypeName,
-    tabular::traits::{
-        table_schema::TableColumnTypes,
-        triescan::{TrieScan, TrieScanEnum},
-    },
+    datatypes::StorageTypeName,
+    tabular::traits::triescan::{TrieScan, TrieScanEnum},
 };
 
 /// [`TrieScan`] which appends columns with nulls at the end of another [`TrieScan`].
@@ -22,7 +19,7 @@ pub struct TrieScanNulls<'a> {
     current_layer: Option<usize>,
 
     /// Types of the resulting trie.
-    target_types: TableColumnTypes,
+    target_types: Vec<StorageTypeName>,
 
     /// [`ColumnScanT`]s which represent each new layer in the resulting trie.
     /// Note: Reason for using [`UnsafeCell`] is explained for [`TrieScanJoin`].
@@ -57,17 +54,17 @@ impl<'a> TrieScanNulls<'a> {
                 }
 
                 match trie_scan.get_types()[scan_index] {
-                    DataTypeName::U32 => add_scan_for_datatype!(U32, u32),
-                    DataTypeName::U64 => add_scan_for_datatype!(U64, u64),
-                    DataTypeName::Float => add_scan_for_datatype!(Float, Float),
-                    DataTypeName::Double => add_scan_for_datatype!(Double, Double),
+                    StorageTypeName::U32 => add_scan_for_datatype!(U32, u32),
+                    StorageTypeName::U64 => add_scan_for_datatype!(U64, u64),
+                    StorageTypeName::Float => add_scan_for_datatype!(Float, Float),
+                    StorageTypeName::Double => add_scan_for_datatype!(Double, Double),
                 }
             }
         }
 
         // TODO: Should be revised after type system is completed
         for null_index in 0..num_nulls {
-            target_types.push(DataTypeName::U64);
+            target_types.push(StorageTypeName::U64);
 
             // To prevent different [`ColumnScanNulls`] from producing the same null
             // we offset the starting point an increment the null value by the amount of null columns
@@ -123,7 +120,7 @@ impl<'a> TrieScan<'a> for TrieScanNulls<'a> {
         Some(&self.column_scans[index])
     }
 
-    fn get_types(&self) -> &TableColumnTypes {
+    fn get_types(&self) -> &Vec<StorageTypeName> {
         &self.target_types
     }
 }

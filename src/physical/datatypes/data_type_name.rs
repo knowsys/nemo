@@ -1,12 +1,15 @@
 use std::fmt::Display;
 
-use crate::error::Error;
+use super::StorageTypeName;
 
-use super::DataValueT;
-
-/// Descriptors to refer to the possible data types at runtime.
+/// Descriptors to refer to the possible data types that pass the barrier of the physical layer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DataTypeName {
+    /// String Datatype
+    String,
+
+    // StorageTypeName from here on
+    //
     /// Data type [`u32`].
     U32,
     /// Data type [`u64`].
@@ -18,24 +21,26 @@ pub enum DataTypeName {
 }
 
 impl DataTypeName {
-    /// Parses a string, based on the name of the Datatype
-    pub fn parse(&self, string: &str) -> Result<DataValueT, Error> {
-        Ok(match self {
-            DataTypeName::U32 => DataValueT::U32(string.parse::<u32>()?),
-            DataTypeName::U64 => DataValueT::U64(string.parse::<u64>()?),
-            DataTypeName::Float => DataValueT::Float(super::Float::new(string.parse::<f32>()?)?),
-            DataTypeName::Double => DataValueT::Double(super::Double::new(string.parse::<f64>()?)?),
-        })
+    /// Get the appropriate [`StorageTypeName`]` for the given [`DataTypeName`]
+    pub fn to_storage_type_name(&self) -> StorageTypeName {
+        match self {
+            Self::String => StorageTypeName::U64, // dictionary indices
+            Self::U32 => StorageTypeName::U32,
+            Self::U64 => StorageTypeName::U64,
+            Self::Float => StorageTypeName::Float,
+            Self::Double => StorageTypeName::Double,
+        }
     }
 }
 
 impl Display for DataTypeName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DataTypeName::U32 => write!(f, "U32"),
-            DataTypeName::U64 => write!(f, "U64"),
-            DataTypeName::Float => write!(f, "Float"),
-            DataTypeName::Double => write!(f, "Double"),
+            Self::String => write!(f, "String"),
+            Self::U32 => write!(f, "U32"),
+            Self::U64 => write!(f, "U64"),
+            Self::Float => write!(f, "Float"),
+            Self::Double => write!(f, "Double"),
         }
     }
 }

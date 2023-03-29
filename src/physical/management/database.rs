@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use bytesize::ByteSize;
 
 use crate::io::csv::read;
-use crate::physical::datatypes::{DataTypeName, DataValueT};
+use crate::physical::datatypes::{StorageTypeName, StorageValueT};
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::table_types::trie::DebugTrie;
@@ -51,9 +51,9 @@ pub type ColumnOrder = Permutation;
 // heavily inspired by https://stackoverflow.com/a/30353928/6105522
 
 /// Closure type mapping logical type from context to DataValueT optionally using the Dictionary
-pub trait Mapper: MapperClone + Fn(&mut Dict) -> DataValueT {}
+pub trait Mapper: MapperClone + Fn(&mut Dict) -> StorageValueT {}
 
-impl<T> Mapper for T where T: Fn(&mut Dict) -> DataValueT + Clone + 'static {}
+impl<T> Mapper for T where T: Fn(&mut Dict) -> StorageValueT + Clone + 'static {}
 
 /// Trait required for cloning the mapper closures
 pub trait MapperClone {
@@ -174,7 +174,7 @@ impl TableStorage {
             let trie = match source {
                 TableSource::DSV { file, delimiter } => {
                     // Using fallback solution to treat everything as string for now (storing as u64 internally)
-                    let datatypes: Vec<Option<DataTypeName>> =
+                    let datatypes: Vec<Option<StorageTypeName>> =
                         (0..schema.arity()).map(|_| None).collect();
 
                     let gz_decoder = flate2::read::GzDecoder::new(File::open(file.as_path())?);
@@ -196,7 +196,7 @@ impl TableStorage {
                     Trie::from_cols(col_table)
                 }
                 TableSource::RLS(table_rows) => {
-                    let rows: Vec<Vec<DataValueT>> = table_rows
+                    let rows: Vec<Vec<StorageValueT>> = table_rows
                         .iter()
                         .map(|row| row.iter().cloned().map(|mapper| mapper(dict)).collect())
                         .collect();
@@ -892,8 +892,8 @@ impl DatabaseInstance {
                     return Ok(None);
                 }
 
-                let schema = type_node.schema.get_column_types();
-                let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema);
+                let schema = type_node.schema.clone();
+                let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema.get_storage_types());
 
                 Ok(Some(TrieScanEnum::TrieScanGeneric(trie_scan)))
             }
@@ -909,8 +909,8 @@ impl DatabaseInstance {
                     return Ok(None);
                 }
 
-                let schema = type_node.schema.get_column_types();
-                let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema);
+                let schema = type_node.schema.clone();
+                let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema.get_storage_types());
 
                 Ok(Some(TrieScanEnum::TrieScanGeneric(trie_scan)))
             }
@@ -1053,14 +1053,14 @@ impl DatabaseInstance {
                     &type_node.subnodes[0],
                     computation_results,
                 )?;
-                let target_types = type_node.schema.get_column_types();
+                let target_types = type_node.schema.clone();
 
                 if let Some(subiterator) = subiterator_opt {
                     let append_scan = TrieScanAppend::new(
                         &mut self.dict_constants.borrow_mut(),
                         subiterator,
                         instructions,
-                        target_types,
+                        target_types.get_storage_types(),
                     );
                     Ok(Some(TrieScanEnum::TrieScanAppend(append_scan)))
                 } else {
@@ -1095,7 +1095,7 @@ impl ByteSized for DatabaseInstance {
 mod test {
     use crate::physical::{
         columnar::traits::column::Column,
-        datatypes::{DataTypeName, DataValueT},
+        datatypes::{DataTypeName, StorageValueT},
         management::{
             database::{ColumnOrder, TableId},
             ByteSized, ExecutionPlan,
@@ -1103,10 +1103,7 @@ mod test {
         tabular::{
             operations::JoinBindings,
             table_types::trie::Trie,
-            traits::{
-                table::Table,
-                table_schema::{TableSchema, TableSchemaEntry},
-            },
+            traits::{table::Table, table_schema::TableSchema},
         },
         util::make_column_with_intervals_t,
     };
@@ -1125,7 +1122,7 @@ mod test {
         let mut reference_id = TableId::default();
 
         let mut schema_a = TableSchema::new();
-        schema_a.add_entry(DataTypeName::U64, false, false);
+        schema_a.add_entry(DataTypeName::U64);
 
         let trie_a_id = instance.register_table("A", schema_a);
         instance.add_trie(trie_a_id, ColumnOrder::default(), trie_a);
@@ -1142,7 +1139,7 @@ mod test {
         let last_size = instance.size_bytes();
 
         let mut schema_b = TableSchema::new();
-        schema_b.add_entry(DataTypeName::U64, false, false);
+        schema_b.add_entry(DataTypeName::U64);
 
         let trie_b_id = instance.register_table("B", schema_b);
         instance.add_trie(trie_b_id, ColumnOrder::default(), trie_b);
@@ -1160,14 +1157,6 @@ mod test {
 
         instance.delete(trie_a_id);
         assert!(instance.size_bytes() < last_size);
-    }
-
-    fn schema_entry(type_name: DataTypeName) -> TableSchemaEntry {
-        TableSchemaEntry {
-            type_name,
-            dict: false,
-            nullable: false,
-        }
     }
 
     fn test_casting_execution_plan() -> (ExecutionPlan, usize) {
@@ -1218,51 +1207,54 @@ mod test {
 
     #[test]
     fn test_casting() {
-        let trie_a = Trie::from_rows(&[vec![DataValueT::U32(1), DataValueT::U32(2)]]);
+        let trie_a = Trie::from_rows(&[vec![StorageValueT::U32(1), StorageValueT::U32(2)]]);
         let trie_b = Trie::from_rows(&[
-            vec![DataValueT::U32(2), DataValueT::U64(1 << 35)],
-            vec![DataValueT::U32(3), DataValueT::U64(2)],
+            vec![StorageValueT::U32(2), StorageValueT::U64(1 << 35)],
+            vec![StorageValueT::U32(3), StorageValueT::U64(2)],
         ]);
-        let trie_c = Trie::from_rows(&[vec![DataValueT::U32(2), DataValueT::U64(4)]]);
+        let trie_c = Trie::from_rows(&[vec![StorageValueT::U32(2), StorageValueT::U64(4)]]);
         let trie_x = Trie::from_rows(&[
-            vec![DataValueT::U64(1), DataValueT::U32(2), DataValueT::U64(4)],
-            vec![DataValueT::U64(3), DataValueT::U32(2), DataValueT::U64(4)],
             vec![
-                DataValueT::U64(1 << 36),
-                DataValueT::U32(6),
-                DataValueT::U64(12),
+                StorageValueT::U64(1),
+                StorageValueT::U32(2),
+                StorageValueT::U64(4),
+            ],
+            vec![
+                StorageValueT::U64(3),
+                StorageValueT::U32(2),
+                StorageValueT::U64(4),
+            ],
+            vec![
+                StorageValueT::U64(1 << 36),
+                StorageValueT::U32(6),
+                StorageValueT::U64(12),
             ],
         ]);
         let trie_y = Trie::from_rows(&[
-            vec![DataValueT::U32(1), DataValueT::U64(2), DataValueT::U32(4)],
             vec![
-                DataValueT::U32(2),
-                DataValueT::U64(1 << 37),
-                DataValueT::U32(7),
+                StorageValueT::U32(1),
+                StorageValueT::U64(2),
+                StorageValueT::U32(4),
+            ],
+            vec![
+                StorageValueT::U32(2),
+                StorageValueT::U64(1 << 37),
+                StorageValueT::U32(7),
             ],
         ]);
 
-        let schema_a = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U32),
-        ]);
-        let schema_b = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
-        ]);
-        let schema_c = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U32),
-        ]);
+        let schema_a = TableSchema::from_vec(vec![DataTypeName::U32, DataTypeName::U32]);
+        let schema_b = TableSchema::from_vec(vec![DataTypeName::U32, DataTypeName::U64]);
+        let schema_c = TableSchema::from_vec(vec![DataTypeName::U32, DataTypeName::U32]);
         let schema_x = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
+            DataTypeName::U64,
+            DataTypeName::U32,
+            DataTypeName::U64,
         ]);
         let schema_y = TableSchema::from_vec(vec![
-            schema_entry(DataTypeName::U32),
-            schema_entry(DataTypeName::U64),
-            schema_entry(DataTypeName::U32),
+            DataTypeName::U32,
+            DataTypeName::U64,
+            DataTypeName::U32,
         ]);
 
         let mut instance = DatabaseInstance::new();

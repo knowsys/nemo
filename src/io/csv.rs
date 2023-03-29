@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use crate::error::Error;
-use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
+use crate::physical::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
 use crate::physical::dictionary::Dictionary;
 use crate::physical::tabular::table_types::trie::DebugTrie;
 use csv::{Reader, ReaderBuilder};
@@ -27,14 +27,14 @@ where
 }
 
 /// Imports a csv file
-/// Needs a list of Options of [DataTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
+/// Needs a list of Options of [StorageTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
 /// # Parameters
-/// * `datatypes` this is a list of [`DataTypeName`] options, which needs to match the number of fields in the csv-file.
-///   If the Option is [`None`] the field will be ignored. [`Some(DataTypeName)`] describes the datatype of the field in the csv-file.
+/// * `datatypes` this is a list of [`StorageTypeName`] options, which needs to match the number of fields in the csv-file.
+///   If the Option is [`None`] the field will be ignored. [`Some(StorageTypeName)`] describes the datatype of the field in the csv-file.
 /// # Behaviour
 /// If a given datatype from `datatypes` is not matching the value in the field (i.e. it cannot be parsed into such a value), the whole line will be ignored and an error message is emitted to the log.
 pub fn read<T, Dict: Dictionary>(
-    datatypes: &[Option<DataTypeName>], // If no datatype (i.e. None) is specified, we treat the column as string (for now); TODO: discuss this
+    datatypes: &[Option<StorageTypeName>], // If no datatype (i.e. None) is specified, we treat the column as string (for now); TODO: discuss this
     csv_reader: &mut Reader<T>,
     dictionary: &mut Dict,
 ) -> Result<Vec<VecT>, Error>
@@ -47,10 +47,10 @@ where
         result.push(
             dtype
                 .map(|dt| match dt {
-                    DataTypeName::U32 => VecT::U32(Vec::new()),
-                    DataTypeName::U64 => VecT::U64(Vec::new()),
-                    DataTypeName::Float => VecT::Float(Vec::new()),
-                    DataTypeName::Double => VecT::Double(Vec::new()),
+                    StorageTypeName::U32 => VecT::U32(Vec::new()),
+                    StorageTypeName::U64 => VecT::U64(Vec::new()),
+                    StorageTypeName::Float => VecT::Float(Vec::new()),
+                    StorageTypeName::Double => VecT::Double(Vec::new()),
                 })
                 .or_else(|| {
                     // TODO: not sure if we actually want to handle everything as string which is not specified
@@ -84,8 +84,9 @@ where
                         // but let's just do this for now
                         // (we use u64 with a dictionary for strings)
 
-                        let u64_equivalent =
-                            DataValueT::U64(dictionary.add(item.to_string()).try_into().unwrap());
+                        let u64_equivalent = StorageValueT::U64(
+                            dictionary.add(item.to_string()).try_into().unwrap(),
+                        );
                         if let Some(result_col) = result[idx].as_mut() {
                             result_col.push(&u64_equivalent);
                         }
@@ -251,10 +252,10 @@ node03;123;123;13;55;123;invalid
         let imported = read(
             &[
                 None,
-                Some(DataTypeName::U64),
-                Some(DataTypeName::Double),
-                Some(DataTypeName::Float),
-                Some(DataTypeName::U64),
+                Some(StorageTypeName::U64),
+                Some(StorageTypeName::Double),
+                Some(StorageTypeName::Float),
+                Some(StorageTypeName::U64),
                 None,
             ],
             &mut rdr,
@@ -299,10 +300,10 @@ node03;123;123;13;55;123;invalid
         let mut dict = PrefixedStringDictionary::default();
         let imported = read(
             &[
-                Some(DataTypeName::U64),
-                Some(DataTypeName::Double),
-                Some(DataTypeName::U64),
-                Some(DataTypeName::Float),
+                Some(StorageTypeName::U64),
+                Some(StorageTypeName::Double),
+                Some(StorageTypeName::U64),
+                Some(StorageTypeName::Float),
             ],
             &mut rdr,
             &mut dict,

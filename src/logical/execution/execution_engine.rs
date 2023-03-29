@@ -11,7 +11,7 @@ use crate::{
     },
     meta::TimedCode,
     physical::{
-        datatypes::DataValueT,
+        datatypes::StorageValueT,
         dictionary::Dictionary,
         management::database::{Dict, Mapper, TableId, TableSource},
         tabular::table_types::trie::DebugTrie,
@@ -124,12 +124,12 @@ impl ExecutionEngine {
                         Box::new(move |dict: &mut Dict| match t_cloned.clone() {
                             Term::NumericLiteral(nl) => match nl {
                                 NumericLiteral::Integer(i) => {
-                                    DataValueT::U64(i.try_into().unwrap())
+                                    StorageValueT::U64(i.try_into().unwrap())
                                 }
                                 _ => todo!(),
                             },
                             Term::Constant(Identifier(s)) => {
-                                DataValueT::U64(dict.add(s).try_into().unwrap())
+                                StorageValueT::U64(dict.add(s).try_into().unwrap())
                             }
                             _ => todo!(),
                         });

@@ -1,105 +1,115 @@
+use std::{
+    ops::{Index, IndexMut},
+    slice::Iter,
+};
+
 use crate::physical::{
-    datatypes::DataTypeName, tabular::operations::triescan_project::ProjectReordering,
+    datatypes::{DataTypeName, StorageTypeName},
+    tabular::operations::triescan_project::ProjectReordering,
     util::mapping::permutation::Permutation,
 };
-use std::fmt::Debug;
+
+// TODO: move file somewhere else; there is no trait here
 
 /// Type that stores the datatype used in each column of the table.
-pub type TableColumnTypes = Vec<DataTypeName>;
-
-/// Contains information about a column in table.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct TableSchemaEntry {
-    /// The data type in which the data is stored for this column.
-    pub type_name: DataTypeName,
-    /// Whether the entries in the column are the key for some dictionary.
-    pub dict: bool,
-    /// Whether this column may contain nulls.
-    pub nullable: bool,
-}
-
-/// Schema for a particular relation (table).
-/// Each column has a datatype.
-#[derive(Debug, Default, Clone, Eq, PartialEq)]
-pub struct TableSchema {
-    entries: Vec<TableSchemaEntry>,
-}
+#[repr(transparent)]
+#[derive(Clone, Debug, Default)]
+pub struct TableSchema(Vec<DataTypeName>);
 
 impl TableSchema {
     /// Constructs new (empty) [`TableSchema`].
     pub fn new() -> Self {
-        Self {
-            entries: Vec::new(),
-        }
+        Self(Vec::new())
+    }
+
+    /// Turns Vector into [`TableSchema`].
+    pub fn from_vec(vec: Vec<DataTypeName>) -> Self {
+        Self(vec)
     }
 
     /// Construct a new [`TableSchema`]  which is a reordered version of this schema
     pub fn reordered(&self, reordering: &ProjectReordering) -> Self {
-        Self {
-            entries: reordering.transform(&self.entries),
-        }
+        Self(reordering.transform(&self.0))
     }
 
     /// Contruct a new [`TableSchema`] which is a permuted version of this schema.
     pub fn permuted(&self, permutation: &Permutation) -> Self {
-        Self {
-            entries: permutation.permute(&self.entries),
-        }
+        Self(permutation.permute(&self.0))
+    }
+
+    /// Constructs new (empty) [`TableSchema`] with reserved space.
+    pub fn with_capacity(arity: usize) -> Self {
+        Self(Vec::with_capacity(arity))
     }
 
     /// Constructs new (empty) [`TableSchema`] with reserved space.
     pub fn reserve(arity: usize) -> Self {
-        let entries = Vec::with_capacity(arity);
-
-        Self { entries }
+        Self::with_capacity(arity)
     }
 
-    /// Constructs new [`TableSchema`] with the given entries.
-    pub fn from_vec(entries: Vec<TableSchemaEntry>) -> Self {
-        Self { entries }
+    /// Push to the underlying vector.
+    pub fn push(&mut self, type_name: DataTypeName) {
+        self.0.push(type_name);
     }
 
     /// Add new entry to the schema.
-    pub fn add_entry(&mut self, type_name: DataTypeName, dict: bool, nullable: bool) {
-        self.entries.push(TableSchemaEntry {
-            type_name,
-            dict,
-            nullable,
-        });
+    pub fn add_entry(&mut self, type_name: DataTypeName) {
+        self.push(type_name);
     }
 
     /// Add new entry to the schema by cloning it.
-    pub fn add_entry_cloned(&mut self, entry: &TableSchemaEntry) {
-        self.entries.push(*entry);
+    pub fn add_entry_cloned(&mut self, entry: &DataTypeName) {
+        self.push(*entry);
+    }
+
+    /// The length of the underlying vector.
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 
     /// The arity of the table.
     pub fn arity(&self) -> usize {
-        self.entries.len()
+        self.len()
     }
 
-    /// The arity of the table.
+    /// Bool indicating if the table is empty.
     pub fn is_empty(&self) -> bool {
-        self.arity() == 0
+        self.0.is_empty()
     }
 
-    /// Returns the [`TableSchemaEntry`] associated with the column of the given index.
-    pub fn get_entry(&self, index: usize) -> &TableSchemaEntry {
-        &self.entries[index]
+    /// Returns the [`DataTypeName`] associated with the column of the given index.
+    pub fn get_entry(&self, index: usize) -> &DataTypeName {
+        &self[index]
     }
 
-    /// Returns the [`TableSchemaEntry`] associated with the column of the given index.
-    pub fn get_entry_mut(&mut self, index: usize) -> &mut TableSchemaEntry {
-        &mut self.entries[index]
+    /// Returns the [`DataTypeName`] associated with the column of the given index.
+    pub fn get_entry_mut(&mut self, index: usize) -> &mut DataTypeName {
+        &mut self[index]
     }
 
-    /// Return the vector of [`TableSchemaEntry`]s which defines a [`TableSchema`].
-    pub fn get_entries(&self) -> &Vec<TableSchemaEntry> {
-        &self.entries
+    /// Returns an iterator for the underlying vector
+    pub fn iter(&self) -> Iter<DataTypeName> {
+        self.0.iter()
     }
 
-    /// Return the types of the associated columns.
-    pub fn get_column_types(&self) -> TableColumnTypes {
-        self.entries.iter().map(|e| e.type_name).collect()
+    /// return fitting storage types for schema
+    pub fn get_storage_types(&self) -> Vec<StorageTypeName> {
+        self.iter()
+            .map(DataTypeName::to_storage_type_name)
+            .collect()
+    }
+}
+
+impl Index<usize> for TableSchema {
+    type Output = DataTypeName;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl IndexMut<usize> for TableSchema {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
     }
 }

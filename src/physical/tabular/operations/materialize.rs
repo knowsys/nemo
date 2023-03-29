@@ -4,7 +4,7 @@ use crate::physical::{
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         traits::{columnbuilder::ColumnBuilder, columnscan::ColumnScan},
     },
-    datatypes::{DataTypeName, Double, Float},
+    datatypes::{Double, Float, StorageTypeName},
     tabular::{
         table_types::trie::Trie,
         traits::triescan::{TrieScan, TrieScanEnum},
@@ -44,10 +44,10 @@ pub fn materialize_inner(
         }
 
         match column_type {
-            DataTypeName::U32 => init_builder_for_datatype!(U32),
-            DataTypeName::U64 => init_builder_for_datatype!(U64),
-            DataTypeName::Float => init_builder_for_datatype!(Float),
-            DataTypeName::Double => init_builder_for_datatype!(Double),
+            StorageTypeName::U32 => init_builder_for_datatype!(U32),
+            StorageTypeName::U64 => init_builder_for_datatype!(U64),
+            StorageTypeName::Float => init_builder_for_datatype!(Float),
+            StorageTypeName::Double => init_builder_for_datatype!(Double),
         }
     }
 
@@ -169,10 +169,10 @@ pub fn materialize_inner(
             }
 
             match column_type {
-                DataTypeName::U32 => finalize_for_datatype!(U32, u32),
-                DataTypeName::U64 => finalize_for_datatype!(U64, u64),
-                DataTypeName::Float => finalize_for_datatype!(Float, Float),
-                DataTypeName::Double => finalize_for_datatype!(Double, Double),
+                StorageTypeName::U32 => finalize_for_datatype!(U32, u32),
+                StorageTypeName::U64 => finalize_for_datatype!(U64, u64),
+                StorageTypeName::Float => finalize_for_datatype!(Float, Float),
+                StorageTypeName::Double => finalize_for_datatype!(Double, Double),
             }
         }
 

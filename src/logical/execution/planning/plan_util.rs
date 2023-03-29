@@ -12,7 +12,7 @@ use crate::{
         TableManager,
     },
     physical::{
-        datatypes::{DataTypeName, DataValueT},
+        datatypes::{DataTypeName, StorageValueT},
         dictionary::Dictionary,
         management::{
             database::{Dict, TableId},
@@ -111,15 +111,15 @@ pub(super) fn compute_filters(
                         let filter_right_cloned = filter.right.clone();
                         Box::new(move |dict: &mut Dict| match filter_right_cloned.clone() {
                             Term::Constant(Identifier(s)) => {
-                                DataValueT::U64(dict.add(s).try_into().unwrap())
+                                StorageValueT::U64(dict.add(s).try_into().unwrap())
                             }
                             Term::Variable(_) => unreachable!(),
                             Term::NumericLiteral(n) => match n {
                                 NumericLiteral::Integer(i) => {
-                                    DataValueT::U64(i.try_into().unwrap())
+                                    StorageValueT::U64(i.try_into().unwrap())
                                 }
                                 NumericLiteral::Decimal(_, _) => todo!(),
-                                NumericLiteral::Double(d) => DataValueT::Double(d),
+                                NumericLiteral::Double(d) => StorageValueT::Double(d),
                             },
                             Term::RdfLiteral(_) => todo!(),
                         })
@@ -191,9 +191,8 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
             Term::NumericLiteral(nl) => match *nl {
                 NumericLiteral::Integer(i) => {
                     let instruction = AppendInstruction::Constant(
-                        Box::new(move |_dict| DataValueT::U64(i.try_into().unwrap())),
+                        Box::new(move |_dict| StorageValueT::U64(i.try_into().unwrap())),
                         DataTypeName::U64,
-                        false,
                     );
                     current_append_vector.push(instruction);
                 }
@@ -204,10 +203,9 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
 
                 let instruction = AppendInstruction::Constant(
                     Box::new(move |dict| {
-                        DataValueT::U64(dict.add(id_name.clone()).try_into().unwrap())
+                        StorageValueT::U64(dict.add(id_name.clone()).try_into().unwrap())
                     }),
-                    DataTypeName::U64,
-                    true,
+                    DataTypeName::String,
                 );
                 current_append_vector.push(instruction);
             }
