@@ -1,8 +1,7 @@
 use std::collections::HashSet;
 
-use crate::{
-    logical::model::{Atom, Filter, FilterOperation, Identifier, Literal, Program, Term, Variable},
-    physical::dictionary::Dictionary,
+use crate::logical::model::{
+    Atom, Filter, FilterOperation, Identifier, Literal, Program, Term, Variable,
 };
 
 /// Represents the result of normalizing a list of atoms.
@@ -27,12 +26,12 @@ pub fn normalize_atom_vector(atoms: &[&Atom], filters: &[Filter]) -> Normalizati
     // Apply all equality filters
     for filter in filters {
         if filter.operation == FilterOperation::Equals {
-            if let Term::Variable(right_variable) = filter.right {
+            if let Term::Variable(right_variable) = &filter.right {
                 for atom in new_atoms.iter_mut() {
                     for term in atom.terms_mut() {
                         if let Term::Variable(current_variable) = term {
                             if *current_variable == filter.left {
-                                *current_variable = right_variable;
+                                *current_variable = right_variable.clone();
                             }
                         }
                     }
@@ -43,23 +42,17 @@ pub fn normalize_atom_vector(atoms: &[&Atom], filters: &[Filter]) -> Normalizati
             }
         }
 
-        new_filters.push(*filter);
+        new_filters.push(filter.clone());
     }
 
     // Create new filters for handling constants or duplicate variables within one atom
-
-    // TODO: This is horrible and should obviously not work that way,
-    // but implementing this properly would need some discussions first
-    const FRESH_ID: usize = usize::MAX - 10000;
-    let mut current_id = FRESH_ID;
-
     for atom in new_atoms.iter_mut() {
         let mut atom_variables = HashSet::new();
 
         for term in atom.terms_mut() {
             let add_filter = if let Term::Variable(variable) = term {
                 // If term is a variable we add a filter iff it has already occured
-                !atom_variables.insert(*variable)
+                !atom_variables.insert(variable.clone())
             } else {
                 // If term is not a variable then we need to add a filter
                 true
@@ -67,11 +60,16 @@ pub fn normalize_atom_vector(atoms: &[&Atom], filters: &[Filter]) -> Normalizati
 
             if add_filter {
                 // Create fresh variable
-                let new_variable = Variable::Universal(Identifier(current_id));
-                current_id += 1;
+                let new_variable = Variable::Universal(Identifier(format!(
+                    "FRESH_VARIABLE_IN_NORMALIZATION_FOR_TERM_{term:?}"
+                )));
 
                 // Add new filter expression
-                new_filters.push(Filter::new(FilterOperation::Equals, new_variable, *term));
+                new_filters.push(Filter::new(
+                    FilterOperation::Equals,
+                    new_variable.clone(),
+                    term.clone(),
+                ));
 
                 // Replace current term with the new variable
                 *term = Term::Variable(new_variable);
@@ -85,7 +83,7 @@ pub fn normalize_atom_vector(atoms: &[&Atom], filters: &[Filter]) -> Normalizati
     }
 }
 
-impl<Dict: Dictionary> Program<Dict> {
+impl Program {
     /// Transforms the rules into a "normalized" form.
     pub fn normalize(&mut self) {
         for rule in self.rules_mut() {

@@ -8,7 +8,7 @@ use crate::{
         table_manager::SubtableExecutionPlan,
         TableManager,
     },
-    physical::{dictionary::Dictionary, management::execution_plan::ExecutionNodeRef},
+    physical::management::execution_plan::ExecutionNodeRef,
 };
 
 use super::{BodyStrategy, SeminaiveJoinGenerator};
@@ -41,10 +41,10 @@ impl SeminaiveStrategy {
     }
 }
 
-impl<Dict: Dictionary> BodyStrategy<Dict> for SeminaiveStrategy {
+impl BodyStrategy for SeminaiveStrategy {
     fn add_plan_body(
         &self,
-        table_manager: &TableManager<Dict>,
+        table_manager: &TableManager,
         current_plan: &mut SubtableExecutionPlan,
         rule_info: &RuleInfo,
         mut variable_order: VariableOrder,

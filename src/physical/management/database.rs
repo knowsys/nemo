@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::fs::File;
@@ -9,23 +10,21 @@ use crate::io::csv::read;
 use crate::physical::datatypes::{DataTypeName, DataValueT};
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
+use crate::physical::tabular::table_types::trie::DebugTrie;
 use crate::physical::tabular::traits::table::Table;
 use crate::physical::util::mapping::permutation::Permutation;
 use crate::physical::util::mapping::traits::NatMapping;
 use crate::{
     error::Error,
     meta::TimedCode,
-    physical::{
-        dictionary::Dictionary,
-        tabular::{
-            operations::{
-                materialize::materialize, triescan_append::TrieScanAppend, TrieScanJoin,
-                TrieScanMinus, TrieScanNulls, TrieScanProject, TrieScanSelectEqual,
-                TrieScanSelectValue, TrieScanUnion,
-            },
-            table_types::trie::{Trie, TrieScanGeneric},
-            traits::{table_schema::TableSchema, triescan::TrieScanEnum},
+    physical::tabular::{
+        operations::{
+            materialize::materialize, triescan_append::TrieScanAppend, TrieScanJoin, TrieScanMinus,
+            TrieScanNulls, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
+            TrieScanUnion,
         },
+        table_types::trie::{Trie, TrieScanGeneric},
+        traits::{table_schema::TableSchema, triescan::TrieScanEnum},
     },
 };
 
@@ -36,10 +35,55 @@ use super::{
     ByteSized, ExecutionPlan,
 };
 
+#[cfg(feature = "no-prefixed-string-dictionary")]
+/// Dictionary Implementation used in the current configuration
+pub type Dict = crate::physical::dictionary::StringDictionary;
+#[cfg(not(feature = "no-prefixed-string-dictionary"))]
+/// Dictionary Implementation used in the current configuration
+pub type Dict = crate::physical::dictionary::PrefixedStringDictionary;
+
 /// Type that represents a reordering of the columns of a table.
 /// It is given in form of a permutation which encodes the transformation
 /// that is needed to get from the original column order to this one.
 pub type ColumnOrder = Permutation;
+
+// Traits allowing to clone boxed with closures
+// heavily inspired by https://stackoverflow.com/a/30353928/6105522
+
+/// Closure type mapping logical type from context to DataValueT optionally using the Dictionary
+pub trait Mapper: MapperClone + Fn(&mut Dict) -> DataValueT {}
+
+impl<T> Mapper for T where T: Fn(&mut Dict) -> DataValueT + Clone + 'static {}
+
+/// Trait required for cloning the mapper closures
+pub trait MapperClone {
+    /// Clone a boxed mapper closure
+    fn clone_box(&self) -> Box<dyn Mapper>;
+}
+
+impl<T> MapperClone for T
+where
+    T: 'static + Mapper + Clone,
+{
+    fn clone_box(&self) -> Box<dyn Mapper> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn Mapper> {
+    fn clone(&self) -> Box<dyn Mapper> {
+        self.clone_box()
+    }
+}
+
+impl Debug for Box<dyn Mapper> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "<Some Mapper closure taking Dict and returning DataValueT>"
+        )
+    }
+}
 
 /// Type which represents table id.
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
@@ -74,7 +118,7 @@ pub enum TableSource {
     /// Table is stored as facts in an rls file
     /// TODO: To not invoke the parser twice I just put the parsed "row-table" here.
     /// Does not seem quite right
-    RLS(Vec<Vec<DataValueT>>),
+    RLS(Vec<Vec<Box<dyn Mapper>>>),
 }
 
 impl Display for TableSource {
@@ -98,7 +142,7 @@ pub enum TableStorage {
 impl TableStorage {
     /// Load table from a given on-disk source
     /// TODO: This function should change when the type system gets introduced on the logical layer
-    fn load_from_disk<Dict: Dictionary>(
+    fn load_from_disk(
         source: &TableSource,
         schema: &TableSchema,
         dict: &mut Dict,
@@ -130,7 +174,13 @@ impl TableStorage {
 
                     Trie::from_cols(col_table)
                 }
-                TableSource::RLS(table_rows) => Trie::from_rows(table_rows),
+                TableSource::RLS(table_rows) => {
+                    let rows: Vec<Vec<DataValueT>> = table_rows
+                        .iter()
+                        .map(|row| row.iter().cloned().map(|mapper| mapper(dict)).collect())
+                        .collect();
+                    Trie::from_rows(&rows)
+                }
             };
 
             TimedCode::instance()
@@ -142,10 +192,7 @@ impl TableStorage {
     }
 
     /// Function that makes sure that underlying table is available in memory.
-    pub fn into_memory<'a, Dict: Dictionary>(
-        &'a mut self,
-        dict: &mut Dict,
-    ) -> Result<&'a Trie, Error> {
+    pub fn into_memory<'a>(&'a mut self, dict: &mut Dict) -> Result<&'a Trie, Error> {
         match self {
             TableStorage::InMemory(_) => {}
             TableStorage::OnDisk(schema, sources) => {
@@ -376,14 +423,14 @@ impl TableInfo {
 
 /// Represents a collection of tables
 #[derive(Debug)]
-pub struct DatabaseInstance<Dict: Dictionary> {
+pub struct DatabaseInstance {
     /// Structure which owns all the tries; accessed through Id.
     storage_handler: OrderedReferenceManager,
     /// Map with additional infromation about the tables
     table_infos: HashMap<TableId, TableInfo>,
 
     /// Dictionary which stores the strings associates with abstract constants
-    dict_constants: Dict,
+    dict_constants: RefCell<Dict>,
 
     /// Lowest unused null value.
     current_null: u64,
@@ -403,15 +450,21 @@ enum ComputationResult {
     Empty,
 }
 
-impl<Dict: Dictionary> DatabaseInstance<Dict> {
+impl Default for DatabaseInstance {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DatabaseInstance {
     /// Create new [`DatabaseInstance`]
-    pub fn new(dict_constants: Dict) -> Self {
+    pub fn new() -> Self {
         let current_null = 1 << 63; // TODO: Think about a robust null representation method
 
         Self {
             storage_handler: OrderedReferenceManager::default(),
             table_infos: HashMap::new(),
-            dict_constants,
+            dict_constants: RefCell::new(Dict::default()),
             current_null,
             current_id: TableId::default(),
         }
@@ -440,14 +493,9 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         self.table_schema(id).arity()
     }
 
-    /// Returns a mutable reference to the dictionary used for associating abstract constants with strings.
-    pub fn get_dict_constants_mut(&mut self) -> &mut Dict {
-        &mut self.dict_constants
-    }
-
     /// Returns a reference to the dictionary used for associating abstract constants with strings.
-    pub fn get_dict_constants(&self) -> &Dict {
-        &self.dict_constants
+    pub fn get_dict_constants(&self) -> Dict {
+        self.dict_constants.clone().take()
     }
 
     /// Register a new table under a given name and schema.
@@ -590,7 +638,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
             .storage_handler
             .table_storage_mut(id, &closest_order.clone())
             .expect("Call to search_closest_ordered should give us an existing order")
-            .into_memory(&mut self.dict_constants)?;
+            .into_memory(self.dict_constants.get_mut())?;
 
         if !reorder.is_identity() {
             TimedCode::instance()
@@ -771,6 +819,21 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
             .expect("Function assumes that trie is in memory.")
     }
 
+    /// Returns a DebugTrie for writing to CSV.
+    /// Panics if no table under the given id and order exists.
+    /// Panics if trie is not available in memory.
+    pub fn get_debug_trie(&self, id: TableId, order: &ColumnOrder) -> DebugTrie {
+        let storage = self
+            .storage_handler
+            .table_storage(id, order)
+            .expect("Function assumes that there is a table with the given id and order.");
+
+        storage
+            .get_trie()
+            .expect("Function assumes that trie is in memory.")
+            .debug(self.dict_constants.clone().take())
+    }
+
     /// Return a reference to a trie identified by its id and order.
     /// If the trie is not available in memory, this function will laod it.
     /// Panics if no table under the given id and order exists.
@@ -782,7 +845,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
         self.storage_handler
             .table_storage_mut(id, order)
             .expect("Function assumes that there is a table with the given id and order.")
-            .into_memory(&mut self.dict_constants)
+            .into_memory(self.dict_constants.get_mut())
     }
 
     /// Given a node in the execution tree returns the trie iterator
@@ -939,7 +1002,11 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 )?;
 
                 if let Some(subiterator) = subiterator_opt {
-                    let select_scan = TrieScanSelectValue::new(subiterator, assignments);
+                    let select_scan = TrieScanSelectValue::new(
+                        &mut self.dict_constants.borrow_mut(),
+                        subiterator,
+                        assignments,
+                    );
                     Ok(Some(TrieScanEnum::TrieScanSelectValue(select_scan)))
                 } else {
                     Ok(None)
@@ -968,7 +1035,12 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
                 let target_types = type_node.schema.get_column_types();
 
                 if let Some(subiterator) = subiterator_opt {
-                    let append_scan = TrieScanAppend::new(subiterator, instructions, target_types);
+                    let append_scan = TrieScanAppend::new(
+                        &mut self.dict_constants.borrow_mut(),
+                        subiterator,
+                        instructions,
+                        target_types,
+                    );
                     Ok(Some(TrieScanEnum::TrieScanAppend(append_scan)))
                 } else {
                     Ok(None)
@@ -992,7 +1064,7 @@ impl<Dict: Dictionary> DatabaseInstance<Dict> {
     }
 }
 
-impl<Dict: Dictionary> ByteSized for DatabaseInstance<Dict> {
+impl ByteSized for DatabaseInstance {
     fn size_bytes(&self) -> ByteSize {
         self.storage_handler.size_bytes()
     }
@@ -1003,7 +1075,6 @@ mod test {
     use crate::physical::{
         columnar::traits::column::Column,
         datatypes::{DataTypeName, DataValueT},
-        dictionary::StringDictionary,
         management::{
             database::{ColumnOrder, TableId},
             ByteSized, ExecutionPlan,
@@ -1029,7 +1100,7 @@ mod test {
         let trie_a = Trie::new(vec![column_a]);
         let trie_b = Trie::new(vec![column_b]);
 
-        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
+        let mut instance = DatabaseInstance::new();
         let mut reference_id = TableId::default();
 
         let mut schema_a = TableSchema::new();
@@ -1173,7 +1244,7 @@ mod test {
             schema_entry(DataTypeName::U32),
         ]);
 
-        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
+        let mut instance = DatabaseInstance::new();
         instance.register_add_trie("TableA", schema_a, ColumnOrder::default(), trie_a);
         instance.register_add_trie("TableB", schema_b, ColumnOrder::default(), trie_b);
         instance.register_add_trie("TableC", schema_c, ColumnOrder::default(), trie_c);

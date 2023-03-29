@@ -3,7 +3,6 @@
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
 use crate::logical::Permutator;
-use crate::physical::dictionary::Dictionary;
 use crate::{logical::model::Term, physical::management::database::ColumnOrder};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -41,7 +40,7 @@ impl VariableOrder {
         let mut variable_vector = Vec::<Variable>::with_capacity(variables.len());
         for variable in variables {
             if self.0.get(variable).is_some() {
-                variable_vector.push(*variable);
+                variable_vector.push(variable.clone());
             }
         }
 
@@ -92,16 +91,18 @@ impl VariableOrder {
     }
 
     /// Return [`String`] with the contents of this object for debugging.
-    pub fn debug<Dict: Dictionary>(&self, dict: &Dict) -> String {
+    pub fn debug(&self) -> String {
         let mut variable_vector = Vec::<Variable>::new();
-        variable_vector.resize_with(self.0.len(), || Variable::Universal(Identifier(0)));
+        variable_vector.resize_with(self.0.len(), || {
+            Variable::Universal(Identifier("PLACEHOLDER".to_string()))
+        });
 
         for (variable, index) in &self.0 {
             if *index >= variable_vector.len() {
                 return String::from("TODO: Fix this function");
             }
 
-            variable_vector[*index] = *variable;
+            variable_vector[*index] = variable.clone();
         }
 
         let mut result = String::new();
@@ -113,7 +114,7 @@ impl VariableOrder {
                 Variable::Existential(id) => id,
             };
 
-            result += &dict.entry(identifier.0).unwrap_or_else(|| "?".to_string());
+            result += &identifier.0;
 
             if index < variable_vector.len() - 1 {
                 result += ", ";
@@ -154,7 +155,7 @@ fn column_order_for(lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
         .flat_map(|var| {
             lit.variables()
                 .enumerate()
-                .filter(move |(_, lit_var)| lit_var == var)
+                .filter(move |(_, lit_var)| *lit_var == var)
                 .map(|(i, _)| i)
         })
         .collect();
@@ -198,7 +199,7 @@ impl RuleVariableList for Vec<Variable> {
             .iter()
             .filter(|var| {
                 rule.body().iter().any(|lit| {
-                    let predicate_vars: Vec<Variable> = lit.atom().variables().collect();
+                    let predicate_vars: Vec<Variable> = lit.atom().variables().cloned().collect();
 
                     predicate_vars.iter().any(|pred_var| pred_var == *var)
                         && predicate_vars
@@ -206,7 +207,7 @@ impl RuleVariableList for Vec<Variable> {
                             .any(|pred_var| partial_var_order.contains(pred_var))
                 })
             })
-            .copied()
+            .cloned()
             .collect();
 
         if result.is_empty() {
@@ -227,13 +228,13 @@ impl RuleVariableList for Vec<Variable> {
             .iter()
             .map(|var| {
                 let mut extended_var_order: VariableOrder = partial_var_order.clone();
-                extended_var_order.push(*var);
+                extended_var_order.push(var.clone());
 
                 let literals = rule
                     .body()
                     .iter()
                     .filter(|lit| predicate_filter(&lit.predicate()))
-                    .filter(|lit| lit.variables().any(|lit_var| lit_var == *var));
+                    .filter(|lit| lit.variables().any(|lit_var| lit_var == var));
 
                 let (literals_requiring_new_orders, total_literals) =
                     literals.fold((0, 0), |acc, lit| {
@@ -275,16 +276,16 @@ impl RuleVariableList for Vec<Variable> {
     }
 }
 
-struct VariableOrderBuilder<'a, Dict: Dictionary> {
-    program: &'a Program<Dict>,
+struct VariableOrderBuilder<'a> {
+    program: &'a Program,
     iteration_order_within_rule: IterationOrder,
     required_trie_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>, // maps predicates to sets of column orders
     idb_preds: HashSet<Identifier>,
 }
 
-impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
+impl VariableOrderBuilder<'_> {
     fn build_for(
-        program: &Program<Dict>,
+        program: &Program,
         iteration_order_within_rule: IterationOrder,
         initial_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>,
     ) -> Vec<VariableOrder> {
@@ -335,7 +336,7 @@ impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
                 }
             })
             .filter(|&v| matches!(v, Variable::Existential(_)))
-            .copied()
+            .cloned()
             .collect();
 
         for variable in existential_variables {
@@ -386,8 +387,8 @@ impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
                 .iter()
                 .flat_map(|lit| lit.variables())
                 .fold(vec![], |mut acc, var| {
-                    if !acc.contains(&var) {
-                        acc.push(var);
+                    if !acc.contains(var) {
+                        acc.push(var.clone());
                     }
 
                     acc
@@ -420,11 +421,11 @@ impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
                         |pred| !self.idb_preds.contains(pred),
                     )
                     .first()
-                    .copied()
+                    .cloned()
                     .expect("the filter results are guaranteed to be non-empty")
             };
 
-            variable_order.push(next_var);
+            variable_order.push(next_var.clone());
             remaining_vars.retain(|var| var != &next_var);
             self.update_trie_column_orders(&variable_order, HashSet::from([next_var]), rule);
         }
@@ -439,7 +440,7 @@ impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
         rule: &Rule,
     ) {
         let literals = rule.body().iter().filter(|lit| {
-            let vars: Vec<Variable> = lit.variables().collect();
+            let vars: Vec<Variable> = lit.variables().cloned().collect();
             must_contain.iter().all(|var| vars.contains(var))
                 && vars.iter().all(|var| variable_order.contains(var))
         });
@@ -457,8 +458,8 @@ impl<Dict: Dictionary> VariableOrderBuilder<'_, Dict> {
     }
 }
 
-pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
-    program: &Program<Dict>,
+pub(super) fn build_preferable_variable_orders(
+    program: &Program,
     initial_column_orders: Option<HashMap<Identifier, HashSet<ColumnOrder>>>,
 ) -> Vec<Vec<VariableOrder>> {
     let iteration_orders = [
@@ -473,8 +474,10 @@ pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
             .iter()
             .map(|f| (f.0.predicate(), f.0.terms().len()))
             .collect();
-        let source_preds: HashSet<(Identifier, usize)> =
-            program.sources().map(|((p, a), _)| (p, a)).collect();
+        let source_preds: HashSet<(Identifier, usize)> = program
+            .sources()
+            .map(|((p, a), _)| (p.clone(), a))
+            .collect();
 
         let preds = fact_preds.union(&source_preds);
 
@@ -482,7 +485,7 @@ pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
             .map(|(p, _)| {
                 let mut set = HashSet::new();
                 set.insert(ColumnOrder::default());
-                (*p, set)
+                (p.clone(), set)
             })
             .collect()
     });
@@ -514,9 +517,7 @@ pub(super) fn build_preferable_variable_orders<Dict: Dictionary>(
 
 #[cfg(test)]
 mod test {
-    use crate::physical::{
-        dictionary::PrefixedStringDictionary, management::database::ColumnOrder,
-    };
+    use crate::physical::management::database::ColumnOrder;
 
     use super::{
         super::super::model::{
@@ -579,23 +580,23 @@ mod test {
     }
 
     fn get_test_rule_with_vars_where_predicates_are_different() -> (Rule, Vec<Variable>) {
-        let a = Identifier(11);
-        let b = Identifier(12);
-        let c = Identifier(13);
+        let a = Identifier("a".to_string());
+        let b = Identifier("b".to_string());
+        let c = Identifier("c".to_string());
 
-        let x = Variable::Universal(Identifier(21));
-        let y = Variable::Universal(Identifier(22));
-        let z = Variable::Universal(Identifier(23));
+        let x = Variable::Universal(Identifier("x".to_string()));
+        let y = Variable::Universal(Identifier("y".to_string()));
+        let z = Variable::Universal(Identifier("z".to_string()));
 
-        let tx = Term::Variable(x);
-        let ty = Term::Variable(y);
-        let tz = Term::Variable(z);
+        let tx = Term::Variable(x.clone());
+        let ty = Term::Variable(y.clone());
+        let tz = Term::Variable(z.clone());
 
         (
             Rule::new(
-                vec![Atom::new(c, vec![tx, tz])],
+                vec![Atom::new(c, vec![tx.clone(), tz.clone()])],
                 vec![
-                    Literal::Positive(Atom::new(a, vec![tx, ty])),
+                    Literal::Positive(Atom::new(a, vec![tx, ty.clone()])),
                     Literal::Positive(Atom::new(b, vec![ty, tz])),
                 ],
                 vec![],
@@ -605,21 +606,21 @@ mod test {
     }
 
     fn get_test_rule_with_vars_where_predicates_are_the_same() -> (Rule, Vec<Variable>) {
-        let a = Identifier(11);
+        let a = Identifier("a".to_string());
 
-        let x = Variable::Universal(Identifier(21));
-        let y = Variable::Universal(Identifier(22));
-        let z = Variable::Universal(Identifier(23));
+        let x = Variable::Universal(Identifier("x".to_string()));
+        let y = Variable::Universal(Identifier("y".to_string()));
+        let z = Variable::Universal(Identifier("z".to_string()));
 
-        let tx = Term::Variable(x);
-        let ty = Term::Variable(y);
-        let tz = Term::Variable(z);
+        let tx = Term::Variable(x.clone());
+        let ty = Term::Variable(y.clone());
+        let tz = Term::Variable(z.clone());
 
         (
             Rule::new(
-                vec![Atom::new(a, vec![tx, tz])],
+                vec![Atom::new(a.clone(), vec![tx.clone(), tz.clone()])],
                 vec![
-                    Literal::Positive(Atom::new(a, vec![tx, ty])),
+                    Literal::Positive(Atom::new(a.clone(), vec![tx, ty.clone()])),
                     Literal::Positive(Atom::new(a, vec![ty, tz])),
                 ],
                 vec![],
@@ -656,10 +657,10 @@ mod test {
                 get_test_rule_with_vars_where_predicates_are_different()
             }
         };
-        let x = vars[0];
-        let y = vars[1];
+        let x = vars[0].clone();
+        let y = vars[1].clone();
         let mut ord_with_x = VariableOrder::new();
-        ord_with_x.push(x);
+        ord_with_x.push(x.clone());
 
         let remaining_vars: Vec<Variable> = vars.into_iter().filter(|v| v != &x).collect();
 
@@ -695,7 +696,7 @@ mod test {
     fn filter_tries_where_rule_predicates_are_different_with_empty_var_order_and_empty_trie_cache()
     {
         let (rule, vars) = get_test_rule_with_vars_where_predicates_are_different();
-        let y = vars[1];
+        let y = vars[1].clone();
         let empty_ord = VariableOrder::new();
         let empty_trie_cache: HashMap<Identifier, HashSet<ColumnOrder>> = HashMap::new();
 
@@ -709,7 +710,7 @@ mod test {
     #[test]
     fn filter_tries_where_rule_predicates_are_the_same_with_empty_var_order_and_empty_trie_cache() {
         let (rule, vars) = get_test_rule_with_vars_where_predicates_are_the_same();
-        let y = vars[1];
+        let y = vars[1].clone();
         let empty_ord = VariableOrder::new();
         let empty_trie_cache: HashMap<Identifier, HashSet<ColumnOrder>> = HashMap::new();
 
@@ -727,19 +728,20 @@ mod test {
                 .into_iter()
                 .unzip();
 
-        let program = Program::new(
-            None,
-            HashMap::new(),
-            vec![],
-            rules,
-            vec![],
-            PrefixedStringDictionary::default(),
-        );
+        let program = Program::new(None, HashMap::new(), vec![], rules, vec![]);
 
         let rule_vars = &var_lists[0];
         let rule_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_vars[1], rule_vars[0], rule_vars[2]]),
-            VariableOrder::from_vec(vec![rule_vars[1], rule_vars[2], rule_vars[0]]),
+            VariableOrder::from_vec(vec![
+                rule_vars[1].clone(),
+                rule_vars[0].clone(),
+                rule_vars[2].clone(),
+            ]),
+            VariableOrder::from_vec(vec![
+                rule_vars[1].clone(),
+                rule_vars[2].clone(),
+                rule_vars[0].clone(),
+            ]),
         ];
 
         assert_eq!(
@@ -755,19 +757,20 @@ mod test {
                 .into_iter()
                 .unzip();
 
-        let program = Program::new(
-            None,
-            HashMap::new(),
-            vec![],
-            rules,
-            vec![],
-            PrefixedStringDictionary::default(),
-        );
+        let program = Program::new(None, HashMap::new(), vec![], rules, vec![]);
 
         let rule_vars = &var_lists[0];
         let rule_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_vars[1], rule_vars[0], rule_vars[2]]),
-            VariableOrder::from_vec(vec![rule_vars[1], rule_vars[2], rule_vars[0]]),
+            VariableOrder::from_vec(vec![
+                rule_vars[1].clone(),
+                rule_vars[0].clone(),
+                rule_vars[2].clone(),
+            ]),
+            VariableOrder::from_vec(vec![
+                rule_vars[1].clone(),
+                rule_vars[2].clone(),
+                rule_vars[0].clone(),
+            ]),
         ];
 
         assert_eq!(
@@ -785,25 +788,26 @@ mod test {
         .into_iter()
         .unzip();
 
-        let program = Program::new(
-            None,
-            HashMap::new(),
-            vec![],
-            rules,
-            vec![],
-            PrefixedStringDictionary::default(),
-        );
+        let program = Program::new(None, HashMap::new(), vec![], rules, vec![]);
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_1_vars[1],
-            rule_1_vars[0],
-            rule_1_vars[2],
+            rule_1_vars[1].clone(),
+            rule_1_vars[0].clone(),
+            rule_1_vars[2].clone(),
         ])];
         let rule_2_vars = &var_lists[1];
         let rule_2_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_2_vars[1], rule_2_vars[0], rule_2_vars[2]]),
-            VariableOrder::from_vec(vec![rule_2_vars[1], rule_2_vars[2], rule_2_vars[0]]),
+            VariableOrder::from_vec(vec![
+                rule_2_vars[1].clone(),
+                rule_2_vars[0].clone(),
+                rule_2_vars[2].clone(),
+            ]),
+            VariableOrder::from_vec(vec![
+                rule_2_vars[1].clone(),
+                rule_2_vars[2].clone(),
+                rule_2_vars[0].clone(),
+            ]),
         ];
 
         assert_eq!(
@@ -814,87 +818,108 @@ mod test {
 
     fn get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant(
     ) -> TestRuleSetWithAdditionalInfo {
-        let init = Identifier(11);
-        let sub_class_of = Identifier(12);
-        let is_main_class = Identifier(13);
-        let conj = Identifier(14);
-        let is_sub_class = Identifier(15);
-        let xe = Identifier(16);
-        let exists = Identifier(17);
+        let init = Identifier("init".to_string());
+        let sub_class_of = Identifier("sub_class_of".to_string());
+        let is_main_class = Identifier("is_main_class".to_string());
+        let conj = Identifier("conj".to_string());
+        let is_sub_class = Identifier("is_sub_class".to_string());
+        let xe = Identifier("xe".to_string());
+        let exists = Identifier("exists".to_string());
 
         let predicates = vec![
-            (init, 1),
-            (sub_class_of, 2),
-            (is_main_class, 1),
-            (conj, 3),
-            (is_sub_class, 1),
-            (xe, 3),
-            (exists, 3),
+            (init.clone(), 1),
+            (sub_class_of.clone(), 2),
+            (is_main_class.clone(), 1),
+            (conj.clone(), 3),
+            (is_sub_class.clone(), 1),
+            (xe.clone(), 3),
+            (exists.clone(), 3),
         ];
 
-        let c = Variable::Universal(Identifier(21));
-        let d1 = Variable::Universal(Identifier(22));
-        let d2 = Variable::Universal(Identifier(23));
-        let y = Variable::Universal(Identifier(24));
-        let r = Variable::Universal(Identifier(25));
-        let e = Variable::Universal(Identifier(26));
+        let c = Variable::Universal(Identifier("c".to_string()));
+        let d1 = Variable::Universal(Identifier("d1".to_string()));
+        let d2 = Variable::Universal(Identifier("d2".to_string()));
+        let y = Variable::Universal(Identifier("y".to_string()));
+        let r = Variable::Universal(Identifier("r".to_string()));
+        let e = Variable::Universal(Identifier("e".to_string()));
 
-        let tc = Term::Variable(c);
-        let td1 = Term::Variable(d1);
-        let td2 = Term::Variable(d2);
-        let ty = Term::Variable(y);
-        let tr = Term::Variable(r);
-        let te = Term::Variable(e);
+        let tc = Term::Variable(c.clone());
+        let td1 = Term::Variable(d1.clone());
+        let td2 = Term::Variable(d2.clone());
+        let ty = Term::Variable(y.clone());
+        let tr = Term::Variable(r.clone());
+        let te = Term::Variable(e.clone());
 
         let (rules, variables) = [
             (
                 Rule::new(
-                    vec![Atom::new(init, vec![tc])],
-                    vec![Literal::Positive(Atom::new(is_main_class, vec![tc]))],
+                    vec![Atom::new(init.clone(), vec![tc.clone()])],
+                    vec![Literal::Positive(Atom::new(
+                        is_main_class,
+                        vec![tc.clone()],
+                    ))],
                     vec![],
                 ),
-                vec![c],
+                vec![c.clone()],
             ),
             (
                 Rule::new(
-                    vec![Atom::new(sub_class_of, vec![tc, tc])],
-                    vec![Literal::Positive(Atom::new(init, vec![tc]))],
+                    vec![Atom::new(
+                        sub_class_of.clone(),
+                        vec![tc.clone(), tc.clone()],
+                    )],
+                    vec![Literal::Positive(Atom::new(init, vec![tc.clone()]))],
                     vec![],
                 ),
-                vec![c],
+                vec![c.clone()],
             ),
             (
                 Rule::new(
                     vec![
-                        Atom::new(sub_class_of, vec![tc, td1]),
-                        Atom::new(sub_class_of, vec![tc, td2]),
+                        Atom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
+                        Atom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
                     ],
                     vec![
-                        Literal::Positive(Atom::new(sub_class_of, vec![tc, ty])),
-                        Literal::Positive(Atom::new(conj, vec![ty, td1, td2])),
+                        Literal::Positive(Atom::new(
+                            sub_class_of.clone(),
+                            vec![tc.clone(), ty.clone()],
+                        )),
+                        Literal::Positive(Atom::new(
+                            conj.clone(),
+                            vec![ty.clone(), td1.clone(), td2.clone()],
+                        )),
                     ],
                     vec![],
                 ),
-                vec![c, y, d1, d2],
+                vec![c.clone(), y.clone(), d1.clone(), d2.clone()],
             ),
             (
                 Rule::new(
-                    vec![Atom::new(sub_class_of, vec![tc, ty])],
+                    vec![Atom::new(
+                        sub_class_of.clone(),
+                        vec![tc.clone(), ty.clone()],
+                    )],
                     vec![
-                        Literal::Positive(Atom::new(sub_class_of, vec![tc, td1])),
-                        Literal::Positive(Atom::new(sub_class_of, vec![tc, td2])),
-                        Literal::Positive(Atom::new(conj, vec![ty, td1, td2])),
-                        Literal::Positive(Atom::new(is_sub_class, vec![ty])),
+                        Literal::Positive(Atom::new(
+                            sub_class_of.clone(),
+                            vec![tc.clone(), td1.clone()],
+                        )),
+                        Literal::Positive(Atom::new(
+                            sub_class_of.clone(),
+                            vec![tc.clone(), td2.clone()],
+                        )),
+                        Literal::Positive(Atom::new(conj, vec![ty.clone(), td1, td2])),
+                        Literal::Positive(Atom::new(is_sub_class, vec![ty.clone()])),
                     ],
                     vec![],
                 ),
-                vec![c, d1, d2, y],
+                vec![c.clone(), d1, d2, y.clone()],
             ),
             (
                 Rule::new(
-                    vec![Atom::new(xe, vec![tc, tr, te])],
+                    vec![Atom::new(xe, vec![tc.clone(), tr.clone(), te.clone()])],
                     vec![
-                        Literal::Positive(Atom::new(sub_class_of, vec![te, ty])),
+                        Literal::Positive(Atom::new(sub_class_of, vec![te, ty.clone()])),
                         Literal::Positive(Atom::new(exists, vec![ty, tr, tc])),
                     ],
                     vec![],
@@ -918,71 +943,70 @@ mod test {
             HashMap::new(),
             vec![
                 DataSourceDeclaration::new(
-                    predicates[1].0,
+                    predicates[1].0.clone(),
                     predicates[1].1,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
-                    predicates[2].0,
+                    predicates[2].0.clone(),
                     predicates[2].1,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
-                    predicates[3].0,
+                    predicates[3].0.clone(),
                     predicates[3].1,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
-                    predicates[4].0,
+                    predicates[4].0.clone(),
                     predicates[4].1,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
-                    predicates[6].0,
+                    predicates[6].0.clone(),
                     predicates[6].1,
                     DataSource::csv_file("").unwrap(),
                 ),
             ],
             rules,
             vec![],
-            PrefixedStringDictionary::default(),
         );
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_1_vars[0]]), // z is always first here since it occurs only in edb predicate; x and y occur in A(...) which is idb by rule 2
+            VariableOrder::from_vec(vec![rule_1_vars[0].clone()]), // z is always first here since it occurs only in edb predicate; x and y occur in A(...) which is idb by rule 2
         ];
         let rule_2_vars = &var_lists[1];
         let rule_2_var_orders: Vec<VariableOrder> =
-            vec![VariableOrder::from_vec(vec![rule_2_vars[0]])];
+            vec![VariableOrder::from_vec(vec![rule_2_vars[0].clone()])];
         let rule_3_vars = &var_lists[2];
         let rule_3_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_3_vars[0],
-            rule_3_vars[1],
-            rule_3_vars[2],
-            rule_3_vars[3],
+            rule_3_vars[0].clone(),
+            rule_3_vars[1].clone(),
+            rule_3_vars[2].clone(),
+            rule_3_vars[3].clone(),
         ])];
         let rule_4_vars = &var_lists[3];
         let rule_4_var_orders: Vec<VariableOrder> = vec![
             VariableOrder::from_vec(vec![
-                rule_4_vars[0],
-                rule_4_vars[1],
-                rule_4_vars[2],
-                rule_4_vars[3],
+                rule_4_vars[0].clone(),
+                rule_4_vars[1].clone(),
+                rule_4_vars[2].clone(),
+                rule_4_vars[3].clone(),
             ]),
             VariableOrder::from_vec(vec![
-                rule_4_vars[0],
-                rule_4_vars[2],
-                rule_4_vars[1],
-                rule_4_vars[3],
+                rule_4_vars[0].clone(),
+                rule_4_vars[2].clone(),
+                rule_4_vars[1].clone(),
+                rule_4_vars[3].clone(),
             ]),
         ];
         let rule_5_vars = &var_lists[4];
         let rule_5_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_5_vars[0],
-            rule_5_vars[1],
-            rule_5_vars[2],
-            rule_5_vars[3],
+            rule_5_vars[0].clone(),
+            rule_5_vars[1].clone(),
+            rule_5_vars[2].clone(),
+            rule_5_vars[3].clone(),
         ])];
 
         assert_eq!(
@@ -998,181 +1022,250 @@ mod test {
     }
 
     fn get_el_test_ruleset_without_constants() -> TestRuleSetWithAdditionalInfo {
-        let init = Identifier(101);
-        let sub_class_of = Identifier(102);
-        let is_main_class = Identifier(103);
-        let conj = Identifier(104);
-        let is_sub_class = Identifier(105);
-        let xe = Identifier(106);
-        let exists = Identifier(107);
-        let aux_subsub_ext = Identifier(108);
-        let sub_prop = Identifier(109);
-        let aux = Identifier(110);
-        let sub_prop_chain = Identifier(111);
-        let main_sub_class_of = Identifier(112);
+        let init = Identifier("init".to_string());
+        let sub_class_of = Identifier("sub_class_of".to_string());
+        let is_main_class = Identifier("is_main_class".to_string());
+        let conj = Identifier("conj".to_string());
+        let is_sub_class = Identifier("is_sub_class".to_string());
+        let xe = Identifier("xe".to_string());
+        let exists = Identifier("exists".to_string());
+        let aux_subsub_ext = Identifier("aux_subsub_ext".to_string());
+        let sub_prop = Identifier("sub_prop".to_string());
+        let aux = Identifier("aux".to_string());
+        let sub_prop_chain = Identifier("sub_prop_chain".to_string());
+        let main_sub_class_of = Identifier("main_sub_class_of".to_string());
 
         let predicates = vec![
-            (init, 1),
-            (sub_class_of, 2),
-            (is_main_class, 1),
-            (conj, 3),
-            (is_sub_class, 1),
-            (xe, 3),
-            (exists, 3),
-            (aux_subsub_ext, 3),
-            (sub_prop, 2),
-            (aux, 3),
-            (sub_prop_chain, 3),
-            (main_sub_class_of, 2),
+            (init.clone(), 1),
+            (sub_class_of.clone(), 2),
+            (is_main_class.clone(), 1),
+            (conj.clone(), 3),
+            (is_sub_class.clone(), 1),
+            (xe.clone(), 3),
+            (exists.clone(), 3),
+            (aux_subsub_ext.clone(), 3),
+            (sub_prop.clone(), 2),
+            (aux.clone(), 3),
+            (sub_prop_chain.clone(), 3),
+            (main_sub_class_of.clone(), 2),
         ];
 
-        let c = Variable::Universal(Identifier(201));
-        let d1 = Variable::Universal(Identifier(202));
-        let d2 = Variable::Universal(Identifier(203));
-        let y = Variable::Universal(Identifier(204));
-        let r = Variable::Universal(Identifier(205));
-        let e = Variable::Universal(Identifier(206));
-        let s = Variable::Universal(Identifier(207));
-        let r1 = Variable::Universal(Identifier(208));
-        let r2 = Variable::Universal(Identifier(209));
-        let s1 = Variable::Universal(Identifier(210));
-        let s2 = Variable::Universal(Identifier(211));
-        let d = Variable::Universal(Identifier(212));
-        let a = Variable::Universal(Identifier(213));
-        let b = Variable::Universal(Identifier(214));
+        let c = Variable::Universal(Identifier("c".to_string()));
+        let d1 = Variable::Universal(Identifier("d1".to_string()));
+        let d2 = Variable::Universal(Identifier("d2".to_string()));
+        let y = Variable::Universal(Identifier("y".to_string()));
+        let r = Variable::Universal(Identifier("r".to_string()));
+        let e = Variable::Universal(Identifier("e".to_string()));
+        let s = Variable::Universal(Identifier("s".to_string()));
+        let r1 = Variable::Universal(Identifier("r1".to_string()));
+        let r2 = Variable::Universal(Identifier("r2".to_string()));
+        let s1 = Variable::Universal(Identifier("s1".to_string()));
+        let s2 = Variable::Universal(Identifier("s2".to_string()));
+        let d = Variable::Universal(Identifier("d".to_string()));
+        let a = Variable::Universal(Identifier("a".to_string()));
+        let b = Variable::Universal(Identifier("b".to_string()));
 
-        let tc = Term::Variable(c);
-        let td1 = Term::Variable(d1);
-        let td2 = Term::Variable(d2);
-        let ty = Term::Variable(y);
-        let tr = Term::Variable(r);
-        let te = Term::Variable(e);
-        let ts = Term::Variable(s);
-        let tr1 = Term::Variable(r1);
-        let tr2 = Term::Variable(r2);
-        let ts1 = Term::Variable(s1);
-        let ts2 = Term::Variable(s2);
-        let td = Term::Variable(d);
-        let ta = Term::Variable(a);
-        let tb = Term::Variable(b);
+        let tc = Term::Variable(c.clone());
+        let td1 = Term::Variable(d1.clone());
+        let td2 = Term::Variable(d2.clone());
+        let ty = Term::Variable(y.clone());
+        let tr = Term::Variable(r.clone());
+        let te = Term::Variable(e.clone());
+        let ts = Term::Variable(s.clone());
+        let tr1 = Term::Variable(r1.clone());
+        let tr2 = Term::Variable(r2.clone());
+        let ts1 = Term::Variable(s1.clone());
+        let ts2 = Term::Variable(s2.clone());
+        let td = Term::Variable(d.clone());
+        let ta = Term::Variable(a.clone());
+        let tb = Term::Variable(b.clone());
 
         let (rules, variables) = [
             (
                 Rule::new(
-                    vec![Atom::new(init, vec![tc])],
-                    vec![Literal::Positive(Atom::new(is_main_class, vec![tc]))],
+                    vec![Atom::new(init.clone(), vec![tc.clone()])],
+                    vec![Literal::Positive(Atom::new(
+                        is_main_class.clone(),
+                        vec![tc.clone()],
+                    ))],
                     vec![],
                 ),
-                vec![c],
+                vec![c.clone()],
             ),
             (
                 Rule::new(
-                    vec![Atom::new(sub_class_of, vec![tc, tc])],
-                    vec![Literal::Positive(Atom::new(init, vec![tc]))],
+                    vec![Atom::new(
+                        sub_class_of.clone(),
+                        vec![tc.clone(), tc.clone()],
+                    )],
+                    vec![Literal::Positive(Atom::new(init.clone(), vec![tc.clone()]))],
                     vec![],
                 ),
-                vec![c],
+                vec![c.clone()],
             ),
             (
                 Rule::new(
                     vec![
-                        Atom::new(sub_class_of, vec![tc, td1]),
-                        Atom::new(sub_class_of, vec![tc, td2]),
+                        Atom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
+                        Atom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
                     ],
                     vec![
-                        Literal::Positive(Atom::new(sub_class_of, vec![tc, ty])),
-                        Literal::Positive(Atom::new(conj, vec![ty, td1, td2])),
-                    ],
-                    vec![],
-                ),
-                vec![c, y, d1, d2],
-            ),
-            (
-                Rule::new(
-                    vec![Atom::new(sub_class_of, vec![tc, ty])],
-                    vec![
-                        Literal::Positive(Atom::new(sub_class_of, vec![tc, td1])),
-                        Literal::Positive(Atom::new(sub_class_of, vec![tc, td2])),
-                        Literal::Positive(Atom::new(conj, vec![ty, td1, td2])),
-                        Literal::Positive(Atom::new(is_sub_class, vec![ty])),
-                    ],
-                    vec![],
-                ),
-                vec![c, d1, d2, y],
-            ),
-            (
-                Rule::new(
-                    vec![Atom::new(xe, vec![tc, tr, te])],
-                    vec![
-                        Literal::Positive(Atom::new(sub_class_of, vec![te, ty])),
-                        Literal::Positive(Atom::new(exists, vec![ty, tr, tc])),
+                        Literal::Positive(Atom::new(
+                            sub_class_of.clone(),
+                            vec![tc.clone(), ty.clone()],
+                        )),
+                        Literal::Positive(Atom::new(
+                            conj.clone(),
+                            vec![ty.clone(), td1.clone(), td2.clone()],
+                        )),
                     ],
                     vec![],
                 ),
-                vec![e, y, r, c],
+                vec![c.clone(), y.clone(), d1.clone(), d2.clone()],
             ),
             (
                 Rule::new(
-                    vec![Atom::new(aux_subsub_ext, vec![td, tr, ty])],
+                    vec![Atom::new(
+                        sub_class_of.clone(),
+                        vec![tc.clone(), ty.clone()],
+                    )],
                     vec![
-                        Literal::Positive(Atom::new(sub_prop, vec![tr, ts])),
-                        Literal::Positive(Atom::new(exists, vec![ty, ts, td])),
-                        Literal::Positive(Atom::new(is_sub_class, vec![ty])),
+                        Literal::Positive(Atom::new(
+                            sub_class_of.clone(),
+                            vec![tc.clone(), td1.clone()],
+                        )),
+                        Literal::Positive(Atom::new(
+                            sub_class_of.clone(),
+                            vec![tc.clone(), td2.clone()],
+                        )),
+                        Literal::Positive(Atom::new(conj, vec![ty.clone(), td1, td2])),
+                        Literal::Positive(Atom::new(is_sub_class.clone(), vec![ty.clone()])),
                     ],
                     vec![],
                 ),
-                vec![r, s, y, d],
+                vec![c.clone(), d1, d2, y.clone()],
             ),
             (
                 Rule::new(
-                    vec![Atom::new(aux, vec![tc, tr, ty])],
+                    vec![Atom::new(
+                        xe.clone(),
+                        vec![tc.clone(), tr.clone(), te.clone()],
+                    )],
                     vec![
-                        Literal::Positive(Atom::new(sub_class_of, vec![tc, td])),
-                        Literal::Positive(Atom::new(aux_subsub_ext, vec![td, tr, ty])),
+                        Literal::Positive(Atom::new(
+                            sub_class_of.clone(),
+                            vec![te.clone(), ty.clone()],
+                        )),
+                        Literal::Positive(Atom::new(
+                            exists.clone(),
+                            vec![ty.clone(), tr.clone(), tc.clone()],
+                        )),
                     ],
                     vec![],
                 ),
-                vec![c, d, r, y],
+                vec![e.clone(), y.clone(), r.clone(), c.clone()],
             ),
             (
                 Rule::new(
-                    vec![Atom::new(sub_class_of, vec![te, ty])],
+                    vec![Atom::new(
+                        aux_subsub_ext.clone(),
+                        vec![td.clone(), tr.clone(), ty.clone()],
+                    )],
                     vec![
-                        Literal::Positive(Atom::new(xe, vec![tc, tr, te])),
-                        Literal::Positive(Atom::new(aux, vec![tc, tr, ty])),
+                        Literal::Positive(Atom::new(
+                            sub_prop.clone(),
+                            vec![tr.clone(), ts.clone()],
+                        )),
+                        Literal::Positive(Atom::new(
+                            exists,
+                            vec![ty.clone(), ts.clone(), td.clone()],
+                        )),
+                        Literal::Positive(Atom::new(is_sub_class, vec![ty.clone()])),
                     ],
                     vec![],
                 ),
-                vec![c, r, e, y],
+                vec![r.clone(), s.clone(), y.clone(), d.clone()],
             ),
             (
                 Rule::new(
-                    vec![Atom::new(sub_class_of, vec![tc, te])],
+                    vec![Atom::new(
+                        aux.clone(),
+                        vec![tc.clone(), tr.clone(), ty.clone()],
+                    )],
                     vec![
-                        Literal::Positive(Atom::new(sub_class_of, vec![tc, td])),
-                        Literal::Positive(Atom::new(sub_class_of, vec![td, te])),
+                        Literal::Positive(Atom::new(
+                            sub_class_of.clone(),
+                            vec![tc.clone(), td.clone()],
+                        )),
+                        Literal::Positive(Atom::new(
+                            aux_subsub_ext,
+                            vec![td.clone(), tr.clone(), ty.clone()],
+                        )),
                     ],
                     vec![],
                 ),
-                vec![c, d, e],
+                vec![c.clone(), d.clone(), r.clone(), y.clone()],
             ),
             (
                 Rule::new(
-                    vec![Atom::new(xe, vec![td, ts, te])],
+                    vec![Atom::new(
+                        sub_class_of.clone(),
+                        vec![te.clone(), ty.clone()],
+                    )],
                     vec![
-                        Literal::Positive(Atom::new(xe, vec![tc, tr1, te])),
-                        Literal::Positive(Atom::new(xe, vec![td, tr2, tc])),
-                        Literal::Positive(Atom::new(sub_prop, vec![tr1, ts1])),
-                        Literal::Positive(Atom::new(sub_prop, vec![tr2, ts2])),
+                        Literal::Positive(Atom::new(
+                            xe.clone(),
+                            vec![tc.clone(), tr.clone(), te.clone()],
+                        )),
+                        Literal::Positive(Atom::new(aux, vec![tc.clone(), tr.clone(), ty])),
+                    ],
+                    vec![],
+                ),
+                vec![c.clone(), r.clone(), e.clone(), y],
+            ),
+            (
+                Rule::new(
+                    vec![Atom::new(
+                        sub_class_of.clone(),
+                        vec![tc.clone(), te.clone()],
+                    )],
+                    vec![
+                        Literal::Positive(Atom::new(
+                            sub_class_of.clone(),
+                            vec![tc.clone(), td.clone()],
+                        )),
+                        Literal::Positive(Atom::new(
+                            sub_class_of.clone(),
+                            vec![td.clone(), te.clone()],
+                        )),
+                    ],
+                    vec![],
+                ),
+                vec![c.clone(), d.clone(), e.clone()],
+            ),
+            (
+                Rule::new(
+                    vec![Atom::new(
+                        xe.clone(),
+                        vec![td.clone(), ts.clone(), te.clone()],
+                    )],
+                    vec![
+                        Literal::Positive(Atom::new(
+                            xe.clone(),
+                            vec![tc.clone(), tr1.clone(), te.clone()],
+                        )),
+                        Literal::Positive(Atom::new(xe.clone(), vec![td, tr2.clone(), tc.clone()])),
+                        Literal::Positive(Atom::new(sub_prop.clone(), vec![tr1, ts1.clone()])),
+                        Literal::Positive(Atom::new(sub_prop, vec![tr2, ts2.clone()])),
                         Literal::Positive(Atom::new(sub_prop_chain, vec![ts1, ts2, ts])),
                     ],
                     vec![],
                 ),
-                vec![c, r1, e, d, r2, s1, s2, s],
+                vec![c.clone(), r1, e.clone(), d, r2, s1, s2, s],
             ),
             (
                 Rule::new(
-                    vec![Atom::new(init, vec![tc])],
+                    vec![Atom::new(init, vec![tc.clone()])],
                     vec![Literal::Positive(Atom::new(xe, vec![tc, tr, te]))],
                     vec![],
                 ),
@@ -1180,10 +1273,10 @@ mod test {
             ),
             (
                 Rule::new(
-                    vec![Atom::new(main_sub_class_of, vec![ta, tb])],
+                    vec![Atom::new(main_sub_class_of, vec![ta.clone(), tb.clone()])],
                     vec![
-                        Literal::Positive(Atom::new(sub_class_of, vec![ta, tb])),
-                        Literal::Positive(Atom::new(is_main_class, vec![ta])),
+                        Literal::Positive(Atom::new(sub_class_of, vec![ta.clone(), tb.clone()])),
+                        Literal::Positive(Atom::new(is_main_class.clone(), vec![ta])),
                         Literal::Positive(Atom::new(is_main_class, vec![tb])),
                     ],
                     vec![],
@@ -1206,150 +1299,149 @@ mod test {
             HashMap::new(),
             vec![
                 DataSourceDeclaration::new(
-                    predicates[1].0,
+                    predicates[1].0.clone(),
                     predicates[1].1,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
-                    predicates[2].0,
+                    predicates[2].0.clone(),
                     predicates[2].1,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
-                    predicates[3].0,
+                    predicates[3].0.clone(),
                     predicates[3].1,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
-                    predicates[4].0,
+                    predicates[4].0.clone(),
                     predicates[4].1,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
-                    predicates[6].0,
+                    predicates[6].0.clone(),
                     predicates[6].1,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
-                    predicates[8].0,
+                    predicates[8].0.clone(),
                     predicates[8].1,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
-                    predicates[10].0,
+                    predicates[10].0.clone(),
                     predicates[10].1,
                     DataSource::csv_file("").unwrap(),
                 ),
             ],
             rules,
             vec![],
-            PrefixedStringDictionary::default(),
         );
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_1_vars[0]]), // z is always first here since it occurs only in edb predicate; x and y occur in A(...) which is idb by rule 2
+            VariableOrder::from_vec(vec![rule_1_vars[0].clone()]), // z is always first here since it occurs only in edb predicate; x and y occur in A(...) which is idb by rule 2
         ];
         let rule_2_vars = &var_lists[1];
         let rule_2_var_orders: Vec<VariableOrder> =
-            vec![VariableOrder::from_vec(vec![rule_2_vars[0]])];
+            vec![VariableOrder::from_vec(vec![rule_2_vars[0].clone()])];
         let rule_3_vars = &var_lists[2];
         let rule_3_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_3_vars[1],
-            rule_3_vars[0],
-            rule_3_vars[2],
-            rule_3_vars[3],
+            rule_3_vars[1].clone(),
+            rule_3_vars[0].clone(),
+            rule_3_vars[2].clone(),
+            rule_3_vars[3].clone(),
         ])];
         let rule_4_vars = &var_lists[3];
         let rule_4_var_orders: Vec<VariableOrder> = vec![
             VariableOrder::from_vec(vec![
-                rule_4_vars[0],
-                rule_4_vars[1],
-                rule_4_vars[2],
-                rule_4_vars[3],
+                rule_4_vars[0].clone(),
+                rule_4_vars[1].clone(),
+                rule_4_vars[2].clone(),
+                rule_4_vars[3].clone(),
             ]),
             VariableOrder::from_vec(vec![
-                rule_4_vars[0],
-                rule_4_vars[2],
-                rule_4_vars[1],
-                rule_4_vars[3],
+                rule_4_vars[0].clone(),
+                rule_4_vars[2].clone(),
+                rule_4_vars[1].clone(),
+                rule_4_vars[3].clone(),
             ]),
         ];
         let rule_5_vars = &var_lists[4];
         let rule_5_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_5_vars[1],
-            rule_5_vars[0],
-            rule_5_vars[2],
-            rule_5_vars[3],
+            rule_5_vars[1].clone(),
+            rule_5_vars[0].clone(),
+            rule_5_vars[2].clone(),
+            rule_5_vars[3].clone(),
         ])];
         let rule_6_vars = &var_lists[5];
         let rule_6_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_6_vars[2],
-            rule_6_vars[1],
-            rule_6_vars[3],
-            rule_6_vars[0],
+            rule_6_vars[2].clone(),
+            rule_6_vars[1].clone(),
+            rule_6_vars[3].clone(),
+            rule_6_vars[0].clone(),
         ])];
         let rule_7_vars = &var_lists[6];
         let rule_7_var_orders: Vec<VariableOrder> = vec![
             VariableOrder::from_vec(vec![
-                rule_7_vars[1],
-                rule_7_vars[0],
-                rule_7_vars[2],
-                rule_7_vars[3],
+                rule_7_vars[1].clone(),
+                rule_7_vars[0].clone(),
+                rule_7_vars[2].clone(),
+                rule_7_vars[3].clone(),
             ]),
             VariableOrder::from_vec(vec![
-                rule_7_vars[1],
-                rule_7_vars[0],
-                rule_7_vars[3],
-                rule_7_vars[2],
+                rule_7_vars[1].clone(),
+                rule_7_vars[0].clone(),
+                rule_7_vars[3].clone(),
+                rule_7_vars[2].clone(),
             ]),
         ];
         let rule_8_vars = &var_lists[7];
         let rule_8_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_8_vars[0],
-            rule_8_vars[1],
-            rule_8_vars[2],
-            rule_8_vars[3],
+            rule_8_vars[0].clone(),
+            rule_8_vars[1].clone(),
+            rule_8_vars[2].clone(),
+            rule_8_vars[3].clone(),
         ])];
         let rule_9_vars = &var_lists[8];
         let rule_9_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_9_vars[1],
-            rule_9_vars[2],
-            rule_9_vars[0],
+            rule_9_vars[1].clone(),
+            rule_9_vars[2].clone(),
+            rule_9_vars[0].clone(),
         ])];
         let rule_10_vars = &var_lists[9];
         let rule_10_var_orders: Vec<VariableOrder> = vec![
             VariableOrder::from_vec(vec![
-                rule_10_vars[0],
-                rule_10_vars[1],
-                rule_10_vars[4],
-                rule_10_vars[2],
-                rule_10_vars[3],
-                rule_10_vars[5],
-                rule_10_vars[6],
-                rule_10_vars[7],
+                rule_10_vars[0].clone(),
+                rule_10_vars[1].clone(),
+                rule_10_vars[4].clone(),
+                rule_10_vars[2].clone(),
+                rule_10_vars[3].clone(),
+                rule_10_vars[5].clone(),
+                rule_10_vars[6].clone(),
+                rule_10_vars[7].clone(),
             ]),
             VariableOrder::from_vec(vec![
-                rule_10_vars[0],
-                rule_10_vars[4],
-                rule_10_vars[1],
-                rule_10_vars[3],
-                rule_10_vars[2],
-                rule_10_vars[5],
-                rule_10_vars[6],
-                rule_10_vars[7],
+                rule_10_vars[0].clone(),
+                rule_10_vars[4].clone(),
+                rule_10_vars[1].clone(),
+                rule_10_vars[3].clone(),
+                rule_10_vars[2].clone(),
+                rule_10_vars[5].clone(),
+                rule_10_vars[6].clone(),
+                rule_10_vars[7].clone(),
             ]),
         ];
         let rule_11_vars = &var_lists[10];
         let rule_11_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
-            rule_11_vars[0],
-            rule_11_vars[1],
-            rule_11_vars[2],
+            rule_11_vars[0].clone(),
+            rule_11_vars[1].clone(),
+            rule_11_vars[2].clone(),
         ])];
         let rule_12_vars = &var_lists[11];
         let rule_12_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_12_vars[0], rule_12_vars[1]]),
-            VariableOrder::from_vec(vec![rule_12_vars[1], rule_12_vars[0]]),
+            VariableOrder::from_vec(vec![rule_12_vars[0].clone(), rule_12_vars[1].clone()]),
+            VariableOrder::from_vec(vec![rule_12_vars[1].clone(), rule_12_vars[0].clone()]),
         ];
 
         assert_eq!(

@@ -11,7 +11,7 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
 
-use crate::{logical::model::*, physical::dictionary::Dictionary};
+use crate::logical::model::*;
 
 mod types;
 use types::IntermediateResult;
@@ -75,12 +75,10 @@ pub fn multispace_or_comment1(input: &str) -> IntermediateResult<()> {
     value((), many1(alt((value((), multispace1), comment))))(input)
 }
 
-/// The main parser. Holds a dictionary for terms and a hash map for
+/// The main parser. Holds a hash map for
 /// prefixes, as well as the base IRI.
 #[derive(Debug, Default)]
-pub struct RuleParser<'a, Dict: Dictionary> {
-    /// The [`Dictionary`] mapping names to their internal handles.
-    names: RefCell<Dict>,
+pub struct RuleParser<'a> {
     /// The base IRI, if set.
     base: RefCell<Option<&'a str>>,
     /// A map from Prefixes to IRIs.
@@ -98,15 +96,10 @@ pub enum BodyExpression {
     Filter(Filter),
 }
 
-impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
+impl<'a> RuleParser<'a> {
     /// Construct a new [`RuleParser`].
     pub fn new() -> Self {
         Default::default()
-    }
-
-    /// Return a clone of the internal names dictionary
-    pub fn clone_names(&self) -> Dict {
-        self.names.replace_with(|dict| dict.clone())
     }
 
     /// Parse the dot that ends declarations, optionally surrounded by spaces.
@@ -169,7 +162,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
             log::debug!(target: "parser", r#"parse_base: set new base: "{base}""#);
             *self.base.borrow_mut() = Some(base);
 
-            Ok((remainder, self.intern(base.to_owned())))
+            Ok((remainder, Identifier(base.to_owned())))
         })
     }
 
@@ -246,8 +239,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                         ),
                         |(endpoint, projection, query)| {
                             DataSource::sparql_query(SparqlQuery::new(
-                                self.resolve(&endpoint)
-                                    .expect("should have been interned during parsing"),
+                                endpoint.name(),
                                 projection.to_owned(),
                                 query.to_owned(),
                             ))
@@ -257,7 +249,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                 self.parse_dot(),
             )(remainder)?;
 
-            let source = DataSourceDeclaration::new_validated(predicate, arity, datasource?, self)?;
+            let source = DataSourceDeclaration::new_validated(predicate, arity, datasource?)?;
 
             log::trace!("Found external data source {source:?}");
             self.sources.borrow_mut().push(source.clone());
@@ -292,9 +284,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                 self.parse_dot(),
             )(input)?;
 
-            let predicate_name = self
-                .resolve(&predicate)
-                .expect("should have been interned during parsing");
+            let predicate_name = predicate.name();
             log::trace!(target: "parser", "found fact {predicate_name}({terms:?})");
 
             Ok((remainder, Fact(Atom::new(predicate, terms))))
@@ -313,7 +303,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                 )),
             )(input)?;
 
-            Ok((remainder, self.intern(self.resolve_prefixed_name(name)?)))
+            Ok((remainder, Identifier(self.resolve_prefixed_name(name)?)))
         }
     }
 
@@ -330,7 +320,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                 )),
             )(input)?;
 
-            Ok((remainder, self.intern(self.resolve_prefixed_name(name)?)))
+            Ok((remainder, Identifier(self.resolve_prefixed_name(name)?)))
         }
     }
 
@@ -361,7 +351,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
         traced("parse_pred_name", move |input| {
             let (remainder, name) = self.parse_bare_name()(input)?;
 
-            Ok((remainder, self.intern(name.to_owned())))
+            Ok((remainder, Identifier(name.to_owned())))
         })
     }
 
@@ -403,16 +393,13 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                 })
                 .collect();
             let filters = body
-                .iter()
+                .into_iter()
                 .filter_map(|expr| match expr {
-                    BodyExpression::Filter(f) => Some(*f),
+                    BodyExpression::Filter(f) => Some(f),
                     _ => None,
                 })
                 .collect();
-            Ok((
-                remainder,
-                Rule::new_validated(head, literals, filters, self)?,
-            ))
+            Ok((remainder, Rule::new_validated(head, literals, filters)?))
         })
     }
 
@@ -426,9 +413,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
                 self.parse_close_parenthesis(),
             )(remainder)?;
 
-            let predicate_name = self
-                .resolve(&predicate)
-                .expect("term should have been interned during parsing");
+            let predicate_name = predicate.name();
             log::trace!(target: "parser", "found atom {predicate_name}({terms:?})");
 
             Ok((remainder, Atom::new(predicate, terms)))
@@ -488,7 +473,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
         traced("parse_variable", move |input| {
             let (remainder, name) = recognize(pair(alpha1, alphanumeric0))(input)?;
 
-            Ok((remainder, self.intern(name.to_owned())))
+            Ok((remainder, Identifier(name.to_owned())))
         })
     }
 
@@ -568,7 +553,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
     }
 
     /// Parses a program in the rules language.
-    pub fn parse_program(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Program<Dict>> {
+    pub fn parse_program(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Program> {
         traced("parse_program", move |input| {
             let (remainder, _) = multispace_or_comment0(input)?;
             let (remainder, _) = opt(self.parse_base())(remainder)?;
@@ -576,12 +561,12 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
             let (remainder, _) = many0(self.parse_source())(remainder)?;
             let (remainder, statements) = many0(self.parse_statement())(remainder)?;
 
-            let base = self.base().map(|base| self.intern(base.to_owned()).0);
+            let base = self.base().map(String::from);
             let prefixes = self
                 .prefixes
                 .borrow()
                 .iter()
-                .map(|(&prefix, &iri)| (prefix.to_owned(), self.intern(iri.to_owned()).0))
+                .map(|(&prefix, &iri)| (prefix.to_owned(), iri.to_owned()))
                 .collect();
             let mut rules = Vec::new();
             let mut facts = Vec::new();
@@ -593,14 +578,7 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
 
             Ok((
                 remainder,
-                Program::new(
-                    base,
-                    prefixes,
-                    self.sources.borrow().clone(),
-                    rules,
-                    facts,
-                    self.clone_names(),
-                ),
+                Program::new(base, prefixes, self.sources.borrow().clone(), rules, facts),
             ))
         })
     }
@@ -651,37 +629,19 @@ impl<'a, Dict: Dictionary> RuleParser<'a, Dict> {
         }
     }
 
-    /// Intern a term.
-    #[must_use]
-    pub fn intern(&self, term: String) -> Identifier {
-        log::trace!(target: "parser", r#"interning term "{term}""#);
-        let result = self.names.borrow_mut().add(term);
-        log::trace!(target: "parser", "interned as {result}");
-        Identifier(result)
-    }
-
-    /// Resolve an interned [Identifier].
-    #[must_use]
-    pub fn resolve(&self, identifier: &Identifier) -> Option<String> {
-        self.names.borrow().entry(identifier.0)
-    }
-
     /// Intern a [`turtle::RdfLiteral`].
     #[must_use]
     fn intern_rdf_literal(&self, literal: turtle::RdfLiteral) -> RdfLiteral {
         match literal {
             turtle::RdfLiteral::LanguageString { value, tag } => RdfLiteral::LanguageString {
-                value: self.intern(value.to_owned()).0,
-                tag: self.intern(tag.to_owned()).0,
+                value: value.to_string(),
+                tag: tag.to_string(),
             },
             turtle::RdfLiteral::DatatypeValue { value, datatype } => RdfLiteral::DatatypeValue {
-                value: self.intern(value.to_owned()).0,
+                value: value.to_string(),
                 datatype: self
-                    .intern(
-                        self.resolve_prefixed_name(datatype)
-                            .expect("prefix should have been registered during parsing"),
-                    )
-                    .0,
+                    .resolve_prefixed_name(datatype)
+                    .expect("prefix should have been registered during parsing"),
             },
         }
     }
@@ -694,8 +654,6 @@ mod test {
     use crate::physical::datatypes::Double;
 
     use super::*;
-
-    type Dict = crate::physical::dictionary::PrefixedStringDictionary;
 
     macro_rules! assert_parse {
         ($parser:expr, $left:expr, $right:expr $(,) ?) => {
@@ -712,8 +670,8 @@ mod test {
     fn base_directive() {
         let base = "http://example.org/foo";
         let input = format!("@base <{base}> .");
-        let parser = RuleParser::<Dict>::new();
-        let b = parser.intern(base.to_owned());
+        let parser = RuleParser::new();
+        let b = Identifier(base.to_owned());
         assert!(parser.base().is_none());
         assert_parse!(parser.parse_base(), input.as_str(), b);
         assert_eq!(parser.base(), Some(base));
@@ -724,7 +682,7 @@ mod test {
         let prefix = "foo";
         let iri = "http://example.org/foo";
         let input = format!("@prefix {prefix}: <{iri}> .");
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::new();
         assert!(parser.resolve_prefix(prefix).is_err());
         assert_parse!(parser.parse_prefix(), input.as_str(), prefix);
         assert_eq!(parser.resolve_prefix(prefix), Ok(iri));
@@ -732,10 +690,10 @@ mod test {
 
     #[test]
     fn source() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::new();
         let file = "drinks.csv";
         let predicate_name = "drink";
-        let predicate = parser.intern(predicate_name.to_owned());
+        let predicate = Identifier(predicate_name.to_owned());
         let source = DataSourceDeclaration::new(predicate, 1, DataSource::csv_file(file).unwrap());
         // rulewerk accepts all of these variants
         let input = format!(r#"@source {predicate_name}[1]: load-csv("{file}") ."#);
@@ -750,116 +708,106 @@ mod test {
 
     #[test]
     fn fact() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::new();
         let predicate = "p";
         let value = "foo";
         let datatype = "bar";
-        let p = parser.intern(predicate.to_owned());
-        let v = parser.intern(value.to_owned()).0;
-        let t = parser.intern(format!("<{datatype}>")).0;
+        let p = Identifier(predicate.to_owned());
+        let v = value.to_owned();
+        let t = format!("<{datatype}>");
         let fact = format!(r#"{predicate}("{value}"^^<{datatype}>) ."#);
 
-        assert_parse!(
-            parser.parse_fact(),
-            &fact,
-            Fact(Atom::new(
-                p,
-                vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                    value: v,
-                    datatype: t
-                })]
-            ))
-        );
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: v,
+                datatype: t,
+            })],
+        ));
+
+        assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
 
     #[test]
     fn fact_namespaced() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::new();
         let predicate = "p";
         let name = "foo";
         let prefix = "eg";
         let iri = "http://example.org/foo";
         let prefix_declaration = format!("@prefix {prefix}: <{iri}> .");
-        let p = parser.intern(predicate.to_owned());
+        let p = Identifier(predicate.to_owned());
         let pn = format!("{prefix}:{name}");
-        let v = parser.intern(format!("<{iri}{name}>"));
+        let v = Identifier(format!("<{iri}{name}>"));
         let fact = format!(r#"{predicate}({pn}) ."#);
 
         assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
 
-        assert_parse!(
-            parser.parse_fact(),
-            &fact,
-            Fact(Atom::new(p, vec![Term::Constant(v)]))
-        );
+        let expected_fact = Fact(Atom::new(p, vec![Term::Constant(v)]));
+
+        assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
 
     #[test]
     fn fact_bnode() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::new();
         let predicate = "p";
         let name = "foo";
-        let p = parser.intern(predicate.to_owned());
+        let p = Identifier(predicate.to_owned());
         let pn = format!("_:{name}");
         let fact = format!(r#"{predicate}({pn}) ."#);
-        let v = parser.intern(pn);
+        let v = Identifier(pn);
 
-        assert_parse!(
-            parser.parse_fact(),
-            &fact,
-            Fact(Atom::new(p, vec![Term::Constant(v)]))
-        );
+        let expected_fact = Fact(Atom::new(p, vec![Term::Constant(v)]));
+
+        assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
 
     #[test]
     fn fact_numbers() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::new();
         let predicate = "p";
-        let p = parser.intern(predicate.to_owned());
+        let p = Identifier(predicate.to_owned());
         let int = 23_i64;
         let dbl = Double::new(42.0).expect("is not NaN");
         let dec = 13.37;
         let fact = format!(r#"{predicate}({int}, {dbl:.1}E0, {dec:.2}) ."#);
 
-        assert_parse!(
-            parser.parse_fact(),
-            &fact,
-            Fact(Atom::new(
-                p,
-                vec![
-                    Term::NumericLiteral(NumericLiteral::Integer(int)),
-                    Term::NumericLiteral(NumericLiteral::Double(dbl)),
-                    Term::NumericLiteral(NumericLiteral::Decimal(13, 37)),
-                ]
-            ))
-        );
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![
+                Term::NumericLiteral(NumericLiteral::Integer(int)),
+                Term::NumericLiteral(NumericLiteral::Double(dbl)),
+                Term::NumericLiteral(NumericLiteral::Decimal(13, 37)),
+            ],
+        ));
+
+        assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
 
     #[test]
     fn fact_abstract() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::new();
         let predicate = "p";
         let name = "a";
-        let p = parser.intern(predicate.to_owned());
-        let a = parser.intern(format!("<{name}>"));
+        let p = Identifier(predicate.to_owned());
+        let a = Identifier(format!("<{name}>"));
         let fact = format!(r#"{predicate}({name}) ."#);
 
-        assert_parse!(
-            parser.parse_fact(),
-            &fact,
-            Fact(Atom::new(p, vec![Term::Constant(a)]))
-        );
+        let expected_fact = Fact(Atom::new(p, vec![Term::Constant(a)]));
+
+        assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
 
     #[test]
     fn fact_comment() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::new();
         let predicate = "p";
         let value = "foo";
         let datatype = "bar";
-        let p = parser.intern(predicate.to_owned());
-        let v = parser.intern(value.to_owned()).0;
-        let t = parser.intern(format!("<{datatype}>")).0;
+        let p = Identifier(predicate.to_owned());
+        let v = value.to_owned();
+        let t = format!("<{datatype}>");
         let fact = format!(
             r#"{predicate}(% comment 1
                  "{value}"^^<{datatype}> % comment 2
@@ -867,82 +815,84 @@ mod test {
                . % comment 4"#
         );
 
-        assert_parse!(
-            parser.parse_fact(),
-            &fact,
-            Fact(Atom::new(
-                p,
-                vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                    value: v,
-                    datatype: t
-                })]
-            ))
-        );
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: v,
+                datatype: t,
+            })],
+        ));
+
+        assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
 
     #[test]
     fn filter() {
-        let parser = RuleParser::<Dict>::new();
+        let parser = RuleParser::new();
         let aa = "A";
-        let a = parser.intern(aa.to_owned());
+        let a = Identifier(aa.to_owned());
         let bb = "B";
-        let b = parser.intern(bb.to_owned());
+        let b = Identifier(bb.to_owned());
         let pp = "P";
-        let p = parser.intern(pp.to_owned());
+        let p = Identifier(pp.to_owned());
         let xx = "X";
-        let x = parser.intern(xx.to_owned());
+        let x = Identifier(xx.to_owned());
         let yy = "Y";
-        let y = parser.intern(yy.to_owned());
+        let y = Identifier(yy.to_owned());
         let zz = "Z";
-        let z = parser.intern(zz.to_owned());
+        let z = Identifier(zz.to_owned());
 
         let rule = format!(
             "{pp}(?{xx}) :- {aa}(?{xx}, ?{yy}), ?{yy} > ?{xx}, {bb}(?{zz}), ?{xx} = 3, ?{zz} < 7, ?{xx} <= ?{zz}, ?{zz} >= ?{yy} ."
         );
 
-        assert_parse!(
-            parser.parse_rule(),
-            &rule,
-            Rule::new(
-                vec![Atom::new(p, vec![Term::Variable(Variable::Universal(x))])],
-                vec![
-                    Literal::Positive(Atom::new(
-                        a,
-                        vec![
-                            Term::Variable(Variable::Universal(x)),
-                            Term::Variable(Variable::Universal(y))
-                        ]
-                    )),
-                    Literal::Positive(Atom::new(b, vec![Term::Variable(Variable::Universal(z))]))
-                ],
-                vec![
-                    Filter::new(
-                        FilterOperation::GreaterThan,
-                        Variable::Universal(y),
-                        Term::Variable(Variable::Universal(x)),
-                    ),
-                    Filter::new(
-                        FilterOperation::Equals,
-                        Variable::Universal(x),
-                        Term::NumericLiteral(NumericLiteral::Integer(3))
-                    ),
-                    Filter::new(
-                        FilterOperation::LessThan,
-                        Variable::Universal(z),
-                        Term::NumericLiteral(NumericLiteral::Integer(7))
-                    ),
-                    Filter::new(
-                        FilterOperation::LessThanEq,
-                        Variable::Universal(x),
-                        Term::Variable(Variable::Universal(z)),
-                    ),
-                    Filter::new(
-                        FilterOperation::GreaterThanEq,
-                        Variable::Universal(z),
-                        Term::Variable(Variable::Universal(y)),
-                    ),
-                ]
-            )
+        let expected_rule = Rule::new(
+            vec![Atom::new(
+                p,
+                vec![Term::Variable(Variable::Universal(x.clone()))],
+            )],
+            vec![
+                Literal::Positive(Atom::new(
+                    a,
+                    vec![
+                        Term::Variable(Variable::Universal(x.clone())),
+                        Term::Variable(Variable::Universal(y.clone())),
+                    ],
+                )),
+                Literal::Positive(Atom::new(
+                    b,
+                    vec![Term::Variable(Variable::Universal(z.clone()))],
+                )),
+            ],
+            vec![
+                Filter::new(
+                    FilterOperation::GreaterThan,
+                    Variable::Universal(y.clone()),
+                    Term::Variable(Variable::Universal(x.clone())),
+                ),
+                Filter::new(
+                    FilterOperation::Equals,
+                    Variable::Universal(x.clone()),
+                    Term::NumericLiteral(NumericLiteral::Integer(3)),
+                ),
+                Filter::new(
+                    FilterOperation::LessThan,
+                    Variable::Universal(z.clone()),
+                    Term::NumericLiteral(NumericLiteral::Integer(7)),
+                ),
+                Filter::new(
+                    FilterOperation::LessThanEq,
+                    Variable::Universal(x),
+                    Term::Variable(Variable::Universal(z.clone())),
+                ),
+                Filter::new(
+                    FilterOperation::GreaterThanEq,
+                    Variable::Universal(z),
+                    Term::Variable(Variable::Universal(y)),
+                ),
+            ],
         );
+
+        assert_parse!(parser.parse_rule(), &rule, expected_rule,);
     }
 }

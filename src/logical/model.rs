@@ -2,73 +2,25 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
     ops::Neg,
     path::{Path, PathBuf},
 };
 
-use crate::{
-    generate_forwarder,
-    io::parser::{ParseError, RuleParser},
-    physical::{
-        datatypes::{DataValueT, Double},
-        dictionary::Dictionary,
-    },
-};
+use crate::{generate_forwarder, io::parser::ParseError, physical::datatypes::Double};
 
 /// An identifier for, e.g., a Term or a Predicate.
-#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
-pub struct Identifier(pub(crate) usize);
+#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
+pub struct Identifier(pub(crate) String);
 
 impl Identifier {
-    /// Make the [`Identifier`] pretty-printable using the given
-    /// [`Dictionary`].
-    pub fn format<'a, 'b, Dict: Dictionary>(
-        &'a self,
-        dictionary: &'b Dict,
-    ) -> PrintableIdentifier<'b, Dict>
-    where
-        'a: 'b,
-    {
-        PrintableIdentifier {
-            identifier: *self,
-            dictionary,
-        }
-    }
-
-    /// Returns the associated name, based on a given [`Dictionary`]
-    pub fn name<Dict: Dictionary>(&self, dict: &Dict) -> Option<String> {
-        dict.entry(self.0)
-    }
-
-    /// TODO(mx): ugly hack, this needs to go.
-    pub fn to_constant_u64(self) -> u64 {
-        self.0 as u64
-    }
-}
-
-/// A pretty-printable identifier that can be resolved using the dictionary.
-#[derive(Debug)]
-pub struct PrintableIdentifier<'a, Dict: Dictionary> {
-    identifier: Identifier,
-    dictionary: &'a Dict,
-}
-
-impl<Dict: Dictionary> Display for PrintableIdentifier<'_, Dict> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ident = self.identifier.0;
-        write!(
-            f,
-            "{}",
-            self.dictionary
-                .entry(ident)
-                .unwrap_or_else(|| format!("<unresolved identifier {ident}>"))
-        )
+    /// Returns the associated name
+    pub fn name(&self) -> String {
+        self.0.clone()
     }
 }
 
 /// Variable occuring in a rule
-#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 pub enum Variable {
     /// A universally quantified variable.
     Universal(Identifier),
@@ -77,7 +29,7 @@ pub enum Variable {
 }
 
 /// Terms occurring in programs.
-#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum Term {
     /// An (abstract) constant.
     Constant(Identifier),
@@ -97,21 +49,6 @@ impl Term {
             Self::Constant(_) | Self::NumericLiteral(_) | Self::RdfLiteral(_)
         )
     }
-
-    // TODO: Not sure if this is a sane way to do it, some discussion needed
-    /// Converts term to DataValueT
-    pub fn to_datavalue_t(&self) -> Option<DataValueT> {
-        match self {
-            Self::Constant(Identifier(i)) => Some(DataValueT::U64((*i).try_into().ok()?)),
-            Self::Variable(_) => unreachable!(),
-            Self::NumericLiteral(n) => match n {
-                NumericLiteral::Integer(i) => Some(DataValueT::U64((*i).try_into().ok()?)),
-                NumericLiteral::Decimal(_, _) => todo!(),
-                NumericLiteral::Double(d) => Some(DataValueT::Double(*d)),
-            },
-            Self::RdfLiteral(_) => todo!(),
-        }
-    }
 }
 
 /// A numerical literal.
@@ -126,21 +63,21 @@ pub enum NumericLiteral {
 }
 
 /// An RDF literal.
-#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 pub enum RdfLiteral {
     /// A language string.
     LanguageString {
         /// The literal value.
-        value: usize,
+        value: String,
         /// The language tag.
-        tag: usize,
+        tag: String,
     },
     /// A literal with a datatype.
     DatatypeValue {
         /// The literal value.
-        value: usize,
+        value: String,
         /// The datatype IRI.
-        datatype: usize,
+        datatype: String,
     },
 }
 
@@ -162,7 +99,7 @@ impl Atom {
     /// Return the predicate [`Identifier`].
     #[must_use]
     pub fn predicate(&self) -> Identifier {
-        self.predicate
+        self.predicate.clone()
     }
 
     /// Return the terms in the atom - immutable.
@@ -178,15 +115,15 @@ impl Atom {
     }
 
     /// Return all variables in the atom.
-    pub fn variables(&self) -> impl Iterator<Item = Variable> + '_ {
-        self.terms().iter().filter_map(|&term| match term {
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.terms().iter().filter_map(|term| match term {
             Term::Variable(var) => Some(var),
             _ => None,
         })
     }
 
     /// Return all universally quantified variables in the atom.
-    pub fn universal_variables(&self) -> impl Iterator<Item = Identifier> + '_ {
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
         self.variables().filter_map(|var| match var {
             Variable::Universal(identifier) => Some(identifier),
             _ => None,
@@ -194,7 +131,7 @@ impl Atom {
     }
 
     /// Return all existentially quantified variables in the atom.
-    pub fn existential_variables(&self) -> impl Iterator<Item = Identifier> + '_ {
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
         self.variables().filter_map(|var| match var {
             Variable::Existential(identifier) => Some(identifier),
             _ => None,
@@ -258,17 +195,17 @@ impl Literal {
     }
 
     /// Return the variables in the literal.
-    pub fn variables(&self) -> impl Iterator<Item = Variable> + '_ {
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> + '_ {
         forward_to_atom!(self, variables)
     }
 
     /// Return the universally quantified variables in the literal.
-    pub fn universal_variables(&self) -> impl Iterator<Item = Identifier> + '_ {
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
         forward_to_atom!(self, universal_variables)
     }
 
     /// Return the existentially quantified variables in the literal.
-    pub fn existential_variables(&self) -> impl Iterator<Item = Identifier> + '_ {
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
         forward_to_atom!(self, existential_variables)
     }
 }
@@ -289,7 +226,7 @@ pub enum FilterOperation {
 }
 
 /// Filter of the form <variable> <operation> <term>
-#[derive(Debug, Eq, PartialEq, Clone, Copy, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct Filter {
     /// Operation to be performed
     pub operation: FilterOperation,
@@ -332,11 +269,10 @@ impl Rule {
     }
 
     /// Construct a new rule, validating constraints on variable usage.
-    pub(crate) fn new_validated<Dict: Dictionary>(
+    pub(crate) fn new_validated(
         head: Vec<Atom>,
         body: Vec<Literal>,
         filters: Vec<Filter>,
-        parser: &RuleParser<Dict>,
     ) -> Result<Self, ParseError> {
         // Check if existential variables occur in the body.
         let existential_variables = body
@@ -346,9 +282,10 @@ impl Rule {
 
         if !existential_variables.is_empty() {
             return Err(ParseError::BodyExistential(
-                parser
-                    .resolve(existential_variables.first().expect("is not empty here"))
-                    .expect("identifier has been parsed, so must be known"),
+                existential_variables
+                    .first()
+                    .expect("is not empty here")
+                    .name(),
             ));
         }
 
@@ -371,9 +308,10 @@ impl Rule {
 
         if !negative_variables.is_empty() {
             return Err(ParseError::UnsafeNegatedVariable(
-                parser
-                    .resolve(negative_variables.first().expect("is not empty here"))
-                    .expect("identifier has been parsed, so must be known"),
+                negative_variables
+                    .first()
+                    .expect("is not empty here")
+                    .name(),
             ));
         }
 
@@ -395,9 +333,7 @@ impl Rule {
 
         if !common_variables.is_empty() {
             return Err(ParseError::BothQuantifiers(
-                parser
-                    .resolve(common_variables.first().expect("is not empty here"))
-                    .expect("identifier has been parsed, so must be known"),
+                common_variables.first().expect("is not empty here").name(),
             ));
         }
 
@@ -460,25 +396,22 @@ pub enum Statement {
 
 /// A full program.
 #[derive(Debug)]
-pub struct Program<Dict: Dictionary> {
-    base: Option<usize>,
-    prefixes: HashMap<String, usize>,
+pub struct Program {
+    base: Option<String>,
+    prefixes: HashMap<String, String>,
     sources: Vec<DataSourceDeclaration>,
     rules: Vec<Rule>,
     facts: Vec<Fact>,
-
-    names: Dict,
 }
 
-impl<Dict: Dictionary> Program<Dict> {
+impl Program {
     /// Construct a new program.
     pub fn new(
-        base: Option<usize>,
-        prefixes: HashMap<String, usize>,
+        base: Option<String>,
+        prefixes: HashMap<String, String>,
         sources: Vec<DataSourceDeclaration>,
         rules: Vec<Rule>,
         facts: Vec<Fact>,
-        names: Dict,
     ) -> Self {
         Self {
             base,
@@ -486,14 +419,13 @@ impl<Dict: Dictionary> Program<Dict> {
             sources,
             rules,
             facts,
-            names,
         }
     }
 
     /// Get the base IRI, if set.
     #[must_use]
-    pub fn base(&self) -> Option<usize> {
-        self.base
+    pub fn base(&self) -> Option<String> {
+        self.base.clone()
     }
 
     /// Return all rules in the program - immutable.
@@ -544,37 +476,27 @@ impl<Dict: Dictionary> Program<Dict> {
     pub fn edb_predicates(&self) -> HashSet<Identifier> {
         self.predicates()
             .difference(&self.idb_predicates())
-            .copied()
+            .cloned()
             .collect()
     }
 
     /// Return all prefixes in the program.
     #[must_use]
-    pub fn prefixes(&self) -> &HashMap<String, usize> {
+    pub fn prefixes(&self) -> &HashMap<String, String> {
         &self.prefixes
     }
 
     /// Return all data sources in the program.
-    pub fn sources(&self) -> impl Iterator<Item = ((Identifier, usize), &DataSource)> {
+    pub fn sources(&self) -> impl Iterator<Item = ((&Identifier, usize), &DataSource)> {
         self.sources
             .iter()
-            .map(|source| ((source.predicate, source.arity), &source.source))
+            .map(|source| ((&source.predicate, source.arity), &source.source))
     }
 
     /// Look up a given prefix.
     #[must_use]
-    pub fn resolve_prefix(&self, tag: &str) -> Option<usize> {
-        self.prefixes.get(tag).copied()
-    }
-
-    /// Return the dictionary
-    pub fn get_names(&self) -> &Dict {
-        &self.names
-    }
-
-    /// Returns the first [`Identifier`] that is not used for naming e.g. a predicate.
-    pub fn first_unused_id_names(&self) -> Identifier {
-        Identifier(self.names.len())
+    pub fn resolve_prefix(&self, tag: &str) -> Option<String> {
+        self.prefixes.get(tag).cloned()
     }
 }
 
@@ -690,20 +612,17 @@ impl DataSourceDeclaration {
     }
 
     /// Construct a new data source declaration, validating constraints on, e.g., arity.
-    pub(crate) fn new_validated<Dict: Dictionary>(
+    pub(crate) fn new_validated(
         predicate: Identifier,
         arity: usize,
         source: DataSource,
-        parser: &RuleParser<Dict>,
     ) -> Result<Self, ParseError> {
         match source {
             DataSource::CsvFile(_) => (), // no validation for CSV files
             DataSource::RdfFile(ref path) => {
                 if arity != 3 {
                     return Err(ParseError::RdfSourceInvalidArity(
-                        parser
-                            .resolve(&predicate)
-                            .expect("predicate has been parsed, must be known"),
+                        predicate.name(),
                         path.to_str()
                             .unwrap_or("<path is invalid unicode>")
                             .to_owned(),
@@ -715,9 +634,7 @@ impl DataSourceDeclaration {
                 let variables = query.projection().split(',').count();
                 if variables != arity {
                     return Err(ParseError::SparqlSourceInvalidArity(
-                        parser
-                            .resolve(&predicate)
-                            .expect("predicate has been parsed, must be known"),
+                        predicate.name(),
                         variables,
                         arity,
                     ));

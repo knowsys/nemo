@@ -4,7 +4,6 @@ use crate::{
     error::Error,
     physical::{
         datatypes::DataTypeName,
-        dictionary::Dictionary,
         tabular::{
             operations::triescan_append::AppendInstruction,
             traits::table_schema::{TableSchema, TableSchemaEntry},
@@ -87,8 +86,8 @@ impl Display for TypeTree {
 
 impl TypeTree {
     /// Create a [`TypeTree`] from an [`ExecutionPlan`]
-    pub(super) fn from_execution_tree<Dict: Dictionary>(
-        instance: &DatabaseInstance<Dict>,
+    pub(super) fn from_execution_tree(
+        instance: &DatabaseInstance,
         previous_trees: &HashMap<usize, TypeTree>,
         tree: &ExecutionTree,
     ) -> Result<Self, Error> {
@@ -99,8 +98,8 @@ impl TypeTree {
     }
 
     /// Types are propagated from bottom to top through the [`ExecutionTree`].
-    fn propagate_up<Dict: Dictionary>(
-        instance: &DatabaseInstance<Dict>,
+    fn propagate_up(
+        instance: &DatabaseInstance,
         previous_trees: &HashMap<usize, TypeTree>,
         node: ExecutionNodeRef,
     ) -> Result<TypeTreeNode, Error> {
@@ -302,8 +301,8 @@ impl TypeTree {
                                         subtype_node.schema.get_entry(*repeat_index),
                                     );
                                 }
-                                AppendInstruction::Constant(constant, dict) => {
-                                    new_schema.add_entry(constant.get_type(), *dict, false);
+                                AppendInstruction::Constant(_, type_name, dict) => {
+                                    new_schema.add_entry(*type_name, *dict, false);
                                 }
                             }
                         }
@@ -538,7 +537,6 @@ mod test {
 
     use crate::physical::{
         datatypes::{DataTypeName, DataValueT},
-        dictionary::StringDictionary,
         management::{
             database::{ColumnOrder, TableId},
             execution_plan::ExecutionTree,
@@ -815,7 +813,7 @@ mod test {
             schema_entry(DataTypeName::U32),
         ]);
 
-        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
+        let mut instance = DatabaseInstance::new();
         instance.register_add_trie("TableA", schema_a, ColumnOrder::default(), trie_a);
         instance.register_add_trie("TableB", schema_b, ColumnOrder::default(), trie_b);
         instance.register_add_trie("TableC", schema_c, ColumnOrder::default(), trie_c);
@@ -855,7 +853,7 @@ mod test {
             schema_entry(DataTypeName::U32),
         ]);
 
-        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
+        let mut instance = DatabaseInstance::new();
         let id_a = instance.register_add_trie("TableA", schema_a, ColumnOrder::default(), trie_a);
         let id_b = instance.register_add_trie("TableB", schema_b, ColumnOrder::default(), trie_b);
 
@@ -915,7 +913,7 @@ mod test {
             schema_entry(DataTypeName::U64),
         ]);
 
-        let mut instance = DatabaseInstance::<_>::new(StringDictionary::default());
+        let mut instance = DatabaseInstance::new();
         let id_a = instance.register_add_trie("TableA", schema_a, ColumnOrder::default(), trie_a);
         let id_b = instance.register_add_trie("TableB", schema_b, ColumnOrder::default(), trie_b);
 

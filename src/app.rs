@@ -6,18 +6,17 @@ use stage2::io::parser::{all_input_consumed, RuleParser};
 use stage2::logical::execution::ExecutionEngine;
 use stage2::logical::model::Program;
 use stage2::meta::TimedCode;
-use stage2::physical::dictionary::Dictionary;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
 /// Application state
-struct AppState<Dict: Dictionary> {
+struct AppState {
     /// parsed program data
-    program: Program<Dict>,
+    program: Program,
 }
 
-impl<Dict: Dictionary> AppState<Dict> {
-    fn new(program: Program<Dict>) -> Self {
+impl AppState {
+    fn new(program: Program) -> Self {
         Self { program }
     }
 }
@@ -54,11 +53,6 @@ pub struct CliApp {
     gz: bool,
 }
 
-#[cfg(feature = "no-prefixed-string-dictionary")]
-type Dict = stage2::physical::dictionary::StringDictionary;
-#[cfg(not(feature = "no-prefixed-string-dictionary"))]
-type Dict = stage2::physical::dictionary::PrefixedStringDictionary;
-
 impl CliApp {
     /// Application logic, based on the parsed data inside the [`CliApp`] object
     pub fn run(&mut self) -> Result<(), Error> {
@@ -80,7 +74,7 @@ impl CliApp {
             );
         }
 
-        let app_state = self.parse_rules::<Dict>()?;
+        let app_state = self.parse_rules()?;
 
         let mut exec_engine = ExecutionEngine::initialize(app_state.program);
 
@@ -104,13 +98,10 @@ impl CliApp {
                 self.gz,
             )?;
             // TODO fix cloning
-            let dict = exec_engine.get_dict().clone();
             exec_engine.idb_predicates()?.try_for_each(|(pred, trie)| {
-                let pred_name = pred
-                    .name(&dict)
-                    .expect("All predicates shall depend on the dictionary");
+                let pred_name = pred.name();
                 if let Some(trie) = trie {
-                    csv_writer.write_predicate(&pred_name, trie, &dict)
+                    csv_writer.write_predicate(&pred_name, trie)
                 } else {
                     csv_writer.create_file(&pred_name).map(|_| ())
                 }
@@ -151,7 +142,7 @@ impl CliApp {
     /// Parsing of all rule files, defined in [`Self::rules`]. Links internally used and needed dictionaries into the program state.
     ///
     /// Note: Currently all rule files will be merged into one big set of rules and parsed afterwards, this needs to be fixed when #59 and #60 is done.
-    fn parse_rules<Dict: Dictionary>(&mut self) -> Result<AppState<Dict>, Error> {
+    fn parse_rules(&mut self) -> Result<AppState, Error> {
         log::info!("Parsing rules ...");
         let parser = RuleParser::new();
         let mut inputs: Vec<String> = Vec::new();

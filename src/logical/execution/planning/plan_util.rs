@@ -12,10 +12,10 @@ use crate::{
         TableManager,
     },
     physical::{
-        datatypes::DataValueT,
+        datatypes::{DataTypeName, DataValueT},
         dictionary::Dictionary,
         management::{
-            database::TableId,
+            database::{Dict, TableId},
             execution_plan::{ExecutionNodeRef, ExecutionPlan},
         },
         tabular::operations::{
@@ -104,14 +104,27 @@ pub(super) fn compute_filters(
                 }
             }
             _ => {
-                if let Some(datavalue) = filter.right.to_datavalue_t() {
-                    filter_assignments.push(ValueAssignment {
-                        column_idx: *variable_to_columnindex.get(&filter.left).unwrap(),
-                        value: datavalue,
-                    });
-                } else {
-                    // TODO: Not sure what to do in this case
-                }
+                // TODO: this needs to change fot the type system; it panics in various cases right now
+                filter_assignments.push(ValueAssignment {
+                    column_idx: *variable_to_columnindex.get(&filter.left).unwrap(),
+                    value_mapper: {
+                        let filter_right_cloned = filter.right.clone();
+                        Box::new(move |dict: &mut Dict| match filter_right_cloned.clone() {
+                            Term::Constant(Identifier(s)) => {
+                                DataValueT::U64(dict.add(s).try_into().unwrap())
+                            }
+                            Term::Variable(_) => unreachable!(),
+                            Term::NumericLiteral(n) => match n {
+                                NumericLiteral::Integer(i) => {
+                                    DataValueT::U64(i.try_into().unwrap())
+                                }
+                                NumericLiteral::Decimal(_, _) => todo!(),
+                                NumericLiteral::Double(d) => DataValueT::Double(d),
+                            },
+                            Term::RdfLiteral(_) => todo!(),
+                        })
+                    },
+                });
             }
         }
     }
@@ -131,9 +144,9 @@ pub(super) fn compute_filters(
 }
 
 /// Compute the subplan that represents the union of a tables within a certain step range.
-pub(super) fn subplan_union<Dict: Dictionary>(
+pub(super) fn subplan_union(
     plan: &mut ExecutionPlan,
-    manager: &TableManager<Dict>,
+    manager: &TableManager,
     predicate: Identifier,
     steps: &Range<usize>,
 ) -> ExecutionNodeRef {
@@ -175,42 +188,48 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
 
     for (term_index, term) in atom.terms().iter().enumerate() {
         match term {
-            Term::NumericLiteral(nl) => match nl {
+            Term::NumericLiteral(nl) => match *nl {
                 NumericLiteral::Integer(i) => {
                     let instruction = AppendInstruction::Constant(
-                        DataValueT::U64((*i).try_into().unwrap()),
+                        Box::new(move |_dict| DataValueT::U64(i.try_into().unwrap())),
+                        DataTypeName::U64,
                         false,
                     );
                     current_append_vector.push(instruction);
                 }
-                _ => unimplemented!(),
+                _ => todo!(),
             },
             Term::Constant(identifier) => {
+                let id_name = identifier.name();
+
                 let instruction = AppendInstruction::Constant(
-                    DataValueT::U64(identifier.to_constant_u64()),
-                    false,
+                    Box::new(move |dict| {
+                        DataValueT::U64(dict.add(id_name.clone()).try_into().unwrap())
+                    }),
+                    DataTypeName::U64,
+                    true,
                 );
                 current_append_vector.push(instruction);
             }
             Term::Variable(variable) => {
                 let variable_identifier = match variable {
-                    Variable::Universal(id) => *id,
-                    Variable::Existential(id) => *id,
+                    Variable::Universal(id) => id,
+                    Variable::Existential(id) => id,
                 };
 
-                if let Some(repeat_index) = variable_map.get(&variable_identifier) {
+                if let Some(repeat_index) = variable_map.get(variable_identifier) {
                     let instruction = AppendInstruction::RepeatColumn(*repeat_index);
                     current_append_vector.push(instruction);
                 } else {
-                    reduced_terms.push(Term::Variable(*variable));
+                    reduced_terms.push(Term::Variable(variable.clone()));
 
-                    variable_map.insert(variable_identifier, term_index);
+                    variable_map.insert(variable_identifier.clone(), term_index);
 
                     append_instructions.push(vec![]);
                     current_append_vector = append_instructions.last_mut().unwrap();
                 }
             }
-            Term::RdfLiteral(_) => unimplemented!(),
+            Term::RdfLiteral(_) => todo!(),
         }
     }
 

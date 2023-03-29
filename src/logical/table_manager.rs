@@ -5,13 +5,15 @@ use crate::{
     error::Error,
     physical::{
         datatypes::DataTypeName,
-        dictionary::Dictionary,
         management::{
             database::{ColumnOrder, TableId, TableSource},
             execution_plan::ExecutionNodeRef,
             DatabaseInstance, ExecutionPlan,
         },
-        tabular::{table_types::trie::Trie, traits::table_schema::TableSchema},
+        tabular::{
+            table_types::trie::{DebugTrie, Trie},
+            traits::table_schema::TableSchema,
+        },
         util::mapping::permutation::Permutation,
     },
 };
@@ -188,7 +190,7 @@ struct PredicateInfo {
 }
 
 /// Identifier of a subtable in a chase sequence.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct SubtableIdentifier {
     predicate: Identifier,
     step: usize,
@@ -247,9 +249,9 @@ impl SubtableExecutionPlan {
 /// Manager object for handling tables that are the result
 /// of a seminaive existential rules evaluation process.
 #[derive(Debug)]
-pub struct TableManager<Dict: Dictionary> {
+pub struct TableManager {
     /// [`DatabaseInstance`] managing all existing tables.
-    database: DatabaseInstance<Dict>,
+    database: DatabaseInstance,
 
     /// Map containg all the ids of all the sub tables associated with a predicate.
     predicate_subtables: HashMap<Identifier, SubtableHandler>,
@@ -258,11 +260,17 @@ pub struct TableManager<Dict: Dictionary> {
     predicate_to_info: HashMap<Identifier, PredicateInfo>,
 }
 
-impl<Dict: Dictionary> TableManager<Dict> {
+impl Default for TableManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TableManager {
     /// Create new [`TableManager`].
-    pub fn new(dict_constants: Dict) -> Self {
+    pub fn new() -> Self {
         Self {
-            database: DatabaseInstance::new(dict_constants),
+            database: DatabaseInstance::new(),
             predicate_subtables: HashMap::new(),
             predicate_to_info: HashMap::new(),
         }
@@ -282,17 +290,17 @@ impl<Dict: Dictionary> TableManager<Dict> {
         self.predicate_subtables.get(&predicate)?.last_step()
     }
 
-    /// Return a reference to a [`Trie`] that is associated with the given id.
+    /// Return a [`DebugTrie`] that is associated with the given id.
     /// Uses the default [`ColumnOrder`]
     /// Panics if there is no trie associated with the given id.
-    pub fn table_from_id(&self, id: TableId) -> &Trie {
-        self.database.get_trie(id, &ColumnOrder::default())
+    pub fn table_from_id(&self, id: TableId) -> DebugTrie {
+        self.database.get_debug_trie(id, &ColumnOrder::default())
     }
 
     /// Combine all subtables of a predicate into one table
     /// and return the [`TableId`] of that new table.
     pub fn combine_predicate(&mut self, predicate: Identifier) -> Result<Option<TableId>, Error> {
-        match self.last_step(predicate) {
+        match self.last_step(predicate.clone()) {
             Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)),
             None => Ok(None),
         }
@@ -305,12 +313,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         order: &ColumnOrder,
         step: usize,
     ) -> String {
-        let predicate_name = self
-            .database
-            .get_dict_constants()
-            .entry(predicate.0)
-            .unwrap_or(String::from("Unnamed"));
-
+        let predicate_name = predicate.name();
         let order_string = format!("{order:?}");
 
         format!("{predicate_name} ({step}) {order_string}")
@@ -323,11 +326,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         order: &ColumnOrder,
         steps: &Range<usize>,
     ) -> String {
-        let predicate_name = self
-            .database
-            .get_dict_constants()
-            .entry(predicate.0)
-            .unwrap_or(String::from("Unnamed"));
+        let predicate_name = predicate.name();
         let order_string = format!("{order:?}");
 
         format!(
@@ -344,11 +343,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
         referenced_table_id: TableId,
         permutation: &Permutation,
     ) -> String {
-        let predicate_name = self
-            .database
-            .get_dict_constants()
-            .entry(predicate.0)
-            .unwrap_or(String::from("Unnamed"));
+        let predicate_name = predicate.name();
         let referenced_table_name = self.database.table_name(referenced_table_id);
 
         format!("{predicate_name} ({step}) -> {referenced_table_name} {permutation}")
@@ -371,7 +366,8 @@ impl<Dict: Dictionary> TableManager<Dict> {
             schema: Self::generate_table_schema(arity),
         };
 
-        self.predicate_to_info.insert(predicate, predicate_info);
+        self.predicate_to_info
+            .insert(predicate.clone(), predicate_info);
         self.predicate_subtables
             .insert(predicate, SubtableHandler::default());
     }
@@ -397,7 +393,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             .expect("Predicate should be registered before calling this function")
             .schema
             .clone();
-        let name = self.generate_table_name(predicate, &edb_order, EDB_STEP);
+        let name = self.generate_table_name(predicate.clone(), &edb_order, EDB_STEP);
 
         let table_id = self.database.register_table(&name, schema);
         self.database.add_sources(table_id, edb_order, sources);
@@ -420,7 +416,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             .expect("Predicate should be registered before calling this function")
             .schema
             .clone();
-        let name = self.generate_table_name(predicate, &order, step);
+        let name = self.generate_table_name(predicate.clone(), &order, step);
 
         let table_id = self.database.register_add_trie(&name, schema, order, trie);
         self.add_subtable(SubtableIdentifier::new(predicate, step), table_id);
@@ -445,7 +441,7 @@ impl<Dict: Dictionary> TableManager<Dict> {
             .schema
             .clone();
         let name = self.generate_table_name_reference(
-            subtable.predicate,
+            subtable.predicate.clone(),
             subtable.step,
             referenced_id,
             &permutation,
@@ -474,13 +470,13 @@ impl<Dict: Dictionary> TableManager<Dict> {
     ) -> Result<Option<TableId>, Error> {
         let combined_order: ColumnOrder = ColumnOrder::default();
 
-        let tables = self.tables_in_range(predicate, &range);
+        let tables = self.tables_in_range(predicate.clone(), &range);
 
         if tables.is_empty() {
             return Ok(None);
         }
 
-        let name = self.generate_table_name_combined(predicate, &combined_order, &range);
+        let name = self.generate_table_name_combined(predicate.clone(), &combined_order, &range);
 
         let mut union_plan = ExecutionPlan::default();
         let fetch_nodes = tables
@@ -513,18 +509,12 @@ impl<Dict: Dictionary> TableManager<Dict> {
         let mut updated_predicates = Vec::new();
         for (plan_id, table_id) in result {
             let subtable = subtable_plan.map_subtrees.get(&plan_id).unwrap();
-            updated_predicates.push(subtable.predicate);
+            updated_predicates.push(subtable.predicate.clone());
 
-            self.add_subtable(*subtable, table_id);
+            self.add_subtable(subtable.clone(), table_id);
         }
 
         Ok(updated_predicates)
-    }
-
-    /// Return the dictionary used in the database instance.
-    /// TODO: Remove this once proper Dictionary support is implemented in the physical layer.
-    pub fn get_dict(&self) -> &Dict {
-        self.database.get_dict_constants()
     }
 }
 

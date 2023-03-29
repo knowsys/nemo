@@ -238,7 +238,7 @@ impl Display for Permutation {
                     write!(f, "{element}->")?;
                 }
 
-                write!(f, "{}", first_element)?;
+                write!(f, "{first_element}")?;
             }
 
             if !last_cycle {

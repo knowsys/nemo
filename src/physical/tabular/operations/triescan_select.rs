@@ -4,6 +4,7 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{DataTypeName, DataValueT},
+    management::database::{Dict, Mapper},
     tabular::traits::{
         table_schema::TableColumnTypes,
         triescan::{TrieScan, TrieScanEnum},
@@ -176,17 +177,22 @@ pub struct TrieScanSelectValue<'a> {
 }
 
 /// Struct representing the restriction of a column to a certain value
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct ValueAssignment {
     /// Index of the column to which the value is assigned
     pub column_idx: usize,
     /// The value assigned to the column
-    pub value: DataValueT,
+    //pub value_mapper: fn (&mut Dict) -> DataValueT,
+    pub value_mapper: Box<dyn Mapper>,
 }
 
 impl<'a> TrieScanSelectValue<'a> {
     /// Construct new TrieScanSelectValue object.
-    pub fn new(base_trie: TrieScanEnum<'a>, assignemnts: &[ValueAssignment]) -> Self {
+    pub fn new(
+        dict: &mut Dict,
+        base_trie: TrieScanEnum<'a>,
+        assignemnts: &[ValueAssignment],
+    ) -> Self {
         let column_types = base_trie.get_types();
         let arity = column_types.len();
         let mut select_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
@@ -223,11 +229,12 @@ impl<'a> TrieScanSelectValue<'a> {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
                     unsafe {
-                        let value = if let DataValueT::$variant(value) = assignemnt.value {
-                            value
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($variant));
-                        };
+                        let value =
+                            if let DataValueT::$variant(value) = (assignemnt.value_mapper)(dict) {
+                                value
+                            } else {
+                                panic!("Expected a column scan of type {}", stringify!($variant));
+                            };
 
                         let scan_enum = if let ColumnScanT::$variant(scan) =
                             &*base_trie.get_scan(assignemnt.column_idx).unwrap().get()
@@ -302,6 +309,7 @@ mod test {
     use super::{TrieScanSelectEqual, TrieScanSelectValue, ValueAssignment};
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
     use crate::physical::datatypes::DataValueT;
+    use crate::physical::management::database::Dict;
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_column_with_intervals_t;
@@ -404,16 +412,18 @@ mod test {
         let trie = Trie::new(vec![column_fst, column_snd, column_trd, column_fth]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
+        let mut dict = Dict::default();
         let mut select_iter = TrieScanSelectValue::new(
+            &mut dict,
             trie_iter,
             &[
                 ValueAssignment {
                     column_idx: 1,
-                    value: DataValueT::U64(4),
+                    value_mapper: Box::new(|_| DataValueT::U64(4)),
                 },
                 ValueAssignment {
                     column_idx: 3,
-                    value: DataValueT::U64(7),
+                    value_mapper: Box::new(|_| DataValueT::U64(7)),
                 },
             ],
         );
