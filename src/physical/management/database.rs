@@ -1,13 +1,11 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
-use std::fs::File;
 use std::path::PathBuf;
 
 use bytesize::ByteSize;
 
-use crate::io::csv::{read, DSVReader};
-use crate::physical::columnar::proxy_builder;
+use crate::io::csv::DSVReader;
 use crate::physical::datatypes::{StorageTypeName, StorageValueT};
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;

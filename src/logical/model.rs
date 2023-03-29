@@ -6,7 +6,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::physical::datatypes::StorageValueT;
 use crate::{generate_forwarder, io::parser::ParseError, physical::datatypes::Double};
 
 /// An identifier for, e.g., a Term or a Predicate.
