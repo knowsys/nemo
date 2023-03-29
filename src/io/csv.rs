@@ -62,7 +62,7 @@ impl DSVReader {
     /// Returns a Vector of [VecT] or a corresponding [Error]
     pub fn read(self, schema: &TableSchema, dictionary: &mut Dict) -> Result<Vec<VecT>, Error> {
         let gz_decoder = flate2::read::GzDecoder::new(File::open(self.file.as_path())?);
-        let builder = self.compute_proxies(schema);
+        let builder = self.generate_proxies(schema);
         if gz_decoder.header().is_some() {
             self.read_with_reader(
                 builder,
@@ -126,8 +126,8 @@ impl DSVReader {
         Ok(result)
     }
 
-    /// Given a TableSchema, computes the corresponding Proxy implementation
-    fn compute_proxies(&self, schema: &TableSchema) -> Vec<Box<dyn ColumnBuilderProxy>> {
+    /// Given a TableSchema, generates the corresponding Proxy implementation
+    fn generate_proxies(&self, schema: &TableSchema) -> Vec<Box<dyn ColumnBuilderProxy>> {
         schema
             .get_entries()
             .iter()
@@ -322,7 +322,7 @@ node03;123;123;13;55;123;invalid
 
         let mut dict = PrefixedStringDictionary::default();
         let csvreader = DSVReader::csv("test".into());
-        let builder = csvreader.compute_proxies(&TableSchema::from_vec(vec![
+        let builder = csvreader.generate_proxies(&TableSchema::from_vec(vec![
             TableSchemaEntry {
                 type_name: StorageTypeName::U64,
                 dict: true,
@@ -393,7 +393,7 @@ node03;123;123;13;55;123;invalid
             .from_reader(csv.as_bytes());
         let mut dict = PrefixedStringDictionary::default();
         let csvreader = DSVReader::csv("test".into());
-        let builder = csvreader.compute_proxies(&TableSchema::from_vec(vec![
+        let builder = csvreader.generate_proxies(&TableSchema::from_vec(vec![
             TableSchemaEntry {
                 type_name: StorageTypeName::U64,
                 dict: false,
