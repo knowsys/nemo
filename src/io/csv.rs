@@ -94,17 +94,17 @@ impl DSVReader {
         R: Read,
     {
         for row in reader.records().flatten() {
-            if let Err(Error::RollBack(rollback)) =
+            if let Err(Error::Rollback(rollback)) =
                 row.iter().enumerate().try_for_each(|(idx, item)| {
                     if idx < builder.len() {
                         if let Err(column_err) = builder[idx].add(item, Some(dictionary)) {
                             log::info!("Ignoring line {row:?}, parsing failed with: {column_err}");
-                            Err(Error::RollBack(idx))
+                            Err(Error::Rollback(idx))
                         } else {
                             Ok(())
                         }
                     } else {
-                        Err(Error::RollBack(idx - 1))
+                        Err(Error::Rollback(idx - 1))
                     }
                 })
             {
