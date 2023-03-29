@@ -5,15 +5,11 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use crate::error::Error;
-use crate::physical::columnar::adaptive_column_builder::ColumnBuilderAdaptiveT;
-use crate::physical::columnar::proxy_builder::{
-    self, ProxyColumnBuilder, ProxyStringColumnBuilder,
-};
-use crate::physical::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
-use crate::physical::dictionary::Dictionary;
+use crate::physical::columnar::proxy_builder::{ProxyColumnBuilder, ProxyStringColumnBuilder};
+use crate::physical::datatypes::DataTypeName;
+use crate::physical::datatypes::storage_value::VecT;
 use crate::physical::management::database::Dict;
 use crate::physical::tabular::table_types::trie::DebugTrie;
-use crate::physical::tabular::table_types::trie::Trie;
 use crate::physical::tabular::traits::table_schema::TableSchema;
 use csv::{Reader, ReaderBuilder};
 use flate2::write::GzEncoder;
@@ -29,6 +25,7 @@ pub struct DSVReader {
 }
 
 impl DSVReader {
+    /// Instantiate a [DSVReader] for CSV files
     pub(crate) fn csv(file: PathBuf) -> Self {
         Self {
             file,
@@ -37,6 +34,7 @@ impl DSVReader {
         }
     }
 
+    /// Instantiate a [DSVReader] for TSV files
     pub(crate) fn tsv(file: PathBuf) -> Self {
         Self {
             file,
@@ -45,6 +43,7 @@ impl DSVReader {
         }
     }
 
+    /// Static function to create a serde reader
     fn reader<R>(rdr: R, delimiter: u8, escape: Option<u8>) -> Reader<R>
     where
         R: Read,
@@ -56,7 +55,8 @@ impl DSVReader {
             .double_quote(true)
             .from_reader(rdr)
     }
-    /// todo
+    /// Read the file, using the [TableSchema] and a [dictionary][Dict]
+    /// Returns a Vector of [VecT] or a corresponding [Error]
     pub fn read(self, schema: &TableSchema, dictionary: &mut Dict) -> Result<Vec<VecT>, Error> {
         let gz_decoder = flate2::read::GzDecoder::new(File::open(self.file.as_path())?);
         let builder = self.compute_proxies(schema);
@@ -79,6 +79,8 @@ impl DSVReader {
         }
     }
 
+    /// Actually reads the data from the file and distributes the different fields into the corresponding [ProxyColumnBuilder]
+    /// If a field cannot be read or parsed, the line will be ignored
     fn read_with_reader<R>(
         &self,
         mut builder: Vec<Box<dyn ProxyColumnBuilder>>,
@@ -120,12 +122,12 @@ impl DSVReader {
         Ok(result)
     }
 
+    /// Given a TableSchema, computes the corresponding Proxy implementation
     fn compute_proxies(&self, schema: &TableSchema) -> Vec<Box<dyn ProxyColumnBuilder>> {
         schema
-            .get_entries()
             .iter()
-            .map(|schema_entry| -> Box<dyn ProxyColumnBuilder> {
-                if schema_entry.dict {
+            .map(|data_type| -> Box<dyn ProxyColumnBuilder> {
+                if *data_type == DataTypeName::String {
                     // assume it is just a string for now
                     // TODO: implement for all proxies and types
                     Box::<ProxyStringColumnBuilder>::default()
@@ -135,99 +137,6 @@ impl DSVReader {
             })
             .collect()
     }
-}
-
-/// Creates a [csv::Reader], based on any `Reader` which implements the [std::io::Read] trait
-pub(crate) fn reader<R>(rdr: R, delimiter: u8) -> Reader<R>
-where
-    R: Read,
-{
-    ReaderBuilder::new()
-        .delimiter(delimiter)
-        .escape(Some(b'\\'))
-        .has_headers(false)
-        .double_quote(true)
-        .from_reader(rdr)
-}
-
-/// Imports a csv file
-/// Needs a list of Options of [StorageTypeName] and a [csv::Reader] reference, as well as a [Dictionary][crate::physical::dictionary::Dictionary]
-/// # Parameters
-/// * `datatypes` this is a list of [`StorageTypeName`] options, which needs to match the number of fields in the csv-file.
-///   If the Option is [`None`] the field will be ignored. [`Some(StorageTypeName)`] describes the datatype of the field in the csv-file.
-/// # Behaviour
-/// If a given datatype from `datatypes` is not matching the value in the field (i.e. it cannot be parsed into such a value), the whole line will be ignored and an error message is emitted to the log.
-pub fn read<T, Dict: Dictionary>(
-    datatypes: &[Option<StorageTypeName>], // If no datatype (i.e. None) is specified, we treat the column as string (for now); TODO: discuss this
-    csv_reader: &mut Reader<T>,
-    dictionary: &mut Dict,
-) -> Result<Vec<VecT>, Error>
-where
-    T: Read,
-{
-    let mut result: Vec<Option<VecT>> = Vec::new();
-
-    datatypes.iter().for_each(|dtype| {
-        result.push(
-            dtype
-                .map(|dt| match dt {
-                    StorageTypeName::U32 => VecT::U32(Vec::new()),
-                    StorageTypeName::U64 => VecT::U64(Vec::new()),
-                    StorageTypeName::Float => VecT::Float(Vec::new()),
-                    StorageTypeName::Double => VecT::Double(Vec::new()),
-                })
-                .or_else(|| {
-                    // TODO: not sure if we actually want to handle everything as string which is not specified
-                    // but let's just do this on for now
-                    // (we use u64 with a dictionary for strings)
-                    Some(VecT::U64(Vec::new()))
-                }),
-        );
-    });
-    csv_reader.records().for_each(|rec| {
-        if let Ok(row) = rec {
-            log::trace!("imported row: {:?}", row);
-            if let Err(Error::RollBack(rollback)) =
-                row.iter().enumerate().try_for_each(|(idx, item)| {
-                    if let Some(datatype) = datatypes[idx] {
-                        match datatype.parse(item) {
-                            Ok(val) => {
-                                result[idx].as_mut().map(|vect| {
-                                    vect.push(&val);
-                                    Some(())
-                                });
-                                Ok(())
-                            }
-                            Err(e) => {
-                                log::error!("Ignoring line {:?}, parsing failed: {}", row, e);
-                                Err(Error::RollBack(idx))
-                            }
-                        }
-                    } else {
-                        // TODO: not sure if we actually want to handle everything as string which is not specified
-                        // but let's just do this for now
-                        // (we use u64 with a dictionary for strings)
-
-                        let u64_equivalent = StorageValueT::U64(
-                            dictionary.add(item.to_string()).try_into().unwrap(),
-                        );
-                        if let Some(result_col) = result[idx].as_mut() {
-                            result_col.push(&u64_equivalent);
-                        }
-
-                        Ok(())
-                    }
-                })
-            {
-                for item in result.iter_mut().take(rollback) {
-                    if let Some(vec) = item.as_mut() {
-                        vec.pop()
-                    }
-                }
-            }
-        }
-    });
-    Ok(result.into_iter().flatten().collect())
 }
 
 /// Contains all the needed information, to write results into csv-files
