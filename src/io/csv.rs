@@ -6,7 +6,9 @@ use std::path::PathBuf;
 
 use crate::error::Error;
 use crate::physical::columnar::adaptive_column_builder::ColumnBuilderAdaptiveT;
-use crate::physical::columnar::proxy_builder::{self, ProxyBuilder, ProxyStringBuilder};
+use crate::physical::columnar::proxy_builder::{
+    self, ProxyColumnBuilder, ProxyStringColumnBuilder,
+};
 use crate::physical::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
 use crate::physical::dictionary::Dictionary;
 use crate::physical::tabular::table_types::trie::DebugTrie;
@@ -82,7 +84,7 @@ impl DSVReader {
 
     fn read_with_reader<R>(
         &self,
-        mut builder: Vec<Box<dyn ProxyBuilder>>,
+        mut builder: Vec<Box<dyn ProxyColumnBuilder>>,
         reader: &mut Reader<R>,
         dictionary: &mut proxy_builder::Dict,
     ) -> Result<Vec<ColumnBuilderAdaptiveT>, Error>
@@ -120,15 +122,15 @@ impl DSVReader {
         Ok(result)
     }
 
-    fn compute_proxies(&self, schema: &TableSchema) -> Vec<Box<dyn ProxyBuilder>> {
+    fn compute_proxies(&self, schema: &TableSchema) -> Vec<Box<dyn ProxyColumnBuilder>> {
         schema
             .get_entries()
             .iter()
-            .map(|schema_entry| -> Box<dyn ProxyBuilder> {
+            .map(|schema_entry| -> Box<dyn ProxyColumnBuilder> {
                 if schema_entry.dict {
                     // assume it is just a string for now
                     // TODO: implement for all proxies and types
-                    Box::<ProxyStringBuilder>::default()
+                    Box::<ProxyStringColumnBuilder>::default()
                 } else {
                     unimplemented!("needs to be implemented for all variants!")
                 }
