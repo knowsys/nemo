@@ -52,9 +52,9 @@ pub type ColumnOrder = Permutation;
 // heavily inspired by https://stackoverflow.com/a/30353928/6105522
 
 /// Closure type mapping logical type from context to DataValueT optionally using the Dictionary
-pub trait Mapper: MapperClone + Fn(&mut Dict) -> DataValueT {}
+pub trait Mapper: MapperClone + Fn(&mut Dict) -> StorageValueT {}
 
-impl<T> Mapper for T where T: Fn(&mut Dict) -> DataValueT + Clone + 'static {}
+impl<T> Mapper for T where T: Fn(&mut Dict) -> StorageValueT + Clone + 'static {}
 
 /// Trait required for cloning the mapper closures
 pub trait MapperClone {
@@ -180,7 +180,7 @@ impl TableStorage {
                     Trie::from_cols(col_table)
                 }
                 TableSource::RLS(table_rows) => {
-                    let rows: Vec<Vec<DataValueT>> = table_rows
+                    let rows: Vec<Vec<StorageValueT>> = table_rows
                         .iter()
                         .map(|row| row.iter().cloned().map(|mapper| mapper(dict)).collect())
                         .collect();

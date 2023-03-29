@@ -111,15 +111,15 @@ pub(super) fn compute_filters(
                         let filter_right_cloned = filter.right.clone();
                         Box::new(move |dict: &mut Dict| match filter_right_cloned.clone() {
                             Term::Constant(Identifier(s)) => {
-                                DataValueT::U64(dict.add(s).try_into().unwrap())
+                                StorageValueT::U64(dict.add(s).try_into().unwrap())
                             }
                             Term::Variable(_) => unreachable!(),
                             Term::NumericLiteral(n) => match n {
                                 NumericLiteral::Integer(i) => {
-                                    DataValueT::U64(i.try_into().unwrap())
+                                    StorageValueT::U64(i.try_into().unwrap())
                                 }
                                 NumericLiteral::Decimal(_, _) => todo!(),
-                                NumericLiteral::Double(d) => DataValueT::Double(d),
+                                NumericLiteral::Double(d) => StorageValueT::Double(d),
                             },
                             Term::RdfLiteral(_) => todo!(),
                         })
