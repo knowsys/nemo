@@ -63,7 +63,7 @@ pub struct ProxyU64ColumnBuilder {
 }
 
 impl ProxyColumnBuilder for ProxyU64ColumnBuilder {
-    fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
+    fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.write();
         self.value = Some(string.parse::<u64>()?);
         Ok(())
@@ -93,7 +93,7 @@ pub struct ProxyU32ColumnBuilder {
 }
 
 impl ProxyColumnBuilder for ProxyU32ColumnBuilder {
-    fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
+    fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.write();
         self.value = Some(string.parse::<u32>()?);
         Ok(())
@@ -123,7 +123,7 @@ pub struct ProxyFloatColumnBuilder {
 }
 
 impl ProxyColumnBuilder for ProxyFloatColumnBuilder {
-    fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
+    fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.write();
         let val = string.parse::<f32>()?;
         self.value = Some(Float::new(val)?);
@@ -154,7 +154,7 @@ pub struct ProxyDoubleColumnBuilder {
 }
 
 impl ProxyColumnBuilder for ProxyDoubleColumnBuilder {
-    fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
+    fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.write();
         let val = string.parse::<f64>()?;
         self.value = Some(Double::new(val)?);
