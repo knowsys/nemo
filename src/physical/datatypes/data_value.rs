@@ -1,6 +1,9 @@
+use crate::physical::dictionary::Dictionary;
+use crate::physical::management::database::Dict;
+
 use super::double::Double;
 use super::float::Float;
-use super::DataTypeName;
+use super::{DataTypeName, StorageValueT};
 
 /// Enum for values that pass the barrier of the physical layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,6 +32,17 @@ impl DataValueT {
             Self::U64(_) => DataTypeName::U64,
             Self::Float(_) => DataTypeName::Float,
             Self::Double(_) => DataTypeName::Double,
+        }
+    }
+
+    /// Get the appropriate [`StorageValueT`]` for the given [`DataValueT`]
+    pub fn to_storage_value(&self, dict: &mut Dict) -> StorageValueT {
+        match self {
+            Self::String(val) => StorageValueT::U64(dict.add(val.clone()).try_into().unwrap()), // dictionary indices
+            Self::U32(val) => StorageValueT::U32(*val),
+            Self::U64(val) => StorageValueT::U64(*val),
+            Self::Float(val) => StorageValueT::Float(*val),
+            Self::Double(val) => StorageValueT::Double(*val),
         }
     }
 }

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use bytesize::ByteSize;
 
 use crate::io::csv::read;
-use crate::physical::datatypes::{StorageTypeName, StorageValueT};
+use crate::physical::datatypes::{DataValueT, StorageTypeName, StorageValueT};
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::table_types::trie::DebugTrie;
@@ -47,44 +47,6 @@ pub type Dict = crate::physical::dictionary::PrefixedStringDictionary;
 /// that is needed to get from the original column order to this one.
 pub type ColumnOrder = Permutation;
 
-// Traits allowing to clone boxed with closures
-// heavily inspired by https://stackoverflow.com/a/30353928/6105522
-
-/// Closure type mapping logical type from context to DataValueT optionally using the Dictionary
-pub trait Mapper: MapperClone + Fn(&mut Dict) -> StorageValueT {}
-
-impl<T> Mapper for T where T: Fn(&mut Dict) -> StorageValueT + Clone + 'static {}
-
-/// Trait required for cloning the mapper closures
-pub trait MapperClone {
-    /// Clone a boxed mapper closure
-    fn clone_box(&self) -> Box<dyn Mapper>;
-}
-
-impl<T> MapperClone for T
-where
-    T: 'static + Mapper + Clone,
-{
-    fn clone_box(&self) -> Box<dyn Mapper> {
-        Box::new(self.clone())
-    }
-}
-
-impl Clone for Box<dyn Mapper> {
-    fn clone(&self) -> Box<dyn Mapper> {
-        self.clone_box()
-    }
-}
-
-impl Debug for Box<dyn Mapper> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "<Some Mapper closure taking Dict and returning DataValueT>"
-        )
-    }
-}
-
 /// Type which represents table id.
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct TableId(u64);
@@ -123,7 +85,7 @@ pub enum TableSource {
     /// Table is stored as facts in an rls file
     /// TODO: To not invoke the parser twice I just put the parsed "row-table" here.
     /// Does not seem quite right
-    RLS(Vec<Vec<Box<dyn Mapper>>>),
+    RLS(Vec<Vec<DataValueT>>),
 }
 
 impl Display for TableSource {
@@ -198,7 +160,12 @@ impl TableStorage {
                 TableSource::RLS(table_rows) => {
                     let rows: Vec<Vec<StorageValueT>> = table_rows
                         .iter()
-                        .map(|row| row.iter().cloned().map(|mapper| mapper(dict)).collect())
+                        .map(|row| {
+                            row.iter()
+                                .cloned()
+                                .map(|val| val.to_storage_value(dict))
+                                .collect()
+                        })
                         .collect();
                     Trie::from_rows(&rows)
                 }

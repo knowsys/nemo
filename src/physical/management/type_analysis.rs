@@ -293,8 +293,8 @@ impl TypeTree {
                                         subtype_node.schema.get_entry(*repeat_index),
                                     );
                                 }
-                                AppendInstruction::Constant(_, type_name) => {
-                                    new_schema.add_entry(*type_name);
+                                AppendInstruction::Constant(value) => {
+                                    new_schema.add_entry(value.get_type());
                                 }
                             }
                         }

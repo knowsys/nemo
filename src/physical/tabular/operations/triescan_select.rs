@@ -3,8 +3,8 @@ use crate::physical::{
         operations::{ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanPass},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::{StorageTypeName, StorageValueT},
-    management::database::{Dict, Mapper},
+    datatypes::{DataValueT, StorageTypeName, StorageValueT},
+    management::database::Dict,
     tabular::traits::triescan::{TrieScan, TrieScanEnum},
 };
 use std::cell::UnsafeCell;
@@ -179,8 +179,7 @@ pub struct ValueAssignment {
     /// Index of the column to which the value is assigned
     pub column_idx: usize,
     /// The value assigned to the column
-    //pub value_mapper: fn (&mut Dict) -> StorageValueT,
-    pub value_mapper: Box<dyn Mapper>,
+    pub value: DataValueT,
 }
 
 impl<'a> TrieScanSelectValue<'a> {
@@ -227,7 +226,7 @@ impl<'a> TrieScanSelectValue<'a> {
                 ($variant:ident) => {
                     unsafe {
                         let value = if let StorageValueT::$variant(value) =
-                            (assignemnt.value_mapper)(dict)
+                            assignemnt.value.to_storage_value(dict)
                         {
                             value
                         } else {
@@ -306,7 +305,7 @@ impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
 mod test {
     use super::{TrieScanSelectEqual, TrieScanSelectValue, ValueAssignment};
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
-    use crate::physical::datatypes::StorageValueT;
+    use crate::physical::datatypes::DataValueT;
     use crate::physical::management::database::Dict;
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
@@ -417,11 +416,11 @@ mod test {
             &[
                 ValueAssignment {
                     column_idx: 1,
-                    value_mapper: Box::new(|_| StorageValueT::U64(4)),
+                    value: DataValueT::U64(4),
                 },
                 ValueAssignment {
                     column_idx: 3,
-                    value_mapper: Box::new(|_| StorageValueT::U64(7)),
+                    value: DataValueT::U64(7),
                 },
             ],
         );

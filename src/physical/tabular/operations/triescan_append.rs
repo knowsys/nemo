@@ -17,8 +17,8 @@ use crate::{
                 columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
             },
         },
-        datatypes::{DataTypeName, StorageTypeName, StorageValueT},
-        management::database::{Dict, Mapper},
+        datatypes::{DataValueT, StorageTypeName, StorageValueT},
+        management::database::Dict,
         tabular::{
             table_types::trie::Trie,
             traits::{
@@ -57,7 +57,7 @@ pub enum AppendInstruction {
     /// Add a column which only contains a constant.
     /// Must contain schema information.
     /// In this case whether the constant is associated with a dict
-    Constant(Box<dyn Mapper>, DataTypeName),
+    Constant(DataValueT),
 }
 
 /// Appends columns to an existing trie and returns the modified trie.
@@ -144,7 +144,7 @@ pub fn trie_append(
                         }
                     };
                 }
-                AppendInstruction::Constant(mapper, _) => {
+                AppendInstruction::Constant(value) => {
                     macro_rules! append_columns_for_datatype {
                         ($value:ident, $variant:ident, $type:ty) => {{
                             let target_length = gap_index
@@ -167,7 +167,7 @@ pub fn trie_append(
                         }};
                     }
 
-                    match mapper(dict) {
+                    match value.to_storage_value(dict) {
                         StorageValueT::U32(value) => append_columns_for_datatype!(value, U32, u32),
                         StorageValueT::U64(value) => append_columns_for_datatype!(value, U64, u64),
                         StorageValueT::Float(value) => {
@@ -271,7 +271,7 @@ impl<'a> TrieScanAppend<'a> {
                             StorageTypeName::Double => append_repeat_for_datatype!(Double),
                         }
                     },
-                    AppendInstruction::Constant(mapper, _) => {
+                    AppendInstruction::Constant(value) => {
                         macro_rules! append_constant_for_datatype {
                             ($variant:ident, $value: expr) => {{
                                 column_scans.push(UnsafeCell::new(ColumnScanT::$variant(
@@ -282,7 +282,7 @@ impl<'a> TrieScanAppend<'a> {
                             }};
                         }
 
-                        match mapper(dict) {
+                        match value.to_storage_value(dict) {
                             StorageValueT::U32(value) => append_constant_for_datatype!(U32, value),
                             StorageValueT::U64(value) => append_constant_for_datatype!(U64, value),
                             StorageValueT::Float(value) => {
@@ -424,7 +424,7 @@ impl<'a> TrieScan<'a> for TrieScanAppend<'a> {
 mod test {
     use crate::physical::{
         columnar::traits::columnscan::ColumnScanT,
-        datatypes::{DataTypeName, StorageTypeName, StorageValueT},
+        datatypes::{DataValueT, StorageTypeName},
         management::database::Dict,
         tabular::{
             operations::triescan_append::{AppendInstruction, TrieScanAppend},
@@ -466,25 +466,13 @@ mod test {
             &mut dict,
             trie_generic,
             &[
-                vec![AppendInstruction::Constant(
-                    Box::new(|_| StorageValueT::U64(2)),
-                    DataTypeName::U64,
-                )],
+                vec![AppendInstruction::Constant(DataValueT::U64(2))],
                 vec![],
                 vec![
-                    AppendInstruction::Constant(
-                        Box::new(|_| StorageValueT::U64(3)),
-                        DataTypeName::U64,
-                    ),
-                    AppendInstruction::Constant(
-                        Box::new(|_| StorageValueT::U64(4)),
-                        DataTypeName::U64,
-                    ),
+                    AppendInstruction::Constant(DataValueT::U64(3)),
+                    AppendInstruction::Constant(DataValueT::U64(4)),
                 ],
-                vec![AppendInstruction::Constant(
-                    Box::new(|_| StorageValueT::U64(1)),
-                    DataTypeName::U64,
-                )],
+                vec![AppendInstruction::Constant(DataValueT::U64(1))],
             ],
             vec![
                 StorageTypeName::U64,
