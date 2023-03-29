@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Trait for a Proxy builder, which handles the parsing and translation from [`string`] to [`StorageType`][crate::physical::datatypes::StorageType] Column elements
-pub trait ProxyColumnBuilder: std::fmt::Debug {
+pub trait ColumnBuilderProxy: std::fmt::Debug {
     /// Prepare another value to be added to the ColumnBuilder. If another value is already prepared, this one is actually added to the ColumnBuilder before the new value is checked
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error>;
     /// Forgets an already prepared value, to rollback that information
@@ -21,12 +21,12 @@ pub trait ProxyColumnBuilder: std::fmt::Debug {
 
 /// ProxyBuilder to add Strings
 #[derive(Default, Debug)]
-pub struct ProxyStringColumnBuilder {
+pub struct StringColumnBuilderProxy {
     value: Option<u64>,
     vec: Vec<u64>,
 }
 
-impl ProxyColumnBuilder for ProxyStringColumnBuilder {
+impl ColumnBuilderProxy for StringColumnBuilderProxy {
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.write();
         self.value = Some(
@@ -57,12 +57,12 @@ impl ProxyColumnBuilder for ProxyStringColumnBuilder {
 
 /// ProxyBuilder to add U64
 #[derive(Default, Debug)]
-pub struct ProxyU64ColumnBuilder {
+pub struct U64ColumnBuilderProxy {
     value: Option<u64>,
     vec: Vec<u64>,
 }
 
-impl ProxyColumnBuilder for ProxyU64ColumnBuilder {
+impl ColumnBuilderProxy for U64ColumnBuilderProxy {
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.write();
         self.value = Some(string.parse::<u64>()?);
@@ -87,12 +87,12 @@ impl ProxyColumnBuilder for ProxyU64ColumnBuilder {
 
 /// ProxyBuilder to add U32
 #[derive(Default, Debug)]
-pub struct ProxyU32ColumnBuilder {
+pub struct U32ColumnBuilderProxy {
     value: Option<u32>,
     vec: Vec<u32>,
 }
 
-impl ProxyColumnBuilder for ProxyU32ColumnBuilder {
+impl ColumnBuilderProxy for U32ColumnBuilderProxy {
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.write();
         self.value = Some(string.parse::<u32>()?);
@@ -117,12 +117,12 @@ impl ProxyColumnBuilder for ProxyU32ColumnBuilder {
 
 /// ProxyBuilder to add Float
 #[derive(Default, Debug)]
-pub struct ProxyFloatColumnBuilder {
+pub struct FloatColumnBuilderProxy {
     value: Option<Float>,
     vec: Vec<Float>,
 }
 
-impl ProxyColumnBuilder for ProxyFloatColumnBuilder {
+impl ColumnBuilderProxy for FloatColumnBuilderProxy {
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.write();
         let val = string.parse::<f32>()?;
@@ -148,12 +148,12 @@ impl ProxyColumnBuilder for ProxyFloatColumnBuilder {
 
 /// ProxyBuilder to add Double
 #[derive(Default, Debug)]
-pub struct ProxyDoubleColumnBuilder {
+pub struct DoubleColumnBuilderProxy {
     value: Option<Double>,
     vec: Vec<Double>,
 }
 
-impl ProxyColumnBuilder for ProxyDoubleColumnBuilder {
+impl ColumnBuilderProxy for DoubleColumnBuilderProxy {
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.write();
         let val = string.parse::<f64>()?;

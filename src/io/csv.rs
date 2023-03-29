@@ -6,8 +6,8 @@ use std::path::PathBuf;
 
 use crate::error::Error;
 use crate::physical::columnar::proxy_builder::{
-    ProxyColumnBuilder, ProxyDoubleColumnBuilder, ProxyFloatColumnBuilder,
-    ProxyStringColumnBuilder, ProxyU32ColumnBuilder, ProxyU64ColumnBuilder,
+    ColumnBuilderProxy, DoubleColumnBuilderProxy, FloatColumnBuilderProxy,
+    StringColumnBuilderProxy, U32ColumnBuilderProxy, U64ColumnBuilderProxy,
 };
 use crate::physical::datatypes::storage_value::VecT;
 use crate::physical::datatypes::StorageTypeName;
@@ -86,7 +86,7 @@ impl DSVReader {
     /// If a field cannot be read or parsed, the line will be ignored
     fn read_with_reader<R>(
         &self,
-        mut builder: Vec<Box<dyn ProxyColumnBuilder>>,
+        mut builder: Vec<Box<dyn ColumnBuilderProxy>>,
         reader: &mut Reader<R>,
         dictionary: &mut Dict,
     ) -> Result<Vec<VecT>, Error>
@@ -109,7 +109,8 @@ impl DSVReader {
                 })
             {
                 builder.iter_mut().enumerate().for_each(|(idx, builder)| {
-                    // We need to write the last line, if one exists
+                    // Write the last line, if one exists
+                    // This has been done till the rollback-index, therefore the old data needs to be written
                     if idx > rollback {
                         builder.write();
                     }
@@ -126,21 +127,21 @@ impl DSVReader {
     }
 
     /// Given a TableSchema, computes the corresponding Proxy implementation
-    fn compute_proxies(&self, schema: &TableSchema) -> Vec<Box<dyn ProxyColumnBuilder>> {
+    fn compute_proxies(&self, schema: &TableSchema) -> Vec<Box<dyn ColumnBuilderProxy>> {
         schema
             .get_entries()
             .iter()
-            .map(|schema_entry| -> Box<dyn ProxyColumnBuilder> {
+            .map(|schema_entry| -> Box<dyn ColumnBuilderProxy> {
                 if schema_entry.dict {
                     // assume it is just a string for now
                     // TODO: implement for all proxies and types
-                    Box::<ProxyStringColumnBuilder>::default()
+                    Box::<StringColumnBuilderProxy>::default()
                 } else {
                     match schema_entry.type_name {
-                        StorageTypeName::U32 => Box::<ProxyU32ColumnBuilder>::default(),
-                        StorageTypeName::U64 => Box::<ProxyU64ColumnBuilder>::default(),
-                        StorageTypeName::Float => Box::<ProxyFloatColumnBuilder>::default(),
-                        StorageTypeName::Double => Box::<ProxyDoubleColumnBuilder>::default(),
+                        StorageTypeName::U32 => Box::<U32ColumnBuilderProxy>::default(),
+                        StorageTypeName::U64 => Box::<U64ColumnBuilderProxy>::default(),
+                        StorageTypeName::Float => Box::<FloatColumnBuilderProxy>::default(),
+                        StorageTypeName::Double => Box::<DoubleColumnBuilderProxy>::default(),
                     }
                 }
             })
@@ -248,9 +249,9 @@ Boston;United States;4628910
         let csvreader = DSVReader::csv("test".into());
         let result = csvreader.read_with_reader(
             vec![
-                Box::<ProxyStringColumnBuilder>::default(),
-                Box::<ProxyStringColumnBuilder>::default(),
-                Box::<ProxyStringColumnBuilder>::default(),
+                Box::<StringColumnBuilderProxy>::default(),
+                Box::<StringColumnBuilderProxy>::default(),
+                Box::<StringColumnBuilderProxy>::default(),
             ],
             &mut rdr,
             &mut dict,
