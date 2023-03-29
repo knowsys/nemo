@@ -3,13 +3,15 @@ use std::fs::File;
 use criterion::{criterion_group, criterion_main, Criterion};
 use csv::ReaderBuilder;
 use polars::prelude::{CsvReader, DataFrame, DataType, JoinType, Schema, SerReader};
-use stage2::io::csv::read;
+use stage2::io::csv::DSVReader;
 
+use stage2::physical::datatypes::DataTypeName;
 use stage2::physical::tabular::operations::triescan_project::ProjectReordering;
 use stage2::physical::tabular::operations::{
     materialize, JoinBindings, TrieScanJoin, TrieScanProject, TrieScanUnion,
 };
 use stage2::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
+use stage2::physical::tabular::traits::table_schema::{TableSchema, TableSchemaEntry};
 use stage2::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
 use stage2::{
     logical::model::DataSource,
@@ -18,16 +20,16 @@ use stage2::{
 
 fn load_trie(source: &DataSource, arity: usize, dict: &mut PrefixedStringDictionary) -> Trie {
     match source {
-        DataSource::DsvFile { file, delimiter } => {
-            // Using fallback solution to treat everything as string for now (storing as u64 internally)
-            let datatypes: Vec<Option<StorageTypeName>> = (0..arity).map(|_| None).collect();
-
-            let mut reader = ReaderBuilder::new()
-                .delimiter(*delimiter)
-                .has_headers(false)
-                .from_reader(File::open(file.as_path()).unwrap());
-
-            let col_table = read(&datatypes, &mut reader, dict).unwrap();
+        DataSource::CsvFile(file) => {
+            // Using fallback solution to treat eveything as string for now (storing as u64 internally)
+            let datatypeschema = TableSchema::from_vec(
+                (0..arity)
+                    .map(|_| DataTypeName::String)
+                    .collect(),
+            );
+            // TODO branch will be reduced to these two lines
+            let csv_reader = DSVReader::csv(*file.clone());
+            let col_table = csv_reader.read(&datatypeschema, dict).expect("Should work");
 
             let trie = Trie::from_cols(col_table);
 
