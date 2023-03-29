@@ -1,7 +1,6 @@
 use std::fs::File;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use csv::ReaderBuilder;
 use polars::prelude::{CsvReader, DataFrame, DataType, JoinType, Schema, SerReader};
 use stage2::io::csv::DSVReader;
 
