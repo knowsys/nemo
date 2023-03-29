@@ -11,6 +11,7 @@ use crate::physical::columnar::proxy_builder::{
 };
 use crate::physical::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
 use crate::physical::dictionary::Dictionary;
+use crate::physical::management::database::Dict;
 use crate::physical::tabular::table_types::trie::DebugTrie;
 use crate::physical::tabular::table_types::trie::Trie;
 use crate::physical::tabular::traits::table_schema::TableSchema;
@@ -56,11 +57,7 @@ impl DSVReader {
             .from_reader(rdr)
     }
     /// todo
-    pub fn read(
-        self,
-        schema: &TableSchema,
-        dictionary: &mut proxy_builder::Dict,
-    ) -> Result<Vec<ColumnBuilderAdaptiveT>, Error> {
+    pub fn read(self, schema: &TableSchema, dictionary: &mut Dict) -> Result<Vec<VecT>, Error> {
         let gz_decoder = flate2::read::GzDecoder::new(File::open(self.file.as_path())?);
         let builder = self.compute_proxies(schema);
         if gz_decoder.header().is_some() {
@@ -86,8 +83,8 @@ impl DSVReader {
         &self,
         mut builder: Vec<Box<dyn ProxyColumnBuilder>>,
         reader: &mut Reader<R>,
-        dictionary: &mut proxy_builder::Dict,
-    ) -> Result<Vec<ColumnBuilderAdaptiveT>, Error>
+        dictionary: &mut Dict,
+    ) -> Result<Vec<VecT>, Error>
     where
         R: Read,
     {
