@@ -4,11 +4,6 @@ use crate::{
     physical::{datatypes::storage_value::VecT, dictionary::Dictionary},
 };
 
-use super::{
-    adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
-    traits::columnbuilder::ColumnBuilder,
-};
-
 /// Trait for a Proxy builder, which handles the parsing and translation from [`string`] to [`StorageType`][crate::physical::datatypes::StorageType] Column elements
 pub trait ProxyColumnBuilder: std::fmt::Debug {
     /// Prepare another value to be added to the ColumnBuilder. If another value is already prepared, this one is actually added to the ColumnBuilder before the new value is checked

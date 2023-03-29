@@ -8,7 +8,7 @@ use bytesize::ByteSize;
 
 use crate::io::csv::{read, DSVReader};
 use crate::physical::columnar::proxy_builder;
-use crate::physical::datatypes::{DataValueT, StorageTypeName, StorageValueT};
+use crate::physical::datatypes::{DataValueT, StorageValueT, DataTypeName};
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::table_types::trie::DebugTrie;
@@ -135,26 +135,16 @@ impl TableStorage {
             log::info!("Loading source {source}");
 
             let trie = match source {
-                TableSource::DSV { file, delimiter } => {
-                    // Using fallback solution to treat everything as string for now (storing as u64 internally)
-                    let datatypes: Vec<Option<StorageTypeName>> =
-                        (0..schema.arity()).map(|_| None).collect();
-
-                    let gz_decoder = flate2::read::GzDecoder::new(File::open(file.as_path())?);
-
-                    let col_table = if gz_decoder.header().is_some() {
-                        read(
-                            &datatypes,
-                            &mut crate::io::csv::reader(gz_decoder, *delimiter),
-                            dict,
-                        )?
-                    } else {
-                        read(
-                            &datatypes,
-                            &mut crate::io::csv::reader(File::open(file.as_path())?, *delimiter),
-                            dict,
-                        )?
-                    };
+                TableSource::DSV {file, delimiter } => {
+                    // Using fallback solution to treat eveything as string for now (storing as u64 internally)
+                    let datatypeschema = TableSchema::from_vec(
+                        (0..schema.arity())
+                            .map(|_| DataTypeName::String)
+                            .collect(),
+                    );
+                    // TODO branch will be reduced to these two lines
+                    let csv_reader = DSVReader::csv(file.clone(), *delimiter);
+                    let col_table = csv_reader.read(&datatypeschema, dict)?;
 
                     Trie::from_cols(col_table)
                 }
