@@ -94,7 +94,10 @@ impl ExecutionEngine {
         // Add all the data source declarations
         for ((predicate, _), source) in program.sources() {
             let new_source = match source {
-                DataSource::CsvFile(file) => TableSource::CSV(*file.clone()),
+                DataSource::DsvFile { file, delimiter } => TableSource::DSV {
+                    file: *file.clone(),
+                    delimiter: *delimiter,
+                },
                 DataSource::RdfFile(_) => todo!("RDF data sources are not yet implemented"),
                 DataSource::SparqlQuery(_) => {
                     todo!("SPARQL query data sources are not yet implemented")

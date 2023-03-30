@@ -18,7 +18,7 @@ use stage2::{
 
 fn load_trie(source: &DataSource, arity: usize, dict: &mut PrefixedStringDictionary) -> Trie {
     match source {
-        DataSource::CsvFile(file) => {
+        DataSource::DsvFile { file, delimiter } => {
             // Using fallback solution to treat eveything as string for now (storing as u64 internally)
             let datatypeschema = TableSchema::from_vec(
                 (0..arity)
@@ -30,8 +30,8 @@ fn load_trie(source: &DataSource, arity: usize, dict: &mut PrefixedStringDiction
                     .collect(),
             );
             // TODO branch will be reduced to these two lines
-            let csv_reader = DSVReader::csv(*file.clone());
-            let col_table = csv_reader.read(&datatypeschema, dict).expect("Should work");
+            let dsv_reader = DSVReader::dsv(*file.clone(), *delimiter);
+            let col_table = dsv_reader.read(&datatypeschema, dict).expect("Should work");
 
             let trie = Trie::from_cols(col_table);
 

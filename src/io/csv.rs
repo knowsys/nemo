@@ -30,18 +30,19 @@ pub struct DSVReader {
 impl DSVReader {
     /// Instantiate a [DSVReader] for CSV files
     pub fn csv(file: PathBuf) -> Self {
-        Self {
-            file,
-            delimiter: b',',
-            escape: Some(b'\\'),
-        }
+        Self::dsv(file, b',')
     }
 
     /// Instantiate a [DSVReader] for TSV files
     pub fn tsv(file: PathBuf) -> Self {
+        Self::dsv(file, b'\t')
+    }
+
+    /// Instantiate a [DSVReader] for a given delimiter
+    pub fn dsv(file: PathBuf, delimiter: u8) -> Self {
         Self {
             file,
-            delimiter: b'\t',
+            delimiter,
             escape: Some(b'\\'),
         }
     }

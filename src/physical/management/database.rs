@@ -113,8 +113,13 @@ impl TableId {
 /// Indicates the file format of a table stored on disc.
 #[derive(Debug)]
 pub enum TableSource {
-    /// Table is contained in csv file
-    CSV(PathBuf),
+    /// Table is contained in a DSV (delimiter-separated values) file
+    DSV {
+        /// the path to the DSV file
+        file: PathBuf,
+        /// the delimiter separating values
+        delimiter: u8,
+    },
     /// Table is stored as facts in an rls file
     /// TODO: To not invoke the parser twice I just put the parsed "row-table" here.
     /// Does not seem quite right
@@ -124,7 +129,19 @@ pub enum TableSource {
 impl Display for TableSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TableSource::CSV(path) => write!(f, "CSV file: {}", path.display()),
+            TableSource::DSV {
+                file,
+                delimiter: b',',
+            } => write!(f, "CSV file: {}", file.display()),
+            TableSource::DSV {
+                file,
+                delimiter: b'\t',
+            } => write!(f, "TSV file: {}", file.display()),
+            TableSource::DSV { file, delimiter } => write!(
+                f,
+                "DSV file with delimiter {delimiter:?}: {}",
+                file.display()
+            ),
             TableSource::RLS(_) => write!(f, "Rule file"),
         }
     }
@@ -155,7 +172,7 @@ impl TableStorage {
             log::info!("Loading source {source}");
 
             let trie = match source {
-                TableSource::CSV(file) => {
+                TableSource::DSV { file, delimiter } => {
                     // Using fallback solution to treat eveything as string for now (storing as u64 internally)
                     let datatypeschema = TableSchema::from_vec(
                         (0..schema.arity())
@@ -167,9 +184,8 @@ impl TableStorage {
                             .collect(),
                     );
                     // TODO branch will be reduced to these two lines
-                    let csv_reader = DSVReader::csv(file.clone());
-                    let col_table = csv_reader.read(&datatypeschema, dict)?;
-
+                    let dsv_reader = DSVReader::dsv(file.clone(), *delimiter);
+                    let col_table = dsv_reader.read(&datatypeschema, dict)?;
                     Trie::from_cols(col_table)
                 }
                 TableSource::RLS(table_rows) => {

@@ -221,6 +221,14 @@ impl<'a> RuleParser<'a> {
                     ),
                     map(
                         delimited(
+                            preceded(tag("load-tsv"), self.parse_open_parenthesis()),
+                            turtle::string,
+                            self.parse_close_parenthesis(),
+                        ),
+                        DataSource::tsv_file,
+                    ),
+                    map(
+                        delimited(
                             preceded(tag("load-rdf"), self.parse_open_parenthesis()),
                             turtle::string,
                             self.parse_close_parenthesis(),
