@@ -1,13 +1,13 @@
 use super::super::traits::{table::Table, table_schema::TableSchema};
 use crate::physical::columnar::column_types::interval::ColumnWithIntervalsT;
-use crate::physical::datatypes::DataTypeName;
+use crate::physical::datatypes::StorageTypeName;
 use std::fmt::Debug;
 
 /// Representation of one attribute/tree node in an [`FTableSchema`]
 #[derive(Debug)]
 struct FTableSchemaEntry {
     label: usize,
-    datatype: DataTypeName,
+    datatype: StorageTypeName,
     parent: usize,
 }
 
@@ -34,7 +34,7 @@ impl FTableSchema {
 
     /// Adds a new entry with the given values to the current entries.
     /// The parent will be set if a node with the given label exists; otherwise the new node becomes a root.
-    pub fn add_entry(&mut self, label: usize, datatype: DataTypeName, parent_label: usize) {
+    pub fn add_entry(&mut self, label: usize, datatype: StorageTypeName, parent_label: usize) {
         let pidx = self.find_index(parent_label);
         if let Some(idx) = pidx {
             self.attributes.push(FTableSchemaEntry {
@@ -83,7 +83,7 @@ impl TableSchema for FTableSchema {
         self.attributes.len()
     }
 
-    fn get_type(&self, index: usize) -> DataTypeName {
+    fn get_type(&self, index: usize) -> StorageTypeName {
         self.attributes[index].datatype
     }
 
@@ -169,16 +169,16 @@ impl Table for Ftrie {
 mod test {
     use super::super::super::traits::{table::Table, table_schema::TableSchema};
     use super::{FTableSchema, Ftrie};
-    use crate::physical::datatypes::DataTypeName;
+    use crate::physical::datatypes::StorageTypeName;
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
     #[test]
     fn test_count_rows_linear() {
         let mut fts = FTableSchema::new();
-        fts.add_entry(1, DataTypeName::U64, 0);
-        fts.add_entry(11, DataTypeName::U64, 1);
-        fts.add_entry(111, DataTypeName::U64, 11);
+        fts.add_entry(1, StorageTypeName::U64, 0);
+        fts.add_entry(11, StorageTypeName::U64, 1);
+        fts.add_entry(111, StorageTypeName::U64, 11);
 
         let gic1 = make_column_with_intervals_t(&[1, 2, 3], &[0]);
         let gic11 = make_column_with_intervals_t(&[11, 21, 31], &[0, 1, 2]);
@@ -194,10 +194,10 @@ mod test {
     #[test]
     fn test_count_rows() {
         let mut fts = FTableSchema::new();
-        fts.add_entry(1, DataTypeName::U64, 0);
-        fts.add_entry(11, DataTypeName::U64, 1);
-        fts.add_entry(12, DataTypeName::U64, 1);
-        fts.add_entry(121, DataTypeName::U64, 12);
+        fts.add_entry(1, StorageTypeName::U64, 0);
+        fts.add_entry(11, StorageTypeName::U64, 1);
+        fts.add_entry(12, StorageTypeName::U64, 1);
+        fts.add_entry(121, StorageTypeName::U64, 12);
 
         let gic1 = make_column_with_intervals_t(&[1, 2, 3], &[0]);
         let gic11 = make_column_with_intervals_t(&[11, 21, 22, 31], &[0, 1, 3]);
@@ -214,10 +214,10 @@ mod test {
     #[test]
     fn test_count_rows_cartesian() {
         let mut fts = FTableSchema::new();
-        fts.add_entry(1, DataTypeName::U64, 0);
-        fts.add_entry(2, DataTypeName::U64, 0);
-        fts.add_entry(11, DataTypeName::U64, 1);
-        fts.add_entry(21, DataTypeName::U64, 2);
+        fts.add_entry(1, StorageTypeName::U64, 0);
+        fts.add_entry(2, StorageTypeName::U64, 0);
+        fts.add_entry(11, StorageTypeName::U64, 1);
+        fts.add_entry(21, StorageTypeName::U64, 2);
 
         let gic1 = make_column_with_intervals_t(&[1, 2, 3], &[0]);
         let gic2 = make_column_with_intervals_t(&[1, 2], &[0]);
@@ -234,18 +234,18 @@ mod test {
     #[test]
     fn test() {
         let mut fts = FTableSchema::new();
-        fts.add_entry(1, DataTypeName::U64, 0);
-        fts.add_entry(11, DataTypeName::U64, 1);
-        fts.add_entry(12, DataTypeName::Double, 1);
-        fts.add_entry(111, DataTypeName::Float, 11);
-        fts.add_entry(1111, DataTypeName::U64, 111);
-        fts.add_entry(1112, DataTypeName::U64, 111);
+        fts.add_entry(1, StorageTypeName::U64, 0);
+        fts.add_entry(11, StorageTypeName::U64, 1);
+        fts.add_entry(12, StorageTypeName::Double, 1);
+        fts.add_entry(111, StorageTypeName::Float, 11);
+        fts.add_entry(1111, StorageTypeName::U64, 111);
+        fts.add_entry(1112, StorageTypeName::U64, 111);
 
         assert_eq!(fts.arity(), 6);
-        assert_eq!(fts.get_type(0), DataTypeName::U64);
+        assert_eq!(fts.get_type(0), StorageTypeName::U64);
         assert_eq!(fts.get_label(0), 1);
         assert_eq!(fts.get_parent(0), None);
-        assert_eq!(fts.get_type(2), DataTypeName::Double);
+        assert_eq!(fts.get_type(2), StorageTypeName::Double);
         assert_eq!(fts.get_label(2), 12);
         assert_eq!(fts.get_parent(2), Some(0));
 

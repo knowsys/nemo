@@ -12,8 +12,7 @@ use crate::{
     meta::TimedCode,
     physical::{
         datatypes::DataValueT,
-        dictionary::Dictionary,
-        management::database::{Dict, Mapper, TableId, TableSource},
+        management::database::{TableId, TableSource},
         tabular::table_types::trie::DebugTrie,
     },
 };
@@ -111,29 +110,20 @@ impl ExecutionEngine {
         }
 
         // Add all the facts contained in the rule file as a source
-        let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<Box<dyn Mapper>>>>::new();
+        let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<DataValueT>>>::new();
 
         for fact in program.facts() {
-            let new_row: Vec<Box<dyn Mapper>> = fact
+            let new_row: Vec<DataValueT> = fact
                 .0
                 .terms()
                 .iter()
-                .map(|t| {
-                    let t_cloned = t.clone();
-                    let boxed_mapper: Box<dyn Mapper> =
-                        Box::new(move |dict: &mut Dict| match t_cloned.clone() {
-                            Term::NumericLiteral(nl) => match nl {
-                                NumericLiteral::Integer(i) => {
-                                    DataValueT::U64(i.try_into().unwrap())
-                                }
-                                _ => todo!(),
-                            },
-                            Term::Constant(Identifier(s)) => {
-                                DataValueT::U64(dict.add(s).try_into().unwrap())
-                            }
-                            _ => todo!(),
-                        });
-                    boxed_mapper
+                .map(|t| match t {
+                    Term::NumericLiteral(nl) => match nl {
+                        NumericLiteral::Integer(i) => DataValueT::String(i.to_string()), // TODO: should be integer type; we handle everything as string for now as long as we do not have the logical type system
+                        _ => todo!(),
+                    },
+                    Term::Constant(Identifier(s)) => DataValueT::String(s.clone()),
+                    _ => todo!(),
                 })
                 .collect();
 

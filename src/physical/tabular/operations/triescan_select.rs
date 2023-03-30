@@ -3,12 +3,9 @@ use crate::physical::{
         operations::{ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanPass},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::{DataTypeName, DataValueT},
-    management::database::{Dict, Mapper},
-    tabular::traits::{
-        table_schema::TableColumnTypes,
-        triescan::{TrieScan, TrieScanEnum},
-    },
+    datatypes::{DataValueT, StorageTypeName, StorageValueT},
+    management::database::Dict,
+    tabular::traits::triescan::{TrieScan, TrieScanEnum},
 };
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
@@ -65,10 +62,10 @@ impl<'a> TrieScanSelectEqual<'a> {
             }
 
             match col_type {
-                DataTypeName::U32 => init_scans_for_datatype!(U32),
-                DataTypeName::U64 => init_scans_for_datatype!(U64),
-                DataTypeName::Float => init_scans_for_datatype!(Float),
-                DataTypeName::Double => init_scans_for_datatype!(Double),
+                StorageTypeName::U32 => init_scans_for_datatype!(U32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double),
             };
         }
 
@@ -111,10 +108,10 @@ impl<'a> TrieScanSelectEqual<'a> {
                 }
 
                 match column_types[current_member_idx] {
-                    DataTypeName::U32 => init_scans_for_datatype!(U32),
-                    DataTypeName::U64 => init_scans_for_datatype!(U64),
-                    DataTypeName::Float => init_scans_for_datatype!(Float),
-                    DataTypeName::Double => init_scans_for_datatype!(Double),
+                    StorageTypeName::U32 => init_scans_for_datatype!(U32),
+                    StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                    StorageTypeName::Float => init_scans_for_datatype!(Float),
+                    StorageTypeName::Double => init_scans_for_datatype!(Double),
                 }
             }
         }
@@ -157,7 +154,7 @@ impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
         Some(&self.select_scans[index])
     }
 
-    fn get_types(&self) -> &TableColumnTypes {
+    fn get_types(&self) -> &Vec<StorageTypeName> {
         self.base_trie.get_types()
     }
 }
@@ -182,8 +179,7 @@ pub struct ValueAssignment {
     /// Index of the column to which the value is assigned
     pub column_idx: usize,
     /// The value assigned to the column
-    //pub value_mapper: fn (&mut Dict) -> DataValueT,
-    pub value_mapper: Box<dyn Mapper>,
+    pub value: DataValueT,
 }
 
 impl<'a> TrieScanSelectValue<'a> {
@@ -218,10 +214,10 @@ impl<'a> TrieScanSelectValue<'a> {
             }
 
             match col_type {
-                DataTypeName::U32 => init_scans_for_datatype!(U32),
-                DataTypeName::U64 => init_scans_for_datatype!(U64),
-                DataTypeName::Float => init_scans_for_datatype!(Float),
-                DataTypeName::Double => init_scans_for_datatype!(Double),
+                StorageTypeName::U32 => init_scans_for_datatype!(U32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double),
             }
         }
 
@@ -229,12 +225,13 @@ impl<'a> TrieScanSelectValue<'a> {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
                     unsafe {
-                        let value =
-                            if let DataValueT::$variant(value) = (assignemnt.value_mapper)(dict) {
-                                value
-                            } else {
-                                panic!("Expected a column scan of type {}", stringify!($variant));
-                            };
+                        let value = if let StorageValueT::$variant(value) =
+                            assignemnt.value.to_storage_value(dict)
+                        {
+                            value
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        };
 
                         let scan_enum = if let ColumnScanT::$variant(scan) =
                             &*base_trie.get_scan(assignemnt.column_idx).unwrap().get()
@@ -254,10 +251,10 @@ impl<'a> TrieScanSelectValue<'a> {
                 };
             }
             match column_types[assignemnt.column_idx] {
-                DataTypeName::U32 => init_scans_for_datatype!(U32),
-                DataTypeName::U64 => init_scans_for_datatype!(U64),
-                DataTypeName::Float => init_scans_for_datatype!(Float),
-                DataTypeName::Double => init_scans_for_datatype!(Double),
+                StorageTypeName::U32 => init_scans_for_datatype!(U32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double),
             }
         }
 
@@ -299,7 +296,7 @@ impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
         Some(&self.select_scans[index])
     }
 
-    fn get_types(&self) -> &TableColumnTypes {
+    fn get_types(&self) -> &Vec<StorageTypeName> {
         self.base_trie.get_types()
     }
 }
@@ -419,11 +416,11 @@ mod test {
             &[
                 ValueAssignment {
                     column_idx: 1,
-                    value_mapper: Box::new(|_| DataValueT::U64(4)),
+                    value: DataValueT::U64(4),
                 },
                 ValueAssignment {
                     column_idx: 3,
-                    value_mapper: Box::new(|_| DataValueT::U64(7)),
+                    value: DataValueT::U64(7),
                 },
             ],
         );

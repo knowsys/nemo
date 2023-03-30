@@ -13,12 +13,11 @@ use crate::physical::columnar::{
         columnscan::{ColumnScan, ColumnScanT},
     },
 };
-use crate::physical::datatypes::{data_value::VecT, DataTypeName, DataValueT};
+use crate::physical::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
 use crate::physical::dictionary::Dictionary;
 use crate::physical::management::database::Dict;
 use crate::physical::management::ByteSized;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
-use crate::physical::tabular::traits::table_schema::TableColumnTypes;
 use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
 use std::cell::UnsafeCell;
 use std::fmt;
@@ -30,7 +29,7 @@ use std::mem::size_of;
 /// The underlying data is oragnized in IntervalColumns.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Trie {
-    types: TableColumnTypes,
+    types: Vec<StorageTypeName>,
     columns: Vec<ColumnWithIntervalsT>,
 }
 
@@ -102,7 +101,7 @@ impl Trie {
                         .expect("we return early if columns are empty")
                         .iter()
                         .map(|val| match val {
-                            DataValueT::$variant(constant) => constant,
+                            StorageValueT::$variant(constant) => constant,
                             _ => panic!("Unsupported type"),
                         })
                         .collect(),
@@ -115,10 +114,10 @@ impl Trie {
             .last()
             .expect("we return early if columns are empty")
         {
-            DataTypeName::U32 => last_column_for_datatype!(U32),
-            DataTypeName::U64 => last_column_for_datatype!(U64),
-            DataTypeName::Float => last_column_for_datatype!(Float),
-            DataTypeName::Double => last_column_for_datatype!(Double),
+            StorageTypeName::U32 => last_column_for_datatype!(U32),
+            StorageTypeName::U64 => last_column_for_datatype!(U64),
+            StorageTypeName::Float => last_column_for_datatype!(Float),
+            StorageTypeName::Double => last_column_for_datatype!(Double),
         };
 
         for column_index in (0..(self.columns.len() - 1)).rev() {
@@ -145,12 +144,12 @@ impl Trie {
                             .zip(padding_lengths)
                             .flat_map(|(val, pl)| {
                                 iter::once(match val {
-                                    DataValueT::$variant(constant) => constant,
+                                    StorageValueT::$variant(constant) => constant,
                                     _ => panic!("Unsupported type"),
                                 })
                                 .chain(
                                     iter::repeat(match val {
-                                        DataValueT::$variant(constant) => constant,
+                                        StorageValueT::$variant(constant) => constant,
                                         _ => panic!("Unsupported type"),
                                     })
                                     .take(pl),
@@ -162,10 +161,10 @@ impl Trie {
             }
 
             match current_type {
-                DataTypeName::U32 => push_column_for_datatype!(U32),
-                DataTypeName::U64 => push_column_for_datatype!(U64),
-                DataTypeName::Float => push_column_for_datatype!(Float),
-                DataTypeName::Double => push_column_for_datatype!(Double),
+                StorageTypeName::U32 => push_column_for_datatype!(U32),
+                StorageTypeName::U64 => push_column_for_datatype!(U64),
+                StorageTypeName::Float => push_column_for_datatype!(Float),
+                StorageTypeName::Double => push_column_for_datatype!(Double),
             };
 
             last_interval_lengths = current_interval_lengths;
@@ -199,7 +198,7 @@ impl Trie {
             .expect("we return early if columns are empty")
             .iter()
             .map(|val| match val {
-                DataValueT::U64(constant) => dict
+                StorageValueT::U64(constant) => dict
                     .entry(constant.try_into().unwrap())
                     .unwrap_or_else(|| format!("<{constant} should have been interned>")),
                 _ => val.to_string(),
@@ -226,7 +225,7 @@ impl Trie {
                     .zip(padding_lengths)
                     .flat_map(|(val, pl)| {
                         iter::once(match val {
-                            DataValueT::U64(constant) => {
+                            StorageValueT::U64(constant) => {
                                 dict.entry(constant.try_into().unwrap()).unwrap_or_else(|| {
                                     format!("<{constant} should have been interned>")
                                 })
@@ -235,7 +234,7 @@ impl Trie {
                         })
                         .chain(
                             iter::repeat(match val {
-                                DataValueT::U64(constant) => {
+                                StorageValueT::U64(constant) => {
                                     dict.entry(constant.try_into().unwrap()).unwrap_or_else(|| {
                                         format!("<{constant} should have been interned>")
                                     })
@@ -381,7 +380,7 @@ impl Table for Trie {
                 cols
                     .into_iter()
                     .map(|_| {
-                        let empty_data_col = ColumnBuilderAdaptiveT::new(DataTypeName::U64, Default::default(), Default::default());
+                        let empty_data_col = ColumnBuilderAdaptiveT::new(StorageTypeName::U64, Default::default(), Default::default());
                         let empty_interval_col = ColumnBuilderAdaptive::<usize>::default();
                         build_interval_column!(empty_data_col, empty_interval_col; U32; U64; Float; Double)
                     })
@@ -489,7 +488,7 @@ impl Table for Trie {
         )
     }
 
-    fn from_rows(rows: &[Vec<DataValueT>]) -> Self {
+    fn from_rows(rows: &[Vec<StorageValueT>]) -> Self {
         debug_assert!(!rows.is_empty());
 
         let arity = rows[0].len();
@@ -511,7 +510,7 @@ impl Table for Trie {
         self.columns.last().map_or(0, |c| c.len())
     }
 
-    fn get_types(&self) -> &TableColumnTypes {
+    fn get_types(&self) -> &Vec<StorageTypeName> {
         &self.types
     }
 }
@@ -520,7 +519,7 @@ impl Table for Trie {
 #[derive(Debug)]
 pub struct TrieScanGeneric<'a> {
     trie: &'a Trie,
-    column_types: TableColumnTypes,
+    column_types: Vec<StorageTypeName>,
     layers: Vec<UnsafeCell<ColumnScanT<'a>>>,
     current_layer: Option<usize>,
 }
@@ -533,7 +532,7 @@ impl<'a> TrieScanGeneric<'a> {
     }
 
     /// Construct a new trie iterator but converts each column to the given types.
-    pub fn new_cast(trie: &'a Trie, column_types: TableColumnTypes) -> Self {
+    pub fn new_cast(trie: &'a Trie, column_types: Vec<StorageTypeName>) -> Self {
         debug_assert!(trie.get_types().len() == column_types.len());
 
         let mut layers = Vec::<UnsafeCell<ColumnScanT<'a>>>::new();
@@ -625,7 +624,7 @@ impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
         Some(&self.layers[index])
     }
 
-    fn get_types(&self) -> &TableColumnTypes {
+    fn get_types(&self) -> &Vec<StorageTypeName> {
         &self.column_types
     }
 }
@@ -634,7 +633,7 @@ impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
 mod test {
     use super::{Trie, TrieScanGeneric};
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
-    use crate::physical::datatypes::{data_value::VecT, DataValueT};
+    use crate::physical::datatypes::{storage_value::VecT, StorageValueT};
     use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
     use crate::physical::util::make_column_with_intervals_t;
     use test_log::test;
@@ -674,13 +673,33 @@ mod test {
     /// 2 3 9
     /// 1 2 8
     /// 2 6 9
-    fn get_test_table_as_rows() -> Vec<Vec<DataValueT>> {
+    fn get_test_table_as_rows() -> Vec<Vec<StorageValueT>> {
         vec![
-            vec![DataValueT::U64(1), DataValueT::U64(3), DataValueT::U64(8)],
-            vec![DataValueT::U64(1), DataValueT::U64(2), DataValueT::U64(7)],
-            vec![DataValueT::U64(2), DataValueT::U64(3), DataValueT::U64(9)],
-            vec![DataValueT::U64(1), DataValueT::U64(2), DataValueT::U64(8)],
-            vec![DataValueT::U64(2), DataValueT::U64(6), DataValueT::U64(9)],
+            vec![
+                StorageValueT::U64(1),
+                StorageValueT::U64(3),
+                StorageValueT::U64(8),
+            ],
+            vec![
+                StorageValueT::U64(1),
+                StorageValueT::U64(2),
+                StorageValueT::U64(7),
+            ],
+            vec![
+                StorageValueT::U64(2),
+                StorageValueT::U64(3),
+                StorageValueT::U64(9),
+            ],
+            vec![
+                StorageValueT::U64(1),
+                StorageValueT::U64(2),
+                StorageValueT::U64(8),
+            ],
+            vec![
+                StorageValueT::U64(2),
+                StorageValueT::U64(6),
+                StorageValueT::U64(9),
+            ],
         ]
     }
 

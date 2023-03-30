@@ -3,11 +3,8 @@ use crate::physical::{
         operations::{ColumnScanFollow, ColumnScanMinus},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::DataTypeName,
-    tabular::traits::{
-        table_schema::TableColumnTypes,
-        triescan::{TrieScan, TrieScanEnum},
-    },
+    datatypes::StorageTypeName,
+    tabular::traits::triescan::{TrieScan, TrieScanEnum},
 };
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
@@ -88,10 +85,10 @@ impl<'a> TrieScanMinus<'a> {
             }
 
             match target_type {
-                DataTypeName::U32 => init_scans_for_datatype!(U32),
-                DataTypeName::U64 => init_scans_for_datatype!(U64),
-                DataTypeName::Float => init_scans_for_datatype!(Float),
-                DataTypeName::Double => init_scans_for_datatype!(Double),
+                StorageTypeName::U32 => init_scans_for_datatype!(U32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double),
             };
         }
 
@@ -169,7 +166,7 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
         Some(&self.minus_scans[index])
     }
 
-    fn get_types(&self) -> &TableColumnTypes {
+    fn get_types(&self) -> &Vec<StorageTypeName> {
         self.trie_left.get_types()
     }
 }

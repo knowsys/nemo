@@ -12,10 +12,9 @@ use crate::{
         TableManager,
     },
     physical::{
-        datatypes::{DataTypeName, DataValueT},
-        dictionary::Dictionary,
+        datatypes::DataValueT,
         management::{
-            database::{Dict, TableId},
+            database::TableId,
             execution_plan::{ExecutionNodeRef, ExecutionPlan},
         },
         tabular::operations::{
@@ -107,22 +106,15 @@ pub(super) fn compute_filters(
                 // TODO: this needs to change fot the type system; it panics in various cases right now
                 filter_assignments.push(ValueAssignment {
                     column_idx: *variable_to_columnindex.get(&filter.left).unwrap(),
-                    value_mapper: {
-                        let filter_right_cloned = filter.right.clone();
-                        Box::new(move |dict: &mut Dict| match filter_right_cloned.clone() {
-                            Term::Constant(Identifier(s)) => {
-                                DataValueT::U64(dict.add(s).try_into().unwrap())
-                            }
-                            Term::Variable(_) => unreachable!(),
-                            Term::NumericLiteral(n) => match n {
-                                NumericLiteral::Integer(i) => {
-                                    DataValueT::U64(i.try_into().unwrap())
-                                }
-                                NumericLiteral::Decimal(_, _) => todo!(),
-                                NumericLiteral::Double(d) => DataValueT::Double(d),
-                            },
-                            Term::RdfLiteral(_) => todo!(),
-                        })
+                    value: match &filter.right {
+                        Term::Constant(Identifier(s)) => DataValueT::String(s.clone()),
+                        Term::Variable(_) => unreachable!(),
+                        Term::NumericLiteral(n) => match n {
+                            NumericLiteral::Integer(i) => DataValueT::String(i.to_string()), // TODO: should be integer type; we handle everything as string for now as long as we do not have the logical type system
+                            NumericLiteral::Decimal(_, _) => todo!(),
+                            NumericLiteral::Double(d) => DataValueT::String(d.to_string()), // TODO: should be double; we handle everything as string for now as long as we do not have the logical type system
+                        },
+                        Term::RdfLiteral(_) => todo!(),
                     },
                 });
             }
@@ -190,11 +182,8 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
         match term {
             Term::NumericLiteral(nl) => match *nl {
                 NumericLiteral::Integer(i) => {
-                    let instruction = AppendInstruction::Constant(
-                        Box::new(move |_dict| DataValueT::U64(i.try_into().unwrap())),
-                        DataTypeName::U64,
-                        false,
-                    );
+                    let instruction =
+                        AppendInstruction::Constant(DataValueT::String(i.to_string())); // TODO: should be integer type; we handle everything as string for now as long as we do not have the logical type system
                     current_append_vector.push(instruction);
                 }
                 _ => todo!(),
@@ -202,13 +191,7 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
             Term::Constant(identifier) => {
                 let id_name = identifier.name();
 
-                let instruction = AppendInstruction::Constant(
-                    Box::new(move |dict| {
-                        DataValueT::U64(dict.add(id_name.clone()).try_into().unwrap())
-                    }),
-                    DataTypeName::U64,
-                    true,
-                );
+                let instruction = AppendInstruction::Constant(DataValueT::String(id_name));
                 current_append_vector.push(instruction);
             }
             Term::Variable(variable) => {
