@@ -254,25 +254,6 @@ Boston;United States;4628910
 
         assert_eq!(x.len(), 3);
         assert!(x.iter().all(|vect| vect.len() == 1));
-
-        log::error!(
-            "{:?}{:?}{:?}",
-            x[0].get(0)
-                .and_then(|dvt| dvt.as_u64())
-                .and_then(|u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.entry(usize))
-                .unwrap(),
-            x[1].get(0)
-                .and_then(|dvt| dvt.as_u64())
-                .and_then(|u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.entry(usize))
-                .unwrap(),
-            x[2].get(0)
-                .and_then(|dvt| dvt.as_u64())
-                .and_then(|u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.entry(usize))
-                .unwrap()
-        );
         assert_eq!(
             x[0].get(0)
                 .and_then(|dvt| dvt.as_u64())
