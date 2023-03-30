@@ -110,9 +110,9 @@ pub(super) fn compute_filters(
                         Term::Constant(Identifier(s)) => DataValueT::String(s.clone()),
                         Term::Variable(_) => unreachable!(),
                         Term::NumericLiteral(n) => match n {
-                            NumericLiteral::Integer(i) => DataValueT::U64((*i).try_into().unwrap()),
+                            NumericLiteral::Integer(i) => DataValueT::String(i.to_string()), // TODO: should be integer type; we handle everything as string for now as long as we do not have the logical type system
                             NumericLiteral::Decimal(_, _) => todo!(),
-                            NumericLiteral::Double(d) => DataValueT::Double(*d),
+                            NumericLiteral::Double(d) => DataValueT::String(d.to_string()), // TODO: should be double; we handle everything as string for now as long as we do not have the logical type system
                         },
                         Term::RdfLiteral(_) => todo!(),
                     },
@@ -183,7 +183,7 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
             Term::NumericLiteral(nl) => match *nl {
                 NumericLiteral::Integer(i) => {
                     let instruction =
-                        AppendInstruction::Constant(DataValueT::U64(i.try_into().unwrap()));
+                        AppendInstruction::Constant(DataValueT::String(i.to_string())); // TODO: should be integer type; we handle everything as string for now as long as we do not have the logical type system
                     current_append_vector.push(instruction);
                 }
                 _ => todo!(),

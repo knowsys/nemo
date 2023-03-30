@@ -119,7 +119,7 @@ impl ExecutionEngine {
                 .iter()
                 .map(|t| match t {
                     Term::NumericLiteral(nl) => match nl {
-                        NumericLiteral::Integer(i) => DataValueT::U64((*i).try_into().unwrap()),
+                        NumericLiteral::Integer(i) => DataValueT::String(i.to_string()), // TODO: should be integer type; we handle everything as string for now as long as we do not have the logical type system
                         _ => todo!(),
                     },
                     Term::Constant(Identifier(s)) => DataValueT::String(s.clone()),
