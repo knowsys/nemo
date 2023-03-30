@@ -1,3 +1,4 @@
+//! Adaptive Builder to create [`VecT`] columns, based on streamed data
 use crate::{
     error::Error,
     physical::{datatypes::Float, management::database::Dict},
@@ -11,8 +12,8 @@ use crate::{
 pub trait ColumnBuilderProxy: std::fmt::Debug {
     /// Prepare another value to be added to the ColumnBuilder. If another value is already prepared, this one is actually added to the ColumnBuilder before the new value is checked
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error>;
-    /// Forgets an already prepared value, to rollback that information
-    fn rollback(&mut self);
+    /// Forgets an already prepared value
+    fn forget(&mut self);
     /// Writes a prepared value to the ColumnBuilder, if one exists
     fn write(&mut self);
     /// Writes the remaining prepared value and returns a VecT
@@ -39,7 +40,7 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
         Ok(())
     }
 
-    fn rollback(&mut self) {
+    fn forget(&mut self) {
         self.value = None;
     }
 
@@ -69,7 +70,7 @@ impl ColumnBuilderProxy for U64ColumnBuilderProxy {
         Ok(())
     }
 
-    fn rollback(&mut self) {
+    fn forget(&mut self) {
         self.value = None;
     }
 
@@ -99,7 +100,7 @@ impl ColumnBuilderProxy for U32ColumnBuilderProxy {
         Ok(())
     }
 
-    fn rollback(&mut self) {
+    fn forget(&mut self) {
         self.value = None;
     }
 
@@ -130,7 +131,7 @@ impl ColumnBuilderProxy for FloatColumnBuilderProxy {
         Ok(())
     }
 
-    fn rollback(&mut self) {
+    fn forget(&mut self) {
         self.value = None;
     }
 
@@ -161,7 +162,7 @@ impl ColumnBuilderProxy for DoubleColumnBuilderProxy {
         Ok(())
     }
 
-    fn rollback(&mut self) {
+    fn forget(&mut self) {
         self.value = None;
     }
 

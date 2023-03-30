@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use crate::error::Error;
-use crate::physical::columnar::proxy_builder::{
+use crate::io::builder_proxy::{
     ColumnBuilderProxy, DoubleColumnBuilderProxy, FloatColumnBuilderProxy,
     StringColumnBuilderProxy, U32ColumnBuilderProxy, U64ColumnBuilderProxy,
 };
@@ -115,7 +115,7 @@ impl DSVReader {
                     if idx > rollback {
                         builder.write();
                     }
-                    builder.rollback();
+                    builder.forget();
                 });
             }
         }
