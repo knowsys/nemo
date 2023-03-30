@@ -14,7 +14,7 @@ pub trait ColumnBuilderProxy: std::fmt::Debug {
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error>;
     /// Forgets an already prepared value
     fn forget(&mut self);
-    /// Writes a prepared value to the ColumnBuilder, if one exists
+    /// Writes a prepared value to the ColumnBuilder, if one exists, but keeps it prepared
     fn write(&mut self);
     /// Writes the remaining prepared value and returns a VecT
     fn finalize(self: Box<Self>) -> VecT;

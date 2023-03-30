@@ -92,7 +92,7 @@ impl CliApp {
                 .sub("Output & Final Materialization")
                 .start();
             log::info!("writing output");
-            let csv_writer = stage2::io::csv::CSVWriter::try_new(
+            let csv_writer = stage2::io::dsv::CSVWriter::try_new(
                 &self.output_directory,
                 self.overwrite,
                 self.gz,
