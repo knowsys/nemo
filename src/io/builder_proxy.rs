@@ -10,12 +10,12 @@ use crate::{
 
 /// Trait for a Proxy builder, which handles the parsing and translation from [`string`] to [`StorageType`][crate::physical::datatypes::StorageType] Column elements
 pub trait ColumnBuilderProxy: std::fmt::Debug {
-    /// Prepare another value to be added to the ColumnBuilder. If another value is already prepared, this one is actually added to the ColumnBuilder before the new value is checked
+    /// Cache a value to be added to the ColumnBuilder. If a value is already cached, this one is actually added to the ColumnBuilder before the new value is checked
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error>;
-    /// Forgets an already prepared value
+    /// Forgets a cached value
     fn forget(&mut self);
-    /// Writes a prepared value to the ColumnBuilder, if one exists, but keeps it prepared
-    fn write(&mut self);
+    /// Commits the data, cleaning the cached value while adding it to the respective ColumnBuilder
+    fn commit(&mut self);
     /// Writes the remaining prepared value and returns a VecT
     fn finalize(self: Box<Self>) -> VecT;
 }
@@ -29,7 +29,7 @@ pub struct StringColumnBuilderProxy {
 
 impl ColumnBuilderProxy for StringColumnBuilderProxy {
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
-        self.write();
+        self.commit();
         self.value = Some(
             dictionary
                 .expect("ProxyStringColumnBuilder expects a Dictionary to be provided!")
@@ -45,12 +45,12 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
     }
 
     fn finalize(mut self: Box<Self>) -> VecT {
-        self.as_mut().write();
+        self.as_mut().commit();
         VecT::U64(self.vec)
     }
 
-    fn write(&mut self) {
-        if let Some(value) = self.value {
+    fn commit(&mut self) {
+        if let Some(value) = self.value.take() {
             self.vec.push(value);
         }
     }
@@ -65,7 +65,7 @@ pub struct U64ColumnBuilderProxy {
 
 impl ColumnBuilderProxy for U64ColumnBuilderProxy {
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
-        self.write();
+        self.commit();
         self.value = Some(string.parse::<u64>()?);
         Ok(())
     }
@@ -74,14 +74,14 @@ impl ColumnBuilderProxy for U64ColumnBuilderProxy {
         self.value = None;
     }
 
-    fn write(&mut self) {
-        if let Some(value) = self.value {
+    fn commit(&mut self) {
+        if let Some(value) = self.value.take() {
             self.vec.push(value);
         }
     }
 
     fn finalize(mut self: Box<Self>) -> VecT {
-        self.as_mut().write();
+        self.as_mut().commit();
         VecT::U64(self.vec)
     }
 }
@@ -95,7 +95,7 @@ pub struct U32ColumnBuilderProxy {
 
 impl ColumnBuilderProxy for U32ColumnBuilderProxy {
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
-        self.write();
+        self.commit();
         self.value = Some(string.parse::<u32>()?);
         Ok(())
     }
@@ -104,14 +104,14 @@ impl ColumnBuilderProxy for U32ColumnBuilderProxy {
         self.value = None;
     }
 
-    fn write(&mut self) {
-        if let Some(value) = self.value {
+    fn commit(&mut self) {
+        if let Some(value) = self.value.take() {
             self.vec.push(value);
         }
     }
 
     fn finalize(mut self: Box<Self>) -> VecT {
-        self.as_mut().write();
+        self.as_mut().commit();
         VecT::U32(self.vec)
     }
 }
@@ -125,7 +125,7 @@ pub struct FloatColumnBuilderProxy {
 
 impl ColumnBuilderProxy for FloatColumnBuilderProxy {
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
-        self.write();
+        self.commit();
         let val = string.parse::<f32>()?;
         self.value = Some(Float::new(val)?);
         Ok(())
@@ -135,14 +135,14 @@ impl ColumnBuilderProxy for FloatColumnBuilderProxy {
         self.value = None;
     }
 
-    fn write(&mut self) {
-        if let Some(value) = self.value {
+    fn commit(&mut self) {
+        if let Some(value) = self.value.take() {
             self.vec.push(value);
         }
     }
 
     fn finalize(mut self: Box<Self>) -> VecT {
-        self.as_mut().write();
+        self.as_mut().commit();
         VecT::Float(self.vec)
     }
 }
@@ -156,7 +156,7 @@ pub struct DoubleColumnBuilderProxy {
 
 impl ColumnBuilderProxy for DoubleColumnBuilderProxy {
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
-        self.write();
+        self.commit();
         let val = string.parse::<f64>()?;
         self.value = Some(Double::new(val)?);
         Ok(())
@@ -166,14 +166,14 @@ impl ColumnBuilderProxy for DoubleColumnBuilderProxy {
         self.value = None;
     }
 
-    fn write(&mut self) {
-        if let Some(value) = self.value {
+    fn commit(&mut self) {
+        if let Some(value) = self.value.take() {
             self.vec.push(value);
         }
     }
 
     fn finalize(mut self: Box<Self>) -> VecT {
-        self.as_mut().write();
+        self.as_mut().commit();
         VecT::Double(self.vec)
     }
 }

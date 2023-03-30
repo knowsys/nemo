@@ -112,10 +112,9 @@ impl DSVReader {
                 builder.iter_mut().enumerate().for_each(|(idx, builder)| {
                     // Write the last line, if one exists
                     // This has been done till the rollback-index, therefore the old data needs to be written
-                    if idx > rollback {
-                        builder.write();
+                    if idx <= rollback {
+                        builder.forget();
                     }
-                    builder.forget();
                 });
             }
         }
