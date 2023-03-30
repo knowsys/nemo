@@ -133,15 +133,13 @@ impl TableStorage {
             log::info!("Loading source {source}");
 
             let trie = match source {
-                TableSource::DSV {file, delimiter } => {
+                TableSource::DSV { file, delimiter } => {
                     // Using fallback solution to treat eveything as string for now (storing as u64 internally)
                     let datatypeschema = TableSchema::from_vec(
-                        (0..schema.arity())
-                            .map(|_| DataTypeName::String)
-                            .collect(),
+                        (0..schema.arity()).map(|_| DataTypeName::String).collect(),
                     );
                     // TODO branch will be reduced to these two lines
-                    let csv_reader = DSVReader::csv(file.clone());
+                    let csv_reader = DSVReader::dsv(file.clone(), *delimiter);
                     let col_table = csv_reader.read(&datatypeschema, dict)?;
 
                     Trie::from_cols(col_table)

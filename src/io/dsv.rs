@@ -30,18 +30,19 @@ pub struct DSVReader {
 impl DSVReader {
     /// Instantiate a [DSVReader] for CSV files
     pub fn csv(file: PathBuf) -> Self {
-        Self {
-            file,
-            delimiter: b',',
-            escape: Some(b'\\'),
-        }
+        Self::dsv(file, b',')
     }
 
     /// Instantiate a [DSVReader] for TSV files
     pub fn tsv(file: PathBuf) -> Self {
+        Self::dsv(file, b'\t')
+    }
+
+    /// Instantiate a [DSVReader] for a given delimiter
+    pub fn dsv(file: PathBuf, delimiter: u8) -> Self {
         Self {
             file,
-            delimiter: b'\t',
+            delimiter,
             escape: Some(b'\\'),
         }
     }
@@ -218,10 +219,7 @@ impl CSVWriter<'_> {
 
 #[cfg(test)]
 mod test {
-    use crate::physical::{
-        dictionary::{Dictionary, PrefixedStringDictionary},
-        tabular::traits::table_schema::TableSchemaEntry,
-    };
+    use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
 
     use super::*;
     use csv::ReaderBuilder;
@@ -298,36 +296,12 @@ node03;123;123;13;55;123;invalid
         let mut dict = PrefixedStringDictionary::default();
         let csvreader = DSVReader::csv("test".into());
         let builder = csvreader.generate_proxies(&TableSchema::from_vec(vec![
-            TableSchemaEntry {
-                type_name: StorageTypeName::U64,
-                dict: true,
-                nullable: false,
-            },
-            TableSchemaEntry {
-                type_name: StorageTypeName::U64,
-                dict: false,
-                nullable: false,
-            },
-            TableSchemaEntry {
-                type_name: StorageTypeName::Double,
-                dict: false,
-                nullable: false,
-            },
-            TableSchemaEntry {
-                type_name: StorageTypeName::Float,
-                dict: false,
-                nullable: false,
-            },
-            TableSchemaEntry {
-                type_name: StorageTypeName::U64,
-                dict: false,
-                nullable: false,
-            },
-            TableSchemaEntry {
-                type_name: StorageTypeName::U64,
-                dict: true,
-                nullable: false,
-            },
+            DataTypeName::String,
+            DataTypeName::U64,
+            DataTypeName::Double,
+            DataTypeName::Float,
+            DataTypeName::U64,
+            DataTypeName::String,
         ]));
         let imported = csvreader.read_with_reader(builder, &mut rdr, &mut dict);
 
@@ -369,26 +343,10 @@ node03;123;123;13;55;123;invalid
         let mut dict = PrefixedStringDictionary::default();
         let csvreader = DSVReader::csv("test".into());
         let builder = csvreader.generate_proxies(&TableSchema::from_vec(vec![
-            TableSchemaEntry {
-                type_name: StorageTypeName::U64,
-                dict: false,
-                nullable: false,
-            },
-            TableSchemaEntry {
-                type_name: StorageTypeName::Double,
-                dict: false,
-                nullable: false,
-            },
-            TableSchemaEntry {
-                type_name: StorageTypeName::U64,
-                dict: false,
-                nullable: false,
-            },
-            TableSchemaEntry {
-                type_name: StorageTypeName::Float,
-                dict: false,
-                nullable: false,
-            },
+            DataTypeName::U64,
+            DataTypeName::Double,
+            DataTypeName::U64,
+            DataTypeName::Float,
         ]));
 
         let imported = csvreader.read_with_reader(builder, &mut rdr, &mut dict);
