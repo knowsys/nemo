@@ -7,6 +7,8 @@ use crate::{
         dictionary::Dictionary,
     },
 };
+#[macro_use]
+mod macros;
 
 /// Trait for a Proxy builder, which handles the parsing and translation from [`string`] to [`StorageType`][crate::physical::datatypes::StorageType] Column elements
 pub trait ColumnBuilderProxy: std::fmt::Debug {
@@ -28,6 +30,7 @@ pub struct StringColumnBuilderProxy {
 }
 
 impl ColumnBuilderProxy for StringColumnBuilderProxy {
+    generic_trait_impl!(VecT::U64);
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
         self.value = Some(
@@ -39,21 +42,6 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
 
         Ok(())
     }
-
-    fn forget(&mut self) {
-        self.value = None;
-    }
-
-    fn finalize(mut self: Box<Self>) -> VecT {
-        self.as_mut().commit();
-        VecT::U64(self.vec)
-    }
-
-    fn commit(&mut self) {
-        if let Some(value) = self.value.take() {
-            self.vec.push(value);
-        }
-    }
 }
 
 /// ProxyBuilder to add U64
@@ -64,25 +52,12 @@ pub struct U64ColumnBuilderProxy {
 }
 
 impl ColumnBuilderProxy for U64ColumnBuilderProxy {
+    generic_trait_impl!(VecT::U64);
+
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
         self.value = Some(string.parse::<u64>()?);
         Ok(())
-    }
-
-    fn forget(&mut self) {
-        self.value = None;
-    }
-
-    fn commit(&mut self) {
-        if let Some(value) = self.value.take() {
-            self.vec.push(value);
-        }
-    }
-
-    fn finalize(mut self: Box<Self>) -> VecT {
-        self.as_mut().commit();
-        VecT::U64(self.vec)
     }
 }
 
@@ -94,25 +69,12 @@ pub struct U32ColumnBuilderProxy {
 }
 
 impl ColumnBuilderProxy for U32ColumnBuilderProxy {
+    generic_trait_impl!(VecT::U32);
+
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
         self.value = Some(string.parse::<u32>()?);
         Ok(())
-    }
-
-    fn forget(&mut self) {
-        self.value = None;
-    }
-
-    fn commit(&mut self) {
-        if let Some(value) = self.value.take() {
-            self.vec.push(value);
-        }
-    }
-
-    fn finalize(mut self: Box<Self>) -> VecT {
-        self.as_mut().commit();
-        VecT::U32(self.vec)
     }
 }
 
@@ -124,26 +86,13 @@ pub struct FloatColumnBuilderProxy {
 }
 
 impl ColumnBuilderProxy for FloatColumnBuilderProxy {
+    generic_trait_impl!(VecT::Float);
+
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
         let val = string.parse::<f32>()?;
         self.value = Some(Float::new(val)?);
         Ok(())
-    }
-
-    fn forget(&mut self) {
-        self.value = None;
-    }
-
-    fn commit(&mut self) {
-        if let Some(value) = self.value.take() {
-            self.vec.push(value);
-        }
-    }
-
-    fn finalize(mut self: Box<Self>) -> VecT {
-        self.as_mut().commit();
-        VecT::Float(self.vec)
     }
 }
 
@@ -155,25 +104,12 @@ pub struct DoubleColumnBuilderProxy {
 }
 
 impl ColumnBuilderProxy for DoubleColumnBuilderProxy {
+    generic_trait_impl!(VecT::Double);
+
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
         let val = string.parse::<f64>()?;
         self.value = Some(Double::new(val)?);
         Ok(())
-    }
-
-    fn forget(&mut self) {
-        self.value = None;
-    }
-
-    fn commit(&mut self) {
-        if let Some(value) = self.value.take() {
-            self.vec.push(value);
-        }
-    }
-
-    fn finalize(mut self: Box<Self>) -> VecT {
-        self.as_mut().commit();
-        VecT::Double(self.vec)
     }
 }
