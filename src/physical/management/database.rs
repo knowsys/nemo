@@ -608,7 +608,7 @@ impl DatabaseInstance {
         )
         .expect("This function assumes that there is at least one table under the given id.");
 
-        let reorder = Self::reorder_to(order, closest_order, arity);
+        let reorder = Self::reorder_to(closest_order, order, arity);
         let trie_unordered = self
             .storage_handler
             .table_storage_mut(id, &closest_order.clone())

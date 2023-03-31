@@ -1004,4 +1004,44 @@ mod test {
 
         compare_leapfrog_trees(&test_tree, &expected_orders, &expected_bindings);
     }
+
+    #[test]
+    fn test_satisfy_leapfrog_4() {
+        let mut test_plan = ExecutionPlan::default();
+        let mut current_id = TableId::default();
+
+        let subnode_vec = vec![
+            test_plan.fetch_existing(current_id.increment()), // A B
+            test_plan.fetch_existing(current_id.increment()), // A C
+            test_plan.fetch_existing(current_id.increment()), // D B C
+            test_plan.fetch_existing(current_id.increment()), // D
+        ];
+
+        // Order: A B C D
+        let join_bindings = JoinBindings::new(vec![vec![0, 1], vec![0, 2], vec![3, 1, 2], vec![3]]);
+
+        let node_join = test_plan.join(subnode_vec, join_bindings);
+        test_plan.write_temporary(node_join, "Test");
+
+        let mut test_tree = ExecutionTree::new(test_plan);
+        test_tree.satisfy_leapfrog_triejoin();
+
+        let mut current_id = TableId::default();
+        let mut expected_orders = HashMap::<TableId, ColumnOrder>::new();
+        expected_orders.insert(current_id.increment(), ColumnOrder::from_vector(vec![0, 1]));
+        expected_orders.insert(current_id.increment(), ColumnOrder::from_vector(vec![0, 1]));
+        expected_orders.insert(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![1, 2, 0]),
+        );
+        expected_orders.insert(current_id.increment(), ColumnOrder::from_vector(vec![0]));
+
+        let mut expected_bindings = HashMap::<usize, JoinBindings>::new();
+        expected_bindings.insert(
+            4,
+            JoinBindings::new(vec![vec![0, 1], vec![0, 2], vec![1, 2, 3], vec![3]]),
+        );
+
+        compare_leapfrog_trees(&test_tree, &expected_orders, &expected_bindings);
+    }
 }
