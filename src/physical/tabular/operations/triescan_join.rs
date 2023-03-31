@@ -12,7 +12,7 @@ use std::{cell::UnsafeCell, collections::HashMap};
 use std::{collections::hash_map::Entry, fmt::Debug};
 
 /// Identifies a column from a vector of given relations by its relation index and column index.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JoinColumnIndex {
     /// The index of the relation this column belons to.
     pub relation: usize,
@@ -24,9 +24,9 @@ pub struct JoinColumnIndex {
 /// This includes:
 ///     * What columns need to be joined with what other columns
 ///     * In which order do the output columns appear in
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JoinBindings {
-    /// The column that is present at index `i` results from joining every every column in `bindings[i]`.
+    /// The column that is present at index `i` results from joining every column in `bindings[i]`.
     bindings: Vec<Vec<JoinColumnIndex>>,
     /// Number of input relations.
     num_relations: usize,
@@ -137,7 +137,7 @@ impl JoinBindings {
             }
         }
 
-        sort_permutations.into_iter().map(|p| p.invert()).collect()
+        sort_permutations
     }
 }
 

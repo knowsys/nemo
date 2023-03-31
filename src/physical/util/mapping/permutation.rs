@@ -189,7 +189,6 @@ impl NatMapping for Permutation {
 
     fn chain_permutation(&self, permutation: &Permutation) -> Self {
         let mut result_map = HashMap::<usize, usize>::new();
-        let mut used_inputs = HashSet::<usize>::new();
 
         for (input, value) in &self.map {
             let chained_value = permutation.get(*value);
@@ -198,11 +197,10 @@ impl NatMapping for Permutation {
             }
 
             result_map.insert(*input, chained_value);
-            used_inputs.insert(*input);
         }
 
         for (input, value) in &permutation.map {
-            if used_inputs.contains(input) {
+            if self.map.contains_key(input) {
                 continue;
             }
 

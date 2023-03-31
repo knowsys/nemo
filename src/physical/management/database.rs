@@ -754,13 +754,14 @@ impl DatabaseInstance {
                         computation_results.insert(tree_id, ComputationResult::Temporary(new_trie));
                     }
                     ExecutionResult::Permanent(order, name) => {
+                        let new_id = self.register_table(name, schema);
+
                         log::info!(
-                            "Saved permanent table: {} entries ({})",
+                            "Saved permanent table {new_id} - {name} with {} entries ({})",
                             new_trie.row_num(),
                             new_trie.size_bytes()
                         );
 
-                        let new_id = self.register_table(name, schema);
                         self.add_trie(new_id, order.clone(), new_trie);
 
                         permanent_ids.insert(tree_id, new_id);
