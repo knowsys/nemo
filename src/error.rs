@@ -16,9 +16,12 @@ pub enum Error {
     /// Error occurred during parsing of Float values
     #[error(transparent)]
     ParseFloat(#[from] std::num::ParseFloatError),
+    /// Error which occurs when trying to Parse from an Int
+    #[error(transparent)]
+    FromInt(#[from] std::num::TryFromIntError),
     /// Error which implies a needed Rollback
     #[error("Rollback due to csv-error")]
-    RollBack(usize),
+    Rollback(usize),
     /// Permutation shall be sorted, but the input data is of different length
     #[error("The provided data-structures do not have the same length: {0:?}")]
     PermutationSortLen(Vec<usize>),
