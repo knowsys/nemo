@@ -110,7 +110,7 @@ impl DSVReader {
                 })
             {
                 builder.iter_mut().enumerate().for_each(|(idx, builder)| {
-                    // Forget the stored values of the row to be rollbacked.
+                    // Forget the stored values of the row to be rolled back.
                     if idx <= rollback {
                         builder.forget();
                     }
