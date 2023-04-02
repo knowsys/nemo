@@ -39,7 +39,7 @@ impl Permutation {
 
     /// Return an instance of the function from a hash map representation where the input `i` is mapped to `map.get(i)`.
     pub fn from_map(mut map: HashMap<usize, usize>) -> Self {
-        // Values that map to themselves will be represented implicitly
+        // Values that map to themselves will not be stored
         // This also allows us to have a canonical representation such that we can easily check for equality
         map.retain(|i, v| *i != *v);
 
@@ -119,17 +119,12 @@ impl Permutation {
     fn to_vector(&self) -> Vec<usize> {
         let mut result = Vec::<usize>::new();
 
-        let mut used_map_keys = 0usize;
-        let mut current_input = 0usize;
-        while used_map_keys < self.map.len() {
-            if let Some(value) = self.map.get(&current_input) {
-                result.push(*value);
-                used_map_keys += 1;
-            } else {
-                result.push(current_input);
+        for (&input, &value) in &self.map {
+            for new_index in result.len()..=value {
+                result.push(new_index);
             }
 
-            current_input += 1;
+            result[value] = input;
         }
 
         result
@@ -221,7 +216,11 @@ impl NatMapping for Permutation {
 
 impl Display for Permutation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let cycles = self.find_cycles();
+        let mut cycles = self.find_cycles();
+        for cycle in &mut cycles {
+            cycle.sort();
+        }
+        cycles.sort_by(|c_a, c_b| c_a[0].cmp(&c_b[0]));
 
         write!(f, "[")?;
         for (cycle_index, cycle) in cycles.into_iter().enumerate() {
@@ -257,5 +256,225 @@ impl Hash for Permutation {
 impl PartialEq for Permutation {
     fn eq(&self, other: &Self) -> bool {
         self.to_vector() == other.to_vector()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+
+    use crate::physical::{datatypes::Float, util::mapping::traits::NatMapping};
+
+    use super::Permutation;
+
+    #[test]
+    fn test_canonical_representation() {
+        let map_1 = HashMap::<usize, usize>::from([(0, 0), (1, 1), (2, 2)]);
+        let map_2 = HashMap::<usize, usize>::from([(0, 0), (1, 1)]);
+        assert_eq!(Permutation::from_map(map_1), Permutation::from_map(map_2));
+
+        let map_1 = HashMap::<usize, usize>::from([(0, 0), (1, 1), (2, 2)]);
+        let map_2 = HashMap::<usize, usize>::new();
+        assert_eq!(Permutation::from_map(map_1), Permutation::from_map(map_2));
+
+        let map_1 = HashMap::<usize, usize>::from([(0, 0), (1, 2), (2, 1)]);
+        let map_2 = HashMap::<usize, usize>::from([(1, 2), (2, 1), (4, 4)]);
+        assert_eq!(Permutation::from_map(map_1), Permutation::from_map(map_2));
+
+        let map_1 = HashMap::<usize, usize>::from([(0, 1), (1, 2), (2, 0), (5, 4), (4, 5)]);
+        let map_2 = HashMap::<usize, usize>::from([(4, 5), (1, 2), (2, 0), (3, 3), (0, 1), (5, 4)]);
+        assert_eq!(Permutation::from_map(map_1), Permutation::from_map(map_2));
+
+        let map_1 = HashMap::<usize, usize>::from([(0, 1), (1, 2), (2, 0), (5, 4), (4, 5)]);
+        let map_2 = HashMap::<usize, usize>::from([(0, 1), (1, 2), (2, 0)]);
+        assert_ne!(Permutation::from_map(map_1), Permutation::from_map(map_2));
+
+        let map_1 = HashMap::<usize, usize>::from([(0, 1), (1, 0)]);
+        let map_2 = HashMap::<usize, usize>::new();
+        assert_ne!(Permutation::from_map(map_1), Permutation::from_map(map_2));
+
+        let map_1 = HashMap::<usize, usize>::from([(0, 1), (1, 2), (2, 0), (5, 4), (4, 5)]);
+        let map_2 =
+            HashMap::<usize, usize>::from([(4, 5), (1, 2), (2, 0), (7, 8), (0, 1), (5, 4), (8, 7)]);
+        assert_ne!(Permutation::from_map(map_1), Permutation::from_map(map_2));
+    }
+
+    #[test]
+    fn test_from_vector() {
+        let vector = vec![0, 2, 1];
+        let map = HashMap::<usize, usize>::from([(0, 0), (1, 2), (2, 1)]);
+        assert_eq!(Permutation::from_vector(vector), Permutation::from_map(map));
+
+        let vector = vec![4, 2, 0, 1, 3];
+        let map = HashMap::<usize, usize>::from([(0, 2), (1, 3), (2, 1), (3, 4), (4, 0)]);
+        assert_eq!(Permutation::from_vector(vector), Permutation::from_map(map));
+
+        let vector = vec![0, 1, 2];
+        let map = HashMap::<usize, usize>::new();
+        assert_eq!(Permutation::from_vector(vector), Permutation::from_map(map));
+
+        let vector = vec![2, 0, 3, 1];
+        let map = HashMap::<usize, usize>::from([(0, 1), (1, 3), (2, 0), (3, 2)]);
+        assert_eq!(Permutation::from_vector(vector), Permutation::from_map(map));
+    }
+
+    #[test]
+    fn test_from_unsorted() {
+        let vec = vec!['A', 'D', 'B', 'C'];
+        let map = HashMap::<usize, usize>::from([(1, 3), (3, 2), (2, 1)]);
+        assert_eq!(Permutation::from_unsorted(&vec), Permutation::from_map(map));
+
+        let vec = vec![
+            Float::new(9.0).unwrap(),
+            Float::new(5.2).unwrap(),
+            Float::new(1.3).unwrap(),
+            Float::new(3.1).unwrap(),
+        ];
+        let map = HashMap::<usize, usize>::from([(2, 0), (3, 1), (1, 2), (0, 3)]);
+        assert_eq!(Permutation::from_unsorted(&vec), Permutation::from_map(map));
+
+        let vec = vec![-8, 12, -100, 1000, 423];
+        let map = HashMap::<usize, usize>::from([(2, 0), (0, 1), (1, 2), (4, 3), (3, 4)]);
+        assert_eq!(Permutation::from_unsorted(&vec), Permutation::from_map(map));
+    }
+
+    #[test]
+    fn test_last_mapped() {
+        let map = HashMap::<usize, usize>::from([(7, 8), (8, 7), (10, 10), (100, 100)]);
+        assert_eq!(Permutation::from_map(map).last_mapped(), Some(8));
+
+        let map = HashMap::<usize, usize>::from([(8, 8), (7, 7), (10, 10), (100, 100)]);
+        assert_eq!(Permutation::from_map(map).last_mapped(), None);
+    }
+
+    #[test]
+    fn test_is_valid() {
+        let map = HashMap::<usize, usize>::from([(7, 8), (8, 7), (6, 8)]);
+        let perm = Permutation { map };
+        assert!(!perm.is_valid());
+
+        let map = HashMap::<usize, usize>::from([(7, 8)]);
+        let perm = Permutation { map };
+        assert!(!perm.is_valid());
+    }
+
+    fn sort_cycles(mut cycles: Vec<Vec<usize>>) -> Vec<Vec<usize>> {
+        for cycle in &mut cycles {
+            cycle.sort();
+        }
+
+        cycles.sort_by(|c_a, c_b| c_a[0].cmp(&c_b[0]));
+        cycles
+    }
+
+    #[test]
+    fn test_find_cycles() {
+        let map = HashMap::<usize, usize>::from([(0, 1), (1, 2), (2, 0)]);
+        let cycles = sort_cycles(Permutation::from_map(map).find_cycles());
+        let expected = vec![vec![0, 1, 2]];
+        assert_eq!(cycles, expected);
+
+        let map = HashMap::<usize, usize>::from([(0, 1), (1, 2), (2, 0), (5, 6), (6, 5)]);
+        let cycles = sort_cycles(Permutation::from_map(map).find_cycles());
+        let expected = vec![vec![0, 1, 2], vec![5, 6]];
+        assert_eq!(cycles, expected);
+
+        let map = HashMap::<usize, usize>::from([(0, 2), (2, 1), (1, 4), (4, 3), (3, 0)]);
+        let cycles = sort_cycles(Permutation::from_map(map).find_cycles());
+        let expected = vec![vec![0, 1, 2, 3, 4]];
+        assert_eq!(cycles, expected);
+    }
+
+    #[test]
+    fn test_to_vector() {
+        let vector = vec![0, 2, 1];
+        let perm = Permutation::from_vector(vector.clone());
+        assert_eq!(perm.to_vector(), vector);
+
+        let vector = vec![4, 2, 0, 1, 3];
+        let perm = Permutation::from_vector(vector.clone());
+        assert_eq!(perm.to_vector(), vector);
+
+        let vector = vec![0, 3, 1, 2, 4, 5, 6];
+        let perm = Permutation::from_vector(vector);
+        assert_eq!(perm.to_vector(), vec![0, 3, 1, 2]);
+
+        let vector = vec![0, 1, 2, 4, 3, 5, 6, 9, 7, 8, 10, 11];
+        let perm = Permutation::from_vector(vector);
+        assert_eq!(perm.to_vector(), vec![0, 1, 2, 4, 3, 5, 6, 9, 7, 8]);
+    }
+
+    #[test]
+    fn test_from_transformation() {
+        let source = vec!['B', 'C', 'A', 'D'];
+        let target = vec!['C', 'D', 'B', 'A'];
+        let expected = HashMap::<usize, usize>::from([(0, 2), (1, 0), (2, 3), (3, 1)]);
+        assert_eq!(
+            Permutation::from_transformation(&source, &target),
+            Permutation::from_map(expected)
+        );
+
+        let source = vec![-10, -100, 5, 20, 90, 50];
+        let target = vec![-10, 90, 50, -100, 5, 20];
+        let expected =
+            HashMap::<usize, usize>::from([(0, 0), (1, 3), (2, 4), (3, 5), (4, 1), (5, 2)]);
+        assert_eq!(
+            Permutation::from_transformation(&source, &target),
+            Permutation::from_map(expected)
+        );
+    }
+
+    #[test]
+    fn test_permute() {
+        let vector = vec!['C', 'B', 'A', 'D'];
+        let expected = vec!['A', 'B', 'C', 'D'];
+        let map = HashMap::<usize, usize>::from([(2, 0), (0, 2)]);
+        assert_eq!(Permutation::from_map(map).permute(&vector), expected);
+
+        let vector = vec!['C', 'E', 'B', 'A', 'D'];
+        let expected = vec!['A', 'B', 'C', 'D', 'E'];
+        let map = HashMap::<usize, usize>::from([(3, 0), (2, 1), (0, 2), (4, 3), (1, 4)]);
+        assert_eq!(Permutation::from_map(map).permute(&vector), expected);
+    }
+
+    #[test]
+    fn test_chain_permutation() {
+        let map_a = HashMap::<usize, usize>::from([(3, 0), (2, 1), (0, 2), (4, 3), (1, 4)]);
+        let map_b = HashMap::<usize, usize>::from([
+            (1, 5),
+            (3, 1),
+            (5, 4),
+            (4, 2),
+            (2, 3),
+            (0, 7),
+            (7, 0),
+            (8, 9),
+            (9, 8),
+        ]);
+        let expected = HashMap::<usize, usize>::from([
+            (0, 3),
+            (1, 2),
+            (2, 5),
+            (3, 7),
+            (4, 1),
+            (5, 4),
+            (7, 0),
+            (8, 9),
+            (9, 8),
+        ]);
+        assert_eq!(
+            Permutation::from_map(map_a).chain_permutation(&Permutation::from_map(map_b)),
+            Permutation::from_map(expected)
+        );
+    }
+
+    #[test]
+    fn test_invert() {
+        let perm = HashMap::from([(1, 2), (2, 0), (0, 1), (4, 5), (5, 4)]);
+        let inv = HashMap::from([(2, 1), (0, 2), (1, 0), (4, 5), (5, 4)]);
+        assert_eq!(
+            Permutation::from_map(perm).invert(),
+            Permutation::from_map(inv)
+        );
     }
 }
