@@ -583,7 +583,7 @@ mod test {
         let node_root = execution_tree.union(vec![node_project, node_minus]);
         execution_tree.write_temporary(node_root, "Test Tree");
 
-        ExecutionTree(execution_tree)
+        ExecutionTree::new(execution_tree)
     }
 
     fn build_expected_type_tree_up() -> TypeTree {
@@ -766,7 +766,7 @@ mod test {
 
         let union = execution_tree.union(vec![append_a, fetch_b]);
         execution_tree.write_temporary(union, "Test");
-        let execution_tree = ExecutionTree(execution_tree);
+        let execution_tree = ExecutionTree::new(execution_tree);
 
         let type_trees = HashMap::<usize, TypeTree>::new();
         let type_tree = TypeTree::from_execution_tree(&instance, &type_trees, &execution_tree);
@@ -815,7 +815,7 @@ mod test {
         );
 
         execution_tree.write_temporary(node_join, "Test");
-        let execution_tree = ExecutionTree(execution_tree);
+        let execution_tree = ExecutionTree::new(execution_tree);
 
         let type_trees = HashMap::<usize, TypeTree>::new();
         let type_tree = TypeTree::from_execution_tree(&instance, &type_trees, &execution_tree);

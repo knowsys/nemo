@@ -221,12 +221,22 @@ impl ByteSized for TableStorage {
     }
 }
 
+/// Object that owns a table in various orders.
+/// May also just be a pointer to another table.
 #[derive(Debug)]
 enum TableStatus {
-    /// Table is present in different orders
+    /// Table is present under different [`ColumnOrder`]s.
     Present(HashMap<ColumnOrder, TableStorage>),
-    /// Table has the same contents as another table except for reordering.
-    /// The permutation is the transformation needed to get from the referenced table to this one.
+    /// Table has the same contents as the referenced table except for reordering.
+    /// The referenced table is given by its [`TableId`].
+    /// Given the referenced table in some column order,
+    /// the [`Permutation`] encodes the reordering that needs to be applied
+    /// to the referenced table to obtain this table in that same ordering.
+    ///
+    /// For example, assume we have a table `T`.
+    /// We also have a table `R` that is the same as `T` except for reordering `[0->1->2->0]`.
+    /// This means that to obtain the table `R` in the standard ordering one would need the table `T` in the order `[0->1->2->0]`.
+    /// To obtain the table `R` in the ordering `[0->1->2->0]` one owuld need the table `T` in the ordering `[0->2->1->0]`.
     Reference(TableId, Permutation),
 }
 
@@ -243,6 +253,8 @@ struct TableResolvedMut<'a> {
     map: &'a mut HashMap<ColumnOrder, TableStorage>,
     /// If the requested table is a reordered reference then this is the reordered requested column order
     /// If no reordering was required then this is the original requested column order.
+    ///
+    /// Essentially, this means that searching for `order` in `map` will give return the right table.
     order: ColumnOrder,
 }
 
@@ -264,10 +276,7 @@ impl OrderedReferenceManager {
         match &self.map.get(&id)? {
             TableStatus::Present(_) => {}
             TableStatus::Reference(ref_id, permutation) => {
-                return self.resolve_reference_mut(
-                    *ref_id,
-                    &order.chain_permutation(&permutation.invert()),
-                )
+                return self.resolve_reference_mut(*ref_id, &order.chain_permutation(permutation))
             }
         }
 
@@ -291,7 +300,7 @@ impl OrderedReferenceManager {
                 order: order.clone(),
             }),
             TableStatus::Reference(ref_id, permutation) => {
-                self.resolve_reference(*ref_id, &order.chain_permutation(&permutation.invert()))
+                self.resolve_reference(*ref_id, &order.chain_permutation(permutation))
             }
         }
     }
@@ -299,7 +308,7 @@ impl OrderedReferenceManager {
     /// Add a new table (that is not a reference).
     pub fn add_present(&mut self, id: TableId, order: ColumnOrder, storage: TableStorage) {
         if let Some(resolved) = self.resolve_reference_mut(id, &order) {
-            resolved.map.insert(order, storage);
+            resolved.map.insert(resolved.order, storage);
         } else {
             let mut new_order_map = HashMap::<ColumnOrder, TableStorage>::new();
             new_order_map.insert(order, storage);
@@ -320,7 +329,7 @@ impl OrderedReferenceManager {
         {
             (*ref_id, ref_permutation.chain_permutation(&permutation))
         } else {
-            (id, permutation)
+            (reference_id, permutation)
         };
 
         let status = TableStatus::Reference(final_id, final_permutation);
@@ -351,9 +360,15 @@ impl OrderedReferenceManager {
 
     /// Return an iterator of all the available orders of a table.
     /// Returns `None` if there is no table with the given id.
-    pub fn available_orders(&self, id: TableId) -> Option<impl Iterator<Item = &ColumnOrder>> {
+    pub fn available_orders(&self, id: TableId) -> Option<Vec<ColumnOrder>> {
         let resolved = self.resolve_reference(id, &ColumnOrder::default())?;
-        Some(resolved.map.keys())
+        Some(
+            resolved
+                .map
+                .keys()
+                .map(|o| o.chain_permutation(&resolved.order.invert()))
+                .collect(),
+        )
     }
 
     /// Delete the given table.
@@ -568,11 +583,13 @@ impl DatabaseInstance {
     /// Helper function that iterates through a collection of [`ColumnOrder`]
     /// to find the one that is "closest" to given one.
     /// Returns `None` if the given iterator is empty.
-    fn search_closest_order<'a, OrderIter: Iterator<Item = &'a ColumnOrder>>(
-        iter_orders: OrderIter,
+    fn search_closest_order<'a>(
+        iter_orders: &'a [ColumnOrder],
         order: &ColumnOrder,
     ) -> Option<&'a ColumnOrder> {
-        iter_orders.min_by(|x, y| Self::distance(x, order).cmp(&Self::distance(y, order)))
+        iter_orders
+            .iter()
+            .min_by(|x, y| Self::distance(x, order).cmp(&Self::distance(y, order)))
     }
 
     /// Return a [`ProjectReordering`] that will turn a table given in some [`ColumnOrder`] into the same table in another [`ColumnOrder`].
@@ -600,15 +617,15 @@ impl DatabaseInstance {
     /// Panics if the requested table does not exist.
     fn make_available_in_memory(&mut self, id: TableId, order: &ColumnOrder) -> Result<(), Error> {
         let arity = self.table_arity(id);
-        let closest_order = Self::search_closest_order(
-            self.storage_handler
-                .available_orders(id)
-                .expect("Table with given id should exist."),
-            order,
-        )
-        .expect("This function assumes that there is at least one table under the given id.");
+        let available_orders = self
+            .storage_handler
+            .available_orders(id)
+            .expect("Table with given id should exist.");
 
-        let reorder = Self::reorder_to(order, closest_order, arity);
+        let closest_order = Self::search_closest_order(&available_orders, order)
+            .expect("This function assumes that there is at least one table under the given id.");
+
+        let reorder = Self::reorder_to(closest_order, order, arity);
         let trie_unordered = self
             .storage_handler
             .table_storage_mut(id, &closest_order.clone())
@@ -754,13 +771,14 @@ impl DatabaseInstance {
                         computation_results.insert(tree_id, ComputationResult::Temporary(new_trie));
                     }
                     ExecutionResult::Permanent(order, name) => {
+                        let new_id = self.register_table(name, schema);
+
                         log::info!(
-                            "Saved permanent table: {} entries ({})",
+                            "Saved permanent table {new_id} - {name} with {} entries ({})",
                             new_trie.row_num(),
                             new_trie.size_bytes()
                         );
 
-                        let new_id = self.register_table(name, schema);
                         self.add_trie(new_id, order.clone(), new_trie);
 
                         permanent_ids.insert(tree_id, new_id);
@@ -1059,10 +1077,10 @@ mod test {
             table_types::trie::Trie,
             traits::{table::Table, table_schema::TableSchema},
         },
-        util::make_column_with_intervals_t,
+        util::{make_column_with_intervals_t, mapping::permutation::Permutation},
     };
 
-    use super::DatabaseInstance;
+    use super::{DatabaseInstance, OrderedReferenceManager, TableStorage};
 
     #[test]
     fn basic_add_delete() {
@@ -1272,6 +1290,87 @@ mod test {
                 .iter()
                 .collect::<Vec<usize>>(),
             vec![0, 2, 4]
+        );
+    }
+
+    #[test]
+    fn test_reference_manager() {
+        let mut current_id = TableId::default();
+        let mut manager = OrderedReferenceManager::default();
+
+        let id_present = current_id.increment();
+
+        let order_first = ColumnOrder::from_vector(vec![4, 2, 1, 0, 3]);
+        let storage_first = TableStorage::OnDisk(TableSchema::default(), vec![]);
+        manager.add_present(id_present, order_first, storage_first);
+
+        let order_second = ColumnOrder::from_vector(vec![4, 0, 1, 2, 3]);
+        let storage_second = TableStorage::OnDisk(TableSchema::default(), vec![]);
+        manager.add_present(id_present, order_second, storage_second);
+
+        let id_reference = current_id.increment();
+        let permutation_reference = Permutation::from_vector(vec![2, 3, 4, 1, 0]);
+        manager.add_reference(id_reference, id_present, permutation_reference);
+
+        let order_third = ColumnOrder::from_vector(vec![3, 4, 0, 1, 2]);
+        let storage_third = TableStorage::OnDisk(TableSchema::default(), vec![]);
+        manager.add_present(id_reference, order_third, storage_third);
+
+        let reference_available_orders = vec![
+            ColumnOrder::from_vector(vec![3, 0, 4, 2, 1]),
+            ColumnOrder::from_vector(vec![3, 2, 4, 0, 1]),
+            ColumnOrder::from_vector(vec![3, 4, 0, 1, 2]),
+        ];
+
+        for order in manager.available_orders(id_reference).unwrap() {
+            assert!(reference_available_orders.iter().any(|o| o == &order));
+        }
+
+        let requested_order = ColumnOrder::from_vector(vec![0, 3, 1, 2, 4]);
+        let expected_order = ColumnOrder::from_vector(vec![1, 2, 4, 3, 0]);
+        let resolved = manager
+            .resolve_reference(id_reference, &requested_order)
+            .unwrap();
+        assert_eq!(resolved.order, expected_order);
+
+        let id_second_reference = current_id.increment();
+        let permutation_second_reference = Permutation::from_vector(vec![4, 3, 1, 2, 0]);
+        manager.add_reference(
+            id_second_reference,
+            id_reference,
+            permutation_second_reference,
+        );
+
+        let reference_available_orders = vec![
+            ColumnOrder::from_vector(vec![4, 2, 3, 1, 0]),
+            ColumnOrder::from_vector(vec![4, 0, 3, 1, 2]),
+            ColumnOrder::from_vector(vec![0, 1, 3, 2, 4]),
+        ];
+
+        for order in manager.available_orders(id_second_reference).unwrap() {
+            assert!(reference_available_orders.iter().any(|o| o == &order));
+        }
+    }
+
+    #[test]
+    fn test_closest_order() {
+        let orders = vec![
+            ColumnOrder::from_vector(vec![3, 0, 2, 1]),
+            ColumnOrder::from_vector(vec![0, 1, 2, 3]),
+        ];
+
+        let requested_order = ColumnOrder::from_vector(vec![0, 1, 3, 2]);
+        let expected_order = ColumnOrder::from_vector(vec![0, 1, 2, 3]);
+        assert_eq!(
+            DatabaseInstance::search_closest_order(&orders, &requested_order).unwrap(),
+            &expected_order
+        );
+
+        let requested_order = ColumnOrder::from_vector(vec![3, 2, 0, 1]);
+        let expected_order = ColumnOrder::from_vector(vec![3, 0, 2, 1]);
+        assert_eq!(
+            DatabaseInstance::search_closest_order(&orders, &requested_order).unwrap(),
+            &expected_order
         );
     }
 }

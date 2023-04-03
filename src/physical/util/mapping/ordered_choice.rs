@@ -126,12 +126,16 @@ impl SortedChoice {
     /// Also there may not be any function value that is higher than the size of the domain.
     fn is_valid(&self) -> bool {
         let mut value_set = HashSet::<usize>::new();
-        for (_, value) in self.iter() {
-            if !value_set.insert(*value) {
+        for (&input, &value) in self.iter() {
+            if !value_set.insert(value) {
                 return false;
             }
 
-            if *value >= self.map.len() {
+            if value >= self.map.len() {
+                return false;
+            }
+
+            if input >= self.domain_size {
                 return false;
             }
         }
@@ -176,5 +180,160 @@ impl Display for SortedChoice {
         }
 
         write!(f, "]")
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+
+    use crate::physical::util::mapping::{permutation::Permutation, traits::NatMapping};
+
+    use super::SortedChoice;
+
+    #[test]
+    fn test_from_vector() {
+        let vector = vec![0, 2, 1];
+        let map = HashMap::<usize, usize>::from([(0, 0), (1, 2), (2, 1)]);
+        assert_eq!(
+            SortedChoice::from_vector(vector, 3),
+            SortedChoice::from_map(map, 3)
+        );
+
+        let vector = vec![3, 1, 2];
+        let map = HashMap::<usize, usize>::from([(3, 0), (1, 1), (2, 2)]);
+        assert_eq!(
+            SortedChoice::from_vector(vector, 5),
+            SortedChoice::from_map(map, 5)
+        );
+
+        let vector = vec![0, 1, 2];
+        let map = HashMap::<usize, usize>::from([(0, 0), (1, 1), (2, 2)]);
+        assert_eq!(
+            SortedChoice::from_vector(vector, 3),
+            SortedChoice::from_map(map, 3)
+        );
+    }
+
+    #[test]
+    fn test_from_transformation() {
+        let source = vec!['A', 'B', 'C', 'D'];
+        let target = vec!['B', 'A', 'D'];
+        let expected = HashMap::<usize, usize>::from([(0, 1), (1, 0), (3, 2)]);
+        assert_eq!(
+            SortedChoice::from_transformation(&source, &target),
+            SortedChoice::from_map(expected, 4)
+        );
+
+        let source = vec![1.0, 2.0, 3.0];
+        let target = vec![3.0, 1.0, 2.0];
+        let expected = HashMap::<usize, usize>::from([(0, 1), (1, 2), (2, 0)]);
+        assert_eq!(
+            SortedChoice::from_transformation(&source, &target),
+            SortedChoice::from_map(expected, 3)
+        );
+    }
+
+    #[test]
+    fn test_to_vector() {
+        let vector = vec![0, 2, 1];
+        let choice = SortedChoice::from_vector(vector.clone(), 3);
+        assert_eq!(vector, choice.to_vector());
+
+        let vector = vec![3, 1, 2];
+        let choice = SortedChoice::from_vector(vector.clone(), 4);
+        assert_eq!(vector, choice.to_vector());
+
+        let vector = vec![0, 1, 2];
+        let choice = SortedChoice::from_vector(vector.clone(), 4);
+        assert_eq!(vector, choice.to_vector());
+    }
+
+    #[test]
+    fn test_is_permutation() {
+        let choice = SortedChoice::from_vector(vec![2, 0, 1], 3);
+        assert!(choice.is_permutation());
+
+        let choice = SortedChoice::from_vector(vec![2, 0, 1], 4);
+        assert!(!choice.is_permutation());
+    }
+
+    #[test]
+    fn test_into_permutation() {
+        let vector = vec![2, 0, 1];
+        let choice = SortedChoice::from_vector(vector.clone(), vector.len());
+        let permutation = Permutation::from_vector(vector);
+        assert_eq!(permutation, choice.into_permutation());
+
+        let vector = vec![2, 0, 1, 4, 3];
+        let choice = SortedChoice::from_vector(vector.clone(), vector.len());
+        let permutation = Permutation::from_vector(vector);
+        assert_eq!(permutation, choice.into_permutation());
+    }
+
+    #[test]
+    fn test_transform() {
+        let vector = vec!['A', 'B', 'C', 'D'];
+        let choice = SortedChoice::from_vector(vec![2, 3, 0], 4);
+        assert_eq!(choice.transform(&vector), vec!['C', 'D', 'A']);
+
+        let vector = vec![5.0, 1.0, -3.0];
+        let choice = SortedChoice::from_vector(vec![2, 1, 0], 4);
+        assert_eq!(choice.transform(&vector), vec![-3.0, 1.0, 5.0]);
+    }
+
+    #[test]
+    fn test_transform_consumed() {
+        let vector = vec!['A', 'B', 'C', 'D'];
+        let choice = SortedChoice::from_vector(vec![2, 3, 0], 4);
+        assert_eq!(choice.transform_consumed(vector), vec!['C', 'D', 'A']);
+
+        let vector = vec![5.0, 1.0, -3.0];
+        let choice = SortedChoice::from_vector(vec![2, 1, 0], 4);
+        assert_eq!(choice.transform_consumed(vector), vec![-3.0, 1.0, 5.0]);
+    }
+
+    #[test]
+    fn test_is_valid() {
+        let map = HashMap::<usize, usize>::from([(3, 2)]);
+        let choice = SortedChoice {
+            map,
+            domain_size: 4,
+        };
+        assert!(!choice.is_valid());
+
+        let map = HashMap::<usize, usize>::from([(2, 1), (1, 0), (2, 1)]);
+        let choice = SortedChoice {
+            map,
+            domain_size: 2,
+        };
+        assert!(!choice.is_valid());
+
+        let map = HashMap::<usize, usize>::from([(1, 0), (0, 0)]);
+        let choice = SortedChoice {
+            map,
+            domain_size: 2,
+        };
+        assert!(!choice.is_valid());
+
+        let map = HashMap::<usize, usize>::from([(1, 0), (0, 1), (5, 2)]);
+        let choice = SortedChoice {
+            map,
+            domain_size: 2,
+        };
+        assert!(!choice.is_valid());
+    }
+
+    #[test]
+    fn test_chain_permutation() {
+        let choice = SortedChoice::from_map(HashMap::from([(0, 1), (1, 2), (2, 0)]), 3);
+        let permutation = Permutation::from_map(HashMap::from([(0, 1), (1, 2), (2, 0)]));
+        let expected = SortedChoice::from_map(HashMap::from([(0, 2), (1, 0), (2, 1)]), 3);
+        assert_eq!(choice.chain_permutation(&permutation), expected);
+
+        let choice = SortedChoice::from_map(HashMap::from([(1, 0), (2, 1)]), 4);
+        let permutation = Permutation::from_map(HashMap::from([(0, 1), (1, 0), (3, 4), (4, 3)]));
+        let expected = SortedChoice::from_map(HashMap::from([(1, 1), (2, 0)]), 4);
+        assert_eq!(choice.chain_permutation(&permutation), expected);
     }
 }

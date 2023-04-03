@@ -75,6 +75,25 @@ impl ExecutionNodeRef {
             }
         }
     }
+
+    /// Return the list of subnodes.
+    pub fn subnodes(&self) -> Vec<ExecutionNodeRef> {
+        let node_rc = self.get_rc();
+        let node_operation = &node_rc.borrow().operation;
+
+        match node_operation {
+            ExecutionOperation::Join(subnodes, _) => subnodes.clone(),
+            ExecutionOperation::Union(subnodes) => subnodes.clone(),
+            ExecutionOperation::FetchExisting(_, _) => vec![],
+            ExecutionOperation::FetchNew(_) => vec![],
+            ExecutionOperation::Minus(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::Project(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::SelectValue(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::SelectEqual(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::AppendColumns(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::AppendNulls(subnode, _) => vec![subnode.clone()],
+        }
+    }
 }
 
 /// Represents a node in a [`ExecutionPlan`]
@@ -402,7 +421,7 @@ impl ExecutionPlan {
                 name: out_node.name.clone(),
             });
 
-            result.push((id, ExecutionTree(subtree)));
+            result.push((id, ExecutionTree::new(subtree)));
         }
 
         result
@@ -411,7 +430,7 @@ impl ExecutionPlan {
 
 /// Represents a subtree of a [`ExecutionPlan`]
 /// Contains an [`ExecutionPlan`] with a designated root node.
-pub(super) struct ExecutionTree(pub ExecutionPlan);
+pub(super) struct ExecutionTree(ExecutionPlan);
 
 impl Debug for ExecutionTree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -420,6 +439,13 @@ impl Debug for ExecutionTree {
 }
 
 impl ExecutionTree {
+    /// Create a [`ExecutionTree`] from a [`ExecutionPlan`] with one write node
+    pub fn new(plan: ExecutionPlan) -> Self {
+        debug_assert!(plan.out_nodes.len() == 1);
+
+        ExecutionTree(plan)
+    }
+
     /// Returns the [`ExecutionResult`] of this tree.
     pub(super) fn result(&self) -> &ExecutionResult {
         &self.0.out_nodes[0].result
@@ -668,7 +694,7 @@ impl ExecutionTree {
             name: String::from(self.name()),
         });
 
-        Some(ExecutionTree(simplified_tree))
+        Some(ExecutionTree::new(simplified_tree))
     }
 
     /// Return a list of fetched tables that are required by this tree.
@@ -700,9 +726,8 @@ impl ExecutionTree {
         let node_operation = &mut node_rc.borrow_mut().operation;
 
         match node_operation {
-            ExecutionOperation::FetchExisting(id, order) => {
-                *node_operation =
-                    ExecutionOperation::FetchExisting(*id, order.chain_permutation(&permutation));
+            ExecutionOperation::FetchExisting(_id, order) => {
+                *order = order.chain_permutation(&permutation);
             }
             ExecutionOperation::FetchNew(_index) => {
                 if !permutation.is_identity() {
@@ -721,6 +746,7 @@ impl ExecutionTree {
             }
             ExecutionOperation::Join(subnodes, bindings) => {
                 bindings.apply_permutation(&permutation);
+
                 let subpermutations = bindings.comply_with_leapfrog();
 
                 for (subnode, subpermutation) in subnodes.iter().zip(subpermutations.into_iter()) {
@@ -734,7 +760,7 @@ impl ExecutionTree {
             }
             ExecutionOperation::Minus(left, right) => {
                 Self::satisfy_leapfrog_recurisve(left.clone(), permutation.clone());
-                Self::satisfy_leapfrog_recurisve(right.clone(), permutation.clone());
+                Self::satisfy_leapfrog_recurisve(right.clone(), permutation);
             }
             ExecutionOperation::SelectValue(subnode, _assignments) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
@@ -771,12 +797,14 @@ impl ExecutionTree {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use crate::physical::{
-        management::database::TableId,
+        management::database::{ColumnOrder, TableId},
         tabular::operations::{triescan_project::ProjectReordering, JoinBindings},
     };
 
-    use super::ExecutionPlan;
+    use super::{ExecutionOperation, ExecutionPlan, ExecutionTree};
 
     #[test]
     fn general_use() {
@@ -818,5 +846,202 @@ mod test {
         // Write both projections as permanent tables
         test_plan.write_permanent(node_project_a, "Computing Projection A", "Table X");
         test_plan.write_permanent(node_project_b, "Computing Projection B", "Table X");
+    }
+
+    fn compare_leapfrog_trees(
+        tree: &ExecutionTree,
+        expected_orders: &HashMap<TableId, ColumnOrder>,
+        expected_bindings: &HashMap<usize, JoinBindings>,
+    ) {
+        for (node_index, node) in tree.0.nodes.iter().enumerate() {
+            let operation = &node.0.as_ref().borrow().operation;
+
+            match operation {
+                ExecutionOperation::FetchExisting(id, order) => {
+                    assert_eq!(order, expected_orders.get(id).unwrap());
+                }
+                ExecutionOperation::Join(_, bindings) => {
+                    assert_eq!(bindings, expected_bindings.get(&node_index).unwrap());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn test_satisfy_leapfrog_1() {
+        let mut test_plan = ExecutionPlan::default();
+        let mut current_id = TableId::default();
+
+        let subnode_vec = vec![
+            test_plan.fetch_existing(current_id.increment()), // X Z Y
+            test_plan.fetch_existing(current_id.increment()), // W Y Z
+        ];
+
+        // Order: X Y Z W
+        let join_bindings = JoinBindings::new(vec![vec![0, 2, 1], vec![3, 1, 2]]);
+
+        let node_join = test_plan.join(subnode_vec, join_bindings);
+        test_plan.write_temporary(node_join, "Test");
+
+        let mut test_tree = ExecutionTree::new(test_plan);
+        test_tree.satisfy_leapfrog_triejoin();
+
+        let mut current_id = TableId::default();
+        let mut expected_orders = HashMap::<TableId, ColumnOrder>::new();
+        expected_orders.insert(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![0, 2, 1]),
+        );
+        expected_orders.insert(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![1, 2, 0]),
+        );
+        let mut expected_bindings = HashMap::<usize, JoinBindings>::new();
+        expected_bindings.insert(2, JoinBindings::new(vec![vec![0, 1, 2], vec![1, 2, 3]]));
+
+        compare_leapfrog_trees(&test_tree, &expected_orders, &expected_bindings);
+    }
+
+    #[test]
+    fn test_satisfy_leapfrog_2() {
+        let mut test_plan = ExecutionPlan::default();
+        let mut current_id = TableId::default();
+
+        let subnodes_union = vec![
+            test_plan.fetch_existing_reordered(
+                current_id.increment(),
+                ColumnOrder::from_vector(vec![2, 0, 3, 1]),
+            ),
+            test_plan.fetch_existing_reordered(
+                current_id.increment(),
+                ColumnOrder::from_vector(vec![1, 3, 2, 0]),
+            ),
+        ];
+        let node_union = test_plan.union(subnodes_union);
+
+        let node_fetch = test_plan.fetch_existing(current_id.increment());
+
+        let join_bindings = JoinBindings::new(vec![vec![3, 1, 0, 2], vec![0, 2, 1]]);
+        let node_join = test_plan.join(vec![node_union, node_fetch], join_bindings);
+        test_plan.write_temporary(node_join, "Test");
+
+        let mut test_tree = ExecutionTree::new(test_plan);
+        test_tree.satisfy_leapfrog_triejoin();
+
+        let mut current_id = TableId::default();
+        let mut expected_orders = HashMap::<TableId, ColumnOrder>::new();
+        expected_orders.insert(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![3, 0, 1, 2]),
+        );
+        expected_orders.insert(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![2, 3, 0, 1]),
+        );
+        expected_orders.insert(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![0, 2, 1]),
+        );
+        let mut expected_bindings = HashMap::<usize, JoinBindings>::new();
+        expected_bindings.insert(4, JoinBindings::new(vec![vec![0, 1, 2, 3], vec![0, 1, 2]]));
+
+        compare_leapfrog_trees(&test_tree, &expected_orders, &expected_bindings);
+    }
+
+    #[test]
+    fn test_satisfy_leapfrog_3() {
+        let mut test_plan = ExecutionPlan::default();
+        let mut current_id = TableId::default();
+
+        let node_fetch_a = test_plan.fetch_existing_reordered(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![2, 3, 0, 1]),
+        );
+
+        let node_fetch_b = test_plan.fetch_existing_reordered(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![2, 0, 1]),
+        );
+
+        let node_fetch_c = test_plan.fetch_existing_reordered(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![2, 3, 4, 0, 1]),
+        );
+
+        let join_bindings_ab = JoinBindings::new(vec![vec![1, 0, 3, 2], vec![3, 1, 2]]);
+        let node_join_ab = test_plan.join(vec![node_fetch_a, node_fetch_b], join_bindings_ab);
+
+        let join_bindings_abc = JoinBindings::new(vec![vec![4, 1, 0, 2], vec![4, 2, 1, 0, 3]]);
+        let node_join_abc = test_plan.join(vec![node_join_ab, node_fetch_c], join_bindings_abc);
+
+        test_plan.write_temporary(node_join_abc, "Test");
+
+        let mut test_tree = ExecutionTree::new(test_plan);
+        test_tree.satisfy_leapfrog_triejoin();
+
+        let mut current_id = TableId::default();
+        let mut expected_orders = HashMap::<TableId, ColumnOrder>::new();
+        expected_orders.insert(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![1, 2, 0, 3]),
+        );
+        expected_orders.insert(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![1, 0, 2]),
+        );
+        expected_orders.insert(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![0, 4, 3, 1, 2]),
+        );
+
+        let mut expected_bindings = HashMap::<usize, JoinBindings>::new();
+        expected_bindings.insert(3, JoinBindings::new(vec![vec![0, 1, 2, 3], vec![0, 1, 2]]));
+        expected_bindings.insert(
+            4,
+            JoinBindings::new(vec![vec![0, 1, 2, 4], vec![0, 1, 2, 3, 4]]),
+        );
+
+        compare_leapfrog_trees(&test_tree, &expected_orders, &expected_bindings);
+    }
+
+    #[test]
+    fn test_satisfy_leapfrog_4() {
+        let mut test_plan = ExecutionPlan::default();
+        let mut current_id = TableId::default();
+
+        let subnode_vec = vec![
+            test_plan.fetch_existing(current_id.increment()), // A B
+            test_plan.fetch_existing(current_id.increment()), // A C
+            test_plan.fetch_existing(current_id.increment()), // D B C
+            test_plan.fetch_existing(current_id.increment()), // D
+        ];
+
+        // Order: A B C D
+        let join_bindings = JoinBindings::new(vec![vec![0, 1], vec![0, 2], vec![3, 1, 2], vec![3]]);
+
+        let node_join = test_plan.join(subnode_vec, join_bindings);
+        test_plan.write_temporary(node_join, "Test");
+
+        let mut test_tree = ExecutionTree::new(test_plan);
+        test_tree.satisfy_leapfrog_triejoin();
+
+        let mut current_id = TableId::default();
+        let mut expected_orders = HashMap::<TableId, ColumnOrder>::new();
+        expected_orders.insert(current_id.increment(), ColumnOrder::from_vector(vec![0, 1]));
+        expected_orders.insert(current_id.increment(), ColumnOrder::from_vector(vec![0, 1]));
+        expected_orders.insert(
+            current_id.increment(),
+            ColumnOrder::from_vector(vec![1, 2, 0]),
+        );
+        expected_orders.insert(current_id.increment(), ColumnOrder::from_vector(vec![0]));
+
+        let mut expected_bindings = HashMap::<usize, JoinBindings>::new();
+        expected_bindings.insert(
+            4,
+            JoinBindings::new(vec![vec![0, 1], vec![0, 2], vec![1, 2, 3], vec![3]]),
+        );
+
+        compare_leapfrog_trees(&test_tree, &expected_orders, &expected_bindings);
     }
 }

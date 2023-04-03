@@ -169,8 +169,7 @@ fn column_order_for(lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
 
     partial_col_order.append(&mut remaining_vars);
 
-    // TODO (Alex): There probably a direct way to calculate this but I'm not sure what the above code does exactly.
-    ColumnOrder::from_vector(partial_col_order).invert()
+    ColumnOrder::from_vector(partial_col_order)
 }
 
 trait RuleVariableList {
