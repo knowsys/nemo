@@ -1351,4 +1351,26 @@ mod test {
             assert!(reference_available_orders.iter().any(|o| o == &order));
         }
     }
+
+    #[test]
+    fn test_closest_order() {
+        let orders = vec![
+            ColumnOrder::from_vector(vec![3, 0, 2, 1]),
+            ColumnOrder::from_vector(vec![0, 1, 2, 3]),
+        ];
+
+        let requested_order = ColumnOrder::from_vector(vec![0, 1, 3, 2]);
+        let expected_order = ColumnOrder::from_vector(vec![0, 1, 2, 3]);
+        assert_eq!(
+            DatabaseInstance::search_closest_order(&orders, &requested_order).unwrap(),
+            &expected_order
+        );
+
+        let requested_order = ColumnOrder::from_vector(vec![3, 2, 0, 1]);
+        let expected_order = ColumnOrder::from_vector(vec![3, 0, 2, 1]);
+        assert_eq!(
+            DatabaseInstance::search_closest_order(&orders, &requested_order).unwrap(),
+            &expected_order
+        );
+    }
 }
