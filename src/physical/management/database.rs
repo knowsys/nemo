@@ -276,7 +276,7 @@ impl OrderedReferenceManager {
         match &self.map.get(&id)? {
             TableStatus::Present(_) => {}
             TableStatus::Reference(ref_id, permutation) => {
-                return self.resolve_reference_mut(*ref_id, &order.chain_permutation(&permutation))
+                return self.resolve_reference_mut(*ref_id, &order.chain_permutation(permutation))
             }
         }
 
@@ -300,7 +300,7 @@ impl OrderedReferenceManager {
                 order: order.clone(),
             }),
             TableStatus::Reference(ref_id, permutation) => {
-                self.resolve_reference(*ref_id, &order.chain_permutation(&permutation))
+                self.resolve_reference(*ref_id, &order.chain_permutation(permutation))
             }
         }
     }
@@ -1323,10 +1323,7 @@ mod test {
         ];
 
         for order in manager.available_orders(id_reference).unwrap() {
-            assert!(reference_available_orders
-                .iter()
-                .find(|&o| o == &order)
-                .is_some());
+            assert!(reference_available_orders.iter().any(|o| o == &order));
         }
 
         let requested_order = ColumnOrder::from_vector(vec![0, 3, 1, 2, 4]);
@@ -1351,10 +1348,7 @@ mod test {
         ];
 
         for order in manager.available_orders(id_second_reference).unwrap() {
-            assert!(reference_available_orders
-                .iter()
-                .find(|&o| o == &order)
-                .is_some());
+            assert!(reference_available_orders.iter().any(|o| o == &order));
         }
     }
 }
