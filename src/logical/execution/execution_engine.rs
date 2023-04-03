@@ -17,7 +17,12 @@ use crate::{
     },
 };
 
-use super::rule_execution::RuleExecution;
+use super::{
+    rule_execution::RuleExecution,
+    selection_strategy::{
+        strategy::RuleSelectionStrategy, strategy_round_robin::StrategyRoundRobin,
+    },
+};
 
 // Number of tables that are periodically combined into one.
 const MAX_FRAGMENTATION: usize = 8;
@@ -43,6 +48,8 @@ impl RuleInfo {
 pub struct ExecutionEngine {
     program: Program,
     analysis: ProgramAnalysis,
+
+    rule_strategy: Box<dyn RuleSelectionStrategy>,
 
     table_manager: TableManager,
 
@@ -70,9 +77,12 @@ impl ExecutionEngine {
             .iter()
             .for_each(|_| rule_infos.push(RuleInfo::new()));
 
+        let rule_strategy = Box::new(StrategyRoundRobin::new(analysis.rule_analysis.clone()));
+
         Self {
             program,
             analysis,
+            rule_strategy,
             table_manager,
             predicate_fragmentation: HashMap::new(),
             predicate_last_union: HashMap::new(),
@@ -159,10 +169,9 @@ impl ExecutionEngine {
             .map(|(r, a)| RuleExecution::initialize(r, a))
             .collect();
 
-        let mut without_derivation: usize = 0;
-        let mut current_rule_index: usize = 0;
+        let mut new_derivations: Option<bool> = None;
 
-        while without_derivation < self.program.rules().len() {
+        while let Some(current_rule_index) = self.rule_strategy.next_rule(new_derivations) {
             let timing_string = format!("Reasoning/Rules/Rule {current_rule_index}");
 
             TimedCode::instance().sub(&timing_string).start();
@@ -172,7 +181,6 @@ impl ExecutionEngine {
             );
 
             let current_info = &mut self.rule_infos[current_rule_index];
-            let current_analysis = &self.analysis.rule_analysis[current_rule_index];
             let current_execution = &rule_execution[current_rule_index];
 
             let updated_predicates = current_execution.execute(
@@ -181,20 +189,7 @@ impl ExecutionEngine {
                 self.current_step,
             )?;
 
-            let no_derivation = updated_predicates.is_empty();
-
-            if no_derivation {
-                without_derivation += 1;
-            } else {
-                without_derivation = 0;
-            }
-
-            // If we have a derivation and the rule is recursive we want to stay on the same rule
-            let update_rule_index = no_derivation || !current_analysis.is_recursive;
-
-            if update_rule_index {
-                current_rule_index = (current_rule_index + 1) % self.program.rules().len();
-            }
+            new_derivations = Some(!updated_predicates.is_empty());
 
             current_info.step_last_applied = self.current_step;
 
