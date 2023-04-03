@@ -50,6 +50,97 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+struct Source {
+    name: String,
+    arity: usize,
+    content: String,
+}
+
+impl Source {
+    fn new(name: &str, arity: usize, content: &str) -> Self {
+        Self {
+            name: String::from(name),
+            arity,
+            content: String::from(content),
+        }
+    }
+
+    fn to_source_statment(&self, path: &str) -> String {
+        format!(
+            "@source {}[{}]: load-csv(\"{}\").\n",
+            self.name, self.arity, path
+        )
+    }
+}
+
+struct Target {
+    name: String,
+    content: String,
+}
+
+impl Target {
+    fn new(name: &str, content: &str) -> Self {
+        Self {
+            name: String::from(name),
+            content: String::from(content),
+        }
+    }
+}
+
+fn run_test(
+    sources: Vec<Source>,
+    rules: &str,
+    targets: Vec<Target>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("stage2")?;
+
+    let output_directory = assert_fs::TempDir::new()?;
+
+    let rule_file = assert_fs::NamedTempFile::new("rule_file.rls")?;
+    let mut rule_content = String::new();
+    let mut source_files = Vec::new();
+
+    for source in &sources {
+        let csv_file = assert_fs::NamedTempFile::new(format!("{}.csv", source.name))?;
+        csv_file.write_str(&source.content)?;
+        let csv_path = csv_file.path().as_os_str().to_str().unwrap();
+
+        rule_content += &source.to_source_statment(csv_path);
+
+        source_files.push(csv_file);
+    }
+
+    rule_content += rules;
+    rule_file.write_str(&rule_content)?;
+
+    cmd.arg("-vvv")
+        .arg("-s")
+        .arg("-o")
+        .arg(output_directory.path())
+        .arg(rule_file.path());
+    cmd.assert().success();
+
+    for target in targets {
+        let target_file = PathBuf::from(
+            format!(
+                "{}/{}.csv",
+                output_directory
+                    .to_path_buf()
+                    .into_os_string()
+                    .to_str()
+                    .unwrap(),
+                target.name
+            )
+            .as_str(),
+        );
+
+        let target_computed = read_to_string(target_file)?;
+        assert_eq!(target_computed, target.content);
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(miri, ignore)]
 #[test]
 fn reasoning_symmetry_transitive_closure() -> Result<(), Box<dyn std::error::Error>> {
@@ -133,4 +224,35 @@ fn reasoning_symmetry_transitive_closure() -> Result<(), Box<dyn std::error::Err
     assert!(expected_results.is_empty());
     assert_eq!(lines.count(), 16);
     Ok(())
+}
+
+#[cfg_attr(miri, ignore)]
+#[test]
+fn test_datalog_basic_project() -> Result<(), Box<dyn std::error::Error>> {
+    let sources = vec![Source::new(
+        "source",
+        3,
+        "1,2,3\n\
+        2,2,5\n\
+        1,4,7\n\
+        3,5,5",
+    )];
+
+    let rules = "\
+        A(?X, ?Z) :- source(?X, ?Y, ?Z) .\n\
+        B(?Y, ?X) :- A(?X, ?Y) .\n\
+        C(?Y) :- B(?VariableThatIsNotNeeded, ?Y) .\n\
+        D(?Y, ?Z) :- source(?X, ?Y, ?Z) .\n\
+        E(?F, ?E) :- D(?E, ?F) .\
+    ";
+
+    let targets = vec![Target::new(
+        "A",
+        "1,3\n\
+        1,7\n\
+        2,5\n\
+        3,5\n",
+    )];
+
+    run_test(sources, rules, targets)
 }
