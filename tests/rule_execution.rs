@@ -9,10 +9,6 @@ use test_log::test;
 fn symmetry_transitive_closure() -> Result<(), Box<dyn std::error::Error>> {
     let manifest = env!("CARGO_MANIFEST_DIR");
     let rule_file = format!("{manifest}/tests/testfiles/stc_symmetry_transitive_closure.rls");
-    let files = vec![
-        format!("{manifest}/tests/testfiles/stc_csv1.csv"),
-        format!("{manifest}/tests/testfiles/stc_csv2.csv"),
-    ];
     let tuples = vec![
         (
             format!("{manifest}/tests/testfiles/stc_csv1.csv"),
