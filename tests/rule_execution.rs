@@ -13,14 +13,21 @@ fn symmetry_transitive_closure() -> Result<(), Box<dyn std::error::Error>> {
         format!("{manifest}/tests/testfiles/stc_csv1.csv"),
         format!("{manifest}/tests/testfiles/stc_csv2.csv"),
     ];
+    let tuples = vec![
+        (
+            format!("{manifest}/tests/testfiles/stc_csv1.csv"),
+            1,
+            "city",
+        ),
+        (
+            format!("{manifest}/tests/testfiles/stc_csv2.csv"),
+            2,
+            "conn",
+        ),
+    ];
     let conn = format!("{manifest}/tests/testfiles/stc_result.csv");
-    let test_case = TestCase::generate_test_set(
-        &rule_file,
-        files,
-        vec![1, 2],
-        vec!["city", "conn"],
-        vec![("connected.csv", conn.as_str())],
-    )?;
+    let test_case =
+        TestCase::generate_test_set(&rule_file, tuples, vec![("connected.csv", conn.as_str())])?;
 
     test_case.run()?;
     Ok(())
@@ -37,14 +44,9 @@ struct TestCase {
 impl TestCase {
     fn generate_test_set(
         rule_file: &str,
-        csv_files: Vec<String>,
-        csv_arities: Vec<usize>,
-        csv_predicate_names: Vec<&str>,
+        csv_files: Vec<(String, usize, &str)>,
         result_files: Vec<(&str, &str)>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        assert_eq!(csv_files.len(), csv_arities.len());
-        assert_eq!(csv_arities.len(), csv_predicate_names.len());
-
         let rule_file = PathBuf::from_str(rule_file).unwrap();
         assert!(rule_file.exists());
         let rule_file_name = rule_file.file_name().expect("Filename should exist");
@@ -53,9 +55,7 @@ impl TestCase {
 
         let temp_csv_files = csv_files
             .iter()
-            .zip(csv_arities.iter())
-            .zip(csv_predicate_names.iter())
-            .map(|((file, arity), pred_name)| {
+            .map(|(file, arity, pred_name)| {
                 let file_buf = PathBuf::from_str(file).unwrap();
                 assert!(file_buf.exists());
                 let file_name = file_buf.file_name().expect("File should exist");
