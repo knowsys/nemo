@@ -1,4 +1,8 @@
-use std::{fs::read_to_string, path::PathBuf, str::FromStr};
+use std::{
+    fs::{read_dir, read_to_string, ReadDir},
+    path::PathBuf,
+    str::FromStr,
+};
 
 use assert_cmd::Command;
 use assert_fs::{prelude::*, NamedTempFile, TempDir};
@@ -8,104 +12,89 @@ use test_log::test;
 #[test]
 fn symmetry_transitive_closure() -> Result<(), Box<dyn std::error::Error>> {
     let manifest = env!("CARGO_MANIFEST_DIR");
-    let rule_file = format!("{manifest}/tests/testfiles/stc_symmetry_transitive_closure.rls");
-    let tuples = vec![
-        (
-            format!("{manifest}/tests/testfiles/stc_csv1.csv"),
-            1,
-            "city",
-        ),
-        (
-            format!("{manifest}/tests/testfiles/stc_csv2.csv"),
-            2,
-            "conn",
-        ),
-    ];
-    let conn = format!("{manifest}/tests/testfiles/stc_result.csv");
-    let test_case =
-        TestCase::generate_test_set(&rule_file, tuples, vec![("connected.csv", conn.as_str())])?;
-
+    let test_case = TestCase::generate_test(
+        "run.rls",
+        &format!("{manifest}/tests/cases/symmetric_transitive_closure"),
+    )?;
     test_case.run()?;
     Ok(())
 }
 
+/**
+The folder Structure of one test case is as follows
+testcase
+|- problem ... a folder, containing the rule file to be executed and all other resources. stage2 will be run in this folder
+|- expected ... contains all output files to be compared to the computed output
+*/
 #[derive(Debug)]
 struct TestCase {
-    rule_file: NamedTempFile,
-    _csv_files: Vec<NamedTempFile>,
+    rule_file: PathBuf,
     output_dir: TempDir,
-    result_files: Vec<(String, PathBuf)>,
+    test_dir: TempDir,
+    expected_result: PathBuf,
 }
 
 impl TestCase {
-    fn generate_test_set(
+    /// Expects a path to the test, case and the name of the file to run in the problem subfolder
+    fn generate_test(
         rule_file: &str,
-        csv_files: Vec<(String, usize, &str)>,
-        result_files: Vec<(&str, &str)>,
+        test_directory: &str,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let rule_file = PathBuf::from_str(rule_file).unwrap();
-        assert!(rule_file.exists());
-        let rule_file_name = rule_file.file_name().expect("Filename should exist");
+        let test_dir = PathBuf::from_str(&format!("{test_directory}/problem"))?;
+        let tmp_test_dir = TempDir::new()?;
+        Command::new("cp")
+            .arg("-r")
+            .arg(&format!("{}/.", test_dir.as_os_str().to_str().unwrap()))
+            .arg(tmp_test_dir.path())
+            .output()?;
+        let rule_file = format!("{}/{rule_file}", tmp_test_dir.as_os_str().to_string_lossy());
+        log::error!("{rule_file}");
+        let result = Self {
+            rule_file: PathBuf::from_str(&rule_file)?,
+            output_dir: TempDir::new()?,
+            test_dir: tmp_test_dir,
+            expected_result: PathBuf::from_str(&format!("{test_directory}/expected"))?,
+        };
 
-        let mut import = String::new();
-
-        let temp_csv_files = csv_files
-            .iter()
-            .map(|(file, arity, pred_name)| {
-                let file_buf = PathBuf::from_str(file).unwrap();
-                assert!(file_buf.exists());
-                let file_name = file_buf.file_name().expect("File should exist");
-                let temp = NamedTempFile::new(file_name.to_str().unwrap()).unwrap();
-                import = format!(
-                    "{import}\n@source {pred_name}[{arity}]: load-csv(\"{}\").",
-                    temp.as_os_str().to_str().unwrap()
-                );
-                temp.write_file(&file_buf).unwrap();
-                temp
-            })
-            .collect::<Vec<_>>();
-
-        let temp_rule_file = NamedTempFile::new(rule_file_name).unwrap();
-        temp_rule_file
-            .write_str(format!("{import}{}", read_to_string(&rule_file).unwrap()).as_str())
-            .unwrap();
-        Ok(Self {
-            rule_file: temp_rule_file,
-            _csv_files: temp_csv_files,
-            output_dir: TempDir::new().unwrap(),
-            result_files: result_files
-                .iter()
-                .map(|(name, path)| (name.to_string(), PathBuf::from_str(path).unwrap()))
-                .collect::<Vec<_>>(),
-        })
+        log::warn!(
+            "\ntest_file {:?}\noutput_dir {:?}",
+            result.test_dir.path(),
+            result.output_dir.path()
+        );
+        assert!(result.expected_result.is_dir());
+        assert!(result.rule_file.exists());
+        assert!(!result.rule_file.is_dir());
+        Ok(result)
     }
 
     fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
         let mut cmd = Command::cargo_bin("stage2")?;
-        cmd.arg("-s")
+
+        cmd.current_dir(self.test_dir.path())
+            .arg("-s")
             .arg("-o")
             .arg(self.output_dir.path())
-            .arg(self.rule_file.path());
-        cmd.assert().success();
-        self.result_files.iter().try_for_each(
-            |(filename, expected_result_path)| -> Result<(), Box<dyn std::error::Error>> {
-                let output = PathBuf::from(
-                    format!(
-                        "{}/{filename}",
-                        self.output_dir
-                            .to_path_buf()
-                            .into_os_string()
-                            .to_str()
-                            .unwrap()
-                    )
-                    .as_str(),
-                );
-                let mut output_lines = read_to_string(output)?
+            .arg(self.rule_file.as_path())
+            .assert()
+            .success();
+
+        read_dir(&self.expected_result)?
+            .into_iter()
+            .for_each(|entry| {
+                let expected_file = entry.unwrap().path();
+                let expected_name = expected_file.file_name().and_then(|s| s.to_str()).unwrap();
+                let output_file =
+                    PathBuf::from_str(self.output_dir.child(expected_name).to_str().unwrap())
+                        .unwrap();
+                assert!(output_file.exists());
+                let mut output_lines = read_to_string(output_file)
+                    .unwrap()
                     .trim()
                     .split('\n')
                     .map(|s| s.to_string())
                     .collect::<Vec<_>>();
-                let mut expected_lines = read_to_string(expected_result_path)?
+                let mut expected_lines = read_to_string(expected_file)
+                    .unwrap()
                     .trim()
                     .split('\n')
                     .map(|s| s.to_string())
@@ -113,9 +102,7 @@ impl TestCase {
                 output_lines.sort();
                 expected_lines.sort();
                 assert_eq!(output_lines, expected_lines);
-                Ok(())
-            },
-        )?;
+            });
         Ok(())
     }
 }
