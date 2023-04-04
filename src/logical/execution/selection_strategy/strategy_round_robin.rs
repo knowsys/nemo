@@ -1,6 +1,6 @@
 //! Defines the execution strategy by which each rule is applied in the order it appears.
 
-use crate::logical::program_analysis::analysis::RuleAnalysis;
+use crate::logical::{model::Rule, program_analysis::analysis::RuleAnalysis};
 
 use super::strategy::RuleSelectionStrategy;
 
@@ -11,7 +11,7 @@ use super::strategy::RuleSelectionStrategy;
 #[derive(Debug)]
 pub struct StrategyRoundRobin {
     rule_count: usize,
-    rule_analyses: Vec<RuleAnalysis>,
+    self_recursive: Vec<bool>,
 
     without_derivation: usize,
     current_rule_index: usize,
@@ -19,11 +19,12 @@ pub struct StrategyRoundRobin {
 
 impl RuleSelectionStrategy for StrategyRoundRobin {
     /// Create new [`StrategyRoundRobin`].
-    fn new(rule_analyses: Vec<RuleAnalysis>) -> Self {
+    fn new(_rules: &[Rule], rule_analyses: &[RuleAnalysis]) -> Self {
+        let self_recursive = rule_analyses.iter().map(|a| a.is_recursive).collect();
+
         Self {
             rule_count: rule_analyses.len(),
-            rule_analyses,
-
+            self_recursive,
             without_derivation: 0,
             current_rule_index: 0,
         }
@@ -38,8 +39,6 @@ impl RuleSelectionStrategy for StrategyRoundRobin {
             return if self.rule_count > 0 { Some(0) } else { None };
         };
 
-        let current_analysis = &self.rule_analyses[self.current_rule_index];
-
         if new_derivations {
             self.without_derivation = 0;
         } else {
@@ -52,7 +51,7 @@ impl RuleSelectionStrategy for StrategyRoundRobin {
         }
 
         // If we have a derivation and the rule is recursive we want to stay on the same rule
-        let update_rule_index = !new_derivations || !current_analysis.is_recursive;
+        let update_rule_index = !new_derivations || !self.self_recursive[self.current_rule_index];
 
         if update_rule_index {
             self.current_rule_index = (self.current_rule_index + 1) % self.rule_count;

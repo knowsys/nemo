@@ -1,12 +1,12 @@
 //! Contains the trait that defines what constitutes a rule execution strategy.
 
-use crate::logical::program_analysis::analysis::RuleAnalysis;
+use crate::logical::{model::Rule, program_analysis::analysis::RuleAnalysis};
 
 /// Trait that defines a strategy for rule execution,
 /// namely the order in which the rules are applied in.
 pub trait RuleSelectionStrategy: std::fmt::Debug {
     /// Create a new [`RuleSelectionStrategy`] object.
-    fn new(rule_analyses: Vec<RuleAnalysis>) -> Self
+    fn new(rules: &[Rule], rule_analyses: &[RuleAnalysis]) -> Self
     where
         Self: Sized;
 

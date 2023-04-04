@@ -14,6 +14,11 @@ pub struct RuleAnalysis {
     /// Whether the rule has filter that need to be applied.
     pub has_filters: bool,
 
+    /// Predicates appearing in the body.
+    pub body_predicates: HashSet<Identifier>,
+    /// Predicates appearing in the head.
+    pub head_predicates: HashSet<Identifier>,
+
     /// Variables occuring in the body.
     pub body_variables: HashSet<Variable>,
     /// Variables occuring in the head.
@@ -63,6 +68,10 @@ fn get_variables(atoms: &[&Atom]) -> HashSet<Variable> {
     result
 }
 
+fn get_predicates(atoms: &[&Atom]) -> HashSet<Identifier> {
+    atoms.iter().map(|a| a.predicate()).collect()
+}
+
 fn analyze_rule(
     rule: &Rule,
     promising_variable_orders: Vec<VariableOrder>,
@@ -77,6 +86,8 @@ fn analyze_rule(
         is_existential: num_existential > 0,
         is_recursive: is_recursive(rule),
         has_filters: !rule.filters().is_empty(),
+        body_predicates: get_predicates(&body_atoms),
+        head_predicates: get_predicates(&head_atoms),
         body_variables: get_variables(&body_atoms),
         head_variables: get_variables(&head_atoms),
         num_existential,
