@@ -757,7 +757,7 @@ impl DatabaseInstance {
 
             if let Some(new_trie) = new_trie_opt {
                 // If trie appended nulls then we need to update our `current_null` value
-                self.current_null += new_trie.num_elements() as u64 * num_null_columns;
+                self.current_null += new_trie.row_num() as u64 * num_null_columns;
 
                 // Add new trie to the appropriate place
                 match execution_tree.result() {

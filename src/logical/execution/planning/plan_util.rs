@@ -75,22 +75,28 @@ pub(super) fn compute_filters(
 
                 match left_index {
                     Some(li) => match right_index {
-                        Some(ri) => {
-                            if ri > li {
-                                let other_set = filter_classes.remove(ri);
-                                filter_classes[li].extend(other_set);
-                            } else {
-                                let other_set = filter_classes.remove(li);
+                        Some(ri) => match ri.cmp(&li) {
+                            std::cmp::Ordering::Less => {
+                                let other_set = filter_classes[li].clone();
                                 filter_classes[ri].extend(other_set);
+
+                                filter_classes.remove(li);
                             }
-                        }
+                            std::cmp::Ordering::Equal => todo!(),
+                            std::cmp::Ordering::Greater => {
+                                let other_set = filter_classes[ri].clone();
+                                filter_classes[li].extend(other_set);
+
+                                filter_classes.remove(ri);
+                            }
+                        },
                         None => {
                             filter_classes[li].insert(right_variable);
                         }
                     },
                     None => match right_index {
                         Some(ri) => {
-                            filter_classes[ri].insert(right_variable);
+                            filter_classes[ri].insert(left_variable);
                         }
                         None => {
                             let mut new_set = HashSet::new();
@@ -120,6 +126,7 @@ pub(super) fn compute_filters(
             }
         }
     }
+
     let filter_classes: SelectEqualClasses = filter_classes
         .iter()
         .map(|s| {
@@ -178,7 +185,7 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
 
     let mut variable_map = HashMap::<Identifier, usize>::new();
 
-    for (term_index, term) in atom.terms().iter().enumerate() {
+    for term in atom.terms() {
         match term {
             Term::NumericLiteral(nl) => match *nl {
                 NumericLiteral::Integer(i) => {
@@ -204,9 +211,10 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
                     let instruction = AppendInstruction::RepeatColumn(*repeat_index);
                     current_append_vector.push(instruction);
                 } else {
+                    let reduced_index = reduced_terms.len();
                     reduced_terms.push(Term::Variable(variable.clone()));
 
-                    variable_map.insert(variable_identifier.clone(), term_index);
+                    variable_map.insert(variable_identifier.clone(), reduced_index);
 
                     append_instructions.push(vec![]);
                     current_append_vector = append_instructions.last_mut().unwrap();
