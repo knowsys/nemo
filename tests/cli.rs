@@ -1,6 +1,7 @@
 use assert_cmd::prelude::*; // Add methods on commands
 use assert_fs::prelude::*;
-use predicates::prelude::*; // Used for writing assertions
+use predicates::prelude::*;
+use stage2::physical::tabular::table_types::trie::Trie; // Used for writing assertions
 use std::{fs::read_to_string, path::PathBuf, process::Command}; // Run programs
 use test_log::test;
 
@@ -232,10 +233,10 @@ fn test_datalog_basic_project() -> Result<(), Box<dyn std::error::Error>> {
     let sources = vec![Source::new(
         "source",
         3,
-        "1,2,3\n\
-        2,2,5\n\
-        1,4,7\n\
-        3,5,5",
+        "A,B,C\n\
+        B,B,D\n\
+        A,E,F\n\
+        C,D,D\n",
     )];
 
     let rules = "\
@@ -246,13 +247,538 @@ fn test_datalog_basic_project() -> Result<(), Box<dyn std::error::Error>> {
         E(?F, ?E) :- D(?E, ?F) .\
     ";
 
-    let targets = vec![Target::new(
-        "A",
-        "1,3\n\
-        1,7\n\
-        2,5\n\
-        3,5\n",
-    )];
+    let targets = vec![
+        Target::new(
+            "A",
+            "A,C\n\
+            A,F\n\
+            B,D\n\
+            C,D\n",
+        ),
+        Target::new(
+            "B",
+            "C,A\n\
+            D,B\n\
+            D,C\n\
+            F,A\n",
+        ),
+        Target::new(
+            "C",
+            "A\n\
+            B\n\
+            C\n",
+        ),
+        Target::new(
+            "D",
+            "B,C\n\
+            B,D\n\
+            D,D\n\
+            E,F\n",
+        ),
+        Target::new(
+            "E",
+            "C,B\n\
+            D,B\n\
+            D,D\n\
+            F,E\n",
+        ),
+    ];
+
+    run_test(sources, rules, targets)
+}
+
+#[cfg_attr(miri, ignore)]
+#[test]
+fn test_datalog_basic_union() -> Result<(), Box<dyn std::error::Error>> {
+    let sources = vec![
+        Source::new(
+            "sourceA",
+            3,
+            "A,B,C\n\
+            B,B,D\n\
+            A,E,F\n\
+            C,D,D\n",
+        ),
+        Source::new(
+            "sourceB",
+            3,
+            "B,B,D\n\
+            A,C,F\n\
+            A,G,Q\n\
+            Q,Q,A\n\
+            C,D,D\n",
+        ),
+        Source::new(
+            "sourceC",
+            3,
+            "Q,Q,A\n\
+            Z,Z,Z\n",
+        ),
+    ];
+
+    let rules = "\
+        U(?X, ?Y, ?Z) :- sourceA(?X, ?Y, ?Z) .\n\
+        U(?X, ?Y, ?Z) :- sourceB(?X, ?Y, ?Z) .\n\
+        U(?X, ?Y, ?Z) :- sourceC(?X, ?Y, ?Z) .\n\
+        u(?X, ?Y, ?Z) :- sourceA(?X, ?Y, ?Z) .\n\
+        u(?X, ?Y, ?Z) :- sourceB(?X, ?Y, ?Z) .\n\
+    ";
+
+    let targets = vec![
+        Target::new(
+            "U",
+            "A,B,C\n\
+            A,C,F\n\
+            A,E,F\n\
+            A,G,Q\n\
+            B,B,D\n\
+            C,D,D\n\
+            Q,Q,A\n\
+            Z,Z,Z\n",
+        ),
+        Target::new(
+            "u",
+            "A,B,C\n\
+            A,C,F\n\
+            A,E,F\n\
+            A,G,Q\n\
+            B,B,D\n\
+            C,D,D\n\
+            Q,Q,A\n",
+        ),
+    ];
+
+    run_test(sources, rules, targets)
+}
+
+#[cfg_attr(miri, ignore)]
+#[test]
+fn test_datalog_basic_join() -> Result<(), Box<dyn std::error::Error>> {
+    let sources = vec![
+        Source::new(
+            "sourceA",
+            3,
+            "A,B,C\n\
+            B,B,D\n\
+            A,E,F\n\
+            C,D,D\n",
+        ),
+        Source::new(
+            "sourceB",
+            3,
+            "B,B,D\n\
+            B,D,A\n\
+            A,C,F\n\
+            A,G,Q\n\
+            Q,Q,A\n\
+            C,D,D\n",
+        ),
+        Source::new(
+            "sourceC",
+            3,
+            "Q,Q,A\n\
+            Z,Z,Z\n\
+            F,E,D\n\
+            D,B,Q\n\
+            D,B,Z\n\
+            D,B,F\n",
+        ),
+    ];
+
+    let rules = "\
+        J1(?X, ?Y, ?Z) :- sourceA(?X, ?Z, ?Y), sourceB(?X, ?Y, ?T) .\n\
+        J2(?X, ?Y, ?Z) :- sourceA(?Z, ?Y, ?X), sourceC(?X, ?Y, ?T) .\n\
+        J3(?X, ?Y, ?W) :- sourceA(?T, ?Y, ?X), sourceB(?T, ?Y, ?X), sourceC(?X, ?Y, ?W) .\n\
+    ";
+
+    let targets = vec![
+        Target::new(
+            "J1",
+            "A,C,B\n\
+            B,D,B\n\
+            C,D,D\n",
+        ),
+        Target::new(
+            "J2",
+            "D,B,B\n\
+            F,E,A\n",
+        ),
+        Target::new(
+            "J3",
+            "D,B,F\n\
+            D,B,Q\n\
+            D,B,Z\n",
+        ),
+    ];
+
+    run_test(sources, rules, targets)
+}
+
+#[cfg_attr(miri, ignore)]
+#[test]
+fn test_datalog_repeat_vars() -> Result<(), Box<dyn std::error::Error>> {
+    let sources = vec![
+        Source::new(
+            "sourceA",
+            3,
+            "A,B,C\n\
+            B,B,D\n\
+            A,E,F\n\
+            C,D,D\n",
+        ),
+        Source::new(
+            "sourceB",
+            3,
+            "B,B,D\n\
+            B,D,A\n\
+            A,C,F\n\
+            A,G,Q\n\
+            A,Q,Q\n\
+            C,D,D\n",
+        ),
+        Source::new(
+            "sourceC",
+            3,
+            "Q,Q,A\n\
+            Z,Z,Z\n\
+            F,E,D\n\
+            D,B,Q\n\
+            D,B,Z\n\
+            D,B,F\n",
+        ),
+    ];
+
+    let rules = "\
+        RepeatBody(?R, ?S) :- sourceA(?X, ?X, ?R), sourceB(?S, ?Y, ?Y) .\n\
+        RepeatHead(?X, ?Y, ?X, ?Y, ?Z, ?Z, ?X) :- sourceA(?X, ?Z, ?Y), sourceB(?X, ?Y, ?T) .\n
+        RepeatAll(?X, ?X, ?X, ?X) :- sourceC(?X, ?X, ?X) .
+        RepeatAlternative(?R, ?S) :- sourceA(?R, ?X, ?X), sourceB(?S, ?Y, ?Y) .\n\
+    ";
+
+    let targets = vec![
+        Target::new(
+            "RepeatBody",
+            "D,A\n\
+            D,C\n",
+        ),
+        Target::new(
+            "RepeatAlternative",
+            "C,A\n\
+            C,C\n",
+        ),
+        Target::new("RepeatAll", "Z,Z,Z,Z\n"),
+        Target::new(
+            "RepeatHead",
+            "A,C,A,C,B,B,A\n\
+            B,D,B,D,B,B,B\n\
+            C,D,C,D,D,D,C\n",
+        ),
+    ];
+
+    run_test(sources, rules, targets)
+}
+
+#[cfg_attr(miri, ignore)]
+#[test]
+fn test_datalog_constants() -> Result<(), Box<dyn std::error::Error>> {
+    let sources = vec![
+        Source::new(
+            "sourceA",
+            3,
+            "<A>,<B>,<C>\n\
+            <B>,<B>,<D>\n\
+            <A>,<E>,<F>\n\
+            <C>,<D>,<D>\n",
+        ),
+        Source::new(
+            "sourceB",
+            3,
+            "<B>,<B>,<D>\n\
+            <B>,<D>,<A>\n\
+            <A>,<C>,<F>\n\
+            <A>,<G>,<Q>\n\
+            <A>,<Q>,<Q>\n\
+            <C>,<D>,<D>\n\
+            <C>,<D>,<A>\n",
+        ),
+    ];
+
+    let rules = "\
+        ConstantBodyXY(?X, ?Y) :- sourceA(?X, ?Y, D) .\n\
+        ConstantBodyYZ(?Y, ?Z) :- sourceA(A, ?Y, ?Z) .\n\
+        ConstantBodyXZ(?X, ?Z) :- sourceA(?X, B, ?Z) .\n
+
+        ConstantBodyX(?X) :- sourceB(?X, D, A) .\n\
+        ConstantBodyY(?Y) :- sourceB(A, ?Y, Q) .\n\
+        ConstantBodyZ(?Z) :- sourceB(C, D, ?Z) .\n
+
+        Exist(?X, ?Y) :- sourceA(?X, ?X, ?Y), sourceB(A, Q, Q).\n\
+        NotExist(?X, ?Y) :- sourceA(?X, ?X, ?Y), sourceB(D, D, D).\n
+
+        ConstantHeadAfter(?X, ?Y, A, B, Z) :- sourceA(?X, ?Y, ?I) .\n\
+        ConstantHeadBefore(A, Z, B, ?X, ?Y) :- sourceA(?X, ?I, ?Y) .\n\
+        ConstantHeadEverywhere(A, B, ?X, ?Z, ?X, C, ?Y, E, F) :- sourceA(?X, ?Y, ?Z) .\n
+
+        ConstantBodyHead(Q, ?Y, A, B, ?X, Z) :- sourceA(A, ?X, ?Y), sourceB(?X, D, A) .\n
+    ";
+
+    let targets = vec![
+        Target::new(
+            "ConstantBodyXY",
+            "<B>,<B>\n\
+            <C>,<D>\n",
+        ),
+        Target::new(
+            "ConstantBodyYZ",
+            "<B>,<C>\n\
+            <E>,<F>\n",
+        ),
+        Target::new(
+            "ConstantBodyXZ",
+            "<A>,<C>\n\
+            <B>,<D>\n",
+        ),
+        Target::new(
+            "ConstantBodyX",
+            "<B>\n\
+            <C>\n",
+        ),
+        Target::new(
+            "ConstantBodyY",
+            "<G>\n\
+            <Q>\n",
+        ),
+        Target::new(
+            "ConstantBodyZ",
+            "<A>\n\
+            <D>\n",
+        ),
+        Target::new("Exist", "<B>,<D>\n"),
+        Target::new("NotExist", ""),
+        Target::new(
+            "ConstantHeadAfter",
+            "<A>,<B>,<A>,<B>,<Z>\n\
+            <A>,<E>,<A>,<B>,<Z>\n\
+            <B>,<B>,<A>,<B>,<Z>\n\
+            <C>,<D>,<A>,<B>,<Z>\n",
+        ),
+        Target::new(
+            "ConstantHeadBefore",
+            "<A>,<Z>,<B>,<A>,<C>\n\
+            <A>,<Z>,<B>,<A>,<F>\n\
+            <A>,<Z>,<B>,<B>,<D>\n\
+            <A>,<Z>,<B>,<C>,<D>\n",
+        ),
+        Target::new(
+            "ConstantHeadEverywhere",
+            "<A>,<B>,<A>,<C>,<A>,<C>,<B>,<E>,<F>\n\
+            <A>,<B>,<A>,<F>,<A>,<C>,<E>,<E>,<F>\n\
+            <A>,<B>,<B>,<D>,<B>,<C>,<B>,<E>,<F>\n\
+            <A>,<B>,<C>,<D>,<C>,<C>,<D>,<E>,<F>\n",
+        ),
+        Target::new("ConstantBodyHead", "<Q>,<C>,<A>,<B>,<B>,<Z>\n"),
+    ];
+
+    run_test(sources, rules, targets)
+}
+
+struct NullPrinter {
+    current_null: u64,
+}
+
+impl NullPrinter {
+    fn new() -> Self {
+        Self {
+            current_null: 1 << 63,
+        }
+    }
+
+    fn print_next(&mut self) -> String {
+        self.current_null += 1;
+
+        Trie::format_null(self.current_null)
+    }
+
+    fn print_back(&mut self, back: u64) -> String {
+        self.current_null -= back;
+
+        self.print_next()
+    }
+
+    fn print_skip(&mut self, skip: u64) -> String {
+        self.current_null += skip;
+
+        self.print_next()
+    }
+}
+
+#[cfg_attr(miri, ignore)]
+#[test]
+fn test_restricted() -> Result<(), Box<dyn std::error::Error>> {
+    let sources = vec![
+        Source::new(
+            "sourceR",
+            2,
+            "<A>,<A>\n\
+            <B>,<C>\n\
+            <C>,<D>\n",
+        ),
+        Source::new("sourceA", 2, "<A>,<B>\n"),
+        Source::new("sourceB", 2, "<B>,<C>\n"),
+    ];
+
+    let rules = "\
+        Simple(?X, !V) :- sourceR(?X, ?Y) .\n
+
+        Block(?X, ?X) :- sourceR(?X, ?X) .\n\
+        Block(?X, !V) :- sourceR(?X, ?Y) .\n
+
+        HeadConstant(!V, X), HeadConstant(?X, !V) :- sourceR(?X, ?Y) .\n
+
+        DatalogEx(?X, ?X) :- sourceR(?X, ?X) .\n\
+        Datalog(?X), DatalogEx(?X, !V) :- sourceR(?X, ?Y) .\n
+
+        MultiHeadNull(!V), MultiHead(!V, ?X), MultiHead(?X, !V) :- sourceR(?X, ?Y) .\n
+
+        MultiNulls(?X, ?X) :- sourceR(?X, ?X) .\n\
+        MultiNulls(!W, ?X), MultiNulls(?X, !V) :- sourceR(?X, ?Y) .\n
+
+        MultiPieces(?X, ?X) :- sourceR(?X, ?X) .\n\
+        MultiPieces(!W, ?X), MultiPieces(?Y, !V) :- sourceR(?X, ?Y) .\n
+
+        RecA(?X, ?Y) :- sourceA(?X, ?Y) .\n\
+        RecB(?X, ?Y) :- sourceB(?X, ?Y) .\n\
+        RecB(?X, !V), RecA(!V, ?Y) :- RecA(?X, ?Z), RecB(?Z, ?Y) .\n
+    ";
+
+    let mut null = NullPrinter::new();
+
+    let targets = vec![
+        Target::new(
+            "Simple",
+            &format!(
+                "<A>,{}\n\
+                <B>,{}\n\
+                <C>,{}\n",
+                null.print_next(),
+                null.print_next(),
+                null.print_next()
+            ),
+        ),
+        Target::new(
+            "Block",
+            &format!(
+                "<A>,<A>\n\
+                <B>,{}\n\
+                <C>,{}\n",
+                null.print_next(),
+                null.print_next(),
+            ),
+        ),
+        Target::new(
+            "HeadConstant",
+            &format!(
+                "<A>,{0}\n\
+                 <B>,{1}\n\
+                 <C>,{2}\n\
+                 {0},<X>\n\
+                 {1},<X>\n\
+                 {2},<X>\n",
+                null.print_next(),
+                null.print_next(),
+                null.print_next(),
+            ),
+        ),
+        Target::new(
+            "DatalogEx",
+            &format!(
+                "<A>,<A>\n\
+                <A>,{}\n\
+                <B>,{}\n\
+                <C>,{}\n",
+                null.print_next(),
+                null.print_next(),
+                null.print_next(),
+            ),
+        ),
+        Target::new(
+            "Datalog",
+            "<A>\n\
+            <B>\n\
+            <C>\n",
+        ),
+        Target::new(
+            "MultiHead",
+            &format!(
+                "<A>,{0}\n\
+                 <B>,{1}\n\
+                 <C>,{2}\n\
+                 {0},<A>\n\
+                 {1},<B>\n\
+                 {2},<C>\n",
+                null.print_next(),
+                null.print_next(),
+                null.print_next(),
+            ),
+        ),
+        Target::new(
+            "MultiHeadNull",
+            &format!(
+                "{}\n\
+                {}\n\
+                {}\n",
+                null.print_back(3),
+                null.print_next(),
+                null.print_next(),
+            ),
+        ),
+        // Sadly, this concrete nulls assigned here are random
+        // TODO: Think about a solution
+        // Target::new(
+        //     "MultiNulls",
+        //     &format!(
+        //         "<A>,<X>\n\
+        //          <B>,{0}\n\
+        //          <C>,{2}\n\
+        //          {1},<B>\n\
+        //          {3},<C>\n",
+        //         null.print_next(),
+        //         null.print_next(),
+        //         null.print_next(),
+        //         null.print_next(),
+        //     ),
+        // ),
+        // Target::new(
+        //     "MultiPieces",
+        //     &format!(
+        //         "<A>,<X>\n\
+        //          <B>,{0}\n\
+        //          <C>,{2}\n\
+        //          {1},<C>\n\
+        //          {3},<D>\n",
+        //         null.print_skip(1),
+        //         null.print_next(),
+        //         null.print_next(),
+        //         null.print_next(),
+        //     ),
+        // ),
+        Target::new(
+            "RecA",
+            &format!(
+                "<A>,<B>\n\
+                {},<C>\n",
+                null.print_skip(8),
+            ),
+        ),
+        Target::new(
+            "RecB",
+            &format!(
+                "<A>,{}\n\
+                <B>,<C>\n",
+                null.print_back(1),
+            ),
+        ),
+    ];
 
     run_test(sources, rules, targets)
 }
