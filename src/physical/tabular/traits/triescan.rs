@@ -23,7 +23,7 @@ pub trait TrieScan<'a>: Debug {
     fn down(&mut self);
 
     /// Return the current position of the scan as a [`ColumnScanT`].
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>>;
 
     /// Return the underlying [`ColumnScanT`] object given an index.
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
@@ -76,7 +76,7 @@ impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
         forward_to_scan!(self, down)
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
         forward_to_scan!(self, current_scan)
     }
 

@@ -407,8 +407,8 @@ impl<'a> TrieScan<'a> for TrieScanAppend<'a> {
             .reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        self.get_scan(self.current_layer?)
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
+        Some(self.column_scans[self.current_layer?].get_mut())
     }
 
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
@@ -435,7 +435,7 @@ mod test {
     };
 
     fn scan_next(int_scan: &mut TrieScanAppend) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*int_scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -443,12 +443,10 @@ mod test {
     }
 
     fn scan_current(int_scan: &mut TrieScanAppend) -> Option<u64> {
-        unsafe {
-            if let ColumnScanT::U64(rcs) = &(*int_scan.current_scan()?.get()) {
-                rcs.current()
-            } else {
-                panic!("type should be u64");
-            }
+        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
+            rcs.current()
+        } else {
+            panic!("type should be u64");
         }
     }
 

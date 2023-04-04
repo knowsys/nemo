@@ -81,8 +81,8 @@ pub fn materialize_inner(
         // current_value is the value we are leaving behind
         // If there exists a path from current_value to the bottom (which we keep track of with the current_row variable)
         // then it has to be added to a column builder
-        let current_value = unsafe { (*trie_scan.current_scan().unwrap().get()).current() };
-        let next_value = unsafe { (*trie_scan.current_scan().unwrap().get()).next() };
+        let current_value = trie_scan.current_scan().unwrap().current();
+        let next_value = trie_scan.current_scan().unwrap().next();
         next_count += 1;
 
         if let Some(val) = current_value {
