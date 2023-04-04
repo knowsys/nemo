@@ -1,40 +1,32 @@
+/// Test methods to execute code in the test builder.
+/// code appears to be dead as the utilising code is generated during build time
 use std::{
-    fs::{read_dir, read_to_string, ReadDir},
+    fs::{read_dir, read_to_string},
     path::PathBuf,
     str::FromStr,
 };
 
 use assert_cmd::Command;
-use assert_fs::{prelude::*, NamedTempFile, TempDir};
-use test_log::test;
+use assert_fs::{prelude::*, TempDir};
 
-#[cfg_attr(miri, ignore)]
-#[test]
-fn symmetry_transitive_closure() -> Result<(), Box<dyn std::error::Error>> {
-    let manifest = env!("CARGO_MANIFEST_DIR");
-    let test_case = TestCase::generate_test(
-        "run.rls",
-        &format!("{manifest}/tests/cases/symmetric_transitive_closure"),
-    )?;
-    test_case.run()?;
-    Ok(())
-}
-
-/**
-The folder Structure of one test case is as follows
-testcase
-|- problem ... a folder, containing the rule file to be executed and all other resources. stage2 will be run in this folder
-|- expected ... contains all output files to be compared to the computed output
-*/
+/// The folder Structure of one test case is as follows
+/// testcase
+/// |- problem ... a folder, containing the rule file to be executed and all other resources. stage2 will be run in this folder
+/// |- expected ... contains all output files to be compared to the computed output
 #[derive(Debug)]
 struct TestCase {
+    #[allow(dead_code)]
     rule_file: PathBuf,
+    #[allow(dead_code)]
     output_dir: TempDir,
+    #[allow(dead_code)]
     test_dir: TempDir,
+    #[allow(dead_code)]
     expected_result: PathBuf,
 }
 
 impl TestCase {
+    #[allow(dead_code)]
     /// Expects a path to the test, case and the name of the file to run in the problem subfolder
     fn generate_test(
         rule_file: &str,
@@ -55,18 +47,13 @@ impl TestCase {
             test_dir: tmp_test_dir,
             expected_result: PathBuf::from_str(&format!("{test_directory}/expected"))?,
         };
-
-        log::warn!(
-            "\ntest_file {:?}\noutput_dir {:?}",
-            result.test_dir.path(),
-            result.output_dir.path()
-        );
         assert!(result.expected_result.is_dir());
         assert!(result.rule_file.exists());
         assert!(!result.rule_file.is_dir());
         Ok(result)
     }
 
+    #[allow(dead_code)]
     fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
         let mut cmd = Command::cargo_bin("stage2")?;
 
