@@ -78,8 +78,8 @@ impl ExecutionEngine {
             .for_each(|_| rule_infos.push(RuleInfo::new()));
 
         let rule_strategy = Box::new(StrategyRoundRobin::new(
-            program.rules(),
-            &analysis.rule_analysis,
+            program.rules().iter().collect(),
+            analysis.rule_analysis.iter().collect(),
         ));
 
         Self {

@@ -17,7 +17,7 @@ pub struct StrategyRandom {
 
 impl RuleSelectionStrategy for StrategyRandom {
     /// Create new [`StrategyRandom`].
-    fn new(_rules: &[Rule], rule_analyses: &[RuleAnalysis]) -> Self {
+    fn new(_rules: Vec<&Rule>, rule_analyses: Vec<&RuleAnalysis>) -> Self {
         Self {
             rule_count: rule_analyses.len(),
             no_derivations: HashSet::new(),

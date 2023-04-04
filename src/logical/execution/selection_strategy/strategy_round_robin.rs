@@ -19,7 +19,7 @@ pub struct StrategyRoundRobin {
 
 impl RuleSelectionStrategy for StrategyRoundRobin {
     /// Create new [`StrategyRoundRobin`].
-    fn new(_rules: &[Rule], rule_analyses: &[RuleAnalysis]) -> Self {
+    fn new(_rules: Vec<&Rule>, rule_analyses: Vec<&RuleAnalysis>) -> Self {
         let self_recursive = rule_analyses.iter().map(|a| a.is_recursive).collect();
 
         Self {
