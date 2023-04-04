@@ -65,31 +65,28 @@ impl TestCase {
             .assert()
             .success();
 
-        read_dir(&self.expected_result)?
-            .into_iter()
-            .for_each(|entry| {
-                let expected_file = entry.unwrap().path();
-                let expected_name = expected_file.file_name().and_then(|s| s.to_str()).unwrap();
-                let output_file =
-                    PathBuf::from_str(self.output_dir.child(expected_name).to_str().unwrap())
-                        .unwrap();
-                assert!(output_file.exists());
-                let mut output_lines = read_to_string(output_file)
-                    .unwrap()
-                    .trim()
-                    .split('\n')
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>();
-                let mut expected_lines = read_to_string(expected_file)
-                    .unwrap()
-                    .trim()
-                    .split('\n')
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>();
-                output_lines.sort();
-                expected_lines.sort();
-                assert_eq!(output_lines, expected_lines);
-            });
+        read_dir(&self.expected_result)?.for_each(|entry| {
+            let expected_file = entry.unwrap().path();
+            let expected_name = expected_file.file_name().and_then(|s| s.to_str()).unwrap();
+            let output_file =
+                PathBuf::from_str(self.output_dir.child(expected_name).to_str().unwrap()).unwrap();
+            assert!(output_file.exists());
+            let mut output_lines = read_to_string(output_file)
+                .unwrap()
+                .trim()
+                .split('\n')
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>();
+            let mut expected_lines = read_to_string(expected_file)
+                .unwrap()
+                .trim()
+                .split('\n')
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>();
+            output_lines.sort();
+            expected_lines.sort();
+            assert_eq!(output_lines, expected_lines);
+        });
         Ok(())
     }
 }
