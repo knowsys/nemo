@@ -7,6 +7,7 @@ use crate::{
     logical::{
         model::{DataSource, Identifier, NumericLiteral, Program, Term},
         program_analysis::analysis::ProgramAnalysis,
+        types::LogicalTypeEnum,
         TableManager,
     },
     meta::TimedCode,
@@ -91,7 +92,16 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {
         for (predicate, arity) in &analysis.all_predicates {
-            table_manager.register_predicate(predicate.clone(), *arity);
+            table_manager.register_predicate(
+                predicate.clone(),
+                analysis
+                    .predicate_types
+                    .get(predicate)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        (0..*arity).map(|_| LogicalTypeEnum::RdfsResource).collect()
+                    }),
+            );
         }
     }
 

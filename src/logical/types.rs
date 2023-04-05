@@ -4,6 +4,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use crate::error::Error;
+use crate::physical::datatypes::DataTypeName;
 
 macro_rules! count {
     () => (0usize);
@@ -41,7 +42,6 @@ macro_rules! generate_logical_type_enum {
             }
         }
 
-
         impl FromStr for LogicalTypeEnum {
             type Err = Error;
 
@@ -56,3 +56,12 @@ macro_rules! generate_logical_type_enum {
 }
 
 generate_logical_type_enum!(RdfsResource, UnsignedInteger);
+
+impl From<LogicalTypeEnum> for DataTypeName {
+    fn from(source: LogicalTypeEnum) -> Self {
+        match source {
+            LogicalTypeEnum::RdfsResource => Self::String,
+            LogicalTypeEnum::UnsignedInteger => Self::U64,
+        }
+    }
+}

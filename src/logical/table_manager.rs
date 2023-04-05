@@ -1,10 +1,9 @@
 //! Managing of tables
 
-use super::model::Identifier;
+use super::{model::Identifier, types::LogicalTypeEnum};
 use crate::{
     error::Error,
     physical::{
-        datatypes::DataTypeName,
         management::{
             database::{ColumnOrder, TableId, TableSource},
             execution_plan::ExecutionNodeRef,
@@ -349,21 +348,12 @@ impl TableManager {
         format!("{predicate_name} ({step}) -> {referenced_table_name} {permutation}")
     }
 
-    /// Workaround because of the missing type system.
-    /// We assume for now that every table is a String table.
-    fn generate_table_schema(arity: usize) -> TableSchema {
-        let mut schema = TableSchema::new();
-        (0..arity).for_each(|_| schema.add_entry(DataTypeName::String));
-
-        schema
-    }
-
     /// Intitializes helper structures that are needed for handling the table associated with the predicate.
     /// Must be done before calling functions that add tables to that predicate.
-    pub fn register_predicate(&mut self, predicate: Identifier, arity: usize) {
+    pub fn register_predicate(&mut self, predicate: Identifier, types: Vec<LogicalTypeEnum>) {
         // TODO: Change this once type system is integrated
         let predicate_info = PredicateInfo {
-            schema: Self::generate_table_schema(arity),
+            schema: TableSchema::from_vec(types.iter().copied().map(Into::into).collect()),
         };
 
         self.predicate_to_info
