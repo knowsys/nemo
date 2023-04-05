@@ -6,9 +6,7 @@ use crate::logical::{model::Rule, program_analysis::analysis::RuleAnalysis};
 /// namely the order in which the rules are applied in.
 pub trait RuleSelectionStrategy: std::fmt::Debug {
     /// Create a new [`RuleSelectionStrategy`] object.
-    fn new(rules: Vec<&Rule>, rule_analyses: Vec<&RuleAnalysis>) -> Self
-    where
-        Self: Sized;
+    fn new(rules: Vec<&Rule>, rule_analyses: Vec<&RuleAnalysis>) -> Self;
 
     /// Return the index of the next rule that should be executed.
     /// Returns `None` if there are no more rules to be applied

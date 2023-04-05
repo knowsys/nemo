@@ -17,12 +17,7 @@ use crate::{
     },
 };
 
-use super::{
-    rule_execution::RuleExecution,
-    selection_strategy::{
-        strategy::RuleSelectionStrategy, strategy_round_robin::StrategyRoundRobin,
-    },
-};
+use super::{rule_execution::RuleExecution, selection_strategy::strategy::RuleSelectionStrategy};
 
 // Number of tables that are periodically combined into one.
 const MAX_FRAGMENTATION: usize = 8;
@@ -45,11 +40,11 @@ impl RuleInfo {
 
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
-pub struct ExecutionEngine {
+pub struct ExecutionEngine<RuleSelectionStrategy> {
     program: Program,
     analysis: ProgramAnalysis,
 
-    rule_strategy: Box<dyn RuleSelectionStrategy>,
+    rule_strategy: RuleSelectionStrategy,
 
     table_manager: TableManager,
 
@@ -60,7 +55,7 @@ pub struct ExecutionEngine {
     current_step: usize,
 }
 
-impl ExecutionEngine {
+impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [`ExecutionEngine`].
     pub fn initialize(mut program: Program) -> Self {
         program.normalize();
@@ -77,10 +72,10 @@ impl ExecutionEngine {
             .iter()
             .for_each(|_| rule_infos.push(RuleInfo::new()));
 
-        let rule_strategy = Box::new(StrategyRoundRobin::new(
+        let rule_strategy = Strategy::new(
             program.rules().iter().collect(),
             analysis.rule_analysis.iter().collect(),
-        ));
+        );
 
         Self {
             program,

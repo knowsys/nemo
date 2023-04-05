@@ -45,6 +45,8 @@ impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStr
             substrategies.push(SubStrategy::new(sub_rules, sub_analyses));
         }
 
+        println!("{ordered_sccs:?}");
+
         Self {
             _constructor: PhantomData::default(),
             ordered_sccs,
@@ -53,7 +55,7 @@ impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStr
         }
     }
 
-    fn next_rule(&mut self, new_derivations: Option<bool>) -> Option<usize> {
+    fn next_rule(&mut self, mut new_derivations: Option<bool>) -> Option<usize> {
         while self.current_scc_index < self.ordered_sccs.len() {
             if let Some(substrategy_next_rule) =
                 self.substrategies[self.current_scc_index].next_rule(new_derivations)
@@ -61,6 +63,7 @@ impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStr
                 return Some(self.ordered_sccs[self.current_scc_index][substrategy_next_rule]);
             } else {
                 self.current_scc_index += 1;
+                new_derivations = None;
             }
         }
 
