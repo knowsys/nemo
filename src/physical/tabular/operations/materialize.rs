@@ -144,51 +144,68 @@ pub fn materialize_inner(
         }
     }
 
-    if !is_empty {
-        // Collect data from column builders
-        for column_type in column_types {
-            macro_rules! finalize_for_datatype {
-                ($variant:ident, $type:ty) => {{
-                    let current_data_builder: ColumnBuilderAdaptive<$type> =
-                        if let ColumnBuilderAdaptiveT::$variant(cb) = data_column_builders.remove(0)
-                        {
-                            cb
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($type));
-                        };
-                    let current_interval_builder = intervals_column_builders.remove(0);
-
-                    let next_interval_column =
-                        ColumnWithIntervalsT::$variant(ColumnWithIntervals::new(
-                            current_data_builder.finalize(),
-                            current_interval_builder.finalize(),
-                        ));
-
-                    result_columns.push(next_interval_column);
-                }};
-            }
-
-            match column_type {
-                StorageTypeName::U32 => finalize_for_datatype!(U32, u32),
-                StorageTypeName::U64 => finalize_for_datatype!(U64, u64),
-                StorageTypeName::Float => finalize_for_datatype!(Float, Float),
-                StorageTypeName::Double => finalize_for_datatype!(Double, Double),
-            }
-        }
-
-        let result = Trie::new(result_columns);
-
-        log::info!(
-            "Materialize: Next: {next_count}, Elements: {}, Quotient: {}",
-            result.num_elements(),
-            num::ToPrimitive::to_f64(&next_count).unwrap()
-                / num::ToPrimitive::to_f64(&result.num_elements()).unwrap()
-        );
-
-        return Some(result);
+    if is_empty {
+        return None;
     }
 
-    None
+    let mut num_rle_data_columns = 0;
+    let mut num_rle_index_columns = 0;
+    let num_total_columns = column_types.len();
+
+    // Collect data from column builders
+    for column_type in column_types {
+        macro_rules! finalize_for_datatype {
+            ($variant:ident, $type:ty) => {{
+                let current_data_builder: ColumnBuilderAdaptive<$type> =
+                    if let ColumnBuilderAdaptiveT::$variant(cb) = data_column_builders.remove(0) {
+                        cb
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($type));
+                    };
+                let current_interval_builder = intervals_column_builders.remove(0);
+
+                if current_data_builder.is_rle() {
+                    num_rle_data_columns += 1;
+                }
+
+                if current_interval_builder.is_rle() {
+                    num_rle_index_columns += 1;
+                }
+
+                let next_interval_column =
+                    ColumnWithIntervalsT::$variant(ColumnWithIntervals::new(
+                        current_data_builder.finalize(),
+                        current_interval_builder.finalize(),
+                    ));
+
+                result_columns.push(next_interval_column);
+            }};
+        }
+
+        match column_type {
+            StorageTypeName::U32 => finalize_for_datatype!(U32, u32),
+            StorageTypeName::U64 => finalize_for_datatype!(U64, u64),
+            StorageTypeName::Float => finalize_for_datatype!(Float, Float),
+            StorageTypeName::Double => finalize_for_datatype!(Double, Double),
+        }
+    }
+
+    let result = Trie::new(result_columns);
+
+    log::info!(
+        "Materialize: Next: {next_count}, Elements: {}, Quotient: {}",
+        result.num_elements(),
+        num::ToPrimitive::to_f64(&next_count).unwrap()
+            / num::ToPrimitive::to_f64(&result.num_elements()).unwrap()
+    );
+
+    log::info!(
+        "Columns (Rle/Vector): Data: {num_rle_data_columns}/{}, Index: {num_rle_index_columns}/{}",
+        num_total_columns - num_rle_data_columns,
+        num_total_columns - num_rle_index_columns
+    );
+
+    Some(result)
 }
 
 /// Given a TrieScan iterator, materialize its content into a trie
