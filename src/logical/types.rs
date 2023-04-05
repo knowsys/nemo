@@ -13,7 +13,7 @@ macro_rules! count {
 macro_rules! generate_logical_type_enum {
     ($($variant_name:ident),+) => {
         /// An enum capturing the logical type names and funtionality related to parsing and translating into and from physical types
-        #[derive(Copy, Clone, Debug)]
+        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
         pub enum LogicalTypeEnum {
             $(
                 /// $variant_name
@@ -25,6 +25,12 @@ macro_rules! generate_logical_type_enum {
             const VARIANTS: [Self; count!($($variant_name)+)] = [
                 $(Self::$variant_name),+
             ];
+        }
+
+        impl Default for LogicalTypeEnum {
+            fn default() -> Self {
+                Self::RdfsResource
+            }
         }
 
         impl Display for LogicalTypeEnum {

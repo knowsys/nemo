@@ -628,7 +628,14 @@ impl<'a> RuleParser<'a> {
 
             Ok((
                 remainder,
-                Program::new(base, prefixes, self.sources.borrow().clone(), rules, facts),
+                Program::new(
+                    base,
+                    prefixes,
+                    self.sources.borrow().clone(),
+                    rules,
+                    facts,
+                    self.predicate_declarations.borrow().clone(),
+                ),
             ))
         })
     }

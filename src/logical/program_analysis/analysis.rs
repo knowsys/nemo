@@ -1,6 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use crate::logical::model::{Atom, Identifier, Program, Rule, Term, Variable};
+use crate::logical::{
+    model::{Atom, Identifier, Program, Rule, Term, Variable},
+    types::LogicalTypeEnum,
+};
 
 use super::variable_order::{build_preferable_variable_orders, VariableOrder};
 
@@ -31,6 +34,9 @@ pub struct RuleAnalysis {
 
     /// Variable orders that are worth considering.
     pub promising_variable_orders: Vec<VariableOrder>,
+
+    /// Logical Type of each Variable
+    pub variable_types: HashMap<Variable, LogicalTypeEnum>,
 }
 
 fn is_recursive(rule: &Rule) -> bool {
@@ -76,11 +82,75 @@ fn analyze_rule(
     rule: &Rule,
     promising_variable_orders: Vec<VariableOrder>,
     rule_index: usize,
+    type_declarations: &mut HashMap<Identifier, Vec<LogicalTypeEnum>>,
 ) -> RuleAnalysis {
     let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
     let head_atoms: Vec<&Atom> = rule.head().iter().collect();
 
     let num_existential = count_distinct_existential_variables(rule);
+
+    // TODO: infering of types is only done in the order in that rules are parsed, a different order may allow to infer more types...
+    // TODO: ground terms (e.g. constants) should probably also be considered for validation
+
+    // Check if type declarations are violated; add them if they do not exist
+    let mut variable_types: HashMap<Variable, LogicalTypeEnum> = HashMap::new();
+
+    // FIRST: Assign Types to variables based on known predicate types
+    for (decl, term) in body_atoms
+        .iter()
+        .chain(head_atoms.iter())
+        .filter_map(|atom| {
+            type_declarations
+                .get(&atom.predicate())
+                .map(|decls| decls.iter().zip(atom.terms()))
+        })
+        .flatten()
+    {
+        if let Term::Variable(var) = term {
+            match variable_types.get(var) {
+                Some(decl_occ) => {
+                    if decl != decl_occ {
+                        // TODO: proper error handling
+                        panic!("type declaration mismatch");
+                    }
+                }
+                None => {
+                    variable_types.insert(var.clone(), *decl);
+                }
+            }
+        }
+    }
+
+    // SECOND: Set unknown variable types to default type
+    body_atoms
+        .iter()
+        .chain(head_atoms.iter())
+        .flat_map(|atom| atom.terms())
+        .for_each(|term| {
+            if let Term::Variable(var) = term {
+                variable_types
+                    .entry(var.clone())
+                    .or_insert(Default::default());
+            }
+        });
+
+    // THIRD: Update predicate types based on variable
+    body_atoms.iter().chain(head_atoms.iter()).for_each(|atom| {
+        type_declarations.entry(atom.predicate()).or_insert(
+            atom.terms()
+                .iter()
+                .map(|term| {
+                    if let Term::Variable(var) = term {
+                        *variable_types
+                            .get(var)
+                            .expect("We made sure every variable has a type (possibly default).")
+                    } else {
+                        Default::default() // TODO: we should not just treat the constant positions as default probably...
+                    }
+                })
+                .collect(),
+        );
+    });
 
     RuleAnalysis {
         is_existential: num_existential > 0,
@@ -96,6 +166,7 @@ fn analyze_rule(
             "FRESH_HEAD_MATCHES_IDENTIFIER_FOR_RULE_{rule_index}"
         )),
         promising_variable_orders,
+        variable_types,
     }
 }
 
@@ -108,6 +179,8 @@ pub struct ProgramAnalysis {
     pub derived_predicates: HashSet<Identifier>,
     /// Set of all predicates and their arity.
     pub all_predicates: HashSet<(Identifier, usize)>,
+    /// Logical Type Declarations for Predicates
+    pub predicate_types: HashMap<Identifier, Vec<LogicalTypeEnum>>,
 }
 
 impl Program {
@@ -171,11 +244,13 @@ impl Program {
     pub fn analyze(&self) -> ProgramAnalysis {
         let variable_orders = build_preferable_variable_orders(self, None);
 
+        let mut predicate_types = self.parsed_predicate_declarations();
+
         let rule_analysis: Vec<RuleAnalysis> = self
             .rules()
             .iter()
             .enumerate()
-            .map(|(i, r)| analyze_rule(r, variable_orders[i].clone(), i))
+            .map(|(i, r)| analyze_rule(r, variable_orders[i].clone(), i, &mut predicate_types))
             .collect();
 
         let derived_predicates = self.get_head_predicates();
@@ -185,6 +260,7 @@ impl Program {
             rule_analysis,
             derived_predicates,
             all_predicates,
+            predicate_types,
         }
     }
 }
