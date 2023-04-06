@@ -1,9 +1,0 @@
-#[cfg_attr(miri, ignore)]
-#[test]
-fn {name}() -> Result<(), Box<dyn std::error::Error>> {{
-    let test_case = TestCase::generate_test(
-        "run.rls",
-        "{path}")?;
-    test_case.run()?;
-    Ok(())
-}}
