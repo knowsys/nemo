@@ -52,11 +52,11 @@ use dir_test::{dir_test, Fixture};
 /// transitive_closure_test1
 /// transitive_closure_test2
 
+#[cfg_attr(miri, ignore)]
 #[dir_test(
     dir: "$CARGO_MANIFEST_DIR/resources/testcases",
     glob: "**/*/*.rls",
 )]
-#[cfg_attr(miri, ignore)]
 fn test(fixture: Fixture<&str>) {
     let path = PathBuf::from_str(fixture.path())
         .unwrap()
