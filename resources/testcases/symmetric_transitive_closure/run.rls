@@ -1,0 +1,6 @@
+@source city[1]: load-csv("csv1.csv").
+@source conn[2]: load-csv("data/csv2.csv").
+
+connected(?X,?Y) :- city(?X), city(?Y), conn(?X,?Y).
+conn(?X,?Y) :- conn(?Y,?X).
+connected(?X,?Y) :- city(?X), city(?XY), city(?Y), connected(?X,?XY), conn(?XY, ?Y).

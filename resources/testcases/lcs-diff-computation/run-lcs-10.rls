@@ -1,0 +1,98 @@
+%%% This program computes the longest common subsequence (LCS) of two words
+%%% using (mostly) Datalog rules.
+%%%
+%%% See "An O(ND) Difference Algorithm and its Variations" [Myers 1986] for details
+%%% on the algorithm that we follow here.
+%%%
+%%% Existential quantification is used to create some extra elements to represent numbers.
+%%% One could simplify this and many other places if native number support were available.
+%%% Likewise, some manual listings could be simplified by using stratified negation (inequality would suffice).
+%%% Conversely, a pure Datalog version would also be possible by using "flattened skolem functions"
+%%% for the few acyclic nulls we actually need (see [Kroetzsch and Rudolph, IJCAI 2011]).
+
+%%% Input data: two documents, A and B, that consist of a sequence of letters (or lines) to diff over:
+
+% @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+% These files can be created with the python script call
+%  python make-test-strings.py 10 lcs10
+@source docA[2]: load-csv("lcs10-doca.csv") .
+@source docB[2]: load-csv("lcs10-docb.csv") .
+@source s[2]: load-csv("lcs10-succ.csv") .
+@source sLetter[2]: load-csv("lcs10-letters.csv") .
+
+docAend(?X) :- docA(?X,ENDOFA) .
+docBend(?X) :- docB(?X,ENDOFB) .
+
+infDocA(?P,?C) :- docA(?P,?C).
+infDocB(?P,?C) :- docB(?P,?C).
+
+% Inequality for letters from their strict order (could be computed with stratified negation).
+ltLetter(?X,?Y) :- sLetter(?X,?Y) .
+ltLetter(?X,?Z) :- ltLetter(?X,?Y), sLetter(?Y,?Z) .
+neq(?X,?Y) :- ltLetter(?X,?Y) .
+neq(?X,?Y) :- neq(?Y,?X) .
+
+%%% Set up some relevant arithmetic facts to compensate for lack of integer support:
+lt(?X,?Y) :- s(?X,?Y) .
+lt(?X,?Z) :- lt(?X,?Y), s(?Y,?Z) .
+eq(?X,?X) :- s(?X,?Y) .
+eq(?X,?X) :- s(?Y,?X) .
+
+ge(?X,?Y) :- lt(?Y,?X) .
+ge(?X,?X) :- eq(?X,?Y) .
+
+% Add some more numbers to our list:
+doPlus(?X,p0) :- docAend(?X) .
+s(?X,!Xp), doPlus(!Xp,?Bp) :- doPlus(?X,?B), s(?B,?Bp), lt(?B,?Bmax), docBend(?Bmax) .
+max(?X) :- doPlus(?X,?Bmax), docBend(?Bmax).
+
+minus(p0,p0) .
+minus(?Up,!Lm), s(!Lm,?L) :- minus(?U,?L), s(?U,?Up) .
+min(?X) :- minus(?Y,?X), max(?Y).
+
+% Plus 2:
+s2(?X,?Z) :- s(?X,?Y),s(?Y,?Z) .
+
+%%% Diff computation according to [Myers 1986]
+
+% Schema:
+% furthestPath(D,k,Apos,Bpos) -- "Furthest reaching D-path in diagonal k" with final A and B positions
+% path(D,k,Apos,Bpos) -- intermediate result for furthestPath, possibly not maximal yet
+% startPathComp(Dm,D,k) -- initiate search for D-path on diagonal k (Dm = D-1 is the predecssor)
+% nonfinal(D,k) -- furthest D-path on diagonal k has not reached goal yet; prerequisite for continuing search 
+
+path(p0,p0,p0,p0) .
+
+% Maximally extend path along diagonal:
+path(?D,?k,?Apos,?Bpos), edge(?AposMinus,?BposMinus,?Apos,?Bpos,eq) :- path(?D,?k,?AposMinus,?BposMinus), s(?AposMinus,?Apos), s(?BposMinus,?Bpos), docA(?Apos,?content), docB(?Bpos,?content) .
+
+% Mark paths that cannot be extended further:
+furthestPath(?D,?k,?AposMinus,?BposMinus) :- path(?D,?k,?AposMinus,?BposMinus), s(?AposMinus,?Apos), s(?BposMinus,?Bpos), docA(?Apos,?contentA), docB(?Bpos,?contentB), neq(?contentA,?contentB) .
+furthestPath(?D,?k,?AposMinus,?BposMinus) :- path(?D,?k,?AposMinus,?BposMinus), s(?AposMinus,?Apos), docA(?Apos,?contentA), ge(?BposMinus,?Bend), docBend(?Bend) .
+furthestPath(?D,?k,?AposMinus,?BposMinus) :- path(?D,?k,?AposMinus,?BposMinus), s(?BposMinus,?Bpos), docB(?Bpos,?contentB), ge(?AposMinus,?Aend), docAend(?Aend) .
+furthestPath(?D,?k,?AposMinus,?BposMinus) :- path(?D,?k,?AposMinus,?BposMinus), ge(?AposMinus,?Aend), docAend(?Aend), ge(?BposMinus,?Bend), docBend(?Bend) .
+
+% Initiate relevant new path computations:
+startPathComp(?D,?Dp,?minusD) :- nonfinal(?D,?D), s(?D,?Dp), minus(?Dp,?minusD) .
+startPathComp(?Dm,?D,?kpp) :- startPathComp(?Dm,?D,?k), nonfinal(?D,?k), s2(?k,?kpp) .
+% Record if goal has not been reached yet:
+nonfinal(?D,?k) :- furthestPath(?D,?k,?A,?B), lt(?A,?Aend), docAend(?Aend) .
+nonfinal(?D,?k) :- furthestPath(?D,?k,?A,?B), lt(?B,?Bend), docBend(?Bend) .
+
+% Start new path from best of two prior paths (first two rules cover k=-D and k=D with just one prior path in either case):
+path(?D,?k,?A,?Bp), edge(?A,?B,?A,?Bp,down) :- startPathComp(?Dm,?D,?k), minus(?D,?k), % k=-D
+                        s(?k,?kp), furthestPath(?Dm,?kp,?A,?B), s(?B,?Bp) .
+path(?D,?D,?Ap,?B), edge(?A,?B,?Ap,?B,right) :- startPathComp(?Dm,?D,?D), % k=D
+                        s(?km,?D), furthestPath(?Dm,?km,?A,?B), s(?A,?Ap) .
+path(?D,?k,?A2,?B2p), edge(?A2,?B2,?A2,?B2p,down) :- startPathComp(?Dm,?D,?k), s(?km,?k), s(?k,?kp), furthestPath(?Dm,?km,?A1,?B1), furthestPath(?Dm,?kp,?A2,?B2),
+                        lt(?A1,?A2), s(?B2,?B2p) .
+path(?D,?k,?A1p,?B1), edge(?A1,?B1,?A1p,?B1,right) :- startPathComp(?Dm,?D,?k), s(?km,?k), s(?k,?kp), furthestPath(?Dm,?km,?A1,?B1), furthestPath(?Dm,?kp,?A2,?B2),
+                        ge(?A1,?A2), s(?A1,?A1p) .
+
+%%% Extract longest common subsequence:
+                        
+gather(?A,?B) :- furthestPath(?D,?k,?A,?B), docAend(?A), docBend(?B) .
+lcs(?A,?B,?content), gather(?Ap,?Bp) :- gather(?A,?B), edge(?Ap,?Bp,?A,?B,eq), docA(?A,?content) .
+gather(?Ap,?Bp) :- gather(?A,?B), edge(?Ap,?Bp,?A,?B,down) .
+gather(?Ap,?Bp) :- gather(?A,?B), edge(?Ap,?Bp,?A,?B,right) .

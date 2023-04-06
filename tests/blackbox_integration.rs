@@ -9,8 +9,6 @@ use std::{
 use assert_cmd::Command;
 use assert_fs::{prelude::*, TempDir};
 use dir_test::{dir_test, Fixture};
-use test_log::test;
-
 /// Testcase-generator. Each set of testcases needs a directory in resources/testcases.
 /// Every testcase is represented by a single .rls file in the testcases directory
 /// To check the correctness of the output, the expected output (in csv-export format) needs to be in a directory with the same name (without extension) as the rule-file
