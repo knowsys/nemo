@@ -1,3 +1,4 @@
+#![cfg_attr(miri, ignore)]
 /// Test methods to execute code in the test builder.
 /// code appears to be dead as the utilising code is generated during build time
 use std::{
@@ -52,7 +53,6 @@ use dir_test::{dir_test, Fixture};
 /// transitive_closure_test1
 /// transitive_closure_test2
 
-#[cfg_attr(miri, ignore)]
 #[dir_test(
     dir: "$CARGO_MANIFEST_DIR/resources/testcases",
     glob: "**/*/*.rls",
