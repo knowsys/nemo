@@ -1,4 +1,4 @@
-#![cfg_attr(miri, ignore)]
+#![cfg(not(miri))]
 /// Test methods to execute code in the test builder.
 /// code appears to be dead as the utilising code is generated during build time
 use std::{
