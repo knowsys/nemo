@@ -45,6 +45,7 @@ polars = "0.25.1"
 assert_cmd = "2.0"
 predicates = "2.1"
 assert_fs = "1.0"
+dir-test = "0.1"
 
 [target.'cfg(unix)'.dev-dependencies]
 iai = "0.1" # needs valgrind -> unix only
