@@ -92,11 +92,6 @@ where
             }
         }
     }
-
-    /// Returns true if the column will definitely be run length encoded
-    pub fn is_rle(&self) -> bool {
-        matches!(self.builder, ColumnBuilderType::ColumnRle(_))
-    }
 }
 
 impl<'a, T> ColumnBuilder<'a, T> for ColumnBuilderAdaptive<T>

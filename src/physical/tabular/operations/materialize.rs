@@ -2,9 +2,10 @@ use crate::physical::{
     columnar::{
         adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-        traits::{columnbuilder::ColumnBuilder, columnscan::ColumnScan},
+        traits::{column::Column, columnbuilder::ColumnBuilder, columnscan::ColumnScan},
     },
     datatypes::{Double, Float, StorageTypeName},
+    management::ByteSized,
     tabular::{
         table_types::trie::Trie,
         traits::triescan::{TrieScan, TrieScanEnum},
@@ -151,6 +152,8 @@ pub fn materialize_inner(
     let mut num_rle_data_columns = 0;
     let mut num_rle_index_columns = 0;
     let num_total_columns = column_types.len();
+    let mut savings_data = Vec::new();
+    let mut savings_index = Vec::new();
 
     // Collect data from column builders
     for column_type in column_types {
@@ -164,19 +167,43 @@ pub fn materialize_inner(
                     };
                 let current_interval_builder = intervals_column_builders.remove(0);
 
-                if current_data_builder.is_rle() {
+                let data_column = current_data_builder.finalize();
+                if data_column.is_rle() {
                     num_rle_data_columns += 1;
-                }
+                    let orig_space = std::mem::size_of::<
+                        crate::physical::columnar::traits::column::ColumnEnum<$type>,
+                    >() as u64
+                        + std::mem::size_of::<
+                            crate::physical::columnar::column_types::vector::ColumnVector<$type>,
+                        >() as u64
+                        + data_column.len() as u64 * std::mem::size_of::<$type>() as u64;
 
-                if current_interval_builder.is_rle() {
-                    num_rle_index_columns += 1;
-                }
-
-                let next_interval_column =
-                    ColumnWithIntervalsT::$variant(ColumnWithIntervals::new(
-                        current_data_builder.finalize(),
-                        current_interval_builder.finalize(),
+                    savings_data.push((
+                        data_column.size_bytes().0 as f32 / orig_space as f32 * 100.,
+                        data_column.size_bytes(),
                     ));
+                }
+
+                let interval_column = current_interval_builder.finalize();
+                if interval_column.is_rle() {
+                    num_rle_index_columns += 1;
+                    let orig_space = std::mem::size_of::<
+                        crate::physical::columnar::traits::column::ColumnEnum<usize>,
+                    >() as u64
+                        + std::mem::size_of::<
+                            crate::physical::columnar::column_types::vector::ColumnVector<usize>,
+                        >() as u64
+                        + interval_column.len() as u64 * std::mem::size_of::<usize>() as u64;
+
+                    savings_index.push((
+                        interval_column.size_bytes().0 as f32 / orig_space as f32 * 100.,
+                        interval_column.size_bytes(),
+                    ));
+                }
+
+                let next_interval_column = ColumnWithIntervalsT::$variant(
+                    ColumnWithIntervals::new(data_column, interval_column),
+                );
 
                 result_columns.push(next_interval_column);
             }};
@@ -200,9 +227,9 @@ pub fn materialize_inner(
     );
 
     log::info!(
-        "Columns (Rle/Vector): Data: {num_rle_data_columns}/{}, Index: {num_rle_index_columns}/{}",
-        num_total_columns - num_rle_data_columns,
-        num_total_columns - num_rle_index_columns
+        "Columns (Rle/Vector): Data: {num_rle_data_columns}/{} - saved {:?}, Index: {num_rle_index_columns}/{} - saved {:?}",
+        num_total_columns - num_rle_data_columns, savings_data,
+        num_total_columns - num_rle_index_columns, savings_index
     );
 
     Some(result)

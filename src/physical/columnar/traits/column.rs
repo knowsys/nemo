@@ -44,6 +44,13 @@ pub enum ColumnEnum<T> {
     ColumnRle(ColumnRle<T>),
 }
 
+impl<T> ColumnEnum<T> {
+    /// Returns whether this column is run length encoded
+    pub fn is_rle(&self) -> bool {
+        matches!(self, Self::ColumnRle(_))
+    }
+}
+
 generate_forwarder!(forward_to_column;
                     ColumnVector,
                     ColumnRle);
@@ -113,5 +120,10 @@ impl ColumnT {
     /// Returns [`true`] iff the column is empty
     pub fn is_empty(&self) -> bool {
         forward_to_column_enum!(self, is_empty)
+    }
+
+    /// Returns whether the column is run length encoded
+    pub fn is_rle(&self) -> bool {
+        forward_to_column_enum!(self, is_rle)
     }
 }
