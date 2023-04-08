@@ -18,7 +18,7 @@ pub enum ColumnImplDecisionThreshold {
 
 impl Default for ColumnImplDecisionThreshold {
     fn default() -> Self {
-        Self::NumberOfRleElements(5)
+        Self::NumberOfRleElements(100)
     }
 }
 
@@ -29,15 +29,17 @@ pub struct TargetMinLengthForRleElements(usize);
 
 impl Default for TargetMinLengthForRleElements {
     fn default() -> Self {
-        Self(3)
+        Self(50)
     }
 }
 
 #[derive(Debug, PartialEq)]
 enum ColumnBuilderType<T> {
-    Undecided(Option<ColumnBuilderRle<T>>), // by default we start building an rle column to evaluate memory consumption
-    ColumnVector(Vec<T>),
+    // by default we start building an rle column to evaluate memory consumption
+    // for at least ColumnImplDecisionThreshold many elements
     ColumnRle(ColumnBuilderRle<T>),
+    // if the elements' lengths are below TargetMinLengthForRleElements, switch to ColumnVector
+    ColumnVector(Vec<T>),
 }
 
 impl<T> Default for ColumnBuilderType<T>
@@ -45,7 +47,7 @@ where
     T: ColumnDataType + Default,
 {
     fn default() -> Self {
-        Self::Undecided(Some(ColumnBuilderRle::new()))
+        Self::ColumnRle(ColumnBuilderRle::new())
     }
 }
 
@@ -71,25 +73,24 @@ where
         target_min_length_for_rle_elements: TargetMinLengthForRleElements,
     ) -> ColumnBuilderAdaptive<T> {
         ColumnBuilderAdaptive {
-            builder: ColumnBuilderType::Undecided(Some(ColumnBuilderRle::new())),
+            builder: ColumnBuilderType::ColumnRle(ColumnBuilderRle::new()),
             decision_threshold,
             target_min_length_for_rle_elements,
         }
     }
 
-    fn decide_column_type(&mut self) {
-        if let ColumnBuilderType::Undecided(rle_builder_opt) = &mut self.builder {
-            let rle_builder = rle_builder_opt
-                .take()
-                .expect("this is only None from this take() call until the end of this method");
+    fn expand_sparse_rle_columns(&mut self) {
+        let ColumnBuilderType::ColumnRle(rle_builder) = &self.builder else { return; };
+        let avg_len = rle_builder.avg_length_of_rle_elements();
 
-            if rle_builder.avg_length_of_rle_elements() > self.target_min_length_for_rle_elements.0
-            {
-                self.builder = ColumnBuilderType::ColumnRle(rle_builder);
-            } else {
-                let rle_column = rle_builder.finalize();
-                self.builder = ColumnBuilderType::ColumnVector(rle_column.iter().collect());
-            }
+        if self.target_min_length_for_rle_elements.0 > avg_len {
+            let new_builder = ColumnBuilderType::ColumnVector(Vec::with_capacity(rle_builder.count()));
+            let ColumnBuilderType::ColumnRle(rle_builder) = std::mem::replace(&mut self.builder, new_builder) else {
+                unreachable!("ColumnBuilderType checked in let-else expression above"); 
+            };
+
+            let rle_column = rle_builder.finalize();
+            self.builder = ColumnBuilderType::ColumnVector(rle_column.iter().collect());
         }
     }
 }
@@ -101,12 +102,11 @@ where
     type Col = ColumnEnum<T>;
 
     fn add(&mut self, value: T) {
-        if let ColumnBuilderType::Undecided(Some(rle_builder)) = &self.builder {
-            if let ColumnImplDecisionThreshold::NumberOfRleElements(threshold) =
-                self.decision_threshold
-            {
+        if let ColumnImplDecisionThreshold::NumberOfRleElements(threshold) = self.decision_threshold {
+            if let ColumnBuilderType::ColumnRle(rle_builder) = &mut self.builder {
+            
                 if rle_builder.number_of_rle_elements() > threshold {
-                    self.decide_column_type();
+                    self.expand_sparse_rle_columns();
                 }
             }
         }
@@ -114,26 +114,16 @@ where
         match &mut self.builder {
             ColumnBuilderType::ColumnVector(vec) => vec.push(value),
             ColumnBuilderType::ColumnRle(rle_builder) => rle_builder.add(value),
-
-            // we only build the rle if still undecided and then evaluate the compression ration by
-            // the length of the rle elements
-            ColumnBuilderType::Undecided(builder) => builder
-                .as_mut()
-                .expect("In undecided case None should only briefly be used in decide_column_type.")
-                .add(value),
         }
     }
 
     fn finalize(mut self) -> Self::Col {
-        self.decide_column_type();
+        self.expand_sparse_rle_columns();
 
         match self.builder {
             ColumnBuilderType::ColumnVector(vec) => Self::Col::ColumnVector(ColumnVector::new(vec)),
             ColumnBuilderType::ColumnRle(rle_builder) => {
                 Self::Col::ColumnRle(rle_builder.finalize())
-            }
-            ColumnBuilderType::Undecided(_) => {
-                unreachable!("column type should have been decided here")
             }
         }
     }
@@ -142,10 +132,6 @@ where
         match &self.builder {
             ColumnBuilderType::ColumnVector(vec) => vec.len(),
             ColumnBuilderType::ColumnRle(rle_builder) => rle_builder.count(),
-            ColumnBuilderType::Undecided(builder) => builder
-                .as_ref()
-                .expect("Should never be None on the outside")
-                .count(),
         }
     }
 }
@@ -274,9 +260,9 @@ impl FromIterator<StorageValueT> for ColumnBuilderAdaptiveT {
 
 #[cfg(test)]
 mod test {
-    use super::{ColumnBuilderAdaptive, ColumnBuilderType};
+    use super::ColumnBuilderAdaptive;
     use crate::physical::{
-        columnar::traits::{column::Column, columnbuilder::ColumnBuilder},
+        columnar::traits::{column::{Column, ColumnEnum}, columnbuilder::ColumnBuilder},
         datatypes::{Double, Float},
     };
     use test_log::test;
@@ -292,32 +278,53 @@ mod test {
 
     fn construct_presumable_rle_column() -> ColumnBuilderAdaptive<u32> {
         let mut acb = ColumnBuilderAdaptive::<u32>::default();
-        acb.add(1);
-        acb.add(2);
-        acb.add(3);
-        acb.add(4);
+
+        for i in 1 .. 100 {
+            acb.add(i)
+        }
+
+        acb
+    }
+
+    fn construct_pathological_column() -> ColumnBuilderAdaptive<u32> {
+        let mut acb = ColumnBuilderAdaptive::<u32>::default();
+
+        for i in 1 .. 100 {
+            acb.add(i)
+        }
+
+        for _ in 0 .. 1000 {
+            acb.add(rand::random())
+        }
 
         acb
     }
 
     #[test]
     fn test_column_type_decision_for_vector_column() {
-        let mut acb: ColumnBuilderAdaptive<u32> = construct_presumable_vector_column();
+        let acb: ColumnBuilderAdaptive<u32> = construct_presumable_vector_column();
 
-        acb.decide_column_type();
-        let builder = acb.builder;
+        let column = acb.finalize();
 
-        assert!(matches!(builder, ColumnBuilderType::ColumnVector(_)));
+        assert!(matches!(column, ColumnEnum::ColumnVector(_)));
     }
 
     #[test]
     fn test_column_type_decision_for_rle_column() {
-        let mut acb: ColumnBuilderAdaptive<u32> = construct_presumable_rle_column();
+        let acb: ColumnBuilderAdaptive<u32> = construct_presumable_rle_column();
 
-        acb.decide_column_type();
-        let builder = acb.builder;
+        let column = acb.finalize();
 
-        assert!(matches!(builder, ColumnBuilderType::ColumnRle(_)));
+        assert!(matches!(column, ColumnEnum::ColumnRle(_)));
+    }
+
+    #[test]
+    fn test_column_type_decision_for_pathological_column() {
+        let acb = construct_pathological_column();
+
+        let column = acb.finalize();
+
+        assert!(matches!(column, ColumnEnum::ColumnVector(_)));
     }
 
     #[test]
@@ -336,7 +343,7 @@ mod test {
         let acb: ColumnBuilderAdaptive<u32> = construct_presumable_rle_column();
 
         let rlec = acb.finalize();
-        assert_eq!(rlec.len(), 4);
+        assert_eq!(rlec.len(), 99);
         assert_eq!(rlec.get(0), 1);
         assert_eq!(rlec.get(1), 2);
         assert_eq!(rlec.get(2), 3);
