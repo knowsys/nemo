@@ -215,7 +215,7 @@ where
             return 0;
         }
 
-        self.elements.iter().map(|e| e.length.get()).sum::<usize>() / self.elements.len()
+        self.count / self.elements.len()
     }
 
     /// Get number of RleElements in builder.
