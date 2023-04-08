@@ -84,7 +84,8 @@ where
         let avg_len = rle_builder.avg_length_of_rle_elements();
 
         if self.target_min_length_for_rle_elements.0 > avg_len {
-            let new_builder = ColumnBuilderType::ColumnVector(Vec::with_capacity(rle_builder.count()));
+            let new_builder =
+                ColumnBuilderType::ColumnVector(Vec::with_capacity(rle_builder.count()));
             let ColumnBuilderType::ColumnRle(rle_builder) = std::mem::replace(&mut self.builder, new_builder) else {
                 unreachable!("ColumnBuilderType checked in let-else expression above"); 
             };
@@ -102,9 +103,9 @@ where
     type Col = ColumnEnum<T>;
 
     fn add(&mut self, value: T) {
-        if let ColumnImplDecisionThreshold::NumberOfRleElements(threshold) = self.decision_threshold {
+        if let ColumnImplDecisionThreshold::NumberOfRleElements(threshold) = self.decision_threshold
+        {
             if let ColumnBuilderType::ColumnRle(rle_builder) = &mut self.builder {
-            
                 if rle_builder.number_of_rle_elements() > threshold {
                     self.expand_sparse_rle_columns();
                 }
@@ -262,7 +263,10 @@ impl FromIterator<StorageValueT> for ColumnBuilderAdaptiveT {
 mod test {
     use super::ColumnBuilderAdaptive;
     use crate::physical::{
-        columnar::traits::{column::{Column, ColumnEnum}, columnbuilder::ColumnBuilder},
+        columnar::traits::{
+            column::{Column, ColumnEnum},
+            columnbuilder::ColumnBuilder,
+        },
         datatypes::{Double, Float},
     };
     use test_log::test;
@@ -279,7 +283,7 @@ mod test {
     fn construct_presumable_rle_column() -> ColumnBuilderAdaptive<u32> {
         let mut acb = ColumnBuilderAdaptive::<u32>::default();
 
-        for i in 1 .. 100 {
+        for i in 1..100 {
             acb.add(i)
         }
 
@@ -289,11 +293,11 @@ mod test {
     fn construct_pathological_column() -> ColumnBuilderAdaptive<u32> {
         let mut acb = ColumnBuilderAdaptive::<u32>::default();
 
-        for i in 1 .. 100 {
+        for i in 1..100 {
             acb.add(i)
         }
 
-        for _ in 0 .. 1000 {
+        for _ in 0..1000 {
             acb.add(rand::random())
         }
 
