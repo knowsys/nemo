@@ -23,7 +23,7 @@ pub struct ColumnBuilderRle<T: RunLengthEncodable> {
 
 impl<T> ColumnBuilderRle<T>
 where
-    T: ColumnDataType + Default + RunLengthEncodable,
+    T: ColumnDataType + Default,
 {
     /// Constructor.
     pub fn new() -> ColumnBuilderRle<T> {
