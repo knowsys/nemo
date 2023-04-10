@@ -581,12 +581,7 @@ mod test {
                 NonZeroUsize::new(7).unwrap(),
                 NonZeroUsize::new(11).unwrap(),
             ],
-            increments: vec![
-                3.into(),
-                1.into(),
-                (-38).into(),
-                3.into(),
-            ],
+            increments: vec![3.into(), 1.into(), (-38).into(), 3.into()],
         }
     }
 
@@ -599,12 +594,7 @@ mod test {
                 NonZeroUsize::new(7).unwrap(),
                 NonZeroUsize::new(11).unwrap(),
             ],
-            increments: vec![
-                3.into(),
-                1.into(),
-                (-38).into(),
-                3.into(),
-            ],
+            increments: vec![3.into(), 1.into(), (-38).into(), 3.into()],
         }
     }
 
@@ -820,10 +810,7 @@ mod test {
         let seek_test_col = ColumnRle {
             values: vec![2u32, 22],
             end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
-            increments: vec![
-                5.into(),
-                1.into(),
-            ],
+            increments: vec![5.into(), 1.into()],
         };
 
         let mut iter = seek_test_col.iter();
@@ -857,10 +844,7 @@ mod test {
         let seek_test_col = ColumnRle {
             values: vec![2u32, 22],
             end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
-            increments: vec![
-                5.into(),
-                1.into(),
-            ],
+            increments: vec![5.into(), 1.into()],
         };
 
         let mut iter = seek_test_col.iter();
@@ -924,11 +908,7 @@ mod test {
                 NonZeroUsize::new(6).unwrap(),
                 NonZeroUsize::new(10).unwrap(),
             ],
-            increments: vec![
-                5.into(),
-                (-2).into(),
-                3.into(),
-            ],
+            increments: vec![5.into(), (-2).into(), 3.into()],
         };
 
         let mut iter = seek_test_col.iter();
