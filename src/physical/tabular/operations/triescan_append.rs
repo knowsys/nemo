@@ -17,7 +17,7 @@ use crate::{
                 columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
             },
         },
-        datatypes::{DataValueT, StorageTypeName, StorageValueT},
+        datatypes::{DataValueT, RunLengthEncodable, StorageTypeName, StorageValueT},
         management::database::Dict,
         tabular::{
             table_types::trie::Trie,
@@ -116,7 +116,7 @@ pub fn trie_append(
 
                                 let new_interval_column = ColumnRle::range(
                                     0usize,
-                                    1usize,
+                                    <usize as RunLengthEncodable>::Step::Increment(1),
                                     NonZeroUsize::new(prev_column.len())
                                         .expect("Tried to construct empty rle column."),
                                 );
@@ -155,8 +155,11 @@ pub fn trie_append(
                                 .expect("Tried to construct empty rle column.");
 
                             let new_data_column = ColumnRle::constant($value, target_length);
-                            let new_interval_column =
-                                ColumnRle::range(0usize, 1usize, target_length);
+                            let new_interval_column = ColumnRle::range(
+                                0usize,
+                                <usize as RunLengthEncodable>::Step::Increment(1),
+                                target_length,
+                            );
 
                             new_columns.push_front(ColumnWithIntervalsT::$variant(
                                 ColumnWithIntervals::new(

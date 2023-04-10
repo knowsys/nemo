@@ -1,4 +1,6 @@
-use crate::physical::datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT};
+use crate::physical::datatypes::{
+    ColumnDataType, Double, Float, RunLengthEncodable, StorageTypeName, StorageValueT,
+};
 use std::fmt::Debug;
 
 use super::column_types::{rle::ColumnBuilderRle, vector::ColumnVector};
@@ -34,7 +36,7 @@ impl Default for TargetMinLengthForRleElements {
 }
 
 #[derive(Debug, PartialEq)]
-enum ColumnBuilderType<T> {
+enum ColumnBuilderType<T: RunLengthEncodable> {
     // by default we start building an rle column to evaluate memory consumption
     // for at least ColumnImplDecisionThreshold many elements
     ColumnRle(ColumnBuilderRle<T>),

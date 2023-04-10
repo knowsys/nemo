@@ -105,7 +105,7 @@ mod test {
 
     #[test]
     fn test_u64() {
-        let mut scan = ColumnScanConstant::new(4);
+        let mut scan = ColumnScanConstant::new(4u32);
         assert_eq!(scan.current(), None);
         assert_eq!(scan.next(), Some(4));
         assert_eq!(scan.current(), Some(4));

@@ -35,6 +35,10 @@ pub use floor_to_usize::FloorToUsize;
 pub mod column_data_type;
 pub use column_data_type::ColumnDataType;
 
+/// Module defining the [`RunLengthEncodable`] trait and impls
+pub mod run_length_encodable;
+pub use run_length_encodable::RunLengthEncodable;
+
 /// Module containing functionality relevant to casting types
 pub mod casting;
 pub use casting::ImplicitCastError;

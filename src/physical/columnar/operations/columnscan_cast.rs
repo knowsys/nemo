@@ -234,6 +234,7 @@ mod test {
         assert_eq!(cast_scan.current(), None);
     }
 
+    #[cfg(signed)]
     #[test]
     fn test_flow_next() {
         let ref_col = ColumnVector::new(vec![-1000i16, -270, -100, 0, 5, 100, 1000, 1200]);
@@ -254,6 +255,7 @@ mod test {
         assert_eq!(cast_scan.current(), None);
     }
 
+    #[cfg(signed)]
     #[test]
     fn test_flow_seek_1() {
         let ref_col = ColumnVector::new(vec![-1000i16, -270, -100, 0, 5, 100, 1000, 1200]);
@@ -270,6 +272,7 @@ mod test {
         assert_eq!(cast_scan.current(), None);
     }
 
+    #[cfg(signed)]
     #[test]
     fn test_flow_seek_2() {
         let ref_col = ColumnVector::new(vec![-100i8, 0, 5, 100]);
