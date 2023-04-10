@@ -29,13 +29,14 @@ pub trait RunLengthEncodable: Zero {
     fn offset(self, inc: Self::Step, times: usize) -> Self;
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 /// Step value for unsigned integer types (u32, u64, usize)
-pub enum UintStep {
-    /// Increment by the saved value
-    Increment(u16),
-    /// Decrement by the saved value
-    Decrement(u16),
+pub struct UintStep(i16);
+
+impl From<i16> for UintStep {
+    fn from(value: i16) -> Self {
+        UintStep(value)
+    }
 }
 
 impl UintStep {
@@ -44,13 +45,12 @@ impl UintStep {
         T: Add<T, Output = T> + TryFrom<usize> + Sub<T, Output = T>,
         <T as TryFrom<usize>>::Error: Debug,
     {
-        match inc {
-            UintStep::Increment(i) => {
-                t + T::try_from(i as usize * times).expect("step multiplication overflow")
-            }
-            UintStep::Decrement(d) => {
-                t - T::try_from(d as usize * times).expect("step multiplication overflow")
-            }
+        if inc.0 >= 0 {
+            t + T::try_from(inc.0 as usize * times).expect("step multiplication overflow")
+        } else {
+            // convert to i32, because abs might overflow on 2s-complement architectures
+            let abs_offset = (inc.0 as i32).abs();
+            t - T::try_from(abs_offset as usize * times).expect("step multiplication overflow")
         }
     }
 }
@@ -61,42 +61,19 @@ impl ByteSized for UintStep {
     }
 }
 
-impl PartialEq for UintStep {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Increment(l0), Self::Increment(r0)) => l0 == r0,
-            (Self::Decrement(l0), Self::Decrement(r0)) => l0 == r0,
-            (Self::Increment(0), Self::Decrement(0)) => true,
-            (Self::Decrement(0), Self::Increment(0)) => true,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for UintStep {}
-
 impl RunLengthEncodable for u32 {
     type Step = UintStep;
 
     fn diff_step(prev: Self, curr: Self) -> Option<Self::Step> {
-        if prev <= curr {
-            let inc = u16::try_from(curr - prev).ok()?;
-            Some(UintStep::Increment(inc))
-        } else {
-            let dec = u16::try_from(prev - curr).ok()?;
-            Some(UintStep::Decrement(dec))
-        }
+        Some(UintStep(i16::try_from(curr as i64 - prev as i64).ok()?))
     }
 
     fn zero_step() -> Self::Step {
-        UintStep::Increment(0)
+        UintStep(0)
     }
 
     fn get_step_increment(step: Self::Step) -> Option<Self> {
-        match step {
-            UintStep::Increment(i) => Some(i.into()),
-            UintStep::Decrement(_) => None,
-        }
+        Self::try_from(step.0).ok()
     }
 
     fn offset(self, inc: Self::Step, times: usize) -> Self {
@@ -108,24 +85,15 @@ impl RunLengthEncodable for u64 {
     type Step = UintStep;
 
     fn diff_step(prev: Self, curr: Self) -> Option<Self::Step> {
-        if prev <= curr {
-            let inc = u16::try_from(curr - prev).ok()?;
-            Some(UintStep::Increment(inc))
-        } else {
-            let dec = u16::try_from(prev - curr).ok()?;
-            Some(UintStep::Decrement(dec))
-        }
+        Some(UintStep(i16::try_from(curr as i128 - prev as i128).ok()?))
     }
 
     fn zero_step() -> Self::Step {
-        UintStep::Increment(0)
+        UintStep(0)
     }
 
     fn get_step_increment(step: Self::Step) -> Option<Self> {
-        match step {
-            UintStep::Increment(i) => Some(i.into()),
-            UintStep::Decrement(_) => None,
-        }
+        Self::try_from(step.0).ok()
     }
 
     fn offset(self, inc: Self::Step, times: usize) -> Self {
@@ -137,24 +105,15 @@ impl RunLengthEncodable for usize {
     type Step = UintStep;
 
     fn diff_step(prev: Self, curr: Self) -> Option<Self::Step> {
-        if prev <= curr {
-            let inc = u16::try_from(curr - prev).ok()?;
-            Some(UintStep::Increment(inc))
-        } else {
-            let dec = u16::try_from(prev - curr).ok()?;
-            Some(UintStep::Decrement(dec))
-        }
+        Some(UintStep(i16::try_from(curr as i128 - prev as i128).ok()?))
     }
 
     fn zero_step() -> Self::Step {
-        UintStep::Increment(0)
+        UintStep(0)
     }
 
     fn get_step_increment(step: Self::Step) -> Option<Self> {
-        match step {
-            UintStep::Increment(i) => Some(i.into()),
-            UintStep::Decrement(_) => None,
-        }
+        Self::try_from(step.0).ok()
     }
 
     fn offset(self, inc: Self::Step, times: usize) -> Self {
@@ -162,14 +121,9 @@ impl RunLengthEncodable for usize {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 /// Step type for small unsigned types like u8
-pub enum SmallUintStep {
-    /// Increment by the saved value
-    Increment(u8),
-    /// Decrement by the saved value
-    Decrement(u8),
-}
+pub struct SmallUintStep(i8);
 
 impl ByteSized for SmallUintStep {
     fn size_bytes(&self) -> ByteSize {
@@ -177,47 +131,19 @@ impl ByteSized for SmallUintStep {
     }
 }
 
-impl PartialEq for SmallUintStep {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Increment(l0), Self::Increment(r0)) => l0 == r0,
-            (Self::Decrement(l0), Self::Decrement(r0)) => l0 == r0,
-            (Self::Increment(0), Self::Decrement(0)) => true,
-            (Self::Decrement(0), Self::Increment(0)) => true,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for SmallUintStep {}
-
 impl RunLengthEncodable for u8 {
     type Step = SmallUintStep;
 
     fn diff_step(prev: Self, curr: Self) -> Option<Self::Step> {
-        if prev <= curr {
-            Some(SmallUintStep::Increment(curr - prev))
-        } else {
-            Some(SmallUintStep::Decrement(prev - curr))
-        }
+        Some(SmallUintStep(i8::try_from(curr as i16 - prev as i16).ok()?))
     }
 
     fn get_step_increment(step: Self::Step) -> Option<Self> {
-        match step {
-            SmallUintStep::Increment(inc) => Some(inc),
-            SmallUintStep::Decrement(_) => None,
-        }
+        Self::try_from(step.0).ok()
     }
 
     fn offset(self, inc: Self::Step, times: usize) -> Self {
-        match inc {
-            SmallUintStep::Increment(i) => {
-                self + (i * u8::try_from(times).expect("times to large"))
-            }
-            SmallUintStep::Decrement(d) => {
-                self - (d * u8::try_from(times).expect("times to large"))
-            }
-        }
+        u8::try_from(self as i16 + inc.0 as i16 * times as i16).expect("multiplication overflow")
     }
 }
 

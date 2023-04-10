@@ -582,10 +582,10 @@ mod test {
                 NonZeroUsize::new(11).unwrap(),
             ],
             increments: vec![
-                <u64 as RunLengthEncodable>::Step::Increment(3),
-                <u64 as RunLengthEncodable>::Step::Increment(1),
-                <u64 as RunLengthEncodable>::Step::Decrement(38),
-                <u64 as RunLengthEncodable>::Step::Increment(3),
+                3.into(),
+                1.into(),
+                (-38).into(),
+                3.into(),
             ],
         }
     }
@@ -600,10 +600,10 @@ mod test {
                 NonZeroUsize::new(11).unwrap(),
             ],
             increments: vec![
-                <u32 as RunLengthEncodable>::Step::Increment(3),
-                <u32 as RunLengthEncodable>::Step::Increment(1),
-                <u32 as RunLengthEncodable>::Step::Decrement(38),
-                <u32 as RunLengthEncodable>::Step::Increment(3),
+                3.into(),
+                1.into(),
+                (-38).into(),
+                3.into(),
             ],
         }
     }
@@ -821,8 +821,8 @@ mod test {
             values: vec![2u32, 22],
             end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
             increments: vec![
-                <u32 as RunLengthEncodable>::Step::Increment(5),
-                <u32 as RunLengthEncodable>::Step::Increment(1),
+                5.into(),
+                1.into(),
             ],
         };
 
@@ -858,8 +858,8 @@ mod test {
             values: vec![2u32, 22],
             end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
             increments: vec![
-                <u32 as RunLengthEncodable>::Step::Increment(5),
-                <u32 as RunLengthEncodable>::Step::Increment(1),
+                5.into(),
+                1.into(),
             ],
         };
 
@@ -925,9 +925,9 @@ mod test {
                 NonZeroUsize::new(10).unwrap(),
             ],
             increments: vec![
-                <u32 as RunLengthEncodable>::Step::Increment(5),
-                <u32 as RunLengthEncodable>::Step::Decrement(2),
-                <u32 as RunLengthEncodable>::Step::Increment(3),
+                5.into(),
+                (-2).into(),
+                3.into(),
             ],
         };
 
