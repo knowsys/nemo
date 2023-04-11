@@ -18,7 +18,7 @@
 <p6>,<p9>,<p6>,<p10>,<down>
 <p6>,<p10>,<p6>,<p11>,<down>
 <p6>,<p11>,<p6>,<p12>,<down>
-<p6>,<p11>,<p6>,<9223372036854775809 should have been interned>,<down>
+<p6>,<p11>,<p6>,<__Null#9223372036854775809>,<down>
 <p7>,<p3>,<p7>,<p4>,<down>
 <p7>,<p3>,<p8>,<p3>,<right>
 <p7>,<p8>,<p7>,<p9>,<down>

@@ -1,0 +1,9 @@
+@source sourceA[3]: load-csv("sources/dataA.csv").
+@source sourceB[3]: load-csv("sources/dataB.csv").
+@source sourceC[3]: load-csv("sources/dataC.csv").
+
+ABC(?X, ?Y, ?Z) :- sourceA(?X, ?Y, ?Z) .
+ABC(?X, ?Y, ?Z) :- sourceB(?X, ?Y, ?Z) .
+ABC(?X, ?Y, ?Z) :- sourceC(?X, ?Y, ?Z) .
+AB(?X, ?Y, ?Z) :- sourceA(?X, ?Y, ?Z) .
+AB(?X, ?Y, ?Z) :- sourceB(?X, ?Y, ?Z) .
