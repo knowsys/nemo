@@ -174,6 +174,12 @@ impl Trie {
         project_reordering.transform_consumed(result_columns)
     }
 
+    /// Determines how null values are represented.
+    /// TODO: There should be a better place for this function.
+    pub fn format_null(value: u64) -> String {
+        format!("<__Null#{value}>")
+    }
+
     // TODO: unify this with Display Trait implementation
     pub(crate) fn format_as_csv(&self, f: &mut fmt::Formatter<'_>, dict: &Dict) -> fmt::Result {
         if self
@@ -200,7 +206,7 @@ impl Trie {
             .map(|val| match val {
                 StorageValueT::U64(constant) => dict
                     .entry(constant.try_into().unwrap())
-                    .unwrap_or_else(|| format!("<{constant} should have been interned>")),
+                    .unwrap_or_else(|| Self::format_null(constant)),
                 _ => val.to_string(),
             })
             .collect()];
@@ -225,20 +231,16 @@ impl Trie {
                     .zip(padding_lengths)
                     .flat_map(|(val, pl)| {
                         iter::once(match val {
-                            StorageValueT::U64(constant) => {
-                                dict.entry(constant.try_into().unwrap()).unwrap_or_else(|| {
-                                    format!("<{constant} should have been interned>")
-                                })
-                            }
+                            StorageValueT::U64(constant) => dict
+                                .entry(constant.try_into().unwrap())
+                                .unwrap_or_else(|| Self::format_null(constant)),
                             _ => val.to_string(),
                         })
                         .chain(
                             iter::repeat(match val {
-                                StorageValueT::U64(constant) => {
-                                    dict.entry(constant.try_into().unwrap()).unwrap_or_else(|| {
-                                        format!("<{constant} should have been interned>")
-                                    })
-                                }
+                                StorageValueT::U64(constant) => dict
+                                    .entry(constant.try_into().unwrap())
+                                    .unwrap_or_else(|| Self::format_null(constant)),
                                 _ => val.to_string(),
                             })
                             .take(pl),

@@ -1,0 +1,17 @@
+@source data[2]: load-csv("sources/data.csv").
+
+result(?X, ?X) :- data(?X, ?X) .
+result(!W, ?X), result(?Y, !V) :- data(?X, ?Y) .
+
+% This test is a bit tricky because the concrete nulls assigned to a given existential variable is random
+% So we don't test for the result predicate but for another which derives from it
+
+test(?X) :- result(A, ?X) .
+test(?X) :- result(B, ?X) .
+test(?X) :- result(C, ?X) .
+test(?X) :- result(D, ?X) .
+
+test(?X) :- result(?X, A) .
+test(?X) :- result(?X, B) .
+test(?X) :- result(?X, C) .
+test(?X) :- result(?X, D) .

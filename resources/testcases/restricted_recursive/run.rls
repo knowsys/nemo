@@ -1,0 +1,6 @@
+@source sourceA[2]: load-csv("sources/dataA.csv").
+@source sourceB[2]: load-csv("sources/dataB.csv").
+
+resultA(?X, ?Y) :- sourceA(?X, ?Y) .
+resultB(?X, ?Y) :- sourceB(?X, ?Y) .
+resultB(?X, !V), resultA(!V, ?Y) :- resultA(?X, ?Z), resultB(?Z, ?Y) .

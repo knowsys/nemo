@@ -45,11 +45,16 @@ pub fn normalize_atom_vector(atoms: &[&Atom], filters: &[Filter]) -> Normalizati
         new_filters.push(filter.clone());
     }
 
+    // Used to create unique variables
+    let mut term_counter = 0;
+
     // Create new filters for handling constants or duplicate variables within one atom
     for atom in new_atoms.iter_mut() {
         let mut atom_variables = HashSet::new();
 
         for term in atom.terms_mut() {
+            term_counter += 1;
+
             let add_filter = if let Term::Variable(variable) = term {
                 // If term is a variable we add a filter iff it has already occured
                 !atom_variables.insert(variable.clone())
@@ -61,7 +66,7 @@ pub fn normalize_atom_vector(atoms: &[&Atom], filters: &[Filter]) -> Normalizati
             if add_filter {
                 // Create fresh variable
                 let new_variable = Variable::Universal(Identifier(format!(
-                    "FRESH_VARIABLE_IN_NORMALIZATION_FOR_TERM_{term:?}"
+                    "FRESH_VARIABLE_IN_NORMALIZATION_FOR_TERM_{term_counter}"
                 )));
 
                 // Add new filter expression
