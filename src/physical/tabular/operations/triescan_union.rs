@@ -134,8 +134,8 @@ impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
         self.union_scans[next_layer].get_mut().reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        self.get_scan(self.current_layer?)
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
+        Some(self.union_scans[self.current_layer?].get_mut())
     }
 
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
@@ -158,7 +158,7 @@ mod test {
     use test_log::test;
 
     fn union_next(union_scan: &mut TrieScanUnion) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
+        if let ColumnScanT::U64(rcs) = union_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -166,7 +166,7 @@ mod test {
     }
 
     fn union_current(union_scan: &mut TrieScanUnion) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &*union_scan.current_scan()?.get() } {
+        if let ColumnScanT::U64(rcs) = union_scan.current_scan()? {
             rcs.current()
         } else {
             panic!("type should be u64");

@@ -158,8 +158,8 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
         }
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        self.get_scan(self.layer_left?)
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
+        Some(self.minus_scans[self.layer_left?].get_mut())
     }
 
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
@@ -181,7 +181,7 @@ mod test {
     use test_log::test;
 
     fn diff_next(diff_scan: &mut TrieScanMinus) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
+        if let ColumnScanT::U64(rcs) = diff_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -189,7 +189,7 @@ mod test {
     }
 
     fn diff_current(diff_scan: &mut TrieScanMinus) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &*diff_scan.current_scan()?.get() } {
+        if let ColumnScanT::U64(rcs) = diff_scan.current_scan()? {
             rcs.current()
         } else {
             panic!("type should be u64");

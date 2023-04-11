@@ -146,8 +146,8 @@ impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
             .reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        self.get_scan(self.current_layer?)
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
+        Some(self.select_scans[self.current_layer?].get_mut())
     }
 
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
@@ -288,8 +288,8 @@ impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
             .reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        self.get_scan(self.current_layer?)
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
+        Some(self.select_scans[self.current_layer?].get_mut())
     }
 
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
@@ -313,7 +313,7 @@ mod test {
     use test_log::test;
 
     fn select_eq_next(scan: &mut TrieScanSelectEqual) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.next()
         } else {
             panic!("Type should be u64");
@@ -321,7 +321,7 @@ mod test {
     }
 
     fn select_eq_current(scan: &mut TrieScanSelectEqual) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.current()
         } else {
             panic!("Type should be u64");
@@ -329,7 +329,7 @@ mod test {
     }
 
     fn select_val_next(scan: &mut TrieScanSelectValue) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.next()
         } else {
             panic!("Type should be u64");
@@ -337,7 +337,7 @@ mod test {
     }
 
     fn select_val_current(scan: &mut TrieScanSelectValue) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &(*scan.current_scan()?.get()) } {
+        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.current()
         } else {
             panic!("Type should be u64");

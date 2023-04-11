@@ -305,10 +305,10 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
         self.merge_joins[current_layer].get_mut().reset();
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
         debug_assert!(self.current_layer.is_some());
 
-        Some(&self.merge_joins[self.current_layer?])
+        Some(self.merge_joins[self.current_layer?].get_mut())
     }
 
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
@@ -342,22 +342,18 @@ mod test {
     use test_log::test;
 
     fn join_next(join_scan: &mut TrieScanJoin) -> Option<u64> {
-        unsafe {
-            if let ColumnScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
-                rcs.next()
-            } else {
-                panic!("type should be u64");
-            }
+        if let ColumnScanT::U64(rcs) = join_scan.current_scan()? {
+            rcs.next()
+        } else {
+            panic!("type should be u64");
         }
     }
 
     fn join_current(join_scan: &mut TrieScanJoin) -> Option<u64> {
-        unsafe {
-            if let ColumnScanT::U64(rcs) = &(*join_scan.current_scan()?.get()) {
-                rcs.current()
-            } else {
-                panic!("type should be u64");
-            }
+        if let ColumnScanT::U64(rcs) = join_scan.current_scan()? {
+            rcs.current()
+        } else {
+            panic!("type should be u64");
         }
     }
 

@@ -263,10 +263,10 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
         self.current_layer = Some(next_layer);
     }
 
-    fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
         debug_assert!(self.current_layer.is_some());
 
-        Some(&self.reorder_scans[self.current_layer?])
+        Some(self.reorder_scans[self.current_layer?].get_mut())
     }
 
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
