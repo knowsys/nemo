@@ -581,6 +581,7 @@ where
     /// If multiple candidates exist, the iterator should be advanced to the first such value.
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
         // seek only works correctly if column is sorted; we are just checking this here
+        #[cfg(check_column_sorting)]
         debug_assert!(
             self.column.is_empty()
                 || self
