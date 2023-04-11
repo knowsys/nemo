@@ -103,7 +103,7 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        self.smallest_scans = vec![false; self.smallest_scans.len()];
+        self.smallest_scans.fill(false);
         let mut next_smallest: Option<T> = None;
 
         for &index in &self.active_scans {
@@ -137,7 +137,7 @@ where
     }
 
     fn reset(&mut self) {
-        self.smallest_scans = vec![true; self.smallest_scans.len()];
+        self.smallest_scans.fill(true);
         self.smallest_value = None;
     }
 

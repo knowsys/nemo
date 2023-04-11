@@ -104,7 +104,7 @@ pub fn materialize_inner(
                 current_row[current_layer] = false;
             }
         } else if is_last_layer && next_value.is_some() {
-            current_row = vec![true; arity - 1];
+            current_row.fill(true);
             is_empty = false;
 
             // At this point we know that the result will contain at least one variable
