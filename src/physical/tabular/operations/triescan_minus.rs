@@ -1,13 +1,120 @@
+use polars::export::arrow::compute::arity;
+
 use crate::physical::{
     columnar::{
-        operations::{ColumnScanFollow, ColumnScanMinus},
+        operations::{ColumnScanFollow, ColumnScanMinus, ColumnScanSubtract},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::StorageTypeName,
     tabular::traits::triescan::{TrieScan, TrieScanEnum},
+    util::mapping::permutation::{self, Permutation},
 };
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
+
+/// TODO: Descriptions
+#[derive(Debug)]
+pub struct TrieScanSubtract<'a> {
+    /// [`TrieScan`] from which elements are being subtracted
+    trie_left: Box<TrieScanEnum<'a>>,
+    /// Elements that are subtracted
+    trie_right: Box<TrieScanEnum<'a>>,
+
+    /// Has an entry for each layer in `trie_left`
+    /// If `matched_layers[i]` is true
+    matched_layers: Vec<bool>,
+
+    /// Current layer of this scan.
+    current_layer: Option<usize>,
+
+    /// List of `ColumnScanSubtract` where every entry represents one level of the resulting trie.
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
+}
+
+#[derive(Debug)]
+pub struct SubtractInfo {
+    skipped_layers: Vec<usize>,
+}
+
+impl SubtractInfo {
+    /// Create new [`SubtractInfo`].
+    pub fn new(mut skipped_layers: Vec<usize>) -> Self {
+        skipped_layers.sort();
+
+        Self { skipped_layers }
+    }
+
+    /// Applies a permutation representing a reordering of the trie scan that this info is attached to.
+    pub fn apply_permutation(&mut self, permutation: Permutation) {
+        self.skipped_layers
+            .iter_mut()
+            .map(|l| permutation.get(l))
+            .collect();
+        self.skipped_layers.sort();
+    }
+}
+
+impl<'a> TrieScanSubtract<'a> {
+    /// Construct new [`TrieScanSubtract`] object.
+    pub fn new(
+        trie_left: TrieScanEnum<'a>,
+        trie_right: TrieScanEnum<'a>,
+        info: SubtractInfo,
+    ) -> Self {
+        debug_assert!(trie_left.get_types().len() >= trie_right.get_types().len());
+        debug_assert!(trie_left.get_types().len() > info.skipped_layers.len());
+        debug_assert!(
+            trie_left.get_types().len() - info.skipped_layers.len() == trie_right.get_types().len()
+        );
+        debug_assert!(info.skipped_layers.is_sorted());
+        debug_assert!(info
+            .skipped_layers
+            .iter()
+            .all(|&l| l < trie_left.get_types().len()));
+
+        let arity_left = trie_left.get_types().len();
+
+        let mut matched_layers = vec![true; arity_left];
+        for layer in info.skipped_layers {
+            matched_layers[layer] = false;
+        }
+        let last_not_skipped_layer = matched_layers
+            .iter()
+            .rev()
+            .position(|&l| l == true)
+            .expect("At least one layer should have not been skipped.");
+
+        let mut column_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity_left);
+        let last_scan_index: Option<usize> = None;
+
+        for layer_index in 0..arity_left {
+            unsafe {
+                if let ColumnScanT::U64(left_scan_enum) =
+                    &*trie_left.get_scan(layer_index).unwrap().get()
+                {
+                    if let ColumnScanT::U64(right_scan_enum) =
+                        &*trie_right.get_scan(layer_index).unwrap().get()
+                    {
+                        let new_scan = ColumnScanEnum::ColumnScanSubtract(ColumnScanSubtract::new(
+                            left_scan_enum,
+                            right_scan_enum,
+                            t,
+                            i,
+                        ));
+                    }
+                }
+            }
+        }
+
+        Self {
+            trie_left: Box::new(trie_left),
+            trie_right: Box::new(trie_right),
+            matched_layers,
+            current_layer: None,
+            column_scans,
+        }
+    }
+}
 
 /// [`TrieScan`] containg all elements from a "left" [`TrieScan`] that are not in the "right" [`TrieScan`]  
 #[derive(Debug)]

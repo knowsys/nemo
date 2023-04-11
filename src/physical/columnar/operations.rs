@@ -28,6 +28,7 @@ pub use columnscan_prune::ColumnScanPrune;
 pub mod columnscan_minus;
 pub use columnscan_minus::ColumnScanFollow;
 pub use columnscan_minus::ColumnScanMinus;
+pub use columnscan_minus::ColumnScanSubtract;
 
 /// Module for defining [`ColumnScanUnion`]
 pub mod columnscan_union;

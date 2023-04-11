@@ -1,5 +1,6 @@
 use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 use crate::physical::datatypes::ColumnDataType;
+use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -203,6 +204,135 @@ where
 
     fn reset(&mut self) {
         self.enabled = true;
+        self.current_value = None;
+    }
+
+    fn pos(&self) -> Option<usize> {
+        unimplemented!("This functions is not implemented for column operators");
+    }
+    fn narrow(&mut self, _interval: Range<usize>) {
+        unimplemented!("This functions is not implemented for column operators");
+    }
+}
+
+#[derive(Debug)]
+pub struct ColumnScanSubtract<'a, T>
+where
+    T: 'a + ColumnDataType,
+{
+    /// The value of this sub scan determines the value of the whole scan
+    scan_main: &'a ColumnScanCell<'a, T>,
+    /// Scan that seeks the current value of `main_scan`
+    scan_follower: &'a ColumnScanCell<'a, T>,
+
+    /// If disabled this scan behaves the same as `scan_main`
+    is_enabled: bool,
+
+    /// Whether `scan_main` currently points to the same value as `scan_follower`
+    is_equal: bool,
+    /// Indicates whether values from `scan_main` should be ignored if they also appear in `scan_follower`.
+    subtract_value: bool,
+
+    /// Current value of this scan
+    current_value: Option<T>,
+}
+
+impl<'a, T> ColumnScanSubtract<'a, T>
+where
+    T: 'a + ColumnDataType,
+{
+    /// Constructs a new [`ColumnScanMinus`] for a Column.
+    pub fn new(
+        scan_main: &'a ColumnScanCell<'a, T>,
+        scan_follower: &'a ColumnScanCell<'a, T>,
+        subtract_value: bool,
+    ) -> Self {
+        Self {
+            scan_main,
+            scan_follower,
+            is_enabled: true,
+            is_equal: true,
+            subtract_value,
+            current_value: None,
+        }
+    }
+
+    pub fn is_equal(&self) -> bool {
+        self.is_equal
+    }
+
+    /// Enabled means that the minus operation is performed;
+    /// otherwise this scan acts like a [`ColumnScanPass`]
+    pub fn enable(&mut self, enabled: bool) {
+        self.is_enabled = enabled;
+    }
+}
+
+impl<'a, T> Iterator for ColumnScanSubtract<'a, T>
+where
+    T: 'a + ColumnDataType,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.is_enabled {
+            self.current_value = self.scan_main.next();
+            return self.current_value;
+        }
+
+        loop {
+            self.current_value = self.scan_main.next();
+
+            if let Some(current_left) = self.current_value {
+                if let Some(current_right) = self.scan_follower.seek(current_left) {
+                    if !self.subtract_value || current_left != current_right {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        self.is_equal =
+            self.current_value.is_some() && self.current_value == self.scan_follower.current();
+
+        self.current_value
+    }
+}
+
+impl<'a, T: Ord + Copy + Debug> ColumnScan for ColumnScanSubtract<'a, T>
+where
+    T: 'a + ColumnDataType,
+{
+    fn seek(&mut self, value: T) -> Option<T> {
+        if !self.is_enabled {
+            self.current_value = self.scan_main.seek(value);
+            return self.current_value;
+        }
+
+        if let Some(current_left) = self.current_value {
+            if let Some(current_right) = self.scan_follower.seek(current_left) {
+                if self.subtract_value && current_left == current_right {
+                    // If `scan_right` contains the value `scan_left` is set to
+                    // then find the next value in `scan_left` that is not in `scan_right`
+                    self.next();
+                }
+            }
+        }
+
+        self.current_value
+    }
+
+    fn current(&self) -> Option<T> {
+        self.current_value
+    }
+
+    fn reset(&mut self) {
+        self.is_equal = true;
+        self.is_enabled = true;
         self.current_value = None;
     }
 

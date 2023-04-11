@@ -5,7 +5,9 @@ use super::super::operations::{
     ColumnScanUnion,
 };
 
-use crate::physical::columnar::operations::{ColumnScanConstant, ColumnScanCopy, ColumnScanNulls};
+use crate::physical::columnar::operations::{
+    ColumnScanConstant, ColumnScanCopy, ColumnScanNulls, ColumnScanSubtract,
+};
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::datatypes::{ColumnDataType, Double, Float, StorageValueT},
@@ -75,6 +77,8 @@ where
     ColumnScanCopy(ColumnScanCopy<'a, T>),
     /// Case ColumnScanNulls
     ColumnScanNulls(ColumnScanNulls<T>),
+    /// Case ColumnScanSubtract
+    ColumnScanSubtract(ColumnScanSubtract<'a, T>),
 }
 
 /// The following impl statements allow converting from a specific [`ColumnScan`] into a gerneral [`ColumnScanEnum`]
@@ -207,10 +211,12 @@ where
     /// Assumes that column scan is a [`ColumnScanFollow`]
     /// Returns whether its scans point to the same value
     pub fn is_equal(&self) -> bool {
-        if let Self::ColumnScanFollow(cs) = self {
-            cs.is_equal()
-        } else {
-            unimplemented!("is_equal is only available for ColumnScanFollow")
+        match self {
+            ColumnScanEnum::ColumnScanFollow(scan) => scan.is_equal(),
+            ColumnScanEnum::ColumnScanSubtract(scan) => scan.is_equal(),
+            _ => unimplemented!(
+                "is_equal is only available for ColumnScanFollow and ColumnScanSubtract"
+            ),
         }
     }
 
@@ -264,7 +270,8 @@ generate_forwarder!(forward_to_columnscan;
     ColumnScanUnion,
     ColumnScanConstant,
     ColumnScanCopy,
-    ColumnScanNulls
+    ColumnScanNulls,
+    ColumnScanSubtract
 );
 
 impl<'a, T> Iterator for ColumnScanEnum<'a, T>
