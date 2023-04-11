@@ -693,7 +693,7 @@ mod test {
     }
 
     #[test]
-    fn get_large_increment_overflowing_value_space_i64() {
+    fn get_large_increment_overflowing_value_space_u64() {
         let control_data = vec![
             0,
             u64::MAX / 4,
