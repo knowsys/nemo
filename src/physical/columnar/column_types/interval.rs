@@ -1,7 +1,7 @@
 use bytesize::ByteSize;
 
 use crate::generate_datatype_forwarder;
-use crate::physical::datatypes::StorageTypeName;
+use crate::physical::datatypes::{RunLengthEncodable, StorageTypeName};
 use crate::physical::management::ByteSized;
 use crate::physical::{
     columnar::traits::{
@@ -15,7 +15,7 @@ use std::{fmt::Debug, ops::Range};
 
 /// Simple implementation of [`IntervalColumn`] that uses a second column to manage interval bounds.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ColumnWithIntervals<T> {
+pub struct ColumnWithIntervals<T: RunLengthEncodable> {
     data: ColumnEnum<T>,
     int_starts: ColumnEnum<usize>,
 }

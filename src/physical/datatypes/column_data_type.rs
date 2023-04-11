@@ -1,6 +1,6 @@
 use super::{
     casting::{ImplicitCastFrom, ImplicitCastInto},
-    Field, FloorToUsize,
+    Field, FloorToUsize, RunLengthEncodable,
 };
 use num::{Bounded, CheckedMul};
 use std::fmt::Debug;
@@ -19,6 +19,7 @@ pub trait ColumnDataType:
     + ImplicitCastFrom<u64>
     + ImplicitCastInto<u64>
     + Bounded
+    + RunLengthEncodable
 {
 }
 
@@ -35,5 +36,6 @@ impl<T> ColumnDataType for T where
         + ImplicitCastFrom<u64>
         + ImplicitCastInto<u64>
         + Bounded
+        + RunLengthEncodable
 {
 }

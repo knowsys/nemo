@@ -1,184 +1,21 @@
 use crate::physical::{
     columnar::traits::{column::Column, columnbuilder::ColumnBuilder, columnscan::ColumnScan},
-    datatypes::{ColumnDataType, Field, Ring},
+    datatypes::{ColumnDataType, RunLengthEncodable},
     management::ByteSized,
 };
 use bytesize::ByteSize;
-use num::{CheckedMul, Zero};
-use std::{
-    fmt::Debug,
-    iter::repeat,
-    mem::size_of,
-    num::NonZeroUsize,
-    ops::{Add, Mul, Range},
-};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Step<T> {
-    /// Step in positive direction
-    Increment(T),
-    /// Step in negative direction
-    Decrement(T),
-    /// Used as alternative to multiplication when multiplication would overflow T
-    RepeatedIncrement(T, usize),
-    /// Used as alternative to multiplication when multiplication would overflow T
-    RepeatedDecrement(T, usize),
-}
-
-impl<T> Default for Step<T>
-where
-    T: Default,
-{
-    fn default() -> Self {
-        Self::Increment(Default::default())
-    }
-}
-
-impl<T> Step<T>
-where
-    T: Copy + Ord + TryFrom<usize> + Ring,
-{
-    // returns None if the computed diff does not allow the computation of the original value
-    // (may happen for floating point numbers)
-    fn from_two_values(previous_value: T, next_value: T) -> Option<Self> {
-        if next_value < previous_value {
-            let diff = previous_value - next_value;
-
-            (next_value == previous_value - diff).then_some(Self::Decrement(diff))
-        } else {
-            let diff = next_value - previous_value;
-
-            (next_value == previous_value + diff).then_some(Self::Increment(diff))
-        }
-    }
-
-    // just a special case of from_two_values with the first being zero and without the checks
-    fn from_t(value: T) -> Self {
-        if value < T::zero() {
-            Self::Decrement(T::zero() - value)
-        } else {
-            Self::Increment(value)
-        }
-    }
-
-    fn into_repeated(self) -> Self {
-        match self {
-            Self::Increment(inc) => Self::RepeatedIncrement(inc, 1),
-            Self::Decrement(dec) => Self::RepeatedDecrement(dec, 1),
-            Self::RepeatedIncrement(_, _) | Self::RepeatedDecrement(_, _) => self,
-        }
-    }
-}
-
-impl<T> Step<T>
-where
-    T: Copy + Ord + TryFrom<usize> + Ring + CheckedMul,
-{
-    fn will_mul_overflow(&self, rhs: usize) -> bool {
-        // NOTE: we have special handling for increment zero so in this case, we do not have to change the enum variant
-        if self.is_zero() {
-            return false;
-        }
-
-        match self {
-            Self::Increment(raw_inc) | Self::Decrement(raw_inc) => T::try_from(rhs)
-                .ok()
-                .and_then(|t_rhs| raw_inc.checked_mul(&t_rhs))
-                .is_none(),
-            // NOTE: we are actually only interested in the non-repeated cases in this method; we still provide the following cases to be complete
-            Self::RepeatedIncrement(_, mul) | Self::RepeatedDecrement(_, mul) => {
-                mul.checked_mul(&rhs).is_none()
-            }
-        }
-    }
-}
-
-impl<T> Add<T> for Step<T>
-where
-    T: Copy + Ring,
-{
-    type Output = T;
-
-    fn add(self, rhs: T) -> T {
-        match self {
-            Self::Increment(inc) => rhs + inc,
-            Self::Decrement(dec) => rhs - dec,
-            Self::RepeatedIncrement(inc, mul) => {
-                repeat(inc).take(mul).fold(rhs, |sum, inc| sum + inc)
-            }
-            Self::RepeatedDecrement(dec, mul) => {
-                repeat(dec).take(mul).fold(rhs, |sum, dec| sum - dec)
-            }
-        }
-    }
-}
-
-impl<T> Add for Step<T>
-where
-    T: Copy + Ord + TryFrom<usize> + Ring,
-{
-    type Output = Self;
-
-    // NOTE: this may overflow but it should be fine for our use cases
-    fn add(self, rhs: Self) -> Self {
-        Self::from_t(self + (rhs + T::zero()))
-    }
-}
-
-impl<T> Mul<usize> for Step<T>
-where
-    T: Copy + Ord + TryFrom<usize> + Field,
-{
-    type Output = Self;
-
-    fn mul(self, rhs: usize) -> Self {
-        match self {
-            Self::Increment(inc) => Self::Increment(
-                // NOTE: we check during construction that this multiplication will not overflow
-                inc * T::try_from(rhs)
-                    .ok()
-                    .expect("this is ensured during construction"),
-            ),
-            Self::Decrement(dec) => Self::Decrement(
-                // NOTE: we check during construction that this multiplication will not overflow
-                dec * T::try_from(rhs)
-                    .ok()
-                    .expect("this is ensured during construction"),
-            ),
-            Self::RepeatedIncrement(inc, mul) => Self::RepeatedIncrement(inc, rhs * mul),
-            Self::RepeatedDecrement(dec, mul) => Self::RepeatedDecrement(dec, rhs * mul),
-        }
-    }
-}
-
-impl<T> Zero for Step<T>
-where
-    T: Copy + Zero + Ord + TryFrom<usize> + Ring,
-{
-    fn zero() -> Self {
-        Self::Increment(T::zero())
-    }
-
-    fn is_zero(&self) -> bool {
-        match self {
-            Self::Increment(inc) => inc.is_zero(),
-            Self::Decrement(dec) => dec.is_zero(),
-            Self::RepeatedIncrement(inc, mul) => inc.is_zero() || mul.is_zero(),
-            Self::RepeatedDecrement(dec, mul) => dec.is_zero() || mul.is_zero(),
-        }
-    }
-}
+use std::{fmt::Debug, mem::size_of, num::NonZeroUsize, ops::Range};
 
 #[derive(Debug, PartialEq)]
-struct RleElement<T> {
+struct RleElement<T: RunLengthEncodable> {
     value: T,
     length: NonZeroUsize,
-    increment: Step<T>,
+    increment: T::Step,
 }
 
 /// Implementation of [`ColumnBuilder`] that allows the use of incremental run length encoding.
 #[derive(Debug, Default, PartialEq)]
-pub struct ColumnBuilderRle<T> {
+pub struct ColumnBuilderRle<T: RunLengthEncodable> {
     elements: Vec<RleElement<T>>,
     previous_value_opt: Option<T>,
     count: usize,
@@ -242,7 +79,7 @@ where
             self.elements.push(RleElement {
                 value: current_value,
                 length: NonZeroUsize::new(1).expect("1 is non-zero"),
-                increment: Default::default(),
+                increment: T::zero_step(),
             });
 
             self.previous_value_opt = Some(current_value);
@@ -257,23 +94,15 @@ where
             .elements
             .last_mut()
             .expect("if the elements are not empty, then there is a last one");
-        let current_increment = Step::from_two_values(previous_value, current_value);
+        let current_increment = T::diff_step(previous_value, current_value);
 
         match current_increment {
             Some(cur_inc) => {
                 if last_element.length == NonZeroUsize::new(1).expect("1 is non-zero") {
                     last_element.length = NonZeroUsize::new(2).expect("2 is non-zero");
                     last_element.increment = cur_inc;
-                } else if last_element.increment == cur_inc
-                    || last_element.increment == cur_inc.into_repeated()
-                {
+                } else if last_element.increment == cur_inc {
                     let last_length = last_element.length.get();
-
-                    // check that the current value is reproducible when using multiplication (i.e. multiplied increment is not infinite)
-                    if cur_inc.will_mul_overflow(last_length) {
-                        // if the multiplication will overflow, then just sum up iteratively (by marking the increment with a special enum variant)
-                        last_element.increment = cur_inc.into_repeated();
-                    }
 
                     last_element.length =
                         NonZeroUsize::new(last_length + 1).expect("usize + 1 is non-zero");
@@ -281,7 +110,7 @@ where
                     self.elements.push(RleElement {
                         value: current_value,
                         length: NonZeroUsize::new(1).expect("1 is non-zero"),
-                        increment: Default::default(),
+                        increment: T::zero_step(),
                     });
                 }
             }
@@ -289,7 +118,7 @@ where
                 self.elements.push(RleElement {
                     value: current_value,
                     length: NonZeroUsize::new(1).expect("1 is non-zero"),
-                    increment: Default::default(),
+                    increment: T::zero_step(),
                 });
             }
         }
@@ -308,10 +137,10 @@ where
 
 /// Implementation of [`Column`] that allows the use of incremental run length encoding.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct ColumnRle<T> {
+pub struct ColumnRle<T: RunLengthEncodable> {
     values: Vec<T>,
     end_indices: Vec<NonZeroUsize>,
-    increments: Vec<Step<T>>,
+    increments: Vec<T::Step>,
 }
 
 impl<T> ColumnRle<T>
@@ -322,7 +151,7 @@ where
     fn from_rle_elements(elements: Vec<RleElement<T>>) -> ColumnRle<T> {
         let mut values: Vec<T> = vec![];
         let mut end_indices: Vec<NonZeroUsize> = vec![];
-        let mut increments: Vec<Step<T>> = vec![];
+        let mut increments: Vec<T::Step> = vec![];
 
         elements.iter().for_each(|e| {
             values.push(e.value);
@@ -357,18 +186,18 @@ where
         let element = RleElement {
             value,
             length,
-            increment: Step::Increment(T::zero()),
+            increment: T::zero_step(),
         };
 
         Self::from_rle_elements(vec![element])
     }
 
     /// Construct new [`ColumnScanRle`] consisting of a single continuous range of values.
-    pub fn range(start_value: T, increment: T, length: NonZeroUsize) -> ColumnRle<T> {
+    pub fn range(start_value: T, increment: T::Step, length: NonZeroUsize) -> ColumnRle<T> {
         let element = RleElement {
             value: start_value,
             length,
-            increment: Step::Increment(increment),
+            increment,
         };
 
         Self::from_rle_elements(vec![element])
@@ -405,17 +234,11 @@ where
         let value = self.values[element_index];
         let increment = self.increments[element_index];
 
-        if increment.is_zero() {
+        if increment == T::zero_step() {
             return value;
         }
 
-        // explicit check for zero since increment may be Infinity for floating point types
-        // (and Infinity * 0 produces NaN)
-        if increment_index == 0 {
-            value
-        } else {
-            increment * increment_index + value
-        }
+        value.offset(increment, increment_index)
     }
 }
 
@@ -448,12 +271,12 @@ where
     }
 }
 
-impl<T> ByteSized for ColumnRle<T> {
+impl<T: RunLengthEncodable> ByteSized for ColumnRle<T> {
     fn size_bytes(&self) -> ByteSize {
         let size_values = size_of::<T>() as u64 * self.values.capacity() as u64;
         let size_end_indices =
             size_of::<NonZeroUsize>() as u64 * self.end_indices.capacity() as u64;
-        let size_increments = size_of::<Step<T>>() as u64 * self.increments.capacity() as u64;
+        let size_increments = size_of::<T::Step>() as u64 * self.increments.capacity() as u64;
 
         ByteSize::b(size_of::<Self>() as u64 + size_values + size_end_indices + size_increments)
     }
@@ -461,7 +284,7 @@ impl<T> ByteSized for ColumnRle<T> {
 
 /// Column Scan tailored towards ColumnRles
 #[derive(Debug)]
-pub struct ColumnScanRle<'a, T> {
+pub struct ColumnScanRle<'a, T: RunLengthEncodable> {
     column: &'a ColumnRle<T>,
     element_index: usize,
     increment_index: usize,
@@ -561,7 +384,7 @@ where
             if self.increment_index == 0 {
                 self.column.values[self.element_index]
             } else if let Some(current) = self.current {
-                self.column.increments[self.element_index] + current
+                current.offset(self.column.increments[self.element_index], 1)
             } else {
                 self.column
                     .get_internal(self.element_index, self.increment_index)
@@ -650,10 +473,10 @@ where
         if value <= start_value {
             seek_element_index = bin_search_element_index;
             seek_increment_index = 0;
-        } else if inc.is_zero() {
+        } else if inc == T::zero_step() {
             seek_element_index = bin_search_element_index + 1;
             seek_increment_index = 0;
-        } else if let Step::Increment(inc) = inc {
+        } else if let Some(inc) = T::get_step_increment(inc) {
             seek_element_index = bin_search_element_index;
             seek_increment_index = ((value - start_value) / inc)
                 .floor_to_usize()
@@ -737,21 +560,20 @@ where
 mod test {
     use crate::physical::{
         columnar::traits::{column::Column, columnscan::ColumnScan},
-        datatypes::{Double, Float},
+        datatypes::{Double, Float, RunLengthEncodable},
     };
-    use num::Zero;
     use quickcheck_macros::quickcheck;
     use std::iter::repeat;
     use std::num::NonZeroUsize;
     use test_log::test;
 
-    use super::{ColumnRle, Step};
+    use super::ColumnRle;
 
-    fn get_control_data() -> Vec<i64> {
+    fn get_control_data() -> Vec<u64> {
         vec![2, 5, 6, 7, 8, 42, 4, 7, 10, 13, 16]
     }
 
-    fn get_test_column_i64() -> ColumnRle<i64> {
+    fn get_test_column_u64() -> ColumnRle<u64> {
         ColumnRle {
             values: vec![2, 6, 42, 7],
             end_indices: vec![
@@ -760,12 +582,7 @@ mod test {
                 NonZeroUsize::new(7).unwrap(),
                 NonZeroUsize::new(11).unwrap(),
             ],
-            increments: vec![
-                Step::Increment(3),
-                Step::Increment(1),
-                Step::Decrement(38),
-                Step::Increment(3),
-            ],
+            increments: vec![3.into(), 1.into(), (-38).into(), 3.into()],
         }
     }
 
@@ -778,12 +595,7 @@ mod test {
                 NonZeroUsize::new(7).unwrap(),
                 NonZeroUsize::new(11).unwrap(),
             ],
-            increments: vec![
-                Step::Increment(3),
-                Step::Increment(1),
-                Step::Decrement(38),
-                Step::Increment(3),
-            ],
+            increments: vec![3.into(), 1.into(), (-38).into(), 3.into()],
         }
     }
 
@@ -795,16 +607,16 @@ mod test {
         ColumnRle {
             values: vec![1],
             end_indices: vec![NonZeroUsize::new(1000000).unwrap()],
-            increments: vec![Step::zero()],
+            increments: vec![<u8 as RunLengthEncodable>::zero_step()],
         }
     }
 
     #[test]
-    fn i64_construction() {
+    fn u64_construction() {
         let raw_data = get_control_data();
-        let expected: ColumnRle<i64> = get_test_column_i64();
+        let expected = get_test_column_u64();
 
-        let constructed: ColumnRle<i64> = ColumnRle::new(raw_data);
+        let constructed = ColumnRle::new(raw_data);
         assert_eq!(expected, constructed);
     }
 
@@ -829,10 +641,10 @@ mod test {
 
     #[test]
     fn is_empty() {
-        let c: ColumnRle<i64> = get_test_column_i64();
+        let c = get_test_column_u64();
         assert!(!c.is_empty());
 
-        let c_empty: ColumnRle<i64> = ColumnRle {
+        let c_empty: ColumnRle<u64> = ColumnRle {
             values: vec![],
             end_indices: vec![],
             increments: vec![],
@@ -843,14 +655,14 @@ mod test {
     #[test]
     fn len() {
         let control_data = get_control_data();
-        let c: ColumnRle<i64> = get_test_column_i64();
+        let c = get_test_column_u64();
         assert_eq!(c.len(), control_data.len());
     }
 
     #[test]
     fn get() {
         let control_data = get_control_data();
-        let c: ColumnRle<i64> = get_test_column_i64();
+        let c = get_test_column_u64();
 
         control_data
             .iter()
@@ -870,9 +682,26 @@ mod test {
             .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
     }
 
+    #[cfg(signed)]
     #[test]
     fn get_large_increment_overflowing_value_space_i64() {
         let control_data = vec![-i64::MAX, 0, i64::MAX];
+        let c = ColumnRle::new(control_data.clone());
+        control_data
+            .iter()
+            .enumerate()
+            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
+    }
+
+    #[test]
+    fn get_large_increment_overflowing_value_space_u64() {
+        let control_data = vec![
+            0,
+            u64::MAX / 4,
+            u64::MAX / 2,
+            3 * (u64::MAX / 4),
+            u64::MAX - 1,
+        ];
         let c = ColumnRle::new(control_data.clone());
         control_data
             .iter()
@@ -943,10 +772,10 @@ mod test {
 
     #[test]
     fn iter() {
-        let control_data: Vec<i64> = get_control_data();
-        let c: ColumnRle<i64> = get_test_column_i64();
+        let control_data = get_control_data();
+        let c = get_test_column_u64();
 
-        let iterated_c: Vec<i64> = c.iter().collect();
+        let iterated_c: Vec<_> = c.iter().collect();
         assert_eq!(iterated_c, control_data);
     }
 
@@ -980,9 +809,9 @@ mod test {
     #[test]
     fn seek_and_get_pos() {
         let seek_test_col = ColumnRle {
-            values: vec![2, 22],
+            values: vec![2u32, 22],
             end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
-            increments: vec![Step::Increment(5), Step::Increment(1)],
+            increments: vec![5.into(), 1.into()],
         };
 
         let mut iter = seek_test_col.iter();
@@ -1014,9 +843,9 @@ mod test {
     #[test]
     fn next_and_seek_and_get_pos_on_narrowed_column() {
         let seek_test_col = ColumnRle {
-            values: vec![2, 22],
+            values: vec![2u32, 22],
             end_indices: vec![NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(9).unwrap()],
-            increments: vec![Step::Increment(5), Step::Increment(1)],
+            increments: vec![5.into(), 1.into()],
         };
 
         let mut iter = seek_test_col.iter();
@@ -1074,13 +903,13 @@ mod test {
         // 20,
         // 18, 21, 24, 27, 30
         let seek_test_col = ColumnRle {
-            values: vec![2, 22, 21],
+            values: vec![2u32, 22, 21],
             end_indices: vec![
                 NonZeroUsize::new(3).unwrap(),
                 NonZeroUsize::new(6).unwrap(),
                 NonZeroUsize::new(10).unwrap(),
             ],
-            increments: vec![Step::Increment(5), Step::Decrement(2), Step::Increment(3)],
+            increments: vec![5.into(), (-2).into(), 3.into()],
         };
 
         let mut iter = seek_test_col.iter();

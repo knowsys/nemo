@@ -116,7 +116,7 @@ pub fn trie_append(
 
                                 let new_interval_column = ColumnRle::range(
                                     0usize,
-                                    1usize,
+                                    1.into(),
                                     NonZeroUsize::new(prev_column.len())
                                         .expect("Tried to construct empty rle column."),
                                 );
@@ -156,7 +156,7 @@ pub fn trie_append(
 
                             let new_data_column = ColumnRle::constant($value, target_length);
                             let new_interval_column =
-                                ColumnRle::range(0usize, 1usize, target_length);
+                                ColumnRle::range(0usize, 1.into(), target_length);
 
                             new_columns.push_front(ColumnWithIntervalsT::$variant(
                                 ColumnWithIntervals::new(

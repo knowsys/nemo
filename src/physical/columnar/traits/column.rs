@@ -3,7 +3,7 @@ use bytesize::ByteSize;
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
     physical::{
-        datatypes::{ColumnDataType, Double, Float, StorageValueT},
+        datatypes::{ColumnDataType, Double, Float, RunLengthEncodable, StorageValueT},
         management::ByteSized,
     },
 };
@@ -37,7 +37,7 @@ pub trait Column<'a, T>: Debug + Clone + ByteSized {
 
 /// Enum for column implementations
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ColumnEnum<T> {
+pub enum ColumnEnum<T: RunLengthEncodable> {
     /// Case ColumnVector
     ColumnVector(ColumnVector<T>),
     /// Case ColumnRle
@@ -74,7 +74,7 @@ where
     }
 }
 
-impl<T> ByteSized for ColumnEnum<T> {
+impl<T: RunLengthEncodable> ByteSized for ColumnEnum<T> {
     fn size_bytes(&self) -> ByteSize {
         let size_column = forward_to_column!(self, size_bytes);
         ByteSize::b(size_of::<Self>() as u64) + size_column

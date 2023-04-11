@@ -1,4 +1,5 @@
-use super::{FloatIsNaN, FloorToUsize};
+use super::run_length_encodable::FloatingStep;
+use super::{FloatIsNaN, FloorToUsize, RunLengthEncodable};
 use crate::error::Error;
 use num::{Bounded, CheckedMul, FromPrimitive, One, Zero};
 use std::cmp::Ordering;
@@ -214,5 +215,25 @@ impl Arbitrary for Double {
         }
 
         Self::from_number(value)
+    }
+}
+
+impl RunLengthEncodable for Double {
+    type Step = FloatingStep;
+
+    fn diff_step(a: Self, b: Self) -> Option<Self::Step> {
+        if a == b {
+            Some(FloatingStep {})
+        } else {
+            None
+        }
+    }
+
+    fn get_step_increment(_: Self::Step) -> Option<Self> {
+        Some(Self::zero())
+    }
+
+    fn offset(self, _: Self::Step, _: usize) -> Self {
+        self
     }
 }

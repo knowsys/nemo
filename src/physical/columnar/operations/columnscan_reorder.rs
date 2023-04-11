@@ -2,8 +2,8 @@ use super::super::traits::{
     column::{Column, ColumnEnum},
     columnscan::ColumnScan,
 };
-use crate::logical::Permutator;
 use crate::physical::datatypes::ColumnDataType;
+use crate::{logical::Permutator, physical::datatypes::RunLengthEncodable};
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -11,7 +11,7 @@ use std::ops::Range;
 //       for cases where data happens to be sorted already
 /// Scan which reorders its underlying [`ColumnEnum`] according to a permutator
 #[derive(Debug)]
-pub struct ColumnScanReorder<'a, T> {
+pub struct ColumnScanReorder<'a, T: RunLengthEncodable> {
     column: &'a ColumnEnum<T>,
     permutator: Permutator,
     current_value: Option<T>,
