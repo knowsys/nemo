@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::{
     error::Error,
     logical::{
-        model::{DataSource, Identifier, NumericLiteral, Program, Term},
+        model::{DataSource, Identifier, Program},
         program_analysis::analysis::ProgramAnalysis,
         types::LogicalTypeEnum,
         TableManager,
@@ -65,7 +65,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
-        Self::add_sources(&mut table_manager, &program);
+        Self::add_sources(&mut table_manager, &program, &analysis);
 
         let mut rule_infos = Vec::<RuleInfo>::new();
         program
@@ -105,7 +105,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
     }
 
-    fn add_sources(table_manager: &mut TableManager, program: &Program) {
+    fn add_sources(
+        table_manager: &mut TableManager,
+        program: &Program,
+        analysis: &ProgramAnalysis,
+    ) {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the data source declarations
@@ -135,13 +139,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .0
                 .terms()
                 .iter()
-                .map(|t| match t {
-                    Term::NumericLiteral(nl) => match nl {
-                        NumericLiteral::Integer(i) => DataValueT::String(i.to_string()), // TODO: should be integer type; we handle everything as string for now as long as we do not have the logical type system
-                        _ => todo!(),
-                    },
-                    Term::Constant(Identifier(s)) => DataValueT::String(s.clone()),
-                    _ => todo!(),
+                .enumerate()
+                // TODO: get rid of unwrap
+                .map(|(i, t)| {
+                    analysis.predicate_types.get(&fact.0.predicate()).unwrap()[i]
+                        .ground_term_to_data_value_t(t.clone())
                 })
                 .collect();
 

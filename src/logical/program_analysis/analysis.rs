@@ -37,6 +37,8 @@ pub struct RuleAnalysis {
 
     /// Logical Type of each Variable
     pub variable_types: HashMap<Variable, LogicalTypeEnum>,
+    /// Logical Type of predicates in Rule
+    pub predicate_types: HashMap<Identifier, Vec<LogicalTypeEnum>>,
 }
 
 fn is_recursive(rule: &Rule) -> bool {
@@ -145,12 +147,19 @@ fn analyze_rule(
                             .get(var)
                             .expect("We made sure every variable has a type (possibly default).")
                     } else {
-                        Default::default() // TODO: we should not just treat the constant positions as default probably...
+                        // TODO: we should not just treat the constant positions as default probably...
+                        Default::default()
                     }
                 })
                 .collect(),
         );
     });
+
+    let rule_preds: Vec<Identifier> = body_atoms
+        .iter()
+        .chain(head_atoms.iter())
+        .map(|a| a.predicate())
+        .collect();
 
     RuleAnalysis {
         is_existential: num_existential > 0,
@@ -161,12 +170,16 @@ fn analyze_rule(
         body_variables: get_variables(&body_atoms),
         head_variables: get_variables(&head_atoms),
         num_existential,
-        // TODO: not sure if this is a good way to introduce a fresh head identifier; I'm not quite sute why it is even required
+        // TODO: not sure if this is a good way to introduce a fresh head identifier; I'm not quite sure why it is even required
         head_matches_identifier: Identifier(format!(
             "FRESH_HEAD_MATCHES_IDENTIFIER_FOR_RULE_{rule_index}"
         )),
         promising_variable_orders,
         variable_types,
+        predicate_types: type_declarations
+            .iter()
+            .filter_map(|(k, v)| rule_preds.contains(k).then(|| (k.clone(), v.clone())))
+            .collect(),
     }
 }
 

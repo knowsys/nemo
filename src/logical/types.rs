@@ -4,7 +4,9 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use crate::error::Error;
-use crate::physical::datatypes::DataTypeName;
+use crate::physical::datatypes::{DataTypeName, DataValueT};
+
+use super::model::{Identifier, NumericLiteral, RdfLiteral, Term};
 
 macro_rules! count {
     () => (0usize);
@@ -62,6 +64,46 @@ impl From<LogicalTypeEnum> for DataTypeName {
         match source {
             LogicalTypeEnum::RdfsResource => Self::String,
             LogicalTypeEnum::UnsignedInteger => Self::U64,
+        }
+    }
+}
+
+impl LogicalTypeEnum {
+    // TODO: probably return result instead of panicing
+    /// Convert a given ground term to a DataValueT fitting the current logical type
+    pub fn ground_term_to_data_value_t(&self, gt: Term) -> DataValueT {
+        match self {
+            Self::RdfsResource => {
+                match gt {
+                    Term::Variable(_) => {
+                        panic!("Expecting ground term for conversion to DataValueT")
+                    }
+                    Term::Constant(Identifier(s)) => DataValueT::String(s),
+                    // TODO: maybe implement display on numeric literal instead?
+                    Term::NumericLiteral(NumericLiteral::Integer(i)) => {
+                        DataValueT::String(i.to_string())
+                    }
+                    Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
+                        DataValueT::String(format!("{a}.{b}"))
+                    }
+                    Term::NumericLiteral(NumericLiteral::Double(d)) => {
+                        DataValueT::String(d.to_string())
+                    }
+                    Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
+                        DataValueT::String(format!("{value}@{tag}"))
+                    }
+                    Term::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
+                        DataValueT::String(format!("{value}^^{datatype}"))
+                    }
+                }
+            }
+            Self::UnsignedInteger => {
+                match gt {
+                    // TODO: get rid of unwrap in next line
+                    Term::NumericLiteral(NumericLiteral::Integer(i)) => DataValueT::U64(i.try_into().unwrap()),
+                    _ => panic!("Only NumericLiteral::Integer terms are supported for logical type UnsignedInteger!"),
+                }
+            }
         }
     }
 }

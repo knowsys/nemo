@@ -351,7 +351,6 @@ impl TableManager {
     /// Intitializes helper structures that are needed for handling the table associated with the predicate.
     /// Must be done before calling functions that add tables to that predicate.
     pub fn register_predicate(&mut self, predicate: Identifier, types: Vec<LogicalTypeEnum>) {
-        // TODO: Change this once type system is integrated
         let predicate_info = PredicateInfo {
             schema: TableSchema::from_vec(types.iter().copied().map(Into::into).collect()),
         };
