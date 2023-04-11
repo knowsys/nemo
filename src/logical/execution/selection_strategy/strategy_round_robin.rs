@@ -31,27 +31,28 @@ impl RuleSelectionStrategy for StrategyRoundRobin {
     }
 
     fn next_rule(&mut self, new_derivations: Option<bool>) -> Option<usize> {
-        let new_derivations = if let Some(new) = new_derivations {
-            new
-        } else {
-            // If it is the first rule application then either return the first rule
-            // or finish the computation if the program is empty.
-            return if self.rule_count > 0 { Some(0) } else { None };
-        };
+        // Only switch to a different rule if the rule is not
+        // recursive or if there are no new derivations
+        let mut update_rule_index = !self.self_recursive[self.current_rule_index];
 
-        if new_derivations {
-            self.without_derivation = 0;
-        } else {
-            self.without_derivation += 1;
+        match new_derivations {
+            Some(true) => self.without_derivation = 0,
+            Some(false) => {
+                self.without_derivation += 1;
+                // no new derivations, switch to a different rule
+                update_rule_index = true;
+            }
+            None => {
+                // If it is the first rule application then either return the first rule
+                // or finish the computation if the program is empty.
+                return (self.rule_count > 0).then_some(0);
+            }
         }
 
         // Finish the computation if every rule has been applied with no derivation
         if self.without_derivation >= self.rule_count {
             return None;
         }
-
-        // If we have a derivation and the rule is recursive we want to stay on the same rule
-        let update_rule_index = !new_derivations || !self.self_recursive[self.current_rule_index];
 
         if update_rule_index {
             self.current_rule_index = (self.current_rule_index + 1) % self.rule_count;
