@@ -3,6 +3,7 @@
 use clap::Parser;
 use stage2::error::Error;
 use stage2::io::parser::{all_input_consumed, RuleParser};
+use stage2::logical::execution::selection_strategy::strategy_round_robin::StrategyRoundRobin;
 use stage2::logical::execution::ExecutionEngine;
 use stage2::logical::model::Program;
 use stage2::meta::TimedCode;
@@ -76,7 +77,7 @@ impl CliApp {
 
         let app_state = self.parse_rules()?;
 
-        let mut exec_engine = ExecutionEngine::initialize(app_state.program);
+        let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program);
 
         TimedCode::instance().sub("Reading & Preprocessing").stop();
         TimedCode::instance().sub("Reasoning").start();
