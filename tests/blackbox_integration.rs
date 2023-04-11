@@ -112,13 +112,13 @@ impl TestCase {
             let mut output_lines = read_to_string(output_file)
                 .unwrap()
                 .trim()
-                .split('\n')
+                .lines()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>();
             let mut expected_lines = read_to_string(expected_file)
                 .unwrap()
                 .trim()
-                .split('\n')
+                .lines()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>();
             output_lines.sort();
