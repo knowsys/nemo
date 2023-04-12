@@ -50,7 +50,7 @@ pub enum Error {
     #[error(transparent)]
     IO(#[from] std::io::Error),
     /// File exists and should not be overwritten
-    #[error("File \"{filename}\" exists and would be overwritten!\nConsider to use the overwrite results option, change the output directory, or clean up your results directory. See --help for details on options.")]
+    #[error("File \"{filename}\" exists and would be overwritten!\nConsider to use the overwrite results option (--overwrite-results), change the output directory (--output <directory>), or clean up your results directory. See --help for details on options.")]
     IOExists {
         /// Contains the wrapped error
         error: std::io::Error,
