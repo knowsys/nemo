@@ -195,7 +195,7 @@ impl<'a> RuleParser<'a> {
     ) -> impl FnMut(&'a str) -> IntermediateResult<(Identifier, Vec<LogicalTypeEnum>)> {
         traced("parse_predicate_declaration", move |input| {
             let (remainder, (predicate, types)) = delimited(
-                terminated(tag("@declaration"), multispace1),
+                terminated(tag("@declare"), multispace1),
                 pair(
                     self.parse_predicate_name(),
                     delimited(
@@ -218,7 +218,7 @@ impl<'a> RuleParser<'a> {
     fn parse_type_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<LogicalTypeEnum> {
         traced("parse_type_name", move |input| {
             let (remainder, type_name) = (map_res(
-                recognize(pair(alpha1, many0(none_of(",")))),
+                recognize(pair(alpha1, many0(none_of(",)")))),
                 |name: &str| {
                     // NOTE: type names may not contain commata but any other character (they should start with [a-zA-Z] though)
                     name.parse()
