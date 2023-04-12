@@ -1,0 +1,8 @@
+@declare a(RdfsResource, UnsignedInteger) .
+@declare c(UnsignedInteger) .
+
+@source c[1]: load-csv("sources/c.csv") .
+
+a(Hello, ?X) :- c(?X) .
+b(?Y, ?X) :- a(?X, ?Y) .
+a(?Y, ?X) :- b(?X, ?Y) .
