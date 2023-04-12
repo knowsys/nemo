@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use crate::{
     error::Error,
+    io::dsv::CSVWriter,
     logical::{
         model::{DataSource, Identifier, Program},
         program_analysis::analysis::ProgramAnalysis,
@@ -11,11 +12,7 @@ use crate::{
         TableManager,
     },
     meta::TimedCode,
-    physical::{
-        datatypes::DataValueT,
-        management::database::{TableId, TableSource},
-        tabular::table_types::trie::DebugTrie,
-    },
+    physical::{datatypes::DataValueT, management::database::TableSource},
 };
 
 use super::{rule_execution::RuleExecution, selection_strategy::strategy::RuleSelectionStrategy};
@@ -242,36 +239,32 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(())
     }
 
-    /// Return the output tries that resulted form the execution.
-    pub fn get_results(&mut self) -> Result<Vec<(Identifier, DebugTrie)>, Error> {
-        let mut result_ids = Vec::<(Identifier, TableId)>::new();
+    /// Write the output tries that resulted form the execution to disk as CSV.
+    pub fn write_all_results(&mut self, writer: &CSVWriter) -> Result<(), Error> {
         for predicate in &self.analysis.derived_predicates {
             if let Some(combined_id) = self.table_manager.combine_predicate(predicate.clone())? {
-                result_ids.push((predicate.clone(), combined_id));
+                self.table_manager
+                    .write_table_to_disk(writer, predicate, combined_id)?;
+            } else {
+                writer.create_file(predicate)?;
             }
         }
 
-        let result = result_ids
-            .into_iter()
-            .map(|(p, id)| (p, self.table_manager.table_from_id(id)))
-            .collect();
-
-        Ok(result)
+        Ok(())
     }
 
-    /// Iterator over all IDB predicates, with Tries if present.
-    pub fn idb_predicates(
-        &mut self,
-    ) -> Result<impl Iterator<Item = (Identifier, Option<DebugTrie>)>, Error> {
+    /// Write tries for all IDB predicates to disk as CSV if present.
+    pub fn write_idb_results(&mut self, writer: &CSVWriter) -> Result<(), Error> {
         let idbs = self.program.idb_predicates();
-        let mut tables = self.get_results()?.into_iter().collect::<HashMap<_, _>>();
-        let mut result = Vec::new();
-
         for predicate in idbs {
-            let table = tables.remove(&predicate);
-            result.push((predicate, table));
+            if let Some(combined_id) = self.table_manager.combine_predicate(predicate.clone())? {
+                self.table_manager
+                    .write_table_to_disk(writer, &predicate, combined_id)?
+            } else {
+                writer.create_file(&predicate)?;
+            }
         }
 
-        Ok(result.into_iter())
+        Ok(())
     }
 }

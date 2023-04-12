@@ -17,7 +17,6 @@ use crate::physical::datatypes::{storage_value::VecT, StorageTypeName, StorageVa
 use crate::physical::dictionary::Dictionary;
 use crate::physical::management::database::Dict;
 use crate::physical::management::ByteSized;
-use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
 use std::cell::UnsafeCell;
 use std::fmt;
@@ -75,9 +74,8 @@ impl Trie {
     }
 
     /// Convert the trie into a vector of columns with equal length.
-    /// This will also reorder or leave out columns according to the given [`ProjectReordering`]
     /// TODO: unify this with Display Trait implementation and `format_as_csv` function
-    pub fn as_column_vector(&self, project_reordering: &ProjectReordering) -> Vec<VecT> {
+    pub fn as_column_vector(&self) -> Vec<VecT> {
         if self.columns.is_empty() {
             return Vec::new();
         }
@@ -169,7 +167,7 @@ impl Trie {
         }
 
         result_columns.reverse();
-        project_reordering.transform_consumed(result_columns)
+        result_columns
     }
 
     /// Determines how null values are represented.

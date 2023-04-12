@@ -3,16 +3,14 @@
 use super::{model::Identifier, types::LogicalTypeEnum};
 use crate::{
     error::Error,
+    io::dsv::CSVWriter,
     physical::{
         management::{
             database::{ColumnOrder, TableId, TableSource},
             execution_plan::ExecutionNodeRef,
             DatabaseInstance, ExecutionPlan,
         },
-        tabular::{
-            table_types::trie::{DebugTrie, Trie},
-            traits::table_schema::TableSchema,
-        },
+        tabular::{table_types::trie::Trie, traits::table_schema::TableSchema},
         util::mapping::permutation::Permutation,
     },
 };
@@ -289,11 +287,23 @@ impl TableManager {
         self.predicate_subtables.get(&predicate)?.last_step()
     }
 
-    /// Return a [`DebugTrie`] that is associated with the given id.
+    /// Write the Trie associated with the given id to CSV.
     /// Uses the default [`ColumnOrder`]
     /// Panics if there is no trie associated with the given id.
-    pub fn table_from_id(&self, id: TableId) -> DebugTrie {
-        self.database.get_debug_trie(id, &ColumnOrder::default())
+    pub fn write_table_to_disk(
+        &self,
+        writer: &CSVWriter,
+        pred: &Identifier,
+        id: TableId,
+    ) -> Result<(), Error> {
+        writer.write_predicate(
+            pred,
+            self.database.table_schema(id),
+            self.database
+                .get_trie(id, &ColumnOrder::default())
+                .as_column_vector(),
+            &self.database.get_dict_constants(),
+        )
     }
 
     /// Combine all subtables of a predicate into one table

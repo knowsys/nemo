@@ -12,8 +12,8 @@ use crate::io::builder_proxy::{
 use crate::logical::model::Identifier;
 use crate::physical::datatypes::storage_value::VecT;
 use crate::physical::datatypes::DataTypeName;
+use crate::physical::dictionary::Dictionary;
 use crate::physical::management::database::Dict;
-use crate::physical::tabular::table_types::trie::DebugTrie;
 use crate::physical::tabular::traits::table_schema::TableSchema;
 use csv::{Reader, ReaderBuilder};
 use flate2::write::GzEncoder;
@@ -226,26 +226,73 @@ impl CSVWriter<'_> {
     /// Writes a predicate as a csv-file into the corresponding result-directory
     /// # Parameters
     /// * `pred` is a [`&Identifier`], representing a predicate
-    /// * `trie` is the [`Trie`] which holds all the content of the given predicate
+    /// * `schema` is the [`TableSchema`] associated with the prediacte
+    /// * `cols` is vector of [`VecT`] respresenting columns
     /// * `dict` is a [`Dictionary`], containing the mapping of the internal number representation to a [`String`]
     /// # Returns
     /// * [`Ok`][std::result::Result::Ok] if the predicate could be written to the csv-file
     /// * [`Error`] in case of any issues during writing the file
-    pub fn write_predicate(&self, pred: &Identifier, trie: DebugTrie) -> Result<(), Error> {
+    pub fn write_predicate(
+        &self,
+        pred: &Identifier,
+        schema: &TableSchema,
+        cols: Vec<VecT>,
+        dict: &Dict,
+    ) -> Result<(), Error> {
         log::debug!("Writing {}", pred.name());
-        let (mut file, filename) = self.create_file(pred)?;
+        let (file, filename) = self.create_file(pred)?;
         log::debug!("Outputting into {filename}");
-        let content = trie;
-        match self.compression_format {
-            FileCompression::Gzip(_) => {
-                write!(GzEncoder::new(file, GZIP_COMPRESSION_LEVEL), "{}", &content)
-            }
-            FileCompression::None(_) => {
-                write!(file, "{}", &content)?;
-                file.flush()
-            }
+
+        let num_rows = if let Some(col) = cols.first() {
+            col.len()
+        } else {
+            return Ok(()); // there is nothing to write
+        };
+
+        let mut writer: Box<dyn Write> = match self.compression_format {
+            FileCompression::Gzip(_) => Box::new(GzEncoder::new(file, GZIP_COMPRESSION_LEVEL)),
+            FileCompression::None(_) => Box::new(file),
+        };
+
+        // TODO: have a similar solution as for the proxy builders for writing to prevent unpacking enums over and over again
+        for row_idx in 0..num_rows {
+            let row: Vec<String> = (0..cols.len()).map(|col_idx| {
+                match schema[col_idx] {
+                    DataTypeName::String => match &cols[col_idx] {
+                        VecT::U64(val) => dict.entry(val[row_idx].try_into().expect("We were able to store this so we should be able to read this as well.")).unwrap_or_else(|| format!("<__Null#{}>", val[row_idx])),
+                        _ => unreachable!("DataType and Storage Type are incompatible. This should never happen!"),
+                    }
+                    DataTypeName::U64 => match &cols[col_idx] {
+                        VecT::U64(val) => val[row_idx].to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
+                        _ => unreachable!("DataType and Storage Type are incompatible. This should never happen!"),
+                    }
+                    DataTypeName::U32 => match &cols[col_idx] {
+                        VecT::U32(val) => val[row_idx].to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
+                        _ => unreachable!("DataType and Storage Type are incompatible. This should never happen!"),
+                    }
+                    DataTypeName::Float => match &cols[col_idx] {
+                        VecT::Float(val) => val[row_idx].to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
+                        _ => unreachable!("DataType and Storage Type are incompatible. This should never happen!"),
+                    }
+                    DataTypeName::Double => match &cols[col_idx] {
+                        VecT::Double(val) => val[row_idx].to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
+                        _ => unreachable!("DataType and Storage Type are incompatible. This should never happen!"),
+                    }
+                }
+            }).collect();
+
+            writeln!(writer, "{}", &row.join(",")).map_err(|error| Error::IOWriting {
+                error,
+                filename: filename.clone(),
+            })?;
         }
-        .map_err(|error| Error::IOWriting { error, filename })
+
+        writer.flush().map_err(|error| Error::IOWriting {
+            error,
+            filename: filename.clone(),
+        })?;
+
+        Ok(())
     }
 }
 
