@@ -525,12 +525,6 @@ mod test {
         )))
         .unwrap();
 
-        log::debug!(
-            "\n{}\n\n{}",
-            trie.debug(Dict::default()),
-            trie_reordered.debug(Dict::default())
-        );
-
         assert_eq!(trie.row_num(), trie_reordered.row_num());
 
         let proj_column_upper = trie_reordered.get_column(0).as_u64().unwrap();
