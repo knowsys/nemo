@@ -49,4 +49,12 @@ pub enum Error {
     /// IO Error
     #[error(transparent)]
     IO(#[from] std::io::Error),
+    /// File exists and should not be overwritten
+    #[error("File \"{filename}\" exists and would be overwritten!\nConsider using the `--overwrite-results` option, setting a different `--output` directory, or deleting \"{filename}\".")]
+    IOExists {
+        /// Contains the wrapped error
+        error: std::io::Error,
+        /// Filename which caused the error
+        filename: String,
+    },
 }

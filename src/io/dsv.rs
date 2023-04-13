@@ -176,14 +176,15 @@ impl CSVWriter<'_> {
             ..Default::default()
         };
         let file_name = sanitise_with_options(pred, &sanitise_options);
-        let file_path = PathBuf::from(format!(
+        let file_name_with_extensions = format!(
             "{}/{file_name}.csv{}",
             self.path
                 .as_os_str()
                 .to_str()
                 .expect("Path should be a unicode string"),
             if self.gzip { ".gz" } else { "" }
-        ));
+        );
+        let file_path = PathBuf::from(file_name_with_extensions.clone());
         log::info!("Creating {pred} as {file_path:?}");
         let mut options = OpenOptions::new();
         options.write(true);
@@ -192,7 +193,13 @@ impl CSVWriter<'_> {
         } else {
             options.create_new(true);
         };
-        options.open(file_path).map_err(|err| err.into())
+        options.open(file_path).map_err(|err| match err.kind() {
+            std::io::ErrorKind::AlreadyExists => Error::IOExists {
+                error: err,
+                filename: file_name_with_extensions,
+            },
+            _ => err.into(),
+        })
     }
     /// Writes a predicate as a csv-file into the corresponding result-directory
     /// # Parameters
