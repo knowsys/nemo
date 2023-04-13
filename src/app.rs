@@ -1,14 +1,20 @@
 //! Contains structures and functionality for the binary
 
 use clap::Parser;
-use nemo::error::Error;
-use nemo::io::parser::{all_input_consumed, RuleParser};
-use nemo::logical::execution::selection_strategy::strategy_round_robin::StrategyRoundRobin;
-use nemo::logical::execution::ExecutionEngine;
-use nemo::logical::model::Program;
-use nemo::meta::TimedCode;
 use std::fs::read_to_string;
 use std::path::PathBuf;
+
+use nemo::{
+    error::Error,
+    io::parser::{all_input_consumed, RuleParser},
+    logical::{
+        execution::{
+            selection_strategy::strategy_round_robin::StrategyRoundRobin, ExecutionEngine,
+        },
+        model::Program,
+    },
+    meta::TimedCode,
+};
 
 /// Application state
 struct AppState {

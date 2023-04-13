@@ -1,19 +1,23 @@
 use std::fs::File;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use nemo::io::dsv::DSVReader;
 use polars::prelude::{CsvReader, DataFrame, DataType, JoinType, Schema, SerReader};
 
-use nemo::physical::tabular::operations::triescan_project::ProjectReordering;
-use nemo::physical::tabular::operations::{
-    materialize, JoinBindings, TrieScanJoin, TrieScanProject, TrieScanUnion,
-};
-use nemo::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
-use nemo::physical::tabular::traits::table_schema::TableSchema;
-use nemo::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
 use nemo::{
+    io::dsv::DSVReader,
     logical::model::DataSource,
-    physical::{datatypes::DataTypeName, dictionary::PrefixedStringDictionary},
+    physical::{
+        datatypes::DataTypeName,
+        dictionary::PrefixedStringDictionary,
+        tabular::{
+            operations::{
+                materialize, triescan_project::ProjectReordering, JoinBindings, TrieScanJoin,
+                TrieScanProject, TrieScanUnion,
+            },
+            table_types::trie::{Trie, TrieScanGeneric},
+            traits::{table::Table, table_schema::TableSchema, triescan::TrieScanEnum},
+        },
+    },
 };
 
 fn load_trie(source: &DataSource, arity: usize, dict: &mut PrefixedStringDictionary) -> Trie {
