@@ -30,7 +30,7 @@ impl AppState {
 
 const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
 
-/// Stage 2 CLI
+/// Nemo 2 CLI
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 pub struct CliApp {
