@@ -1,7 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
-use stage2::physical::columnar::{
+
+use nemo::physical::columnar::{
     column_types::{rle::ColumnRle, vector::ColumnVector},
     traits::{column::Column, columnscan::ColumnScan},
 };

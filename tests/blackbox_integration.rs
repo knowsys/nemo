@@ -93,7 +93,7 @@ impl TestCase {
     }
 
     fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut cmd = Command::cargo_bin("stage2")?;
+        let mut cmd = Command::cargo_bin("nemo")?;
 
         cmd.current_dir(self.test_dir.as_path())
             .arg("-s")

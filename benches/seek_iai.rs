@@ -1,9 +1,9 @@
-use rand::prelude::*;
-use rand_pcg::Pcg64;
-use stage2::physical::columnar::{
+use nemo::physical::columnar::{
     column_types::vector::ColumnVector,
     traits::{column::Column, columnscan::ColumnScan},
 };
+use rand::prelude::*;
+use rand_pcg::Pcg64;
 
 pub fn bench() {
     let mut rng = Pcg64::seed_from_u64(21564);

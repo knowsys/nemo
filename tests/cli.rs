@@ -6,7 +6,7 @@ use test_log::test;
 #[cfg_attr(miri, ignore)]
 #[test]
 fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
-    let bin = "stage2";
+    let bin = "nemo";
     let mut cmd = Command::cargo_bin(bin)?;
     cmd.arg("-vvv").arg("Non-existing-file.rls");
     cmd.assert()

@@ -17,9 +17,9 @@ Integration testing is done in the related `tests` directory on the top-level of
 
 ## Submitting changes
 
-Please send a [GitHub Pull Request to knowsys/stage2](https://github.com/knowsys/stage2/pull/new/main) with a clear list of what you've done (read more about [pull requests](http://help.github.com/pull-requests/)). When you send a pull request be sure to check open and claimed tickets first. We can always use more test coverage. Please follow our coding conventions (below).
+Please send a [GitHub Pull Request to knowsys/nemo](https://github.com/knowsys/nemo/pull/new/main) with a clear list of what you've done (read more about [pull requests](http://help.github.com/pull-requests/)). When you send a pull request be sure to check open and claimed tickets first. We can always use more test coverage. Please follow our coding conventions (below).
 
-Always write a clear log message for your commits. One-line messages are fine for small changes, but bigger changes should have a commit-paragraph and/or a related and appropriately mentioned [issue](https://github.com/knowsys/stage2/issues).
+Always write a clear log message for your commits. One-line messages are fine for small changes, but bigger changes should have a commit-paragraph and/or a related and appropriately mentioned [issue](https://github.com/knowsys/nemo/issues).
 
 Before creating the pull request be sure to check if
 - [ ] all already existing tests are passing,
