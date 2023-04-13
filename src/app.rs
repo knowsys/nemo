@@ -1,12 +1,12 @@
 //! Contains structures and functionality for the binary
 
 use clap::Parser;
-use stage2::error::Error;
-use stage2::io::parser::{all_input_consumed, RuleParser};
-use stage2::logical::execution::selection_strategy::strategy_round_robin::StrategyRoundRobin;
-use stage2::logical::execution::ExecutionEngine;
-use stage2::logical::model::Program;
-use stage2::meta::TimedCode;
+use nemo::error::Error;
+use nemo::io::parser::{all_input_consumed, RuleParser};
+use nemo::logical::execution::selection_strategy::strategy_round_robin::StrategyRoundRobin;
+use nemo::logical::execution::ExecutionEngine;
+use nemo::logical::model::Program;
+use nemo::meta::TimedCode;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
@@ -93,11 +93,8 @@ impl CliApp {
                 .sub("Output & Final Materialization")
                 .start();
             log::info!("writing output");
-            let csv_writer = stage2::io::dsv::CSVWriter::try_new(
-                &self.output_directory,
-                self.overwrite,
-                self.gz,
-            )?;
+            let csv_writer =
+                nemo::io::dsv::CSVWriter::try_new(&self.output_directory, self.overwrite, self.gz)?;
             // TODO fix cloning
             exec_engine.idb_predicates()?.try_for_each(|(pred, trie)| {
                 let pred_name = pred.name();

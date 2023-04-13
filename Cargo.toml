@@ -1,5 +1,5 @@
 [package]
-name = "stage2"
+name = "nemo"
 authors = [
 "Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
 "Lukas Gerlach <lukas.gerlach@tu-dresden.de>",

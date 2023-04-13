@@ -1,17 +1,17 @@
 use std::fs::File;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use nemo::io::dsv::DSVReader;
 use polars::prelude::{CsvReader, DataFrame, DataType, JoinType, Schema, SerReader};
-use stage2::io::dsv::DSVReader;
 
-use stage2::physical::tabular::operations::triescan_project::ProjectReordering;
-use stage2::physical::tabular::operations::{
+use nemo::physical::tabular::operations::triescan_project::ProjectReordering;
+use nemo::physical::tabular::operations::{
     materialize, JoinBindings, TrieScanJoin, TrieScanProject, TrieScanUnion,
 };
-use stage2::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
-use stage2::physical::tabular::traits::table_schema::TableSchema;
-use stage2::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
-use stage2::{
+use nemo::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
+use nemo::physical::tabular::traits::table_schema::TableSchema;
+use nemo::physical::tabular::traits::{table::Table, triescan::TrieScanEnum};
+use nemo::{
     logical::model::DataSource,
     physical::{datatypes::DataTypeName, dictionary::PrefixedStringDictionary},
 };

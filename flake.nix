@@ -1,5 +1,5 @@
 {
-  description = "stage2, the next stage of Datalog reasoning";
+  description = "nemo, the next stage of Datalog reasoning";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.05";

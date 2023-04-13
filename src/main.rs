@@ -1,5 +1,5 @@
 /*!
-  Binary for the CLI of stage2
+  Binary for the CLI of nemo
 */
 
 #![deny(
@@ -22,8 +22,8 @@ pub mod app;
 
 use clap::Parser;
 
-use stage2::meta::timing::TimedDisplay;
-use stage2::meta::TimedCode;
+use nemo::meta::timing::TimedDisplay;
+use nemo::meta::TimedCode;
 
 fn main() {
     TimedCode::instance().start();
@@ -36,11 +36,11 @@ fn main() {
     println!(
         "\n{}",
         TimedCode::instance().create_tree_string(
-            "stage2",
+            "nemo",
             &[
                 TimedDisplay::default(),
                 TimedDisplay::default(),
-                TimedDisplay::new(stage2::meta::timing::TimedSorting::LongestThreadTime, 0)
+                TimedDisplay::new(nemo::meta::timing::TimedSorting::LongestThreadTime, 0)
             ]
         )
     );
