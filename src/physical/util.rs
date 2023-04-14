@@ -1,5 +1,6 @@
 //! This module collects miscellaneous functionality.
 
+pub mod labeled_graph;
 pub mod mapping;
 
 /// Module for utility functions used in tests

@@ -1,8 +1,13 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
-use crate::logical::{
-    model::{Atom, Identifier, Program, Rule, Term, Variable},
-    types::LogicalTypeEnum,
+use petgraph::{visit::Dfs, Undirected};
+
+use crate::{
+    logical::{
+        model::{Atom, Identifier, Program, Rule, Term, Variable},
+        types::LogicalTypeEnum,
+    },
+    physical::util::labeled_graph::NodeLabeledGraph,
 };
 
 use super::variable_order::{build_preferable_variable_orders, VariableOrder};
@@ -80,80 +85,39 @@ fn get_predicates(atoms: &[&Atom]) -> HashSet<Identifier> {
     atoms.iter().map(|a| a.predicate()).collect()
 }
 
+fn get_fresh_rule_predicate(rule_index: usize) -> Identifier {
+    Identifier(format!(
+        "FRESH_HEAD_MATCHES_IDENTIFIER_FOR_RULE_{rule_index}"
+    ))
+}
+
 fn analyze_rule(
     rule: &Rule,
     promising_variable_orders: Vec<VariableOrder>,
     rule_index: usize,
-    type_declarations: &mut HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    type_declarations: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
 ) -> RuleAnalysis {
     let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
     let head_atoms: Vec<&Atom> = rule.head().iter().collect();
 
     let num_existential = count_distinct_existential_variables(rule);
 
-    // TODO: infering of types is only done in the order in that rules are parsed, a different order may allow to infer more types...
-    // TODO: ground terms (e.g. constants) should probably also be considered for validation
-
     // Check if type declarations are violated; add them if they do not exist
     let mut variable_types: HashMap<Variable, LogicalTypeEnum> = HashMap::new();
+    for atom in body_atoms.iter().chain(head_atoms.iter()) {
+        for (term_position, term) in atom.terms().iter().enumerate() {
+            if let Term::Variable(variable) = term {
+                if let Entry::Vacant(entry) = variable_types.entry(variable.clone()) {
+                    let assigned_type = type_declarations
+                        .get(&atom.predicate())
+                        .expect("Every predicate should have recived type information.")
+                        [term_position];
 
-    // FIRST: Assign Types to variables based on known predicate types
-    for (decl, term) in body_atoms
-        .iter()
-        .chain(head_atoms.iter())
-        .filter_map(|atom| {
-            type_declarations
-                .get(&atom.predicate())
-                .map(|decls| decls.iter().zip(atom.terms()))
-        })
-        .flatten()
-    {
-        if let Term::Variable(var) = term {
-            match variable_types.get(var) {
-                Some(decl_occ) => {
-                    if decl != decl_occ {
-                        // TODO: proper error handling
-                        panic!("type declaration mismatch");
-                    }
-                }
-                None => {
-                    variable_types.insert(var.clone(), *decl);
+                    entry.insert(assigned_type);
                 }
             }
         }
     }
-
-    // SECOND: Set unknown variable types to default type
-    body_atoms
-        .iter()
-        .chain(head_atoms.iter())
-        .flat_map(|atom| atom.terms())
-        .for_each(|term| {
-            if let Term::Variable(var) = term {
-                variable_types
-                    .entry(var.clone())
-                    .or_insert(Default::default());
-            }
-        });
-
-    // THIRD: Update predicate types based on variable
-    body_atoms.iter().chain(head_atoms.iter()).for_each(|atom| {
-        type_declarations.entry(atom.predicate()).or_insert(
-            atom.terms()
-                .iter()
-                .map(|term| {
-                    if let Term::Variable(var) = term {
-                        *variable_types
-                            .get(var)
-                            .expect("We made sure every variable has a type (possibly default).")
-                    } else {
-                        // TODO: we should not just treat the constant positions as default probably...
-                        Default::default()
-                    }
-                })
-                .collect(),
-        );
-    });
 
     let rule_preds: Vec<Identifier> = body_atoms
         .iter()
@@ -171,9 +135,7 @@ fn analyze_rule(
         head_variables: get_variables(&head_atoms),
         num_existential,
         // TODO: not sure if this is a good way to introduce a fresh head identifier; I'm not quite sure why it is even required
-        head_matches_identifier: Identifier(format!(
-            "FRESH_HEAD_MATCHES_IDENTIFIER_FOR_RULE_{rule_index}"
-        )),
+        head_matches_identifier: get_fresh_rule_predicate(rule_index),
         promising_variable_orders,
         variable_types,
         predicate_types: type_declarations
@@ -182,6 +144,26 @@ fn analyze_rule(
             .collect(),
     }
 }
+
+/// Identifies a position within a predicate.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PredicatePosition {
+    predicate: Identifier,
+    position: usize,
+}
+
+impl PredicatePosition {
+    /// Create new [`PredicatePosition`].
+    pub fn new(predicate: Identifier, position: usize) -> Self {
+        Self {
+            predicate,
+            position,
+        }
+    }
+}
+
+/// Graph that represents a prioritization between rules.
+pub type PositionGraph = NodeLabeledGraph<PredicatePosition, Undirected>;
 
 /// Contains useful information about the
 #[derive(Debug)]
@@ -194,6 +176,8 @@ pub struct ProgramAnalysis {
     pub all_predicates: HashSet<(Identifier, usize)>,
     /// Logical Type Declarations for Predicates
     pub predicate_types: HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    /// Graph representing the information flow between predicates
+    pub position_graph: PositionGraph,
 }
 
 impl Program {
@@ -211,7 +195,7 @@ impl Program {
     }
 
     /// Collect all predicates occurring in the program.
-    fn get_all_predicates(&self, rule_analysis: &[RuleAnalysis]) -> HashSet<(Identifier, usize)> {
+    fn get_all_predicates(&self) -> HashSet<(Identifier, usize)> {
         let mut result = HashSet::<(Identifier, usize)>::new();
 
         // Predicates in source statments
@@ -236,16 +220,20 @@ impl Program {
         }
 
         // Additional predicates for existential rules
-        for analysis in rule_analysis {
-            if !analysis.is_existential {
+        for (rule_index, rule) in self.rules().iter().enumerate() {
+            let is_existential = count_distinct_existential_variables(rule) > 0;
+            if !is_existential {
                 continue;
             }
 
-            let predicate = analysis.head_matches_identifier.clone();
-            let arity = analysis
-                .head_variables
-                .difference(&analysis.body_variables)
-                .count();
+            let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
+            let head_atoms: Vec<&Atom> = rule.head().iter().collect();
+
+            let body_variables = get_variables(&body_atoms);
+            let head_variables = get_variables(&head_atoms);
+
+            let predicate = get_fresh_rule_predicate(rule_index);
+            let arity = head_variables.difference(&body_variables).count();
 
             result.insert((predicate, arity));
         }
@@ -253,27 +241,130 @@ impl Program {
         result
     }
 
+    fn build_position_graph(&self) -> PositionGraph {
+        let mut graph = PositionGraph::default();
+
+        for rule in self.rules() {
+            let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
+            let head_atoms: Vec<&Atom> = rule.head().iter().collect();
+
+            let mut variable_to_last_node = HashMap::<Variable, PredicatePosition>::new();
+
+            for atom in body_atoms.iter().chain(head_atoms.iter()) {
+                for (term_position, term) in atom.terms().iter().enumerate() {
+                    if let Term::Variable(variable) = term {
+                        let predicate_position =
+                            PredicatePosition::new(atom.predicate(), term_position);
+
+                        match variable_to_last_node.entry(variable.clone()) {
+                            Entry::Occupied(mut entry) => {
+                                let last_position = entry.insert(predicate_position.clone());
+                                graph.add_edge(last_position, predicate_position);
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(predicate_position);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        graph
+    }
+
+    fn infer_predicate_types(
+        &self,
+        position_graph: &PositionGraph,
+        all_predicates: &HashSet<(Identifier, usize)>,
+    ) -> HashMap<Identifier, Vec<LogicalTypeEnum>> {
+        // Set all predicate types to unknown
+        let mut predicate_types: HashMap<Identifier, Vec<Option<LogicalTypeEnum>>> = all_predicates
+            .iter()
+            .map(|(predicate, arity)| (predicate.clone(), vec![None; *arity]))
+            .collect();
+
+        // For now we set the type of each variable that occurrs together with an existential variable in the head
+        // to `LogicalTypeEnum::RdfsResource`
+        // TODO: Only set this type for the positions where there is an existential variables
+        for rule in self.rules() {
+            if count_distinct_existential_variables(rule) > 0 {
+                for atom in rule.head() {
+                    predicate_types.insert(
+                        atom.predicate(),
+                        vec![Some(LogicalTypeEnum::RdfsResource); atom.terms().len()],
+                    );
+                }
+            }
+        }
+
+        // Propagate each type from its declaration
+        for (predicate, types) in self.parsed_predicate_declarations() {
+            for (position, logical_type) in types.into_iter().enumerate() {
+                let predicate_position = PredicatePosition::new(predicate.clone(), position);
+
+                if let Some(start_node) = position_graph.get_node(&predicate_position) {
+                    let mut dfs = Dfs::new(position_graph.graph(), start_node);
+
+                    while let Some(next_node) = dfs.next(position_graph.graph()) {
+                        let next_position = position_graph
+                            .graph()
+                            .node_weight(next_node)
+                            .expect("The DFS iterator guarantees that every node exists.");
+
+                        let current_type_opt = &mut predicate_types
+                            .get_mut(&next_position.predicate)
+                            .expect("The initialization step inserted every known predicate")
+                            [next_position.position];
+
+                        if let Some(current_type) = current_type_opt {
+                            if *current_type != logical_type {
+                                // TODO: Throw an error
+                                panic!("Incompatible type declarations.");
+                            }
+                        } else {
+                            *current_type_opt = Some(logical_type);
+                        }
+                    }
+                }
+            }
+        }
+
+        // All the types that are not set will be mapped to a default type
+        predicate_types
+            .into_iter()
+            .map(|(predicate, types)| {
+                (
+                    predicate,
+                    types.into_iter().map(|t| t.unwrap_or_default()).collect(),
+                )
+            })
+            .collect()
+    }
+
     /// Analyze itself and return a struct containing the results.
     pub fn analyze(&self) -> ProgramAnalysis {
         let variable_orders = build_preferable_variable_orders(self, None);
 
-        let mut predicate_types = self.parsed_predicate_declarations();
+        let all_predicates = self.get_all_predicates();
+        let derived_predicates = self.get_head_predicates();
+
+        let position_graph = self.build_position_graph();
+        let predicate_types = self.infer_predicate_types(&position_graph, &all_predicates);
 
         let rule_analysis: Vec<RuleAnalysis> = self
             .rules()
             .iter()
             .enumerate()
-            .map(|(i, r)| analyze_rule(r, variable_orders[i].clone(), i, &mut predicate_types))
+            .map(|(i, r)| analyze_rule(r, variable_orders[i].clone(), i, &predicate_types))
             .collect();
-
-        let derived_predicates = self.get_head_predicates();
-        let all_predicates = self.get_all_predicates(&rule_analysis);
 
         ProgramAnalysis {
             rule_analysis,
             derived_predicates,
             all_predicates,
             predicate_types,
+            position_graph,
         }
     }
 }
