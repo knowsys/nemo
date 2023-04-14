@@ -57,9 +57,9 @@ pub enum Error {
         /// Filename which caused the error
         filename: String,
     },
-    /// File exists and should not be overwritten
-    #[error("File \"{filename}\" does not exist.")]
-    IOExistsNot {
+    /// Errors on reading a file
+    #[error("Failed to read \"{filename}\": {error}.")]
+    IOReading {
         /// Contains the wrapped error
         error: std::io::Error,
         /// Filename which caused the error

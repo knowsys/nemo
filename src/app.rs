@@ -1,16 +1,14 @@
 //! Contains structures and functionality for the binary
 
 use clap::Parser;
-use sanitise_file_name::{sanitise_with_options, Options};
-use std::{
-    fs::{read_to_string, File},
-    io::ErrorKind,
-    path::PathBuf,
-};
+use std::{fs::read_to_string, io::ErrorKind, path::PathBuf};
 
 use nemo::{
     error::Error,
-    io::parser::{all_input_consumed, RuleParser},
+    io::{
+        parser::{all_input_consumed, RuleParser},
+        FileCompression, FileFormat,
+    },
     logical::{
         execution::{
             selection_strategy::strategy_round_robin::StrategyRoundRobin, ExecutionEngine,
@@ -89,11 +87,10 @@ impl CliApp {
 
         // check if output is already existing and overwrite is not set
         if self.save_results && !self.overwrite {
-            self.check_idb_predicate_output_files_not_exist(&app_state)?;
+            self.no_output_file(&app_state)?;
         }
 
         let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program);
-
         TimedCode::instance().sub("Reading & Preprocessing").stop();
         TimedCode::instance().sub("Reasoning").start();
 
@@ -112,11 +109,10 @@ impl CliApp {
                 nemo::io::dsv::CSVWriter::try_new(&self.output_directory, self.overwrite, self.gz)?;
             // TODO fix cloning
             exec_engine.idb_predicates()?.try_for_each(|(pred, trie)| {
-                let pred_name = pred.name();
                 if let Some(trie) = trie {
-                    csv_writer.write_predicate(&pred_name, trie)
+                    csv_writer.write_predicate(&pred, trie)
                 } else {
-                    csv_writer.create_file(&pred_name).map(|_| ())
+                    csv_writer.create_file(&pred).map(|_| ())
                 }
             })?;
 
@@ -162,16 +158,13 @@ impl CliApp {
 
         self.rules.iter().try_for_each(|file| {
             inputs.push(read_to_string(file).map_err(|err| {
-                match err.kind() {
-                    ErrorKind::NotFound => Error::IOExistsNot {
-                        error: err,
-                        filename: file
-                            .clone()
-                            .into_os_string()
-                            .into_string()
-                            .expect("Path shall be representable as string"),
-                    },
-                    _ => err.into(),
+                Error::IOReading {
+                    error: err,
+                    filename: file
+                        .clone()
+                        .into_os_string()
+                        .into_string()
+                        .expect("Path shall be representable as string"),
                 }
             })?);
             Ok::<(), Error>(())
@@ -187,29 +180,18 @@ impl CliApp {
         Ok(AppState::new(program))
     }
 
-    fn check_idb_predicate_output_files_not_exist(
-        &self,
-        app_state: &AppState,
-    ) -> Result<(), Error> {
+    fn no_output_file(&self, app_state: &AppState) -> Result<(), Error> {
         app_state
             .program
             .idb_predicates()
             .iter()
             .try_for_each(|pred| {
-                let sanitise_options = Options::<Option<char>> {
-                    url_safe: true,
-                    ..Default::default()
-                };
-                let file_name = sanitise_with_options(&pred.name(), &sanitise_options);
-                let file_name_with_extensions = format!(
-                    "{}/{file_name}.csv{}",
-                    self.output_directory
-                        .as_os_str()
-                        .to_str()
-                        .expect("Path should be a unicode string"),
-                    if self.gz { ".gz" } else { "" }
+                let file = pred.sanitised_file_name(
+                    self.output_directory.clone(),
+                    FileCompression::new(self.gz, FileFormat::DSV(b',')),
                 );
-                if let Err(err) = File::open(file_name_with_extensions.clone()) {
+                let meta_info = file.metadata();
+                if let Err(err) = meta_info {
                     if err.kind() == ErrorKind::NotFound {
                         Ok::<(), Error>(())
                     } else {
@@ -218,7 +200,11 @@ impl CliApp {
                 } else {
                     Err(Error::IOExists {
                         error: ErrorKind::AlreadyExists.into(),
-                        filename: file_name_with_extensions,
+                        filename: file
+                            .as_os_str()
+                            .to_str()
+                            .expect("Path is expected to be utf-printable")
+                            .to_string(),
                     })
                 }
             })

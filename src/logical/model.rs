@@ -1,12 +1,17 @@
 //! The data model.
 
+use sanitise_file_name::{sanitise_with_options, Options};
 use std::{
     collections::{HashMap, HashSet},
     ops::Neg,
     path::{Path, PathBuf},
 };
 
-use crate::{generate_forwarder, io::parser::ParseError, physical::datatypes::Double};
+use crate::{
+    generate_forwarder,
+    io::{parser::ParseError, FileCompression},
+    physical::datatypes::Double,
+};
 
 /// An identifier for, e.g., a Term or a Predicate.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
@@ -16,6 +21,17 @@ impl Identifier {
     /// Returns the associated name
     pub fn name(&self) -> String {
         self.0.clone()
+    }
+
+    /// Returns a sanitised path with respect to the associated name
+    pub fn sanitised_file_name(&self, mut path: PathBuf, format: FileCompression) -> PathBuf {
+        let sanitise_options = Options::<Option<char>> {
+            url_safe: true,
+            ..Default::default()
+        };
+        let file_name = sanitise_with_options(&self.name(), &sanitise_options);
+        path.push(file_name);
+        format.file_name(path)
     }
 }
 

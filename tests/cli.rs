@@ -11,7 +11,7 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
     cmd.arg("-vvv").arg("Non-existing-file.rls");
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("does not exist"));
+        .stderr(predicate::str::contains("No such file or directory"));
 
     cmd = Command::cargo_bin(bin)?;
     cmd.arg("-h");

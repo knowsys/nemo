@@ -9,6 +9,7 @@ use crate::io::builder_proxy::{
     ColumnBuilderProxy, DoubleColumnBuilderProxy, FloatColumnBuilderProxy,
     StringColumnBuilderProxy, U32ColumnBuilderProxy, U64ColumnBuilderProxy,
 };
+use crate::logical::model::Identifier;
 use crate::physical::datatypes::storage_value::VecT;
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::management::database::Dict;
@@ -17,7 +18,8 @@ use crate::physical::tabular::traits::table_schema::TableSchema;
 use csv::{Reader, ReaderBuilder};
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use sanitise_file_name::{sanitise_with_options, Options};
+
+use super::{FileCompression, FileFormat};
 
 /// A reader Object, which allows to read a DSV (delimiter separated) file
 #[derive(Debug, Clone)]
@@ -63,18 +65,15 @@ impl DSVReader {
     /// Returns a Vector of [VecT] or a corresponding [Error]
     pub fn read(self, schema: &TableSchema, dictionary: &mut Dict) -> Result<Vec<VecT>, Error> {
         let gz_decoder =
-            flate2::read::GzDecoder::new(File::open(self.file.as_path()).map_err(|err| {
-                match err.kind() {
-                    std::io::ErrorKind::NotFound => Error::IOExistsNot {
-                        error: err,
-                        filename: self
-                            .file
-                            .clone()
-                            .into_os_string()
-                            .into_string()
-                            .expect("Path shall be representable as string"),
-                    },
-                    _ => err.into(),
+            flate2::read::GzDecoder::new(File::open(self.file.as_path()).map_err(|error| {
+                Error::IOReading {
+                    error,
+                    filename: self
+                        .file
+                        .as_os_str()
+                        .to_str()
+                        .expect("Path is expected to be utf-printable")
+                        .into(),
                 }
             })?);
         let builder = self.generate_proxies(schema);
@@ -164,7 +163,7 @@ pub struct CSVWriter<'a> {
     /// Overwrite files, note that the target folder will be emptied if `overwrite` is set to [true].
     overwrite: bool,
     /// Gzip csv-file.
-    gzip: bool,
+    compression_format: FileCompression,
 }
 
 impl<'a> CSVWriter<'a> {
@@ -177,29 +176,14 @@ impl<'a> CSVWriter<'a> {
         Ok(CSVWriter {
             path,
             overwrite,
-            gzip,
+            compression_format: FileCompression::new(gzip, FileFormat::DSV(b',')),
         })
     }
 }
 
 impl CSVWriter<'_> {
     /// Creates a csv-file and returns a [`File`] handle to write data.
-    pub fn create_file(&self, pred: &str) -> Result<File, Error> {
-        let sanitise_options = Options::<Option<char>> {
-            url_safe: true,
-            ..Default::default()
-        };
-        let file_name = sanitise_with_options(pred, &sanitise_options);
-        let file_name_with_extensions = format!(
-            "{}/{file_name}.csv{}",
-            self.path
-                .as_os_str()
-                .to_str()
-                .expect("Path should be a unicode string"),
-            if self.gzip { ".gz" } else { "" }
-        );
-        let file_path = PathBuf::from(file_name_with_extensions.clone());
-        log::info!("Creating {pred} as {file_path:?}");
+    pub fn create_file(&self, pred: &Identifier) -> Result<File, Error> {
         let mut options = OpenOptions::new();
         options.write(true);
         if self.overwrite {
@@ -207,31 +191,36 @@ impl CSVWriter<'_> {
         } else {
             options.create_new(true);
         };
-        options.open(file_path).map_err(|err| match err.kind() {
+        let pred_path = pred.sanitised_file_name(self.path.to_path_buf(), self.compression_format);
+        options.open(&pred_path).map_err(|err| match err.kind() {
             std::io::ErrorKind::AlreadyExists => Error::IOExists {
                 error: err,
-                filename: file_name_with_extensions,
+                filename: pred_path
+                    .as_os_str()
+                    .to_str()
+                    .expect("Path is expected to be utf-printable")
+                    .to_string(),
             },
             _ => err.into(),
         })
     }
     /// Writes a predicate as a csv-file into the corresponding result-directory
     /// # Parameters
-    /// * `pred` is a [`&str`], representing a predicate name
+    /// * `pred` is a [`&str`], representing a file where  name
     /// * `trie` is the [`Trie`] which holds all the content of the given predicate
     /// * `dict` is a [`Dictionary`], containing the mapping of the internal number representation to a [`String`]
     /// # Returns
     /// * [`Ok`][std::result::Result::Ok] if the predicate could be written to the csv-file
     /// * [`Error`] in case of any issues during writing the file
-    pub fn write_predicate(&self, pred: &str, trie: DebugTrie) -> Result<(), Error> {
-        log::debug!("Writing {pred}");
+    pub fn write_predicate(&self, pred: &Identifier, trie: DebugTrie) -> Result<(), Error> {
         let mut file = self.create_file(pred)?;
         let content = trie;
-        if self.gzip {
-            write!(GzEncoder::new(file, Compression::best()), "{}", &content)?;
-        } else {
-            write!(file, "{}", &content)?;
-        }
+        match self.compression_format {
+            FileCompression::Gzip(_) => {
+                write!(GzEncoder::new(file, Compression::best()), "{}", &content)?
+            }
+            FileCompression::None(_) => write!(file, "{}", &content)?,
+        };
         Ok(())
     }
 }
