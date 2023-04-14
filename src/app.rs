@@ -1,13 +1,13 @@
 //! Contains structures and functionality for the binary
+use std::{fs::read_to_string, io::ErrorKind, path::PathBuf};
 
 use clap::Parser;
-use std::{fs::read_to_string, io::ErrorKind, path::PathBuf};
 
 use nemo::{
     error::Error,
     io::{
+        dsv::CSVWriter,
         parser::{all_input_consumed, RuleParser},
-        FileCompression, FileFormat,
     },
     logical::{
         execution::{
@@ -85,10 +85,7 @@ impl CliApp {
 
         let app_state = self.parse_rules()?;
 
-        // check if output is already existing and overwrite is not set
-        if self.save_results && !self.overwrite {
-            self.no_output_file(&app_state)?;
-        }
+        self.prevent_accidential_overwrite(&app_state)?;
 
         let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program);
         TimedCode::instance().sub("Reading & Preprocessing").stop();
@@ -107,7 +104,6 @@ impl CliApp {
             log::info!("writing output");
             let csv_writer =
                 nemo::io::dsv::CSVWriter::try_new(&self.output_directory, self.overwrite, self.gz)?;
-            // TODO fix cloning
             exec_engine.idb_predicates()?.try_for_each(|(pred, trie)| {
                 if let Some(trie) = trie {
                     csv_writer.write_predicate(&pred, trie)
@@ -180,33 +176,40 @@ impl CliApp {
         Ok(AppState::new(program))
     }
 
-    fn no_output_file(&self, app_state: &AppState) -> Result<(), Error> {
-        app_state
-            .program
-            .idb_predicates()
-            .iter()
-            .try_for_each(|pred| {
-                let file = pred.sanitised_file_name(
-                    self.output_directory.clone(),
-                    FileCompression::new(self.gz, FileFormat::DSV(b',')),
-                );
-                let meta_info = file.metadata();
-                if let Err(err) = meta_info {
-                    if err.kind() == ErrorKind::NotFound {
-                        Ok::<(), Error>(())
+    /// Checks if results shall be saved without allowing to overwrite
+    /// Returns an Error if files are existing without being allowed to overwrite them
+    fn prevent_accidential_overwrite(&self, app_state: &AppState) -> Result<(), Error> {
+        if self.save_results && !self.overwrite {
+            app_state
+                .program
+                .idb_predicates()
+                .iter()
+                .try_for_each(|pred| {
+                    let csv_writer =
+                        CSVWriter::try_new(&self.output_directory, self.overwrite, self.gz)?;
+                    let file = pred.sanitised_file_name(
+                        self.output_directory.clone(),
+                        csv_writer.compression_format,
+                    );
+                    let meta_info = file.metadata();
+                    if let Err(err) = meta_info {
+                        if err.kind() == ErrorKind::NotFound {
+                            Ok::<(), Error>(())
+                        } else {
+                            Err(Error::IO(err))
+                        }
                     } else {
-                        Err(Error::IO(err))
+                        Err(Error::IOExists {
+                            error: ErrorKind::AlreadyExists.into(),
+                            filename: file
+                                .to_str()
+                                .expect("Path is expected to be valid utf-8")
+                                .to_string(),
+                        })
                     }
-                } else {
-                    Err(Error::IOExists {
-                        error: ErrorKind::AlreadyExists.into(),
-                        filename: file
-                            .as_os_str()
-                            .to_str()
-                            .expect("Path is expected to be utf-printable")
-                            .to_string(),
-                    })
-                }
-            })
+                })
+        } else {
+            Ok(())
+        }
     }
 }

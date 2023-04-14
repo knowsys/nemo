@@ -79,9 +79,8 @@ impl DSVReader {
                     error,
                     filename: self
                         .file
-                        .as_os_str()
                         .to_str()
-                        .expect("Path is expected to be utf-printable")
+                        .expect("Path is expected to be valid utf-8")
                         .into(),
                 }
             })?);
@@ -171,21 +170,26 @@ pub struct CSVWriter<'a> {
     path: &'a PathBuf,
     /// Overwrite files, note that the target folder will be emptied if `overwrite` is set to [true].
     overwrite: bool,
-    /// Gzip csv-file.
-    compression_format: FileCompression,
+    /// Compression and file format.
+    pub compression_format: FileCompression,
 }
 
 impl<'a> CSVWriter<'a> {
     /// Instantiate a [`CSVWriter`].
     ///
     /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
-    /// TODO: handle constant dict correctly
     pub fn try_new(path: &'a PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
         create_dir_all(path)?;
+        let file_format = FileFormat::DSV(b',');
+        let compression_format = if gzip {
+            FileCompression::Gzip(file_format)
+        } else {
+            FileCompression::None(file_format)
+        };
         Ok(CSVWriter {
             path,
             overwrite,
-            compression_format: FileCompression::new(gzip, FileFormat::DSV(b',')),
+            compression_format,
         })
     }
 }
@@ -203,7 +207,6 @@ impl CSVWriter<'_> {
         };
         let pred_path = pred.sanitised_file_name(self.path.to_path_buf(), self.compression_format);
         let file_name_with_extensions = pred_path
-            .as_os_str()
             .to_str()
             .expect("Path is expected to be utf-printable")
             .to_string();
@@ -222,7 +225,7 @@ impl CSVWriter<'_> {
 
     /// Writes a predicate as a csv-file into the corresponding result-directory
     /// # Parameters
-    /// * `pred` is a [`&str`], representing a file where  name
+    /// * `pred` is a [`&Identifier`], representing a file
     /// * `trie` is the [`Trie`] which holds all the content of the given predicate
     /// * `dict` is a [`Dictionary`], containing the mapping of the internal number representation to a [`String`]
     /// # Returns

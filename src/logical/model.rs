@@ -1,11 +1,12 @@
 //! The data model.
 
-use sanitise_file_name::{sanitise_with_options, Options};
 use std::{
     collections::{HashMap, HashSet},
     ops::Neg,
     path::{Path, PathBuf},
 };
+
+use sanitise_file_name::{sanitise_with_options, Options};
 
 use crate::{
     generate_forwarder,
