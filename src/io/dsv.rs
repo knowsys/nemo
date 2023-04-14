@@ -170,7 +170,7 @@ impl<'a> CSVWriter<'a> {
 
 impl CSVWriter<'_> {
     /// Creates a csv-file and returns a [`File`] handle to write data.
-    pub fn create_file(&self, pred: &str) -> Result<BufWriter<File>, Error> {
+    pub fn create_file(&self, pred: &str) -> Result<(BufWriter<File>, String), Error> {
         let sanitise_options = Options::<Option<char>> {
             url_safe: true,
             ..Default::default()
@@ -195,7 +195,7 @@ impl CSVWriter<'_> {
         };
         options
             .open(file_path)
-            .map(BufWriter::new)
+            .map(|file| (BufWriter::new(file), file_name_with_extensions.clone()))
             .map_err(|err| match err.kind() {
                 std::io::ErrorKind::AlreadyExists => Error::IOExists {
                     error: err,
@@ -215,14 +215,16 @@ impl CSVWriter<'_> {
     /// * [`Error`] in case of any issues during writing the file
     pub fn write_predicate(&self, pred: &str, trie: DebugTrie) -> Result<(), Error> {
         log::debug!("Writing {pred}");
-        let mut file = self.create_file(pred)?;
+        let (mut file, filename) = self.create_file(pred)?;
+        log::debug!("Outputting into {filename}");
         let content = trie;
         if self.gzip {
-            write!(GzEncoder::new(file, Compression::best()), "{}", &content)?;
+            write!(GzEncoder::new(file, Compression::best()), "{}", &content)
         } else {
             write!(file, "{}", &content)?;
+            file.flush()
         }
-        Ok(())
+        .map_err(|error| Error::IOWriting { error, filename })
     }
 }
 

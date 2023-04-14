@@ -57,4 +57,12 @@ pub enum Error {
         /// Filename which caused the error
         filename: String,
     },
+    /// Error during a Write operation
+    #[error("Failed to write \"{filename}\": {error}")]
+    IOWriting {
+        /// Underlying IO error
+        error: std::io::Error,
+        /// Name of the file that could not be written
+        filename: String,
+    },
 }
