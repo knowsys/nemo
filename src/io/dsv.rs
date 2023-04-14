@@ -62,7 +62,21 @@ impl DSVReader {
     /// Read the file, using the [TableSchema] and a [dictionary][Dict]
     /// Returns a Vector of [VecT] or a corresponding [Error]
     pub fn read(self, schema: &TableSchema, dictionary: &mut Dict) -> Result<Vec<VecT>, Error> {
-        let gz_decoder = flate2::read::GzDecoder::new(File::open(self.file.as_path())?);
+        let gz_decoder =
+            flate2::read::GzDecoder::new(File::open(self.file.as_path()).map_err(|err| {
+                match err.kind() {
+                    std::io::ErrorKind::NotFound => Error::IOExistsNot {
+                        error: err,
+                        filename: self
+                            .file
+                            .clone()
+                            .into_os_string()
+                            .into_string()
+                            .expect("Path shall be representable as string"),
+                    },
+                    _ => err.into(),
+                }
+            })?);
         let builder = self.generate_proxies(schema);
         if gz_decoder.header().is_some() {
             self.read_with_reader(

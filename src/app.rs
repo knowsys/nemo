@@ -152,8 +152,20 @@ impl CliApp {
         let mut inputs: Vec<String> = Vec::new();
 
         self.rules.iter().try_for_each(|file| {
-            inputs.push(read_to_string(file)?);
-            std::io::Result::Ok(())
+            inputs.push(read_to_string(file).map_err(|err| {
+                match err.kind() {
+                    std::io::ErrorKind::NotFound => Error::IOExistsNot {
+                        error: err,
+                        filename: file
+                            .clone()
+                            .into_os_string()
+                            .into_string()
+                            .expect("Path shall be representable as string"),
+                    },
+                    _ => err.into(),
+                }
+            })?);
+            Ok::<(), Error>(())
         })?;
         let input = inputs.iter_mut().fold(String::new(), |mut acc, item| {
             acc.push_str(item);

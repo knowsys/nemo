@@ -57,4 +57,12 @@ pub enum Error {
         /// Filename which caused the error
         filename: String,
     },
+    /// File exists and should not be overwritten
+    #[error("File \"{filename}\" does not exist.")]
+    IOExistsNot {
+        /// Contains the wrapped error
+        error: std::io::Error,
+        /// Filename which caused the error
+        filename: String,
+    },
 }
