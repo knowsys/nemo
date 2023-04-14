@@ -1,8 +1,12 @@
 //! Contains structures and functionality for the binary
 
 use clap::Parser;
-use std::fs::read_to_string;
-use std::path::PathBuf;
+use sanitise_file_name::{sanitise_with_options, Options};
+use std::{
+    fs::{read_to_string, File},
+    io::ErrorKind,
+    path::PathBuf,
+};
 
 use nemo::{
     error::Error,
@@ -83,6 +87,11 @@ impl CliApp {
 
         let app_state = self.parse_rules()?;
 
+        // check if output is already existing and overwrite is not set
+        if self.save_results && !self.overwrite {
+            self.check_idb_predicate_output_files_not_exist(&app_state)?;
+        }
+
         let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program);
 
         TimedCode::instance().sub("Reading & Preprocessing").stop();
@@ -154,7 +163,7 @@ impl CliApp {
         self.rules.iter().try_for_each(|file| {
             inputs.push(read_to_string(file).map_err(|err| {
                 match err.kind() {
-                    std::io::ErrorKind::NotFound => Error::IOExistsNot {
+                    ErrorKind::NotFound => Error::IOExistsNot {
                         error: err,
                         filename: file
                             .clone()
@@ -174,6 +183,44 @@ impl CliApp {
         let program = all_input_consumed(parser.parse_program())(&input)?;
         log::info!("Rules parsed");
         log::trace!("{:?}", program);
+
         Ok(AppState::new(program))
+    }
+
+    fn check_idb_predicate_output_files_not_exist(
+        &self,
+        app_state: &AppState,
+    ) -> Result<(), Error> {
+        app_state
+            .program
+            .idb_predicates()
+            .iter()
+            .try_for_each(|pred| {
+                let sanitise_options = Options::<Option<char>> {
+                    url_safe: true,
+                    ..Default::default()
+                };
+                let file_name = sanitise_with_options(&pred.name(), &sanitise_options);
+                let file_name_with_extensions = format!(
+                    "{}/{file_name}.csv{}",
+                    self.output_directory
+                        .as_os_str()
+                        .to_str()
+                        .expect("Path should be a unicode string"),
+                    if self.gz { ".gz" } else { "" }
+                );
+                if let Err(err) = File::open(file_name_with_extensions.clone()) {
+                    if err.kind() == ErrorKind::NotFound {
+                        Ok::<(), Error>(())
+                    } else {
+                        Err(Error::IO(err))
+                    }
+                } else {
+                    Err(Error::IOExists {
+                        error: ErrorKind::AlreadyExists.into(),
+                        filename: file_name_with_extensions,
+                    })
+                }
+            })
     }
 }
