@@ -1,7 +1,7 @@
 //! Represents different data-import methods
 
 use std::fs::{create_dir_all, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
 
 use crate::error::Error;
@@ -20,6 +20,15 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 
 use super::{FileCompression, FileFormat};
+
+/// Compression level for gzip output, cf. gzip(1):
+///
+/// > Regulate the speed of compression using the specified digit #,
+/// > where -1 or --fast indicates the fastest compression method (less
+/// > compression) and -9 or --best indicates the slowest compression
+/// > method (best compression).  The default compression level is -6
+/// > (that is, biased towards high compression at expense of speed).
+const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 
 /// A reader Object, which allows to read a DSV (delimiter separated) file
 #[derive(Debug, Clone)]
@@ -182,8 +191,9 @@ impl<'a> CSVWriter<'a> {
 }
 
 impl CSVWriter<'_> {
-    /// Creates a csv-file and returns a [`File`] handle to write data.
-    pub fn create_file(&self, pred: &Identifier) -> Result<File, Error> {
+    /// Creates a `.csv` (or possibly a `.csv.gz`) file for predicate
+    /// [`pred`] and returns a [`BufWriter<File>`] to it.
+    pub fn create_file(&self, pred: &Identifier) -> Result<(BufWriter<File>, String), Error> {
         let mut options = OpenOptions::new();
         options.write(true);
         if self.overwrite {
@@ -192,18 +202,24 @@ impl CSVWriter<'_> {
             options.create_new(true);
         };
         let pred_path = pred.sanitised_file_name(self.path.to_path_buf(), self.compression_format);
-        options.open(&pred_path).map_err(|err| match err.kind() {
-            std::io::ErrorKind::AlreadyExists => Error::IOExists {
-                error: err,
-                filename: pred_path
-                    .as_os_str()
-                    .to_str()
-                    .expect("Path is expected to be utf-printable")
-                    .to_string(),
-            },
-            _ => err.into(),
-        })
+        let file_name_with_extensions = pred_path
+            .as_os_str()
+            .to_str()
+            .expect("Path is expected to be utf-printable")
+            .to_string();
+
+        options
+            .open(&pred_path)
+            .map(|file| (BufWriter::new(file), file_name_with_extensions.clone()))
+            .map_err(|err| match err.kind() {
+                std::io::ErrorKind::AlreadyExists => Error::IOExists {
+                    error: err,
+                    filename: file_name_with_extensions,
+                },
+                _ => err.into(),
+            })
     }
+
     /// Writes a predicate as a csv-file into the corresponding result-directory
     /// # Parameters
     /// * `pred` is a [`&str`], representing a file where  name
@@ -213,15 +229,20 @@ impl CSVWriter<'_> {
     /// * [`Ok`][std::result::Result::Ok] if the predicate could be written to the csv-file
     /// * [`Error`] in case of any issues during writing the file
     pub fn write_predicate(&self, pred: &Identifier, trie: DebugTrie) -> Result<(), Error> {
-        let mut file = self.create_file(pred)?;
+        log::debug!("Writing {}", pred.name());
+        let (mut file, filename) = self.create_file(pred)?;
+        log::debug!("Outputting into {filename}");
         let content = trie;
         match self.compression_format {
             FileCompression::Gzip(_) => {
-                write!(GzEncoder::new(file, Compression::best()), "{}", &content)?
+                write!(GzEncoder::new(file, GZIP_COMPRESSION_LEVEL), "{}", &content)
             }
-            FileCompression::None(_) => write!(file, "{}", &content)?,
-        };
-        Ok(())
+            FileCompression::None(_) => {
+                write!(file, "{}", &content)?;
+                file.flush()
+            }
+        }
+        .map_err(|error| Error::IOWriting { error, filename })
     }
 }
 
