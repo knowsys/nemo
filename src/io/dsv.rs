@@ -1,7 +1,7 @@
 //! Represents different data-import methods
 
 use std::fs::{create_dir_all, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
 
 use crate::error::Error;
@@ -170,7 +170,7 @@ impl<'a> CSVWriter<'a> {
 
 impl CSVWriter<'_> {
     /// Creates a csv-file and returns a [`File`] handle to write data.
-    pub fn create_file(&self, pred: &str) -> Result<File, Error> {
+    pub fn create_file(&self, pred: &str) -> Result<BufWriter<File>, Error> {
         let sanitise_options = Options::<Option<char>> {
             url_safe: true,
             ..Default::default()
@@ -193,14 +193,18 @@ impl CSVWriter<'_> {
         } else {
             options.create_new(true);
         };
-        options.open(file_path).map_err(|err| match err.kind() {
-            std::io::ErrorKind::AlreadyExists => Error::IOExists {
-                error: err,
-                filename: file_name_with_extensions,
-            },
-            _ => err.into(),
-        })
+        options
+            .open(file_path)
+            .map(BufWriter::new)
+            .map_err(|err| match err.kind() {
+                std::io::ErrorKind::AlreadyExists => Error::IOExists {
+                    error: err,
+                    filename: file_name_with_extensions,
+                },
+                _ => err.into(),
+            })
     }
+
     /// Writes a predicate as a csv-file into the corresponding result-directory
     /// # Parameters
     /// * `pred` is a [`&str`], representing a predicate name
