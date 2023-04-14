@@ -178,7 +178,8 @@ impl<'a> CSVWriter<'a> {
 }
 
 impl CSVWriter<'_> {
-    /// Creates a csv-file and returns a [`File`] handle to write data.
+    /// Creates a `.csv` (or possibly a `.csv.gz`) file for predicate
+    /// [`pred`] and returns a [`BufWriter<File>`] to it.
     pub fn create_file(&self, pred: &str) -> Result<(BufWriter<File>, String), Error> {
         let sanitise_options = Options::<Option<char>> {
             url_safe: true,
