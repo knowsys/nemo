@@ -19,6 +19,15 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use sanitise_file_name::{sanitise_with_options, Options};
 
+/// Compression level for gzip output, cf. gzip(1):
+///
+/// > Regulate the speed of compression using the specified digit #,
+/// > where -1 or --fast indicates the fastest compression method (less
+/// > compression) and -9 or --best indicates the slowest compression
+/// > method (best compression).  The default compression level is -6
+/// > (that is, biased towards high compression at expense of speed).
+const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
+
 /// A reader Object, which allows to read a DSV (delimiter separated) file
 #[derive(Debug, Clone)]
 pub struct DSVReader {
@@ -219,7 +228,7 @@ impl CSVWriter<'_> {
         log::debug!("Outputting into {filename}");
         let content = trie;
         if self.gzip {
-            write!(GzEncoder::new(file, Compression::best()), "{}", &content)
+            write!(GzEncoder::new(file, GZIP_COMPRESSION_LEVEL), "{}", &content)
         } else {
             write!(file, "{}", &content)?;
             file.flush()
