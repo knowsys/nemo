@@ -211,12 +211,14 @@ impl CSVWriter<'_> {
     /// * [`Error`] in case of any issues during writing the file
     pub fn write_predicate(&self, pred: &str, trie: DebugTrie) -> Result<(), Error> {
         log::debug!("Writing {pred}");
-        let mut file = self.create_file(pred)?;
+        let file = self.create_file(pred)?;
         let content = trie;
         if self.gzip {
             write!(GzEncoder::new(file, Compression::best()), "{}", &content)?;
         } else {
-            write!(file, "{}", &content)?;
+            let mut buffer = std::io::BufWriter::new(file);
+            write!(buffer, "{}", &content)?;
+            buffer.flush()?;
         }
         Ok(())
     }
