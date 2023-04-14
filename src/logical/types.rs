@@ -57,13 +57,14 @@ macro_rules! generate_logical_type_enum {
     };
 }
 
-generate_logical_type_enum!(RdfsResource, UnsignedInteger);
+generate_logical_type_enum!(RdfsResource, UnsignedInteger, Double);
 
 impl From<LogicalTypeEnum> for DataTypeName {
     fn from(source: LogicalTypeEnum) -> Self {
         match source {
             LogicalTypeEnum::RdfsResource => Self::String,
             LogicalTypeEnum::UnsignedInteger => Self::U64,
+            LogicalTypeEnum::Double => Self::Double,
         }
     }
 }
@@ -102,6 +103,17 @@ impl LogicalTypeEnum {
                     // TODO: get rid of unwrap in next line
                     Term::NumericLiteral(NumericLiteral::Integer(i)) => DataValueT::U64(i.try_into().unwrap()),
                     _ => panic!("Only NumericLiteral::Integer terms are supported for logical type UnsignedInteger!"),
+                }
+            }
+            Self::Double => {
+                match gt {
+                    // TODO: get rid of unwrap in next line
+                    Term::NumericLiteral(NumericLiteral::Double(d)) => {
+                        DataValueT::Double(d.try_into().unwrap())
+                    }
+                    _ => panic!(
+                        "Only NumericLiteral::Double terms are supported for logical type Double!"
+                    ),
                 }
             }
         }
