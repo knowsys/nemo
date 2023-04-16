@@ -21,9 +21,89 @@ use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
 use std::cell::UnsafeCell;
 use std::fmt;
-use std::fmt::Debug;
 use std::iter;
 use std::mem::size_of;
+
+pub(crate) struct TrieRows<'a> {
+    data_columns: Vec<ColumnScanT<'a>>,
+    interval_columns: Vec<ColumnScanEnum<'a, usize>>,
+    interval_offsets: Vec<usize>,
+    last_row: Vec<StorageValueT>,
+}
+
+impl<'a> TrieRows<'a> {
+    pub fn next_borrowed(&mut self) -> Option<&Vec<StorageValueT>> {
+        if self.last_row.len() == 0 {
+            self.last_row = self
+                .data_columns
+                .iter_mut()
+                .map(|column| column.next())
+                .collect::<Option<_>>()?;
+
+            for c in &mut self.interval_columns {
+                let interval_start_first = c.next();
+                debug_assert_eq!(interval_start_first, Some(0));
+
+                // call next to get the first interval end upon next call to current
+                let _ = c.next();
+            }
+
+            return Some(&self.last_row);
+        }
+
+        let mut current_column = self.data_columns.len() - 1;
+
+        loop {
+            self.interval_offsets[current_column] += 1;
+            self.last_row[current_column] = self.data_columns[current_column].next()?;
+            let Some(interval_end) = self.interval_columns[current_column].current() else { break; };
+
+            if self.interval_offsets[current_column] < interval_end {
+                break;
+            }
+
+            let _ = self.interval_columns[current_column].next();
+            current_column -= 1;
+        }
+
+        Some(&self.last_row)
+    }
+
+    fn write_as_csv(mut self, output: &mut impl fmt::Write, dict: &Dict) -> fmt::Result {
+        let row_len = self.data_columns.len();
+
+        if row_len == 0 {
+            return Ok(());
+        }
+
+        while let Some(row) = self.next_borrowed() {
+            for (index, &value) in row.iter().enumerate() {
+                match value {
+                    StorageValueT::U64(constant) => dict
+                        .write_entry(output, (constant).try_into().unwrap())
+                        .unwrap_or_else(|| write!(output, "<__Null#{constant}>")),
+                    _ => write!(output, "{}", value),
+                }?;
+
+                if index < row_len - 1 {
+                    output.write_char(',')?;
+                }
+            }
+
+            output.write_char('\n')?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<'a> Iterator for TrieRows<'a> {
+    type Item = Vec<StorageValueT>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_borrowed().cloned()
+    }
+}
 
 /// Implementation of a trie data structure.
 /// The underlying data is oragnized in IntervalColumns.
@@ -180,89 +260,17 @@ impl Trie {
         format!("<__Null#{value}>")
     }
 
-    // TODO: unify this with Display Trait implementation
-    pub(crate) fn format_as_csv(&self, f: &mut fmt::Formatter<'_>, dict: &Dict) -> fmt::Result {
-        if self
-            .columns
-            .first()
-            .map_or(true, |column| column.is_empty())
-        {
-            return writeln!(f);
+    pub(crate) fn rows(&self) -> TrieRows<'_> {
+        let num_columns = self.columns.len();
+        let (data_columns, interval_columns) =
+            self.columns.iter().map(|col| col.as_parts()).unzip();
+
+        TrieRows {
+            data_columns,
+            interval_columns,
+            interval_offsets: vec![0; num_columns],
+            last_row: Vec::with_capacity(num_columns),
         }
-
-        // outer vecs are build in reverse order
-        let mut last_interval_lengths: Vec<usize> = self
-            .columns
-            .last()
-            .expect("we return early if columns are empty")
-            .iter()
-            .map(|_| 1)
-            .collect();
-        let mut str_cols: Vec<Vec<String>> = vec![self
-            .columns
-            .last()
-            .expect("we return early if columns are empty")
-            .iter()
-            .map(|val| match val {
-                StorageValueT::U64(constant) => dict
-                    .entry(constant.try_into().unwrap())
-                    .unwrap_or_else(|| Self::format_null(constant)),
-                _ => val.to_string(),
-            })
-            .collect()];
-        for column_index in (0..(self.columns.len() - 1)).rev() {
-            let current_column = &self.columns[column_index];
-            let last_column = &self.columns[column_index + 1];
-
-            let current_interval_lengths: Vec<usize> = (0..current_column.len())
-                .map(|element_index_in_current_column| {
-                    last_column
-                        .int_bounds(element_index_in_current_column)
-                        .map(|index_in_interval| last_interval_lengths[index_in_interval])
-                        .sum()
-                })
-                .collect();
-
-            let padding_lengths = current_interval_lengths.iter().map(|length| length - 1);
-
-            str_cols.push(
-                current_column
-                    .iter()
-                    .zip(padding_lengths)
-                    .flat_map(|(val, pl)| {
-                        iter::once(match val {
-                            StorageValueT::U64(constant) => dict
-                                .entry(constant.try_into().unwrap())
-                                .unwrap_or_else(|| Self::format_null(constant)),
-                            _ => val.to_string(),
-                        })
-                        .chain(
-                            iter::repeat(match val {
-                                StorageValueT::U64(constant) => dict
-                                    .entry(constant.try_into().unwrap())
-                                    .unwrap_or_else(|| Self::format_null(constant)),
-                                _ => val.to_string(),
-                            })
-                            .take(pl),
-                        )
-                    })
-                    .collect(),
-            );
-
-            last_interval_lengths = current_interval_lengths;
-        }
-
-        for row_index in 0..str_cols[0].len() {
-            for col_index in (0..str_cols.len()).rev() {
-                write!(f, "{}", str_cols[col_index][row_index])?;
-                if col_index > 0 {
-                    write!(f, ",")?;
-                }
-            }
-            writeln!(f,)?;
-        }
-
-        Ok(())
     }
 }
 
@@ -286,7 +294,7 @@ pub struct DebugTrie<'a> {
 
 impl fmt::Display for DebugTrie<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.trie.format_as_csv(f, &self.dict)
+        self.trie.rows().write_as_csv(f, &self.dict)
     }
 }
 

@@ -1,7 +1,7 @@
 //! This module provides different dictionary functionalities
 //! In general these dictionary functionalities allow to represent [String] values as [usize] values
 
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 /// Module to define a [PrefixedStringDictionary]
 /// This will provide a more memory-efficient storage of [String] values if they share equivalent prefixes (such as IRIs)
@@ -28,7 +28,10 @@ pub trait Dictionary: Debug + Default + Clone {
     /// Looks for a given [&str] slice and returns `Some(position)` if there is a match or `None` if there is no match.
     fn index_of(&self, entry: &str) -> Option<usize>;
     /// Returns an equivalent [String] to the one associated with the `index` or None if the `index` is out of bounds
+    #[cfg(test)]
     fn entry(&self, index: usize) -> Option<String>;
+    /// Writes a representatition for the item associated with `index` into the output or returns None
+    fn write_entry<W: fmt::Write>(&self, f: &mut W, index: usize) -> Option<fmt::Result>;
     /// Returns the number of elements in the dictionary.
     fn len(&self) -> usize;
     /// Returns whether the dictionary is empty.

@@ -17,6 +17,7 @@
 )]
 #![feature(macro_metavar_expr)]
 #![feature(is_sorted)]
+#![feature(iter_intersperse)]
 
 pub mod app;
 

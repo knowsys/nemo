@@ -1,4 +1,5 @@
 use super::Dictionary;
+use std::fmt;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -26,6 +27,7 @@ impl Dictionary for StringDictionary {
         self.mapping.get(&entry.to_string()).copied()
     }
 
+    #[cfg(test)]
     fn entry(&self, index: usize) -> Option<String> {
         self.store
             .get(index)
@@ -38,6 +40,10 @@ impl Dictionary for StringDictionary {
 
     fn is_empty(&self) -> bool {
         self.mapping.is_empty()
+    }
+
+    fn write_entry<W: fmt::Write>(&self, f: &mut W, index: usize) -> Option<fmt::Result> {
+        self.store.get(index).map(|entry| write!(f, "{}", entry))
     }
 }
 
