@@ -1,6 +1,6 @@
 use super::Dictionary;
 use std::collections::HashMap;
-use std::fmt;
+
 use std::rc::Rc;
 
 /// Offers a simple way to store multiple [String] objects, associate them to a [usize] and manage ownership for them
@@ -39,10 +39,6 @@ impl Dictionary for StringDictionary {
 
     fn is_empty(&self) -> bool {
         self.mapping.is_empty()
-    }
-
-    fn write_entry<W: fmt::Write>(&self, f: &mut W, index: usize) -> Option<fmt::Result> {
-        self.store.get(index).map(|entry| write!(f, "{}", entry))
     }
 }
 

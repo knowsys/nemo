@@ -1,7 +1,7 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
-    fmt::{self, Display},
+    fmt::Display,
     hash::{Hash, Hasher},
     rc::{Rc, Weak},
 };
@@ -389,19 +389,6 @@ impl Dictionary for PrefixedStringDictionary {
 
     fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-
-    fn write_entry<W: fmt::Write>(&self, f: &mut W, index: usize) -> Option<fmt::Result> {
-        if index < self.ordering.len() {
-            Some(write!(
-                f,
-                "{}{}",
-                self.ordering[index].0.as_ref().borrow(),
-                self.ordering[index].1.as_ref(),
-            ))
-        } else {
-            None
-        }
     }
 }
 
