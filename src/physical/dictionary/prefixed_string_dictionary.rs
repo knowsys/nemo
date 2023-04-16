@@ -1,7 +1,7 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
-    fmt::{Display, self},
+    fmt::{self, Display},
     hash::{Hash, Hasher},
     rc::{Rc, Weak},
 };
