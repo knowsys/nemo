@@ -1,6 +1,5 @@
 use super::Dictionary;
 use std::collections::HashMap;
-
 use std::rc::Rc;
 
 /// Offers a simple way to store multiple [String] objects, associate them to a [usize] and manage ownership for them
