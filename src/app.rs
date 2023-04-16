@@ -102,11 +102,8 @@ impl CliApp {
                 .sub("Output & Final Materialization")
                 .start();
             log::info!("writing output");
-            let file_manager = dsv::OutputFileManager::try_new(
-                &self.output_directory,
-                self.overwrite,
-                self.gz,
-            )?;
+            let file_manager =
+                dsv::OutputFileManager::try_new(&self.output_directory, self.overwrite, self.gz)?;
 
             let idb_tables = exec_engine.combine_results()?;
             let dict = exec_engine.get_dict();
