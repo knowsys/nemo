@@ -33,7 +33,7 @@ pub(crate) struct TrieRows<'a> {
 
 impl<'a> TrieRows<'a> {
     pub fn next_borrowed(&mut self) -> Option<&Vec<StorageValueT>> {
-        if self.last_row.len() == 0 {
+        if self.last_row.is_empty() {
             self.last_row = self
                 .data_columns
                 .iter_mut()
