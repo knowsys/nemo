@@ -525,11 +525,7 @@ mod test {
         )))
         .unwrap();
 
-        log::debug!(
-            "\n{}\n\n{}",
-            trie.debug(Dict::default()),
-            trie_reordered.debug(Dict::default())
-        );
+        log::debug!("\n{}\n\n{}", trie, trie_reordered);
 
         assert_eq!(trie.row_num(), trie_reordered.row_num());
 

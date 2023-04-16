@@ -32,7 +32,11 @@ pub(crate) struct TrieRows<'a> {
 }
 
 impl<'a> TrieRows<'a> {
-    pub fn next_borrowed(&mut self) -> Option<&Vec<StorageValueT>> {
+    /// advances the iterator one step
+    /// # Returns
+    /// * if there is a next row, the index of the first (i.e. lowest index) column with a new value
+    /// * [None] otherwise
+    fn advance(&mut self) -> Option<usize> {
         if self.last_row.is_empty() {
             self.last_row = self
                 .data_columns
@@ -48,7 +52,7 @@ impl<'a> TrieRows<'a> {
                 let _ = c.next();
             }
 
-            return Some(&self.last_row);
+            return Some(0);
         }
 
         let mut current_column = self.data_columns.len() - 1;
@@ -66,42 +70,53 @@ impl<'a> TrieRows<'a> {
             current_column -= 1;
         }
 
-        Some(&self.last_row)
+        Some(current_column)
     }
 
-    fn write_as_csv(mut self, output: &mut impl fmt::Write, dict: &Dict) -> fmt::Result {
-        let row_len = self.data_columns.len();
-
-        if row_len == 0 {
-            return Ok(());
-        }
-
-        while let Some(row) = self.next_borrowed() {
-            for (index, &value) in row.iter().enumerate() {
-                match value {
-                    StorageValueT::U64(constant) => dict
-                        .write_entry(output, (constant).try_into().unwrap())
-                        .unwrap_or_else(|| write!(output, "<__Null#{constant}>")),
-                    _ => write!(output, "{}", value),
-                }?;
-
-                if index < row_len - 1 {
-                    output.write_char(',')?;
-                }
-            }
-
-            output.write_char('\n')?;
-        }
-
-        Ok(())
+    pub fn next_changed(&mut self) -> Option<&[StorageValueT]> {
+        let updated = self.advance()?;
+        Some(&self.last_row[updated..])
     }
 }
 
-impl<'a> Iterator for TrieRows<'a> {
-    type Item = Vec<StorageValueT>;
+pub(crate) struct TrieRecord<'a>(&'a [String]);
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.next_borrowed().cloned()
+impl<'a> IntoIterator for TrieRecord<'a> {
+    type Item = &'a String;
+    type IntoIter = std::slice::Iter<'a, String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+pub(crate) struct TrieRecords<'a> {
+    rows: TrieRows<'a>,
+    last_record: Vec<String>,
+}
+
+impl<'a> TrieRecords<'a> {
+    pub fn next_record(&mut self, dict: &Dict) -> Option<TrieRecord<'_>> {
+        let changed_values = self.rows.next_changed()?;
+
+        if !self.last_record.is_empty() {
+            self.last_record
+                .truncate(self.last_record.len() - changed_values.len());
+        }
+
+        for &value in changed_values {
+            if let StorageValueT::U64(constant) = value {
+                let str_value = dict
+                    .entry(constant.try_into().unwrap())
+                    .unwrap_or_else(|| format!("<__Null#{constant}>"));
+
+                self.last_record.push(str_value);
+            } else {
+                self.last_record.push(value.to_string());
+            }
+        }
+
+        Some(TrieRecord(&self.last_record))
     }
 }
 
@@ -138,11 +153,6 @@ impl Trie {
     /// Panics if index is out of range
     pub fn get_column(&self, index: usize) -> &ColumnWithIntervalsT {
         &self.columns[index]
-    }
-
-    /// Return a [`DebugTrie`] from the [`Trie`]
-    pub fn debug(&self, dict: Dict) -> DebugTrie {
-        DebugTrie { trie: self, dict }
     }
 
     /// Returns the sum of the lengths of each column
@@ -266,6 +276,15 @@ impl Trie {
             last_row: Vec::with_capacity(num_columns),
         }
     }
+
+    pub(crate) fn records(&self) -> TrieRecords<'_> {
+        let num_columns = self.columns.len();
+
+        TrieRecords {
+            rows: self.rows(),
+            last_record: Vec::with_capacity(num_columns),
+        }
+    }
 }
 
 impl ByteSized for Trie {
@@ -276,19 +295,6 @@ impl ByteSized for Trie {
                 .columns
                 .iter()
                 .fold(ByteSize::b(0), |acc, column| acc + column.size_bytes())
-    }
-}
-
-/// [`Trie`] which also contains an associated dictionary for displaying proper names
-#[derive(Debug)]
-pub struct DebugTrie<'a> {
-    trie: &'a Trie,
-    dict: Dict,
-}
-
-impl fmt::Display for DebugTrie<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.trie.rows().write_as_csv(f, &self.dict)
     }
 }
 

@@ -371,7 +371,6 @@ impl Dictionary for PrefixedStringDictionary {
         self.mapping.get(&entry.to_string()).cloned()
     }
 
-    #[cfg(test)]
     fn entry(&self, index: usize) -> Option<String> {
         if index < self.ordering.len() {
             Some(format!(

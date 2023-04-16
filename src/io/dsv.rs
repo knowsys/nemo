@@ -1,7 +1,7 @@
 //! Represents different data-import methods
 
 use std::fs::{create_dir_all, File, OpenOptions};
-use std::io::{BufWriter, Read, Write};
+use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use crate::error::Error;
@@ -12,7 +12,7 @@ use crate::io::builder_proxy::{
 use crate::physical::datatypes::storage_value::VecT;
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::management::database::Dict;
-use crate::physical::tabular::table_types::trie::DebugTrie;
+use crate::physical::tabular::table_types::trie::Trie;
 use crate::physical::tabular::traits::table_schema::TableSchema;
 use csv::{Reader, ReaderBuilder};
 use flate2::write::GzEncoder;
@@ -153,7 +153,7 @@ impl DSVReader {
 
 /// Contains all the needed information, to write results into csv-files
 #[derive(Debug)]
-pub struct CSVWriter<'a> {
+pub struct FileWriterBuilder<'a> {
     /// The path to where the results shall be written to.
     path: &'a PathBuf,
     /// Overwrite files, note that the target folder will be emptied if `overwrite` is set to [true].
@@ -162,14 +162,14 @@ pub struct CSVWriter<'a> {
     gzip: bool,
 }
 
-impl<'a> CSVWriter<'a> {
+impl<'a> FileWriterBuilder<'a> {
     /// Instantiate a [`CSVWriter`].
     ///
     /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
     /// TODO: handle constant dict correctly
     pub fn try_new(path: &'a PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
         create_dir_all(path)?;
-        Ok(CSVWriter {
+        Ok(FileWriterBuilder {
             path,
             overwrite,
             gzip,
@@ -177,10 +177,11 @@ impl<'a> CSVWriter<'a> {
     }
 }
 
-impl CSVWriter<'_> {
+impl FileWriterBuilder<'_> {
     /// Creates a `.csv` (or possibly a `.csv.gz`) file for predicate
-    /// [`pred`] and returns a [`BufWriter<File>`] to it.
-    pub fn create_file(&self, pred: &str) -> Result<(BufWriter<File>, String), Error> {
+    /// [`pred`] and returns a [`csv::Writer<File>`] to it.
+    pub fn create_file_writer(&self, pred: impl AsRef<str>) -> Result<Box<dyn Write>, Error> {
+        let pred = pred.as_ref();
         let sanitise_options = Options::<Option<char>> {
             url_safe: true,
             ..Default::default()
@@ -194,7 +195,7 @@ impl CSVWriter<'_> {
                 .expect("Path should be a unicode string"),
             if self.gzip { ".gz" } else { "" }
         );
-        let file_path = PathBuf::from(file_name_with_extensions.clone());
+        let file_path = PathBuf::from(file_name_with_extensions);
         log::info!("Creating {pred} as {file_path:?}");
         let mut options = OpenOptions::new();
         options.write(true);
@@ -203,39 +204,26 @@ impl CSVWriter<'_> {
         } else {
             options.create_new(true);
         };
-        options
-            .open(file_path)
-            .map(|file| (BufWriter::new(file), file_name_with_extensions.clone()))
-            .map_err(|err| match err.kind() {
-                std::io::ErrorKind::AlreadyExists => Error::IOExists {
-                    error: err,
-                    filename: file_name_with_extensions,
-                },
-                _ => err.into(),
-            })
+        let file = options.open(file_path)?;
+
+        if self.gzip {
+            Ok(Box::new(GzEncoder::new(file, GZIP_COMPRESSION_LEVEL)))
+        } else {
+            Ok(Box::new(file))
+        }
+    }
+}
+
+/// Write the trie into the given writer
+pub fn write_table<W: Write>(writer: W, trie: &Trie, dict: &Dict) -> Result<(), Error> {
+    let mut records = trie.records();
+    let mut writer = csv::Writer::from_writer(writer);
+
+    while let Some(record) = records.next_record(dict) {
+        writer.write_record(record)?;
     }
 
-    /// Writes a predicate as a csv-file into the corresponding result-directory
-    /// # Parameters
-    /// * `pred` is a [`&str`], representing a predicate name
-    /// * `trie` is the [`Trie`] which holds all the content of the given predicate
-    /// * `dict` is a [`Dictionary`], containing the mapping of the internal number representation to a [`String`]
-    /// # Returns
-    /// * [`Ok`][std::result::Result::Ok] if the predicate could be written to the csv-file
-    /// * [`Error`] in case of any issues during writing the file
-    pub fn write_predicate(&self, pred: &str, trie: DebugTrie) -> Result<(), Error> {
-        log::debug!("Writing {pred}");
-        let (mut file, filename) = self.create_file(pred)?;
-        log::debug!("Outputting into {filename}");
-        let content = trie;
-        if self.gzip {
-            write!(GzEncoder::new(file, GZIP_COMPRESSION_LEVEL), "{}", &content)
-        } else {
-            write!(file, "{}", &content)?;
-            file.flush()
-        }
-        .map_err(|error| Error::IOWriting { error, filename })
-    }
+    Ok(())
 }
 
 #[cfg(test)]

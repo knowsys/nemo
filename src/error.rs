@@ -66,3 +66,17 @@ pub enum Error {
         filename: String,
     },
 }
+
+impl From<csv::Error> for Error {
+    fn from(value: csv::Error) -> Self {
+        match value.into_kind() {
+            csv::ErrorKind::Io(e) => Error::IO(e),
+            csv::ErrorKind::Utf8 { .. } => todo!(),
+            csv::ErrorKind::UnequalLengths { .. } => todo!(),
+            csv::ErrorKind::Seek => todo!(),
+            csv::ErrorKind::Serialize(_) => unreachable!("we do not use Serde"),
+            csv::ErrorKind::Deserialize { .. } => todo!(),
+            _ => todo!(),
+        }
+    }
+}

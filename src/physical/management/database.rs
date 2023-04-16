@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::path::PathBuf;
@@ -9,7 +9,6 @@ use crate::io::dsv::DSVReader;
 use crate::physical::datatypes::{DataTypeName, DataValueT, StorageValueT};
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
-use crate::physical::tabular::table_types::trie::DebugTrie;
 use crate::physical::tabular::traits::table::Table;
 use crate::physical::util::mapping::permutation::Permutation;
 use crate::physical::util::mapping::traits::NatMapping;
@@ -484,8 +483,8 @@ impl DatabaseInstance {
     }
 
     /// Returns a reference to the dictionary used for associating abstract constants with strings.
-    pub fn get_dict_constants(&self) -> Dict {
-        self.dict_constants.clone().take()
+    pub fn get_dict_constants(&self) -> Ref<'_, Dict> {
+        self.dict_constants.borrow()
     }
 
     /// Register a new table under a given name and schema.
@@ -810,21 +809,6 @@ impl DatabaseInstance {
         storage
             .get_trie()
             .expect("Function assumes that trie is in memory.")
-    }
-
-    /// Returns a DebugTrie for writing to CSV.
-    /// Panics if no table under the given id and order exists.
-    /// Panics if trie is not available in memory.
-    pub fn get_debug_trie(&self, id: TableId, order: &ColumnOrder) -> DebugTrie {
-        let storage = self
-            .storage_handler
-            .table_storage(id, order)
-            .expect("Function assumes that there is a table with the given id and order.");
-
-        storage
-            .get_trie()
-            .expect("Function assumes that trie is in memory.")
-            .debug(self.dict_constants.clone().take())
     }
 
     /// Return a reference to a trie identified by its id and order.

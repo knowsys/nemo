@@ -28,7 +28,6 @@ pub trait Dictionary: Debug + Default + Clone {
     /// Looks for a given [&str] slice and returns `Some(position)` if there is a match or `None` if there is no match.
     fn index_of(&self, entry: &str) -> Option<usize>;
     /// Returns an equivalent [String] to the one associated with the `index` or None if the `index` is out of bounds
-    #[cfg(test)]
     fn entry(&self, index: usize) -> Option<String>;
     /// Writes a representatition for the item associated with `index` into the output or returns None
     fn write_entry<W: fmt::Write>(&self, f: &mut W, index: usize) -> Option<fmt::Result>;

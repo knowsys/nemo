@@ -27,7 +27,6 @@ impl Dictionary for StringDictionary {
         self.mapping.get(&entry.to_string()).copied()
     }
 
-    #[cfg(test)]
     fn entry(&self, index: usize) -> Option<String> {
         self.store
             .get(index)

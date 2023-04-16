@@ -1,6 +1,6 @@
 //! Functionality which handles the execution of a program
 
-use std::collections::HashMap;
+use std::{cell::Ref, collections::HashMap};
 
 use crate::{
     error::Error,
@@ -12,8 +12,8 @@ use crate::{
     meta::TimedCode,
     physical::{
         datatypes::DataValueT,
-        management::database::{TableId, TableSource},
-        tabular::table_types::trie::DebugTrie,
+        management::database::{Dict, TableId, TableSource},
+        tabular::table_types::trie::Trie,
     },
 };
 
@@ -230,36 +230,31 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(())
     }
 
-    /// Return the output tries that resulted form the execution.
-    pub fn get_results(&mut self) -> Result<Vec<(Identifier, DebugTrie)>, Error> {
-        let mut result_ids = Vec::<(Identifier, TableId)>::new();
+    /// Combine the output tries that resulted form the execution.
+    pub fn combine_results(&mut self) -> Result<Vec<(Identifier, Option<TableId>)>, Error> {
+        let mut result_ids = Vec::new();
         for predicate in &self.analysis.derived_predicates {
+            if !self.program.idb_predicates().contains(predicate) {
+                continue;
+            }
+
             if let Some(combined_id) = self.table_manager.combine_predicate(predicate.clone())? {
-                result_ids.push((predicate.clone(), combined_id));
+                result_ids.push((predicate.clone(), Some(combined_id)));
+            } else {
+                result_ids.push((predicate.clone(), None))
             }
         }
 
-        let result = result_ids
-            .into_iter()
-            .map(|(p, id)| (p, self.table_manager.table_from_id(id)))
-            .collect();
-
-        Ok(result)
+        Ok(result_ids)
     }
 
-    /// Iterator over all IDB predicates, with Tries if present.
-    pub fn idb_predicates(
-        &mut self,
-    ) -> Result<impl Iterator<Item = (Identifier, Option<DebugTrie>)>, Error> {
-        let idbs = self.program.idb_predicates();
-        let mut tables = self.get_results()?.into_iter().collect::<HashMap<_, _>>();
-        let mut result = Vec::new();
+    /// Returns a reference to the constants dictionary
+    pub fn get_dict(&self) -> Ref<'_, Dict> {
+        self.table_manager.get_dict()
+    }
 
-        for predicate in idbs {
-            let table = tables.remove(&predicate);
-            result.push((predicate, table));
-        }
-
-        Ok(result.into_iter())
+    /// Returns a reference to the Trie corresponding to the table_id
+    pub fn table_from_id(&self, id: TableId) -> &Trie {
+        self.table_manager.table_from_id(id)
     }
 }
