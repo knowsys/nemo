@@ -153,7 +153,7 @@ impl DSVReader {
 
 /// Contains all the needed information, to write results into csv-files
 #[derive(Debug)]
-pub struct FileWriterBuilder<'a> {
+pub struct OutputFileManager<'a> {
     /// The path to where the results shall be written to.
     path: &'a PathBuf,
     /// Overwrite files, note that the target folder will be emptied if `overwrite` is set to [true].
@@ -162,14 +162,14 @@ pub struct FileWriterBuilder<'a> {
     gzip: bool,
 }
 
-impl<'a> FileWriterBuilder<'a> {
+impl<'a> OutputFileManager<'a> {
     /// Instantiate a [`CSVWriter`].
     ///
     /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
     /// TODO: handle constant dict correctly
     pub fn try_new(path: &'a PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
         create_dir_all(path)?;
-        Ok(FileWriterBuilder {
+        Ok(OutputFileManager {
             path,
             overwrite,
             gzip,
@@ -177,7 +177,7 @@ impl<'a> FileWriterBuilder<'a> {
     }
 }
 
-impl FileWriterBuilder<'_> {
+impl OutputFileManager<'_> {
     /// Creates a `.csv` (or possibly a `.csv.gz`) file for predicate
     /// [`pred`] and returns a [`csv::Writer<File>`] to it.
     pub fn create_file_writer(&self, pred: impl AsRef<str>) -> Result<Box<dyn Write>, Error> {

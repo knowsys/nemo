@@ -102,7 +102,7 @@ impl CliApp {
                 .sub("Output & Final Materialization")
                 .start();
             log::info!("writing output");
-            let csv_writer = nemo::io::dsv::FileWriterBuilder::try_new(
+            let file_manager = nemo::io::dsv::OutputFileManager::try_new(
                 &self.output_directory,
                 self.overwrite,
                 self.gz,
@@ -113,7 +113,7 @@ impl CliApp {
             let dict = exec_engine.get_dict();
 
             for (pred, table_id) in idb_tables {
-                let writer = csv_writer.create_file_writer(pred.name())?;
+                let writer = file_manager.create_file_writer(pred.name())?;
 
                 if let Some(id) = table_id {
                     let trie = exec_engine.table_from_id(id);
