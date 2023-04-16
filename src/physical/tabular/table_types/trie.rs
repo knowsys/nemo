@@ -254,12 +254,6 @@ impl Trie {
         project_reordering.transform_consumed(result_columns)
     }
 
-    /// Determines how null values are represented.
-    /// TODO: There should be a better place for this function.
-    pub fn format_null(value: u64) -> String {
-        format!("<__Null#{value}>")
-    }
-
     pub(crate) fn rows(&self) -> TrieRows<'_> {
         let num_columns = self.columns.len();
         let (data_columns, interval_columns) =
