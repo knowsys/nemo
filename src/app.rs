@@ -102,12 +102,11 @@ impl CliApp {
                 .sub("Output & Final Materialization")
                 .start();
             log::info!("writing output");
-            let file_manager = nemo::io::dsv::OutputFileManager::try_new(
+            let file_manager = dsv::OutputFileManager::try_new(
                 &self.output_directory,
                 self.overwrite,
                 self.gz,
             )?;
-            // TODO fix cloning
 
             let idb_tables = exec_engine.combine_results()?;
             let dict = exec_engine.get_dict();
