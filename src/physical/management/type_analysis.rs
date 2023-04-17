@@ -284,24 +284,21 @@ impl TypeTree {
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
                 let mut new_schema = TableSchema::new();
 
-                if !subtype_node.schema.is_empty() {
-                    for (gap_index, gap_instructions) in instructions.iter().enumerate() {
-                        for instruction in gap_instructions {
-                            match instruction {
-                                AppendInstruction::RepeatColumn(repeat_index) => {
-                                    new_schema.add_entry_cloned(
-                                        subtype_node.schema.get_entry(*repeat_index),
-                                    );
-                                }
-                                AppendInstruction::Constant(value) => {
-                                    new_schema.add_entry(value.get_type());
-                                }
+                for (gap_index, gap_instructions) in instructions.iter().enumerate() {
+                    for instruction in gap_instructions {
+                        match instruction {
+                            AppendInstruction::RepeatColumn(repeat_index) => {
+                                new_schema
+                                    .add_entry_cloned(subtype_node.schema.get_entry(*repeat_index));
+                            }
+                            AppendInstruction::Constant(value) => {
+                                new_schema.add_entry(value.get_type());
                             }
                         }
+                    }
 
-                        if gap_index < instructions.len() - 1 {
-                            new_schema.add_entry_cloned(subtype_node.schema.get_entry(gap_index));
-                        }
+                    if gap_index < instructions.len() - 1 {
+                        new_schema.add_entry_cloned(subtype_node.schema.get_entry(gap_index));
                     }
                 }
 
@@ -311,11 +308,9 @@ impl TypeTree {
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
                 let mut new_schema = subtype_node.schema.clone();
 
-                if !subtype_node.schema.is_empty() {
-                    for _ in 0..*num_nulls {
-                        // TODO: Revise this once type system is complete
-                        new_schema.add_entry(DataTypeName::String);
-                    }
+                for _ in 0..*num_nulls {
+                    // TODO: Revise this once type system is complete
+                    new_schema.add_entry(DataTypeName::String);
                 }
 
                 Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))

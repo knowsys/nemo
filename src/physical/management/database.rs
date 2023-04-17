@@ -438,6 +438,8 @@ enum ComputationResult {
     Permanent(TableId, ColumnOrder),
     /// The computation resulted in an empty trie.
     Empty,
+    /// The computation resulted in a schema-less trie which contains elements
+    Schemaless(Trie),
 }
 
 impl Default for DatabaseInstance {
@@ -676,6 +678,8 @@ impl DatabaseInstance {
         let root_operation = &root_rc.borrow().operation;
 
         if let ExecutionOperation::Project(subnode, reordering) = root_operation {
+            let schema_less = reordering.iter().collect::<Vec<_>>().is_empty();
+
             let subnode_rc = subnode.get_rc();
             let subnode_operation = &subnode_rc.borrow().operation;
 
@@ -686,21 +690,32 @@ impl DatabaseInstance {
                         return Ok(None);
                     }
 
-                    Ok(Some(project_and_reorder(trie_ref, reordering)))
+                    if !schema_less {
+                        Ok(Some(project_and_reorder(trie_ref, reordering)))
+                    } else {
+                        Ok(Some(Trie::new(vec![])))
+                    }
                 }
                 ExecutionOperation::FetchNew(index) => {
                     let comp_result = computation_results.get(index).unwrap();
                     let trie_ref = match comp_result {
-                        ComputationResult::Temporary(trie) => trie,
+                        ComputationResult::Temporary(trie) => {
+                            if trie.row_num() == 0 {
+                                return Ok(None);
+                            }
+
+                            trie
+                        }
                         ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
                         ComputationResult::Empty => return Ok(None),
+                        ComputationResult::Schemaless(trie) => trie,
                     };
 
-                    if trie_ref.row_num() == 0 {
-                        return Ok(None);
+                    if !schema_less {
+                        Ok(Some(project_and_reorder(trie_ref, reordering)))
+                    } else {
+                        Ok(Some(Trie::new(vec![])))
                     }
-
-                    Ok(Some(project_and_reorder(trie_ref, reordering)))
                 }
                 _ => panic!(
                     "The project/reorder operation can only be applied to materialized tries."
@@ -745,6 +760,9 @@ impl DatabaseInstance {
             let type_tree = TypeTree::from_execution_tree(self, &type_trees, &execution_tree)?;
             let schema = type_tree.schema.clone();
 
+            println!("Simplified: Execution Tree: {execution_tree:?}");
+            println!("TypeTree: {type_tree:?}");
+
             for (id, order) in execution_tree.required_tables() {
                 self.make_available_in_memory(id, &order)?;
             }
@@ -759,31 +777,39 @@ impl DatabaseInstance {
                 // If trie appended nulls then we need to update our `current_null` value
                 self.current_null += new_trie.row_num() as u64 * num_null_columns;
 
-                // Add new trie to the appropriate place
-                match execution_tree.result() {
-                    ExecutionResult::Temporary => {
-                        log::info!(
-                            "Saved temporary table: {} entries ({})",
-                            new_trie.row_num(),
-                            new_trie.size_bytes()
-                        );
+                // A non-empty schema-less table
+                if new_trie.get_types().is_empty() {
+                    computation_results.insert(tree_id, ComputationResult::Schemaless(new_trie));
+                } else {
+                    // Add new trie to the appropriate place
+                    match execution_tree.result() {
+                        ExecutionResult::Temporary => {
+                            log::info!(
+                                "Saved temporary table: {} entries ({})",
+                                new_trie.row_num(),
+                                new_trie.size_bytes()
+                            );
 
-                        computation_results.insert(tree_id, ComputationResult::Temporary(new_trie));
-                    }
-                    ExecutionResult::Permanent(order, name) => {
-                        let new_id = self.register_table(name, schema);
+                            computation_results
+                                .insert(tree_id, ComputationResult::Temporary(new_trie));
+                        }
+                        ExecutionResult::Permanent(order, name) => {
+                            let new_id = self.register_table(name, schema);
 
-                        log::info!(
-                            "Saved permanent table {new_id} - {name} with {} entries ({})",
-                            new_trie.row_num(),
-                            new_trie.size_bytes()
-                        );
+                            log::info!(
+                                "Saved permanent table {new_id} - {name} with {} entries ({})",
+                                new_trie.row_num(),
+                                new_trie.size_bytes()
+                            );
 
-                        self.add_trie(new_id, order.clone(), new_trie);
+                            self.add_trie(new_id, order.clone(), new_trie);
 
-                        permanent_ids.insert(tree_id, new_id);
-                        computation_results
-                            .insert(tree_id, ComputationResult::Permanent(new_id, order.clone()));
+                            permanent_ids.insert(tree_id, new_id);
+                            computation_results.insert(
+                                tree_id,
+                                ComputationResult::Permanent(new_id, order.clone()),
+                            );
+                        }
                     }
                 }
             } else {
@@ -872,14 +898,17 @@ impl DatabaseInstance {
             ExecutionOperation::FetchNew(index) => {
                 let comp_result = computation_results.get(index).unwrap();
                 let trie_ref = match comp_result {
-                    ComputationResult::Temporary(trie) => trie,
+                    ComputationResult::Temporary(trie) => {
+                        if trie.row_num() == 0 {
+                            return Ok(None);
+                        }
+
+                        trie
+                    }
                     ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
                     ComputationResult::Empty => return Ok(None),
+                    ComputationResult::Schemaless(trie) => trie,
                 };
-
-                if trie_ref.row_num() == 0 {
-                    return Ok(None);
-                }
 
                 let schema = type_node.schema.clone();
                 let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema.get_storage_types());
@@ -974,6 +1003,7 @@ impl DatabaseInstance {
                             ComputationResult::Temporary(trie) => trie,
                             ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
                             ComputationResult::Empty => return Ok(None),
+                            ComputationResult::Schemaless(trie) => trie,
                         };
 
                         trie_ref
