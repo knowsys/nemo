@@ -875,10 +875,10 @@ impl DatabaseInstance {
         type_node: &TypeTreeNode,
         computation_results: &'a HashMap<usize, ComputationResult>,
     ) -> Result<Option<TrieScanEnum<'a>>, Error> {
-        if type_node.schema.is_empty() {
-            // That there is no schema for this node implies that the table is empty
-            return Ok(None);
-        }
+        // if type_node.schema.is_empty() {
+        //     // That there is no schema for this node implies that the table is empty
+        //     return Ok(None);
+        // }
 
         let node_rc = execution_node.get_rc();
         let node_operation = &node_rc.borrow().operation;
