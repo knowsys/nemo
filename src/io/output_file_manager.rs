@@ -1,10 +1,14 @@
 //! This module contains the OutputFileManager, which generates [`RecordWriter`] objects
 
-use std::{path::{PathBuf, Path}, fs::{OpenOptions, create_dir_all}, io::Write};
+use std::{
+    fs::{create_dir_all, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+};
 
-use flate2::{Compression, write::GzEncoder};
+use flate2::{write::GzEncoder, Compression};
 
-use crate::{logical::model::Identifier, error::Error};
+use crate::{error::Error, logical::model::Identifier};
 
 use super::RecordWriter;
 
@@ -38,11 +42,9 @@ impl FileFormat {
 
     fn create_writer<W: Write>(&self, writer: W) -> impl RecordWriter {
         match self {
-            FileFormat::DSV(delimiter) => {
-                csv::WriterBuilder::new()
-                    .delimiter(*delimiter)
-                    .from_writer(writer)
-            }
+            FileFormat::DSV(delimiter) => csv::WriterBuilder::new()
+                .delimiter(*delimiter)
+                .from_writer(writer),
         }
     }
 }
@@ -61,12 +63,16 @@ impl FileCompression {
     pub fn file_name(&self, path: PathBuf) -> PathBuf {
         match self {
             FileCompression::None => path,
-            FileCompression::Gzip => path.with_extension(append_extension(&path, "gz"))
+            FileCompression::Gzip => path.with_extension(append_extension(&path, "gz")),
         }
     }
 
     /// Create a writer, that compresses the output stream with the set compression    
-    pub fn create_writer(&self, path: PathBuf, options: OpenOptions) -> Result<Box<dyn Write>, Error> {
+    pub fn create_writer(
+        &self,
+        path: PathBuf,
+        options: OpenOptions,
+    ) -> Result<Box<dyn Write>, Error> {
         match self {
             FileCompression::None => {
                 let writer = options.open(path)?;
@@ -114,11 +120,11 @@ impl<'a> OutputFileManager<'a> {
         } else {
             FileCompression::None
         };
-        Ok(OutputFileManager { 
+        Ok(OutputFileManager {
             path,
             overwrite,
             compression_format,
-            data_format
+            data_format,
         })
     }
 }

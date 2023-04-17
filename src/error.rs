@@ -75,5 +75,5 @@ pub enum Error {
     },
     /// CSV serialization/deserialization error
     #[error(transparent)]
-    CsvError(#[from] csv::Error)
+    CsvError(#[from] csv::Error),
 }

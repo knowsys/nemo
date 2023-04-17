@@ -8,11 +8,7 @@ use std::{
 
 use sanitise_file_name::{sanitise_with_options, Options};
 
-use crate::{
-    generate_forwarder,
-    io::parser::ParseError,
-    physical::datatypes::Double,
-};
+use crate::{generate_forwarder, io::parser::ParseError, physical::datatypes::Double};
 
 /// An identifier for, e.g., a Term or a Predicate.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]

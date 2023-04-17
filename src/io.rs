@@ -4,12 +4,15 @@ use std::io::Write;
 
 pub mod builder_proxy;
 pub mod dsv;
-pub mod parser;
 pub mod output_file_manager;
+pub mod parser;
 
 pub use output_file_manager::OutputFileManager;
 
-use crate::{physical::{tabular::table_types::trie::Trie, management::database::Dict}, error::Error};
+use crate::{
+    error::Error,
+    physical::{management::database::Dict, tabular::table_types::trie::Trie},
+};
 
 /// A general interface for writing records of string values
 pub trait RecordWriter {
@@ -26,7 +29,7 @@ impl<W: Write> RecordWriter for csv::Writer<W> {
     where
         I: IntoIterator<Item = T>,
         // NOTE: instead of AsRef, custom conversion traits can later be set up
-        T: AsRef<[u8]> 
+        T: AsRef<[u8]>,
     {
         self.write_record(record)?;
         Ok(())

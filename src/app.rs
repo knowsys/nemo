@@ -6,7 +6,8 @@ use clap::Parser;
 use nemo::{
     error::Error,
     io::{
-        parser::{all_input_consumed, RuleParser}, OutputFileManager, write_table,
+        parser::{all_input_consumed, RuleParser},
+        write_table, OutputFileManager,
     },
     logical::{
         execution::{
@@ -189,8 +190,11 @@ impl CliApp {
                 .idb_predicates()
                 .iter()
                 .try_for_each(|pred| {
-                    let output_file_manager =
-                        OutputFileManager::try_new(&self.output_directory, self.overwrite, self.gz)?;
+                    let output_file_manager = OutputFileManager::try_new(
+                        &self.output_directory,
+                        self.overwrite,
+                        self.gz,
+                    )?;
                     let file = output_file_manager.get_output_file_name(pred);
                     let meta_info = file.metadata();
                     if let Err(err) = meta_info {
