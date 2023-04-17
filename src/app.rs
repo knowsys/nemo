@@ -1,12 +1,14 @@
 //! Contains structures and functionality for the binary
+use std::{fs::read_to_string, io::ErrorKind, path::PathBuf};
 
 use clap::Parser;
-use std::fs::read_to_string;
-use std::path::PathBuf;
 
 use nemo::{
     error::Error,
-    io::parser::{all_input_consumed, RuleParser},
+    io::{
+        dsv::CSVWriter,
+        parser::{all_input_consumed, RuleParser},
+    },
     logical::{
         execution::{
             selection_strategy::strategy_round_robin::StrategyRoundRobin, ExecutionEngine,
@@ -83,8 +85,9 @@ impl CliApp {
 
         let app_state = self.parse_rules()?;
 
-        let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program);
+        self.prevent_accidential_overwrite(&app_state)?;
 
+        let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program);
         TimedCode::instance().sub("Reading & Preprocessing").stop();
         TimedCode::instance().sub("Reasoning").start();
 
@@ -101,13 +104,11 @@ impl CliApp {
             log::info!("writing output");
             let csv_writer =
                 nemo::io::dsv::CSVWriter::try_new(&self.output_directory, self.overwrite, self.gz)?;
-            // TODO fix cloning
             exec_engine.idb_predicates()?.try_for_each(|(pred, trie)| {
-                let pred_name = pred.name();
                 if let Some(trie) = trie {
-                    csv_writer.write_predicate(&pred_name, trie)
+                    csv_writer.write_predicate(&pred, trie)
                 } else {
-                    csv_writer.create_file(&pred_name).map(|_| ())
+                    csv_writer.create_file(&pred).map(|_| ())
                 }
             })?;
 
@@ -152,8 +153,17 @@ impl CliApp {
         let mut inputs: Vec<String> = Vec::new();
 
         self.rules.iter().try_for_each(|file| {
-            inputs.push(read_to_string(file)?);
-            std::io::Result::Ok(())
+            inputs.push(read_to_string(file).map_err(|err| {
+                Error::IOReading {
+                    error: err,
+                    filename: file
+                        .clone()
+                        .into_os_string()
+                        .into_string()
+                        .expect("Path shall be representable as string"),
+                }
+            })?);
+            Ok::<(), Error>(())
         })?;
         let input = inputs.iter_mut().fold(String::new(), |mut acc, item| {
             acc.push_str(item);
@@ -162,6 +172,44 @@ impl CliApp {
         let program = all_input_consumed(parser.parse_program())(&input)?;
         log::info!("Rules parsed");
         log::trace!("{:?}", program);
+
         Ok(AppState::new(program))
+    }
+
+    /// Checks if results shall be saved without allowing to overwrite
+    /// Returns an Error if files are existing without being allowed to overwrite them
+    fn prevent_accidential_overwrite(&self, app_state: &AppState) -> Result<(), Error> {
+        if self.save_results && !self.overwrite {
+            app_state
+                .program
+                .idb_predicates()
+                .iter()
+                .try_for_each(|pred| {
+                    let csv_writer =
+                        CSVWriter::try_new(&self.output_directory, self.overwrite, self.gz)?;
+                    let file = pred.sanitised_file_name(
+                        self.output_directory.clone(),
+                        csv_writer.compression_format,
+                    );
+                    let meta_info = file.metadata();
+                    if let Err(err) = meta_info {
+                        if err.kind() == ErrorKind::NotFound {
+                            Ok::<(), Error>(())
+                        } else {
+                            Err(Error::IO(err))
+                        }
+                    } else {
+                        Err(Error::IOExists {
+                            error: ErrorKind::AlreadyExists.into(),
+                            filename: file
+                                .to_str()
+                                .expect("Path is expected to be valid utf-8")
+                                .to_string(),
+                        })
+                    }
+                })
+        } else {
+            Ok(())
+        }
     }
 }
