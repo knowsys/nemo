@@ -126,10 +126,6 @@ impl TableStorage {
         dict: &mut Dict,
     ) -> Result<Trie, Error> {
         {
-            TimedCode::instance()
-                .sub("Reasoning/Execution/Load Table")
-                .start();
-
             log::info!("Loading source {source}");
 
             let trie = match source {
@@ -157,10 +153,6 @@ impl TableStorage {
                     Trie::from_rows(&rows)
                 }
             };
-
-            TimedCode::instance()
-                .sub("Reasoning/Execution/Load Table")
-                .stop();
 
             Ok(trie)
         }
@@ -738,26 +730,33 @@ impl DatabaseInstance {
         let mut removed_temp_ids = HashSet::<usize>::new();
 
         for (tree_id, mut execution_tree) in execution_trees {
-            let timed_string = format!("Reasoning/Execution/{}", execution_tree.name());
-            TimedCode::instance().sub(&timed_string).start();
-
             if let Some(simplified_tree) = execution_tree.simplify(&removed_temp_ids) {
                 execution_tree = simplified_tree;
             } else {
                 removed_temp_ids.insert(tree_id);
 
-                TimedCode::instance().sub(&timed_string).stop();
                 continue;
             }
 
             execution_tree.satisfy_leapfrog_triejoin();
 
-            let type_tree = TypeTree::from_execution_tree(self, &type_trees, &execution_tree)?;
-            let schema = type_tree.schema.clone();
+            TimedCode::instance()
+                .sub("Reasoning/Execution/Load Table")
+                .start();
 
             for (id, order) in execution_tree.required_tables() {
                 self.make_available_in_memory(id, &order)?;
             }
+
+            TimedCode::instance()
+                .sub("Reasoning/Execution/Load Table")
+                .stop();
+
+            let timed_string = format!("Reasoning/Execution/{}", execution_tree.name());
+            TimedCode::instance().sub(&timed_string).start();
+
+            let type_tree = TypeTree::from_execution_tree(self, &type_trees, &execution_tree)?;
+            let schema = type_tree.schema.clone();
 
             let num_null_columns = Self::appends_nulls(execution_tree.root());
 
