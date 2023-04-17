@@ -225,7 +225,7 @@ impl CSVWriter<'_> {
 
     /// Writes a predicate as a csv-file into the corresponding result-directory
     /// # Parameters
-    /// * `pred` is a [`&Identifier`], representing a file
+    /// * `pred` is a [`&Identifier`], representing a predicate
     /// * `trie` is the [`Trie`] which holds all the content of the given predicate
     /// * `dict` is a [`Dictionary`], containing the mapping of the internal number representation to a [`String`]
     /// # Returns
