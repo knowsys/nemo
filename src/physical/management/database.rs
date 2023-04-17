@@ -433,7 +433,7 @@ pub struct DatabaseInstance {
 /// Result of executing an [`ExecutionTree`].
 enum ComputationResult {
     /// Resulting trie is only stored temporarily within this object.
-    Temporary(Trie),
+    Temporary(Option<Trie>),
     /// Trie is stored permanently under a [`TableId`] and [`ColumnOrder`].
     Permanent(TableId, ColumnOrder),
     /// The computation resulted in an empty trie.
@@ -491,8 +491,6 @@ impl DatabaseInstance {
     /// Register a new table under a given name and schema.
     /// Returns the [`TableId`] with which the new table can be addressed.
     pub fn register_table(&mut self, name: &str, schema: TableSchema) -> TableId {
-        debug_assert!(schema.arity() > 0);
-
         self.table_infos
             .insert(self.current_id, TableInfo::new(String::from(name), schema));
 
@@ -676,6 +674,8 @@ impl DatabaseInstance {
         let root_operation = &root_rc.borrow().operation;
 
         if let ExecutionOperation::Project(subnode, reordering) = root_operation {
+            let schema_less = reordering.iter().collect::<Vec<_>>().is_empty();
+
             let subnode_rc = subnode.get_rc();
             let subnode_operation = &subnode_rc.borrow().operation;
 
@@ -686,21 +686,31 @@ impl DatabaseInstance {
                         return Ok(None);
                     }
 
-                    Ok(Some(project_and_reorder(trie_ref, reordering)))
+                    if !schema_less {
+                        Ok(Some(project_and_reorder(trie_ref, reordering)))
+                    } else {
+                        Ok(Some(Trie::new(vec![])))
+                    }
                 }
                 ExecutionOperation::FetchNew(index) => {
                     let comp_result = computation_results.get(index).unwrap();
                     let trie_ref = match comp_result {
-                        ComputationResult::Temporary(trie) => trie,
+                        ComputationResult::Temporary(trie_opt) => {
+                            if let Some(trie) = trie_opt {
+                                trie
+                            } else {
+                                return Ok(None);
+                            }
+                        }
                         ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
                         ComputationResult::Empty => return Ok(None),
                     };
 
-                    if trie_ref.row_num() == 0 {
-                        return Ok(None);
+                    if !schema_less {
+                        Ok(Some(project_and_reorder(trie_ref, reordering)))
+                    } else {
+                        Ok(Some(Trie::new(vec![])))
                     }
-
-                    Ok(Some(project_and_reorder(trie_ref, reordering)))
                 }
                 _ => panic!(
                     "The project/reorder operation can only be applied to materialized tries."
@@ -768,7 +778,12 @@ impl DatabaseInstance {
                             new_trie.size_bytes()
                         );
 
-                        computation_results.insert(tree_id, ComputationResult::Temporary(new_trie));
+                        if new_trie.row_num() > 0 || new_trie.get_types().is_empty() {
+                            computation_results
+                                .insert(tree_id, ComputationResult::Temporary(Some(new_trie)));
+                        } else {
+                            computation_results.insert(tree_id, ComputationResult::Temporary(None));
+                        }
                     }
                     ExecutionResult::Permanent(order, name) => {
                         let new_id = self.register_table(name, schema);
@@ -849,10 +864,10 @@ impl DatabaseInstance {
         type_node: &TypeTreeNode,
         computation_results: &'a HashMap<usize, ComputationResult>,
     ) -> Result<Option<TrieScanEnum<'a>>, Error> {
-        if type_node.schema.is_empty() {
-            // That there is no schema for this node implies that the table is empty
-            return Ok(None);
-        }
+        // if type_node.schema.is_empty() {
+        //     // That there is no schema for this node implies that the table is empty
+        //     return Ok(None);
+        // }
 
         let node_rc = execution_node.get_rc();
         let node_operation = &node_rc.borrow().operation;
@@ -872,14 +887,16 @@ impl DatabaseInstance {
             ExecutionOperation::FetchNew(index) => {
                 let comp_result = computation_results.get(index).unwrap();
                 let trie_ref = match comp_result {
-                    ComputationResult::Temporary(trie) => trie,
+                    ComputationResult::Temporary(trie_opt) => {
+                        if let Some(trie) = trie_opt {
+                            trie
+                        } else {
+                            return Ok(None);
+                        }
+                    }
                     ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
                     ComputationResult::Empty => return Ok(None),
                 };
-
-                if trie_ref.row_num() == 0 {
-                    return Ok(None);
-                }
 
                 let schema = type_node.schema.clone();
                 let trie_scan = TrieScanGeneric::new_cast(trie_ref, schema.get_storage_types());
@@ -971,7 +988,13 @@ impl DatabaseInstance {
                     ExecutionOperation::FetchNew(index) => {
                         let comp_result = computation_results.get(index).unwrap();
                         let trie_ref = match comp_result {
-                            ComputationResult::Temporary(trie) => trie,
+                            ComputationResult::Temporary(trie_opt) => {
+                                if let Some(trie) = trie_opt {
+                                    trie
+                                } else {
+                                    return Ok(None);
+                                }
+                            }
                             ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
                             ComputationResult::Empty => return Ok(None),
                         };

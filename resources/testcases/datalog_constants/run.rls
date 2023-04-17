@@ -17,3 +17,6 @@ ConstantHeadBefore(A, Z, B, ?X, ?Y) :- sourceA(?X, ?I, ?Y) .
 ConstantHeadEverywhere(A, B, ?X, ?Z, ?X, C, ?Y, E, F) :- sourceA(?X, ?Y, ?Z) .
 
 ConstantBodyHead(Q, ?Y, A, B, ?X, Z) :- sourceA(A, ?X, ?Y), sourceB(?X, D, A) .
+
+OnlyNewConstants(A, B, C) :- sourceA(?X, ?Y, ?Z) .
+OnlyNewConstantsEmpty(A, B, C) :- sourceA(C, C, C) .
