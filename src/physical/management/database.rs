@@ -433,13 +433,11 @@ pub struct DatabaseInstance {
 /// Result of executing an [`ExecutionTree`].
 enum ComputationResult {
     /// Resulting trie is only stored temporarily within this object.
-    Temporary(Trie),
+    Temporary(Option<Trie>),
     /// Trie is stored permanently under a [`TableId`] and [`ColumnOrder`].
     Permanent(TableId, ColumnOrder),
     /// The computation resulted in an empty trie.
     Empty,
-    /// The computation resulted in a schema-less trie which contains elements
-    Schemaless(Trie),
 }
 
 impl Default for DatabaseInstance {
@@ -493,8 +491,6 @@ impl DatabaseInstance {
     /// Register a new table under a given name and schema.
     /// Returns the [`TableId`] with which the new table can be addressed.
     pub fn register_table(&mut self, name: &str, schema: TableSchema) -> TableId {
-        debug_assert!(schema.arity() > 0);
-
         self.table_infos
             .insert(self.current_id, TableInfo::new(String::from(name), schema));
 
@@ -699,16 +695,15 @@ impl DatabaseInstance {
                 ExecutionOperation::FetchNew(index) => {
                     let comp_result = computation_results.get(index).unwrap();
                     let trie_ref = match comp_result {
-                        ComputationResult::Temporary(trie) => {
-                            if trie.row_num() == 0 {
+                        ComputationResult::Temporary(trie_opt) => {
+                            if let Some(trie) = trie_opt {
+                                trie
+                            } else {
                                 return Ok(None);
                             }
-
-                            trie
                         }
                         ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
                         ComputationResult::Empty => return Ok(None),
-                        ComputationResult::Schemaless(trie) => trie,
                     };
 
                     if !schema_less {
@@ -777,39 +772,36 @@ impl DatabaseInstance {
                 // If trie appended nulls then we need to update our `current_null` value
                 self.current_null += new_trie.row_num() as u64 * num_null_columns;
 
-                // A non-empty schema-less table
-                if new_trie.get_types().is_empty() {
-                    computation_results.insert(tree_id, ComputationResult::Schemaless(new_trie));
-                } else {
-                    // Add new trie to the appropriate place
-                    match execution_tree.result() {
-                        ExecutionResult::Temporary => {
-                            log::info!(
-                                "Saved temporary table: {} entries ({})",
-                                new_trie.row_num(),
-                                new_trie.size_bytes()
-                            );
+                // Add new trie to the appropriate place
+                match execution_tree.result() {
+                    ExecutionResult::Temporary => {
+                        log::info!(
+                            "Saved temporary table: {} entries ({})",
+                            new_trie.row_num(),
+                            new_trie.size_bytes()
+                        );
 
+                        if new_trie.row_num() > 0 || new_trie.get_types().is_empty() {
                             computation_results
-                                .insert(tree_id, ComputationResult::Temporary(new_trie));
+                                .insert(tree_id, ComputationResult::Temporary(Some(new_trie)));
+                        } else {
+                            computation_results.insert(tree_id, ComputationResult::Temporary(None));
                         }
-                        ExecutionResult::Permanent(order, name) => {
-                            let new_id = self.register_table(name, schema);
+                    }
+                    ExecutionResult::Permanent(order, name) => {
+                        let new_id = self.register_table(name, schema);
 
-                            log::info!(
-                                "Saved permanent table {new_id} - {name} with {} entries ({})",
-                                new_trie.row_num(),
-                                new_trie.size_bytes()
-                            );
+                        log::info!(
+                            "Saved permanent table {new_id} - {name} with {} entries ({})",
+                            new_trie.row_num(),
+                            new_trie.size_bytes()
+                        );
 
-                            self.add_trie(new_id, order.clone(), new_trie);
+                        self.add_trie(new_id, order.clone(), new_trie);
 
-                            permanent_ids.insert(tree_id, new_id);
-                            computation_results.insert(
-                                tree_id,
-                                ComputationResult::Permanent(new_id, order.clone()),
-                            );
-                        }
+                        permanent_ids.insert(tree_id, new_id);
+                        computation_results
+                            .insert(tree_id, ComputationResult::Permanent(new_id, order.clone()));
                     }
                 }
             } else {
@@ -898,16 +890,15 @@ impl DatabaseInstance {
             ExecutionOperation::FetchNew(index) => {
                 let comp_result = computation_results.get(index).unwrap();
                 let trie_ref = match comp_result {
-                    ComputationResult::Temporary(trie) => {
-                        if trie.row_num() == 0 {
+                    ComputationResult::Temporary(trie_opt) => {
+                        if let Some(trie) = trie_opt {
+                            trie
+                        } else {
                             return Ok(None);
                         }
-
-                        trie
                     }
                     ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
                     ComputationResult::Empty => return Ok(None),
-                    ComputationResult::Schemaless(trie) => trie,
                 };
 
                 let schema = type_node.schema.clone();
@@ -1000,10 +991,15 @@ impl DatabaseInstance {
                     ExecutionOperation::FetchNew(index) => {
                         let comp_result = computation_results.get(index).unwrap();
                         let trie_ref = match comp_result {
-                            ComputationResult::Temporary(trie) => trie,
+                            ComputationResult::Temporary(trie_opt) => {
+                                if let Some(trie) = trie_opt {
+                                    trie
+                                } else {
+                                    return Ok(None);
+                                }
+                            }
                             ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
                             ComputationResult::Empty => return Ok(None),
-                            ComputationResult::Schemaless(trie) => trie,
                         };
 
                         trie_ref
