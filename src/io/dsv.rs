@@ -1,7 +1,7 @@
 //! Represents different data-import methods
 
-use std::fs::{create_dir_all, File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
 
 use crate::error::Error;
@@ -12,21 +12,8 @@ use crate::io::builder_proxy::{
 use crate::physical::datatypes::storage_value::VecT;
 use crate::physical::datatypes::DataTypeName;
 use crate::physical::management::database::Dict;
-use crate::physical::tabular::table_types::trie::Trie;
 use crate::physical::tabular::traits::table_schema::TableSchema;
 use csv::{Reader, ReaderBuilder};
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use sanitise_file_name::{sanitise_with_options, Options};
-
-/// Compression level for gzip output, cf. gzip(1):
-///
-/// > Regulate the speed of compression using the specified digit #,
-/// > where -1 or --fast indicates the fastest compression method (less
-/// > compression) and -9 or --best indicates the slowest compression
-/// > method (best compression).  The default compression level is -6
-/// > (that is, biased towards high compression at expense of speed).
-const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 
 /// A reader Object, which allows to read a DSV (delimiter separated) file
 #[derive(Debug, Clone)]
@@ -71,7 +58,17 @@ impl DSVReader {
     /// Read the file, using the [TableSchema] and a [dictionary][Dict]
     /// Returns a Vector of [VecT] or a corresponding [Error]
     pub fn read(self, schema: &TableSchema, dictionary: &mut Dict) -> Result<Vec<VecT>, Error> {
-        let gz_decoder = flate2::read::GzDecoder::new(File::open(self.file.as_path())?);
+        let gz_decoder =
+            flate2::read::GzDecoder::new(File::open(self.file.as_path()).map_err(|error| {
+                Error::IOReading {
+                    error,
+                    filename: self
+                        .file
+                        .to_str()
+                        .expect("Path is expected to be valid utf-8")
+                        .into(),
+                }
+            })?);
         let builder = self.generate_proxies(schema);
         if gz_decoder.header().is_some() {
             self.read_with_reader(
@@ -149,81 +146,6 @@ impl DSVReader {
             })
             .collect()
     }
-}
-
-/// Contains all the needed information, to write results into csv-files
-#[derive(Debug)]
-pub struct OutputFileManager<'a> {
-    /// The path to where the results shall be written to.
-    path: &'a PathBuf,
-    /// Overwrite files, note that the target folder will be emptied if `overwrite` is set to [true].
-    overwrite: bool,
-    /// Gzip csv-file.
-    gzip: bool,
-}
-
-impl<'a> OutputFileManager<'a> {
-    /// Instantiate a [`CSVWriter`].
-    ///
-    /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
-    /// TODO: handle constant dict correctly
-    pub fn try_new(path: &'a PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
-        create_dir_all(path)?;
-        Ok(OutputFileManager {
-            path,
-            overwrite,
-            gzip,
-        })
-    }
-}
-
-impl OutputFileManager<'_> {
-    /// Creates a `.csv` (or possibly a `.csv.gz`) file for predicate
-    /// [`pred`] and returns a [`csv::Writer<File>`] to it.
-    pub fn create_file_writer(&self, pred: impl AsRef<str>) -> Result<Box<dyn Write>, Error> {
-        let pred = pred.as_ref();
-        let sanitise_options = Options::<Option<char>> {
-            url_safe: true,
-            ..Default::default()
-        };
-        let file_name = sanitise_with_options(pred, &sanitise_options);
-        let file_name_with_extensions = format!(
-            "{}/{file_name}.csv{}",
-            self.path
-                .as_os_str()
-                .to_str()
-                .expect("Path should be a unicode string"),
-            if self.gzip { ".gz" } else { "" }
-        );
-        let file_path = PathBuf::from(file_name_with_extensions);
-        log::info!("Creating {pred} as {file_path:?}");
-        let mut options = OpenOptions::new();
-        options.write(true);
-        if self.overwrite {
-            options.create(true).truncate(true);
-        } else {
-            options.create_new(true);
-        };
-        let file = options.open(file_path)?;
-
-        if self.gzip {
-            Ok(Box::new(GzEncoder::new(file, GZIP_COMPRESSION_LEVEL)))
-        } else {
-            Ok(Box::new(file))
-        }
-    }
-}
-
-/// Write the trie into the given writer
-pub fn write_table<W: Write>(writer: W, trie: &Trie, dict: &Dict) -> Result<(), Error> {
-    let mut records = trie.records();
-    let mut writer = csv::Writer::from_writer(writer);
-
-    while let Some(record) = records.next_record(dict) {
-        writer.write_record(record)?;
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

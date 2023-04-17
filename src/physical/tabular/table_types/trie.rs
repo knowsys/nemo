@@ -131,8 +131,6 @@ pub struct Trie {
 impl Trie {
     /// Construct a new Trie from a given schema and a vector of IntervalColumns.
     pub fn new(columns: Vec<ColumnWithIntervalsT>) -> Self {
-        debug_assert!(!columns.is_empty());
-
         let types = columns.iter().map(|col| col.get_type()).collect();
         Self { types, columns }
     }

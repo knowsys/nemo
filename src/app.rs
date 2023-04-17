@@ -1,14 +1,12 @@
 //! Contains structures and functionality for the binary
+use std::{fs::read_to_string, io::ErrorKind, path::PathBuf};
 
 use clap::Parser;
-use std::fs::read_to_string;
-use std::path::PathBuf;
 
 use nemo::{
     error::Error,
     io::{
-        dsv,
-        parser::{all_input_consumed, RuleParser},
+        parser::{all_input_consumed, RuleParser}, OutputFileManager, write_table,
     },
     logical::{
         execution::{
@@ -86,8 +84,9 @@ impl CliApp {
 
         let app_state = self.parse_rules()?;
 
-        let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program);
+        self.prevent_accidential_overwrite(&app_state)?;
 
+        let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program);
         TimedCode::instance().sub("Reading & Preprocessing").stop();
         TimedCode::instance().sub("Reasoning").start();
 
@@ -103,17 +102,17 @@ impl CliApp {
                 .start();
             log::info!("writing output");
             let file_manager =
-                dsv::OutputFileManager::try_new(&self.output_directory, self.overwrite, self.gz)?;
+                OutputFileManager::try_new(&self.output_directory, self.overwrite, self.gz)?;
 
             let idb_tables = exec_engine.combine_results()?;
             let dict = exec_engine.get_dict();
 
             for (pred, table_id) in idb_tables {
-                let writer = file_manager.create_file_writer(pred.name())?;
+                let writer = file_manager.create_file_writer(&pred)?;
 
                 if let Some(id) = table_id {
                     let trie = exec_engine.table_from_id(id);
-                    dsv::write_table(writer, trie, &dict)?;
+                    write_table(writer, trie, &dict)?;
                 }
             }
 
@@ -158,8 +157,17 @@ impl CliApp {
         let mut inputs: Vec<String> = Vec::new();
 
         self.rules.iter().try_for_each(|file| {
-            inputs.push(read_to_string(file)?);
-            std::io::Result::Ok(())
+            inputs.push(read_to_string(file).map_err(|err| {
+                Error::IOReading {
+                    error: err,
+                    filename: file
+                        .clone()
+                        .into_os_string()
+                        .into_string()
+                        .expect("Path shall be representable as string"),
+                }
+            })?);
+            Ok::<(), Error>(())
         })?;
         let input = inputs.iter_mut().fold(String::new(), |mut acc, item| {
             acc.push_str(item);
@@ -168,6 +176,41 @@ impl CliApp {
         let program = all_input_consumed(parser.parse_program())(&input)?;
         log::info!("Rules parsed");
         log::trace!("{:?}", program);
+
         Ok(AppState::new(program))
+    }
+
+    /// Checks if results shall be saved without allowing to overwrite
+    /// Returns an Error if files are existing without being allowed to overwrite them
+    fn prevent_accidential_overwrite(&self, app_state: &AppState) -> Result<(), Error> {
+        if self.save_results && !self.overwrite {
+            app_state
+                .program
+                .idb_predicates()
+                .iter()
+                .try_for_each(|pred| {
+                    let output_file_manager =
+                        OutputFileManager::try_new(&self.output_directory, self.overwrite, self.gz)?;
+                    let file = output_file_manager.get_output_file_name(pred);
+                    let meta_info = file.metadata();
+                    if let Err(err) = meta_info {
+                        if err.kind() == ErrorKind::NotFound {
+                            Ok::<(), Error>(())
+                        } else {
+                            Err(Error::IO(err))
+                        }
+                    } else {
+                        Err(Error::IOExists {
+                            error: ErrorKind::AlreadyExists.into(),
+                            filename: file
+                                .to_str()
+                                .expect("Path is expected to be valid utf-8")
+                                .to_string(),
+                        })
+                    }
+                })
+        } else {
+            Ok(())
+        }
     }
 }

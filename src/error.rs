@@ -57,6 +57,14 @@ pub enum Error {
         /// Filename which caused the error
         filename: String,
     },
+    /// Errors on reading a file
+    #[error("Failed to read \"{filename}\": {error}.")]
+    IOReading {
+        /// Contains the wrapped error
+        error: std::io::Error,
+        /// Filename which caused the error
+        filename: String,
+    },
     /// Error during a Write operation
     #[error("Failed to write \"{filename}\": {error}")]
     IOWriting {
