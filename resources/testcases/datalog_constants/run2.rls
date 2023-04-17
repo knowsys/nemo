@@ -1,0 +1,4 @@
+sourceA(A,B,C).
+
+OnlyNewConstants(A, B, C) :- sourceA(?X, ?Y, ?Z) .
+OnlyNewConstantsEmpty(A, B, C) :- sourceA(C, C, C) .
