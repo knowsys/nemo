@@ -755,9 +755,6 @@ impl DatabaseInstance {
             let type_tree = TypeTree::from_execution_tree(self, &type_trees, &execution_tree)?;
             let schema = type_tree.schema.clone();
 
-            println!("Simplified: Execution Tree: {execution_tree:?}");
-            println!("TypeTree: {type_tree:?}");
-
             for (id, order) in execution_tree.required_tables() {
                 self.make_available_in_memory(id, &order)?;
             }
