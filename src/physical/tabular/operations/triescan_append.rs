@@ -387,11 +387,11 @@ impl<'a> TrieScan<'a> for TrieScanAppend<'a> {
     }
 
     fn down(&mut self) {
-        if self.base_indices.len() > 0 && self.current_layer.is_none() {
+        if !self.base_indices.is_empty() && self.current_layer.is_none() {
             self.trie_scan.down();
         }
 
-        if self.base_indices.len() > 0
+        if !self.base_indices.is_empty()
             && self.base_pointer < self.base_indices.len() - 1
             && self.current_layer.is_some()
             && self.base_indices[self.base_pointer] == self.current_layer.unwrap()
