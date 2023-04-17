@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
-    character::complete::{alpha1, alphanumeric0, digit1, multispace1, satisfy},
+    character::complete::{alpha1, digit1, multispace1, satisfy},
     combinator::{all_consuming, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
@@ -479,7 +479,7 @@ impl<'a> RuleParser<'a> {
     /// Parse a variable name.
     pub fn parse_variable_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
         traced("parse_variable", move |input| {
-            let (remainder, name) = recognize(pair(alpha1, alphanumeric0))(input)?;
+            let (remainder, name) = self.parse_bare_name()(input)?;
 
             Ok((remainder, Identifier(name.to_owned())))
         })
