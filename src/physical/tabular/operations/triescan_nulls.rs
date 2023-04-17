@@ -99,8 +99,9 @@ impl<'a> TrieScan<'a> for TrieScanNulls<'a> {
     }
 
     fn down(&mut self) {
-        if self.current_layer.is_none()
-            || self.current_layer.unwrap() < self.trie_scan.get_types().len() - 1
+        if self.trie_scan.get_types().len() > 0
+            && (self.current_layer.is_none()
+                || self.current_layer.unwrap() < self.trie_scan.get_types().len() - 1)
         {
             self.trie_scan.down();
         }
