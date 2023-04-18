@@ -23,3 +23,6 @@ flycheck_*.el
 
 # Test data
 /test-files
+
+# nix build
+/result

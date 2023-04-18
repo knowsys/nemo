@@ -24,8 +24,36 @@
           inherit system;
           overlays = [ (import rust-overlay) ];
         };
+        toolchain = (pkgs.rust-bin.selectLatestNightlyWith (toolchain:
+          toolchain.default.override { extensions = [ "rust-src" "miri" ]; }));
+        platform = pkgs.makeRustPlatform {
+          cargo = toolchain;
+          rustc = toolchain;
+        };
       in rec {
-        devShell = pkgs.mkShell {
+
+        packages = rec {
+          nemo = platform.buildRustPackage {
+            pname = "nemo";
+            version = "0.1.0";
+            src = ./.;
+
+            cargoLock.lockFile = ./nix/Cargo.lock;
+            postPatch = ''
+              ln -s ${./nix/Cargo.lock} Cargo.lock
+            '';
+
+            meta = {
+              description = "nemo, the next stage of Datalog reasoning";
+              homepage = "htps://github.com/knowsys/nemo";
+              license = [ pkgs.lib.licenses.asl20 ];
+            };
+          };
+
+          default = nemo;
+        };
+
+        devShells.default = pkgs.mkShell {
           RUST_LOG = "debug";
           RUST_BACKTRACE = 1;
 
@@ -34,10 +62,7 @@
           '';
 
           buildInputs = [
-            (pkgs.rust-bin.selectLatestNightlyWith (toolchain:
-              toolchain.default.override {
-                extensions = [ "rust-src" "miri" ];
-              }))
+            toolchain
             pkgs.rust-analyzer
             pkgs.cargo-audit
             pkgs.cargo-license
