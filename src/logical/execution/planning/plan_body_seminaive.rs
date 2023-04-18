@@ -18,7 +18,6 @@ use super::{plan_util::cut_last_layers, BodyStrategy, SeminaiveJoinGenerator};
 /// Implementation of the semi-naive existential rule evaluation strategy.
 #[derive(Debug)]
 pub struct SeminaiveStrategy {
-    is_existential: bool,
     used_variables: HashSet<Variable>,
     join_generator: SeminaiveJoinGenerator,
 }
@@ -40,7 +39,6 @@ impl SeminaiveStrategy {
         };
 
         Self {
-            is_existential: analysis.is_existential,
             used_variables,
             join_generator,
         }
@@ -53,13 +51,9 @@ impl BodyStrategy for SeminaiveStrategy {
         table_manager: &TableManager,
         current_plan: &mut SubtableExecutionPlan,
         rule_info: &RuleInfo,
-        mut variable_order: VariableOrder,
+        variable_order: VariableOrder,
         step_number: usize,
     ) -> ExecutionNodeRef {
-        if self.is_existential {
-            variable_order = variable_order.restrict_to(&self.join_generator.variables);
-        }
-
         let node_seminaive = self.join_generator.seminaive_join(
             current_plan.plan_mut(),
             table_manager,

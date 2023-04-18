@@ -3,7 +3,7 @@
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
 use crate::logical::Permutator;
-use crate::{logical::model::Term, physical::management::database::ColumnOrder};
+use crate::physical::management::database::ColumnOrder;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::super::model::{Identifier, Literal, Program, Rule, Variable};
@@ -317,31 +317,6 @@ impl VariableOrderBuilder<'_> {
         (idb_count, edb_count)
     }
 
-    /// This is a hack to deal with existential rules
-    /// It just appends the existential variables to the end
-    /// TODO: Think about variable orders with existential rules
-    fn append_existentials(variable_order: &mut VariableOrder, rule: &Rule) {
-        // TODO: Pass a RuleAnalysis object and check if this would be useful in other places
-        let existential_variables: Vec<Variable> = rule
-            .head()
-            .iter()
-            .flat_map(|a| a.terms())
-            .filter_map(|t| {
-                if let Term::Variable(var) = t {
-                    Some(var)
-                } else {
-                    None
-                }
-            })
-            .filter(|&v| matches!(v, Variable::Existential(_)))
-            .cloned()
-            .collect();
-
-        for variable in existential_variables {
-            variable_order.push(variable);
-        }
-    }
-
     fn generate_variable_orders(&mut self) -> Vec<VariableOrder> {
         // NOTE: We use a BTreeMap to determinise the iteration order for easier debugging; this should not be performance critical
         let mut remaining_rules: BTreeMap<usize, &Rule> =
@@ -366,8 +341,7 @@ impl VariableOrderBuilder<'_> {
                 .expect("the remaining rules are never empty here");
 
             let next_index = *next_index;
-            let mut var_order = self.generate_variable_order_for_rule(next_rule);
-            Self::append_existentials(&mut var_order, next_rule);
+            let var_order = self.generate_variable_order_for_rule(next_rule);
 
             remaining_rules.remove(&next_index);
             result.push((next_index, var_order));

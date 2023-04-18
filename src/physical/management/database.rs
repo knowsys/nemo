@@ -725,15 +725,18 @@ impl DatabaseInstance {
         let mut removed_temp_ids = HashSet::<usize>::new();
 
         for (tree_id, mut execution_tree) in execution_trees {
+            log::info!("Execution step: {}", execution_tree.name());
+
+            execution_tree.satisfy_leapfrog_triejoin();
+
             if let Some(simplified_tree) = execution_tree.simplify(&removed_temp_ids) {
                 execution_tree = simplified_tree;
             } else {
                 removed_temp_ids.insert(tree_id);
+                log::info!("Result is empty. No computation was required.");
 
                 continue;
             }
-
-            execution_tree.satisfy_leapfrog_triejoin();
 
             TimedCode::instance()
                 .sub("Reasoning/Execution/Load Table")

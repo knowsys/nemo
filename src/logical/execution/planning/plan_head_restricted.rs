@@ -6,11 +6,8 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Atom, Identifier, Rule, Term, Variable},
-        program_analysis::{
-            analysis::RuleAnalysis, normalization::normalize_atom_vector,
-            variable_order::VariableOrder,
-        },
+        model::{Identifier, Rule, Term, Variable},
+        program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::{SubtableExecutionPlan, SubtableIdentifier},
         TableManager,
     },
@@ -32,10 +29,12 @@ use super::{
 #[derive(Debug)]
 pub struct RestrictedChaseStrategy {
     join_generator: SeminaiveJoinGenerator,
-    frontier_variables: HashSet<Variable>,
 
     predicate_to_instructions: HashMap<Identifier, Vec<HeadInstruction>>,
     predicate_to_full_existential: HashMap<Identifier, bool>,
+
+    aux_head_order: VariableOrder,
+    aux_predicate: Identifier,
 
     analysis: RuleAnalysis,
 }
@@ -43,27 +42,6 @@ pub struct RestrictedChaseStrategy {
 impl RestrictedChaseStrategy {
     /// Create a new [`RestrictedChaseStrategy`] object.
     pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
-        let frontier_variables = analysis
-            .body_variables
-            .intersection(&analysis.head_variables)
-            .cloned()
-            .collect();
-
-        let normalized_head =
-            normalize_atom_vector(&rule.head().iter().by_ref().collect::<Vec<&Atom>>(), &[]);
-        let mut normalized_head_variables = HashSet::new();
-        let mut normalized_head_variable_types = analysis.variable_types.clone();
-        for atom in &normalized_head.atoms {
-            for term in atom.terms() {
-                if let Term::Variable(v) = term {
-                    normalized_head_variables.insert(v.clone());
-                    normalized_head_variable_types
-                        .entry(v.clone())
-                        .or_insert(Default::default());
-                }
-            }
-        }
-
         let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
         let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();
 
@@ -84,19 +62,46 @@ impl RestrictedChaseStrategy {
             *is_full_existential &= is_existential;
         }
 
+        let normalized_head_variables = analysis.existential_aux_order.iter().cloned().collect();
+        let head_join_atoms = analysis
+            .existential_aux_rule
+            .body()
+            .iter()
+            .map(|l| l.atom().clone())
+            .collect();
+        let head_join_filters = analysis
+            .existential_aux_rule
+            .filters()
+            .iter()
+            .cloned()
+            .collect();
+
         let join_generator = SeminaiveJoinGenerator {
             variables: normalized_head_variables,
-            atoms: normalized_head.atoms,
-            filters: normalized_head.filters,
-            variable_types: normalized_head_variable_types,
+            atoms: head_join_atoms,
+            filters: head_join_filters,
+            variable_types: analysis.existential_aux_types.clone(),
         };
 
+        let aux_head = &analysis.existential_aux_rule.head()[0];
+        let mut aux_head_order = VariableOrder::new();
+        for term in aux_head.terms() {
+            if let Term::Variable(variable) = term {
+                aux_head_order.push(variable.clone());
+            } else {
+                unreachable!("This atom should only conist of variables");
+            }
+        }
+
+        let aux_predicate = aux_head.predicate().clone();
+
         RestrictedChaseStrategy {
-            frontier_variables,
             join_generator,
             predicate_to_instructions,
             predicate_to_full_existential,
             analysis: analysis.clone(),
+            aux_predicate,
+            aux_head_order,
         }
     }
 }
@@ -108,7 +113,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
         current_plan: &mut SubtableExecutionPlan,
         node_matches: ExecutionNodeRef,
         rule_info: &RuleInfo,
-        variable_order: VariableOrder,
+        body_join_order: VariableOrder,
         step: usize,
     ) {
         // High-level description of the strategy:
@@ -135,23 +140,13 @@ impl HeadStrategy for RestrictedChaseStrategy {
 
         // 1. Compute the table "New Satisfied Matches"
 
-        // For this we will need to compute the seminaive join of the CQ expressed in the head of the rule
-        // The problem is that the join assumes that the atom vector is "normalized", i.e.
-        // does not contain any contants or repeat variable within one atom.
-        // Hence we normalize the head in the constructor of this object.
-        // However the variable order does not know about the potential new variables introduced during normalization
-        // Hence we compute a new one
-        let normalized_head_variable_order = append_unknown_variables(
-            &self.join_generator.atoms,
-            variable_order.restrict_to(&self.analysis.head_variables),
-        );
-
         let node_new_satisfied_matches = self.join_generator.seminaive_join(
             current_plan.plan_mut(),
             table_manager,
             rule_info.step_last_applied,
             step,
-            &normalized_head_variable_order,
+            // We use the same precomputed variable order every time
+            &self.analysis.existential_aux_order,
         );
 
         current_plan.add_temporary_table(
@@ -162,11 +157,9 @@ impl HeadStrategy for RestrictedChaseStrategy {
         // 2. Compute the table "Satisfied Matches Frontier"
 
         // The order of variables in the table "Satisfied Matches"
-        let variables_satisifed_matches = normalized_head_variable_order.as_ordered_list();
+        let variables_satisifed_matches = self.analysis.existential_aux_order.as_ordered_list();
         // The above order but without non-fronier variables
-        let variables_satisifed_matches_frontier = normalized_head_variable_order
-            .restrict_to(&self.frontier_variables)
-            .as_ordered_list();
+        let variables_satisifed_matches_frontier = self.aux_head_order.as_ordered_list();
         // Below is the reordering that would project the non-fronier columns away
         let satisfied_matches_frontier_reordering = ProjectReordering::from_transformation(
             &variables_satisifed_matches,
@@ -183,7 +176,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
         let node_old_satisfied_matches_frontier = subplan_union(
             current_plan.plan_mut(),
             table_manager,
-            self.analysis.head_matches_identifier.clone(),
+            self.aux_predicate.clone(),
             &(0..step),
         );
         let node_new_satisfied_matches_frontier = current_plan.plan_mut().minus(
@@ -195,7 +188,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
             node_new_satisfied_matches_frontier.clone(),
             "Head (Restricted): Sat. Frontier",
             "Restricted Chase Helper Table",
-            SubtableIdentifier::new(self.analysis.head_matches_identifier.clone(), step),
+            SubtableIdentifier::new(self.aux_predicate.clone(), step),
         );
 
         let mut node_satisfied_matches_frontier = current_plan.plan_mut().union_empty();
@@ -204,14 +197,11 @@ impl HeadStrategy for RestrictedChaseStrategy {
 
         // 3. Compute "Matches Frontier"
 
-        let variables_matches = variable_order
-            .restrict_to(&self.analysis.body_variables)
-            .as_ordered_list();
-        let variables_matches_frontier = variable_order
-            .restrict_to(&self.frontier_variables)
-            .as_ordered_list();
-        let matches_frontier_reordering =
-            ProjectReordering::from_transformation(&variables_matches, &variables_matches_frontier);
+        let variables_matches = body_join_order.as_ordered_list();
+        let matches_frontier_reordering = ProjectReordering::from_transformation(
+            &variables_matches,
+            &variables_satisifed_matches_frontier,
+        );
 
         let node_matches_frontier = current_plan
             .plan_mut()
@@ -237,7 +227,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
         );
 
         let variables_unsatisfied_matches_nulls = append_existential_at_the_end(
-            variable_order.restrict_to(&self.frontier_variables),
+            self.aux_head_order.clone(),
             &self.analysis.head_variables,
         );
 
@@ -307,21 +297,6 @@ impl HeadStrategy for RestrictedChaseStrategy {
             }
         }
     }
-}
-
-/// Helper function that puts variables not already contained in the given variable order at the end of it.
-fn append_unknown_variables(atoms: &[Atom], mut order: VariableOrder) -> VariableOrder {
-    for atom in atoms {
-        for term in atom.terms() {
-            if let Term::Variable(variable) = term {
-                if order.get(variable).is_none() {
-                    order.push(variable.clone());
-                }
-            }
-        }
-    }
-
-    order
 }
 
 fn append_existential_at_the_end(
