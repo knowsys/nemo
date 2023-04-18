@@ -414,7 +414,7 @@ pub enum Statement {
 }
 
 /// A full program.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Program {
     base: Option<String>,
     prefixes: HashMap<String, String>,
@@ -422,6 +422,25 @@ pub struct Program {
     rules: Vec<Rule>,
     facts: Vec<Fact>,
     parsed_predicate_declarations: HashMap<Identifier, Vec<LogicalTypeEnum>>,
+}
+
+impl From<Vec<Rule>> for Program {
+    fn from(rules: Vec<Rule>) -> Self {
+        Self {
+            rules,
+            ..Default::default()
+        }
+    }
+}
+
+impl From<(Vec<DataSourceDeclaration>, Vec<Rule>)> for Program {
+    fn from((sources, rules): (Vec<DataSourceDeclaration>, Vec<Rule>)) -> Self {
+        Self {
+            sources,
+            rules,
+            ..Default::default()
+        }
+    }
 }
 
 impl Program {

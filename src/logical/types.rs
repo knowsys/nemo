@@ -105,17 +105,12 @@ impl LogicalTypeEnum {
                     _ => panic!("Only NumericLiteral::Integer terms are supported for logical type UnsignedInteger!"),
                 }
             }
-            Self::Double => {
-                match gt {
-                    // TODO: get rid of unwrap in next line
-                    Term::NumericLiteral(NumericLiteral::Double(d)) => {
-                        DataValueT::Double(d.try_into().unwrap())
-                    }
-                    _ => panic!(
-                        "Only NumericLiteral::Double terms are supported for logical type Double!"
-                    ),
-                }
-            }
+            Self::Double => match gt {
+                Term::NumericLiteral(NumericLiteral::Double(d)) => DataValueT::Double(d),
+                _ => panic!(
+                    "Only NumericLiteral::Double terms are supported for logical type Double!"
+                ),
+            },
         }
     }
 }

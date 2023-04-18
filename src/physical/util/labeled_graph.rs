@@ -33,11 +33,11 @@ where
     /// Add a single node to the graph under a new label.
     /// Returns the [`NodeIndex`] of the new node.
     fn add_node(&mut self, node: Label) -> NodeIndex {
-        match self.label_map.entry(node.clone()) {
-            Entry::Occupied(entry) => entry.get().clone(),
+        match self.label_map.entry(node) {
+            Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
                 let new_index = self.graph.add_node(entry.key().clone());
-                entry.insert(new_index.clone());
+                entry.insert(new_index);
 
                 new_index
             }

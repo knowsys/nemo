@@ -727,7 +727,7 @@ mod test {
                 .into_iter()
                 .unzip();
 
-        let program = Program::new(None, HashMap::new(), vec![], rules, vec![], HashMap::new());
+        let program: Program = rules.into();
 
         let rule_vars = &var_lists[0];
         let rule_var_orders: Vec<VariableOrder> = vec![
@@ -756,7 +756,7 @@ mod test {
                 .into_iter()
                 .unzip();
 
-        let program = Program::new(None, HashMap::new(), vec![], rules, vec![], HashMap::new());
+        let program: Program = rules.into();
 
         let rule_vars = &var_lists[0];
         let rule_var_orders: Vec<VariableOrder> = vec![
@@ -787,7 +787,7 @@ mod test {
         .into_iter()
         .unzip();
 
-        let program = Program::new(None, HashMap::new(), vec![], rules, vec![], HashMap::new());
+        let program: Program = rules.into();
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
@@ -937,9 +937,7 @@ mod test {
         let (rules, var_lists, predicates) =
             get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant();
 
-        let program = Program::new(
-            None,
-            HashMap::new(),
+        let program: Program = (
             vec![
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),
@@ -968,9 +966,8 @@ mod test {
                 ),
             ],
             rules,
-            vec![],
-            HashMap::new(),
-        );
+        )
+            .into();
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![
@@ -1294,9 +1291,7 @@ mod test {
     fn build_preferable_variable_orders_with_el_without_constant() {
         let (rules, var_lists, predicates) = get_el_test_ruleset_without_constants();
 
-        let program = Program::new(
-            None,
-            HashMap::new(),
+        let program: Program = (
             vec![
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),
@@ -1335,9 +1330,8 @@ mod test {
                 ),
             ],
             rules,
-            vec![],
-            HashMap::new(),
-        );
+        )
+            .into();
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![

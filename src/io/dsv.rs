@@ -254,7 +254,7 @@ impl CSVWriter<'_> {
             FileCompression::None(_) => Box::new(file),
         };
 
-        // TODO: have a similar solution as for the proxy builders for writing to prevent unpacking enums over and over again
+        // TODO: have a similar solution as for the builder proxies for writing to prevent unpacking enums over and over again
         for row_idx in 0..num_rows {
             let row: Vec<String> = (0..cols.len()).map(|col_idx| {
                 match schema[col_idx] {
