@@ -1,9 +1,11 @@
 //! Module defining the strategy for calculating all body matches for a rule application.
 
+use std::collections::HashSet;
+
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Atom, Filter, Rule},
+        model::{Atom, Filter, Rule, Variable},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::SubtableExecutionPlan,
         TableManager,
@@ -11,12 +13,13 @@ use crate::{
     physical::management::execution_plan::ExecutionNodeRef,
 };
 
-use super::{BodyStrategy, SeminaiveJoinGenerator};
+use super::{plan_util::cut_last_layers, BodyStrategy, SeminaiveJoinGenerator};
 
 /// Implementation of the semi-naive existential rule evaluation strategy.
 #[derive(Debug)]
 pub struct SeminaiveStrategy {
     is_existential: bool,
+    used_variables: HashSet<Variable>,
     join_generator: SeminaiveJoinGenerator,
 }
 
@@ -27,6 +30,7 @@ impl SeminaiveStrategy {
         // TODO: Think about negation here
         let atoms: Vec<Atom> = rule.body().iter().map(|l| l.atom().clone()).collect();
         let filters: Vec<Filter> = rule.filters().to_vec();
+        let used_variables = analysis.head_variables.clone();
 
         let join_generator = SeminaiveJoinGenerator {
             atoms,
@@ -37,6 +41,7 @@ impl SeminaiveStrategy {
 
         Self {
             is_existential: analysis.is_existential,
+            used_variables,
             join_generator,
         }
     }
@@ -51,8 +56,6 @@ impl BodyStrategy for SeminaiveStrategy {
         mut variable_order: VariableOrder,
         step_number: usize,
     ) -> ExecutionNodeRef {
-        // let mut tree = ExecutionTree::new_temporary("Body Join");
-
         if self.is_existential {
             variable_order = variable_order.restrict_to(&self.join_generator.variables);
         }
@@ -65,7 +68,8 @@ impl BodyStrategy for SeminaiveStrategy {
             &variable_order,
         );
 
-        current_plan.add_temporary_table(node_seminaive.clone(), "Body Join");
+        let cut = cut_last_layers(&variable_order, &self.used_variables);
+        current_plan.add_temporary_table_cut(node_seminaive.clone(), "Body Join", cut);
 
         node_seminaive
     }

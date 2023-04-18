@@ -148,6 +148,8 @@ struct ExecutionOutNode {
     result: ExecutionResult,
     /// Name which identifies this operation, e.g., for logging and timing.
     name: String,
+    /// Amount of layers that will not be considered in the final output.
+    cut_bottom_layers: usize,
 }
 
 /// A DAG representing instructions for generating new tables.
@@ -286,6 +288,7 @@ impl ExecutionPlan {
         node: ExecutionNodeRef,
         result: ExecutionResult,
         name: &str,
+        cut_bottom_layers: usize,
     ) -> usize {
         let id = node.id();
 
@@ -293,6 +296,7 @@ impl ExecutionPlan {
             node,
             result,
             name: String::from(name),
+            cut_bottom_layers,
         });
 
         id
@@ -301,7 +305,19 @@ impl ExecutionPlan {
     /// Designate a [`ExecutionNode`] as an "output" node that will produce a temporary table.
     /// Returns an id which will later be associated with the result of the computation.
     pub fn write_temporary(&mut self, node: ExecutionNodeRef, tree_name: &str) -> usize {
-        self.push_out_node(node, ExecutionResult::Temporary, tree_name)
+        self.push_out_node(node, ExecutionResult::Temporary, tree_name, 0)
+    }
+
+    /// Designate a [`ExecutionNode`] as an "output" node that will produce a temporary table.
+    /// Returns an id which will later be associated with the result of the computation.
+    /// The parameter `cut` indicates how many of the last layers will not be needed.
+    pub fn write_temporary_cut(
+        &mut self,
+        node: ExecutionNodeRef,
+        tree_name: &str,
+        cut: usize,
+    ) -> usize {
+        self.push_out_node(node, ExecutionResult::Temporary, tree_name, cut)
     }
 
     /// Designate a [`ExecutionNode`] as an "output" node that will produce a permament table (in its default order).
@@ -328,6 +344,7 @@ impl ExecutionPlan {
             node,
             ExecutionResult::Permanent(order, String::from(table_name)),
             tree_name,
+            0,
         )
     }
 
@@ -419,6 +436,7 @@ impl ExecutionPlan {
                 node: root_node,
                 result: out_node.result.clone(),
                 name: out_node.name.clone(),
+                cut_bottom_layers: out_node.cut_bottom_layers,
             });
 
             result.push((id, ExecutionTree::new(subtree)));
@@ -459,6 +477,11 @@ impl ExecutionTree {
     /// Return the root of the trie.
     pub fn root(&self) -> ExecutionNodeRef {
         self.0.out_nodes[0].node.clone()
+    }
+
+    /// How many of the final layers will be dropped in the end result
+    pub fn cut_bottom(&self) -> usize {
+        self.0.out_nodes[0].cut_bottom_layers
     }
 
     fn ascii_tree_recursive(node: ExecutionNodeRef) -> Tree {
@@ -692,6 +715,7 @@ impl ExecutionTree {
             node: new_root,
             result: self.result().clone(),
             name: String::from(self.name()),
+            cut_bottom_layers: self.cut_bottom(),
         });
 
         Some(ExecutionTree::new(simplified_tree))

@@ -217,6 +217,18 @@ impl SubtableExecutionPlan {
         self.execution_plan.write_temporary(node, tree_name)
     }
 
+    /// Add a temporary table to the plan.
+    /// The parameter `cut` indicates how many of the last layers will not be needed.
+    pub fn add_temporary_table_cut(
+        &mut self,
+        node: ExecutionNodeRef,
+        tree_name: &str,
+        cut: usize,
+    ) -> usize {
+        self.execution_plan
+            .write_temporary_cut(node, tree_name, cut)
+    }
+
     /// Add a permanent table ot the plan-
     pub fn add_permanent_table(
         &mut self,

@@ -45,10 +45,9 @@ impl VariableOrder {
         }
 
         variable_vector.sort_by(|a, b| {
-            variables
-                .get(a)
+            self.get(a)
                 .unwrap()
-                .partial_cmp(variables.get(b).unwrap())
+                .partial_cmp(self.get(b).unwrap())
                 .unwrap()
         });
 

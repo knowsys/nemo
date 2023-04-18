@@ -18,6 +18,7 @@ use crate::physical::{
 pub fn materialize_inner(
     trie_scan: &mut TrieScanEnum,
     picked_columns: Option<Vec<bool>>,
+    cut_bottom: usize,
     check_empty: bool,
 ) -> Option<Trie> {
     // Keep track of the number of next calls; used for logging
@@ -26,6 +27,10 @@ pub fn materialize_inner(
     // Used types will be the same as in the trie scan
     let column_types = trie_scan.get_types().clone();
     let arity = column_types.len();
+
+    if arity == 0 {
+        return Some(Trie::new(vec![]));
+    }
 
     // Setup column builders
     let mut result_columns = Vec::<ColumnWithIntervalsT>::with_capacity(arity);
@@ -139,6 +144,11 @@ pub fn materialize_inner(
         }
 
         if !is_last_layer {
+            let is_nextlayer_cut = current_layer + 1 <= arity - cut_bottom;
+            if is_nextlayer_cut && current_row[current_layer] {
+                continue;
+            }
+
             trie_scan.down();
             current_layer += 1;
         }
@@ -193,12 +203,18 @@ pub fn materialize_inner(
 
 /// Given a TrieScan iterator, materialize its content into a trie
 pub fn materialize(trie_scan: &mut TrieScanEnum) -> Option<Trie> {
-    materialize_inner(trie_scan, None, false)
+    materialize_inner(trie_scan, None, 0, false)
+}
+
+/// Given a TrieScan iterator, materialize its content into a trie
+/// For the last `cut` layers only checks the existence of a value and does not materialize it fully.
+pub fn materialize_up_to(trie_scan: &mut TrieScanEnum, cut: usize) -> Option<Trie> {
+    materialize_inner(trie_scan, None, cut, false)
 }
 
 /// Tests whether an iterator is empty by materializing it until the first element
 pub fn scan_is_empty(trie_scan: &mut TrieScanEnum) -> bool {
-    materialize_inner(trie_scan, None, true).is_some()
+    materialize_inner(trie_scan, None, 0, true).is_some()
 }
 
 /// Given a TrieScan iterator, materialize its content into a trie
@@ -211,7 +227,7 @@ pub fn materialize_subset(
     trie_scan: &mut TrieScanEnum,
     _picked_columns: Vec<bool>,
 ) -> Option<Trie> {
-    materialize_inner(trie_scan, None, false)
+    materialize_inner(trie_scan, None, 0, false)
 }
 
 #[cfg(test)]

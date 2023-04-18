@@ -7,6 +7,7 @@ use bytesize::ByteSize;
 
 use crate::io::dsv::DSVReader;
 use crate::physical::datatypes::{DataValueT, StorageValueT};
+use crate::physical::tabular::operations::materialize::materialize_up_to;
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::traits::table::Table;
@@ -704,8 +705,9 @@ impl DatabaseInstance {
         } else {
             let iter_opt =
                 self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
+            let cut_bottom = execution_tree.cut_bottom();
 
-            Ok(iter_opt.and_then(|mut iter| materialize(&mut iter)))
+            Ok(iter_opt.and_then(|mut iter| materialize_up_to(&mut iter, cut_bottom)))
         }
     }
 
