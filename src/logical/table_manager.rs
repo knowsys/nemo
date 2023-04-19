@@ -1,19 +1,16 @@
 //! Managing of tables
 
-use super::model::Identifier;
+use super::{model::Identifier, types::LogicalTypeEnum};
 use crate::{
     error::Error,
+    io::dsv::CSVWriter,
     physical::{
-        datatypes::DataTypeName,
         management::{
             database::{ColumnOrder, TableId, TableSource},
             execution_plan::ExecutionNodeRef,
             DatabaseInstance, ExecutionPlan,
         },
-        tabular::{
-            table_types::trie::{DebugTrie, Trie},
-            traits::table_schema::TableSchema,
-        },
+        tabular::{table_types::trie::Trie, traits::table_schema::TableSchema},
         util::mapping::permutation::Permutation,
     },
 };
@@ -290,11 +287,23 @@ impl TableManager {
         self.predicate_subtables.get(&predicate)?.last_step()
     }
 
-    /// Return a [`DebugTrie`] that is associated with the given id.
+    /// Write the Trie associated with the given id to CSV.
     /// Uses the default [`ColumnOrder`]
     /// Panics if there is no trie associated with the given id.
-    pub fn table_from_id(&self, id: TableId) -> DebugTrie {
-        self.database.get_debug_trie(id, &ColumnOrder::default())
+    pub fn write_table_to_disk(
+        &self,
+        writer: &CSVWriter,
+        pred: &Identifier,
+        id: TableId,
+    ) -> Result<(), Error> {
+        writer.write_predicate(
+            pred,
+            self.database.table_schema(id),
+            self.database
+                .get_trie(id, &ColumnOrder::default())
+                .as_column_vector(),
+            &self.database.get_dict_constants(),
+        )
     }
 
     /// Combine all subtables of a predicate into one table
@@ -349,21 +358,11 @@ impl TableManager {
         format!("{predicate_name} ({step}) -> {referenced_table_name} {permutation}")
     }
 
-    /// Workaround because of the missing type system.
-    /// We assume for now that every table is a String table.
-    fn generate_table_schema(arity: usize) -> TableSchema {
-        let mut schema = TableSchema::new();
-        (0..arity).for_each(|_| schema.add_entry(DataTypeName::String));
-
-        schema
-    }
-
     /// Intitializes helper structures that are needed for handling the table associated with the predicate.
     /// Must be done before calling functions that add tables to that predicate.
-    pub fn register_predicate(&mut self, predicate: Identifier, arity: usize) {
-        // TODO: Change this once type system is integrated
+    pub fn register_predicate(&mut self, predicate: Identifier, types: Vec<LogicalTypeEnum>) {
         let predicate_info = PredicateInfo {
-            schema: Self::generate_table_schema(arity),
+            schema: TableSchema::from_vec(types.iter().copied().map(Into::into).collect()),
         };
 
         self.predicate_to_info

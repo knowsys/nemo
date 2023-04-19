@@ -1,6 +1,9 @@
 //! Error-handling module for the crate
 
-use crate::{io::parser::ParseError, physical::datatypes::float_is_nan::FloatIsNaN};
+use crate::{
+    io::parser::ParseError, logical::types::LogicalTypeEnum,
+    physical::datatypes::float_is_nan::FloatIsNaN,
+};
 use thiserror::Error;
 
 /// Error-Collection for all the possible Errors occurring in this crate
@@ -73,4 +76,7 @@ pub enum Error {
         /// Name of the file that could not be written
         filename: String,
     },
+    /// Unknown logical type name in program.
+    #[error("A predicate declaration used an unknown type ({0}). The known types are: {1:?}")]
+    ParseUnknownType(String, Vec<LogicalTypeEnum>),
 }

@@ -52,10 +52,14 @@ impl RestrictedChaseStrategy {
         let normalized_head =
             normalize_atom_vector(&rule.head().iter().by_ref().collect::<Vec<&Atom>>(), &[]);
         let mut normalized_head_variables = HashSet::new();
+        let mut normalized_head_variable_types = analysis.variable_types.clone();
         for atom in &normalized_head.atoms {
             for term in atom.terms() {
                 if let Term::Variable(v) = term {
                     normalized_head_variables.insert(v.clone());
+                    normalized_head_variable_types
+                        .entry(v.clone())
+                        .or_insert(Default::default());
                 }
             }
         }
@@ -72,7 +76,7 @@ impl RestrictedChaseStrategy {
             let instructions = predicate_to_instructions
                 .entry(head_atom.predicate())
                 .or_insert(Vec::new());
-            instructions.push(head_instruction_from_atom(head_atom));
+            instructions.push(head_instruction_from_atom(head_atom, analysis));
 
             let is_full_existential = predicate_to_full_existential
                 .entry(head_atom.predicate())
@@ -84,6 +88,7 @@ impl RestrictedChaseStrategy {
             variables: normalized_head_variables,
             atoms: normalized_head.atoms,
             filters: normalized_head.filters,
+            variable_types: normalized_head_variable_types,
         };
 
         RestrictedChaseStrategy {

@@ -14,6 +14,8 @@ use crate::{
     physical::datatypes::Double,
 };
 
+use super::types::LogicalTypeEnum;
+
 /// An identifier for, e.g., a Term or a Predicate.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 pub struct Identifier(pub(crate) String);
@@ -412,13 +414,33 @@ pub enum Statement {
 }
 
 /// A full program.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Program {
     base: Option<String>,
     prefixes: HashMap<String, String>,
     sources: Vec<DataSourceDeclaration>,
     rules: Vec<Rule>,
     facts: Vec<Fact>,
+    parsed_predicate_declarations: HashMap<Identifier, Vec<LogicalTypeEnum>>,
+}
+
+impl From<Vec<Rule>> for Program {
+    fn from(rules: Vec<Rule>) -> Self {
+        Self {
+            rules,
+            ..Default::default()
+        }
+    }
+}
+
+impl From<(Vec<DataSourceDeclaration>, Vec<Rule>)> for Program {
+    fn from((sources, rules): (Vec<DataSourceDeclaration>, Vec<Rule>)) -> Self {
+        Self {
+            sources,
+            rules,
+            ..Default::default()
+        }
+    }
 }
 
 impl Program {
@@ -429,6 +451,7 @@ impl Program {
         sources: Vec<DataSourceDeclaration>,
         rules: Vec<Rule>,
         facts: Vec<Fact>,
+        parsed_predicate_declarations: HashMap<Identifier, Vec<LogicalTypeEnum>>,
     ) -> Self {
         Self {
             base,
@@ -436,6 +459,7 @@ impl Program {
             sources,
             rules,
             facts,
+            parsed_predicate_declarations,
         }
     }
 
@@ -514,6 +538,12 @@ impl Program {
     #[must_use]
     pub fn resolve_prefix(&self, tag: &str) -> Option<String> {
         self.prefixes.get(tag).cloned()
+    }
+
+    /// Return parsed predicate declarations
+    #[must_use]
+    pub fn parsed_predicate_declarations(&self) -> HashMap<Identifier, Vec<LogicalTypeEnum>> {
+        self.parsed_predicate_declarations.clone()
     }
 }
 

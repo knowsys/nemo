@@ -104,13 +104,8 @@ impl CliApp {
             log::info!("writing output");
             let csv_writer =
                 nemo::io::dsv::CSVWriter::try_new(&self.output_directory, self.overwrite, self.gz)?;
-            exec_engine.idb_predicates()?.try_for_each(|(pred, trie)| {
-                if let Some(trie) = trie {
-                    csv_writer.write_predicate(&pred, trie)
-                } else {
-                    csv_writer.create_file(&pred).map(|_| ())
-                }
-            })?;
+
+            exec_engine.write_idb_results(&csv_writer)?;
 
             TimedCode::instance()
                 .sub("Output & Final Materialization")

@@ -7,12 +7,12 @@ use std::{
 
 use crate::{
     logical::{
-        model::{Atom, Filter, Identifier, NumericLiteral, Term, Variable},
-        program_analysis::variable_order::VariableOrder,
+        model::{Atom, Filter, Identifier, Term, Variable},
+        program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
+        types::LogicalTypeEnum,
         TableManager,
     },
     physical::{
-        datatypes::DataValueT,
         management::{
             database::TableId,
             execution_plan::{ExecutionNodeRef, ExecutionPlan},
@@ -43,6 +43,7 @@ pub(super) fn compute_filters(
     body_variables: &HashSet<Variable>,
     variable_order: &VariableOrder,
     filters: &[Filter],
+    variable_types: &HashMap<Variable, LogicalTypeEnum>,
 ) -> (SelectEqualClasses, Vec<ValueAssignment>) {
     let mut body_variables_sorted: Vec<Variable> = body_variables.clone().into_iter().collect();
     body_variables_sorted.sort_by(|a, b| variable_order.get(a).cmp(&variable_order.get(b)));
@@ -109,19 +110,12 @@ pub(super) fn compute_filters(
                 }
             }
             _ => {
-                // TODO: this needs to change fot the type system; it panics in various cases right now
                 filter_assignments.push(ValueAssignment {
                     column_idx: *variable_to_columnindex.get(&filter.left).unwrap(),
-                    value: match &filter.right {
-                        Term::Constant(Identifier(s)) => DataValueT::String(s.clone()),
-                        Term::Variable(_) => unreachable!(),
-                        Term::NumericLiteral(n) => match n {
-                            NumericLiteral::Integer(i) => DataValueT::String(i.to_string()), // TODO: should be integer type; we handle everything as string for now as long as we do not have the logical type system
-                            NumericLiteral::Decimal(_, _) => todo!(),
-                            NumericLiteral::Double(d) => DataValueT::String(d.to_string()), // TODO: should be double; we handle everything as string for now as long as we do not have the logical type system
-                        },
-                        Term::RdfLiteral(_) => todo!(),
-                    },
+                    value: variable_types
+                        .get(&filter.left)
+                        .unwrap()
+                        .ground_term_to_data_value_t(filter.right.clone()),
                 });
             }
         }
@@ -175,7 +169,7 @@ pub(super) struct HeadInstruction {
 
 /// Given an atom, bring compute the corresponding [`HeadInstruction`].
 /// TODO: This needs to be revised once the Type System on the logical layer has been implemented.
-pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
+pub(super) fn head_instruction_from_atom(atom: &Atom, analysis: &RuleAnalysis) -> HeadInstruction {
     let arity = atom.terms().len();
     let mut reduced_terms = Vec::<Term>::with_capacity(arity);
     let mut append_instructions = Vec::<Vec<AppendInstruction>>::new();
@@ -185,42 +179,34 @@ pub(super) fn head_instruction_from_atom(atom: &Atom) -> HeadInstruction {
 
     let mut variable_map = HashMap::<Identifier, usize>::new();
 
-    for term in atom.terms() {
-        match term {
-            Term::NumericLiteral(nl) => match *nl {
-                NumericLiteral::Integer(i) => {
-                    let instruction =
-                        AppendInstruction::Constant(DataValueT::String(i.to_string())); // TODO: should be integer type; we handle everything as string for now as long as we do not have the logical type system
-                    current_append_vector.push(instruction);
-                }
-                _ => todo!(),
-            },
-            Term::Constant(identifier) => {
-                let id_name = identifier.name();
+    for (logical_type, term) in atom.terms().iter().enumerate().map(|(i, t)| {
+        (
+            analysis.predicate_types.get(&atom.predicate()).unwrap()[i],
+            t,
+        )
+    }) {
+        if let Term::Variable(variable) = term {
+            let variable_identifier = match variable {
+                Variable::Universal(id) => id,
+                Variable::Existential(id) => id,
+            };
 
-                let instruction = AppendInstruction::Constant(DataValueT::String(id_name));
+            if let Some(repeat_index) = variable_map.get(variable_identifier) {
+                let instruction = AppendInstruction::RepeatColumn(*repeat_index);
                 current_append_vector.push(instruction);
+            } else {
+                let reduced_index = reduced_terms.len();
+                reduced_terms.push(Term::Variable(variable.clone()));
+
+                variable_map.insert(variable_identifier.clone(), reduced_index);
+
+                append_instructions.push(vec![]);
+                current_append_vector = append_instructions.last_mut().unwrap();
             }
-            Term::Variable(variable) => {
-                let variable_identifier = match variable {
-                    Variable::Universal(id) => id,
-                    Variable::Existential(id) => id,
-                };
-
-                if let Some(repeat_index) = variable_map.get(variable_identifier) {
-                    let instruction = AppendInstruction::RepeatColumn(*repeat_index);
-                    current_append_vector.push(instruction);
-                } else {
-                    let reduced_index = reduced_terms.len();
-                    reduced_terms.push(Term::Variable(variable.clone()));
-
-                    variable_map.insert(variable_identifier.clone(), reduced_index);
-
-                    append_instructions.push(vec![]);
-                    current_append_vector = append_instructions.last_mut().unwrap();
-                }
-            }
-            Term::RdfLiteral(_) => todo!(),
+        } else {
+            let data_value_t = logical_type.ground_term_to_data_value_t(term.clone());
+            let instruction = AppendInstruction::Constant(data_value_t);
+            current_append_vector.push(instruction);
         }
     }
 

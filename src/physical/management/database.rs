@@ -6,10 +6,9 @@ use std::path::PathBuf;
 use bytesize::ByteSize;
 
 use crate::io::dsv::DSVReader;
-use crate::physical::datatypes::{DataTypeName, DataValueT, StorageValueT};
+use crate::physical::datatypes::{DataValueT, StorageValueT};
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
-use crate::physical::tabular::table_types::trie::DebugTrie;
 use crate::physical::tabular::traits::table::Table;
 use crate::physical::util::mapping::permutation::Permutation;
 use crate::physical::util::mapping::traits::NatMapping;
@@ -119,7 +118,6 @@ pub enum TableStorage {
 
 impl TableStorage {
     /// Load table from a given on-disk source
-    /// TODO: This function should change when the type system gets introduced on the logical layer
     fn load_from_disk(
         source: &TableSource,
         schema: &TableSchema,
@@ -130,13 +128,8 @@ impl TableStorage {
 
             let trie = match source {
                 TableSource::DSV { file, delimiter } => {
-                    // Using fallback solution to treat eveything as string for now (storing as u64 internally)
-                    let datatypeschema = TableSchema::from_vec(
-                        (0..schema.arity()).map(|_| DataTypeName::String).collect(),
-                    );
-                    // TODO branch will be reduced to these two lines
                     let csv_reader = DSVReader::dsv(file.clone(), *delimiter);
-                    let col_table = csv_reader.read(&datatypeschema, dict)?;
+                    let col_table = csv_reader.read(schema, dict)?;
 
                     Trie::from_cols(col_table)
                 }
@@ -824,21 +817,6 @@ impl DatabaseInstance {
         storage
             .get_trie()
             .expect("Function assumes that trie is in memory.")
-    }
-
-    /// Returns a DebugTrie for writing to CSV.
-    /// Panics if no table under the given id and order exists.
-    /// Panics if trie is not available in memory.
-    pub fn get_debug_trie(&self, id: TableId, order: &ColumnOrder) -> DebugTrie {
-        let storage = self
-            .storage_handler
-            .table_storage(id, order)
-            .expect("Function assumes that there is a table with the given id and order.");
-
-        storage
-            .get_trie()
-            .expect("Function assumes that trie is in memory.")
-            .debug(self.dict_constants.clone().take())
     }
 
     /// Return a reference to a trie identified by its id and order.

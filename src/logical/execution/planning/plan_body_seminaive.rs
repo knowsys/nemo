@@ -32,6 +32,7 @@ impl SeminaiveStrategy {
             atoms,
             filters,
             variables: analysis.body_variables.clone(),
+            variable_types: analysis.variable_types.clone(),
         };
 
         Self {
