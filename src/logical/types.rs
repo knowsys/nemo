@@ -30,12 +30,6 @@ macro_rules! generate_logical_type_enum {
             ];
         }
 
-        impl Default for LogicalTypeEnum {
-            fn default() -> Self {
-                Self::RdfsResource
-            }
-        }
-
         impl Display for LogicalTypeEnum {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 match self {
@@ -58,6 +52,12 @@ macro_rules! generate_logical_type_enum {
 }
 
 generate_logical_type_enum!(RdfsResource, UnsignedInteger, Double);
+
+impl Default for LogicalTypeEnum {
+    fn default() -> Self {
+        Self::RdfsResource
+    }
+}
 
 impl From<LogicalTypeEnum> for DataTypeName {
     fn from(source: LogicalTypeEnum) -> Self {
