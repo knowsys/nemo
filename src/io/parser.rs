@@ -5,13 +5,13 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
-    character::complete::{alpha1, alphanumeric0, digit1, multispace1, satisfy},
+    character::complete::{alpha1, digit1, multispace1, none_of, satisfy},
     combinator::{all_consuming, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
 
-use crate::logical::model::*;
+use crate::logical::{model::*, types::LogicalTypeEnum};
 
 mod types;
 use types::IntermediateResult;
@@ -85,6 +85,8 @@ pub struct RuleParser<'a> {
     prefixes: RefCell<HashMap<&'a str, &'a str>>,
     /// The external data sources.
     sources: RefCell<Vec<DataSourceDeclaration>>,
+    /// Declarations of predicates with their types.
+    predicate_declarations: RefCell<HashMap<Identifier, Vec<LogicalTypeEnum>>>,
 }
 
 /// Body may contain literals or filter expressions
@@ -185,6 +187,45 @@ impl<'a> RuleParser<'a> {
             } else {
                 Ok((remainder, prefix))
             }
+        })
+    }
+
+    fn parse_predicate_declaration(
+        &'a self,
+    ) -> impl FnMut(&'a str) -> IntermediateResult<(Identifier, Vec<LogicalTypeEnum>)> {
+        traced("parse_predicate_declaration", move |input| {
+            let (remainder, (predicate, types)) = delimited(
+                terminated(tag("@declare"), multispace1),
+                pair(
+                    self.parse_predicate_name(),
+                    delimited(
+                        self.parse_open_parenthesis(),
+                        separated_list1(self.parse_comma(), self.parse_type_name()),
+                        self.parse_close_parenthesis(),
+                    ),
+                ),
+                self.parse_dot(),
+            )(input)?;
+
+            self.predicate_declarations
+                .borrow_mut()
+                .entry(predicate.clone())
+                .or_insert(types.clone());
+            Ok((remainder, (predicate, types)))
+        })
+    }
+
+    fn parse_type_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<LogicalTypeEnum> {
+        traced("parse_type_name", move |input| {
+            let (remainder, type_name) = (map_res(
+                recognize(pair(alpha1, many0(none_of(",)")))),
+                |name: &str| {
+                    // NOTE: type names may not contain commata but any other character (they should start with [a-zA-Z] though)
+                    name.parse()
+                },
+            ))(input)?;
+
+            Ok((remainder, type_name))
         })
     }
 
@@ -479,7 +520,7 @@ impl<'a> RuleParser<'a> {
     /// Parse a variable name.
     pub fn parse_variable_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
         traced("parse_variable", move |input| {
-            let (remainder, name) = recognize(pair(alpha1, alphanumeric0))(input)?;
+            let (remainder, name) = self.parse_bare_name()(input)?;
 
             Ok((remainder, Identifier(name.to_owned())))
         })
@@ -566,6 +607,7 @@ impl<'a> RuleParser<'a> {
             let (remainder, _) = multispace_or_comment0(input)?;
             let (remainder, _) = opt(self.parse_base())(remainder)?;
             let (remainder, _) = many0(self.parse_prefix())(remainder)?;
+            let (remainder, _) = many0(self.parse_predicate_declaration())(remainder)?;
             let (remainder, _) = many0(self.parse_source())(remainder)?;
             let (remainder, statements) = many0(self.parse_statement())(remainder)?;
 
@@ -586,7 +628,14 @@ impl<'a> RuleParser<'a> {
 
             Ok((
                 remainder,
-                Program::new(base, prefixes, self.sources.borrow().clone(), rules, facts),
+                Program::new(
+                    base,
+                    prefixes,
+                    self.sources.borrow().clone(),
+                    rules,
+                    facts,
+                    self.predicate_declarations.borrow().clone(),
+                ),
             ))
         })
     }

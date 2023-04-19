@@ -7,7 +7,7 @@ use nemo::{
     error::Error,
     io::{
         parser::{all_input_consumed, RuleParser},
-        write_table, OutputFileManager,
+        OutputFileManager,
     },
     logical::{
         execution::{
@@ -106,14 +106,12 @@ impl CliApp {
                 OutputFileManager::try_new(&self.output_directory, self.overwrite, self.gz)?;
 
             let idb_tables = exec_engine.combine_results()?;
-            let dict = exec_engine.get_dict();
 
             for (pred, table_id) in idb_tables {
-                let writer = file_manager.create_file_writer(&pred)?;
+                let mut writer = file_manager.create_file_writer(&pred)?;
 
                 if let Some(id) = table_id {
-                    let trie = exec_engine.table_from_id(id);
-                    write_table(writer, trie, &dict)?;
+                    exec_engine.write_predicate_to_disk(&mut writer, id)?;
                 }
             }
 

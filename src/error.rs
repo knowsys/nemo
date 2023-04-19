@@ -1,6 +1,9 @@
 //! Error-handling module for the crate
 
-use crate::{io::parser::ParseError, physical::datatypes::float_is_nan::FloatIsNaN};
+use crate::{
+    io::parser::ParseError, logical::types::LogicalTypeEnum,
+    physical::datatypes::float_is_nan::FloatIsNaN,
+};
 use thiserror::Error;
 
 /// Error-Collection for all the possible Errors occurring in this crate
@@ -76,4 +79,7 @@ pub enum Error {
     /// CSV serialization/deserialization error
     #[error(transparent)]
     CsvError(#[from] csv::Error),
+    /// Unknown logical type name in program.
+    #[error("A predicate declaration used an unknown type ({0}). The known types are: {1:?}")]
+    ParseUnknownType(String, Vec<LogicalTypeEnum>),
 }

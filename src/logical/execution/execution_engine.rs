@@ -1,19 +1,20 @@
 //! Functionality which handles the execution of a program
 
-use std::{cell::Ref, collections::HashMap};
+use std::collections::HashMap;
 
 use crate::{
     error::Error,
+    io::RecordWriter,
     logical::{
-        model::{DataSource, Identifier, NumericLiteral, Program, Term},
+        model::{DataSource, Identifier, Program},
         program_analysis::analysis::ProgramAnalysis,
+        types::LogicalTypeEnum,
         TableManager,
     },
     meta::TimedCode,
     physical::{
         datatypes::DataValueT,
-        management::database::{Dict, TableId, TableSource},
-        tabular::table_types::trie::Trie,
+        management::database::{TableId, TableSource},
     },
 };
 
@@ -64,7 +65,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
-        Self::add_sources(&mut table_manager, &program);
+        Self::add_sources(&mut table_manager, &program, &analysis);
 
         let mut rule_infos = Vec::<RuleInfo>::new();
         program
@@ -91,11 +92,24 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {
         for (predicate, arity) in &analysis.all_predicates {
-            table_manager.register_predicate(predicate.clone(), *arity);
+            table_manager.register_predicate(
+                predicate.clone(),
+                analysis
+                    .predicate_types
+                    .get(predicate)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        (0..*arity).map(|_| LogicalTypeEnum::RdfsResource).collect()
+                    }),
+            );
         }
     }
 
-    fn add_sources(table_manager: &mut TableManager, program: &Program) {
+    fn add_sources(
+        table_manager: &mut TableManager,
+        program: &Program,
+        analysis: &ProgramAnalysis,
+    ) {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the data source declarations
@@ -125,13 +139,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .0
                 .terms()
                 .iter()
-                .map(|t| match t {
-                    Term::NumericLiteral(nl) => match nl {
-                        NumericLiteral::Integer(i) => DataValueT::String(i.to_string()), // TODO: should be integer type; we handle everything as string for now as long as we do not have the logical type system
-                        _ => todo!(),
-                    },
-                    Term::Constant(Identifier(s)) => DataValueT::String(s.clone()),
-                    _ => todo!(),
+                .enumerate()
+                // TODO: get rid of unwrap
+                .map(|(i, t)| {
+                    analysis.predicate_types.get(&fact.0.predicate()).unwrap()[i]
+                        .ground_term_to_data_value_t(t.clone())
                 })
                 .collect();
 
@@ -238,23 +250,19 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 continue;
             }
 
-            if let Some(combined_id) = self.table_manager.combine_predicate(predicate.clone())? {
-                result_ids.push((predicate.clone(), Some(combined_id)));
-            } else {
-                result_ids.push((predicate.clone(), None))
-            }
+            let table_id = self.table_manager.combine_predicate(predicate.clone())?;
+            result_ids.push((predicate.clone(), table_id));
         }
 
         Ok(result_ids)
     }
 
-    /// Returns a reference to the constants dictionary
-    pub fn get_dict(&self) -> Ref<'_, Dict> {
-        self.table_manager.get_dict()
-    }
-
     /// Returns a reference to the Trie corresponding to the table_id
-    pub fn table_from_id(&self, id: TableId) -> &Trie {
-        self.table_manager.table_from_id(id)
+    pub fn write_predicate_to_disk(
+        &self,
+        writer: &mut impl RecordWriter,
+        table_id: TableId,
+    ) -> Result<(), Error> {
+        self.table_manager.write_table_to_disk(writer, table_id)
     }
 }

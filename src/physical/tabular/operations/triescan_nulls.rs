@@ -62,7 +62,7 @@ impl<'a> TrieScanNulls<'a> {
             }
         }
 
-        // TODO: Should be revised after type system is completed
+        // TODO: We do not have access to the logical types here; how should we handle nulls?
         for null_index in 0..num_nulls {
             target_types.push(StorageTypeName::U64);
 

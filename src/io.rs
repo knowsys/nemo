@@ -9,10 +9,7 @@ pub mod parser;
 
 pub use output_file_manager::OutputFileManager;
 
-use crate::{
-    error::Error,
-    physical::{management::database::Dict, tabular::table_types::trie::Trie},
-};
+use crate::error::Error;
 
 /// A general interface for writing records of string values
 pub trait RecordWriter {
@@ -34,15 +31,4 @@ impl<W: Write> RecordWriter for csv::Writer<W> {
         self.write_record(record)?;
         Ok(())
     }
-}
-
-/// Write the trie into the given writer
-pub fn write_table<W: RecordWriter>(mut writer: W, trie: &Trie, dict: &Dict) -> Result<(), Error> {
-    let mut records = trie.records();
-
-    while let Some(record) = records.next_record(dict) {
-        writer.write_record(record)?;
-    }
-
-    Ok(())
 }

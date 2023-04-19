@@ -14,13 +14,10 @@ use crate::physical::columnar::{
     },
 };
 use crate::physical::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
-use crate::physical::dictionary::Dictionary;
-use crate::physical::management::database::Dict;
+use crate::physical::dictionary::ValueSerializer;
 use crate::physical::management::ByteSized;
-use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
 use std::cell::UnsafeCell;
-use std::fmt;
 use std::iter;
 use std::mem::size_of;
 
@@ -79,6 +76,8 @@ impl<'a> TrieRows<'a> {
     }
 }
 
+// TODO: TrieRecord(s) should probably be moved somewhere else, alongside the table_schema
+
 pub(crate) struct TrieRecord<'a>(&'a [String]);
 
 impl<'a> IntoIterator for TrieRecord<'a> {
@@ -93,27 +92,24 @@ impl<'a> IntoIterator for TrieRecord<'a> {
 pub(crate) struct TrieRecords<'a> {
     rows: TrieRows<'a>,
     last_record: Vec<String>,
+    serializer: ValueSerializer<'a>,
 }
 
 impl<'a> TrieRecords<'a> {
-    pub fn next_record(&mut self, dict: &Dict) -> Option<TrieRecord<'_>> {
+    pub fn next_record(&mut self) -> Option<TrieRecord<'_>> {
         let changed_values = self.rows.next_changed()?;
+        let unchanged = if !self.last_record.is_empty() {
+            self.last_record.len() - changed_values.len()
+        } else {
+            0
+        };
 
-        if !self.last_record.is_empty() {
-            self.last_record
-                .truncate(self.last_record.len() - changed_values.len());
-        }
+        self.last_record.truncate(unchanged);
 
-        for &value in changed_values {
-            if let StorageValueT::U64(constant) = value {
-                let str_value = dict
-                    .entry(constant.try_into().unwrap())
-                    .unwrap_or_else(|| format!("<__Null#{constant}>"));
-
-                self.last_record.push(str_value);
-            } else {
-                self.last_record.push(value.to_string());
-            }
+        for (offset, &value) in changed_values.iter().enumerate() {
+            let column_index = unchanged + offset;
+            let str_value = self.serializer.value_to_string(column_index, value);
+            self.last_record.push(str_value);
         }
 
         Some(TrieRecord(&self.last_record))
@@ -165,9 +161,7 @@ impl Trie {
     }
 
     /// Convert the trie into a vector of columns with equal length.
-    /// This will also reorder or leave out columns according to the given [`ProjectReordering`]
-    /// TODO: unify this with Display Trait implementation and `format_as_csv` function
-    pub fn as_column_vector(&self, project_reordering: &ProjectReordering) -> Vec<VecT> {
+    pub fn as_column_vector(&self) -> Vec<VecT> {
         if self.columns.is_empty() {
             return Vec::new();
         }
@@ -259,7 +253,7 @@ impl Trie {
         }
 
         result_columns.reverse();
-        project_reordering.transform_consumed(result_columns)
+        result_columns
     }
 
     pub(crate) fn rows(&self) -> TrieRows<'_> {
@@ -275,12 +269,13 @@ impl Trie {
         }
     }
 
-    pub(crate) fn records(&self) -> TrieRecords<'_> {
+    pub(crate) fn records<'a>(&'a self, serializer: ValueSerializer<'a>) -> TrieRecords<'a> {
         let num_columns = self.columns.len();
 
         TrieRecords {
             rows: self.rows(),
             last_record: Vec::with_capacity(num_columns),
+            serializer,
         }
     }
 }
@@ -293,67 +288,6 @@ impl ByteSized for Trie {
                 .columns
                 .iter()
                 .fold(ByteSize::b(0), |acc, column| acc + column.size_bytes())
-    }
-}
-
-// TODO: unify this with debug above
-impl fmt::Display for Trie {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.columns.is_empty() {
-            writeln!(f)?;
-            return Ok(());
-        }
-
-        // outer vecs are build in reverse order
-        let mut last_interval_lengths: Vec<usize> = self
-            .columns
-            .last()
-            .expect("we return early if columns are empty")
-            .iter()
-            .map(|_| 1)
-            .collect();
-        let mut str_cols: Vec<Vec<String>> = vec![self
-            .columns
-            .last()
-            .expect("we return early if columns are empty")
-            .iter()
-            .map(|val| val.to_string())
-            .collect()];
-        for column_index in (0..(self.columns.len() - 1)).rev() {
-            let current_column = &self.columns[column_index];
-            let last_column = &self.columns[column_index + 1];
-
-            let current_interval_lengths: Vec<usize> = (0..current_column.len())
-                .map(|element_index_in_current_column| {
-                    last_column
-                        .int_bounds(element_index_in_current_column)
-                        .map(|index_in_interval| last_interval_lengths[index_in_interval])
-                        .sum()
-                })
-                .collect();
-
-            let padding_lengths = current_interval_lengths.iter().map(|length| length - 1);
-
-            str_cols.push(
-                current_column
-                    .iter()
-                    .zip(padding_lengths)
-                    .flat_map(|(val, pl)| {
-                        iter::once(val.to_string()).chain(iter::repeat(" ".to_string()).take(pl))
-                    })
-                    .collect(),
-            );
-
-            last_interval_lengths = current_interval_lengths;
-        }
-
-        for row_index in 0..str_cols[0].len() {
-            for col_index in (0..str_cols.len()).rev() {
-                write!(f, "{} ", str_cols[col_index][row_index])?;
-            }
-            writeln!(f)?;
-        }
-        Ok(())
     }
 }
 
@@ -745,21 +679,6 @@ mod test {
         let constructed_trie = Trie::from_rows(&rows);
 
         assert_eq!(expected_trie, constructed_trie);
-    }
-
-    #[test]
-    fn display_trie() {
-        let trie = get_test_table_as_trie();
-        let expected_output = "1 2 7 \
-           \n    8 \
-           \n  3 8 \
-           \n2 3 9 \
-           \n  6 9 \
-           \n";
-
-        let actual_output = format!("{trie}");
-
-        assert_eq!(expected_output, actual_output);
     }
 
     fn scan_seek(int_scan: &mut TrieScanGeneric, value: u64) -> Option<u64> {

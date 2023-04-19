@@ -309,7 +309,7 @@ impl TypeTree {
                 let mut new_schema = subtype_node.schema.clone();
 
                 for _ in 0..*num_nulls {
-                    // TODO: Revise this once type system is complete
+                    // TODO: We do not have access to the logical types here; how should we handle nulls?
                     new_schema.add_entry(DataTypeName::String);
                 }
 
