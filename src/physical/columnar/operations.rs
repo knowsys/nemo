@@ -20,6 +20,10 @@ pub use columnscan_equal_value::ColumnScanEqualValue;
 pub mod columnscan_pass;
 pub use columnscan_pass::ColumnScanPass;
 
+/// Module for defining [`ColumnScanPrune`]
+pub mod columnscan_prune;
+pub use columnscan_prune::ColumnScanPrune;
+
 /// Module for defining [`ColumnScanFollow`] and [`ColumnScanMinus`]
 pub mod columnscan_minus;
 pub use columnscan_minus::ColumnScanFollow;

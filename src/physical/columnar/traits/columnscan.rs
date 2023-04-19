@@ -4,6 +4,8 @@ use super::super::operations::{
     ColumnScanJoin, ColumnScanMinus, ColumnScanPass, ColumnScanReorder, ColumnScanUnion,
 };
 
+use crate::physical::columnar::operations::ColumnScanPrune;
+
 use crate::physical::columnar::operations::{ColumnScanConstant, ColumnScanCopy, ColumnScanNulls};
 use crate::{
     generate_datatype_forwarder, generate_forwarder,
@@ -60,6 +62,8 @@ where
     ColumnScanEqualValue(ColumnScanEqualValue<'a, T>),
     /// Case ColumnScanJoin
     ColumnScanPass(ColumnScanPass<'a, T>),
+    /// Case ColumnScanPrune
+    ColumnScanPrune(ColumnScanPrune<'a, T>),
     /// Case ColumnScanFollow
     ColumnScanFollow(ColumnScanFollow<'a, T>),
     /// Case ColumnScanMinus
@@ -255,6 +259,7 @@ generate_forwarder!(forward_to_columnscan;
     ColumnScanEqualColumn,
     ColumnScanEqualValue,
     ColumnScanPass,
+    ColumnScanPrune,
     ColumnScanFollow,
     ColumnScanMinus,
     ColumnScanUnion,
