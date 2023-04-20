@@ -374,16 +374,17 @@ impl Program {
             .map(|(predicate, arity)| (predicate.clone(), vec![None; *arity]))
             .collect();
 
-        // For now we set the type of each variable that occurrs together with an existential variable in the head
-        // to `LogicalTypeEnum::RdfsResource`
-        // TODO: Only set this type for the positions where there is an existential variables
+        // If there is an existential variable at some potion,
+        // it will be assigned to the type `LogicalTypeEnum::RdfsResource`
         for rule in self.rules() {
-            if count_distinct_existential_variables(rule) > 0 {
-                for atom in rule.head() {
-                    predicate_types.insert(
-                        atom.predicate(),
-                        vec![Some(LogicalTypeEnum::RdfsResource); atom.terms().len()],
-                    );
+            for atom in rule.head() {
+                for (term_index, term) in atom.terms().iter().enumerate() {
+                    if let Term::Variable(Variable::Existential(_)) = term {
+                        let types = predicate_types
+                            .get_mut(&atom.predicate())
+                            .expect("All predicates should have been assigned a type");
+                        types[term_index] = Some(LogicalTypeEnum::RdfsResource);
+                    }
                 }
             }
         }
