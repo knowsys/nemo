@@ -481,7 +481,7 @@ impl Program {
         &self,
         analyses: &[RuleAnalysis],
         predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), RuleAnalysisError> {
         for fact in self.facts() {
             let predicate_types = predicate_types
                 .get(&fact.0.predicate())
