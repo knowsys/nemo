@@ -47,7 +47,7 @@ rand_pcg = "0.3"
 quickcheck = "1"
 quickcheck_macros = "1"
 arbitrary = { version = "1", features = ["derive"] }
-polars = "0.28"
+polars = "0.25.1"
 assert_cmd = "2.0"
 predicates = "3.0"
 assert_fs = "1.0"
