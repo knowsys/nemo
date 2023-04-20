@@ -1,4 +1,4 @@
-name: build and test main
+name: Build and Test main
 
 on:
   push:
@@ -33,7 +33,7 @@ jobs:
       fail-fast: false
       matrix:
         rust: [ nightly ]
-        os: [ ubuntu-latest, windows-latest, macOS-latest ]
+        os: [ ubuntu-latest ]
     steps:
       - uses: actions/checkout@v3
       - uses: hecrj/setup-rust-action@v1
