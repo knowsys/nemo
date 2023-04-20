@@ -1,5 +1,7 @@
 # Nemo
 
+[![dependency status](https://deps.rs/repo/github/knowsys/nemo/status.svg?path=.)](https://deps.rs/repo/github/knowsys/nemo?path=.)
+
 *Nemo* is a datalog-based rule engine for fast and scalable analytic data processing in memory. It is available as a command-line tool ```nmo```.
 
 Goals of Nemo are performance, declarativity, versatility, and reliability. It is written in Rust. Nemo's data model aims at compatibility with [RDF](https://www.w3.org/TR/rdf11-concepts/)/[SPARQL](https://www.w3.org/TR/sparql11-overview/) while preservig established logic programming conventions and features. The following formats are currently supported:
