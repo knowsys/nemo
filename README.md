@@ -1,6 +1,6 @@
 # Nemo
 
-[![dependency status](https://deps.rs/repo/github/knowsys/nemo/status.svg?path=.)](https://deps.rs/repo/github/knowsys/nemo?path=.)
+[![dependency status](https://deps.rs/repo/github/knowsys/nemo/status.svg)](https://deps.rs/repo/github/knowsys/nemo)
 
 *Nemo* is a datalog-based rule engine for fast and scalable analytic data processing in memory. It is available as a command-line tool ```nmo```.
 
