@@ -138,6 +138,11 @@ impl HeadStrategy for RestrictedChaseStrategy {
         //     If it contains an existential varianormalize_atom_veble: Project from "Unsatisfied Matches Nulls" and append constants when needed
         //     If it does not contain an existential: Project from "Unsatisfied Matches Nulls", append constants and perform duplicate elimation
 
+        log::info!(
+            "Existential Head Join Variable Order: {:?}",
+            self.analysis.existential_aux_order
+        );
+
         // 1. Compute the table "New Satisfied Matches"
 
         let node_new_satisfied_matches = self.join_generator.seminaive_join(

@@ -7,7 +7,7 @@ use crate::{
         model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
         types::LogicalTypeEnum,
     },
-    physical::util::labeled_graph::NodeLabeledGraph,
+    physical::{management::database::ColumnOrder, util::labeled_graph::NodeLabeledGraph},
 };
 
 use super::{
@@ -102,6 +102,7 @@ fn construct_existential_aux_rule(
     rule_index: usize,
     head_atoms: &Vec<&Atom>,
     predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
 ) -> (Rule, VariableOrder, HashMap<Variable, LogicalTypeEnum>) {
     let normalized_head = normalize_atom_vector(&head_atoms, &[]);
 
@@ -151,10 +152,12 @@ fn construct_existential_aux_rule(
         HashMap::new(),
     );
 
-    let variable_order = build_preferable_variable_orders(&temp_program, None)
-        .pop()
-        .and_then(|mut v| v.pop())
-        .expect("This functions provides at least one variable order");
+    let variable_order =
+        build_preferable_variable_orders(&temp_program, Some(column_orders.clone()))
+            .0
+            .pop()
+            .and_then(|mut v| v.pop())
+            .expect("This functions provides at least one variable order");
 
     (temp_rule, variable_order, variable_types)
 }
@@ -162,6 +165,7 @@ fn construct_existential_aux_rule(
 fn analyze_rule(
     rule: &Rule,
     promising_variable_orders: Vec<VariableOrder>,
+    promising_column_orders: &Vec<HashMap<Identifier, HashSet<ColumnOrder>>>,
     rule_index: usize,
     type_declarations: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
 ) -> RuleAnalysis {
@@ -170,7 +174,6 @@ fn analyze_rule(
 
     let num_existential = count_distinct_existential_variables(rule);
 
-    // Check if type declarations are violated; add them if they do not exist
     let mut variable_types: HashMap<Variable, LogicalTypeEnum> = HashMap::new();
     for atom in body_atoms.iter().chain(head_atoms.iter()) {
         for (term_position, term) in atom.terms().iter().enumerate() {
@@ -194,7 +197,13 @@ fn analyze_rule(
         .collect();
     let (existential_aux_rule, existential_aux_order, existential_aux_types) =
         if num_existential > 0 {
-            construct_existential_aux_rule(rule_index, &head_atoms, type_declarations)
+            // TODO: We only consider the first variable order
+            construct_existential_aux_rule(
+                rule_index,
+                &head_atoms,
+                type_declarations,
+                &promising_column_orders[0],
+            )
         } else {
             (
                 Rule::new(vec![], vec![], vec![]),
@@ -423,7 +432,7 @@ impl Program {
 
     /// Analyze itself and return a struct containing the results.
     pub fn analyze(&self) -> ProgramAnalysis {
-        let variable_orders = build_preferable_variable_orders(self, None);
+        let (variable_orders, column_orders) = build_preferable_variable_orders(self, None);
 
         let all_predicates = self.get_all_predicates();
         let derived_predicates = self.get_head_predicates();
@@ -435,7 +444,15 @@ impl Program {
             .rules()
             .iter()
             .enumerate()
-            .map(|(i, r)| analyze_rule(r, variable_orders[i].clone(), i, &predicate_types))
+            .map(|(i, r)| {
+                analyze_rule(
+                    r,
+                    variable_orders[i].clone(),
+                    &column_orders,
+                    i,
+                    &predicate_types,
+                )
+            })
             .collect();
 
         ProgramAnalysis {
