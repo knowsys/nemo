@@ -60,7 +60,10 @@ pub fn all_input_consumed<'a, T>(
 /// A combinator that recognises a comment, starting at a `%`
 /// character and ending at the end of the line.
 pub fn comment(input: &str) -> IntermediateResult<()> {
-    value((), pair(tag("%"), is_not("\n\r")))(input)
+    alt((
+        value((), pair(tag("%"), is_not("\n\r"))),
+        value((), tag("%")),
+    ))(input)
 }
 
 /// A combinator that recognises an arbitrary amount of whitespace and
@@ -869,7 +872,8 @@ mod test {
             r#"{predicate}(% comment 1
                  "{value}"^^<{datatype}> % comment 2
                  ) % comment 3
-               . % comment 4"#
+               . % comment 4
+               %"#
         );
 
         let expected_fact = Fact(Atom::new(
