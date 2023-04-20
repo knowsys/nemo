@@ -80,6 +80,10 @@ pub fn materialize_inner(
         // It is important to know when we reached the bottom as only those values will be added to the result
         let is_last_layer = current_layer >= arity - 1;
 
+        // Whether the content of this layer is important for the overall output
+        // If this layer is "cut" then it is enough to check whether there is at least one value in this layer
+        let is_layer_cut = current_layer >= arity - cut_bottom;
+
         // In each loop iteration we perform a sideways step, then if not on the last layer go down
         // (unless a sideways step is impossible in which case we go up)
         // next_value is the value on which the down operation will be performed
@@ -87,8 +91,15 @@ pub fn materialize_inner(
         // If there exists a path from current_value to the bottom (which we keep track of with the current_row variable)
         // then it has to be added to a column builder
         let current_value = trie_scan.current_scan().unwrap().current();
-        let next_value = trie_scan.current_scan().unwrap().next();
-        next_count += 1;
+
+        let next_value = if is_layer_cut && is_last_layer && current_value.is_some() {
+            None
+        } else if is_layer_cut && !is_last_layer && current_row[current_layer] {
+            None
+        } else {
+            next_count += 1;
+            trie_scan.current_scan().unwrap().next()
+        };
 
         if let Some(val) = current_value {
             if is_last_layer || current_row[current_layer] {
@@ -144,11 +155,6 @@ pub fn materialize_inner(
         }
 
         if !is_last_layer {
-            let is_nextlayer_cut = current_layer + 1 <= arity - cut_bottom;
-            if is_nextlayer_cut && current_row[current_layer] {
-                continue;
-            }
-
             trie_scan.down();
             current_layer += 1;
         }

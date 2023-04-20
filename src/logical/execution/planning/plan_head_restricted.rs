@@ -21,7 +21,9 @@ use crate::{
 };
 
 use super::{
-    plan_util::{atom_binding, head_instruction_from_atom, subplan_union, HeadInstruction},
+    plan_util::{
+        atom_binding, cut_last_layers, head_instruction_from_atom, subplan_union, HeadInstruction,
+    },
     HeadStrategy, SeminaiveJoinGenerator,
 };
 
@@ -37,6 +39,8 @@ pub struct RestrictedChaseStrategy {
     aux_predicate: Identifier,
 
     analysis: RuleAnalysis,
+
+    head_join_cut: usize,
 }
 
 impl RestrictedChaseStrategy {
@@ -85,14 +89,18 @@ impl RestrictedChaseStrategy {
 
         let aux_head = &analysis.existential_aux_rule.head()[0];
         let mut aux_head_order = VariableOrder::new();
+        let mut used_join_head_variables = HashSet::<Variable>::new();
         for term in aux_head.terms() {
             if let Term::Variable(variable) = term {
                 aux_head_order.push(variable.clone());
+                used_join_head_variables.insert(variable.clone());
             } else {
                 unreachable!("This atom should only conist of variables");
             }
         }
 
+        let head_join_cut =
+            cut_last_layers(&analysis.existential_aux_order, &used_join_head_variables);
         let aux_predicate = aux_head.predicate().clone();
 
         RestrictedChaseStrategy {
@@ -102,6 +110,7 @@ impl RestrictedChaseStrategy {
             analysis: analysis.clone(),
             aux_predicate,
             aux_head_order,
+            head_join_cut,
         }
     }
 }
@@ -154,9 +163,10 @@ impl HeadStrategy for RestrictedChaseStrategy {
             &self.analysis.existential_aux_order,
         );
 
-        current_plan.add_temporary_table(
+        current_plan.add_temporary_table_cut(
             node_new_satisfied_matches.clone(),
             "Head (Restricted): Satisifed",
+            self.head_join_cut,
         );
 
         // 2. Compute the table "Satisfied Matches Frontier"

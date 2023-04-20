@@ -223,6 +223,10 @@ pub(super) fn cut_last_layers(
     variable_order: &VariableOrder,
     used_variables: &HashSet<Variable>,
 ) -> usize {
+    if variable_order.is_empty() || used_variables.is_empty() {
+        return 0;
+    }
+
     let mut last_index = 0;
     let variable_order_list = variable_order.as_ordered_list();
 
@@ -232,5 +236,5 @@ pub(super) fn cut_last_layers(
         }
     }
 
-    variable_order.len() - last_index
+    variable_order.len() - last_index - 1
 }
