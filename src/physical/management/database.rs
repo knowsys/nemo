@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::path::PathBuf;
@@ -469,8 +469,8 @@ impl DatabaseInstance {
     }
 
     /// Returns a reference to the dictionary used for associating abstract constants with strings.
-    pub fn get_dict_constants(&self) -> Dict {
-        self.dict_constants.clone().take()
+    pub fn get_dict_constants(&self) -> Ref<'_, Dict> {
+        self.dict_constants.borrow()
     }
 
     /// Register a new table under a given name and schema.

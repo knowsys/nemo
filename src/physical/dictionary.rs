@@ -11,6 +11,9 @@ pub use prefixed_string_dictionary::PrefixedStringDictionary;
 /// Module to define a simple [StringDictionary]
 pub mod string_dictionary;
 pub use string_dictionary::StringDictionary;
+/// Module mapping physical types into logical types into Strings
+pub mod value_serializer;
+pub use value_serializer::ValueSerializer;
 
 /// This Dictionary Trait defines dictionaries, which keep ownership of the inserted elements.
 pub trait Dictionary: Debug + Default + Clone {

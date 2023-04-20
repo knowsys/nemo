@@ -6,8 +6,8 @@ use clap::Parser;
 use nemo::{
     error::Error,
     io::{
-        dsv::CSVWriter,
         parser::{all_input_consumed, RuleParser},
+        OutputFileManager,
     },
     logical::{
         execution::{
@@ -102,10 +102,18 @@ impl CliApp {
                 .sub("Output & Final Materialization")
                 .start();
             log::info!("writing output");
-            let csv_writer =
-                nemo::io::dsv::CSVWriter::try_new(&self.output_directory, self.overwrite, self.gz)?;
+            let file_manager =
+                OutputFileManager::try_new(&self.output_directory, self.overwrite, self.gz)?;
 
-            exec_engine.write_idb_results(&csv_writer)?;
+            let idb_tables = exec_engine.combine_results()?;
+
+            for (pred, table_id) in idb_tables {
+                let mut writer = file_manager.create_file_writer(&pred)?;
+
+                if let Some(id) = table_id {
+                    exec_engine.write_predicate_to_disk(&mut writer, id)?;
+                }
+            }
 
             TimedCode::instance()
                 .sub("Output & Final Materialization")
@@ -180,12 +188,12 @@ impl CliApp {
                 .idb_predicates()
                 .iter()
                 .try_for_each(|pred| {
-                    let csv_writer =
-                        CSVWriter::try_new(&self.output_directory, self.overwrite, self.gz)?;
-                    let file = pred.sanitised_file_name(
-                        self.output_directory.clone(),
-                        csv_writer.compression_format,
-                    );
+                    let output_file_manager = OutputFileManager::try_new(
+                        &self.output_directory,
+                        self.overwrite,
+                        self.gz,
+                    )?;
+                    let file = output_file_manager.get_output_file_name(pred);
                     let meta_info = file.metadata();
                     if let Err(err) = meta_info {
                         if err.kind() == ErrorKind::NotFound {

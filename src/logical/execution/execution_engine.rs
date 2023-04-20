@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::{
     error::Error,
-    io::dsv::CSVWriter,
+    io::RecordWriter,
     logical::{
         model::{DataSource, Identifier, Program},
         program_analysis::analysis::ProgramAnalysis,
@@ -12,7 +12,10 @@ use crate::{
         TableManager,
     },
     meta::TimedCode,
-    physical::{datatypes::DataValueT, management::database::TableSource},
+    physical::{
+        datatypes::DataValueT,
+        management::database::{TableId, TableSource},
+    },
 };
 
 use super::{rule_execution::RuleExecution, selection_strategy::strategy::RuleSelectionStrategy};
@@ -239,32 +242,27 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(())
     }
 
-    /// Write the output tries that resulted form the execution to disk as CSV.
-    pub fn write_all_results(&mut self, writer: &CSVWriter) -> Result<(), Error> {
+    /// Combine the output tries that resulted form the execution.
+    pub fn combine_results(&mut self) -> Result<Vec<(Identifier, Option<TableId>)>, Error> {
+        let mut result_ids = Vec::new();
         for predicate in &self.analysis.derived_predicates {
-            if let Some(combined_id) = self.table_manager.combine_predicate(predicate.clone())? {
-                self.table_manager
-                    .write_table_to_disk(writer, predicate, combined_id)?;
-            } else {
-                writer.create_file(predicate)?;
+            if !self.program.idb_predicates().contains(predicate) {
+                continue;
             }
+
+            let table_id = self.table_manager.combine_predicate(predicate.clone())?;
+            result_ids.push((predicate.clone(), table_id));
         }
 
-        Ok(())
+        Ok(result_ids)
     }
 
-    /// Write tries for all IDB predicates to disk as CSV if present.
-    pub fn write_idb_results(&mut self, writer: &CSVWriter) -> Result<(), Error> {
-        let idbs = self.program.idb_predicates();
-        for predicate in idbs {
-            if let Some(combined_id) = self.table_manager.combine_predicate(predicate.clone())? {
-                self.table_manager
-                    .write_table_to_disk(writer, &predicate, combined_id)?
-            } else {
-                writer.create_file(&predicate)?;
-            }
-        }
-
-        Ok(())
+    /// Returns a reference to the Trie corresponding to the table_id
+    pub fn write_predicate_to_disk(
+        &self,
+        writer: &mut impl RecordWriter,
+        table_id: TableId,
+    ) -> Result<(), Error> {
+        self.table_manager.write_table_to_disk(writer, table_id)
     }
 }

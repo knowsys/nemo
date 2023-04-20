@@ -8,11 +8,7 @@ use std::{
 
 use sanitise_file_name::{sanitise_with_options, Options};
 
-use crate::{
-    generate_forwarder,
-    io::{parser::ParseError, FileCompression},
-    physical::datatypes::Double,
-};
+use crate::{generate_forwarder, io::parser::ParseError, physical::datatypes::Double};
 
 use super::types::LogicalTypeEnum;
 
@@ -27,14 +23,14 @@ impl Identifier {
     }
 
     /// Returns a sanitised path with respect to the associated name
-    pub fn sanitised_file_name(&self, mut path: PathBuf, format: FileCompression) -> PathBuf {
+    pub fn sanitised_file_name(&self, mut path: PathBuf) -> PathBuf {
         let sanitise_options = Options::<Option<char>> {
             url_safe: true,
             ..Default::default()
         };
         let file_name = sanitise_with_options(&self.name(), &sanitise_options);
         path.push(file_name);
-        format.file_name(path)
+        path
     }
 }
 

@@ -3,10 +3,11 @@
 use super::{model::Identifier, types::LogicalTypeEnum};
 use crate::{
     error::Error,
-    io::dsv::CSVWriter,
+    io::RecordWriter,
     physical::{
+        dictionary::ValueSerializer,
         management::{
-            database::{ColumnOrder, TableId, TableSource},
+            database::{ColumnOrder, Dict, TableId, TableSource},
             execution_plan::ExecutionNodeRef,
             DatabaseInstance, ExecutionPlan,
         },
@@ -14,7 +15,7 @@ use crate::{
         util::mapping::permutation::Permutation,
     },
 };
-use std::{cmp::Ordering, collections::HashMap, hash::Hash, ops::Range};
+use std::{cell::Ref, cmp::Ordering, collections::HashMap, hash::Hash, ops::Range};
 
 /// Indicates that the table contains the union of successive tables.
 /// For example assume that for predicate p there were tables derived in steps 2, 4, 7, 10, 11.
@@ -292,18 +293,25 @@ impl TableManager {
     /// Panics if there is no trie associated with the given id.
     pub fn write_table_to_disk(
         &self,
-        writer: &CSVWriter,
-        pred: &Identifier,
+        writer: &mut impl RecordWriter,
         id: TableId,
     ) -> Result<(), Error> {
-        writer.write_predicate(
-            pred,
-            self.database.table_schema(id),
-            self.database
-                .get_trie(id, &ColumnOrder::default())
-                .as_column_vector(),
-            &self.database.get_dict_constants(),
-        )
+        let schema = self.database.table_schema(id);
+        let dict = self.database.get_dict_constants();
+        let serializer = ValueSerializer {
+            schema,
+            dict: &dict,
+        };
+        let mut records = self
+            .database
+            .get_trie(id, &ColumnOrder::default())
+            .records(serializer);
+
+        while let Some(record) = records.next_record() {
+            writer.write_record(record)?;
+        }
+
+        Ok(())
     }
 
     /// Combine all subtables of a predicate into one table
@@ -514,6 +522,11 @@ impl TableManager {
         }
 
         Ok(updated_predicates)
+    }
+
+    /// Returns a reference to the constants dictionary
+    pub fn get_dict(&self) -> Ref<'_, Dict> {
+        self.database.get_dict_constants()
     }
 }
 

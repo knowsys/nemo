@@ -1,57 +1,34 @@
 //! This module contains utility functions, like importing data from various sources
 
-use std::path::{Path, PathBuf};
+use std::io::Write;
 
 pub mod builder_proxy;
 pub mod dsv;
+pub mod output_file_manager;
 pub mod parser;
 
-/// Represent the file-format of a file
-#[derive(Debug, Copy, Clone)]
-pub enum FileFormat {
-    /// Delimiter Separated Values with the delimiter as u8
-    DSV(u8),
+pub use output_file_manager::OutputFileManager;
+
+use crate::error::Error;
+
+/// A general interface for writing records of string values
+pub trait RecordWriter {
+    /// Write a single record.
+    fn write_record<I, T>(&mut self, record: I) -> Result<(), Error>
+    where
+        I: IntoIterator<Item = T>,
+        // NOTE: instead of AsRef, custom conversion traits can later be set up
+        T: AsRef<[u8]>;
 }
 
-impl FileFormat {
-    fn file_name(&self, file: PathBuf) -> PathBuf {
-        let ext = match self {
-            FileFormat::DSV(delimiter) => match delimiter {
-                b',' => "csv",
-                b'\t' => "tsv",
-                _ => "dsv",
-            },
-        };
-        file.with_extension(append_extension(&file, ext))
-    }
-}
-/// Represent the compression of a file
-#[derive(Debug, Copy, Clone)]
-pub enum FileCompression {
-    /// No file compression
-    None(FileFormat),
-    /// Compress with Gzip
-    Gzip(FileFormat),
-}
-
-impl FileCompression {
-    /// returns the file_name with right extensions
-    pub fn file_name(&self, file: PathBuf) -> PathBuf {
-        match self {
-            FileCompression::None(file_format) => file_format.file_name(file),
-            FileCompression::Gzip(file_format) => {
-                let file = file_format.file_name(file);
-                file.with_extension(append_extension(&file, "gz"))
-            }
-        }
-    }
-}
-
-/// Appends the extension to the path
-fn append_extension(file: &Path, ext: &str) -> String {
-    if let Some(existing_ext) = file.extension() {
-        format!("{}.{ext}", existing_ext.to_str().expect("valid utf-8"))
-    } else {
-        ext.into()
+impl<W: Write> RecordWriter for csv::Writer<W> {
+    fn write_record<I, T>(&mut self, record: I) -> Result<(), Error>
+    where
+        I: IntoIterator<Item = T>,
+        // NOTE: instead of AsRef, custom conversion traits can later be set up
+        T: AsRef<[u8]>,
+    {
+        self.write_record(record)?;
+        Ok(())
     }
 }

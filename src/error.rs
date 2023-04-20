@@ -76,6 +76,9 @@ pub enum Error {
         /// Name of the file that could not be written
         filename: String,
     },
+    /// CSV serialization/deserialization error
+    #[error(transparent)]
+    CsvError(#[from] csv::Error),
     /// Unknown logical type name in program.
     #[error("A predicate declaration used an unknown type ({0}). The known types are: {1:?}")]
     ParseUnknownType(String, Vec<LogicalTypeEnum>),
