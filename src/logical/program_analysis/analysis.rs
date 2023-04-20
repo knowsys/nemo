@@ -110,9 +110,19 @@ fn construct_existential_aux_rule(
 
     let mut term_vec = Vec::<Term>::new();
     let mut occured_variables = HashSet::<Variable>::new();
-    let mut variable_types = HashMap::<Variable, LogicalTypeEnum>::new();
 
     for atom in head_atoms {
+        for term in atom.terms() {
+            if let Term::Variable(Variable::Universal(variable)) = term {
+                if occured_variables.insert(Variable::Universal(variable.clone())) {
+                    term_vec.push(Term::Variable(Variable::Universal(variable.clone())));
+                }
+            }
+        }
+    }
+
+    let mut variable_types = HashMap::<Variable, LogicalTypeEnum>::new();
+    for atom in &normalized_head.atoms {
         let types = predicate_types
             .get(&atom.predicate())
             .expect("Every predicate should have type information at this point");
@@ -120,14 +130,6 @@ fn construct_existential_aux_rule(
         for (term_index, term) in atom.terms().iter().enumerate() {
             if let Term::Variable(variable) = term {
                 variable_types.insert(variable.clone(), types[term_index]);
-            }
-
-            if let Term::Variable(Variable::Universal(universal_variable)) = term {
-                if occured_variables.insert(Variable::Universal(universal_variable.clone())) {
-                    term_vec.push(Term::Variable(Variable::Universal(
-                        universal_variable.clone(),
-                    )));
-                }
             }
         }
     }
