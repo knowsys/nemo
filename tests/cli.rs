@@ -6,7 +6,7 @@ use test_log::test;
 #[cfg_attr(miri, ignore)]
 #[test]
 fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
-    let bin = "nemo";
+    let bin = "nmo";
     let mut cmd = Command::cargo_bin(bin)?;
     cmd.arg("-vvv").arg("Non-existing-file.rls");
     cmd.assert()
@@ -21,7 +21,9 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
 
     cmd = Command::cargo_bin(bin)?;
     cmd.arg("--version");
-    cmd.assert().success().stdout(predicate::str::contains(bin));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("nemo"));
 
     cmd = Command::cargo_bin(bin)?;
     cmd.arg("-v").arg("-q");
