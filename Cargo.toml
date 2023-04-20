@@ -15,6 +15,10 @@ edition = "2021"
 [features]
 "no-prefixed-string-dictionary" = []
 
+[[bin]]
+name = "nmo"
+path = "src/main.rs"
+
 [dependencies]
 env_logger = "*"
 log = { version = "0.4", features = [ "max_level_trace", "release_max_level_info" ] }

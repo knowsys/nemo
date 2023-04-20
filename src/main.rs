@@ -1,5 +1,5 @@
 /*!
-  Binary for the CLI of nemo
+  Binary for the CLI of nemo: nmo
 */
 
 #![deny(
