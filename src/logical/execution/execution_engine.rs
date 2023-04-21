@@ -58,10 +58,10 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [`ExecutionEngine`].
-    pub fn initialize(mut program: Program) -> Self {
+    pub fn initialize(mut program: Program) -> Result<Self, Error> {
         program.normalize();
 
-        let analysis = program.analyze();
+        let analysis = program.analyze()?;
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
@@ -78,7 +78,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             analysis.rule_analysis.iter().collect(),
         );
 
-        Self {
+        Ok(Self {
             program,
             analysis,
             rule_strategy,
@@ -87,7 +87,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             predicate_last_union: HashMap::new(),
             rule_infos,
             current_step: 1,
-        }
+        })
     }
 
     fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {

@@ -43,6 +43,15 @@ pub enum Variable {
     Existential(Identifier),
 }
 
+impl Variable {
+    /// Return the name of the variable.
+    pub fn name(&self) -> String {
+        match self {
+            Self::Universal(identifier) | Self::Existential(identifier) => identifier.name(),
+        }
+    }
+}
+
 /// Terms occurring in programs.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum Term {
@@ -138,19 +147,15 @@ impl Atom {
     }
 
     /// Return all universally quantified variables in the atom.
-    pub fn universal_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
-        self.variables().filter_map(|var| match var {
-            Variable::Universal(identifier) => Some(identifier),
-            _ => None,
-        })
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.variables()
+            .filter(|var| matches!(var, Variable::Universal(_)))
     }
 
     /// Return all existentially quantified variables in the atom.
-    pub fn existential_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
-        self.variables().filter_map(|var| match var {
-            Variable::Existential(identifier) => Some(identifier),
-            _ => None,
-        })
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.variables()
+            .filter(|var| matches!(var, Variable::Existential(_)))
     }
 }
 
@@ -215,12 +220,12 @@ impl Literal {
     }
 
     /// Return the universally quantified variables in the literal.
-    pub fn universal_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
         forward_to_atom!(self, universal_variables)
     }
 
     /// Return the existentially quantified variables in the literal.
-    pub fn existential_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
         forward_to_atom!(self, existential_variables)
     }
 }
@@ -331,11 +336,11 @@ impl Rule {
         }
 
         // Check if a variable occurs with both existential and universal quantification.
-        let mut universal_variables = body
+        let universal_variables = body
             .iter()
             .flat_map(|literal| literal.universal_variables())
             .collect::<HashSet<_>>();
-        universal_variables.extend(head.iter().flat_map(|atom| atom.universal_variables()));
+
         let existential_variables = head
             .iter()
             .flat_map(|atom| atom.existential_variables())
@@ -350,6 +355,42 @@ impl Rule {
             return Err(ParseError::BothQuantifiers(
                 common_variables.first().expect("is not empty here").name(),
             ));
+        }
+
+        // Check if there are universal variables in the head which do not occur in a positive body literal
+        let head_universal_variables = head
+            .iter()
+            .flat_map(|atom| atom.universal_variables())
+            .collect::<HashSet<_>>();
+
+        for head_variable in head_universal_variables {
+            if !universal_variables.contains(head_variable) {
+                return Err(ParseError::UnsafeHeadVariable(head_variable.name()));
+            }
+        }
+
+        // Check if filters are correctly formed
+        for filter in &filters {
+            let mut filter_variables = vec![&filter.left];
+
+            if let Term::Variable(right_variable) = &filter.right {
+                filter_variables.push(right_variable);
+            }
+
+            for variable in filter_variables {
+                match variable {
+                    Variable::Universal(universal_variable) => {
+                        if !positive_varibales.contains(variable) {
+                            return Err(ParseError::UnsafeFilterVariable(
+                                universal_variable.name(),
+                            ));
+                        }
+                    }
+                    Variable::Existential(existential_variable) => {
+                        return Err(ParseError::BodyExistential(existential_variable.name()))
+                    }
+                }
+            }
         }
 
         Ok(Rule {
