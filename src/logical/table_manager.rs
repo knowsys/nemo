@@ -104,6 +104,16 @@ impl SubtableHandler {
         Some(self.single[postion].1)
     }
 
+    pub fn count_rows(&self, database: &DatabaseInstance) -> usize {
+        let mut result = 0;
+
+        for (_, subtable_id) in &self.single {
+            result += database.count_rows(subtable_id);
+        }
+
+        result
+    }
+
     pub fn add_single_table(&mut self, step: usize, id: TableId) {
         debug_assert!(self.single.is_empty() || (self.single.last().unwrap().0 < step));
         self.single.push((step, id));
@@ -298,6 +308,13 @@ impl TableManager {
     /// Returns `None` if the predicate has no subtables.
     pub fn last_step(&self, predicate: Identifier) -> Option<usize> {
         self.predicate_subtables.get(&predicate)?.last_step()
+    }
+
+    /// Count all the rows that belong to a predicate.
+    pub fn predicate_count_rows(&self, predicate: &Identifier) -> Option<usize> {
+        self.predicate_subtables
+            .get(predicate)
+            .map(|s| s.count_rows(&self.database))
     }
 
     /// Write the Trie associated with the given id to CSV.

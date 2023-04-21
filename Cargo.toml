@@ -38,6 +38,7 @@ sanitise-file-name = "1.0.0"
 flate2 = "1.0.25"
 rand = "0.8.4"
 petgraph = "0.6.3"
+colored = "2"
 
 [dev-dependencies]
 test-log = "0.2"

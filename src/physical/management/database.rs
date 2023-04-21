@@ -364,6 +364,21 @@ impl OrderedReferenceManager {
         self.map.remove(id)?;
         Some(())
     }
+
+    /// Return the number of rows contained in this table.
+    pub fn count_rows(&self, id: &TableId) -> usize {
+        if let Some(resolved) = self.resolve_reference(*id, &ColumnOrder::default()) {
+            if let Some((_, storage)) = resolved.map.iter().next() {
+                // TODO: Technically we should be able to somehow count non-inmemory tables
+                // But this is not relevant for now
+                if let TableStorage::InMemory(trie) = storage {
+                    return trie.row_num();
+                }
+            }
+        }
+
+        return 0;
+    }
 }
 
 impl ByteSized for OrderedReferenceManager {
@@ -444,6 +459,11 @@ impl DatabaseInstance {
             current_null,
             current_id: TableId::default(),
         }
+    }
+
+    /// Return the number of rows for a given table.
+    pub fn count_rows(&self, table_id: &TableId) -> usize {
+        self.storage_handler.count_rows(table_id)
     }
 
     /// Return the current number of tables.

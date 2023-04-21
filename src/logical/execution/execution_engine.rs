@@ -257,6 +257,19 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(result_ids)
     }
 
+    /// Count the number of derived facts during the computation.
+    pub fn count_derived_facts(&self) -> usize {
+        let mut result = 0;
+
+        for predicate in &self.analysis.derived_predicates {
+            if let Some(count) = self.table_manager.predicate_count_rows(predicate) {
+                result += count;
+            }
+        }
+
+        result
+    }
+
     /// Returns a reference to the Trie corresponding to the table_id
     pub fn write_predicate_to_disk(
         &self,

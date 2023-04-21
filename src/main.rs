@@ -21,27 +21,12 @@
 pub mod app;
 
 use clap::Parser;
-
-use nemo::meta::timing::TimedDisplay;
-use nemo::meta::TimedCode;
+use colored::Colorize;
 
 fn main() {
-    TimedCode::instance().start();
     let mut app = app::CliApp::parse();
     if let Err(err) = app.run() {
-        eprintln!("Application Error: {err}");
+        eprintln!("{} {err}", "Application Error:".red().bold());
         std::process::exit(1);
     }
-    TimedCode::instance().stop();
-    println!(
-        "\n{}",
-        TimedCode::instance().create_tree_string(
-            "nemo",
-            &[
-                TimedDisplay::default(),
-                TimedDisplay::default(),
-                TimedDisplay::new(nemo::meta::timing::TimedSorting::LongestThreadTime, 0)
-            ]
-        )
-    );
 }

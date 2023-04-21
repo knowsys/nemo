@@ -3,6 +3,7 @@ use std::{fs::read_to_string, io::ErrorKind, path::PathBuf};
 
 use clap::Parser;
 
+use colored::Colorize;
 use nemo::{
     error::Error,
     io::{
@@ -15,7 +16,7 @@ use nemo::{
         },
         model::Program,
     },
-    meta::TimedCode,
+    meta::{timing::TimedDisplay, TimedCode},
 };
 
 /// Application state
@@ -60,11 +61,85 @@ pub struct CliApp {
     /// Gzip output files
     #[arg(short, long = "gzip", default_value = "false")]
     gz: bool,
+    /// Display detailed timing information
+    #[arg(long = "detailed-timing", default_value = "false")]
+    detailed_timing: bool,
 }
 
 impl CliApp {
+    fn print_finished_message(&self, new_facts: usize) {
+        let overall_time = TimedCode::instance().total_system_time().as_millis();
+        let reading_time = TimedCode::instance()
+            .sub("Reading & Preprocessing")
+            .total_system_time()
+            .as_millis();
+        let loading_time = TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table")
+            .total_system_time()
+            .as_millis();
+        let execution_time = TimedCode::instance()
+            .sub("Reasoning")
+            .total_system_time()
+            .as_millis();
+
+        let loading_preprocessing = reading_time + loading_time;
+        let reasoning_time = execution_time - loading_time;
+        let writing_time = if self.save_results {
+            TimedCode::instance()
+                .sub("Output & Final Materialization")
+                .total_system_time()
+                .as_millis()
+        } else {
+            0
+        };
+
+        let max_string_len = vec![loading_preprocessing, reading_time, writing_time]
+            .iter()
+            .map(|t| t.to_string().len())
+            .max()
+            .expect("Vector is not empty")
+            + 2; // for the unit ms
+
+        println!(
+            "Reasoning completed in {}{}. Derived {} facts.",
+            overall_time.to_string().green().bold(),
+            "ms".green().bold(),
+            new_facts.to_string().green().bold(),
+        );
+
+        println!(
+            "   {0: <14} {1:>max_string_len$}ms",
+            "Loading input:", loading_preprocessing
+        );
+        println!(
+            "   {0: <14} {1:>max_string_len$}ms",
+            "Reasoning:", reasoning_time
+        );
+        if self.save_results {
+            println!(
+                "   {0: <14} {1:>max_string_len$}ms",
+                "Saving output:", writing_time
+            );
+        }
+    }
+
+    fn print_timing_stats() {
+        println!(
+            "\n{}",
+            TimedCode::instance().create_tree_string(
+                "nemo",
+                &[
+                    TimedDisplay::default(),
+                    TimedDisplay::default(),
+                    TimedDisplay::new(nemo::meta::timing::TimedSorting::LongestThreadTime, 0)
+                ]
+            )
+        );
+    }
+
     /// Application logic, based on the parsed data inside the [`CliApp`] object
     pub fn run(&mut self) -> Result<(), Error> {
+        TimedCode::instance().start();
         TimedCode::instance().sub("Reading & Preprocessing").start();
         self.init_logging();
         log::info!("Version: {}", clap::crate_version!());
@@ -119,6 +194,15 @@ impl CliApp {
                 .sub("Output & Final Materialization")
                 .stop();
         }
+
+        TimedCode::instance().stop();
+
+        self.print_finished_message(exec_engine.count_derived_facts());
+
+        if self.detailed_timing {
+            Self::print_timing_stats()
+        }
+
         Ok(())
     }
 
