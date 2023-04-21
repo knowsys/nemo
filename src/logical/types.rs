@@ -8,6 +8,8 @@ use crate::physical::datatypes::{DataTypeName, DataValueT};
 
 use super::model::{Identifier, NumericLiteral, RdfLiteral, Term};
 
+use thiserror::Error;
+
 macro_rules! count {
     () => (0usize);
     ( $x:tt $($xs:tt)* ) => (1usize + count!($($xs)*));
@@ -71,7 +73,7 @@ impl From<LogicalTypeEnum> for DataTypeName {
 
 impl LogicalTypeEnum {
     /// Convert a given ground term to a DataValueT fitting the current logical type
-    pub fn ground_term_to_data_value_t(&self, gt: Term) -> Result<DataValueT, Error> {
+    pub fn ground_term_to_data_value_t(&self, gt: Term) -> Result<DataValueT, TypeError> {
         let result = match self {
             Self::RdfsResource => {
                 match gt {
@@ -101,14 +103,25 @@ impl LogicalTypeEnum {
                 Term::NumericLiteral(NumericLiteral::Integer(i)) => {
                     DataValueT::U64(i.try_into().unwrap())
                 }
-                _ => return Err(Error::InvalidRuleTermConversion(gt, *self)),
+                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
             },
             Self::Double => match gt {
                 Term::NumericLiteral(NumericLiteral::Double(d)) => DataValueT::Double(d),
-                _ => return Err(Error::InvalidRuleTermConversion(gt, *self)),
+                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
             },
         };
 
         Ok(result)
     }
+}
+
+/// Errors that can occur during type checking
+#[derive(Error, Debug)]
+pub enum TypeError {
+    /// Conflicting type declarations
+    #[error("Conflicting type declarations. Predicate \"{0}\" at position {1} has been inferred to have the conflicting types {2} and {3}.")]
+    InvalidRuleConflictingTypes(String, usize, LogicalTypeEnum, LogicalTypeEnum),
+    /// Conflicting type conversions
+    #[error("Conflicting type declarations. The term \"{0}\" cannot be converted to a {1}.")]
+    InvalidRuleTermConversion(Term, LogicalTypeEnum),
 }

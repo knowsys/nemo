@@ -4,7 +4,8 @@ use thiserror::Error;
 
 use crate::{
     io::parser::ParseError,
-    logical::{model::Term, types::LogicalTypeEnum},
+    logical::program_analysis::analysis::RuleAnalysisError,
+    logical::types::{LogicalTypeEnum, TypeError},
     physical::datatypes::float_is_nan::FloatIsNaN,
 };
 
@@ -42,21 +43,15 @@ pub enum Error {
     /// Error when converting floating type to integer point value
     #[error("Floating type could not be converted to integer value")]
     FloatingPointToInteger,
-    /// Conflicting type declarations
-    #[error("Conflicting type declarations. Predicate \"{0}\" at position {1} has been inferred to have the conflicting types {2} and {3}.")]
-    InvalidRuleConflictingTypes(String, usize, LogicalTypeEnum, LogicalTypeEnum),
-    /// Conflicting type declarations
-    #[error("Conflicting type declarations. The term \"{0}\" cannot be converted to a {1}.")]
-    InvalidRuleTermConversion(Term, LogicalTypeEnum),
-    /// Unsupported feature: Negation
-    #[error("Negation is currently unsupported.")]
-    UnsupportedFeatureNegation,
-    /// Unsupported feature: Negation
-    #[error("Comparison operations are currently not supported.")]
-    UnsupportedFeatureComparison,
+    /// Rule analysis errors
+    #[error(transparent)]
+    RuleAnalysisError(#[from] RuleAnalysisError),
     /// Parse errors
     #[error(transparent)]
     ParseError(#[from] ParseError),
+    /// Type errors
+    #[error(transparent)]
+    TypeError(#[from] TypeError),
     /// Error when giving invalid execution plan to the database instance
     #[error("The given execution plan is invalid.")]
     InvalidExecutionPlan,
