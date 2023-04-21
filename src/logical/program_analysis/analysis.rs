@@ -360,7 +360,7 @@ impl Program {
 
                 if let Term::Variable(variable_right) = &filter.right {
                     let position_right = variable_to_last_node
-                        .get(&variable_right)
+                        .get(variable_right)
                         .expect("Variables in filters should also appear in the rule body")
                         .clone();
 
@@ -422,7 +422,7 @@ impl Program {
                                 return Err(Error::InvalidRuleConflictingTypes(
                                     next_position.predicate.0.clone(),
                                     next_position.position + 1,
-                                    current_type.clone(),
+                                    *current_type,
                                     logical_type,
                                 ));
                             }

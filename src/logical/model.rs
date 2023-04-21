@@ -148,18 +148,14 @@ impl Atom {
 
     /// Return all universally quantified variables in the atom.
     pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
-        self.variables().filter_map(|var| match var {
-            Variable::Universal(_) => Some(var),
-            _ => None,
-        })
+        self.variables()
+            .filter(|var| matches!(var, Variable::Universal(_)))
     }
 
     /// Return all existentially quantified variables in the atom.
     pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
-        self.variables().filter_map(|var| match var {
-            Variable::Existential(_) => Some(var),
-            _ => None,
-        })
+        self.variables()
+            .filter(|var| matches!(var, Variable::Existential(_)))
     }
 }
 
