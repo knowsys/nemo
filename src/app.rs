@@ -262,7 +262,7 @@ impl CliApp {
             acc
         });
         let program = all_input_consumed(parser.parse_program())(&input)?;
-        program.check_unsupported()?;
+        program.check_for_unsupported_features()?;
 
         log::info!("Rules parsed");
         log::trace!("{:?}", program);

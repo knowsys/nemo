@@ -1,12 +1,10 @@
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
-use petgraph::{visit::Dfs, Undirected};
-
 use crate::{
     error::Error,
     logical::{
         model::{Atom, FilterOperation, Identifier, Literal, Program, Rule, Term, Variable},
-        types::LogicalTypeEnum,
+        types::{LogicalTypeEnum, TypeError},
     },
     physical::{management::database::ColumnOrder, util::labeled_graph::NodeLabeledGraph},
 };
@@ -15,6 +13,9 @@ use super::{
     normalization::normalize_atom_vector,
     variable_order::{build_preferable_variable_orders, BuilderResultVariants, VariableOrder},
 };
+
+use petgraph::{visit::Dfs, Undirected};
+use thiserror::Error;
 
 /// Contains useful information for a (existential) rule
 #[derive(Debug, Clone)]
@@ -52,6 +53,20 @@ pub struct RuleAnalysis {
     pub variable_types: HashMap<Variable, LogicalTypeEnum>,
     /// Logical Type of predicates in Rule
     pub predicate_types: HashMap<Identifier, Vec<LogicalTypeEnum>>,
+}
+
+/// Errors than can occur during rule analysis
+#[derive(Error, Debug, Copy, Clone)]
+pub enum RuleAnalysisError {
+    /// Unsupported feature: Negation
+    #[error("Negation is currently unsupported.")]
+    UnsupportedFeatureNegation,
+    /// Unsupported feature: Negation
+    #[error("Comparison operations are currently not supported.")]
+    UnsupportedFeatureComparison,
+    /// Unsupported feature: Overloading of predicate names by arity/type
+    #[error("Overloading of predicate names by arity is currently not supported.")]
+    UnsupportedFeaturePredicateOverloading,
 }
 
 fn is_recursive(rule: &Rule) -> bool {
@@ -376,7 +391,7 @@ impl Program {
         &self,
         position_graph: &PositionGraph,
         all_predicates: &HashSet<(Identifier, usize)>,
-    ) -> Result<HashMap<Identifier, Vec<LogicalTypeEnum>>, Error> {
+    ) -> Result<HashMap<Identifier, Vec<LogicalTypeEnum>>, TypeError> {
         // Initialize predicate types with the user provided values
         let mut predicate_types: HashMap<Identifier, Vec<Option<LogicalTypeEnum>>> = self
             .parsed_predicate_declarations()
@@ -427,7 +442,7 @@ impl Program {
 
                         if let Some(current_type) = current_type_opt {
                             if *current_type != logical_type {
-                                return Err(Error::InvalidRuleConflictingTypes(
+                                return Err(TypeError::InvalidRuleConflictingTypes(
                                     next_position.predicate.0.clone(),
                                     next_position.position + 1,
                                     *current_type,
@@ -457,17 +472,39 @@ impl Program {
     }
 
     /// Check if the program contains rules with unsupported features
-    pub fn check_unsupported(&self) -> Result<(), Error> {
+    pub fn check_for_unsupported_features(&self) -> Result<(), RuleAnalysisError> {
+        let mut arities = HashMap::new();
+
+        for ((predicate, arity), _) in self.sources() {
+            arities.insert(predicate.clone(), arity);
+        }
+
         for rule in self.rules() {
             for atom in rule.body() {
+                // check for negation
                 if matches!(atom, Literal::Negative(_)) {
-                    return Err(Error::UnsupportedFeatureNegation);
+                    return Err(RuleAnalysisError::UnsupportedFeatureNegation);
+                }
+
+                // check for consistent predicate arities
+                let arity = atom.terms().len();
+                if arity != *arities.entry(atom.predicate()).or_insert(arity) {
+                    return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
                 }
             }
 
+            // check for comparisons
             for filter in rule.filters() {
                 if filter.operation != FilterOperation::Equals {
-                    return Err(Error::UnsupportedFeatureComparison);
+                    return Err(RuleAnalysisError::UnsupportedFeatureComparison);
+                }
+            }
+
+            for atom in rule.head() {
+                // check for consistent predicate arities
+                let arity = atom.terms().len();
+                if arity != *arities.entry(atom.predicate()).or_insert(arity) {
+                    return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
                 }
             }
         }
@@ -477,11 +514,11 @@ impl Program {
 
     /// Check if there is a constant that cannot be converted into the type of
     /// the variable/predicate position it is compared to.
-    fn check_type_conflict_constants(
+    fn check_for_incompatible_constant_types(
         &self,
         analyses: &[RuleAnalysis],
         predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
-    ) -> Result<(), RuleAnalysisError> {
+    ) -> Result<(), Error> {
         for fact in self.facts() {
             let predicate_types = predicate_types
                 .get(&fact.0.predicate())
@@ -557,7 +594,7 @@ impl Program {
             })
             .collect();
 
-        self.check_type_conflict_constants(&rule_analysis, &predicate_types)?;
+        self.check_for_incompatible_constant_types(&rule_analysis, &predicate_types)?;
 
         Ok(ProgramAnalysis {
             rule_analysis,
