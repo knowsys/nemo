@@ -32,6 +32,14 @@ pub enum ParseError {
     /// A variable only occurs in negative literals in the rule body.
     #[error(r#"Variable "{0}" only occurs unsafely in negative literals in the rule body."#)]
     UnsafeNegatedVariable(String),
+    /// The universal variable does not occur in a positive body literal.
+    #[error(r#"The universal variable "{0}" does not occur in a positive body literal."#)]
+    UnsafeHeadVariable(String),
+    /// A variable used in a comparison does not occur in a positive body literal.
+    #[error(
+        r#"The variable "{0}" used in a comparison does not occur in a positive body literal."#
+    )]
+    UnsafeFilterVariable(String),
     /// A variable is both existentially and universally quantified
     #[error(r#"Variable "{0}" occurs with existential and universal quantification"#)]
     BothQuantifiers(String),

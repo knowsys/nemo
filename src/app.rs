@@ -87,7 +87,7 @@ impl CliApp {
 
         self.prevent_accidential_overwrite(&app_state)?;
 
-        let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program);
+        let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program)?;
         TimedCode::instance().sub("Reading & Preprocessing").stop();
         TimedCode::instance().sub("Reasoning").start();
 
@@ -173,6 +173,8 @@ impl CliApp {
             acc
         });
         let program = all_input_consumed(parser.parse_program())(&input)?;
+        program.check_unsupported()?;
+
         log::info!("Rules parsed");
         log::trace!("{:?}", program);
 

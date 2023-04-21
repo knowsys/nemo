@@ -3,8 +3,9 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use petgraph::{visit::Dfs, Undirected};
 
 use crate::{
+    error::Error,
     logical::{
-        model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
+        model::{Atom, FilterOperation, Identifier, Literal, Program, Rule, Term, Variable},
         types::LogicalTypeEnum,
     },
     physical::{management::database::ColumnOrder, util::labeled_graph::NodeLabeledGraph},
@@ -350,6 +351,22 @@ impl Program {
                     }
                 }
             }
+
+            for filter in rule.filters() {
+                let position_left = variable_to_last_node
+                    .get(&filter.left)
+                    .expect("Variables in filters should also appear in the rule body")
+                    .clone();
+
+                if let Term::Variable(variable_right) = &filter.right {
+                    let position_right = variable_to_last_node
+                        .get(&variable_right)
+                        .expect("Variables in filters should also appear in the rule body")
+                        .clone();
+
+                    graph.add_edge(position_left, position_right);
+                }
+            }
         }
 
         graph
@@ -359,7 +376,7 @@ impl Program {
         &self,
         position_graph: &PositionGraph,
         all_predicates: &HashSet<(Identifier, usize)>,
-    ) -> HashMap<Identifier, Vec<LogicalTypeEnum>> {
+    ) -> Result<HashMap<Identifier, Vec<LogicalTypeEnum>>, Error> {
         // Set all predicate types to unknown
         let mut predicate_types: HashMap<Identifier, Vec<Option<LogicalTypeEnum>>> = all_predicates
             .iter()
@@ -402,8 +419,12 @@ impl Program {
 
                         if let Some(current_type) = current_type_opt {
                             if *current_type != logical_type {
-                                // TODO: Throw an error
-                                panic!("Incompatible type declarations.");
+                                return Err(Error::InvalidRuleConflictingTypes(
+                                    next_position.predicate.0.clone(),
+                                    next_position.position + 1,
+                                    current_type.clone(),
+                                    logical_type,
+                                ));
                             }
                         } else {
                             *current_type_opt = Some(logical_type);
@@ -414,7 +435,7 @@ impl Program {
         }
 
         // All the types that are not set will be mapped to a default type
-        predicate_types
+        let result = predicate_types
             .into_iter()
             .map(|(predicate, types)| {
                 (
@@ -422,11 +443,32 @@ impl Program {
                     types.into_iter().map(|t| t.unwrap_or_default()).collect(),
                 )
             })
-            .collect()
+            .collect();
+
+        Ok(result)
+    }
+
+    /// Check if the program contains rules with unsupported features
+    pub fn check_unsupported(&self) -> Result<(), Error> {
+        for rule in self.rules() {
+            for atom in rule.body() {
+                if matches!(atom, Literal::Negative(_)) {
+                    return Err(Error::UnsupportedFeatureNegation);
+                }
+            }
+
+            for filter in rule.filters() {
+                if filter.operation != FilterOperation::Equals {
+                    return Err(Error::UnsupportedFeatureComparison);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Analyze itself and return a struct containing the results.
-    pub fn analyze(&self) -> ProgramAnalysis {
+    pub fn analyze(&self) -> Result<ProgramAnalysis, Error> {
         let BuilderResultVariants {
             all_variable_orders,
             all_column_orders,
@@ -436,7 +478,7 @@ impl Program {
         let derived_predicates = self.get_head_predicates();
 
         let position_graph = self.build_position_graph();
-        let predicate_types = self.infer_predicate_types(&position_graph, &all_predicates);
+        let predicate_types = self.infer_predicate_types(&position_graph, &all_predicates)?;
 
         let rule_analysis: Vec<RuleAnalysis> = self
             .rules()
@@ -453,12 +495,12 @@ impl Program {
             })
             .collect();
 
-        ProgramAnalysis {
+        Ok(ProgramAnalysis {
             rule_analysis,
             derived_predicates,
             all_predicates,
             predicate_types,
             position_graph,
-        }
+        })
     }
 }

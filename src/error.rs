@@ -40,6 +40,15 @@ pub enum Error {
     /// Error when converting floating type to integer point value
     #[error("Floating type could not be converted to integer value")]
     FloatingPointToInteger,
+    /// Conflicting type declarations
+    #[error("Conflicting type declarations. Predicate \"{0}\" at position {1} has been inferred to have the conflicting types {2} and {3}.")]
+    InvalidRuleConflictingTypes(String, usize, LogicalTypeEnum, LogicalTypeEnum),
+    /// Unsupported feature: Negation
+    #[error("Negation is currently unsupported.")]
+    UnsupportedFeatureNegation,
+    /// Unsupported feature: Negation
+    #[error("Comparison operations are currently not supported.")]
+    UnsupportedFeatureComparison,
     /// Parse errors
     #[error(transparent)]
     ParseError(#[from] ParseError),
