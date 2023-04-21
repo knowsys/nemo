@@ -281,15 +281,19 @@ struct VariableOrderBuilder<'a> {
     idb_preds: HashSet<Identifier>,
 }
 
+struct BuilderResult {
+    /// A [`Vec`] where the ith entry contains a good variable order for rule i.
+    variable_orders: Vec<VariableOrder>,
+    /// A [`HashMap`] mapping each predicate to the set of [`ColumnOrder`]s that are supposed to be available.
+    column_orders: HashMap<Identifier, HashSet<ColumnOrder>>,
+}
+
 impl VariableOrderBuilder<'_> {
     fn build_for(
         program: &Program,
         iteration_order_within_rule: IterationOrder,
         initial_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>,
-    ) -> (
-        Vec<VariableOrder>,
-        HashMap<Identifier, HashSet<ColumnOrder>>,
-    ) {
+    ) -> BuilderResult {
         let mut builder = VariableOrderBuilder {
             program,
             iteration_order_within_rule,
@@ -300,7 +304,10 @@ impl VariableOrderBuilder<'_> {
         let variable_orders = builder.generate_variable_orders();
         let column_orders = builder.get_column_orders();
 
-        (variable_orders, column_orders)
+        BuilderResult {
+            variable_orders,
+            column_orders,
+        }
     }
 
     fn get_already_present_idb_edb_count_for_rule_in_tries(&self, rule: &Rule) -> (usize, usize) {
@@ -440,13 +447,19 @@ impl VariableOrderBuilder<'_> {
     }
 }
 
+/// Contains the result of the function `build_preferable_variable_orders`.
+pub(super) struct BuilderResultVariants {
+    /// [`Vec`] where the ith entry contains a [`Vec`] of with good variable orders for the ith rule
+    pub(super) all_variable_orders: Vec<Vec<VariableOrder>>,
+    /// For each variant of the variable order computation
+    /// contains one [`HashSet`] mapping each predicate to its available [`ColumnOrder`]s.
+    pub(super) all_column_orders: Vec<HashMap<Identifier, HashSet<ColumnOrder>>>,
+}
+
 pub(super) fn build_preferable_variable_orders(
     program: &Program,
     initial_column_orders: Option<HashMap<Identifier, HashSet<ColumnOrder>>>,
-) -> (
-    Vec<Vec<VariableOrder>>,
-    Vec<HashMap<Identifier, HashSet<ColumnOrder>>>,
-) {
+) -> BuilderResultVariants {
     let iteration_orders = [
         IterationOrder::Forward,
         IterationOrder::Backward,
@@ -479,7 +492,10 @@ pub(super) fn build_preferable_variable_orders(
     let mut all_column_orders = Vec::new();
 
     for iteration_order in iteration_orders {
-        let (variable_orders, column_orders) = VariableOrderBuilder::build_for(
+        let BuilderResult {
+            variable_orders,
+            column_orders,
+        } = VariableOrderBuilder::build_for(
             program,
             iteration_order,
             initial_column_orders.clone(),
@@ -494,7 +510,10 @@ pub(super) fn build_preferable_variable_orders(
         all_column_orders.push(column_orders);
     }
 
-    (all_variable_orders, all_column_orders)
+    BuilderResultVariants {
+        all_variable_orders,
+        all_column_orders,
+    }
 }
 
 #[cfg(test)]
@@ -728,7 +747,7 @@ mod test {
 
         assert_eq!(
             vec![rule_var_orders],
-            super::build_preferable_variable_orders(&program, None).0,
+            super::build_preferable_variable_orders(&program, None).all_variable_orders,
         );
     }
 
@@ -757,7 +776,7 @@ mod test {
 
         assert_eq!(
             vec![rule_var_orders],
-            super::build_preferable_variable_orders(&program, None).0,
+            super::build_preferable_variable_orders(&program, None).all_variable_orders,
         );
     }
 
@@ -794,7 +813,7 @@ mod test {
 
         assert_eq!(
             vec![rule_1_var_orders, rule_2_var_orders],
-            super::build_preferable_variable_orders(&program, None).0,
+            super::build_preferable_variable_orders(&program, None).all_variable_orders,
         );
     }
 
@@ -997,7 +1016,7 @@ mod test {
                 rule_4_var_orders,
                 rule_5_var_orders
             ],
-            super::build_preferable_variable_orders(&program, None).0,
+            super::build_preferable_variable_orders(&program, None).all_variable_orders,
         );
     }
 
@@ -1437,7 +1456,7 @@ mod test {
                 rule_11_var_orders,
                 rule_12_var_orders,
             ],
-            super::build_preferable_variable_orders(&program, None).0,
+            super::build_preferable_variable_orders(&program, None).all_variable_orders,
         );
     }
 }

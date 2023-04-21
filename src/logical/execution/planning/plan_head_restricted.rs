@@ -73,12 +73,7 @@ impl RestrictedChaseStrategy {
             .iter()
             .map(|l| l.atom().clone())
             .collect();
-        let head_join_filters = analysis
-            .existential_aux_rule
-            .filters()
-            .iter()
-            .cloned()
-            .collect();
+        let head_join_filters = analysis.existential_aux_rule.filters().to_vec();
 
         let join_generator = SeminaiveJoinGenerator {
             variables: normalized_head_variables,
@@ -101,7 +96,7 @@ impl RestrictedChaseStrategy {
 
         let head_join_cut =
             cut_last_layers(&analysis.existential_aux_order, &used_join_head_variables);
-        let aux_predicate = aux_head.predicate().clone();
+        let aux_predicate = aux_head.predicate();
 
         RestrictedChaseStrategy {
             join_generator,

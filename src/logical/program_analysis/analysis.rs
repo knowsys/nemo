@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     normalization::normalize_atom_vector,
-    variable_order::{build_preferable_variable_orders, VariableOrder},
+    variable_order::{build_preferable_variable_orders, BuilderResultVariants, VariableOrder},
 };
 
 /// Contains useful information for a (existential) rule
@@ -104,7 +104,7 @@ fn construct_existential_aux_rule(
     predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
     column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
 ) -> (Rule, VariableOrder, HashMap<Variable, LogicalTypeEnum>) {
-    let normalized_head = normalize_atom_vector(&head_atoms, &[]);
+    let normalized_head = normalize_atom_vector(head_atoms, &[]);
 
     let temp_head_identifier = get_fresh_rule_predicate(rule_index);
 
@@ -140,23 +140,15 @@ fn construct_existential_aux_rule(
         normalized_head
             .atoms
             .into_iter()
-            .map(|a| Literal::Positive(a))
+            .map(Literal::Positive)
             .collect(),
         normalized_head.filters,
     );
 
-    let temp_program = Program::new(
-        None,
-        HashMap::new(),
-        Vec::new(),
-        vec![temp_rule.clone()],
-        Vec::new(),
-        HashMap::new(),
-    );
-
+    let temp_program = vec![temp_rule.clone()].into();
     let variable_order =
         build_preferable_variable_orders(&temp_program, Some(column_orders.clone()))
-            .0
+            .all_variable_orders
             .pop()
             .and_then(|mut v| v.pop())
             .expect("This functions provides at least one variable order");
@@ -167,7 +159,7 @@ fn construct_existential_aux_rule(
 fn analyze_rule(
     rule: &Rule,
     promising_variable_orders: Vec<VariableOrder>,
-    promising_column_orders: &Vec<HashMap<Identifier, HashSet<ColumnOrder>>>,
+    promising_column_orders: &[HashMap<Identifier, HashSet<ColumnOrder>>],
     rule_index: usize,
     type_declarations: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
 ) -> RuleAnalysis {
@@ -435,7 +427,10 @@ impl Program {
 
     /// Analyze itself and return a struct containing the results.
     pub fn analyze(&self) -> ProgramAnalysis {
-        let (variable_orders, column_orders) = build_preferable_variable_orders(self, None);
+        let BuilderResultVariants {
+            all_variable_orders,
+            all_column_orders,
+        } = build_preferable_variable_orders(self, None);
 
         let all_predicates = self.get_all_predicates();
         let derived_predicates = self.get_head_predicates();
@@ -450,8 +445,8 @@ impl Program {
             .map(|(i, r)| {
                 analyze_rule(
                     r,
-                    variable_orders[i].clone(),
-                    &column_orders,
+                    all_variable_orders[i].clone(),
+                    &all_column_orders,
                     i,
                     &predicate_types,
                 )

@@ -92,9 +92,14 @@ pub fn materialize_inner(
         // then it has to be added to a column builder
         let current_value = trie_scan.current_scan().unwrap().current();
 
-        let next_value = if is_layer_cut && is_last_layer && current_value.is_some() {
-            None
-        } else if is_layer_cut && !is_last_layer && current_row[current_layer] {
+        let next_value = if is_layer_cut
+            && (is_last_layer || current_row[current_layer])
+            && (!is_last_layer || current_value.is_some())
+        {
+            // We ignore the rest of the layer if
+            // * This layer is cut
+            // * If it is not the last layer but `current_row` indicates that `current_value` should be part of the output
+            // * If it is the last layer and the previous iteration already proved the existence of a value on this layer
             None
         } else {
             next_count += 1;
