@@ -123,6 +123,9 @@ pub enum ParseError {
     /// Expected a data source declaration.
     #[error(r#"Expected a "@source" declaration"#)]
     ExpectedDataSourceDeclaration,
+    /// Expected an output declaration.
+    #[error(r#"Expected an "@output" declaration"#)]
+    ExpectedOutputDeclaration,
     /// Expected a string literal.
     #[error("Expected a string literal")]
     ExpectedStringLiteral,

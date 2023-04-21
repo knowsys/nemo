@@ -13,7 +13,10 @@ use nom::{
 };
 use nom_locate::position;
 
-use crate::logical::{model::*, types::LogicalTypeEnum};
+use crate::{
+    error::Error,
+    logical::{model::*, types::LogicalTypeEnum},
+};
 
 mod types;
 use types::{IntermediateResult, Span};
@@ -288,17 +291,7 @@ impl<'a> RuleParser<'a> {
                     let (remainder, position) = position(input)?;
                     let (remainder, (predicate, arity)) = preceded(
                         terminated(token("@source"), cut(multispace_or_comment1)),
-                        pair(
-                            self.parse_predicate_name(),
-                            preceded(
-                                multispace_or_comment0,
-                                delimited(
-                                    token("["),
-                                    map_res(digit1, |number: Span<'a>| number.parse::<usize>()),
-                                    token("]"),
-                                ),
-                            ),
-                        ),
+                        self.parse_qualified_predicate_name(),
                     )(remainder)?;
 
                     let (remainder, datasource) = delimited(
@@ -367,6 +360,34 @@ impl<'a> RuleParser<'a> {
                     Ok((remainder, source))
                 },
                 || ParseError::ExpectedDataSourceDeclaration,
+            ),
+        )
+    }
+
+    /// Parses an output directive.
+    pub fn parse_output(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<QualifiedPredicateName> {
+        traced(
+            "parse_output",
+            map_error(
+                delimited(
+                    terminated(token("@output"), cut(multispace_or_comment0)),
+                    alt((
+                        map_res::<_, _, _, _, Error, _, _>(
+                            self.parse_qualified_predicate_name(),
+                            |(identifier, arity)| {
+                                Ok(QualifiedPredicateName::with_arity(identifier, arity))
+                            },
+                        ),
+                        map_res::<_, _, _, _, Error, _, _>(
+                            self.parse_predicate_name(),
+                            |identifier| Ok(identifier.into()),
+                        ),
+                    )),
+                    self.parse_dot(),
+                ),
+                || ParseError::ExpectedOutputDeclaration,
             ),
         )
     }
@@ -477,6 +498,27 @@ impl<'a> RuleParser<'a> {
             map_error(alt((self.parse_iri_pred(), self.parse_pred_name())), || {
                 ParseError::ExpectedPredicateName
             }),
+        )
+    }
+
+    /// Parse a qualified predicate name – currently, this is a
+    /// predicate name together with its arity.
+    fn parse_qualified_predicate_name(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, usize)> {
+        traced(
+            "parse_qualified_predicate_name",
+            pair(
+                self.parse_predicate_name(),
+                preceded(
+                    multispace_or_comment0,
+                    delimited(
+                        token("["),
+                        map_res(digit1, |number: Span<'a>| number.parse::<usize>()),
+                        token("]"),
+                    ),
+                ),
+            ),
         )
     }
 
@@ -778,6 +820,7 @@ impl<'a> RuleParser<'a> {
             let (remainder, _) = many0(self.parse_predicate_declaration())(remainder)?;
             let (remainder, _) = many0(self.parse_source())(remainder)?;
             let (remainder, statements) = many0(self.parse_statement())(remainder)?;
+            let (remainder, output_predicates) = many0(self.parse_output())(remainder)?;
 
             let base = self.base().map(String::from);
             let prefixes = self
@@ -803,6 +846,7 @@ impl<'a> RuleParser<'a> {
                     rules,
                     facts,
                     self.predicate_declarations.borrow().clone(),
+                    output_predicates.into(),
                 ),
             ))
         })
@@ -1141,6 +1185,25 @@ mod test {
         );
 
         assert_parse!(parser.parse_rule(), &rule, expected_rule,);
+    }
+
+    #[test]
+    #[allow(clippy::redundant_clone)]
+    fn parse_output() {
+        let parser = RuleParser::new();
+
+        let j2 = Identifier("J2".to_string());
+
+        assert_parse!(
+            parser.parse_output(),
+            "@output J2 .",
+            QualifiedPredicateName::new(j2.clone())
+        );
+        assert_parse!(
+            parser.parse_output(),
+            "@output J2[3] .",
+            QualifiedPredicateName::with_arity(j2.clone(), 3)
+        );
     }
 
     #[test]
