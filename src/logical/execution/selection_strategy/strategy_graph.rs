@@ -16,6 +16,7 @@ pub struct StrategyDependencyGraph<
     SubStrategy: RuleSelectionStrategy,
 > {
     _constructor: PhantomData<GraphConstructor>,
+
     ordered_sccs: Vec<Vec<usize>>,
     substrategies: Vec<SubStrategy>,
 

@@ -31,6 +31,10 @@ impl RuleSelectionStrategy for StrategyRoundRobin {
     }
 
     fn next_rule(&mut self, new_derivations: Option<bool>) -> Option<usize> {
+        if self.rule_count == 0 {
+            return None;
+        }
+
         // Only switch to a different rule if the rule is not
         // recursive or if there are no new derivations
         let mut update_rule_index = !self.self_recursive[self.current_rule_index];
