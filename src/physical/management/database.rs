@@ -368,16 +368,14 @@ impl OrderedReferenceManager {
     /// Return the number of rows contained in this table.
     pub fn count_rows(&self, id: &TableId) -> usize {
         if let Some(resolved) = self.resolve_reference(*id, &ColumnOrder::default()) {
-            if let Some((_, storage)) = resolved.map.iter().next() {
-                // TODO: Technically we should be able to somehow count non-inmemory tables
-                // But this is not relevant for now
-                if let TableStorage::InMemory(trie) = storage {
-                    return trie.row_num();
-                }
+            // TODO: Technically we should be able to somehow count non-inmemory tables
+            // But this is not relevant for now
+            if let Some((_, TableStorage::InMemory(trie))) = resolved.map.iter().next() {
+                return trie.row_num();
             }
         }
 
-        return 0;
+        0
     }
 }
 
