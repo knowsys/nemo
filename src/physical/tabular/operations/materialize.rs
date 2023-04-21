@@ -18,6 +18,7 @@ use crate::physical::{
 pub fn materialize_inner(
     trie_scan: &mut TrieScanEnum,
     picked_columns: Option<Vec<bool>>,
+    cut_bottom: usize,
     check_empty: bool,
 ) -> Option<Trie> {
     // Keep track of the number of next calls; used for logging
@@ -26,6 +27,10 @@ pub fn materialize_inner(
     // Used types will be the same as in the trie scan
     let column_types = trie_scan.get_types().clone();
     let arity = column_types.len();
+
+    if arity == 0 {
+        return Some(Trie::new(vec![]));
+    }
 
     // Setup column builders
     let mut result_columns = Vec::<ColumnWithIntervalsT>::with_capacity(arity);
@@ -75,6 +80,10 @@ pub fn materialize_inner(
         // It is important to know when we reached the bottom as only those values will be added to the result
         let is_last_layer = current_layer >= arity - 1;
 
+        // Whether the content of this layer is important for the overall output
+        // If this layer is "cut" then it is enough to check whether there is at least one value in this layer
+        let is_layer_cut = current_layer >= arity - cut_bottom;
+
         // In each loop iteration we perform a sideways step, then if not on the last layer go down
         // (unless a sideways step is impossible in which case we go up)
         // next_value is the value on which the down operation will be performed
@@ -82,8 +91,20 @@ pub fn materialize_inner(
         // If there exists a path from current_value to the bottom (which we keep track of with the current_row variable)
         // then it has to be added to a column builder
         let current_value = trie_scan.current_scan().unwrap().current();
-        let next_value = trie_scan.current_scan().unwrap().next();
-        next_count += 1;
+
+        let next_value = if is_layer_cut
+            && (is_last_layer || current_row[current_layer])
+            && (!is_last_layer || current_value.is_some())
+        {
+            // We ignore the rest of the layer if
+            // * This layer is cut
+            // * If it is not the last layer but `current_row` indicates that `current_value` should be part of the output
+            // * If it is the last layer and the previous iteration already proved the existence of a value on this layer
+            None
+        } else {
+            next_count += 1;
+            trie_scan.current_scan().unwrap().next()
+        };
 
         if let Some(val) = current_value {
             if is_last_layer || current_row[current_layer] {
@@ -193,12 +214,18 @@ pub fn materialize_inner(
 
 /// Given a TrieScan iterator, materialize its content into a trie
 pub fn materialize(trie_scan: &mut TrieScanEnum) -> Option<Trie> {
-    materialize_inner(trie_scan, None, false)
+    materialize_inner(trie_scan, None, 0, false)
+}
+
+/// Given a TrieScan iterator, materialize its content into a trie
+/// For the last `cut` layers only checks the existence of a value and does not materialize it fully.
+pub fn materialize_up_to(trie_scan: &mut TrieScanEnum, cut: usize) -> Option<Trie> {
+    materialize_inner(trie_scan, None, cut, false)
 }
 
 /// Tests whether an iterator is empty by materializing it until the first element
 pub fn scan_is_empty(trie_scan: &mut TrieScanEnum) -> bool {
-    materialize_inner(trie_scan, None, true).is_some()
+    materialize_inner(trie_scan, None, 0, true).is_some()
 }
 
 /// Given a TrieScan iterator, materialize its content into a trie
@@ -211,7 +238,7 @@ pub fn materialize_subset(
     trie_scan: &mut TrieScanEnum,
     _picked_columns: Vec<bool>,
 ) -> Option<Trie> {
-    materialize_inner(trie_scan, None, false)
+    materialize_inner(trie_scan, None, 0, false)
 }
 
 #[cfg(test)]

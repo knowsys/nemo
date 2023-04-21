@@ -3,7 +3,7 @@
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
 use crate::logical::Permutator;
-use crate::{logical::model::Term, physical::management::database::ColumnOrder};
+use crate::physical::management::database::ColumnOrder;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::super::model::{Identifier, Literal, Program, Rule, Variable};
@@ -45,10 +45,9 @@ impl VariableOrder {
         }
 
         variable_vector.sort_by(|a, b| {
-            variables
-                .get(a)
+            self.get(a)
                 .unwrap()
-                .partial_cmp(variables.get(b).unwrap())
+                .partial_cmp(self.get(b).unwrap())
                 .unwrap()
         });
 
@@ -282,12 +281,19 @@ struct VariableOrderBuilder<'a> {
     idb_preds: HashSet<Identifier>,
 }
 
+struct BuilderResult {
+    /// A [`Vec`] where the ith entry contains a good variable order for rule i.
+    variable_orders: Vec<VariableOrder>,
+    /// A [`HashMap`] mapping each predicate to the set of [`ColumnOrder`]s that are supposed to be available.
+    column_orders: HashMap<Identifier, HashSet<ColumnOrder>>,
+}
+
 impl VariableOrderBuilder<'_> {
     fn build_for(
         program: &Program,
         iteration_order_within_rule: IterationOrder,
         initial_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>,
-    ) -> Vec<VariableOrder> {
+    ) -> BuilderResult {
         let mut builder = VariableOrderBuilder {
             program,
             iteration_order_within_rule,
@@ -295,7 +301,13 @@ impl VariableOrderBuilder<'_> {
             idb_preds: program.idb_predicates(),
         };
 
-        builder.generate_variable_orders()
+        let variable_orders = builder.generate_variable_orders();
+        let column_orders = builder.get_column_orders();
+
+        BuilderResult {
+            variable_orders,
+            column_orders,
+        }
     }
 
     fn get_already_present_idb_edb_count_for_rule_in_tries(&self, rule: &Rule) -> (usize, usize) {
@@ -316,31 +328,6 @@ impl VariableOrderBuilder<'_> {
         });
 
         (idb_count, edb_count)
-    }
-
-    /// This is a hack to deal with existential rules
-    /// It just appends the existential variables to the end
-    /// TODO: Think about variable orders with existential rules
-    fn append_existentials(variable_order: &mut VariableOrder, rule: &Rule) {
-        // TODO: Pass a RuleAnalysis object and check if this would be useful in other places
-        let existential_variables: Vec<Variable> = rule
-            .head()
-            .iter()
-            .flat_map(|a| a.terms())
-            .filter_map(|t| {
-                if let Term::Variable(var) = t {
-                    Some(var)
-                } else {
-                    None
-                }
-            })
-            .filter(|&v| matches!(v, Variable::Existential(_)))
-            .cloned()
-            .collect();
-
-        for variable in existential_variables {
-            variable_order.push(variable);
-        }
     }
 
     fn generate_variable_orders(&mut self) -> Vec<VariableOrder> {
@@ -367,8 +354,7 @@ impl VariableOrderBuilder<'_> {
                 .expect("the remaining rules are never empty here");
 
             let next_index = *next_index;
-            let mut var_order = self.generate_variable_order_for_rule(next_rule);
-            Self::append_existentials(&mut var_order, next_rule);
+            let var_order = self.generate_variable_order_for_rule(next_rule);
 
             remaining_rules.remove(&next_index);
             result.push((next_index, var_order));
@@ -455,12 +441,25 @@ impl VariableOrderBuilder<'_> {
             set.insert(column_ord);
         }
     }
+
+    fn get_column_orders(self) -> HashMap<Identifier, HashSet<ColumnOrder>> {
+        self.required_trie_column_orders
+    }
+}
+
+/// Contains the result of the function `build_preferable_variable_orders`.
+pub(super) struct BuilderResultVariants {
+    /// [`Vec`] where the ith entry contains a [`Vec`] of with good variable orders for the ith rule
+    pub(super) all_variable_orders: Vec<Vec<VariableOrder>>,
+    /// For each variant of the variable order computation
+    /// contains one [`HashSet`] mapping each predicate to its available [`ColumnOrder`]s.
+    pub(super) all_column_orders: Vec<HashMap<Identifier, HashSet<ColumnOrder>>>,
 }
 
 pub(super) fn build_preferable_variable_orders(
     program: &Program,
     initial_column_orders: Option<HashMap<Identifier, HashSet<ColumnOrder>>>,
-) -> Vec<Vec<VariableOrder>> {
+) -> BuilderResultVariants {
     let iteration_orders = [
         IterationOrder::Forward,
         IterationOrder::Backward,
@@ -489,29 +488,32 @@ pub(super) fn build_preferable_variable_orders(
             .collect()
     });
 
-    iteration_orders
-        .into_iter()
-        .map(|iter_ord| {
-            VariableOrderBuilder::build_for(program, iter_ord, initial_column_orders.clone())
-                .into_iter()
-                .map(|var_ord| vec![var_ord])
-                .collect()
-        })
-        .reduce(|mut vec_a: Vec<Vec<VariableOrder>>, vec_b| {
-            vec_a
-                .iter_mut()
-                .zip(vec_b)
-                .for_each(|(var_ords_a, mut var_ords_b)| {
-                    let new_element = var_ords_b
-                        .pop()
-                        .expect("we know that var_ords_b contains exactly one element");
-                    if !var_ords_a.contains(&new_element) {
-                        var_ords_a.push(new_element);
-                    }
-                });
-            vec_a
-        })
-        .expect("orders are defined above and is non-empty")
+    let mut all_variable_orders = vec![Vec::<VariableOrder>::new(); program.rules().len()];
+    let mut all_column_orders = Vec::new();
+
+    for iteration_order in iteration_orders {
+        let BuilderResult {
+            variable_orders,
+            column_orders,
+        } = VariableOrderBuilder::build_for(
+            program,
+            iteration_order,
+            initial_column_orders.clone(),
+        );
+
+        for (rule_index, variable_order) in variable_orders.into_iter().enumerate() {
+            if !all_variable_orders[rule_index].contains(&variable_order) {
+                all_variable_orders[rule_index].push(variable_order);
+            }
+        }
+
+        all_column_orders.push(column_orders);
+    }
+
+    BuilderResultVariants {
+        all_variable_orders,
+        all_column_orders,
+    }
 }
 
 #[cfg(test)]
@@ -745,7 +747,7 @@ mod test {
 
         assert_eq!(
             vec![rule_var_orders],
-            super::build_preferable_variable_orders(&program, None),
+            super::build_preferable_variable_orders(&program, None).all_variable_orders,
         );
     }
 
@@ -774,7 +776,7 @@ mod test {
 
         assert_eq!(
             vec![rule_var_orders],
-            super::build_preferable_variable_orders(&program, None),
+            super::build_preferable_variable_orders(&program, None).all_variable_orders,
         );
     }
 
@@ -811,7 +813,7 @@ mod test {
 
         assert_eq!(
             vec![rule_1_var_orders, rule_2_var_orders],
-            super::build_preferable_variable_orders(&program, None),
+            super::build_preferable_variable_orders(&program, None).all_variable_orders,
         );
     }
 
@@ -1014,7 +1016,7 @@ mod test {
                 rule_4_var_orders,
                 rule_5_var_orders
             ],
-            super::build_preferable_variable_orders(&program, None),
+            super::build_preferable_variable_orders(&program, None).all_variable_orders,
         );
     }
 
@@ -1454,7 +1456,7 @@ mod test {
                 rule_11_var_orders,
                 rule_12_var_orders,
             ],
-            super::build_preferable_variable_orders(&program, None),
+            super::build_preferable_variable_orders(&program, None).all_variable_orders,
         );
     }
 }

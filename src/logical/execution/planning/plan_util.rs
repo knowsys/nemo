@@ -218,3 +218,23 @@ pub(super) fn head_instruction_from_atom(atom: &Atom, analysis: &RuleAnalysis) -
         _arity: arity,
     }
 }
+
+pub(super) fn cut_last_layers(
+    variable_order: &VariableOrder,
+    used_variables: &HashSet<Variable>,
+) -> usize {
+    if variable_order.is_empty() || used_variables.is_empty() {
+        return 0;
+    }
+
+    let mut last_index = 0;
+    let variable_order_list = variable_order.as_ordered_list();
+
+    for (index, variable) in variable_order_list.iter().enumerate() {
+        if used_variables.contains(variable) {
+            last_index = index;
+        }
+    }
+
+    variable_order.len() - last_index - 1
+}

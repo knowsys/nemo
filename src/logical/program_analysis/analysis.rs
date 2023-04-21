@@ -4,13 +4,16 @@ use petgraph::{visit::Dfs, Undirected};
 
 use crate::{
     logical::{
-        model::{Atom, Identifier, Program, Rule, Term, Variable},
+        model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
         types::LogicalTypeEnum,
     },
-    physical::util::labeled_graph::NodeLabeledGraph,
+    physical::{management::database::ColumnOrder, util::labeled_graph::NodeLabeledGraph},
 };
 
-use super::variable_order::{build_preferable_variable_orders, VariableOrder};
+use super::{
+    normalization::normalize_atom_vector,
+    variable_order::{build_preferable_variable_orders, BuilderResultVariants, VariableOrder},
+};
 
 /// Contains useful information for a (existential) rule
 #[derive(Debug, Clone)]
@@ -34,8 +37,12 @@ pub struct RuleAnalysis {
     /// Number of existential variables.
     pub num_existential: usize,
 
-    /// Table identifier for storing head matches for the restricted chase
-    pub head_matches_identifier: Identifier,
+    /// Rule that represents the calculation of the satisfied matches for an existential rule.
+    pub existential_aux_rule: Rule,
+    /// The associated variable order for the join of the head atoms
+    pub existential_aux_order: VariableOrder,
+    /// The types associated with the auxillary rule
+    pub existential_aux_types: HashMap<Variable, LogicalTypeEnum>,
 
     /// Variable orders that are worth considering.
     pub promising_variable_orders: Vec<VariableOrder>,
@@ -91,9 +98,68 @@ fn get_fresh_rule_predicate(rule_index: usize) -> Identifier {
     ))
 }
 
+fn construct_existential_aux_rule(
+    rule_index: usize,
+    head_atoms: &Vec<&Atom>,
+    predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
+) -> (Rule, VariableOrder, HashMap<Variable, LogicalTypeEnum>) {
+    let normalized_head = normalize_atom_vector(head_atoms, &[]);
+
+    let temp_head_identifier = get_fresh_rule_predicate(rule_index);
+
+    let mut term_vec = Vec::<Term>::new();
+    let mut occured_variables = HashSet::<Variable>::new();
+
+    for atom in head_atoms {
+        for term in atom.terms() {
+            if let Term::Variable(Variable::Universal(variable)) = term {
+                if occured_variables.insert(Variable::Universal(variable.clone())) {
+                    term_vec.push(Term::Variable(Variable::Universal(variable.clone())));
+                }
+            }
+        }
+    }
+
+    let mut variable_types = HashMap::<Variable, LogicalTypeEnum>::new();
+    for atom in &normalized_head.atoms {
+        let types = predicate_types
+            .get(&atom.predicate())
+            .expect("Every predicate should have type information at this point");
+
+        for (term_index, term) in atom.terms().iter().enumerate() {
+            if let Term::Variable(variable) = term {
+                variable_types.insert(variable.clone(), types[term_index]);
+            }
+        }
+    }
+
+    let temp_head_atom = Atom::new(temp_head_identifier, term_vec);
+    let temp_rule = Rule::new(
+        vec![temp_head_atom],
+        normalized_head
+            .atoms
+            .into_iter()
+            .map(Literal::Positive)
+            .collect(),
+        normalized_head.filters,
+    );
+
+    let temp_program = vec![temp_rule.clone()].into();
+    let variable_order =
+        build_preferable_variable_orders(&temp_program, Some(column_orders.clone()))
+            .all_variable_orders
+            .pop()
+            .and_then(|mut v| v.pop())
+            .expect("This functions provides at least one variable order");
+
+    (temp_rule, variable_order, variable_types)
+}
+
 fn analyze_rule(
     rule: &Rule,
     promising_variable_orders: Vec<VariableOrder>,
+    promising_column_orders: &[HashMap<Identifier, HashSet<ColumnOrder>>],
     rule_index: usize,
     type_declarations: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
 ) -> RuleAnalysis {
@@ -102,7 +168,6 @@ fn analyze_rule(
 
     let num_existential = count_distinct_existential_variables(rule);
 
-    // Check if type declarations are violated; add them if they do not exist
     let mut variable_types: HashMap<Variable, LogicalTypeEnum> = HashMap::new();
     for atom in body_atoms.iter().chain(head_atoms.iter()) {
         for (term_position, term) in atom.terms().iter().enumerate() {
@@ -124,6 +189,22 @@ fn analyze_rule(
         .chain(head_atoms.iter())
         .map(|a| a.predicate())
         .collect();
+    let (existential_aux_rule, existential_aux_order, existential_aux_types) =
+        if num_existential > 0 {
+            // TODO: We only consider the first variable order
+            construct_existential_aux_rule(
+                rule_index,
+                &head_atoms,
+                type_declarations,
+                &promising_column_orders[0],
+            )
+        } else {
+            (
+                Rule::new(vec![], vec![], vec![]),
+                VariableOrder::new(),
+                HashMap::new(),
+            )
+        };
 
     RuleAnalysis {
         is_existential: num_existential > 0,
@@ -134,8 +215,9 @@ fn analyze_rule(
         body_variables: get_variables(&body_atoms),
         head_variables: get_variables(&head_atoms),
         num_existential,
-        // TODO: not sure if this is a good way to introduce a fresh head identifier; I'm not quite sure why it is even required
-        head_matches_identifier: get_fresh_rule_predicate(rule_index),
+        existential_aux_rule,
+        existential_aux_order,
+        existential_aux_types,
         promising_variable_orders,
         variable_types,
         predicate_types: type_declarations
@@ -284,16 +366,17 @@ impl Program {
             .map(|(predicate, arity)| (predicate.clone(), vec![None; *arity]))
             .collect();
 
-        // For now we set the type of each variable that occurrs together with an existential variable in the head
-        // to `LogicalTypeEnum::RdfsResource`
-        // TODO: Only set this type for the positions where there is an existential variables
+        // If there is an existential variable at some potion,
+        // it will be assigned to the type `LogicalTypeEnum::RdfsResource`
         for rule in self.rules() {
-            if count_distinct_existential_variables(rule) > 0 {
-                for atom in rule.head() {
-                    predicate_types.insert(
-                        atom.predicate(),
-                        vec![Some(LogicalTypeEnum::RdfsResource); atom.terms().len()],
-                    );
+            for atom in rule.head() {
+                for (term_index, term) in atom.terms().iter().enumerate() {
+                    if let Term::Variable(Variable::Existential(_)) = term {
+                        let types = predicate_types
+                            .get_mut(&atom.predicate())
+                            .expect("All predicates should have been assigned a type");
+                        types[term_index] = Some(LogicalTypeEnum::RdfsResource);
+                    }
                 }
             }
         }
@@ -344,7 +427,10 @@ impl Program {
 
     /// Analyze itself and return a struct containing the results.
     pub fn analyze(&self) -> ProgramAnalysis {
-        let variable_orders = build_preferable_variable_orders(self, None);
+        let BuilderResultVariants {
+            all_variable_orders,
+            all_column_orders,
+        } = build_preferable_variable_orders(self, None);
 
         let all_predicates = self.get_all_predicates();
         let derived_predicates = self.get_head_predicates();
@@ -356,7 +442,15 @@ impl Program {
             .rules()
             .iter()
             .enumerate()
-            .map(|(i, r)| analyze_rule(r, variable_orders[i].clone(), i, &predicate_types))
+            .map(|(i, r)| {
+                analyze_rule(
+                    r,
+                    all_variable_orders[i].clone(),
+                    &all_column_orders,
+                    i,
+                    &predicate_types,
+                )
+            })
             .collect();
 
         ProgramAnalysis {
