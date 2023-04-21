@@ -14,7 +14,7 @@ use nemo::{
         execution::{
             selection_strategy::strategy_round_robin::StrategyRoundRobin, ExecutionEngine,
         },
-        model::Program,
+        model::{OutputPredicateSelection, Program},
     },
     meta::{timing::TimedDisplay, TimedCode},
 };
@@ -64,8 +64,20 @@ pub struct CliApp {
     )]
     overwrite: bool,
     /// Gzip output files
-    #[arg(short, long = "gzip", default_value = "false")]
+    #[arg(
+        short,
+        long = "gzip",
+        default_value = "false",
+        requires = "save_results"
+    )]
     gz: bool,
+    /// Override @output directives and save every IDB predicate
+    #[arg(
+        long = "write-all-idb-predicates",
+        default_value = "false",
+        requires = "save_results"
+    )]
+    write_all_idb_predicates: bool,
     /// Display detailed timing information
     #[arg(long = "detailed-timing", default_value = "false")]
     detailed_timing: bool,
@@ -163,7 +175,13 @@ impl CliApp {
             );
         }
 
-        let app_state = self.parse_rules()?;
+        let mut app_state = self.parse_rules()?;
+
+        if self.write_all_idb_predicates {
+            app_state
+                .program
+                .force_output_predicate_selection(OutputPredicateSelection::AllIDBPredicates)
+        }
 
         self.prevent_accidential_overwrite(&app_state)?;
 
@@ -274,34 +292,27 @@ impl CliApp {
     /// Returns an Error if files are existing without being allowed to overwrite them
     fn prevent_accidential_overwrite(&self, app_state: &AppState) -> Result<(), Error> {
         if self.save_results && !self.overwrite {
-            app_state
-                .program
-                .idb_predicates()
-                .iter()
-                .try_for_each(|pred| {
-                    let output_file_manager = OutputFileManager::try_new(
-                        &self.output_directory,
-                        self.overwrite,
-                        self.gz,
-                    )?;
-                    let file = output_file_manager.get_output_file_name(pred);
-                    let meta_info = file.metadata();
-                    if let Err(err) = meta_info {
-                        if err.kind() == ErrorKind::NotFound {
-                            Ok::<(), Error>(())
-                        } else {
-                            Err(Error::IO(err))
-                        }
+            app_state.program.output_predicates().try_for_each(|pred| {
+                let output_file_manager =
+                    OutputFileManager::try_new(&self.output_directory, self.overwrite, self.gz)?;
+                let file = output_file_manager.get_output_file_name(&pred);
+                let meta_info = file.metadata();
+                if let Err(err) = meta_info {
+                    if err.kind() == ErrorKind::NotFound {
+                        Ok::<(), Error>(())
                     } else {
-                        Err(Error::IOExists {
-                            error: ErrorKind::AlreadyExists.into(),
-                            filename: file
-                                .to_str()
-                                .expect("Path is expected to be valid utf-8")
-                                .to_string(),
-                        })
+                        Err(Error::IO(err))
                     }
-                })
+                } else {
+                    Err(Error::IOExists {
+                        error: ErrorKind::AlreadyExists.into(),
+                        filename: file
+                            .to_str()
+                            .expect("Path is expected to be valid utf-8")
+                            .to_string(),
+                    })
+                }
+            })
         } else {
             Ok(())
         }

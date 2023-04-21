@@ -1,6 +1,6 @@
 //! Functionality which handles the execution of a program
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     error::Error,
@@ -244,9 +244,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Combine the output tries that resulted form the execution.
     pub fn combine_results(&mut self) -> Result<Vec<(Identifier, Option<TableId>)>, Error> {
+        let output_predicates = self.program.output_predicates().collect::<HashSet<_>>();
         let mut result_ids = Vec::new();
         for predicate in &self.analysis.derived_predicates {
-            if !self.program.idb_predicates().contains(predicate) {
+            if !output_predicates.contains(predicate) {
                 continue;
             }
 
