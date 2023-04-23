@@ -211,12 +211,10 @@ where
     /// Assumes that column scan is a [`ColumnScanFollow`]
     /// Returns whether its scans point to the same value
     pub fn is_equal(&self) -> bool {
-        match self {
-            ColumnScanEnum::ColumnScanFollow(scan) => scan.is_equal(),
-            ColumnScanEnum::ColumnScanSubtract(scan) => scan.is_equal(),
-            _ => unimplemented!(
-                "is_equal is only available for ColumnScanFollow and ColumnScanSubtract"
-            ),
+        if let Self::ColumnScanFollow(cs) = self {
+            cs.is_equal()
+        } else {
+            unimplemented!("narrow_ranges is only available for ColumnScanReorder")
         }
     }
 
@@ -247,6 +245,26 @@ where
             cs.minus_enable(enabled)
         } else {
             unimplemented!("minus_enable is only available for ColumnScanMinus")
+        }
+    }
+
+    /// Assumes that column scan is a [`ColumnScanSubtract`]
+    /// Return a vector indicating which subiterators point to the same value as the main one.
+    pub fn equal_values(&self) -> &Vec<bool> {
+        if let Self::ColumnScanSubtract(cs) = self {
+            cs.equal_values()
+        } else {
+            unimplemented!("equal_values is only available for ColumnScanSubtract")
+        }
+    }
+
+    /// Assumes that column scan is a [`ColumnScanSubtract`]
+    /// Set which sub iterators should be enabled.
+    pub fn subtract_enable(&mut self, enabled: &[bool]) {
+        if let Self::ColumnScanSubtract(cs) = self {
+            cs.enable(enabled)
+        } else {
+            unimplemented!("subtract_enable is only available for ColumnScanSubtract")
         }
     }
 }
@@ -402,9 +420,19 @@ where
         self.0.get_mut().set_active_scans(active_scans);
     }
 
-    /// Forward `minus_enable``to the underlying [`ColumnScanEnum`]
+    /// Forward `minus_enable` to the underlying [`ColumnScanEnum`].
     pub fn minus_enable(&mut self, enabled: bool) {
-        unsafe { &mut *self.0.get() }.minus_enable(enabled);
+        self.0.get_mut().minus_enable(enabled);
+    }
+
+    /// Forward `equal_values` to the underlying [`ColumnScanEnum`].
+    pub fn equal_values(&mut self) -> &Vec<bool> {
+        self.0.get_mut().equal_values()
+    }
+
+    /// Forward `subtract_enable` to the underlying [`ColumnScanEnum`].
+    pub fn subtract_enable(&mut self, enabled: &[bool]) {
+        unsafe { &mut *self.0.get() }.subtract_enable(enabled)
     }
 }
 
@@ -472,6 +500,18 @@ impl<'a> ColumnScanT<'a> {
     /// Set a vector that indicates which scans are currently active and should be considered
     pub fn minus_enable(&mut self, enabled: bool) {
         forward_to_columnscan_cell!(self, minus_enable(enabled))
+    }
+
+    /// Assumes that column scan is a [`ColumnScanSubtract`]
+    /// Return a vector indicating which subiterators point to the same value as the main one.
+    pub fn equal_values(&mut self) -> &Vec<bool> {
+        forward_to_columnscan_cell!(self, equal_values)
+    }
+
+    /// Assumes that column scan is a [`ColumnScanSubtract`]
+    /// Set which sub iterators should be enabled.
+    pub fn subtract_enable(&mut self, enabled: &[bool]) {
+        forward_to_columnscan_cell!(self, subtract_enable(enabled))
     }
 }
 
