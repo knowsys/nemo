@@ -115,7 +115,7 @@ pub(super) fn compute_filters(
                     value: variable_types
                         .get(&filter.left)
                         .unwrap()
-                        .ground_term_to_data_value_t(filter.right.clone()),
+                        .ground_term_to_data_value_t(filter.right.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker."),
                 });
             }
         }
@@ -204,7 +204,7 @@ pub(super) fn head_instruction_from_atom(atom: &Atom, analysis: &RuleAnalysis) -
                 current_append_vector = append_instructions.last_mut().unwrap();
             }
         } else {
-            let data_value_t = logical_type.ground_term_to_data_value_t(term.clone());
+            let data_value_t = logical_type.ground_term_to_data_value_t(term.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.");
             let instruction = AppendInstruction::Constant(data_value_t);
             current_append_vector.push(instruction);
         }

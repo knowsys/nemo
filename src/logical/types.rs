@@ -70,10 +70,9 @@ impl From<LogicalTypeEnum> for DataTypeName {
 }
 
 impl LogicalTypeEnum {
-    // TODO: probably return result instead of panicing
     /// Convert a given ground term to a DataValueT fitting the current logical type
-    pub fn ground_term_to_data_value_t(&self, gt: Term) -> DataValueT {
-        match self {
+    pub fn ground_term_to_data_value_t(&self, gt: Term) -> Result<DataValueT, Error> {
+        let result = match self {
             Self::RdfsResource => {
                 match gt {
                     Term::Variable(_) => {
@@ -98,19 +97,18 @@ impl LogicalTypeEnum {
                     }
                 }
             }
-            Self::UnsignedInteger => {
-                match gt {
-                    // TODO: get rid of unwrap in next line
-                    Term::NumericLiteral(NumericLiteral::Integer(i)) => DataValueT::U64(i.try_into().unwrap()),
-                    _ => panic!("Only NumericLiteral::Integer terms are supported for logical type UnsignedInteger!"),
+            Self::UnsignedInteger => match gt {
+                Term::NumericLiteral(NumericLiteral::Integer(i)) => {
+                    DataValueT::U64(i.try_into().unwrap())
                 }
-            }
+                _ => return Err(Error::InvalidRuleTermConversion(gt, *self)),
+            },
             Self::Double => match gt {
                 Term::NumericLiteral(NumericLiteral::Double(d)) => DataValueT::Double(d),
-                _ => panic!(
-                    "Only NumericLiteral::Double terms are supported for logical type Double!"
-                ),
+                _ => return Err(Error::InvalidRuleTermConversion(gt, *self)),
             },
-        }
+        };
+
+        Ok(result)
     }
 }

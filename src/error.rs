@@ -1,7 +1,8 @@
 //! Error-handling module for the crate
 
 use crate::{
-    io::parser::ParseError, logical::types::LogicalTypeEnum,
+    io::parser::ParseError,
+    logical::{model::Term, types::LogicalTypeEnum},
     physical::datatypes::float_is_nan::FloatIsNaN,
 };
 use thiserror::Error;
@@ -43,6 +44,9 @@ pub enum Error {
     /// Conflicting type declarations
     #[error("Conflicting type declarations. Predicate \"{0}\" at position {1} has been inferred to have the conflicting types {2} and {3}.")]
     InvalidRuleConflictingTypes(String, usize, LogicalTypeEnum, LogicalTypeEnum),
+    /// Conflicting type declarations
+    #[error("Conflicting type declarations. The term \"{0}\" cannot be converted to a {1}.")]
+    InvalidRuleTermConversion(Term, LogicalTypeEnum),
     /// Unsupported feature: Negation
     #[error("Negation is currently unsupported.")]
     UnsupportedFeatureNegation,

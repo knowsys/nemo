@@ -2,6 +2,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Debug,
     ops::Neg,
     path::{Path, PathBuf},
 };
@@ -34,6 +35,12 @@ impl Identifier {
     }
 }
 
+impl std::fmt::Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.name(), f)
+    }
+}
+
 /// Variable occuring in a rule
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 pub enum Variable {
@@ -52,6 +59,12 @@ impl Variable {
     }
 }
 
+impl std::fmt::Display for Variable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.name(), f)
+    }
+}
+
 /// Terms occurring in programs.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum Term {
@@ -63,6 +76,17 @@ pub enum Term {
     NumericLiteral(NumericLiteral),
     /// An RDF literal.
     RdfLiteral(RdfLiteral),
+}
+
+impl std::fmt::Display for Term {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Term::Constant(term) => std::fmt::Display::fmt(term, f),
+            Term::Variable(term) => std::fmt::Display::fmt(term, f),
+            Term::NumericLiteral(term) => std::fmt::Display::fmt(term, f),
+            Term::RdfLiteral(term) => std::fmt::Display::fmt(term, f),
+        }
+    }
 }
 
 impl Term {
@@ -86,6 +110,16 @@ pub enum NumericLiteral {
     Double(Double),
 }
 
+impl std::fmt::Display for NumericLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NumericLiteral::Integer(value) => write!(f, "{value}"),
+            NumericLiteral::Decimal(left, right) => write!(f, "{left}.{right}"),
+            NumericLiteral::Double(value) => write!(f, "{value}"),
+        }
+    }
+}
+
 /// An RDF literal.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 pub enum RdfLiteral {
@@ -103,6 +137,15 @@ pub enum RdfLiteral {
         /// The datatype IRI.
         datatype: String,
     },
+}
+
+impl std::fmt::Display for RdfLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RdfLiteral::LanguageString { value, tag } => write!(f, "\"{value}\"@{tag}"),
+            RdfLiteral::DatatypeValue { value, datatype } => write!(f, "\"{value}\"^^{datatype}"),
+        }
+    }
 }
 
 /// An atom.
@@ -683,7 +726,7 @@ impl DataSource {
     }
 }
 
-impl std::fmt::Debug for DataSource {
+impl Debug for DataSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::DsvFile {
