@@ -37,7 +37,7 @@ impl Identifier {
 
 impl std::fmt::Display for Identifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.name(), f)
+        write!(f, "{}", &self.name())
     }
 }
 
@@ -61,7 +61,7 @@ impl Variable {
 
 impl std::fmt::Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.name(), f)
+        write!(f, "{}", &self.name())
     }
 }
 
@@ -81,10 +81,10 @@ pub enum Term {
 impl std::fmt::Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Term::Constant(term) => std::fmt::Display::fmt(term, f),
-            Term::Variable(term) => std::fmt::Display::fmt(term, f),
-            Term::NumericLiteral(term) => std::fmt::Display::fmt(term, f),
-            Term::RdfLiteral(term) => std::fmt::Display::fmt(term, f),
+            Term::Constant(term) => write!(f, "{}", term),
+            Term::Variable(term) => write!(f, "{}", term),
+            Term::NumericLiteral(term) => write!(f, "{}", term),
+            Term::RdfLiteral(term) => write!(f, "{}", term),
         }
     }
 }

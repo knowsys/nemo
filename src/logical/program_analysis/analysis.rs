@@ -386,9 +386,9 @@ impl Program {
 
         // Set all predicates that did not receive explicit type information to `None` which represents unknown.
         for (predicate, arity) in all_predicates {
-            if let Entry::Vacant(entry) = predicate_types.entry(predicate.clone()) {
-                entry.insert(vec![None; *arity]);
-            }
+            predicate_types
+                .entry(predicate.clone())
+                .or_insert(vec![None; *arity]);
         }
 
         // If there is an existential variable at some potion,
