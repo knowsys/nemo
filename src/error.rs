@@ -1,11 +1,12 @@
 //! Error-handling module for the crate
 
+use thiserror::Error;
+
 use crate::{
     io::parser::ParseError,
     logical::{model::Term, types::LogicalTypeEnum},
     physical::datatypes::float_is_nan::FloatIsNaN,
 };
-use thiserror::Error;
 
 /// Error-Collection for all the possible Errors occurring in this crate
 #[allow(variant_size_differences)]

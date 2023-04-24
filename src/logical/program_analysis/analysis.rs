@@ -475,8 +475,8 @@ impl Program {
         Ok(())
     }
 
-    // Check if there is a constant that cannot be converted into the type of
-    // the variable/predicate position it is compared to.
+    /// Check if there is a constant that cannot be converted into the type of
+    /// the variable/predicate position it is compared to.
     fn check_type_conflict_constants(
         &self,
         analyses: &[RuleAnalysis],
