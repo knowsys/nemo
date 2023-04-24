@@ -288,25 +288,44 @@ pub enum FilterOperation {
     GreaterThanEq,
 }
 
+impl FilterOperation {
+    /// Flips the operation: for `op`, returns a suitable operation
+    /// `op'` such that `x op y` iff `y op' x`.
+    pub fn flip(&self) -> Self {
+        match self {
+            Self::Equals => Self::Equals,
+            Self::LessThan => Self::GreaterThan,
+            Self::GreaterThan => Self::LessThan,
+            Self::LessThanEq => Self::GreaterThanEq,
+            Self::GreaterThanEq => Self::LessThanEq,
+        }
+    }
+}
+
 /// Filter of the form <variable> <operation> <term>
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct Filter {
     /// Operation to be performed
     pub operation: FilterOperation,
     /// Left-hand side
-    pub left: Variable,
+    pub lhs: Variable,
     /// Right-hand side
-    pub right: Term,
+    pub rhs: Term,
 }
 
 impl Filter {
     /// Creates a new [`Filter`]
-    pub fn new(operation: FilterOperation, left: Variable, right: Term) -> Self {
+    pub fn new(operation: FilterOperation, lhs: Variable, rhs: Term) -> Self {
         Self {
             operation,
-            left,
-            right,
+            lhs,
+            rhs,
         }
+    }
+
+    /// Creates a new [`Filter]` with the arguments flipped
+    pub fn flipped(operation: FilterOperation, lhs: Term, rhs: Variable) -> Self {
+        Self::new(operation.flip(), rhs, lhs)
     }
 }
 
@@ -414,9 +433,9 @@ impl Rule {
 
         // Check if filters are correctly formed
         for filter in &filters {
-            let mut filter_variables = vec![&filter.left];
+            let mut filter_variables = vec![&filter.lhs];
 
-            if let Term::Variable(right_variable) = &filter.right {
+            if let Term::Variable(right_variable) = &filter.rhs {
                 filter_variables.push(right_variable);
             }
 

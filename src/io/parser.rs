@@ -576,18 +576,29 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parse expression of the for <variable> <operation> <term>
+    /// Parse expression of the form `<variable> <operation> <term>`
+    /// or `<term> <operation> <variable>`.
     pub fn parse_filter_expression(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Filter> {
         traced(
             "parse_filter_expression",
-            map(
-                tuple((
-                    self.parse_universal_variable(),
-                    self.parse_filter_operator(),
-                    self.parse_term(),
-                )),
-                |(left, operation, right)| Filter::new(operation, left, right),
-            ),
+            alt((
+                map(
+                    tuple((
+                        self.parse_universal_variable(),
+                        self.parse_filter_operator(),
+                        self.parse_term(),
+                    )),
+                    |(lhs, operation, rhs)| Filter::new(operation, lhs, rhs),
+                ),
+                map(
+                    tuple((
+                        self.parse_term(),
+                        self.parse_filter_operator(),
+                        self.parse_universal_variable(),
+                    )),
+                    |(lhs, operation, rhs)| Filter::flipped(operation, lhs, rhs),
+                ),
+            )),
         )
     }
 
