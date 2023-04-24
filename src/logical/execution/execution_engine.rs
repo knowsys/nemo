@@ -143,7 +143,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 // TODO: get rid of unwrap
                 .map(|(i, t)| {
                     analysis.predicate_types.get(&fact.0.predicate()).unwrap()[i]
-                        .ground_term_to_data_value_t(t.clone())
+                        .ground_term_to_data_value_t(t.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.")
                 })
                 .collect();
 

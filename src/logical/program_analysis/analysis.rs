@@ -377,11 +377,19 @@ impl Program {
         position_graph: &PositionGraph,
         all_predicates: &HashSet<(Identifier, usize)>,
     ) -> Result<HashMap<Identifier, Vec<LogicalTypeEnum>>, Error> {
-        // Set all predicate types to unknown
-        let mut predicate_types: HashMap<Identifier, Vec<Option<LogicalTypeEnum>>> = all_predicates
-            .iter()
-            .map(|(predicate, arity)| (predicate.clone(), vec![None; *arity]))
+        // Initialize predicate types with the user provided values
+        let mut predicate_types: HashMap<Identifier, Vec<Option<LogicalTypeEnum>>> = self
+            .parsed_predicate_declarations()
+            .into_iter()
+            .map(|(predicate, types)| (predicate, types.into_iter().map(Some).collect()))
             .collect();
+
+        // Set all predicates that did not receive explicit type information to `None` which represents unknown.
+        for (predicate, arity) in all_predicates {
+            predicate_types
+                .entry(predicate.clone())
+                .or_insert(vec![None; *arity]);
+        }
 
         // If there is an existential variable at some potion,
         // it will be assigned to the type `LogicalTypeEnum::RdfsResource`
@@ -467,6 +475,60 @@ impl Program {
         Ok(())
     }
 
+    /// Check if there is a constant that cannot be converted into the type of
+    /// the variable/predicate position it is compared to.
+    fn check_type_conflict_constants(
+        &self,
+        analyses: &[RuleAnalysis],
+        predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    ) -> Result<(), Error> {
+        for fact in self.facts() {
+            let predicate_types = predicate_types
+                .get(&fact.0.predicate())
+                .expect("Previous analysis should have assigned a type vector to each predicate.");
+
+            for (term_index, ground_term) in fact.0.terms().iter().enumerate() {
+                let logical_type = predicate_types[term_index];
+                logical_type.ground_term_to_data_value_t(ground_term.clone())?;
+            }
+        }
+
+        for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
+            for filter in rule.filters() {
+                let left_variable = &filter.left;
+                let right_term = if let Term::Variable(_) = filter.right {
+                    continue;
+                } else {
+                    &filter.right
+                };
+
+                let variable_type = analysis
+                    .variable_types
+                    .get(left_variable)
+                    .expect("Previous analysis should have assigned a type to each variable.");
+
+                variable_type.ground_term_to_data_value_t(right_term.clone())?;
+            }
+
+            for atom in rule.head() {
+                let predicate_types = predicate_types.get(&atom.predicate()).expect(
+                    "Previous analysis should have assigned a type vector to each predicate.",
+                );
+
+                for (term_index, term) in atom.terms().iter().enumerate() {
+                    if let Term::Variable(_) = term {
+                        continue;
+                    }
+
+                    let logical_type = predicate_types[term_index];
+                    logical_type.ground_term_to_data_value_t(term.clone())?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Analyze itself and return a struct containing the results.
     pub fn analyze(&self) -> Result<ProgramAnalysis, Error> {
         let BuilderResultVariants {
@@ -494,6 +556,8 @@ impl Program {
                 )
             })
             .collect();
+
+        self.check_type_conflict_constants(&rule_analysis, &predicate_types)?;
 
         Ok(ProgramAnalysis {
             rule_analysis,

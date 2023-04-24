@@ -124,7 +124,7 @@ impl DivAssign for Double {
 
 impl fmt::Display for Double {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
+        write!(f, "{}", self.0)
     }
 }
 
