@@ -1,11 +1,16 @@
-use nom::{error, Err, IResult};
 use std::num::{ParseFloatError, ParseIntError};
+
+use nom::{error, Err, IResult};
+use nom_locate::LocatedSpan;
 use thiserror::Error;
 
 use crate::error::Error;
 
+/// A [`LocatedSpan`] over the input.
+pub(super) type Span<'a> = LocatedSpan<&'a str>;
+
 /// An intermediate parsing result
-pub(super) type IntermediateResult<'a, T> = IResult<&'a str, T, Error>;
+pub(super) type IntermediateResult<'a, T> = IResult<Span<'a>, T, Error>;
 
 /// The result of a parse
 pub type ParseResult<'a, T> = Result<T, Error>;
@@ -60,7 +65,7 @@ impl<'a> From<error::Error<&'a str>> for Error {
         let error::Error { input, code } = err;
         Self::ParseError(
             error::Error::<String> {
-                input: input.to_owned(),
+                input: input.to_string(),
                 code,
             }
             .into(),
@@ -74,18 +79,18 @@ impl From<ParseError> for Err<Error> {
     }
 }
 
-impl<'a> error::ParseError<&'a str> for Error {
-    fn from_error_kind(input: &'a str, kind: error::ErrorKind) -> Self {
-        let nom_error: error::Error<String> = error::make_error(input.to_owned(), kind);
+impl<'a> error::ParseError<Span<'a>> for Error {
+    fn from_error_kind(input: Span<'a>, kind: error::ErrorKind) -> Self {
+        let nom_error: error::Error<String> = error::make_error(input.to_string(), kind);
         Self::ParseError(nom_error.into())
     }
 
-    fn append(input: &'a str, kind: error::ErrorKind, other: Self) -> Self {
+    fn append(input: Span<'a>, kind: error::ErrorKind, other: Self) -> Self {
         Self::ParseError(ParseError::SyntaxError(match other {
             Self::ParseError(ParseError::SyntaxError(err)) => {
-                error::Error::append(input.to_owned(), kind, err)
+                error::Error::append(input.to_string(), kind, err)
             }
-            _ => error::make_error(input.to_owned(), kind),
+            _ => error::make_error(input.to_string(), kind),
         }))
     }
 }
