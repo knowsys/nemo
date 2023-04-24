@@ -1,7 +1,6 @@
 //! Parsers for productions from the RDF 1.1 Turtle grammar.
 use std::num::ParseIntError;
 
-use macros::traced;
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -12,10 +11,11 @@ use nom::{
 };
 
 use crate::{logical::model::NumericLiteral, physical::datatypes::Double};
+use macros::traced;
 
 use super::{
     sparql::{iri, Name},
-    types::IntermediateResult,
+    types::{IntermediateResult, Span},
 };
 
 /// Characters requiring escape sequences in single-line string literals.
@@ -25,7 +25,7 @@ const REQUIRES_ESCAPE: &str = "\u{22}\u{5C}\u{0A}\u{0D}";
 const HEXDIGIT: &str = "0123456789ABCDEFabcdef";
 
 #[traced("parser::turtle")]
-pub fn string(input: &str) -> IntermediateResult<&str> {
+pub fn string(input: Span) -> IntermediateResult<Span> {
     alt((
         string_literal_quote,
         string_literal_single_quote,
@@ -35,7 +35,7 @@ pub fn string(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::turtle")]
-pub fn string_literal_quote(input: &str) -> IntermediateResult<&str> {
+pub fn string_literal_quote(input: Span) -> IntermediateResult<Span> {
     delimited(
         tag(r#"""#),
         recognize(many0(alt((
@@ -48,7 +48,7 @@ pub fn string_literal_quote(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::turtle")]
-pub fn string_literal_single_quote(input: &str) -> IntermediateResult<&str> {
+pub fn string_literal_single_quote(input: Span) -> IntermediateResult<Span> {
     delimited(
         tag("'"),
         recognize(many0(alt((
@@ -61,7 +61,7 @@ pub fn string_literal_single_quote(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::turtle")]
-pub fn string_literal_long_single_quote(input: &str) -> IntermediateResult<&str> {
+pub fn string_literal_long_single_quote(input: Span) -> IntermediateResult<Span> {
     delimited(
         tag("'''"),
         recognize(many0(alt((recognize(none_of(r#"'\"#)), echar, uchar)))),
@@ -70,7 +70,7 @@ pub fn string_literal_long_single_quote(input: &str) -> IntermediateResult<&str>
 }
 
 #[traced("parser::turtle")]
-pub fn string_literal_long_quote(input: &str) -> IntermediateResult<&str> {
+pub fn string_literal_long_quote(input: Span) -> IntermediateResult<Span> {
     delimited(
         tag(r#"""""#),
         recognize(many0(alt((recognize(none_of(r#""\"#)), echar, uchar)))),
@@ -79,12 +79,12 @@ pub fn string_literal_long_quote(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::turtle")]
-pub fn hex(input: &str) -> IntermediateResult<&str> {
+pub fn hex(input: Span) -> IntermediateResult<Span> {
     recognize(one_of(HEXDIGIT))(input)
 }
 
 #[traced("parser::turtle")]
-pub fn uchar(input: &str) -> IntermediateResult<&str> {
+pub fn uchar(input: Span) -> IntermediateResult<Span> {
     recognize(alt((
         preceded(tag(r#"\u"#), count(hex, 4)),
         preceded(tag(r#"\U"#), count(hex, 8)),
@@ -92,24 +92,24 @@ pub fn uchar(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::turtle")]
-pub fn echar(input: &str) -> IntermediateResult<&str> {
+pub fn echar(input: Span) -> IntermediateResult<Span> {
     recognize(preceded(tag(r#"\"#), one_of(r#"tbnrf"'\"#)))(input)
 }
 
 #[traced("parser::turtle")]
-pub fn sign(input: &str) -> IntermediateResult<&str> {
+pub fn sign(input: Span) -> IntermediateResult<Span> {
     recognize(one_of("+-"))(input)
 }
 
 #[traced("parser::turtle")]
-pub fn integer(input: &str) -> IntermediateResult<NumericLiteral> {
+pub fn integer(input: Span) -> IntermediateResult<NumericLiteral> {
     map_res(recognize(preceded(opt(sign), digit1)), |value| {
         value.parse().map(NumericLiteral::Integer)
     })(input)
 }
 
 #[traced("parser::turtle")]
-pub fn decimal(input: &str) -> IntermediateResult<NumericLiteral> {
+pub fn decimal(input: Span) -> IntermediateResult<NumericLiteral> {
     map_res(
         pair(
             recognize(preceded(opt(sign), digit0)),
@@ -122,12 +122,12 @@ pub fn decimal(input: &str) -> IntermediateResult<NumericLiteral> {
 }
 
 #[traced("parser::turtle")]
-pub fn exponent(input: &str) -> IntermediateResult<&str> {
+pub fn exponent(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((one_of("eE"), opt(sign), digit1)))(input)
 }
 
 #[traced("parser::turtle")]
-pub fn double(input: &str) -> IntermediateResult<NumericLiteral> {
+pub fn double(input: Span) -> IntermediateResult<NumericLiteral> {
     map_res(
         map_res(
             recognize(preceded(
@@ -145,7 +145,7 @@ pub fn double(input: &str) -> IntermediateResult<NumericLiteral> {
 }
 
 #[traced("parser::turtle")]
-pub fn numeric_literal(input: &str) -> IntermediateResult<NumericLiteral> {
+pub fn numeric_literal(input: Span) -> IntermediateResult<NumericLiteral> {
     alt((double, decimal, integer))(input)
 }
 
@@ -156,18 +156,26 @@ pub(super) enum RdfLiteral<'a> {
 }
 
 #[traced("parser::turtle")]
-pub(super) fn rdf_literal(input: &str) -> IntermediateResult<RdfLiteral<'_>> {
+pub(super) fn rdf_literal<'a>(input: Span<'a>) -> IntermediateResult<RdfLiteral<'a>> {
     let (remainder, value) = string(input)?;
-    alt((
-        map(langtag, |tag| RdfLiteral::LanguageString { value, tag }),
-        map(preceded(tag("^^"), iri), |datatype| {
-            RdfLiteral::DatatypeValue { value, datatype }
+    let (remainder, literal) = alt((
+        map(langtag, |tag| RdfLiteral::LanguageString {
+            value: &value,
+            tag: &tag,
         }),
-    ))(remainder)
+        map(preceded(tag("^^"), iri), |datatype| {
+            RdfLiteral::DatatypeValue {
+                value: &value,
+                datatype,
+            }
+        }),
+    ))(remainder)?;
+
+    Ok((remainder, literal))
 }
 
 #[traced("parser::turtle")]
-pub fn langtag(input: &str) -> IntermediateResult<&str> {
+pub fn langtag(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((
         tag("@"),
         alpha1,
@@ -177,6 +185,6 @@ pub fn langtag(input: &str) -> IntermediateResult<&str> {
 
 #[allow(dead_code)]
 #[traced("parser::turtle")]
-pub fn boolean_literal(input: &str) -> IntermediateResult<bool> {
+pub fn boolean_literal(input: Span) -> IntermediateResult<bool> {
     alt((map(tag("true"), |_| true), map(tag("false"), |_| false)))(input)
 }

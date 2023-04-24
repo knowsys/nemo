@@ -1,7 +1,6 @@
 //! Parsers for productions from the SPARQL 1.1 grammar.
 use std::fmt::Display;
 
-use macros::traced;
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -11,7 +10,14 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
 
-use super::{iri, rfc5234::digit, turtle::hex, types::IntermediateResult};
+use super::{
+    iri,
+    rfc5234::digit,
+    turtle::hex,
+    types::{IntermediateResult, Span},
+};
+
+use macros::traced;
 
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)] // `PrefixedName` comes from the SPARQL grammar
@@ -54,24 +60,24 @@ impl Display for Name<'_> {
 /// 3987](https://www.ietf.org/rfc/rfc3987.txt) grammar to verify
 /// the actual IRI.
 #[traced("parser::sparql")]
-pub fn iriref<'a>(input: &'a str) -> IntermediateResult<&'a str> {
+pub fn iriref(input: Span) -> IntermediateResult<Span> {
     delimited(tag("<"), iri::iri_reference, tag(">"))(input)
 }
 
 #[traced("parser::sparql")]
-pub fn iri(input: &str) -> IntermediateResult<Name> {
-    alt((map(iriref, Name::IriReference), prefixed_name))(input)
+pub fn iri(input: Span) -> IntermediateResult<Name> {
+    alt((map(iriref, |name| Name::IriReference(&name)), prefixed_name))(input)
 }
 
 #[traced("parser::sparql")]
-pub fn pname_ns(input: &str) -> IntermediateResult<&str> {
+pub fn pname_ns(input: Span) -> IntermediateResult<Span> {
     let (rest, prefix) = terminated(opt(pn_prefix), tag(":"))(input)?;
 
-    Ok((rest, prefix.unwrap_or_default()))
+    Ok((rest, prefix.unwrap_or("".into())))
 }
 
 #[traced("parser::sparql")]
-pub fn pn_chars_base(input: &str) -> IntermediateResult<&str> {
+pub fn pn_chars_base(input: Span) -> IntermediateResult<Span> {
     recognize(satisfy(|c| {
         [
             0x41_u32..=0x5A,
@@ -95,12 +101,12 @@ pub fn pn_chars_base(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::sparql")]
-pub fn pn_chars_u(input: &str) -> IntermediateResult<&str> {
+pub fn pn_chars_u(input: Span) -> IntermediateResult<Span> {
     alt((pn_chars_base, tag("_")))(input)
 }
 
 #[traced("parser::sparql")]
-pub fn pn_chars(input: &str) -> IntermediateResult<&str> {
+pub fn pn_chars(input: Span) -> IntermediateResult<Span> {
     alt((
         pn_chars_u,
         tag("-"),
@@ -115,7 +121,7 @@ pub fn pn_chars(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::sparql")]
-pub fn pn_prefix(input: &str) -> IntermediateResult<&str> {
+pub fn pn_prefix(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((
         pn_chars_base,
         separated_list0(many1(tag(".")), many0(pn_chars)),
@@ -123,22 +129,22 @@ pub fn pn_prefix(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::sparql")]
-pub fn percent(input: &str) -> IntermediateResult<&str> {
+pub fn percent(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((tag("%"), hex, hex)))(input)
 }
 
 #[traced("parser::sparql")]
-pub fn pn_local_esc(input: &str) -> IntermediateResult<&str> {
+pub fn pn_local_esc(input: Span) -> IntermediateResult<Span> {
     recognize(preceded(tag(r#"\"#), one_of(r#"_~.-!$&'()*+,;=/?#@%"#)))(input)
 }
 
 #[traced("parser::sparql")]
-pub fn plx(input: &str) -> IntermediateResult<&str> {
+pub fn plx(input: Span) -> IntermediateResult<Span> {
     alt((percent, pn_local_esc))(input)
 }
 
 #[traced("parser::sparql")]
-pub fn pn_local(input: &str) -> IntermediateResult<&str> {
+pub fn pn_local(input: Span) -> IntermediateResult<Span> {
     recognize(pair(
         alt((pn_chars_u, tag(":"), digit, plx)),
         opt(separated_list0(
@@ -149,22 +155,28 @@ pub fn pn_local(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::sparql")]
-pub fn pname_ln(input: &str) -> IntermediateResult<Name> {
+pub fn pname_ln(input: Span) -> IntermediateResult<Name> {
     map(pair(pname_ns, pn_local), |(prefix, local)| {
-        Name::PrefixedName { prefix, local }
+        Name::PrefixedName {
+            prefix: &prefix,
+            local: &local,
+        }
     })(input)
 }
 
 #[traced("parser::sparql")]
-pub fn prefixed_name(input: &str) -> IntermediateResult<Name> {
+pub fn prefixed_name(input: Span) -> IntermediateResult<Name> {
     alt((
         pname_ln,
-        map(pname_ns, |prefix| Name::PrefixedName { prefix, local: "" }),
+        map(pname_ns, |prefix| Name::PrefixedName {
+            prefix: &prefix,
+            local: "",
+        }),
     ))(input)
 }
 
 #[traced("parser::sparql")]
-pub fn blank_node_label(input: &str) -> IntermediateResult<Name> {
+pub fn blank_node_label(input: Span) -> IntermediateResult<Name> {
     preceded(
         tag("_:"),
         map(
@@ -172,7 +184,7 @@ pub fn blank_node_label(input: &str) -> IntermediateResult<Name> {
                 alt((pn_chars_u, digit)),
                 opt(separated_list0(many1(tag(".")), many0(pn_chars))),
             )),
-            Name::BlankNode,
+            |name| Name::BlankNode(&name),
         ),
     )(input)
 }

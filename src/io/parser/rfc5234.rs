@@ -5,21 +5,21 @@ use nom::{
 };
 
 /// Parsers defined in RFC 5234
-use super::types::IntermediateResult;
+use super::types::{IntermediateResult, Span};
 
 use macros::traced;
 
 #[traced("parser::rfc5234")]
-pub(super) fn alpha(input: &str) -> IntermediateResult<&str> {
+pub(super) fn alpha<'a>(input: Span<'a>) -> IntermediateResult<Span<'a>> {
     recognize(satisfy(|c| c.is_ascii_alphabetic()))(input)
 }
 
 #[traced("parser::rfc5234")]
-pub(super) fn digit(input: &str) -> IntermediateResult<&str> {
+pub(super) fn digit<'a>(input: Span<'a>) -> IntermediateResult<Span<'a>> {
     recognize(satisfy(|c| c.is_ascii_digit()))(input)
 }
 
 #[traced("parser::rfc5234")]
-pub(super) fn hexdig(input: &str) -> IntermediateResult<&str> {
+pub(super) fn hexdig<'a>(input: Span<'a>) -> IntermediateResult<Span<'a>> {
     alt((digit, recognize(one_of("ABCDEF"))))(input)
 }

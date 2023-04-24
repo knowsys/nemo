@@ -2,8 +2,8 @@
 use std::{fs::read_to_string, io::ErrorKind, path::PathBuf};
 
 use clap::Parser;
-
 use colored::Colorize;
+
 use nemo::{
     error::Error,
     io::{
