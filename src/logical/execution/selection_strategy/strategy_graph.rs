@@ -46,8 +46,6 @@ impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStr
             substrategies.push(SubStrategy::new(sub_rules, sub_analyses));
         }
 
-        println!("{ordered_sccs:?}");
-
         Self {
             _constructor: PhantomData::default(),
             ordered_sccs,
