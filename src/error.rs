@@ -52,7 +52,7 @@ pub enum Error {
     #[error("Negation is currently unsupported.")]
     UnsupportedFeatureNegation,
     /// Unsupported feature: Negation
-    #[error("Comparison operations are currently not supported.")]
+    #[error("Comparison operation between two variables are currently not supported.")]
     UnsupportedFeatureComparison,
     /// Parse errors
     #[error(transparent)]
