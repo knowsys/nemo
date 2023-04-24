@@ -538,6 +538,60 @@ impl Program {
         Ok(())
     }
 
+    /// Check if there is a constant that cannot be converted into the type of
+    /// the variable/predicate position it is compared to.
+    fn check_type_conflict_constants(
+        &self,
+        analyses: &[RuleAnalysis],
+        predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    ) -> Result<(), Error> {
+        for fact in self.facts() {
+            let predicate_types = predicate_types
+                .get(&fact.0.predicate())
+                .expect("Previous analysis should have assigned a type vector to each predicate.");
+
+            for (term_index, ground_term) in fact.0.terms().iter().enumerate() {
+                let logical_type = predicate_types[term_index];
+                logical_type.ground_term_to_data_value_t(ground_term.clone())?;
+            }
+        }
+
+        for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
+            for filter in rule.filters() {
+                let left_variable = &filter.left;
+                let right_term = if let Term::Variable(_) = filter.right {
+                    continue;
+                } else {
+                    &filter.right
+                };
+
+                let variable_type = analysis
+                    .variable_types
+                    .get(left_variable)
+                    .expect("Previous analysis should have assigned a type to each variable.");
+
+                variable_type.ground_term_to_data_value_t(right_term.clone())?;
+            }
+
+            for atom in rule.head() {
+                let predicate_types = predicate_types.get(&atom.predicate()).expect(
+                    "Previous analysis should have assigned a type vector to each predicate.",
+                );
+
+                for (term_index, term) in atom.terms().iter().enumerate() {
+                    if let Term::Variable(_) = term {
+                        continue;
+                    }
+
+                    let logical_type = predicate_types[term_index];
+                    logical_type.ground_term_to_data_value_t(term.clone())?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Analyze itself and return a struct containing the results.
     pub fn analyze(&self) -> Result<ProgramAnalysis, Error> {
         let BuilderResultVariants {
