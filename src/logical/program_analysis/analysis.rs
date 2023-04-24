@@ -5,7 +5,7 @@ use petgraph::{visit::Dfs, Undirected};
 use crate::{
     error::Error,
     logical::{
-        model::{Atom, FilterOperation, Identifier, Literal, Program, Rule, Term, Variable},
+        model::{Atom, Identifier, Literal, Program, Rule, Term, Variable},
         types::LogicalTypeEnum,
     },
     physical::{management::database::ColumnOrder, util::labeled_graph::NodeLabeledGraph},
@@ -465,11 +465,11 @@ impl Program {
                 }
             }
 
-            for filter in rule.filters() {
-                if filter.operation != FilterOperation::Equals {
-                    return Err(Error::UnsupportedFeatureComparison);
-                }
-            }
+            // for filter in rule.filters() {
+            //     if filter.operation != FilterOperation::Equals {
+            //         return Err(Error::UnsupportedFeatureComparison);
+            //     }
+            // }
         }
 
         Ok(())
