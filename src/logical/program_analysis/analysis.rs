@@ -369,11 +369,11 @@ impl Program {
 
             for filter in rule.filters() {
                 let position_left = variable_to_last_node
-                    .get(&filter.left)
+                    .get(&filter.lhs)
                     .expect("Variables in filters should also appear in the rule body")
                     .clone();
 
-                if let Term::Variable(variable_right) = &filter.right {
+                if let Term::Variable(variable_right) = &filter.rhs {
                     let position_right = variable_to_last_node
                         .get(variable_right)
                         .expect("Variables in filters should also appear in the rule body")
@@ -532,11 +532,11 @@ impl Program {
 
         for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
             for filter in rule.filters() {
-                let left_variable = &filter.left;
-                let right_term = if let Term::Variable(_) = filter.right {
+                let left_variable = &filter.lhs;
+                let right_term = if let Term::Variable(_) = filter.rhs {
                     continue;
                 } else {
-                    &filter.right
+                    &filter.rhs
                 };
 
                 let variable_type = analysis

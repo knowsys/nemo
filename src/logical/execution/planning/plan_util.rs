@@ -63,9 +63,9 @@ pub(super) fn compute_filters(
     let mut filter_assignments = Vec::<ValueAssignment>::new();
     let mut filter_classes = Vec::<HashSet<&Variable>>::new();
     for filter in filters {
-        match &filter.right {
+        match &filter.rhs {
             Term::Variable(right_variable) => {
-                let left_variable = &filter.left;
+                let left_variable = &filter.lhs;
 
                 let left_index = filter_classes
                     .iter()
@@ -111,11 +111,11 @@ pub(super) fn compute_filters(
             }
             _ => {
                 filter_assignments.push(ValueAssignment {
-                    column_idx: *variable_to_columnindex.get(&filter.left).unwrap(),
+                    column_idx: *variable_to_columnindex.get(&filter.lhs).unwrap(),
                     value: variable_types
-                        .get(&filter.left)
+                        .get(&filter.lhs)
                         .unwrap()
-                        .ground_term_to_data_value_t(filter.right.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker."),
+                        .ground_term_to_data_value_t(filter.rhs.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker."),
                 });
             }
         }

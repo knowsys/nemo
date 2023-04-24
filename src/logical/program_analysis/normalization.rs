@@ -26,11 +26,11 @@ pub fn normalize_atom_vector(atoms: &[&Atom], filters: &[Filter]) -> Normalizati
     // Apply all equality filters
     for filter in filters {
         if filter.operation == FilterOperation::Equals {
-            if let Term::Variable(right_variable) = &filter.right {
+            if let Term::Variable(right_variable) = &filter.rhs {
                 for atom in new_atoms.iter_mut() {
                     for term in atom.terms_mut() {
                         if let Term::Variable(current_variable) = term {
-                            if *current_variable == filter.left {
+                            if *current_variable == filter.lhs {
                                 *current_variable = right_variable.clone();
                             }
                         }
