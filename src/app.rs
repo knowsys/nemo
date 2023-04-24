@@ -189,7 +189,6 @@ impl CliApp {
 
         self.prevent_accidential_overwrite(&app_state)?;
 
-        // let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program)?;
         let mut exec_engine = ExecutionEngine::<
             StrategyDependencyGraph<GraphConstructorPositive, StrategyRoundRobin>,
         >::initialize(app_state.program)?;
