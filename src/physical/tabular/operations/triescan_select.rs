@@ -222,35 +222,45 @@ impl<'a> TrieScanSelectValue<'a> {
             }
         }
 
+        macro_rules! translate_interval_bound {
+            ($variant:ident,$type:ty,$interval_bound:expr,$dict:expr) => {
+                match $interval_bound {
+                    IntervalBound::Inclusive(bound) => {
+                        if let StorageValueT::$variant(value) = bound.to_storage_value(dict) {
+                            IntervalBound::Inclusive(value)
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        }
+                    }
+                    IntervalBound::Exclusive(bound) => {
+                        if let StorageValueT::$variant(value) = bound.to_storage_value(dict) {
+                            IntervalBound::Exclusive(value)
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        }
+                    }
+                    IntervalBound::Unbounded => IntervalBound::Unbounded,
+                }
+            };
+        }
+
         for assignment in assignments {
             macro_rules! init_scans_for_datatype {
-                ($variant:ident) => {
+                ($variant:ident,$type:ty) => {
                     unsafe {
-                        let lower = if let Some(StorageValueT::$variant(value)) = assignment
-                            .interval
-                            .lower
-                            .bound()
-                            .map(|l| l.to_storage_value(dict))
-                        {
-                            Some(value)
-                        } else {
-                            None
-                        };
-
-                        let upper = if let Some(StorageValueT::$variant(value)) = assignment
-                            .interval
-                            .upper
-                            .bound()
-                            .map(|l| l.to_storage_value(dict))
-                        {
-                            Some(value)
-                        } else {
-                            None
-                        };
-                        let interval = Interval::new(
-                            Self::translate_interval_bound(&assignment.interval.lower, lower),
-                            Self::translate_interval_bound(&assignment.interval.upper, upper),
+                        let lower = translate_interval_bound!(
+                            $variant,
+                            $type,
+                            &assignment.interval.lower,
+                            dict
                         );
+                        let upper = translate_interval_bound!(
+                            $variant,
+                            $type,
+                            &assignment.interval.upper,
+                            dict
+                        );
+                        let interval = Interval::new(lower, upper);
 
                         let scan_enum = if let ColumnScanT::$variant(scan) =
                             &*base_trie.get_scan(assignment.column_idx).unwrap().get()
@@ -270,10 +280,10 @@ impl<'a> TrieScanSelectValue<'a> {
                 };
             }
             match column_types[assignment.column_idx] {
-                StorageTypeName::U32 => init_scans_for_datatype!(U32),
-                StorageTypeName::U64 => init_scans_for_datatype!(U64),
-                StorageTypeName::Float => init_scans_for_datatype!(Float),
-                StorageTypeName::Double => init_scans_for_datatype!(Double),
+                StorageTypeName::U32 => init_scans_for_datatype!(U32, u32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64, u64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float, Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double, Double),
             }
         }
 
@@ -281,17 +291,6 @@ impl<'a> TrieScanSelectValue<'a> {
             base_trie: Box::new(base_trie),
             select_scans,
             current_layer: None,
-        }
-    }
-
-    fn translate_interval_bound<T: Clone>(
-        original: &IntervalBound<DataValueT>,
-        translated: Option<T>,
-    ) -> IntervalBound<T> {
-        match original {
-            IntervalBound::Inclusive(_) => IntervalBound::Inclusive(translated.unwrap()),
-            IntervalBound::Exclusive(_) => IntervalBound::Exclusive(translated.unwrap()),
-            IntervalBound::Unbounded => IntervalBound::Unbounded,
         }
     }
 }
