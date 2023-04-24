@@ -12,7 +12,11 @@ use nemo::{
     },
     logical::{
         execution::{
-            selection_strategy::strategy_round_robin::StrategyRoundRobin, ExecutionEngine,
+            selection_strategy::{
+                dependency_graph::graph_positive::GraphConstructorPositive,
+                strategy_graph::StrategyDependencyGraph, strategy_round_robin::StrategyRoundRobin,
+            },
+            ExecutionEngine,
         },
         model::{OutputPredicateSelection, Program},
     },
@@ -185,7 +189,11 @@ impl CliApp {
 
         self.prevent_accidential_overwrite(&app_state)?;
 
-        let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program)?;
+        // let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program)?;
+        let mut exec_engine = ExecutionEngine::<
+            StrategyDependencyGraph<GraphConstructorPositive, StrategyRoundRobin>,
+        >::initialize(app_state.program)?;
+
         TimedCode::instance().sub("Reading & Preprocessing").stop();
         TimedCode::instance().sub("Reasoning").start();
 

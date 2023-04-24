@@ -149,10 +149,16 @@ impl HeadStrategy for RestrictedChaseStrategy {
 
         // 1. Compute the table "New Satisfied Matches"
 
+        let step_last_applied = if rule_info.step_last_applied == 0 {
+            0
+        } else {
+            rule_info.step_last_applied + 1
+        };
+
         let node_new_satisfied_matches = self.join_generator.seminaive_join(
             current_plan.plan_mut(),
             table_manager,
-            rule_info.step_last_applied,
+            step_last_applied,
             step,
             // We use the same precomputed variable order every time
             &self.analysis.existential_aux_order,
