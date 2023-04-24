@@ -509,12 +509,11 @@ impl Program {
                     .get(left_variable)
                     .expect("Previous analysis should have assigned a type to each variable.");
 
-                if filter.operation != FilterOperation::Equals {
-                    if *variable_type != LogicalTypeEnum::Double
-                        && *variable_type != LogicalTypeEnum::UnsignedInteger
-                    {
-                        return Err(Error::InvalidRuleNonNumericComparison);
-                    }
+                if filter.operation != FilterOperation::Equals
+                    && *variable_type != LogicalTypeEnum::Double
+                    && *variable_type != LogicalTypeEnum::UnsignedInteger
+                {
+                    return Err(Error::InvalidRuleNonNumericComparison);
                 }
 
                 variable_type.ground_term_to_data_value_t(right_term.clone())?;

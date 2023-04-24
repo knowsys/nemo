@@ -85,6 +85,6 @@ impl<T: Clone> Interval<T> {
 impl<T: Ord + Clone> Interval<T> {
     /// Return true iff the given value is within the ranges of this interval.
     pub fn contains(&self, value: &T) -> bool {
-        self.lower.above(&value) && self.upper.below(&value)
+        self.lower.above(value) && self.upper.below(value)
     }
 }
