@@ -6,10 +6,12 @@ use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
     character::complete::{alpha1, digit1, multispace1, none_of, satisfy},
-    combinator::{all_consuming, map, map_res, opt, recognize, value},
+    combinator::{all_consuming, cut, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
+    Err,
 };
+use nom_locate::position;
 
 use crate::logical::{model::*, types::LogicalTypeEnum};
 
@@ -19,7 +21,7 @@ pub(crate) mod iri;
 pub(crate) mod rfc5234;
 pub(crate) mod sparql;
 pub(crate) mod turtle;
-pub use types::{ParseError, ParseResult};
+pub use types::{LocatedParseError, ParseError, ParseResult};
 
 /// A combinator to add tracing to the parser.
 /// [fun] is an identifier for the parser and [parser] is the actual parser.
@@ -43,21 +45,18 @@ where
 /// A combinator that makes sure all input has been consumed.
 pub fn all_input_consumed<'a, T: 'a>(
     parser: impl FnMut(Span<'a>) -> IntermediateResult<'a, T> + 'a,
-) -> impl FnMut(&'a str) -> Result<T, crate::error::Error> + 'a {
+) -> impl FnMut(&'a str) -> Result<T, LocatedParseError> + 'a {
     let mut p = all_consuming(parser);
     move |input| {
-        p(Span::new(input))
-            .map(|(_, result)| result)
-            .map_err(|e| match e {
-                nom::Err::Incomplete(e) => ParseError::MissingInput(match e {
-                    nom::Needed::Unknown => {
-                        "expected an unknown amount of further input".to_string()
-                    }
-                    nom::Needed::Size(size) => format!("expected at least {size} more bytes"),
-                })
-                .into(),
-                nom::Err::Error(e) | nom::Err::Failure(e) => e,
+        let (remainder, position) = position(Span::new(input))?;
+        p(remainder).map(|(_, result)| result).map_err(|e| match e {
+            Err::Incomplete(e) => ParseError::MissingInput(match e {
+                nom::Needed::Unknown => "expected an unknown amount of further input".to_string(),
+                nom::Needed::Size(size) => format!("expected at least {size} more bytes"),
             })
+            .at(position),
+            Err::Error(e) | Err::Failure(e) => e,
+        })
     }
 }
 
@@ -163,7 +162,7 @@ impl<'a> RuleParser<'a> {
     fn parse_base(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         traced("parse_base", move |input| {
             let (remainder, base) = delimited(
-                terminated(tag("@base"), multispace_or_comment1),
+                terminated(tag("@base"), cut(multispace_or_comment1)),
                 sparql::iriref,
                 self.parse_dot(),
             )(input)?;
@@ -177,19 +176,20 @@ impl<'a> RuleParser<'a> {
 
     fn parse_prefix(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
         traced("parse_prefix", move |input| {
+            let (remainder, position) = position(input)?;
             let (remainder, (prefix, iri)) = delimited(
-                terminated(tag("@prefix"), multispace_or_comment1),
+                terminated(tag("@prefix"), cut(multispace_or_comment1)),
                 tuple((
                     terminated(sparql::pname_ns, multispace_or_comment1),
                     sparql::iriref,
                 )),
                 self.parse_dot(),
-            )(input)?;
+            )(remainder)?;
 
             log::debug!(target: "parser", r#"parse_prefix: got prefix "{prefix}" for iri "{iri}""#);
             if self.prefixes.borrow_mut().insert(&prefix, &iri).is_some() {
-                Err(nom::Err::Error(
-                    ParseError::RedeclaredPrefix(prefix.to_string()).into(),
+                Err(Err::Failure(
+                    ParseError::RedeclaredPrefix(prefix.to_string()).at(position),
                 ))
             } else {
                 Ok((remainder, prefix))
@@ -202,7 +202,7 @@ impl<'a> RuleParser<'a> {
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, Vec<LogicalTypeEnum>)> {
         traced("parse_predicate_declaration", move |input| {
             let (remainder, (predicate, types)) = delimited(
-                terminated(tag("@declare"), multispace1),
+                terminated(tag("@declare"), cut(multispace_or_comment1)),
                 pair(
                     self.parse_predicate_name(),
                     delimited(
@@ -241,8 +241,9 @@ impl<'a> RuleParser<'a> {
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<DataSourceDeclaration> {
         traced("parse_source", move |input| {
+            let (remainder, position) = position(input)?;
             let (remainder, (predicate, arity)) = preceded(
-                terminated(tag("@source"), multispace_or_comment1),
+                terminated(tag("@source"), cut(multispace_or_comment1)),
                 pair(
                     self.parse_predicate_name(),
                     preceded(
@@ -254,14 +255,14 @@ impl<'a> RuleParser<'a> {
                         ),
                     ),
                 ),
-            )(input)?;
+            )(remainder)?;
 
             let (remainder, datasource) = delimited(
                 delimited(multispace_or_comment0, tag(":"), multispace_or_comment1),
                 alt((
                     map(
                         delimited(
-                            preceded(tag("load-csv"), self.parse_open_parenthesis()),
+                            preceded(tag("load-csv"), cut(self.parse_open_parenthesis())),
                             turtle::string,
                             self.parse_close_parenthesis(),
                         ),
@@ -269,7 +270,7 @@ impl<'a> RuleParser<'a> {
                     ),
                     map(
                         delimited(
-                            preceded(tag("load-tsv"), self.parse_open_parenthesis()),
+                            preceded(tag("load-tsv"), cut(self.parse_open_parenthesis())),
                             turtle::string,
                             self.parse_close_parenthesis(),
                         ),
@@ -277,7 +278,7 @@ impl<'a> RuleParser<'a> {
                     ),
                     map(
                         delimited(
-                            preceded(tag("load-rdf"), self.parse_open_parenthesis()),
+                            preceded(tag("load-rdf"), cut(self.parse_open_parenthesis())),
                             turtle::string,
                             self.parse_close_parenthesis(),
                         ),
@@ -285,7 +286,7 @@ impl<'a> RuleParser<'a> {
                     ),
                     map(
                         delimited(
-                            preceded(tag("sparql"), self.parse_open_parenthesis()),
+                            preceded(tag("sparql"), cut(self.parse_open_parenthesis())),
                             tuple((
                                 self.parse_iri_pred(),
                                 delimited(self.parse_comma(), turtle::string, self.parse_comma()),
@@ -305,7 +306,12 @@ impl<'a> RuleParser<'a> {
                 self.parse_dot(),
             )(remainder)?;
 
-            let source = DataSourceDeclaration::new_validated(predicate, arity, datasource?)?;
+            let source = DataSourceDeclaration::new_validated(
+                predicate,
+                arity,
+                datasource.map_err(|e| Err::Failure(e.at(position)))?,
+            )
+            .map_err(|e| Err::Failure(e.at(position)))?;
 
             log::trace!("Found external data source {source:?}");
             self.sources.borrow_mut().push(source.clone());
@@ -350,6 +356,7 @@ impl<'a> RuleParser<'a> {
     /// Parse an IRI which can be a predicate name.
     pub fn parse_iri_pred(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         move |input| {
+            let (remainder, position) = position(input)?;
             let (remainder, name) = traced(
                 "parse_iri_pred",
                 alt((
@@ -357,15 +364,22 @@ impl<'a> RuleParser<'a> {
                     sparql::prefixed_name,
                     sparql::blank_node_label,
                 )),
-            )(input)?;
+            )(remainder)?;
 
-            Ok((remainder, Identifier(self.resolve_prefixed_name(name)?)))
+            Ok((
+                remainder,
+                Identifier(
+                    self.resolve_prefixed_name(name)
+                        .map_err(|e| Err::Failure(e.at(position)))?,
+                ),
+            ))
         }
     }
 
     /// Parse an IRI representing a constant.
     pub fn parse_iri_constant(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         move |input| {
+            let (remainder, position) = position(input)?;
             let (remainder, name) = traced(
                 "parse_iri_constant",
                 alt((
@@ -376,9 +390,15 @@ impl<'a> RuleParser<'a> {
                         sparql::Name::IriReference(&name)
                     }),
                 )),
-            )(input)?;
+            )(remainder)?;
 
-            Ok((remainder, Identifier(self.resolve_prefixed_name(name)?)))
+            Ok((
+                remainder,
+                Identifier(
+                    self.resolve_prefixed_name(name)
+                        .map_err(|e| Err::Failure(e.at(position)))?,
+                ),
+            ))
         }
     }
 
@@ -432,16 +452,17 @@ impl<'a> RuleParser<'a> {
     /// Parse a rule.
     pub fn parse_rule(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Rule> {
         traced("parse_rule", move |input| {
+            let (remainder, position) = position(input)?;
             let (remainder, (head, body)) = pair(
                 terminated(
                     separated_list1(self.parse_comma(), self.parse_atom()),
                     self.parse_arrow(),
                 ),
-                terminated(
+                cut(terminated(
                     separated_list1(self.parse_comma(), self.parse_body_expression()),
                     self.parse_dot(),
-                ),
-            )(input)?;
+                )),
+            )(remainder)?;
 
             log::trace!(target: "parser", r#"found rule "{head:?}" :- "{body:?}""#);
 
@@ -459,7 +480,11 @@ impl<'a> RuleParser<'a> {
                     _ => None,
                 })
                 .collect();
-            Ok((remainder, Rule::new_validated(head, literals, filters)?))
+            Ok((
+                remainder,
+                Rule::new_validated(head, literals, filters)
+                    .map_err(|e| Err::Failure(e.at(position)))?,
+            ))
         })
     }
 
@@ -509,7 +534,7 @@ impl<'a> RuleParser<'a> {
         traced(
             "parse_universal_variable",
             map(
-                preceded(tag("?"), self.parse_variable_name()),
+                preceded(tag("?"), cut(self.parse_variable_name())),
                 Variable::Universal,
             ),
         )
@@ -522,7 +547,7 @@ impl<'a> RuleParser<'a> {
         traced(
             "parse_existential_variable",
             map(
-                preceded(tag("!"), self.parse_variable_name()),
+                preceded(tag("!"), cut(self.parse_variable_name())),
                 Variable::Existential,
             ),
         )
@@ -541,7 +566,7 @@ impl<'a> RuleParser<'a> {
     pub fn parse_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
         traced(
             "parse_literal",
-            alt((self.parse_positive_literal(), self.parse_negative_literal())),
+            alt((self.parse_negative_literal(), self.parse_positive_literal())),
         )
     }
 
@@ -728,6 +753,8 @@ impl<'a> RuleParser<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches::assert_matches;
+
     use test_log::test;
 
     use crate::physical::datatypes::Double;
@@ -742,6 +769,12 @@ mod test {
                 ),
                 $right
             );
+        };
+    }
+
+    macro_rules! assert_fails {
+        ($parser:expr, $left:expr, $right:pat $(,) ?) => {
+            assert_matches!(all_input_consumed($parser)($left), Err($right));
         };
     }
 
@@ -764,7 +797,7 @@ mod test {
         let parser = RuleParser::new();
         assert!(parser.resolve_prefix(&prefix).is_err());
         assert_parse!(parser.parse_prefix(), input.as_str(), prefix);
-        assert_eq!(parser.resolve_prefix(&prefix), Ok(iri));
+        assert_eq!(parser.resolve_prefix(&prefix).map_err(|_| ()), Ok(iri));
     }
 
     #[test]
@@ -974,5 +1007,19 @@ mod test {
         );
 
         assert_parse!(parser.parse_rule(), &rule, expected_rule,);
+    }
+
+    #[test]
+    fn fails_parse() {
+        let parser = RuleParser::new();
+
+        assert_fails!(
+            parser.parse_rule(),
+            r#"a(?X, !V) :- b23__#?\(?X, ?Y) ."#,
+            LocatedParseError {
+                source: ParseError::UnsafeHeadVariable(_),
+                ..
+            }
+        );
     }
 }
