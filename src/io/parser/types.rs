@@ -1,27 +1,48 @@
 use std::num::{ParseFloatError, ParseIntError};
 
-use nom::{error, Err, IResult};
+use nom::{
+    error::{ErrorKind, FromExternalError},
+    IResult,
+};
 use nom_locate::LocatedSpan;
 use thiserror::Error;
-
-use crate::error::Error;
 
 /// A [`LocatedSpan`] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
 
 /// An intermediate parsing result
-pub(super) type IntermediateResult<'a, T> = IResult<Span<'a>, T, Error>;
+pub(super) type IntermediateResult<'a, T> = IResult<Span<'a>, T, LocatedParseError>;
 
 /// The result of a parse
-pub type ParseResult<'a, T> = Result<T, Error>;
+pub type ParseResult<'a, T> = Result<T, LocatedParseError>;
+
+/// A [`ParseError`] at a certain location
+#[derive(Debug, Error)]
+#[error("Parse error on line {}, column {}: {}\nContext:\n{}", .line, .offset, .source, .context.iter().map(|ctx| ctx.to_string()).intersperse("\n".to_string()).collect::<String>())]
+pub struct LocatedParseError {
+    #[source]
+    pub(super) source: ParseError,
+    pub(super) line: u32,
+    pub(super) offset: usize,
+    pub(super) context: Vec<LocatedParseError>,
+}
+
+impl LocatedParseError {
+    fn append(&mut self, other: LocatedParseError) {
+        self.context.push(other)
+    }
+}
 
 /// Errors that can occur during parsing.
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum ParseError {
+    /// An external error during parsing.
+    #[error(transparent)]
+    ExternalError(#[from] Box<crate::error::Error>),
     /// A syntax error. Note that we cannot take [&'a str] here, as
     /// bounds on [std::error::Error] require ['static] lifetime.
     #[error("Syntax error: {0}")]
-    SyntaxError(#[from] error::Error<String>),
+    SyntaxError(String),
     /// More input needed.
     #[error("Expected further input: {0}")]
     MissingInput(String),
@@ -60,55 +81,60 @@ pub enum ParseError {
     SparqlSourceInvalidArity(String, usize, usize),
 }
 
-impl<'a> From<error::Error<&'a str>> for Error {
-    fn from(err: error::Error<&'a str>) -> Self {
-        let error::Error { input, code } = err;
-        Self::ParseError(
-            error::Error::<String> {
-                input: input.to_string(),
-                code,
-            }
-            .into(),
-        )
+impl ParseError {
+    /// Locate this error by adding a position.
+    pub fn at(self, position: Span) -> LocatedParseError {
+        LocatedParseError {
+            source: self,
+            line: position.location_line(),
+            offset: position.location_offset(),
+            context: Vec::new(),
+        }
     }
 }
 
-impl From<ParseError> for Err<Error> {
-    fn from(e: ParseError) -> Self {
-        Err::Error(Error::ParseError(e))
+impl From<nom::Err<LocatedParseError>> for LocatedParseError {
+    fn from(err: nom::Err<LocatedParseError>) -> Self {
+        match err {
+            nom::Err::Incomplete(_) => todo!(),
+            nom::Err::Error(_) => todo!(),
+            nom::Err::Failure(_) => todo!(),
+        }
     }
 }
 
-impl<'a> error::ParseError<Span<'a>> for Error {
-    fn from_error_kind(input: Span<'a>, kind: error::ErrorKind) -> Self {
-        let nom_error: error::Error<String> = error::make_error(input.to_string(), kind);
-        Self::ParseError(nom_error.into())
-    }
-
-    fn append(input: Span<'a>, kind: error::ErrorKind, other: Self) -> Self {
-        Self::ParseError(ParseError::SyntaxError(match other {
-            Self::ParseError(ParseError::SyntaxError(err)) => {
-                error::Error::append(input.to_string(), kind, err)
-            }
-            _ => error::make_error(input.to_string(), kind),
-        }))
+impl From<nom::Err<LocatedParseError>> for crate::error::Error {
+    fn from(err: nom::Err<LocatedParseError>) -> Self {
+        crate::error::Error::ParseError(LocatedParseError::from(err))
     }
 }
 
-impl<I> error::FromExternalError<I, Error> for Error {
-    fn from_external_error(_input: I, _kind: error::ErrorKind, e: Error) -> Self {
-        e
+impl nom::error::ParseError<Span<'_>> for LocatedParseError {
+    fn from_error_kind(input: Span, kind: ErrorKind) -> Self {
+        ParseError::SyntaxError(kind.description().to_string()).at(input)
+    }
+
+    fn append(input: Span, kind: ErrorKind, other: Self) -> Self {
+        let mut error = ParseError::SyntaxError(kind.description().to_string()).at(input);
+        error.append(other);
+        error
     }
 }
 
-impl<I> error::FromExternalError<I, ParseIntError> for Error {
-    fn from_external_error(_input: I, _kind: error::ErrorKind, e: ParseIntError) -> Self {
-        Self::ParseInt(e)
+impl FromExternalError<Span<'_>, crate::error::Error> for LocatedParseError {
+    fn from_external_error(input: Span, _kind: ErrorKind, e: crate::error::Error) -> Self {
+        ParseError::ExternalError(Box::new(e)).at(input)
     }
 }
 
-impl<I> error::FromExternalError<I, ParseFloatError> for Error {
-    fn from_external_error(_input: I, _kind: error::ErrorKind, e: ParseFloatError) -> Self {
-        Self::ParseFloat(e)
+impl FromExternalError<Span<'_>, ParseIntError> for LocatedParseError {
+    fn from_external_error(input: Span, _kind: ErrorKind, e: ParseIntError) -> Self {
+        ParseError::ExternalError(Box::new(e.into())).at(input)
+    }
+}
+
+impl FromExternalError<Span<'_>, ParseFloatError> for LocatedParseError {
+    fn from_external_error(input: Span, _kind: ErrorKind, e: ParseFloatError) -> Self {
+        ParseError::ExternalError(Box::new(e.into())).at(input)
     }
 }

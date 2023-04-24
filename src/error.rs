@@ -3,7 +3,7 @@
 use thiserror::Error;
 
 use crate::{
-    io::parser::ParseError,
+    io::parser::LocatedParseError,
     logical::program_analysis::analysis::RuleAnalysisError,
     logical::types::{LogicalTypeEnum, TypeError},
     physical::datatypes::float_is_nan::FloatIsNaN,
@@ -48,16 +48,13 @@ pub enum Error {
     RuleAnalysisError(#[from] RuleAnalysisError),
     /// Parse errors
     #[error(transparent)]
-    ParseError(#[from] ParseError),
+    ParseError(#[from] LocatedParseError),
     /// Type errors
     #[error(transparent)]
     TypeError(#[from] TypeError),
     /// Error when giving invalid execution plan to the database instance
     #[error("The given execution plan is invalid.")]
     InvalidExecutionPlan,
-    /// Parser could not parse whole Program-file, but should have read all of it.
-    #[error("Parser could not parse the whole input file")]
-    ProgramParse,
     /// IO Error
     #[error(transparent)]
     IO(#[from] std::io::Error),
