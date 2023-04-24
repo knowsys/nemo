@@ -510,8 +510,7 @@ impl Program {
                     .expect("Previous analysis should have assigned a type to each variable.");
 
                 if filter.operation != FilterOperation::Equals
-                    && *variable_type != LogicalTypeEnum::Double
-                    && *variable_type != LogicalTypeEnum::UnsignedInteger
+                    && !variable_type.allows_numeric_operations()
                 {
                     return Err(Error::InvalidRuleNonNumericComparison);
                 }

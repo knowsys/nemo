@@ -188,7 +188,7 @@ impl<'a> TrieScanSelectValue<'a> {
     pub fn new(
         dict: &mut Dict,
         base_trie: TrieScanEnum<'a>,
-        assignemnts: &[ValueAssignment],
+        assignments: &[ValueAssignment],
     ) -> Self {
         let column_types = base_trie.get_types();
         let arity = column_types.len();
@@ -222,11 +222,11 @@ impl<'a> TrieScanSelectValue<'a> {
             }
         }
 
-        for assignemnt in assignemnts {
+        for assignment in assignments {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
                     unsafe {
-                        let lower = if let Some(StorageValueT::$variant(value)) = assignemnt
+                        let lower = if let Some(StorageValueT::$variant(value)) = assignment
                             .interval
                             .lower
                             .bound()
@@ -237,7 +237,7 @@ impl<'a> TrieScanSelectValue<'a> {
                             None
                         };
 
-                        let upper = if let Some(StorageValueT::$variant(value)) = assignemnt
+                        let upper = if let Some(StorageValueT::$variant(value)) = assignment
                             .interval
                             .upper
                             .bound()
@@ -248,12 +248,12 @@ impl<'a> TrieScanSelectValue<'a> {
                             None
                         };
                         let interval = Interval::new(
-                            Self::translate_interval_bound(&assignemnt.interval.lower, lower),
-                            Self::translate_interval_bound(&assignemnt.interval.upper, upper),
+                            Self::translate_interval_bound(&assignment.interval.lower, lower),
+                            Self::translate_interval_bound(&assignment.interval.upper, upper),
                         );
 
                         let scan_enum = if let ColumnScanT::$variant(scan) =
-                            &*base_trie.get_scan(assignemnt.column_idx).unwrap().get()
+                            &*base_trie.get_scan(assignment.column_idx).unwrap().get()
                         {
                             scan
                         } else {
@@ -264,12 +264,12 @@ impl<'a> TrieScanSelectValue<'a> {
                             ColumnScanEqualValue::new(scan_enum, interval),
                         ));
 
-                        select_scans[assignemnt.column_idx] =
+                        select_scans[assignment.column_idx] =
                             UnsafeCell::new(ColumnScanT::$variant(next_scan));
                     }
                 };
             }
-            match column_types[assignemnt.column_idx] {
+            match column_types[assignment.column_idx] {
                 StorageTypeName::U32 => init_scans_for_datatype!(U32),
                 StorageTypeName::U64 => init_scans_for_datatype!(U64),
                 StorageTypeName::Float => init_scans_for_datatype!(Float),

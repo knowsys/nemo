@@ -7,8 +7,11 @@ use std::{fmt::Debug, ops::Range};
 
 #[derive(Debug)]
 enum ColumnScanStatus {
+    /// Iterator is before the lower bound of the interval.
     Before,
-    Normal,
+    /// Iterator is withing the bounds of the interval.
+    Within,
+    /// Iterator is past the upper bound of the interval.
     After,
 }
 
@@ -43,6 +46,8 @@ where
         }
     }
 
+    /// Move the inner scan to such a position that it satisfies the lower bound of the interval.
+    /// Returns true if the inner iterator has been moved.
     fn satisfy_lower_bound(&mut self) -> bool {
         match self.interval.lower {
             IntervalBound::Inclusive(bound) => {
@@ -75,7 +80,7 @@ where
         }
 
         let has_moved = if let ColumnScanStatus::Before = self.status {
-            self.status = ColumnScanStatus::Normal;
+            self.status = ColumnScanStatus::Within;
             self.satisfy_lower_bound()
         } else {
             false
@@ -87,7 +92,7 @@ where
 
         if let Some(current) = self.scan.current() {
             if self.interval.upper.below(&current) {
-                return self.scan.current();
+                return Some(current);
             }
         }
 
@@ -103,14 +108,14 @@ where
     fn seek(&mut self, value: T) -> Option<T> {
         if let ColumnScanStatus::Before = self.status {
             self.satisfy_lower_bound();
-            self.status = ColumnScanStatus::Normal;
+            self.status = ColumnScanStatus::Within;
         }
 
         self.scan.seek(value);
 
         if let Some(current) = self.scan.current() {
             if self.interval.upper.below(&current) {
-                return self.scan.current();
+                return Some(current);
             }
         }
 

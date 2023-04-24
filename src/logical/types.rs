@@ -111,4 +111,13 @@ impl LogicalTypeEnum {
 
         Ok(result)
     }
+
+    /// Whether this logical type can be used to perform numeric operations.
+    pub fn allows_numeric_operations(&self) -> bool {
+        match self {
+            LogicalTypeEnum::RdfsResource => false,
+            LogicalTypeEnum::UnsignedInteger => true,
+            LogicalTypeEnum::Double => true,
+        }
+    }
 }
