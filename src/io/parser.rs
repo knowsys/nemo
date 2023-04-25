@@ -65,6 +65,8 @@ pub fn all_input_consumed<'a, T: 'a>(
 pub fn comment(input: Span) -> IntermediateResult<()> {
     alt((
         value((), pair(tag("%"), is_not("\n\r"))),
+        // a comment that immediately precedes the end of the line –
+        // this must come after the normal line comment above
         value((), tag("%")),
     ))(input)
 }
