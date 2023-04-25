@@ -223,7 +223,7 @@ impl<'a> TrieScanSelectValue<'a> {
         }
 
         macro_rules! translate_interval_bound {
-            ($variant:ident,$type:ty,$interval_bound:expr,$dict:expr) => {
+            ($variant:ident, $type:ty, $interval_bound:expr, $dict:expr) => {
                 match $interval_bound {
                     IntervalBound::Inclusive(bound) => {
                         if let StorageValueT::$variant(value) = bound.to_storage_value(dict) {
@@ -246,38 +246,36 @@ impl<'a> TrieScanSelectValue<'a> {
 
         for assignment in assignments {
             macro_rules! init_scans_for_datatype {
-                ($variant:ident,$type:ty) => {
-                    unsafe {
-                        let lower = translate_interval_bound!(
-                            $variant,
-                            $type,
-                            &assignment.interval.lower,
-                            dict
-                        );
-                        let upper = translate_interval_bound!(
-                            $variant,
-                            $type,
-                            &assignment.interval.upper,
-                            dict
-                        );
-                        let interval = Interval::new(lower, upper);
+                ($variant:ident,$type:ty) => {{
+                    let lower = translate_interval_bound!(
+                        $variant,
+                        $type,
+                        &assignment.interval.lower,
+                        dict
+                    );
+                    let upper = translate_interval_bound!(
+                        $variant,
+                        $type,
+                        &assignment.interval.upper,
+                        dict
+                    );
+                    let interval = Interval::new(lower, upper);
 
-                        let scan_enum = if let ColumnScanT::$variant(scan) =
-                            &*base_trie.get_scan(assignment.column_idx).unwrap().get()
-                        {
-                            scan
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($variant));
-                        };
+                    let scan_enum = if let ColumnScanT::$variant(scan) =
+                        unsafe { &*base_trie.get_scan(assignment.column_idx).unwrap().get() }
+                    {
+                        scan
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($variant));
+                    };
 
-                        let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanEqualValue(
-                            ColumnScanEqualValue::new(scan_enum, interval),
-                        ));
+                    let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanEqualValue(
+                        ColumnScanEqualValue::new(scan_enum, interval),
+                    ));
 
-                        select_scans[assignment.column_idx] =
-                            UnsafeCell::new(ColumnScanT::$variant(next_scan));
-                    }
-                };
+                    select_scans[assignment.column_idx] =
+                        UnsafeCell::new(ColumnScanT::$variant(next_scan));
+                }};
             }
             match column_types[assignment.column_idx] {
                 StorageTypeName::U32 => init_scans_for_datatype!(U32, u32),
