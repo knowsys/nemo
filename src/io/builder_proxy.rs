@@ -7,6 +7,9 @@ use crate::{
         dictionary::Dictionary,
     },
 };
+
+use super::parser::parse_dsv_constant;
+
 #[macro_use]
 mod macros;
 
@@ -33,10 +36,20 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
     generic_trait_impl!(VecT::U64);
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
+
+        // TODO: parsing of DSV and Program should be unified
+        // TODO: DSV parsing should depend on logical types
+        let parsed = parse_dsv_constant(string.into())
+            .map(|(remainder, parsed)| {
+                debug_assert!(remainder.is_empty()); // the whole value should be parsed
+                parsed
+            })
+            .unwrap_or(string.to_string());
+
         self.value = Some(
             dictionary
                 .expect("ProxyStringColumnBuilder expects a Dictionary to be provided!")
-                .add(string.to_string())
+                .add(parsed)
                 .try_into()?,
         );
 

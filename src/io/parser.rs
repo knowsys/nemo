@@ -125,6 +125,37 @@ pub fn space_delimited_token<'a>(
     )
 }
 
+fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
+    traced(
+        "parse_bare_name",
+        map_error(
+            recognize(pair(
+                alpha1,
+                opt(pair(
+                    many0(tag(" ")),
+                    separated_list1(
+                        many1(tag(" ")),
+                        many1(satisfy(|c| {
+                            ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
+                                .iter()
+                                .any(|range| range.contains(&c))
+                        })),
+                    ),
+                )),
+            )),
+            || ParseError::ExpectedBareName,
+        ),
+    )(input)
+}
+
+// TODO: parsing of DSV and Program should be unified
+/// Parse a constant from a DSV File
+pub fn parse_dsv_constant(input: Span<'_>) -> IntermediateResult<String> {
+    map(alt((sparql::iriref, parse_bare_name)), |iri| {
+        format!("<{iri}>")
+    })(input)
+}
+
 /// The main parser. Holds a hash map for
 /// prefixes, as well as the base IRI.
 #[derive(Debug, Default)]
@@ -471,9 +502,7 @@ impl<'a> RuleParser<'a> {
                         map(sparql::iriref, |name| sparql::Name::IriReference(&name)),
                         sparql::prefixed_name,
                         sparql::blank_node_label,
-                        map(self.parse_bare_name(), |name| {
-                            sparql::Name::IriReference(&name)
-                        }),
+                        map(parse_bare_name, |name| sparql::Name::IriReference(&name)),
                     )),
                 )(remainder)?;
 
@@ -522,27 +551,10 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    fn parse_bare_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
-        traced(
-            "parse_bare_name",
-            map_error(
-                recognize(pair(
-                    alpha1,
-                    many0(satisfy(|c| {
-                        ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
-                            .iter()
-                            .any(|range| range.contains(&c))
-                    })),
-                )),
-                || ParseError::ExpectedBareName,
-            ),
-        )
-    }
-
     /// Parse a PREDNAME, i.e., a predicate name that is not an IRI.
     pub fn parse_pred_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         traced("parse_pred_name", move |input| {
-            let (remainder, name) = self.parse_bare_name()(input)?;
+            let (remainder, name) = parse_bare_name(input)?;
 
             Ok((remainder, Identifier(name.to_string())))
         })
@@ -699,7 +711,7 @@ impl<'a> RuleParser<'a> {
             "parse_variable",
             map_error(
                 move |input| {
-                    let (remainder, name) = self.parse_bare_name()(input)?;
+                    let (remainder, name) = parse_bare_name(input)?;
 
                     Ok((remainder, Identifier(name.to_string())))
                 },

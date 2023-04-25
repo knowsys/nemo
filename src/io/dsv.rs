@@ -189,7 +189,7 @@ Boston;United States;4628910
                 .and_then(|u64| usize::try_from(u64).ok())
                 .and_then(|usize| dict.entry(usize))
                 .unwrap(),
-            "Boston"
+            "<Boston>"
         );
         assert_eq!(
             x[1].get(0)
@@ -197,7 +197,7 @@ Boston;United States;4628910
                 .and_then(|u64| usize::try_from(u64).ok())
                 .and_then(|usize| dict.entry(usize))
                 .unwrap(),
-            "United States"
+            "<United States>"
         );
         assert_eq!(
             x[2].get(0)
