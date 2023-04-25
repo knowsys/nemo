@@ -49,14 +49,19 @@ pub struct CliApp {
     /// One or more rule program files
     #[arg(value_parser, required = true)]
     rules: Vec<PathBuf>,
-    /// Save results
+    /// Save results to files. (Also see --output-dir)
     #[arg(short, long = "save-results")]
     save_results: bool,
-    /// output directory
-    #[arg(short, long = "output", default_value = DEFAULT_OUTPUT_DIRECTORY)]
+    /// Specify directory for output files. (Only relevant if --save-results is set.)
+    #[arg(short='D', long = "output-dir", default_value = DEFAULT_OUTPUT_DIRECTORY, requires="save_results")]
     output_directory: PathBuf,
-    /// Overwrite existing files. This will remove all files in the given output directory
-    #[arg(long = "overwrite-results", default_value = "false")]
+    /// Overwrite existing files in --output-dir. (Only relevant if --save-results is set.)
+    #[arg(
+        short,
+        long = "overwrite-results",
+        default_value = "false",
+        requires = "save_results"
+    )]
     overwrite: bool,
     /// Gzip output files
     #[arg(short, long = "gzip", default_value = "false")]
