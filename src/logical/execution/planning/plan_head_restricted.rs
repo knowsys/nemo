@@ -157,9 +157,10 @@ impl HeadStrategy for RestrictedChaseStrategy {
         // -- "old" and "new" with the goal of reducing duplicates while computing the join.
         // For the body join, any table derived in the current application of the rule
         // should be considered as a new table in the next (viz. applying the same rule twice in a row).
-        // Here we compute the new sataisfied matches since the last rule application.
-        // However, for this rule application, every unsatisfied match will be satisified
-        // and hence we can add it to the table of satisfied matches directly.
+        // Here we compute the new satisfied matches since the last rule application.
+        // However, after applying a rule at step i, every unsatisfied (at step i) match will be satisified in step i + 1.
+        // This allows us to add the unsatisfied matches of the current rule execution
+        // to the permanent table of satisfied matches for this rule step (see `node_newer_satisfied_matches_frontier` at step 5).
         // As a result, we do not consider the tables derived in step i as new tables in step i + 1.
         let step_last_applied = if rule_info.step_last_applied == 0 {
             // An exception to the above is the case where the rule was never applied.
