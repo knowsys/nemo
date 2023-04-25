@@ -28,7 +28,8 @@ pub struct LocatedParseError {
 }
 
 impl LocatedParseError {
-    fn append(&mut self, other: LocatedParseError) {
+    /// Append another [`LocatedParseError`] as context to this error.
+    pub fn append(&mut self, other: LocatedParseError) {
         self.context.push(other)
     }
 }
@@ -79,6 +80,9 @@ pub enum ParseError {
         r#"SPARQL data source for predicate "{0}" has arity {1}, but {2} variables are given"#
     )]
     SparqlSourceInvalidArity(String, usize, usize),
+    /// Expected a dot.
+    #[error(r#"Expected ".""#)]
+    ExpectedDot,
 }
 
 impl ParseError {

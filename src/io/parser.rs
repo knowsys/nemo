@@ -83,6 +83,24 @@ pub fn multispace_or_comment1(input: Span) -> IntermediateResult<()> {
     value((), many1(alt((value((), multispace1), comment))))(input)
 }
 
+/// A combinator that modifies the associated error.
+pub fn map_error<'a, T: 'a>(
+    mut parser: impl FnMut(Span<'a>) -> IntermediateResult<'a, T> + 'a,
+    mut error: impl FnMut() -> ParseError + 'a,
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, T> + 'a {
+    move |input| {
+        let (remainder, position) = position(input)?;
+        parser(remainder).map_err(|e| match e {
+            Err::Incomplete(_) | Err::Failure(_) => e,
+            Err::Error(context) => {
+                let mut err = error().at(position);
+                err.append(context);
+                Err::Error(err)
+            }
+        })
+    }
+}
+
 /// The main parser. Holds a hash map for
 /// prefixes, as well as the base IRI.
 #[derive(Debug, Default)]
@@ -116,7 +134,10 @@ impl<'a> RuleParser<'a> {
     fn parse_dot(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
         traced(
             "parse_dot",
-            delimited(multispace_or_comment0, tag("."), multispace_or_comment0),
+            map_error(
+                delimited(multispace_or_comment0, tag("."), multispace_or_comment0),
+                || ParseError::ExpectedDot,
+            ),
         )
     }
 
@@ -780,6 +801,12 @@ mod test {
         };
     }
 
+    macro_rules! assert_parse_error {
+        ($parser:expr, $left:expr, $right:pat $(,) ?) => {
+            assert_fails!($parser, $left, LocatedParseError { source: $right, .. });
+        };
+    }
+
     #[test]
     fn base_directive() {
         let base = "http://example.org/foo";
@@ -1012,8 +1039,10 @@ mod test {
     }
 
     #[test]
-    fn fails_parse() {
+    fn parse_errors() {
         let parser = RuleParser::new();
+
+        assert_parse_error!(parser.parse_dot(), "", ParseError::ExpectedDot);
 
         assert_fails!(
             parser.parse_rule(),
