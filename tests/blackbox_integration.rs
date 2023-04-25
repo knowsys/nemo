@@ -97,7 +97,7 @@ impl TestCase {
 
         cmd.current_dir(self.test_dir.as_path())
             .arg("-s")
-            .arg("-o")
+            .arg("-D")
             .arg(self.output_dir.path())
             .arg(self.rule_file.as_path())
             .assert()
