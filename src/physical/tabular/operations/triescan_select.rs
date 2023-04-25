@@ -246,7 +246,7 @@ impl<'a> TrieScanSelectValue<'a> {
 
         for assignment in assignments {
             macro_rules! init_scans_for_datatype {
-                ($variant:ident,$type:ty) => {{
+                ($variant:ident, $type:ty) => {{
                     let lower = translate_interval_bound!(
                         $variant,
                         $type,
@@ -277,6 +277,7 @@ impl<'a> TrieScanSelectValue<'a> {
                         UnsafeCell::new(ColumnScanT::$variant(next_scan));
                 }};
             }
+
             match column_types[assignment.column_idx] {
                 StorageTypeName::U32 => init_scans_for_datatype!(U32, u32),
                 StorageTypeName::U64 => init_scans_for_datatype!(U64, u64),
