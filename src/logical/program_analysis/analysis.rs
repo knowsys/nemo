@@ -6,7 +6,7 @@ use crate::{
         model::{Atom, FilterOperation, Identifier, Literal, Program, Rule, Term, Variable},
         types::{LogicalTypeEnum, TypeError},
     },
-    physical::{management::database::ColumnOrder, util::labeled_graph::NodeLabeledGraph},
+    physical::{management::database::ColumnOrder, util::labeled_graph::LabeledGraph},
 };
 
 use super::{
@@ -261,7 +261,7 @@ impl PredicatePosition {
 }
 
 /// Graph that represents a prioritization between rules.
-pub type PositionGraph = NodeLabeledGraph<PredicatePosition, Undirected>;
+pub type PositionGraph = LabeledGraph<PredicatePosition, (), Undirected>;
 
 /// Contains useful information about the
 #[derive(Debug)]
@@ -357,7 +357,7 @@ impl Program {
                         match variable_to_last_node.entry(variable.clone()) {
                             Entry::Occupied(mut entry) => {
                                 let last_position = entry.insert(predicate_position.clone());
-                                graph.add_edge(last_position, predicate_position);
+                                graph.add_edge(last_position, predicate_position, ());
                             }
                             Entry::Vacant(entry) => {
                                 entry.insert(predicate_position);
@@ -379,7 +379,7 @@ impl Program {
                         .expect("Variables in filters should also appear in the rule body")
                         .clone();
 
-                    graph.add_edge(position_left, position_right);
+                    graph.add_edge(position_left, position_right, ());
                 }
             }
         }
