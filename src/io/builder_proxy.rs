@@ -39,11 +39,7 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
 
         // TODO: parsing of DSV and Program should be unified
         // TODO: DSV parsing should depend on logical types
-        let parsed = parse_dsv_constant(string.into())
-            .map(|(remainder, parsed)| {
-                debug_assert!(remainder.is_empty()); // the whole value should be parsed
-                parsed
-            })
+        let parsed = super::parser::all_input_consumed(parse_dsv_constant)(string)
             .unwrap_or(string.to_string());
 
         self.value = Some(
