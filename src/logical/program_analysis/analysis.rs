@@ -61,12 +61,12 @@ pub enum RuleAnalysisError {
     /// Unsupported feature: Negation
     #[error("Negation is currently unsupported.")]
     UnsupportedFeatureNegation,
-    /// Unsupported feature: Negation
-    #[error("Comparison operations are currently not supported.")]
-    UnsupportedFeatureComparison,
     /// Unsupported feature: Overloading of predicate names by arity/type
     #[error("Overloading of predicate names by arity is currently not supported.")]
     UnsupportedFeaturePredicateOverloading,
+    /// Unsupported feature: Comparison between variables
+    #[error("Comparison operation between two variables are currently not supported.")]
+    UnsupportedFeatureVariableComparison,
 }
 
 fn is_recursive(rule: &Rule) -> bool {
@@ -497,10 +497,8 @@ impl Program {
             for filter in rule.filters() {
                 if filter.operation != FilterOperation::Equals {
                     if let Term::Variable(_) = filter.rhs {
-                        return Err(Error::UnsupportedFeatureComparison);
+                        return Err(RuleAnalysisError::UnsupportedFeatureVariableComparison);
                     }
-
-                    return Err(RuleAnalysisError::UnsupportedFeatureComparison);
                 }
             }
 
@@ -522,7 +520,7 @@ impl Program {
         &self,
         analyses: &[RuleAnalysis],
         predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), TypeError> {
         for fact in self.facts() {
             let predicate_types = predicate_types
                 .get(&fact.0.predicate())
@@ -551,7 +549,7 @@ impl Program {
                 if filter.operation != FilterOperation::Equals
                     && !variable_type.allows_numeric_operations()
                 {
-                    return Err(Error::InvalidRuleNonNumericComparison);
+                    return Err(TypeError::InvalidRuleNonNumericComparison);
                 }
 
                 variable_type.ground_term_to_data_value_t(right_term.clone())?;

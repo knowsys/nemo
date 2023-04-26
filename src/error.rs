@@ -41,21 +41,6 @@ pub enum Error {
     /// Error when converting floating type to integer point value
     #[error("Floating type could not be converted to integer value")]
     FloatingPointToInteger,
-    /// Conflicting type declarations
-    #[error("Conflicting type declarations. Predicate \"{0}\" at position {1} has been inferred to have the conflicting types {2} and {3}.")]
-    InvalidRuleConflictingTypes(String, usize, LogicalTypeEnum, LogicalTypeEnum),
-    /// Conflicting type declarations
-    #[error("Conflicting type declarations. The term \"{0}\" cannot be converted to a {1}.")]
-    InvalidRuleTermConversion(Term, LogicalTypeEnum),
-    /// Comparison of a non-numeric type
-    #[error("Invalid type declarations. Comparison operator can only be used with numeric types.")]
-    InvalidRuleNonNumericComparison,
-    /// Unsupported feature: Negation
-    #[error("Negation is currently unsupported.")]
-    UnsupportedFeatureNegation,
-    /// Unsupported feature: Negation
-    #[error("Comparison operation between two variables are currently not supported.")]
-    UnsupportedFeatureComparison,
     /// Rule analysis errors
     #[error(transparent)]
     RuleAnalysisError(#[from] RuleAnalysisError),
