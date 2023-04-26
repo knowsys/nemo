@@ -7,6 +7,8 @@ use nom::{
 use nom_locate::LocatedSpan;
 use thiserror::Error;
 
+use crate::logical::types::LogicalTypeEnum;
+
 /// A [`LocatedSpan`] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
 
@@ -80,9 +82,99 @@ pub enum ParseError {
         r#"SPARQL data source for predicate "{0}" has arity {1}, but {2} variables are given"#
     )]
     SparqlSourceInvalidArity(String, usize, usize),
+    /// Unknown logical type name in program.
+    #[error("A predicate declaration used an unknown type ({0}). The known types are: {1:?}")]
+    ParseUnknownType(String, Vec<LogicalTypeEnum>),
     /// Expected a dot.
-    #[error(r#"Expected ".""#)]
-    ExpectedDot,
+    #[error(r#"Expected "{0}""#)]
+    ExpectedToken(String),
+    /// Expected an Iriref.
+    #[error("Expected an IRI")]
+    ExpectedIriref,
+    /// Expected a base declaration.
+    #[error(r#"Expected a "@base" declaration"#)]
+    ExpectedBaseDeclaration,
+    /// Expected a prefix declaration.
+    #[error(r#"Expected a "@prefix" declaration"#)]
+    ExpectedPrefixDeclaration,
+    /// Expected a prefix.
+    #[error(r#"Expected a prefix"#)]
+    ExpectedPnameNs,
+    /// Expected a logical type name.
+    #[error("Expected a type name")]
+    ExpectedLogicalTypeName,
+    /// Expected a data source declaration.
+    #[error(r#"Expected a "@source" declaration"#)]
+    ExpectedDataSourceDeclaration,
+    /// Expected a string literal.
+    #[error("Expected a string literal")]
+    ExpectedStringLiteral,
+    /// Expected a statement.
+    #[error("Expected a statement (i.e., either a fact or a rule)")]
+    ExpectedStatement,
+    /// Expected a fact.
+    #[error("Expected a fact")]
+    ExpectedFact,
+    /// Expected a rule.
+    #[error("Expected a rule")]
+    ExpectedRule,
+    /// Expected a prefixed name.
+    #[error("Expected a prefixed name")]
+    ExpectedPrefixedName,
+    /// Expected a blank node label.
+    #[error("Expected a blank node label")]
+    ExpectedBlankNodeLabel,
+    /// Expected an IRI as a predicate name.
+    #[error("Expected an IRI as a predicate name")]
+    ExpectedIriPred,
+    /// Expected an IRI as a constant.
+    #[error("Expected an IRI as a constant name")]
+    ExpectedIriConstant,
+    /// Expected a predicate name.
+    #[error("Expected a predicate name")]
+    ExpectedPredicateName,
+    /// Expected a bare predicate name.
+    #[error("Expected a bare name")]
+    ExpectedBareName,
+    /// Expected a ground term.
+    #[error("Expected a ground term")]
+    ExpectedGroundTerm,
+    /// Expected an atom.
+    #[error("Expected an atom")]
+    ExpectedAtom,
+    /// Expected a term.
+    #[error("Expected a term")]
+    ExpectedTerm,
+    /// Expected a variable.
+    #[error("Expected a variable")]
+    ExpectedVariable,
+    /// Expected a universally quantified variable.
+    #[error("Expected a universally quantified variable")]
+    ExpectedUniversalVariable,
+    /// Expected an existentially quantified variable.
+    #[error("Expected an existentially quantified variable")]
+    ExpectedExistentialVariable,
+    /// Expected a variable name.
+    #[error("Expected a variable name")]
+    ExpectedVariableName,
+    /// Expected a literal.
+    #[error("Expected a literal")]
+    ExpectedLiteral,
+    /// Expected a positive literal.
+    #[error("Expected a positive literal")]
+    ExpectedPositiveLiteral,
+    /// Expected a negative literal.
+    #[error("Expected a negative literal")]
+    ExpectedNegativeLiteral,
+    /// Expected a filter operator.
+    #[error("Expected a filter operator")]
+    ExpectedFilterOperator,
+    /// Expected a filter expression.
+    #[error("Expected a filter expression")]
+    ExpectedFilterExpression,
+    /// Expected a body expression.
+    #[error("Expected a literal or a filter expression")]
+    ExpectedBodyExpression,
 }
 
 impl ParseError {
@@ -128,6 +220,14 @@ impl nom::error::ParseError<Span<'_>> for LocatedParseError {
 impl FromExternalError<Span<'_>, crate::error::Error> for LocatedParseError {
     fn from_external_error(input: Span, _kind: ErrorKind, e: crate::error::Error) -> Self {
         ParseError::ExternalError(Box::new(e)).at(input)
+    }
+}
+
+impl FromExternalError<Span<'_>, ParseError> for LocatedParseError {
+    fn from_external_error(input: Span<'_>, kind: ErrorKind, e: ParseError) -> Self {
+        let mut err = <Self as nom::error::ParseError<Span<'_>>>::from_error_kind(input, kind);
+        err.append(e.at(input));
+        err
     }
 }
 

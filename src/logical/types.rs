@@ -3,7 +3,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use crate::error::Error;
+use crate::io::parser::ParseError;
 use crate::physical::datatypes::{DataTypeName, DataValueT};
 
 use super::model::{Identifier, NumericLiteral, RdfLiteral, Term};
@@ -41,7 +41,7 @@ macro_rules! generate_logical_type_enum {
         }
 
         impl FromStr for LogicalTypeEnum {
-            type Err = Error;
+            type Err = ParseError;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s {

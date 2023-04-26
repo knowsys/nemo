@@ -3,7 +3,6 @@ use std::fmt::Display;
 
 use nom::{
     branch::alt,
-    bytes::complete::tag,
     character::complete::{one_of, satisfy},
     combinator::{map, opt, recognize},
     multi::{many0, many1, separated_list0},
@@ -11,10 +10,12 @@ use nom::{
 };
 
 use super::{
-    iri,
+    iri, map_error,
     rfc5234::digit,
+    token,
     turtle::hex,
     types::{IntermediateResult, Span},
+    ParseError,
 };
 
 use macros::traced;
@@ -61,7 +62,10 @@ impl Display for Name<'_> {
 /// the actual IRI.
 #[traced("parser::sparql")]
 pub fn iriref(input: Span) -> IntermediateResult<Span> {
-    delimited(tag("<"), iri::iri_reference, tag(">"))(input)
+    map_error(
+        delimited(token("<"), iri::iri_reference, token(">")),
+        || ParseError::ExpectedIriref,
+    )(input)
 }
 
 #[traced("parser::sparql")]
@@ -71,7 +75,9 @@ pub fn iri(input: Span) -> IntermediateResult<Name> {
 
 #[traced("parser::sparql")]
 pub fn pname_ns(input: Span) -> IntermediateResult<Span> {
-    let (rest, prefix) = terminated(opt(pn_prefix), tag(":"))(input)?;
+    let (rest, prefix) = map_error(terminated(opt(pn_prefix), token(":")), || {
+        ParseError::ExpectedPnameNs
+    })(input)?;
 
     Ok((rest, prefix.unwrap_or("".into())))
 }
@@ -102,16 +108,16 @@ pub fn pn_chars_base(input: Span) -> IntermediateResult<Span> {
 
 #[traced("parser::sparql")]
 pub fn pn_chars_u(input: Span) -> IntermediateResult<Span> {
-    alt((pn_chars_base, tag("_")))(input)
+    alt((pn_chars_base, token("_")))(input)
 }
 
 #[traced("parser::sparql")]
 pub fn pn_chars(input: Span) -> IntermediateResult<Span> {
     alt((
         pn_chars_u,
-        tag("-"),
+        token("-"),
         digit,
-        tag("\u{00B7}"),
+        token("\u{00B7}"),
         recognize(satisfy(|c| {
             [0x0300u32..=0x036F, 0x203F..=0x2040]
                 .iter()
@@ -124,18 +130,18 @@ pub fn pn_chars(input: Span) -> IntermediateResult<Span> {
 pub fn pn_prefix(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((
         pn_chars_base,
-        separated_list0(many1(tag(".")), many0(pn_chars)),
+        separated_list0(many1(token(".")), many0(pn_chars)),
     )))(input)
 }
 
 #[traced("parser::sparql")]
 pub fn percent(input: Span) -> IntermediateResult<Span> {
-    recognize(tuple((tag("%"), hex, hex)))(input)
+    recognize(tuple((token("%"), hex, hex)))(input)
 }
 
 #[traced("parser::sparql")]
 pub fn pn_local_esc(input: Span) -> IntermediateResult<Span> {
-    recognize(preceded(tag(r#"\"#), one_of(r#"_~.-!$&'()*+,;=/?#@%"#)))(input)
+    recognize(preceded(token(r#"\"#), one_of(r#"_~.-!$&'()*+,;=/?#@%"#)))(input)
 }
 
 #[traced("parser::sparql")]
@@ -146,10 +152,10 @@ pub fn plx(input: Span) -> IntermediateResult<Span> {
 #[traced("parser::sparql")]
 pub fn pn_local(input: Span) -> IntermediateResult<Span> {
     recognize(pair(
-        alt((pn_chars_u, tag(":"), digit, plx)),
+        alt((pn_chars_u, token(":"), digit, plx)),
         opt(separated_list0(
-            many1(tag(".")),
-            many0(alt((pn_chars, tag(":"), plx))),
+            many1(token(".")),
+            many0(alt((pn_chars, token(":"), plx))),
         )),
     ))(input)
 }
@@ -166,25 +172,31 @@ pub fn pname_ln(input: Span) -> IntermediateResult<Name> {
 
 #[traced("parser::sparql")]
 pub fn prefixed_name(input: Span) -> IntermediateResult<Name> {
-    alt((
-        pname_ln,
-        map(pname_ns, |prefix| Name::PrefixedName {
-            prefix: &prefix,
-            local: "",
-        }),
-    ))(input)
+    map_error(
+        alt((
+            pname_ln,
+            map(pname_ns, |prefix| Name::PrefixedName {
+                prefix: &prefix,
+                local: "",
+            }),
+        )),
+        || ParseError::ExpectedPrefixedName,
+    )(input)
 }
 
 #[traced("parser::sparql")]
 pub fn blank_node_label(input: Span) -> IntermediateResult<Name> {
-    preceded(
-        tag("_:"),
-        map(
-            recognize(pair(
-                alt((pn_chars_u, digit)),
-                opt(separated_list0(many1(tag(".")), many0(pn_chars))),
-            )),
-            |name| Name::BlankNode(&name),
+    map_error(
+        preceded(
+            token("_:"),
+            map(
+                recognize(pair(
+                    alt((pn_chars_u, digit)),
+                    opt(separated_list0(many1(token(".")), many0(pn_chars))),
+                )),
+                |name| Name::BlankNode(&name),
+            ),
         ),
+        || ParseError::ExpectedBlankNodeLabel,
     )(input)
 }
