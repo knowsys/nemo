@@ -87,27 +87,6 @@ pub fn multispace_or_comment1(input: Span) -> IntermediateResult<()> {
     value((), many1(alt((value((), multispace1), comment))))(input)
 }
 
-/// Enrich error with position information
-pub fn map_error_position<'a, T: 'a>(
-    position: Span<'a>,
-    result: IntermediateResult<'a, T>,
-    error: ParseError,
-) -> IntermediateResult<'a, T> {
-    result.map_err(|e| match e {
-        Err::Incomplete(_) => e,
-        Err::Error(context) => {
-            let mut err = error.at(position);
-            err.append(context);
-            Err::Error(err)
-        }
-        Err::Failure(context) => {
-            let mut err = error.at(position);
-            err.append(context);
-            Err::Failure(err)
-        }
-    })
-}
-
 /// A combinator that modifies the associated error.
 pub fn map_error<'a, T: 'a>(
     mut parser: impl FnMut(Span<'a>) -> IntermediateResult<'a, T> + 'a,
@@ -115,7 +94,19 @@ pub fn map_error<'a, T: 'a>(
 ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, T> + 'a {
     move |input| {
         let (remainder, position) = position(input)?;
-        map_error_position(position, parser(remainder), error())
+        parser(remainder).map_err(|e| match e {
+            Err::Incomplete(_) => e,
+            Err::Error(context) => {
+                let mut err = error().at(position);
+                err.append(context);
+                Err::Error(err)
+            }
+            Err::Failure(context) => {
+                let mut err = error().at(position);
+                err.append(context);
+                Err::Failure(err)
+            }
+        })
     }
 }
 
@@ -202,53 +193,50 @@ fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
 
 /// Parse an IRI representing a constant.
 fn parse_iri_constant<'a>(
-    prefixes: &HashMap<&str, &str>,
-    input: Span<'a>,
-) -> IntermediateResult<'a, Identifier> {
-    let (remainder, position) = position(input)?;
+    prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Identifier> {
+    map_error(
+        move |input| {
+            let (remainder, position) = position(input)?;
+            let (remainder, name) = traced(
+                "parse_iri_constant",
+                alt((
+                    map(sparql::iriref, |name| sparql::Name::IriReference(&name)),
+                    sparql::prefixed_name,
+                    sparql::blank_node_label,
+                    map(parse_bare_name, |name| sparql::Name::IriReference(&name)),
+                )),
+            )(remainder)?;
 
-    let result = {
-        let (remainder, name) = traced(
-            "parse_iri_constant",
-            alt((
-                map(sparql::iriref, |name| sparql::Name::IriReference(&name)),
-                sparql::prefixed_name,
-                sparql::blank_node_label,
-                map(parse_bare_name, |name| sparql::Name::IriReference(&name)),
-            )),
-        )(remainder)?;
+            let resolved = resolve_prefixed_name(&prefixes.borrow(), name)
+                .map_err(|e| Err::Failure(e.at(position)))?;
 
-        let resolved =
-            resolve_prefixed_name(prefixes, name).map_err(|e| Err::Failure(e.at(position)))?;
-
-        Ok((remainder, Identifier(resolved)))
-    };
-
-    map_error_position(position, result, ParseError::ExpectedIriConstant)
+            Ok((remainder, Identifier(resolved)))
+        },
+        || ParseError::ExpectedIriConstant,
+    )
 }
 
 /// Parse a ground term.
 pub fn parse_ground_term<'a>(
-    prefixes: &HashMap<&str, &str>,
-    input: Span<'a>,
-) -> IntermediateResult<'a, Term> {
-    let final_result = traced("parse_ground_term", |input| {
-        let (input, position) = position(input)?;
-        let result = alt((
-            map(|s| parse_iri_constant(prefixes, s), Term::Constant),
-            map(turtle::numeric_literal, Term::NumericLiteral),
-            map(turtle::rdf_literal, move |literal| {
-                Term::RdfLiteral(resolve_prefixed_rdf_literal(prefixes, literal))
-            }),
-            map(turtle::string_literal, move |literal| {
-                Term::StringLiteral(literal.to_string())
-            }),
-        ))(input);
-
-        map_error_position(position, result, ParseError::ExpectedGroundTerm)
-    })(input);
-
-    final_result
+    prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
+    traced(
+        "parse_ground_term",
+        map_error(
+            alt((
+                map(parse_iri_constant(prefixes), Term::Constant),
+                map(turtle::numeric_literal, Term::NumericLiteral),
+                map(turtle::rdf_literal, move |literal| {
+                    Term::RdfLiteral(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
+                }),
+                map(turtle::string_literal, move |literal| {
+                    Term::StringLiteral(literal.to_string())
+                }),
+            )),
+            || ParseError::ExpectedGroundTerm,
+        ),
+    )
 }
 
 /// The main parser. Holds a hash map for
@@ -543,9 +531,10 @@ impl<'a> RuleParser<'a> {
                             self.parse_predicate_name(),
                             delimited(
                                 self.parse_open_parenthesis(),
-                                separated_list1(self.parse_comma(), |t| {
-                                    parse_ground_term(&self.prefixes.borrow(), t)
-                                }),
+                                separated_list1(
+                                    self.parse_comma(),
+                                    parse_ground_term(&self.prefixes),
+                                ),
                                 self.parse_close_parenthesis(),
                             ),
                         ),
@@ -703,10 +692,7 @@ impl<'a> RuleParser<'a> {
         traced(
             "parse_term",
             map_error(
-                alt((
-                    |t| parse_ground_term(&self.prefixes.borrow(), t),
-                    self.parse_variable(),
-                )),
+                alt((parse_ground_term(&self.prefixes), self.parse_variable())),
                 || ParseError::ExpectedTerm,
             ),
         )
