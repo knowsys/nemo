@@ -17,6 +17,7 @@ use crate::{
     error::Error,
     logical::{model::*, types::LogicalTypeEnum},
 };
+use macros::traced;
 
 mod types;
 use types::{IntermediateResult, Span};
@@ -125,31 +126,30 @@ pub fn space_delimited_token<'a>(
     )
 }
 
+#[traced("parse_bare_name")]
 fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
-    traced(
-        "parse_bare_name",
-        map_error(
-            recognize(pair(
-                alpha1,
-                opt(pair(
-                    many0(tag(" ")),
-                    separated_list1(
-                        many1(tag(" ")),
-                        many1(satisfy(|c| {
-                            ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
-                                .iter()
-                                .any(|range| range.contains(&c))
-                        })),
-                    ),
-                )),
+    map_error(
+        recognize(pair(
+            alpha1,
+            opt(preceded(
+                many0(tag(" ")),
+                separated_list1(
+                    many1(tag(" ")),
+                    many1(satisfy(|c| {
+                        ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
+                            .iter()
+                            .any(|range| range.contains(&c))
+                    })),
+                ),
             )),
-            || ParseError::ExpectedBareName,
-        ),
+        )),
+        || ParseError::ExpectedBareName,
     )(input)
 }
 
 // TODO: parsing of DSV and Program should be unified
 /// Parse a constant from a DSV File
+#[traced("parse_dsv_constant")]
 pub fn parse_dsv_constant(input: Span<'_>) -> IntermediateResult<String> {
     map(alt((sparql::iriref, parse_bare_name)), |iri| {
         format!("<{iri}>")
