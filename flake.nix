@@ -48,10 +48,7 @@ rec {
               version = "0.1.0";
               src = ./.;
 
-              cargoLock.lockFile = ./nix/Cargo.lock;
-              postPatch = ''
-                ln -s ${./nix/Cargo.lock} Cargo.lock
-              '';
+              cargoLock.lockFile = ./Cargo.lock;
 
               meta = {
                 inherit description;
