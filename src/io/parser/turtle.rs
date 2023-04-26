@@ -3,9 +3,8 @@ use std::num::ParseIntError;
 
 use nom::{
     branch::alt,
-    bytes::complete::tag,
     character::complete::{alpha1, alphanumeric1, digit0, digit1, none_of, one_of},
-    combinator::{map, map_res, opt, recognize},
+    combinator::{cut, map, map_res, opt, recognize},
     multi::{count, many0},
     sequence::{delimited, pair, preceded, tuple},
 };
@@ -14,8 +13,11 @@ use crate::{logical::model::NumericLiteral, physical::datatypes::Double};
 use macros::traced;
 
 use super::{
+    map_error,
     sparql::{iri, Name},
+    token,
     types::{IntermediateResult, Span},
+    ParseError,
 };
 
 /// Characters requiring escape sequences in single-line string literals.
@@ -26,55 +28,66 @@ const HEXDIGIT: &str = "0123456789ABCDEFabcdef";
 
 #[traced("parser::turtle")]
 pub fn string(input: Span) -> IntermediateResult<Span> {
-    alt((
-        string_literal_quote,
-        string_literal_single_quote,
-        string_literal_long_single_quote,
-        string_literal_long_quote,
-    ))(input)
+    map_error(
+        alt((
+            string_literal_long_quote,
+            string_literal_long_single_quote,
+            string_literal_quote,
+            string_literal_single_quote,
+        )),
+        || ParseError::ExpectedStringLiteral,
+    )(input)
 }
 
 #[traced("parser::turtle")]
 pub fn string_literal_quote(input: Span) -> IntermediateResult<Span> {
     delimited(
-        tag(r#"""#),
-        recognize(many0(alt((
+        token(r#"""#),
+        cut(recognize(many0(alt((
             recognize(none_of(REQUIRES_ESCAPE)),
             echar,
             uchar,
-        )))),
-        tag(r#"""#),
+        ))))),
+        token(r#"""#),
     )(input)
 }
 
 #[traced("parser::turtle")]
 pub fn string_literal_single_quote(input: Span) -> IntermediateResult<Span> {
     delimited(
-        tag("'"),
-        recognize(many0(alt((
+        token("'"),
+        cut(recognize(many0(alt((
             recognize(none_of(REQUIRES_ESCAPE)),
             echar,
             uchar,
-        )))),
-        tag("'"),
+        ))))),
+        token("'"),
     )(input)
 }
 
 #[traced("parser::turtle")]
 pub fn string_literal_long_single_quote(input: Span) -> IntermediateResult<Span> {
     delimited(
-        tag("'''"),
-        recognize(many0(alt((recognize(none_of(r#"'\"#)), echar, uchar)))),
-        tag("'''"),
+        token("'''"),
+        cut(recognize(many0(alt((
+            recognize(none_of(r#"'\"#)),
+            echar,
+            uchar,
+        ))))),
+        token("'''"),
     )(input)
 }
 
 #[traced("parser::turtle")]
 pub fn string_literal_long_quote(input: Span) -> IntermediateResult<Span> {
     delimited(
-        tag(r#"""""#),
-        recognize(many0(alt((recognize(none_of(r#""\"#)), echar, uchar)))),
-        tag(r#"""""#),
+        token(r#"""""#),
+        cut(recognize(many0(alt((
+            recognize(none_of(r#""\"#)),
+            echar,
+            uchar,
+        ))))),
+        token(r#"""""#),
     )(input)
 }
 
@@ -86,14 +99,14 @@ pub fn hex(input: Span) -> IntermediateResult<Span> {
 #[traced("parser::turtle")]
 pub fn uchar(input: Span) -> IntermediateResult<Span> {
     recognize(alt((
-        preceded(tag(r#"\u"#), count(hex, 4)),
-        preceded(tag(r#"\U"#), count(hex, 8)),
+        preceded(token(r#"\u"#), count(hex, 4)),
+        preceded(token(r#"\U"#), count(hex, 8)),
     )))(input)
 }
 
 #[traced("parser::turtle")]
 pub fn echar(input: Span) -> IntermediateResult<Span> {
-    recognize(preceded(tag(r#"\"#), one_of(r#"tbnrf"'\"#)))(input)
+    recognize(preceded(token(r#"\"#), one_of(r#"tbnrf"'\"#)))(input)
 }
 
 #[traced("parser::turtle")]
@@ -113,7 +126,7 @@ pub fn decimal(input: Span) -> IntermediateResult<NumericLiteral> {
     map_res(
         pair(
             recognize(preceded(opt(sign), digit0)),
-            preceded(tag("."), digit1),
+            preceded(token("."), digit1),
         ),
         |(whole, fraction)| {
             Ok::<_, ParseIntError>(NumericLiteral::Decimal(whole.parse()?, fraction.parse()?))
@@ -133,8 +146,8 @@ pub fn double(input: Span) -> IntermediateResult<NumericLiteral> {
             recognize(preceded(
                 opt(sign),
                 alt((
-                    recognize(tuple((digit1, tag("."), digit0, exponent))),
-                    recognize(tuple((tag("."), digit1, exponent))),
+                    recognize(tuple((digit1, token("."), digit0, exponent))),
+                    recognize(tuple((token("."), digit1, exponent))),
                     recognize(pair(digit1, exponent)),
                 )),
             )),
@@ -159,11 +172,11 @@ pub(super) enum RdfLiteral<'a> {
 pub(super) fn rdf_literal<'a>(input: Span<'a>) -> IntermediateResult<RdfLiteral<'a>> {
     let (remainder, value) = string(input)?;
     let (remainder, literal) = alt((
-        map(langtag, |tag| RdfLiteral::LanguageString {
+        map(token("@"), |tag| RdfLiteral::LanguageString {
             value: &value,
             tag: &tag,
         }),
-        map(preceded(tag("^^"), iri), |datatype| {
+        map(preceded(token("^^"), iri), |datatype| {
             RdfLiteral::DatatypeValue {
                 value: &value,
                 datatype,
@@ -175,16 +188,16 @@ pub(super) fn rdf_literal<'a>(input: Span<'a>) -> IntermediateResult<RdfLiteral<
 }
 
 #[traced("parser::turtle")]
-pub fn langtag(input: Span) -> IntermediateResult<Span> {
+pub fn langtoken(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((
-        tag("@"),
+        token("@"),
         alpha1,
-        many0(preceded(tag("-"), alphanumeric1)),
+        many0(preceded(token("-"), alphanumeric1)),
     )))(input)
 }
 
 #[allow(dead_code)]
 #[traced("parser::turtle")]
 pub fn boolean_literal(input: Span) -> IntermediateResult<bool> {
-    alt((map(tag("true"), |_| true), map(tag("false"), |_| false)))(input)
+    alt((map(token("true"), |_| true), map(token("false"), |_| false)))(input)
 }

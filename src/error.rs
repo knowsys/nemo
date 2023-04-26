@@ -3,10 +3,8 @@
 use thiserror::Error;
 
 use crate::{
-    io::parser::LocatedParseError,
-    logical::program_analysis::analysis::RuleAnalysisError,
-    logical::types::{LogicalTypeEnum, TypeError},
-    physical::datatypes::float_is_nan::FloatIsNaN,
+    io::parser::LocatedParseError, logical::program_analysis::analysis::RuleAnalysisError,
+    logical::types::TypeError, physical::datatypes::float_is_nan::FloatIsNaN,
 };
 
 /// Error-Collection for all the possible Errors occurring in this crate
@@ -85,7 +83,4 @@ pub enum Error {
     /// CSV serialization/deserialization error
     #[error(transparent)]
     CsvError(#[from] csv::Error),
-    /// Unknown logical type name in program.
-    #[error("A predicate declaration used an unknown type ({0}). The known types are: {1:?}")]
-    ParseUnknownType(String, Vec<LogicalTypeEnum>),
 }
