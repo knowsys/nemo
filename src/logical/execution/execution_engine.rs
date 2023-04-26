@@ -98,9 +98,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .predicate_types
                     .get(predicate)
                     .cloned()
-                    .unwrap_or_else(|| {
-                        (0..*arity).map(|_| LogicalTypeEnum::RdfsResource).collect()
-                    }),
+                    .unwrap_or_else(|| (0..*arity).map(|_| LogicalTypeEnum::Any).collect()),
             );
         }
     }

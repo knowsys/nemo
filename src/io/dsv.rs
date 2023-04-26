@@ -189,7 +189,7 @@ Boston;United States;4628910
                 .and_then(|u64| usize::try_from(u64).ok())
                 .and_then(|usize| dict.entry(usize))
                 .unwrap(),
-            "<Boston>"
+            "Boston"
         );
         assert_eq!(
             x[1].get(0)
@@ -197,7 +197,7 @@ Boston;United States;4628910
                 .and_then(|u64| usize::try_from(u64).ok())
                 .and_then(|usize| dict.entry(usize))
                 .unwrap(),
-            "<United States>"
+            "United States"
         );
         assert_eq!(
             x[2].get(0)
@@ -220,12 +220,12 @@ Trailing Spaces do not belong to the name   ; What about spaces in the beginning
 ";
 
         let expected_result = [
-            ("<Boston>", "<United States>", 4628910),
-            ("<Dresden>", "<Germany>", 1234567),
-            ("<My Home Town>", "Some<where >Nice", 2),
+            ("Boston", "United States", 4628910),
+            ("Dresden", "Germany", 1234567),
+            ("My Home Town", "\"Some<where >Nice\"", 2),
             (
-                "<Trailing Spaces do not belong to the name>",
-                "<What about spaces in the beginning though>",
+                "Trailing Spaces do not belong to the name",
+                "What about spaces in the beginning though",
                 123,
             ),
         ];
