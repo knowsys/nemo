@@ -2,6 +2,7 @@
 
 [![Build and Test main](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/build.yml?branch=main&label=build)](https://github.com/knowsys/nemo/actions/workflows/build.yml)
 [![dependency status](https://deps.rs/repo/github/knowsys/nemo/status.svg)](https://deps.rs/repo/github/knowsys/nemo)
+[![built with nix](https://img.shields.io/static/v1?logo=nixos&logoColor=white&label=&message=Built%20with%20Nix&color=41439a)](https://builtwithnix.org)
 
 *Nemo* is a datalog-based rule engine for fast and scalable analytic data processing in memory. It is available as a command-line tool ```nmo```.
 
