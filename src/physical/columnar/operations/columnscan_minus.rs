@@ -296,10 +296,14 @@ where
     fn move_follow_scans(&mut self, mut next_value: T) -> Option<T> {
         let mut subtracted_values = true;
 
+        self.equal_values = self.enabled.clone();
+
         while subtracted_values {
             subtracted_values = false;
 
             for &subtract_index in &self.subtract_indices {
+                self.equal_values[subtract_index] = false;
+
                 if !self.enabled[subtract_index] {
                     continue;
                 }
@@ -316,7 +320,6 @@ where
             }
         }
 
-        self.equal_values.fill(false);
         for &follow_index in &self.follow_indices {
             if !self.enabled[follow_index] {
                 continue;
@@ -326,9 +329,11 @@ where
                 .expect("This vector should not point to None entries.");
 
             if let Some(follow_value) = follow_scan.seek(next_value) {
-                if next_value == follow_value {
-                    self.equal_values[follow_index] = true;
+                if next_value != follow_value {
+                    self.equal_values[follow_index] = false;
                 }
+            } else {
+                self.equal_values[follow_index] = false;
             }
         }
 
@@ -497,26 +502,26 @@ mod test {
 
         assert_eq!(subtract_scan.next(), Some(1));
         assert_eq!(subtract_scan.current(), Some(1));
-        assert_eq!(subtract_scan.equal_values(), &[false, false, true]);
+        assert_eq!(subtract_scan.equal_values(), &[false, true, true]);
 
         assert_eq!(subtract_scan.next(), Some(5));
         assert_eq!(subtract_scan.current(), Some(5));
-        assert_eq!(subtract_scan.equal_values(), &[false, false, true]);
+        assert_eq!(subtract_scan.equal_values(), &[false, true, true]);
 
         assert_eq!(subtract_scan.next(), Some(7));
         assert_eq!(subtract_scan.current(), Some(7));
-        assert_eq!(subtract_scan.equal_values(), &[false, false, false]);
+        assert_eq!(subtract_scan.equal_values(), &[false, true, false]);
 
         assert_eq!(subtract_scan.seek(11), Some(14));
         assert_eq!(subtract_scan.current(), Some(14));
-        assert_eq!(subtract_scan.equal_values(), &[false, false, true]);
+        assert_eq!(subtract_scan.equal_values(), &[false, true, true]);
 
         assert_eq!(subtract_scan.next(), Some(15));
         assert_eq!(subtract_scan.current(), Some(15));
-        assert_eq!(subtract_scan.equal_values(), &[false, false, false]);
+        assert_eq!(subtract_scan.equal_values(), &[false, true, false]);
 
         assert_eq!(subtract_scan.next(), None);
         assert_eq!(subtract_scan.current(), None);
-        assert_eq!(subtract_scan.equal_values(), &[false, false, false]);
+        assert_eq!(subtract_scan.equal_values(), &[false, true, false]);
     }
 }

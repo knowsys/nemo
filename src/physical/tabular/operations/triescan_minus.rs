@@ -10,13 +10,20 @@ use crate::physical::{
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
-/// TODO: Descriptions
+/// [`TrieScan`] that subtracts from a "main" [`TrieScan`] a list of "subtract" [`TrieScan`],
+/// i.e. the results contains all elements that are in main but not in one of the subtract scans.
+/// This can also handle subtracting tables of different arities.
 #[derive(Debug)]
 pub struct TrieScanSubtract<'a> {
     /// [`TrieScan`] from which elements are being subtracted
-    trie_left: Box<TrieScanEnum<'a>>,
+    trie_main: Box<TrieScanEnum<'a>>,
     /// Elements that are subtracted
-    tries_right: Vec<TrieScanEnum<'a>>,
+    tries_subtract: Vec<TrieScanEnum<'a>>,
+
+    /// For each [`TrieScan`] in `trie_subtract`, additional information relevant for this scan.
+    infos: Vec<SubtractInfo>,
+    /// For each [`TrieScan`] in `trie_subtract`, which layer this trie scan is currently on.
+    subtract_current_layers: Vec<usize>,
 
     /// Current layer of this scan.
     current_layer: Option<usize>,
@@ -25,90 +32,112 @@ pub struct TrieScanSubtract<'a> {
     column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
+/// Struct containing additional information for the setting up a [`TrieScanSubtract`] iterator.
+/// One of these structures should be associated with each trie that is to be subtracted.
 #[derive(Debug)]
 pub struct SubtractInfo {
-    skipped_layers: Vec<usize>,
+    /// Which layers of the main trie are subtracted.
+    /// For example, if we have a main trie with for layers: a(x, y, z, w)
+    /// and we want to subtract the trie associated with this struct b(y, w)
+    /// this vector would contain: [1, 3]
+    used_layers: Vec<usize>,
 }
 
 impl SubtractInfo {
     /// Create new [`SubtractInfo`].
-    pub fn new(mut skipped_layers: Vec<usize>) -> Self {
-        skipped_layers.sort();
+    pub fn new(mut used_layers: Vec<usize>) -> Self {
+        used_layers.sort();
 
-        Self { skipped_layers }
+        Self { used_layers }
     }
 
     /// Applies a permutation representing a reordering of the trie scan that this info is attached to.
     pub fn apply_permutation(&mut self, permutation: Permutation) {
-        for layer in &mut self.skipped_layers {
+        for layer in &mut self.used_layers {
             *layer = permutation.get(*layer);
         }
-        self.skipped_layers.sort();
+        self.used_layers.sort();
     }
 }
 
 impl<'a> TrieScanSubtract<'a> {
     /// Construct new [`TrieScanSubtract`] object.
     pub fn new(
-        trie_left: TrieScanEnum<'a>,
-        tries_right: Vec<TrieScanEnum<'a>>,
+        trie_main: TrieScanEnum<'a>,
+        tries_subtract: Vec<TrieScanEnum<'a>>,
         infos: Vec<SubtractInfo>,
     ) -> Self {
-        debug_assert!(tries_right.len() == infos.len());
-        debug_assert!(tries_right
+        debug_assert!(tries_subtract.len() == infos.len());
+        debug_assert!(tries_subtract
             .iter()
-            .all(|trie_right| trie_left.get_types().len() >= trie_right.get_types().len()));
+            .all(|trie_subtract| trie_main.get_types().len() >= trie_subtract.get_types().len()));
         debug_assert!(infos
             .iter()
-            .all(|info| trie_left.get_types().len() > info.skipped_layers.len()));
-        debug_assert!(tries_right
-            .iter()
-            .zip(infos.iter())
-            .all(
-                |(trie_right, info)| trie_left.get_types().len() - info.skipped_layers.len()
-                    == trie_right.get_types().len()
-            ));
-        debug_assert!(infos.iter().all(|info| info.skipped_layers.is_sorted()));
+            .all(|info| trie_main.get_types().len() > info.used_layers.len()));
+        debug_assert!(
+            tries_subtract
+                .iter()
+                .zip(infos.iter())
+                .all(|(trie_subtract, info)| info.used_layers.len()
+                    == trie_subtract.get_types().len())
+        );
+        debug_assert!(infos.iter().all(|info| info.used_layers.is_sorted()));
         debug_assert!(infos.iter().all(|info| info
-            .skipped_layers
+            .used_layers
             .iter()
-            .all(|&l| l < trie_left.get_types().len())));
+            .all(|&l| l < trie_main.get_types().len())));
 
-        let arity_left = trie_left.get_types().len();
+        let arity_main = trie_main.get_types().len();
 
-        // let mut matched_layers = vec![true; arity_left];
-        // for layer in info.skipped_layers {
-        //     matched_layers[layer] = false;
-        // }
-        // let last_not_skipped_layer = matched_layers
-        //     .iter()
-        //     .rev()
-        //     .position(|&l| l == true)
-        //     .expect("At least one layer should have not been skipped.");
+        let last_used_layers: Vec<usize> = infos
+            .iter()
+            .map(|info| {
+                *info
+                    .used_layers
+                    .iter()
+                    .max()
+                    .expect("There should be at least one layer that is used.")
+            })
+            .collect();
+        let mut column_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity_main);
 
-        let mut column_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity_left);
-        let last_scan_index: Option<usize> = None;
-
-        for layer_index in 0..arity_left {
+        for layer in 0..arity_main {
             unsafe {
-                if let ColumnScanT::U64(left_scan_enum) =
-                    &*trie_left.get_scan(layer_index).unwrap().get()
+                if let ColumnScanT::U64(left_scan_enum) = &*trie_main.get_scan(layer).unwrap().get()
                 {
                     let mut scans_follower = Vec::<Option<&ColumnScanCell<'a, u64>>>::new();
 
-                    for (trie_right, info) in tries_right.iter().zip(infos.iter()) {
-                        if let ColumnScanT::U64(right_scan_enum) =
-                            &*trie_right.get_scan(layer_index).unwrap().get()
-                        {
-                            scans_follower.push(Some(right_scan_enum));
+                    let mut subtract_indices = Vec::new();
+                    let mut follow_indices = Vec::new();
+
+                    for (subtract_index, (trie_subtract, info)) in
+                        tries_subtract.iter().zip(infos.iter()).enumerate()
+                    {
+                        let used_layer = info.used_layers.iter().position(|&l| l == layer);
+                        let is_last = layer == last_used_layers[subtract_index];
+
+                        if let Some(used_layer) = used_layer {
+                            if let ColumnScanT::U64(subtract_scan_enum) =
+                                &*trie_subtract.get_scan(used_layer).unwrap().get()
+                            {
+                                scans_follower.push(Some(subtract_scan_enum));
+                            }
+
+                            if is_last {
+                                subtract_indices.push(subtract_index);
+                            } else {
+                                follow_indices.push(subtract_index);
+                            }
+                        } else {
+                            scans_follower.push(None);
                         }
                     }
 
                     let new_scan = ColumnScanEnum::ColumnScanSubtract(ColumnScanSubtract::new(
                         left_scan_enum,
                         scans_follower,
-                        vec![],
-                        vec![],
+                        subtract_indices,
+                        follow_indices,
                     ));
 
                     column_scans.push(UnsafeCell::new(ColumnScanT::U64(ColumnScanCell::new(
@@ -119,11 +148,110 @@ impl<'a> TrieScanSubtract<'a> {
         }
 
         Self {
-            trie_left: Box::new(trie_left),
-            tries_right,
+            trie_main: Box::new(trie_main),
+            tries_subtract,
             current_layer: None,
+            infos,
+            subtract_current_layers: vec![0; last_used_layers.len()],
             column_scans,
         }
+    }
+}
+
+impl<'a> TrieScan<'a> for TrieScanSubtract<'a> {
+    fn up(&mut self) {
+        debug_assert!(self.current_layer.is_some());
+        let current_layer = self.current_layer.unwrap();
+        let previous_layer = current_layer.checked_sub(1);
+
+        if let Some(previous_layer) = previous_layer {
+            let equal_values = self.column_scans[previous_layer].get_mut().equal_values();
+
+            for (subtract_index, trie_subtract) in self.tries_subtract.iter_mut().enumerate() {
+                let subtract_layer = &mut self.subtract_current_layers[subtract_index];
+                if *subtract_layer > 0 {
+                    let equal = equal_values[subtract_index];
+                    let used_layer = self.infos[subtract_index].used_layers[*subtract_layer - 1]
+                        == previous_layer;
+
+                    if equal && used_layer {
+                        trie_subtract.up();
+                        *subtract_layer -= 1;
+                    }
+                }
+
+                if self.infos[subtract_index].used_layers[0] > 0
+                    && previous_layer == self.infos[subtract_index].used_layers[0] - 1
+                {
+                    trie_subtract.up();
+                }
+            }
+        } else {
+            for (subtract_index, trie_subtract) in self.tries_subtract.iter_mut().enumerate() {
+                if self.infos[subtract_index].used_layers[0] == 0 {
+                    trie_subtract.up();
+                }
+            }
+        }
+
+        self.trie_main.up();
+
+        self.current_layer = previous_layer;
+    }
+
+    fn down(&mut self) {
+        let next_layer = self.current_layer.map_or(0, |v| v + 1);
+        debug_assert!(next_layer < self.get_types().len());
+
+        for (subtract_index, trie_subtract) in self.tries_subtract.iter_mut().enumerate() {
+            if next_layer == self.infos[subtract_index].used_layers[0] {
+                trie_subtract.down();
+            }
+        }
+
+        if next_layer > 0 {
+            let current_layer = next_layer - 1;
+            let equal_values = self.column_scans[current_layer]
+                .get_mut()
+                .equal_values()
+                .clone();
+
+            for (subtract_index, trie_subtract) in self.tries_subtract.iter_mut().enumerate() {
+                let equal = equal_values[subtract_index];
+                let subtract_layer = &mut self.subtract_current_layers[subtract_index];
+                let used_layer =
+                    self.infos[subtract_index].used_layers[*subtract_layer] == current_layer;
+
+                if equal && used_layer {
+                    trie_subtract.down();
+                    *subtract_layer += 1;
+                }
+            }
+
+            self.column_scans[next_layer]
+                .get_mut()
+                .subtract_enable(&equal_values);
+        }
+
+        self.trie_main.down();
+
+        // The above down call has changed the sub scans of the current layer
+        // Hence, we need to reset its state
+        self.column_scans[next_layer].get_mut().reset();
+
+        self.current_layer = Some(next_layer);
+    }
+
+    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
+        Some(self.column_scans[self.current_layer?].get_mut())
+    }
+
+    fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+        Some(&self.column_scans[index])
+    }
+
+    fn get_types(&self) -> &Vec<StorageTypeName> {
+        self.trie_main.get_types()
     }
 }
 
@@ -291,6 +419,7 @@ impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
 mod test {
     use super::TrieScanMinus;
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
+    use crate::physical::tabular::operations::triescan_minus::{SubtractInfo, TrieScanSubtract};
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_column_with_intervals_t;
@@ -306,6 +435,22 @@ mod test {
 
     fn diff_current(diff_scan: &mut TrieScanMinus) -> Option<u64> {
         if let ColumnScanT::U64(rcs) = diff_scan.current_scan()? {
+            rcs.current()
+        } else {
+            panic!("type should be u64");
+        }
+    }
+
+    fn sub_next(sub_scan: &mut TrieScanSubtract) -> Option<u64> {
+        if let ColumnScanT::U64(rcs) = sub_scan.current_scan()? {
+            rcs.next()
+        } else {
+            panic!("type should be u64");
+        }
+    }
+
+    fn sub_current(sub_scan: &mut TrieScanSubtract) -> Option<u64> {
+        if let ColumnScanT::U64(rcs) = sub_scan.current_scan()? {
             rcs.current()
         } else {
             panic!("type should be u64");
@@ -444,5 +589,150 @@ mod test {
         diff_iter.up();
         assert_eq!(diff_next(&mut diff_iter), None);
         assert_eq!(diff_current(&mut diff_iter), None);
+    }
+
+    #[test]
+    fn test_subtract() {
+        let column_main_x = make_column_with_intervals_t(&[2, 4, 6, 8], &[0]);
+        let column_main_y =
+            make_column_with_intervals_t(&[0, 1, 5, 0, 2, 5, 2, 9, 1, 4, 5], &[0, 3, 6, 8]);
+        let column_main_z = make_column_with_intervals_t(
+            &[0, 1, 0, 2, 3, 0, 1, 1, 0, 2, 2, 2, 1],
+            &[0, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12],
+        );
+
+        let column_sub_1_x = make_column_with_intervals_t(&[1, 3, 6], &[0]);
+
+        let column_sub_2_x = make_column_with_intervals_t(&[2, 4], &[0]);
+        let column_sub_2_y = make_column_with_intervals_t(&[5, 2], &[0, 1]);
+
+        let column_sub_3_y = make_column_with_intervals_t(&[0, 9], &[0]);
+        let column_sub_3_z = make_column_with_intervals_t(&[0, 2], &[0, 1]);
+
+        let column_sub_4_x = make_column_with_intervals_t(&[8], &[0]);
+        let column_sub_4_z = make_column_with_intervals_t(&[2], &[0]);
+
+        let trie_main = Trie::new(vec![column_main_x, column_main_y, column_main_z]);
+        let trie_sub_1 = Trie::new(vec![column_sub_1_x]);
+        let trie_sub_2 = Trie::new(vec![column_sub_2_x, column_sub_2_y]);
+        let trie_sub_3 = Trie::new(vec![column_sub_3_y, column_sub_3_z]);
+        let trie_sub_4 = Trie::new(vec![column_sub_4_x, column_sub_4_z]);
+
+        let trie_scan_main = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_main));
+        let trie_scan_sub_1 = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_sub_1));
+        let trie_scan_sub_2 = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_sub_2));
+        let trie_scan_sub_3 = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_sub_3));
+        let trie_scan_sub_4 = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_sub_4));
+
+        let mut sub_scan = TrieScanSubtract::new(
+            trie_scan_main,
+            vec![
+                trie_scan_sub_1,
+                trie_scan_sub_2,
+                trie_scan_sub_3,
+                trie_scan_sub_4,
+            ],
+            vec![
+                SubtractInfo::new(vec![0]),
+                SubtractInfo::new(vec![0, 1]),
+                SubtractInfo::new(vec![1, 2]),
+                SubtractInfo::new(vec![0, 2]),
+            ],
+        );
+
+        assert!(sub_scan.current_scan().is_none());
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), Some(2));
+        assert_eq!(sub_current(&mut sub_scan), Some(2));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), Some(0));
+        assert_eq!(sub_current(&mut sub_scan), Some(0));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), Some(1));
+        assert_eq!(sub_current(&mut sub_scan), Some(1));
+        assert_eq!(sub_next(&mut sub_scan), None);
+        assert_eq!(sub_current(&mut sub_scan), None);
+
+        sub_scan.up();
+        assert_eq!(sub_next(&mut sub_scan), Some(1));
+        assert_eq!(sub_current(&mut sub_scan), Some(1));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), Some(0));
+        assert_eq!(sub_current(&mut sub_scan), Some(0));
+        assert_eq!(sub_next(&mut sub_scan), None);
+        assert_eq!(sub_current(&mut sub_scan), None);
+
+        sub_scan.up();
+        assert_eq!(sub_next(&mut sub_scan), None);
+        assert_eq!(sub_current(&mut sub_scan), None);
+
+        sub_scan.up();
+        assert_eq!(sub_next(&mut sub_scan), Some(4));
+        assert_eq!(sub_current(&mut sub_scan), Some(4));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), Some(0));
+        assert_eq!(sub_current(&mut sub_scan), Some(0));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), None);
+        assert_eq!(sub_current(&mut sub_scan), None);
+
+        sub_scan.up();
+        assert_eq!(sub_next(&mut sub_scan), Some(5));
+        assert_eq!(sub_current(&mut sub_scan), Some(5));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), Some(1));
+        assert_eq!(sub_current(&mut sub_scan), Some(1));
+        assert_eq!(sub_next(&mut sub_scan), None);
+        assert_eq!(sub_current(&mut sub_scan), None);
+
+        sub_scan.up();
+        assert_eq!(sub_next(&mut sub_scan), None);
+        assert_eq!(sub_current(&mut sub_scan), None);
+
+        sub_scan.up();
+        assert_eq!(sub_next(&mut sub_scan), Some(8));
+        assert_eq!(sub_current(&mut sub_scan), Some(8));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), Some(1));
+        assert_eq!(sub_current(&mut sub_scan), Some(1));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), None);
+        assert_eq!(sub_current(&mut sub_scan), None);
+
+        sub_scan.up();
+        assert_eq!(sub_next(&mut sub_scan), Some(4));
+        assert_eq!(sub_current(&mut sub_scan), Some(4));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), None);
+        assert_eq!(sub_current(&mut sub_scan), None);
+
+        sub_scan.up();
+        assert_eq!(sub_next(&mut sub_scan), Some(5));
+        assert_eq!(sub_current(&mut sub_scan), Some(5));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), Some(1));
+        assert_eq!(sub_current(&mut sub_scan), Some(1));
     }
 }
