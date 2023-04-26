@@ -1,5 +1,5 @@
 //! Adaptive Builder to create [`VecT`] columns, based on streamed data
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap};
 
 use crate::{
     error::Error,
@@ -45,11 +45,11 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
 
         // TODO: DSV parsing should depend on logical types
         let parsed =
-            all_input_consumed(|input| parse_ground_term(&HashMap::new(), input))(string.trim())
+            all_input_consumed(parse_ground_term(&RefCell::new(HashMap::new())))(string.trim())
                 .map(|gt| {
                     LogicalTypeEnum::Any.ground_term_to_data_value_t(gt).expect(
-                "LogicalTypeEnum::Any should work with every possible term we can get here.",
-            )
+                    "LogicalTypeEnum::Any should work with every possible term we can get here.",
+                )
                 })
                 .unwrap_or(DataValueT::String(format!("\"{string}\""))); // Treat term as string literal by default
 
