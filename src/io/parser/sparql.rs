@@ -28,22 +28,6 @@ pub enum Name<'a> {
     BlankNode(&'a str),
 }
 
-impl<'a> Name<'a> {
-    pub fn as_iri_reference(&'a self) -> Option<&'a str> {
-        match *self {
-            Name::IriReference(iri) => Some(iri),
-            _ => None,
-        }
-    }
-
-    pub fn as_blank_node_label(&'a self) -> Option<&'a str> {
-        match *self {
-            Name::BlankNode(label) => Some(label),
-            _ => None,
-        }
-    }
-}
-
 impl Display for Name<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
