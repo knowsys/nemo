@@ -8,7 +8,7 @@ use crate::{
     },
 };
 
-use super::parser::parse_dsv_constant;
+use super::parser::{all_input_consumed, parse_dsv_constant};
 
 #[macro_use]
 mod macros;
@@ -39,7 +39,7 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
 
         // TODO: parsing of DSV and Program should be unified
         // TODO: DSV parsing should depend on logical types
-        let parsed = super::parser::all_input_consumed(parse_dsv_constant)(string.trim())
+        let parsed = all_input_consumed(parse_dsv_constant)(string.trim())
             .unwrap_or(string.to_string());
 
         self.value = Some(
