@@ -3,9 +3,8 @@
 use thiserror::Error;
 
 use crate::{
-    io::parser::ParseError,
-    logical::{model::Term, types::LogicalTypeEnum},
-    physical::datatypes::float_is_nan::FloatIsNaN,
+    io::parser::LocatedParseError, logical::program_analysis::analysis::RuleAnalysisError,
+    logical::types::TypeError, physical::datatypes::float_is_nan::FloatIsNaN,
 };
 
 /// Error-Collection for all the possible Errors occurring in this crate
@@ -57,15 +56,18 @@ pub enum Error {
     /// Unsupported feature: Negation
     #[error("Comparison operation between two variables are currently not supported.")]
     UnsupportedFeatureComparison,
+    /// Rule analysis errors
+    #[error(transparent)]
+    RuleAnalysisError(#[from] RuleAnalysisError),
     /// Parse errors
     #[error(transparent)]
-    ParseError(#[from] ParseError),
+    ParseError(#[from] LocatedParseError),
+    /// Type errors
+    #[error(transparent)]
+    TypeError(#[from] TypeError),
     /// Error when giving invalid execution plan to the database instance
     #[error("The given execution plan is invalid.")]
     InvalidExecutionPlan,
-    /// Parser could not parse whole Program-file, but should have read all of it.
-    #[error("Parser could not parse the whole input file")]
-    ProgramParse,
     /// IO Error
     #[error(transparent)]
     IO(#[from] std::io::Error),
@@ -96,7 +98,4 @@ pub enum Error {
     /// CSV serialization/deserialization error
     #[error(transparent)]
     CsvError(#[from] csv::Error),
-    /// Unknown logical type name in program.
-    #[error("A predicate declaration used an unknown type ({0}). The known types are: {1:?}")]
-    ParseUnknownType(String, Vec<LogicalTypeEnum>),
 }

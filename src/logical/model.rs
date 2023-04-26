@@ -41,6 +41,40 @@ impl std::fmt::Display for Identifier {
     }
 }
 
+/// A qualified predicate name, i.e., a predicate name together with its arity.
+#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
+pub struct QualifiedPredicateName {
+    /// The predicate name
+    identifier: Identifier,
+    /// The arity
+    arity: Option<usize>,
+}
+
+impl QualifiedPredicateName {
+    /// Construct a new qualified predicate name from an identifier,
+    /// leaving the arity unspecified.
+    pub fn new(identifier: Identifier) -> Self {
+        Self {
+            identifier,
+            arity: None,
+        }
+    }
+
+    /// Construct a new qualified predicate name with the given arity.
+    pub fn with_arity(identifier: Identifier, arity: usize) -> Self {
+        Self {
+            identifier,
+            arity: Some(arity),
+        }
+    }
+}
+
+impl From<Identifier> for QualifiedPredicateName {
+    fn from(identifier: Identifier) -> Self {
+        Self::new(identifier)
+    }
+}
+
 /// Variable occuring in a rule
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 pub enum Variable {
@@ -288,25 +322,44 @@ pub enum FilterOperation {
     GreaterThanEq,
 }
 
+impl FilterOperation {
+    /// Flips the operation: for `op`, returns a suitable operation
+    /// `op'` such that `x op y` iff `y op' x`.
+    pub fn flip(&self) -> Self {
+        match self {
+            Self::Equals => Self::Equals,
+            Self::LessThan => Self::GreaterThan,
+            Self::GreaterThan => Self::LessThan,
+            Self::LessThanEq => Self::GreaterThanEq,
+            Self::GreaterThanEq => Self::LessThanEq,
+        }
+    }
+}
+
 /// Filter of the form <variable> <operation> <term>
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct Filter {
     /// Operation to be performed
     pub operation: FilterOperation,
     /// Left-hand side
-    pub left: Variable,
+    pub lhs: Variable,
     /// Right-hand side
-    pub right: Term,
+    pub rhs: Term,
 }
 
 impl Filter {
     /// Creates a new [`Filter`]
-    pub fn new(operation: FilterOperation, left: Variable, right: Term) -> Self {
+    pub fn new(operation: FilterOperation, lhs: Variable, rhs: Term) -> Self {
         Self {
             operation,
-            left,
-            right,
+            lhs,
+            rhs,
         }
+    }
+
+    /// Creates a new [`Filter]` with the arguments flipped
+    pub fn flipped(operation: FilterOperation, lhs: Term, rhs: Variable) -> Self {
+        Self::new(operation.flip(), rhs, lhs)
     }
 }
 
@@ -414,9 +467,9 @@ impl Rule {
 
         // Check if filters are correctly formed
         for filter in &filters {
-            let mut filter_variables = vec![&filter.left];
+            let mut filter_variables = vec![&filter.lhs];
 
-            if let Term::Variable(right_variable) = &filter.right {
+            if let Term::Variable(right_variable) = &filter.rhs {
                 filter_variables.push(right_variable);
             }
 
@@ -493,6 +546,26 @@ pub enum Statement {
     Rule(Rule),
 }
 
+/// Which predicates to output
+#[derive(Debug, Eq, PartialEq, Clone, Default)]
+pub enum OutputPredicateSelection {
+    /// Output every IDB predicate
+    #[default]
+    AllIDBPredicates,
+    /// Output only selected predicates
+    SelectedPredicates(Vec<QualifiedPredicateName>),
+}
+
+impl From<Vec<QualifiedPredicateName>> for OutputPredicateSelection {
+    fn from(predicates: Vec<QualifiedPredicateName>) -> Self {
+        if predicates.is_empty() {
+            Self::AllIDBPredicates
+        } else {
+            Self::SelectedPredicates(predicates)
+        }
+    }
+}
+
 /// A full program.
 #[derive(Debug, Default)]
 pub struct Program {
@@ -502,6 +575,7 @@ pub struct Program {
     rules: Vec<Rule>,
     facts: Vec<Fact>,
     parsed_predicate_declarations: HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    output_predicates: OutputPredicateSelection,
 }
 
 impl From<Vec<Rule>> for Program {
@@ -532,6 +606,7 @@ impl Program {
         rules: Vec<Rule>,
         facts: Vec<Fact>,
         parsed_predicate_declarations: HashMap<Identifier, Vec<LogicalTypeEnum>>,
+        output_predicates: OutputPredicateSelection,
     ) -> Self {
         Self {
             base,
@@ -540,6 +615,7 @@ impl Program {
             rules,
             facts,
             parsed_predicate_declarations,
+            output_predicates,
         }
     }
 
@@ -601,6 +677,27 @@ impl Program {
             .collect()
     }
 
+    /// Return an Iterator over all output predicates
+    pub fn output_predicates(&self) -> impl Iterator<Item = Identifier> {
+        let result: Vec<_> = match &self.output_predicates {
+            OutputPredicateSelection::AllIDBPredicates => {
+                self.idb_predicates().iter().cloned().collect()
+            }
+            OutputPredicateSelection::SelectedPredicates(predicates) => predicates
+                .iter()
+                .map(
+                    |QualifiedPredicateName {
+                         identifier,
+                         arity: _,
+                     }| identifier,
+                )
+                .cloned()
+                .collect(),
+        };
+
+        result.into_iter()
+    }
+
     /// Return all prefixes in the program.
     #[must_use]
     pub fn prefixes(&self) -> &HashMap<String, String> {
@@ -624,6 +721,14 @@ impl Program {
     #[must_use]
     pub fn parsed_predicate_declarations(&self) -> HashMap<Identifier, Vec<LogicalTypeEnum>> {
         self.parsed_predicate_declarations.clone()
+    }
+
+    /// Force the given selection of output predicates.
+    pub fn force_output_predicate_selection(
+        &mut self,
+        output_predicates: OutputPredicateSelection,
+    ) {
+        self.output_predicates = output_predicates;
     }
 }
 

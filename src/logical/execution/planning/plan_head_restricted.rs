@@ -133,6 +133,9 @@ impl HeadStrategy for RestrictedChaseStrategy {
         //     since the last application of the rule
         //     [We refer to the table containing the currently computed satisifed matches as "New Satisfied Matches"]
         //     [We refer to the tables containing the satisifed matches for previous rule applications as "Old Satisfied Matches"].
+        //   * It is important to keep in mind that the entries "Unsatisfied Matches Frontier" (see below) will
+        //     become satisfied after this rule application;
+        //     hence can be appended to "new satisfied matches frontier" in this round and will not have to be recomputed next time.
         //   * The difference of "Matches Frontier" and "Satisfied Matches Frontier"
         //     results in a table that contains the frontier assignments for the current unsatsified matches
         //     [We refer to this subtable as "Unsatisfied Matches Frontier"]
@@ -149,10 +152,28 @@ impl HeadStrategy for RestrictedChaseStrategy {
 
         // 1. Compute the table "New Satisfied Matches"
 
+        // For each rule we remember the step it was last applied in.
+        // This information is used to split the subtables of a predicate into two groups
+        // -- "old" and "new" with the goal of reducing duplicates while computing the join.
+        // For the body join, any table derived in the current application of the rule
+        // should be considered as a new table in the next (viz. applying the same rule twice in a row).
+        // Here we compute the new satisfied matches since the last rule application.
+        // However, after applying a rule at step i, every unsatisfied (at step i) match will be satisified in step i + 1.
+        // This allows us to add the unsatisfied matches of the current rule execution
+        // to the permanent table of satisfied matches for this rule step (see `node_newer_satisfied_matches_frontier` at step 5).
+        // As a result, we do not consider the tables derived in step i as new tables in step i + 1.
+        let step_last_applied = if rule_info.step_last_applied == 0 {
+            // An exception to the above is the case where the rule was never applied.
+            // Here we need to mark every table as new
+            0
+        } else {
+            rule_info.step_last_applied + 1
+        };
+
         let node_new_satisfied_matches = self.join_generator.seminaive_join(
             current_plan.plan_mut(),
             table_manager,
-            rule_info.step_last_applied,
+            step_last_applied,
             step,
             // We use the same precomputed variable order every time
             &self.analysis.existential_aux_order,
@@ -194,16 +215,14 @@ impl HeadStrategy for RestrictedChaseStrategy {
             node_old_satisfied_matches_frontier.clone(),
         );
 
-        current_plan.add_permanent_table(
+        current_plan.add_temporary_table(
             node_new_satisfied_matches_frontier.clone(),
             "Head (Restricted): Sat. Frontier",
-            "Restricted Chase Helper Table",
-            SubtableIdentifier::new(self.aux_predicate.clone(), step),
         );
 
         let mut node_satisfied_matches_frontier = current_plan.plan_mut().union_empty();
         node_satisfied_matches_frontier.add_subnode(node_old_satisfied_matches_frontier);
-        node_satisfied_matches_frontier.add_subnode(node_new_satisfied_matches_frontier);
+        node_satisfied_matches_frontier.add_subnode(node_new_satisfied_matches_frontier.clone());
 
         // 3. Compute "Matches Frontier"
 
@@ -223,6 +242,20 @@ impl HeadStrategy for RestrictedChaseStrategy {
         let node_unsatisfied_matches_frontier = current_plan
             .plan_mut()
             .minus(node_matches_frontier, node_satisfied_matches_frontier);
+
+        // 5. Save the newly computed "Satisfied matches frontier"
+
+        let node_newer_satisfied_matches_frontier = current_plan.plan_mut().union(vec![
+            node_new_satisfied_matches_frontier,
+            node_unsatisfied_matches_frontier.clone(),
+        ]);
+
+        current_plan.add_permanent_table(
+            node_newer_satisfied_matches_frontier,
+            "Head (Restricted): Updated Sat. Frontier",
+            "Restricted Chase Helper Table",
+            SubtableIdentifier::new(self.aux_predicate.clone(), step),
+        );
 
         // 5. Compute "Unsatisfied Matches Nulls"
 
