@@ -20,7 +20,7 @@ pub type ParseResult<'a, T> = Result<T, LocatedParseError>;
 
 /// A [`ParseError`] at a certain location
 #[derive(Debug, Error)]
-#[error("Parse error on line {}, column {}: {}\nContext:\n{}", .line, .offset, .source, .context.iter().map(|ctx| ctx.to_string()).intersperse("\n".to_string()).collect::<String>())]
+#[error("Parse error on line {}, column {}: {}{}", .line, .offset, .source, format_parse_error_context(.context))]
 pub struct LocatedParseError {
     #[source]
     pub(super) source: ParseError,
@@ -33,6 +33,23 @@ impl LocatedParseError {
     /// Append another [`LocatedParseError`] as context to this error.
     pub fn append(&mut self, other: LocatedParseError) {
         self.context.push(other)
+    }
+}
+
+fn format_parse_error_context(context: &[LocatedParseError]) -> String {
+    let mut fragments = Vec::new();
+
+    for error in context {
+        let error_string = format!("{error}");
+        for line in error_string.split('\n') {
+            fragments.push(format!("{}{line}", " ".repeat(2)));
+        }
+    }
+
+    if fragments.is_empty() {
+        String::new()
+    } else {
+        format!("\nContext:\n{}", fragments.join("\n"))
     }
 }
 
