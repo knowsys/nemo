@@ -415,7 +415,7 @@ impl Program {
                         let types = predicate_types
                             .get_mut(&atom.predicate())
                             .expect("All predicates should have been assigned a type");
-                        types[term_index] = Some(LogicalTypeEnum::RdfsResource);
+                        types[term_index] = Some(LogicalTypeEnum::Any);
                     }
                 }
             }

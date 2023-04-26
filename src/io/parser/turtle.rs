@@ -162,6 +162,11 @@ pub fn numeric_literal(input: Span) -> IntermediateResult<NumericLiteral> {
     alt((double, decimal, integer))(input)
 }
 
+#[traced("parser::turtle")]
+pub(super) fn string_literal<'a>(input: Span<'a>) -> IntermediateResult<Span> {
+    string(input)
+}
+
 #[derive(Debug)]
 pub(super) enum RdfLiteral<'a> {
     LanguageString { value: &'a str, tag: &'a str },

@@ -108,6 +108,8 @@ pub enum Term {
     Variable(Variable),
     /// A numeric literal.
     NumericLiteral(NumericLiteral),
+    /// A string literal.
+    StringLiteral(String),
     /// An RDF literal.
     RdfLiteral(RdfLiteral),
 }
@@ -118,6 +120,7 @@ impl std::fmt::Display for Term {
             Term::Constant(term) => write!(f, "{}", term),
             Term::Variable(term) => write!(f, "{}", term),
             Term::NumericLiteral(term) => write!(f, "{}", term),
+            Term::StringLiteral(term) => write!(f, "{}", term),
             Term::RdfLiteral(term) => write!(f, "{}", term),
         }
     }

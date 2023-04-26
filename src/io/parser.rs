@@ -87,6 +87,27 @@ pub fn multispace_or_comment1(input: Span) -> IntermediateResult<()> {
     value((), many1(alt((value((), multispace1), comment))))(input)
 }
 
+/// Enrich error with position information
+pub fn map_error_position<'a, T: 'a>(
+    position: Span<'a>,
+    result: IntermediateResult<'a, T>,
+    error: ParseError,
+) -> IntermediateResult<'a, T> {
+    result.map_err(|e| match e {
+        Err::Incomplete(_) => e,
+        Err::Error(context) => {
+            let mut err = error.at(position);
+            err.append(context);
+            Err::Error(err)
+        }
+        Err::Failure(context) => {
+            let mut err = error.at(position);
+            err.append(context);
+            Err::Failure(err)
+        }
+    })
+}
+
 /// A combinator that modifies the associated error.
 pub fn map_error<'a, T: 'a>(
     mut parser: impl FnMut(Span<'a>) -> IntermediateResult<'a, T> + 'a,
@@ -94,19 +115,7 @@ pub fn map_error<'a, T: 'a>(
 ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, T> + 'a {
     move |input| {
         let (remainder, position) = position(input)?;
-        parser(remainder).map_err(|e| match e {
-            Err::Incomplete(_) => e,
-            Err::Error(context) => {
-                let mut err = error().at(position);
-                err.append(context);
-                Err::Error(err)
-            }
-            Err::Failure(context) => {
-                let mut err = error().at(position);
-                err.append(context);
-                Err::Failure(err)
-            }
-        })
+        map_error_position(position, parser(remainder), error())
     }
 }
 
@@ -124,6 +133,50 @@ pub fn space_delimited_token<'a>(
         delimited(multispace_or_comment0, tag(token), multispace_or_comment0),
         || ParseError::ExpectedToken(token.to_string()),
     )
+}
+
+/// Expand a prefix.
+fn resolve_prefix<'a>(
+    prefixes: &'a HashMap<&'a str, &'a str>,
+    prefix: &'a str,
+) -> Result<&'a str, ParseError> {
+    prefixes
+        .get(prefix)
+        .copied()
+        .ok_or_else(|| ParseError::UndeclaredPrefix(prefix.to_string()))
+}
+
+/// Expand a prefixed name.
+fn resolve_prefixed_name(
+    prefixes: &HashMap<&str, &str>,
+    name: sparql::Name,
+) -> Result<String, ParseError> {
+    match name {
+        sparql::Name::IriReference(iri) => Ok(iri.to_string()),
+        sparql::Name::PrefixedName { prefix, local } => {
+            resolve_prefix(prefixes, prefix).map(|iri| format!("<{iri}{local}>"))
+        }
+        sparql::Name::BlankNode(label) => Ok(format!("_:{label}")),
+    }
+}
+
+/// Resolve prefixes in a [`turtle::RdfLiteral`].
+#[must_use]
+fn resolve_prefixed_rdf_literal(
+    prefixes: &HashMap<&str, &str>,
+    literal: turtle::RdfLiteral,
+) -> RdfLiteral {
+    match literal {
+        turtle::RdfLiteral::LanguageString { value, tag } => RdfLiteral::LanguageString {
+            value: value.to_string(),
+            tag: tag.to_string(),
+        },
+        turtle::RdfLiteral::DatatypeValue { value, datatype } => RdfLiteral::DatatypeValue {
+            value: value.to_string(),
+            datatype: resolve_prefixed_name(prefixes, datatype)
+                .expect("prefix should have been registered during parsing"),
+        },
+    }
 }
 
 #[traced("parse_bare_name")]
@@ -147,13 +200,55 @@ fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
     )(input)
 }
 
-// TODO: parsing of DSV and Program should be unified
-/// Parse a constant from a DSV File
-#[traced("parse_dsv_constant")]
-pub fn parse_dsv_constant(input: Span<'_>) -> IntermediateResult<String> {
-    map(alt((sparql::iriref, parse_bare_name)), |iri| {
-        format!("<{iri}>")
-    })(input)
+/// Parse an IRI representing a constant.
+fn parse_iri_constant<'a>(
+    prefixes: &HashMap<&str, &str>,
+    input: Span<'a>,
+) -> IntermediateResult<'a, Identifier> {
+    let (remainder, position) = position(input)?;
+
+    let result = {
+        let (remainder, name) = traced(
+            "parse_iri_constant",
+            alt((
+                map(sparql::iriref, |name| sparql::Name::IriReference(&name)),
+                sparql::prefixed_name,
+                sparql::blank_node_label,
+                map(parse_bare_name, |name| sparql::Name::IriReference(&name)),
+            )),
+        )(remainder)?;
+
+        let resolved =
+            resolve_prefixed_name(prefixes, name).map_err(|e| Err::Failure(e.at(position)))?;
+
+        Ok((remainder, Identifier(resolved)))
+    };
+
+    map_error_position(position, result, ParseError::ExpectedIriConstant)
+}
+
+/// Parse a ground term.
+pub fn parse_ground_term<'a>(
+    prefixes: &HashMap<&str, &str>,
+    input: Span<'a>,
+) -> IntermediateResult<'a, Term> {
+    let final_result = traced("parse_ground_term", |input| {
+        let (input, position) = position(input)?;
+        let result = alt((
+            map(|s| parse_iri_constant(prefixes, s), Term::Constant),
+            map(turtle::numeric_literal, Term::NumericLiteral),
+            map(turtle::rdf_literal, move |literal| {
+                Term::RdfLiteral(resolve_prefixed_rdf_literal(prefixes, literal))
+            }),
+            map(turtle::string_literal, move |literal| {
+                Term::StringLiteral(literal.to_string())
+            }),
+        ))(input);
+
+        map_error_position(position, result, ParseError::ExpectedGroundTerm)
+    })(input);
+
+    final_result
 }
 
 /// The main parser. Holds a hash map for
@@ -448,7 +543,9 @@ impl<'a> RuleParser<'a> {
                             self.parse_predicate_name(),
                             delimited(
                                 self.parse_open_parenthesis(),
-                                separated_list1(self.parse_comma(), self.parse_ground_term()),
+                                separated_list1(self.parse_comma(), |t| {
+                                    parse_ground_term(&self.prefixes.borrow(), t)
+                                }),
                                 self.parse_close_parenthesis(),
                             ),
                         ),
@@ -482,39 +579,12 @@ impl<'a> RuleParser<'a> {
                 Ok((
                     remainder,
                     Identifier(
-                        self.resolve_prefixed_name(name)
+                        resolve_prefixed_name(&self.prefixes.borrow(), name)
                             .map_err(|e| Err::Failure(e.at(position)))?,
                     ),
                 ))
             },
             || ParseError::ExpectedIriPred,
-        )
-    }
-
-    /// Parse an IRI representing a constant.
-    pub fn parse_iri_constant(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
-        map_error(
-            move |input| {
-                let (remainder, position) = position(input)?;
-                let (remainder, name) = traced(
-                    "parse_iri_constant",
-                    alt((
-                        map(sparql::iriref, |name| sparql::Name::IriReference(&name)),
-                        sparql::prefixed_name,
-                        sparql::blank_node_label,
-                        map(parse_bare_name, |name| sparql::Name::IriReference(&name)),
-                    )),
-                )(remainder)?;
-
-                Ok((
-                    remainder,
-                    Identifier(
-                        self.resolve_prefixed_name(name)
-                            .map_err(|e| Err::Failure(e.at(position)))?,
-                    ),
-                ))
-            },
-            || ParseError::ExpectedIriConstant,
         )
     }
 
@@ -558,23 +628,6 @@ impl<'a> RuleParser<'a> {
 
             Ok((remainder, Identifier(name.to_string())))
         })
-    }
-
-    /// Parse a ground term.
-    pub fn parse_ground_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
-        traced(
-            "parse_ground_term",
-            map_error(
-                alt((
-                    map(self.parse_iri_constant(), Term::Constant),
-                    map(turtle::numeric_literal, Term::NumericLiteral),
-                    map(turtle::rdf_literal, move |literal| {
-                        Term::RdfLiteral(self.intern_rdf_literal(literal))
-                    }),
-                )),
-                || ParseError::ExpectedGroundTerm,
-            ),
-        )
     }
 
     /// Parse a rule.
@@ -650,7 +703,10 @@ impl<'a> RuleParser<'a> {
         traced(
             "parse_term",
             map_error(
-                alt((self.parse_ground_term(), self.parse_variable())),
+                alt((
+                    |t| parse_ground_term(&self.prefixes.borrow(), t),
+                    self.parse_variable(),
+                )),
                 || ParseError::ExpectedTerm,
             ),
         )
@@ -870,26 +926,6 @@ impl<'a> RuleParser<'a> {
         *self.base.borrow()
     }
 
-    /// Expand a prefix.
-    pub fn resolve_prefix(&self, prefix: &str) -> Result<&'a str, ParseError> {
-        self.prefixes
-            .borrow()
-            .get(prefix)
-            .copied()
-            .ok_or_else(|| ParseError::UndeclaredPrefix(prefix.to_string()))
-    }
-
-    /// Expand a prefixed name.
-    pub fn resolve_prefixed_name(&self, name: sparql::Name) -> Result<String, ParseError> {
-        match name {
-            sparql::Name::IriReference(iri) => Ok(format!("<{iri}>")),
-            sparql::Name::PrefixedName { prefix, local } => self
-                .resolve_prefix(prefix)
-                .map(|iri| format!("<{iri}{local}>")),
-            sparql::Name::BlankNode(label) => Ok(format!("_:{label}")),
-        }
-    }
-
     /// Try to expand an IRI into an absolute IRI.
     #[must_use]
     pub fn absolutize_iri(&self, iri: Span) -> String {
@@ -907,23 +943,6 @@ impl<'a> RuleParser<'a> {
             iri.to_string()
         } else {
             todo!()
-        }
-    }
-
-    /// Intern a [`turtle::RdfLiteral`].
-    #[must_use]
-    fn intern_rdf_literal(&self, literal: turtle::RdfLiteral) -> RdfLiteral {
-        match literal {
-            turtle::RdfLiteral::LanguageString { value, tag } => RdfLiteral::LanguageString {
-                value: value.to_string(),
-                tag: tag.to_string(),
-            },
-            turtle::RdfLiteral::DatatypeValue { value, datatype } => RdfLiteral::DatatypeValue {
-                value: value.to_string(),
-                datatype: self
-                    .resolve_prefixed_name(datatype)
-                    .expect("prefix should have been registered during parsing"),
-            },
         }
     }
 }
@@ -985,9 +1004,12 @@ mod test {
         let iri = "http://example.org/foo";
         let input = format!("@prefix {prefix}: <{iri}> .");
         let parser = RuleParser::new();
-        assert!(parser.resolve_prefix(&prefix).is_err());
+        assert!(resolve_prefix(&parser.prefixes.borrow(), &prefix).is_err());
         assert_parse!(parser.parse_prefix(), input.as_str(), prefix);
-        assert_eq!(parser.resolve_prefix(&prefix).map_err(|_| ()), Ok(iri));
+        assert_eq!(
+            resolve_prefix(&parser.prefixes.borrow(), &prefix).map_err(|_| ()),
+            Ok(iri)
+        );
     }
 
     #[test]
@@ -1016,7 +1038,7 @@ mod test {
         let datatype = "bar";
         let p = Identifier(predicate.to_string());
         let v = value.to_string();
-        let t = format!("<{datatype}>");
+        let t = datatype.to_string();
         let fact = format!(r#"{predicate}("{value}"^^<{datatype}>) ."#);
 
         let expected_fact = Fact(Atom::new(
@@ -1093,7 +1115,7 @@ mod test {
         let predicate = "p";
         let name = "a";
         let p = Identifier(predicate.to_string());
-        let a = Identifier(format!("<{name}>"));
+        let a = Identifier(name.to_string());
         let fact = format!(r#"{predicate}({name}) ."#);
 
         let expected_fact = Fact(Atom::new(p, vec![Term::Constant(a)]));
@@ -1109,7 +1131,7 @@ mod test {
         let datatype = "bar";
         let p = Identifier(predicate.to_string());
         let v = value.to_string();
-        let t = format!("<{datatype}>");
+        let t = datatype.to_string();
         let fact = format!(
             r#"{predicate}(% comment 1
                  "{value}"^^<{datatype}> % comment 2

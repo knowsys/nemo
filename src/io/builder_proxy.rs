@@ -1,14 +1,20 @@
 //! Adaptive Builder to create [`VecT`] columns, based on streamed data
+use std::collections::HashMap;
+
 use crate::{
     error::Error,
-    physical::{datatypes::Float, management::database::Dict},
+    logical::types::LogicalTypeEnum,
     physical::{
         datatypes::{storage_value::VecT, Double},
         dictionary::Dictionary,
     },
+    physical::{
+        datatypes::{DataValueT, Float},
+        management::database::Dict,
+    },
 };
 
-use super::parser::{all_input_consumed, parse_dsv_constant};
+use super::parser::{all_input_consumed, parse_ground_term};
 
 #[macro_use]
 mod macros;
@@ -37,15 +43,22 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
 
-        // TODO: parsing of DSV and Program should be unified
         // TODO: DSV parsing should depend on logical types
         let parsed =
-            all_input_consumed(parse_dsv_constant)(string.trim()).unwrap_or(string.to_string());
+            all_input_consumed(|input| parse_ground_term(&HashMap::new(), input))(string.trim())
+                .map(|gt| {
+                    LogicalTypeEnum::Any.ground_term_to_data_value_t(gt).expect(
+                "LogicalTypeEnum::Any should work with every possible term we can get here.",
+            )
+                })
+                .unwrap_or(DataValueT::String(format!("\"{string}\""))); // Treat term as string literal by default
+
+        let DataValueT::String(parsed_string) = parsed else { unreachable!("LogicalTypeEnum::Any should always be treated as String at the moment.") };
 
         self.value = Some(
             dictionary
                 .expect("StringColumnBuilderProxy expects a Dictionary to be provided!")
-                .add(parsed)
+                .add(parsed_string)
                 .try_into()?,
         );
 
