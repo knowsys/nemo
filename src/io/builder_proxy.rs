@@ -39,12 +39,12 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
 
         // TODO: parsing of DSV and Program should be unified
         // TODO: DSV parsing should depend on logical types
-        let parsed = super::parser::all_input_consumed(parse_dsv_constant)(string)
+        let parsed = super::parser::all_input_consumed(parse_dsv_constant)(string.trim())
             .unwrap_or(string.to_string());
 
         self.value = Some(
             dictionary
-                .expect("ProxyStringColumnBuilder expects a Dictionary to be provided!")
+                .expect("StringColumnBuilderProxy expects a Dictionary to be provided!")
                 .add(parsed)
                 .try_into()?,
         );

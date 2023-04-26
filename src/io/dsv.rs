@@ -210,6 +210,69 @@ Boston;United States;4628910
     }
 
     #[test]
+    fn csv_with_and_without_angle_brackets() {
+        let data = "\
+a;b;c
+Boston;United States;4628910
+<Dresden>;Germany;1234567
+My Home Town;Some<where >Nice;2
+Trailing Spaces do not belong to the name   ; What about spaces in the beginning though;123
+";
+
+        let expected_result = [
+            ("<Boston>", "<United States>", 4628910),
+            ("<Dresden>", "<Germany>", 1234567),
+            ("<My Home Town>", "Some<where >Nice", 2),
+            (
+                "<Trailing Spaces do not belong to the name>",
+                "<What about spaces in the beginning though>",
+                123,
+            ),
+        ];
+
+        let mut rdr = ReaderBuilder::new()
+            .delimiter(b';')
+            .from_reader(data.as_bytes());
+
+        let mut dict = PrefixedStringDictionary::default();
+        let csvreader = DSVReader::csv("test".into());
+        let result = csvreader.read_with_reader(
+            vec![
+                Box::<StringColumnBuilderProxy>::default(),
+                Box::<StringColumnBuilderProxy>::default(),
+                Box::<U64ColumnBuilderProxy>::default(),
+            ],
+            &mut rdr,
+            &mut dict,
+        );
+        let cols = result.unwrap();
+
+        let VecT::U64(ref col0_idx) = cols[0] else { unreachable!() };
+        let VecT::U64(ref col1_idx) = cols[1] else { unreachable!() };
+        let VecT::U64(ref col2) = cols[2] else { unreachable!() };
+
+        let col0: Vec<String> = col0_idx
+            .iter()
+            .copied()
+            .map(|idx| dict.entry(idx.try_into().unwrap()).unwrap())
+            .collect();
+        let col1: Vec<String> = col1_idx
+            .iter()
+            .copied()
+            .map(|idx| dict.entry(idx.try_into().unwrap()).unwrap())
+            .collect();
+
+        std::iter::zip(std::iter::zip(col0, col1), col2)
+            .map(|((c0, c1), c2)| (c0, c1, *c2))
+            .zip(
+                expected_result
+                    .into_iter()
+                    .map(|(e0, e1, e2)| (e0.to_string(), e1.to_string(), e2)),
+            )
+            .for_each(|(t1, t2)| assert_eq!(t1, t2));
+    }
+
+    #[test]
     #[cfg_attr(miri, ignore)]
     fn csv_with_ignored_and_faulty() {
         let data = "\
