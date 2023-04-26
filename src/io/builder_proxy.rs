@@ -39,8 +39,8 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
 
         // TODO: parsing of DSV and Program should be unified
         // TODO: DSV parsing should depend on logical types
-        let parsed = all_input_consumed(parse_dsv_constant)(string.trim())
-            .unwrap_or(string.to_string());
+        let parsed =
+            all_input_consumed(parse_dsv_constant)(string.trim()).unwrap_or(string.to_string());
 
         self.value = Some(
             dictionary
