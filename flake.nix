@@ -32,7 +32,16 @@ rec {
             cargo = toolchain;
             rustc = toolchain;
           };
-        in {
+        in rec {
+          apps = rec {
+            nemo = utils.lib.mkApp {
+              drv = packages.nemo;
+              exePath = "/bin/nmo";
+            };
+
+            default = nemo;
+          };
+
           packages = rec {
             nemo = platform.buildRustPackage {
               pname = "nemo";
