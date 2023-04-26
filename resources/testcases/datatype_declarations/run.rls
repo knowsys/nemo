@@ -1,6 +1,6 @@
-@declare a(RdfsResource, UnsignedInteger) .
-@declare c(UnsignedInteger) .
-@declare numeric(UnsignedInteger, Double) .
+@declare a(any, integer) .
+@declare c(integer) .
+@declare numeric(integer, float64) .
 
 @source c[1]: load-csv("sources/c.csv") .
 @source numeric[2]: load-csv("sources/numeric.csv") .

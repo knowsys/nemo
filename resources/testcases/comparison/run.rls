@@ -1,4 +1,4 @@
-@declare data(UnsignedInteger, UnsignedInteger) .
+@declare data(integer, integer) .
 @source data[2]: load-csv("sources/data.csv") .
 
 x_less_than_three(?X, ?Y) :- data(?X, ?Y), ?X < 3 .
