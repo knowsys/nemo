@@ -113,6 +113,15 @@ impl LogicalTypeEnum {
 
         Ok(result)
     }
+
+    /// Whether this logical type can be used to perform numeric operations.
+    pub fn allows_numeric_operations(&self) -> bool {
+        match self {
+            LogicalTypeEnum::RdfsResource => false,
+            LogicalTypeEnum::UnsignedInteger => true,
+            LogicalTypeEnum::Double => true,
+        }
+    }
 }
 
 /// Errors that can occur during type checking
@@ -124,4 +133,7 @@ pub enum TypeError {
     /// Conflicting type conversions
     #[error("Conflicting type declarations. The term \"{0}\" cannot be converted to a {1}.")]
     InvalidRuleTermConversion(Term, LogicalTypeEnum),
+    /// Comparison of a non-numeric type
+    #[error("Invalid type declarations. Comparison operator can only be used with numeric types.")]
+    InvalidRuleNonNumericComparison,
 }

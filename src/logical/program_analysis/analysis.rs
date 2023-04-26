@@ -61,12 +61,12 @@ pub enum RuleAnalysisError {
     /// Unsupported feature: Negation
     #[error("Negation is currently unsupported.")]
     UnsupportedFeatureNegation,
-    /// Unsupported feature: Negation
-    #[error("Comparison operations are currently not supported.")]
-    UnsupportedFeatureComparison,
     /// Unsupported feature: Overloading of predicate names by arity/type
     #[error("Overloading of predicate names by arity is currently not supported.")]
     UnsupportedFeaturePredicateOverloading,
+    /// Unsupported feature: Comparison between variables
+    #[error("Comparison operation between two variables are currently not supported.")]
+    UnsupportedFeatureVariableComparison,
 }
 
 fn is_recursive(rule: &Rule) -> bool {
@@ -496,7 +496,9 @@ impl Program {
             // check for comparisons
             for filter in rule.filters() {
                 if filter.operation != FilterOperation::Equals {
-                    return Err(RuleAnalysisError::UnsupportedFeatureComparison);
+                    if let Term::Variable(_) = filter.rhs {
+                        return Err(RuleAnalysisError::UnsupportedFeatureVariableComparison);
+                    }
                 }
             }
 
@@ -518,7 +520,7 @@ impl Program {
         &self,
         analyses: &[RuleAnalysis],
         predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), TypeError> {
         for fact in self.facts() {
             let predicate_types = predicate_types
                 .get(&fact.0.predicate())
@@ -543,6 +545,12 @@ impl Program {
                     .variable_types
                     .get(left_variable)
                     .expect("Previous analysis should have assigned a type to each variable.");
+
+                if filter.operation != FilterOperation::Equals
+                    && !variable_type.allows_numeric_operations()
+                {
+                    return Err(TypeError::InvalidRuleNonNumericComparison);
+                }
 
                 variable_type.ground_term_to_data_value_t(right_term.clone())?;
             }

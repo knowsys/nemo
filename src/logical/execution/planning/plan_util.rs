@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     logical::{
-        model::{Atom, Filter, Identifier, Term, Variable},
+        model::{Atom, Filter, FilterOperation, Identifier, Term, Variable},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         types::LogicalTypeEnum,
         TableManager,
@@ -21,6 +21,7 @@ use crate::{
             triescan_append::AppendInstruction, triescan_select::SelectEqualClasses,
             ValueAssignment,
         },
+        util::interval::{Interval, IntervalBound},
     },
 };
 
@@ -110,12 +111,15 @@ pub(super) fn compute_filters(
                 }
             }
             _ => {
+                let right_value = variable_types
+                    .get(&filter.lhs)
+                    .unwrap()
+                    .ground_term_to_data_value_t(filter.rhs.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.");
+                let interval = filter_operation_to_interval(&filter.operation, right_value);
+
                 filter_assignments.push(ValueAssignment {
                     column_idx: *variable_to_columnindex.get(&filter.lhs).unwrap(),
-                    value: variable_types
-                        .get(&filter.lhs)
-                        .unwrap()
-                        .ground_term_to_data_value_t(filter.rhs.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker."),
+                    interval,
                 });
             }
         }
@@ -134,6 +138,24 @@ pub(super) fn compute_filters(
         .collect();
 
     (filter_classes, filter_assignments)
+}
+
+fn filter_operation_to_interval<T: Clone>(operation: &FilterOperation, value: T) -> Interval<T> {
+    match operation {
+        FilterOperation::Equals => Interval::single(value),
+        FilterOperation::LessThan => {
+            Interval::new(IntervalBound::Unbounded, IntervalBound::Exclusive(value))
+        }
+        FilterOperation::GreaterThan => {
+            Interval::new(IntervalBound::Exclusive(value), IntervalBound::Unbounded)
+        }
+        FilterOperation::LessThanEq => {
+            Interval::new(IntervalBound::Unbounded, IntervalBound::Inclusive(value))
+        }
+        FilterOperation::GreaterThanEq => {
+            Interval::new(IntervalBound::Inclusive(value), IntervalBound::Unbounded)
+        }
+    }
 }
 
 /// Compute the subplan that represents the union of a tables within a certain step range.
