@@ -170,7 +170,7 @@ fn resolve_prefixed_rdf_literal(
     }
 }
 
-#[traced("parse_bare_name")]
+#[traced("parser")]
 fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
     map_error(
         recognize(pair(
@@ -230,7 +230,7 @@ pub fn parse_ground_term<'a>(
                 map(turtle::rdf_literal, move |literal| {
                     Term::RdfLiteral(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
                 }),
-                map(turtle::string_literal, move |literal| {
+                map(turtle::string, move |literal| {
                     Term::StringLiteral(literal.to_string())
                 }),
             )),
