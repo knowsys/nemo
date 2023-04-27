@@ -284,10 +284,7 @@ impl CliApp {
             })?);
             Ok::<(), Error>(())
         })?;
-        let input = inputs.iter_mut().fold(String::new(), |mut acc, item| {
-            acc.push_str(item);
-            acc
-        });
+        let input = inputs.join("");
         let program = all_input_consumed(parser.parse_program())(&input)?;
         program.check_for_unsupported_features()?;
 

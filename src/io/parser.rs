@@ -305,12 +305,9 @@ impl<'a> RuleParser<'a> {
             map_error(
                 move |input| {
                     let (remainder, base) = delimited(
-                        map_error(
-                            terminated(tag("@base"), cut(multispace_or_comment1)),
-                            || ParseError::ExpectedToken("@base".to_string()),
-                        ),
-                        sparql::iriref,
-                        self.parse_dot(),
+                        terminated(token("@base"), cut(multispace_or_comment1)),
+                        cut(sparql::iriref),
+                        cut(self.parse_dot()),
                     )(input)?;
 
                     log::debug!(target: "parser", r#"parse_base: set new base: "{base}""#);
@@ -331,11 +328,11 @@ impl<'a> RuleParser<'a> {
                     let (remainder, position) = position(input)?;
                     let (remainder, (prefix, iri)) = delimited(
                         terminated(token("@prefix"), cut(multispace_or_comment1)),
-                        tuple((
-                            terminated(sparql::pname_ns, multispace_or_comment1),
-                            sparql::iriref,
-                        )),
-                        self.parse_dot(),
+                        cut(tuple((
+                            cut(terminated(sparql::pname_ns, multispace_or_comment1)),
+                            cut(sparql::iriref),
+                        ))),
+                        cut(self.parse_dot()),
                     )(remainder)?;
 
                     log::debug!(target: "parser", r#"parse_prefix: got prefix "{prefix}" for iri "{iri}""#);
@@ -355,26 +352,32 @@ impl<'a> RuleParser<'a> {
     fn parse_predicate_declaration(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, Vec<LogicalTypeEnum>)> {
-        traced("parse_predicate_declaration", move |input| {
-            let (remainder, (predicate, types)) = delimited(
-                terminated(tag("@declare"), cut(multispace_or_comment1)),
-                pair(
-                    self.parse_predicate_name(),
-                    delimited(
-                        self.parse_open_parenthesis(),
-                        separated_list1(self.parse_comma(), self.parse_type_name()),
-                        self.parse_close_parenthesis(),
-                    ),
-                ),
-                self.parse_dot(),
-            )(input)?;
+        traced(
+            "parse_predicate_declaration",
+            map_error(
+                move |input| {
+                    let (remainder, (predicate, types)) = delimited(
+                        terminated(token("@declare"), cut(multispace_or_comment1)),
+                        cut(pair(
+                            self.parse_predicate_name(),
+                            delimited(
+                                cut(self.parse_open_parenthesis()),
+                                cut(separated_list1(self.parse_comma(), self.parse_type_name())),
+                                cut(self.parse_close_parenthesis()),
+                            ),
+                        )),
+                        cut(self.parse_dot()),
+                    )(input)?;
 
-            self.predicate_declarations
-                .borrow_mut()
-                .entry(predicate.clone())
-                .or_insert(types.clone());
-            Ok((remainder, (predicate, types)))
-        })
+                    self.predicate_declarations
+                        .borrow_mut()
+                        .entry(predicate.clone())
+                        .or_insert(types.clone());
+                    Ok((remainder, (predicate, types)))
+                },
+                || ParseError::ExpectedPredicateDeclaration,
+            ),
+        )
     }
 
     fn parse_type_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<LogicalTypeEnum> {
@@ -405,10 +408,10 @@ impl<'a> RuleParser<'a> {
                     let (remainder, position) = position(input)?;
                     let (remainder, (predicate, arity)) = preceded(
                         terminated(token("@source"), cut(multispace_or_comment1)),
-                        self.parse_qualified_predicate_name(),
+                        cut(self.parse_qualified_predicate_name()),
                     )(remainder)?;
 
-                    let (remainder, datasource) = delimited(
+                    let (remainder, datasource) = cut(delimited(
                         delimited(multispace_or_comment0, token(":"), multispace_or_comment1),
                         alt((
                             map(
@@ -458,8 +461,8 @@ impl<'a> RuleParser<'a> {
                                 },
                             ),
                         )),
-                        self.parse_dot(),
-                    )(remainder)?;
+                        cut(self.parse_dot()),
+                    ))(remainder)?;
 
                     let source = DataSourceDeclaration::new_validated(
                         predicate,
@@ -487,7 +490,7 @@ impl<'a> RuleParser<'a> {
             map_error(
                 delimited(
                     terminated(token("@output"), cut(multispace_or_comment0)),
-                    alt((
+                    cut(alt((
                         map_res::<_, _, _, _, Error, _, _>(
                             self.parse_qualified_predicate_name(),
                             |(identifier, arity)| {
@@ -498,8 +501,8 @@ impl<'a> RuleParser<'a> {
                             self.parse_predicate_name(),
                             |identifier| Ok(identifier.into()),
                         ),
-                    )),
-                    self.parse_dot(),
+                    ))),
+                    cut(self.parse_dot()),
                 ),
                 || ParseError::ExpectedOutputDeclaration,
             ),
@@ -602,8 +605,8 @@ impl<'a> RuleParser<'a> {
                     multispace_or_comment0,
                     delimited(
                         token("["),
-                        map_res(digit1, |number: Span<'a>| number.parse::<usize>()),
-                        token("]"),
+                        cut(map_res(digit1, |number: Span<'a>| number.parse::<usize>())),
+                        cut(token("]")),
                     ),
                 ),
             ),
@@ -673,8 +676,8 @@ impl<'a> RuleParser<'a> {
                     let (remainder, predicate) = self.parse_predicate_name()(input)?;
                     let (remainder, terms) = delimited(
                         self.parse_open_parenthesis(),
-                        separated_list1(self.parse_comma(), self.parse_term()),
-                        self.parse_close_parenthesis(),
+                        cut(separated_list1(self.parse_comma(), self.parse_term())),
+                        cut(self.parse_close_parenthesis()),
                     )(remainder)?;
 
                     let predicate_name = predicate.name();
@@ -789,7 +792,7 @@ impl<'a> RuleParser<'a> {
             "parse_negative_literal",
             map_error(
                 map(
-                    preceded(self.parse_not(), self.parse_atom()),
+                    preceded(self.parse_not(), cut(self.parse_atom())),
                     Literal::Negative,
                 ),
                 || ParseError::ExpectedNegativeLiteral,
@@ -831,7 +834,7 @@ impl<'a> RuleParser<'a> {
                         tuple((
                             self.parse_universal_variable(),
                             self.parse_filter_operator(),
-                            self.parse_term(),
+                            cut(self.parse_term()),
                         )),
                         |(lhs, operation, rhs)| Filter::new(operation, lhs, rhs),
                     ),
@@ -839,7 +842,7 @@ impl<'a> RuleParser<'a> {
                         tuple((
                             self.parse_term(),
                             self.parse_filter_operator(),
-                            self.parse_universal_variable(),
+                            cut(self.parse_universal_variable()),
                         )),
                         |(lhs, operation, rhs)| Filter::flipped(operation, lhs, rhs),
                     ),
@@ -1299,8 +1302,17 @@ mod test {
         );
 
         assert_parse_error!(parser.parse_variable(), "!23", ParseError::ExpectedVariable);
-
         assert_parse_error!(parser.parse_variable(), "?23", ParseError::ExpectedVariable);
+        assert_parse_error!(
+            parser.parse_predicate_declaration(),
+            "@declare p(InvalidTypeName) .",
+            ParseError::ExpectedPredicateDeclaration
+        );
+        assert_parse_error!(
+            parser.parse_program(),
+            "@declare p(InvalidTypeName) .",
+            ParseError::ExpectedPredicateDeclaration
+        );
 
         assert_parse_error!(
             parser.parse_rule(),

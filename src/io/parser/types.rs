@@ -100,8 +100,11 @@ pub enum ParseError {
     )]
     SparqlSourceInvalidArity(String, usize, usize),
     /// Unknown logical type name in program.
-    #[error("A predicate declaration used an unknown type ({0}). The known types are: {1:?}")]
-    ParseUnknownType(String, Vec<LogicalTypeEnum>),
+    #[error(
+        "A predicate declaration used an unknown type ({0}). The known types are: {}",
+        LogicalTypeEnum::type_representations().join(", ")
+    )]
+    ParseUnknownType(String),
     /// Expected a dot.
     #[error(r#"Expected "{0}""#)]
     ExpectedToken(String),
@@ -114,6 +117,9 @@ pub enum ParseError {
     /// Expected a prefix declaration.
     #[error(r#"Expected a "@prefix" declaration"#)]
     ExpectedPrefixDeclaration,
+    /// Expected a predicate declaration.
+    #[error(r#"Expected a "@declare" type declaration"#)]
+    ExpectedPredicateDeclaration,
     /// Expected a prefix.
     #[error(r#"Expected a prefix"#)]
     ExpectedPnameNs,
