@@ -113,7 +113,7 @@ impl LogicalTypeEnum {
                             XSD_DOUBLE | XSD_DECIMAL | XSD_INTEGER => {
                                 DataValueT::String(format!("{value}"))
                             }
-                            _ => DataValueT::String(format!("\"{value}\"^^{datatype}")),
+                            _ => DataValueT::String(format!("\"{value}\"^^<{datatype}>")),
                         }
                     }
                 }
