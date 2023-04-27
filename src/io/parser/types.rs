@@ -20,12 +20,13 @@ pub type ParseResult<'a, T> = Result<T, LocatedParseError>;
 
 /// A [`ParseError`] at a certain location
 #[derive(Debug, Error)]
-#[error("Parse error on line {}, column {}: {}{}", .line, .offset, .source, format_parse_error_context(.context))]
+#[error("Parse error on line {}, column {}: {}\nat {}{}", .line, .column, .source, .fragment, format_parse_error_context(.context))]
 pub struct LocatedParseError {
     #[source]
     pub(super) source: ParseError,
     pub(super) line: u32,
-    pub(super) offset: usize,
+    pub(super) column: usize,
+    pub(super) fragment: String,
     pub(super) context: Vec<LocatedParseError>,
 }
 
@@ -206,10 +207,29 @@ pub enum ParseError {
 impl ParseError {
     /// Locate this error by adding a position.
     pub fn at(self, position: Span) -> LocatedParseError {
+        // miri doesn't like nom_locate, cf. https://github.com/fflorent/nom_locate/issues/88
+        let column = if cfg!(not(miri)) {
+            position.naive_get_utf8_column()
+        } else {
+            0
+        };
+        let fragment = if position.is_empty() {
+            String::new()
+        } else {
+            let line = if cfg!(not(miri)) {
+                String::from_utf8(position.get_line_beginning().to_vec())
+                    .expect("input is valid UTF-8")
+            } else {
+                String::new()
+            };
+            format!("\"{line}\"\n{}^", "-".repeat(3 + column))
+        };
+
         LocatedParseError {
             source: self,
             line: position.location_line(),
-            offset: position.location_offset(),
+            column,
+            fragment,
             context: Vec::new(),
         }
     }

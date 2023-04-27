@@ -26,7 +26,7 @@ use colored::Colorize;
 fn main() {
     let mut app = app::CliApp::parse();
     if let Err(err) = app.run() {
-        eprintln!("{} {err}", "Application Error:".red().bold());
+        eprintln!("{} {err}", "An error occurred:".red().bold());
         std::process::exit(1);
     }
 }
