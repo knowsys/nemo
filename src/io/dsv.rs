@@ -217,6 +217,7 @@ Boston;United States;4628910
 <Dresden>;Germany;1234567
 My Home Town;Some<where >Nice;2
 Trailing Spaces do not belong to the name   ; What about spaces in the beginning though;123
+\"\"\"Do String literals work?\"\"\";\"\"\"Even with datatype annotation?\"\"\"^^<http://www.w3.org/2001/XMLSchema#string>;456
 ";
 
         let expected_result = [
@@ -227,6 +228,11 @@ Trailing Spaces do not belong to the name   ; What about spaces in the beginning
                 "Trailing Spaces do not belong to the name",
                 "What about spaces in the beginning though",
                 123,
+            ),
+            (
+                "\"Do String literals work?\"",
+                "\"Even with datatype annotation?\"",
+                456,
             ),
         ];
 
