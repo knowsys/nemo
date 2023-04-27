@@ -4,5 +4,6 @@ YetAnotherConstant
 """An invalid constant that will be handled as string literal when parsed from CSV because of the exclamation mark!"""
 """String Litral"""
 """Another String Literal"""
+""""""
 12345
 6789

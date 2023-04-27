@@ -4,5 +4,6 @@ AnotherConstant
 An invalid constant that will be handled as string literal when parsed from CSV because of the exclamation mark!
 """String Litral"""^^<http://www.w3.org/2001/XMLSchema#string>
 """Another String Literal"""
+""
 """12345"""^^<http://www.w3.org/2001/XMLSchema#integer>
 6789
