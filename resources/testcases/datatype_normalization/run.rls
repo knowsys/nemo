@@ -12,6 +12,7 @@ a(YetAnotherConstant).
 a("An invalid constant that will be handled as string literal when parsed from CSV because of the exclamation mark!").
 a("String Litral").
 a("Another String Literal"^^xsd:string).
+a("").
 a(12345).
 a("6789"^^xsd:integer).
 

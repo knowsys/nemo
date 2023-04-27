@@ -210,7 +210,7 @@ Boston;United States;4628910
     }
 
     #[test]
-    fn csv_with_and_without_angle_brackets() {
+    fn csv_with_various_different_constant_and_literal_representations() {
         let data = "\
 a;b;c
 Boston;United States;4628910
@@ -218,6 +218,7 @@ Boston;United States;4628910
 My Home Town;Some<where >Nice;2
 Trailing Spaces do not belong to the name   ; What about spaces in the beginning though;123
 \"\"\"Do String literals work?\"\"\";\"\"\"Even with datatype annotation?\"\"\"^^<http://www.w3.org/2001/XMLSchema#string>;456
+The next column is empty;;789
 ";
 
         let expected_result = [
@@ -234,6 +235,7 @@ Trailing Spaces do not belong to the name   ; What about spaces in the beginning
                 "\"Even with datatype annotation?\"",
                 456,
             ),
+            ("The next column is empty", "\"\"", 789),
         ];
 
         let mut rdr = ReaderBuilder::new()
