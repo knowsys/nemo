@@ -31,16 +31,16 @@ pub trait RunLengthEncodable: Zero {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 /// Step value for unsigned integer types (u32, u64, usize)
-pub struct UintStep(i16);
+pub struct IntStep(i16);
 
-impl From<i16> for UintStep {
+impl From<i16> for IntStep {
     fn from(value: i16) -> Self {
-        UintStep(value)
+        IntStep(value)
     }
 }
 
-impl UintStep {
-    fn offset<T>(t: T, inc: Self, times: usize) -> T
+impl IntStep {
+    fn offset_unsigned<T>(t: T, inc: Self, times: usize) -> T
     where
         T: Add<T, Output = T> + TryFrom<usize> + Sub<T, Output = T>,
         <T as TryFrom<usize>>::Error: Debug,
@@ -53,23 +53,31 @@ impl UintStep {
             t - T::try_from(abs_offset as usize * times).expect("step multiplication overflow")
         }
     }
+
+    fn offset_signed<T>(t: T, inc: Self, times: usize) -> T
+    where
+        T: Add<T, Output = T> + From<i16> + TryFrom<usize> + std::ops::Mul<T, Output = T>,
+        <T as TryFrom<usize>>::Error: Debug,
+    {
+        t + T::from(inc.0) * T::try_from(times).expect("step multiplication overflow")
+    }
 }
 
-impl ByteSized for UintStep {
+impl ByteSized for IntStep {
     fn size_bytes(&self) -> ByteSize {
-        bytesize::ByteSize::b(std::mem::size_of::<UintStep>() as u64)
+        bytesize::ByteSize::b(std::mem::size_of::<IntStep>() as u64)
     }
 }
 
 impl RunLengthEncodable for u32 {
-    type Step = UintStep;
+    type Step = IntStep;
 
     fn diff_step(prev: Self, curr: Self) -> Option<Self::Step> {
-        Some(UintStep(i16::try_from(curr as i64 - prev as i64).ok()?))
+        Some(IntStep(i16::try_from(curr as i64 - prev as i64).ok()?))
     }
 
     fn zero_step() -> Self::Step {
-        UintStep(0)
+        IntStep(0)
     }
 
     fn get_step_increment(step: Self::Step) -> Option<Self> {
@@ -77,19 +85,19 @@ impl RunLengthEncodable for u32 {
     }
 
     fn offset(self, inc: Self::Step, times: usize) -> Self {
-        Self::Step::offset(self, inc, times)
+        Self::Step::offset_unsigned(self, inc, times)
     }
 }
 
 impl RunLengthEncodable for u64 {
-    type Step = UintStep;
+    type Step = IntStep;
 
     fn diff_step(prev: Self, curr: Self) -> Option<Self::Step> {
-        Some(UintStep(i16::try_from(curr as i128 - prev as i128).ok()?))
+        Some(IntStep(i16::try_from(curr as i128 - prev as i128).ok()?))
     }
 
     fn zero_step() -> Self::Step {
-        UintStep(0)
+        IntStep(0)
     }
 
     fn get_step_increment(step: Self::Step) -> Option<Self> {
@@ -97,19 +105,19 @@ impl RunLengthEncodable for u64 {
     }
 
     fn offset(self, inc: Self::Step, times: usize) -> Self {
-        Self::Step::offset(self, inc, times)
+        Self::Step::offset_unsigned(self, inc, times)
     }
 }
 
 impl RunLengthEncodable for usize {
-    type Step = UintStep;
+    type Step = IntStep;
 
     fn diff_step(prev: Self, curr: Self) -> Option<Self::Step> {
-        Some(UintStep(i16::try_from(curr as i128 - prev as i128).ok()?))
+        Some(IntStep(i16::try_from(curr as i128 - prev as i128).ok()?))
     }
 
     fn zero_step() -> Self::Step {
-        UintStep(0)
+        IntStep(0)
     }
 
     fn get_step_increment(step: Self::Step) -> Option<Self> {
@@ -117,7 +125,39 @@ impl RunLengthEncodable for usize {
     }
 
     fn offset(self, inc: Self::Step, times: usize) -> Self {
-        Self::Step::offset(self, inc, times)
+        Self::Step::offset_unsigned(self, inc, times)
+    }
+}
+
+impl RunLengthEncodable for i32 {
+    type Step = IntStep;
+
+    fn diff_step(prev: Self, curr: Self) -> Option<Self::Step> {
+        Some(IntStep(i16::try_from(curr.checked_sub(prev)?).ok()?))
+    }
+
+    fn get_step_increment(step: Self::Step) -> Option<Self> {
+        Some(step.0 as i32)
+    }
+
+    fn offset(self, inc: Self::Step, times: usize) -> Self {
+        Self::Step::offset_signed(self, inc, times)
+    }
+}
+
+impl RunLengthEncodable for i64 {
+    type Step = IntStep;
+
+    fn diff_step(prev: Self, curr: Self) -> Option<Self::Step> {
+        Some(IntStep(i16::try_from(curr.checked_sub(prev)?).ok()?))
+    }
+
+    fn get_step_increment(step: Self::Step) -> Option<Self> {
+        Some(step.0 as i64)
+    }
+
+    fn offset(self, inc: Self::Step, times: usize) -> Self {
+        Self::Step::offset_signed(self, inc, times)
     }
 }
 
