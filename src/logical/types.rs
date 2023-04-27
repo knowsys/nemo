@@ -71,6 +71,12 @@ impl From<LogicalTypeEnum> for DataTypeName {
     }
 }
 
+// TODO: probably put this closer to the parser and also have a default prefix for xsd:
+const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
+const XSD_DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
+const XSD_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
+
 impl LogicalTypeEnum {
     /// Convert a given ground term to a DataValueT fitting the current logical type
     pub fn ground_term_to_data_value_t(&self, gt: Term) -> Result<DataValueT, TypeError> {
@@ -103,8 +109,8 @@ impl LogicalTypeEnum {
                     }
                     Term::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
                         match datatype.as_ref() {
-                            "xsd:string" => DataValueT::String(format!("\"{value}\"")),
-                            "xsd:double" | "xsd:decimal" | "xsd:integer" => {
+                            XSD_STRING => DataValueT::String(format!("\"{value}\"")),
+                            XSD_DOUBLE | XSD_DECIMAL | XSD_INTEGER => {
                                 DataValueT::String(format!("{value}"))
                             }
                             _ => DataValueT::String(format!("\"{value}\"^^{datatype}")),
@@ -120,7 +126,7 @@ impl LogicalTypeEnum {
                     ref value,
                     ref datatype,
                 }) => match datatype.as_str() {
-                    "xsd:integer" => DataValueT::U64(
+                    XSD_INTEGER => DataValueT::U64(
                         value
                             .parse()
                             .map_err(|_err| TypeError::InvalidRuleTermConversion(gt, *self))?,
@@ -135,7 +141,7 @@ impl LogicalTypeEnum {
                     ref value,
                     ref datatype,
                 }) => match datatype.as_str() {
-                    "xsd:double" => DataValueT::Double(
+                    XSD_DOUBLE => DataValueT::Double(
                         value
                             .parse()
                             .ok()

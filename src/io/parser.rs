@@ -145,7 +145,7 @@ fn resolve_prefixed_name(
     match name {
         sparql::Name::IriReference(iri) => Ok(iri.to_string()),
         sparql::Name::PrefixedName { prefix, local } => {
-            resolve_prefix(prefixes, prefix).map(|iri| format!("<{iri}{local}>"))
+            resolve_prefix(prefixes, prefix).map(|iri| format!("{iri}{local}"))
         }
         sparql::Name::BlankNode(label) => Ok(format!("_:{label}")),
     }
@@ -1048,7 +1048,7 @@ mod test {
         let prefix_declaration = format!("@prefix {prefix}: <{iri}> .");
         let p = Identifier(predicate.to_string());
         let pn = format!("{prefix}:{name}");
-        let v = Identifier(format!("<{iri}{name}>"));
+        let v = Identifier(format!("{iri}{name}"));
         let fact = format!(r#"{predicate}({pn}) ."#);
 
         assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
@@ -1091,6 +1091,49 @@ mod test {
                 Term::NumericLiteral(NumericLiteral::Decimal(13, 37)),
             ],
         ));
+
+        assert_parse!(parser.parse_fact(), &fact, expected_fact,);
+    }
+
+    #[test]
+    fn fact_rdf_literal_xsd_string() {
+        let parser = RuleParser::new();
+
+        let prefix = unsafe { Span::new_from_raw_offset(8, 1, "xsd", ()) };
+        let iri = "http://www.w3.org/2001/XMLSchema#";
+        let prefix_declaration = format!("@prefix {prefix}: <{iri}> .");
+
+        assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
+
+        let predicate = "p";
+        let value = "my nice string";
+        let datatype = "xsd:string";
+
+        let p = Identifier(predicate.to_string());
+        let v = value.to_string();
+        let fact = format!(r#"{predicate}("{value}"^^{datatype}) ."#);
+
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: v,
+                datatype: format!("{iri}string"),
+            })],
+        ));
+
+        assert_parse!(parser.parse_fact(), &fact, expected_fact,);
+    }
+
+    #[test]
+    fn fact_string_literal() {
+        let parser = RuleParser::new();
+        let predicate = "p";
+        let value = "my nice string";
+        let p = Identifier(predicate.to_string());
+        let v = value.to_string();
+        let fact = format!(r#"{predicate}("{value}") ."#);
+
+        let expected_fact = Fact(Atom::new(p, vec![Term::StringLiteral(v)]));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
