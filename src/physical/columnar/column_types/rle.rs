@@ -682,59 +682,89 @@ mod test {
             .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
     }
 
-    #[cfg(signed)]
+    macro_rules! check_rle_get_on {
+        [ $($e:expr,)* ] => {{
+            let control_data = vec![ $($e),* ];
+            let c = ColumnRle::new(control_data.clone());
+            control_data
+                .iter()
+                .enumerate()
+                .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item));
+            c
+        }};
+
+        // allow omitting the trailing comma
+        [ $($e:expr),* ] => { check_rle_get_on![ $($e,)* ] }
+    }
+
+    #[test]
+    fn get_large_increment_not_overflowing_value_space_i32() {
+        let c = check_rle_get_on![
+            -i16::MAX as i32 * 2,
+            -i16::MAX as i32,
+            0,
+            i16::MAX as i32,
+            i16::MAX as i32 * 2,
+        ];
+
+        assert_eq!(c.values.len(), 1);
+    }
+
+    #[test]
+    fn get_large_decrement_not_overflowing_value_space_i32() {
+        let c = check_rle_get_on![
+            i16::MAX as i32 * 2,
+            i16::MAX as i32,
+            0,
+            -i16::MAX as i32,
+            -i16::MAX as i32 * 2,
+        ];
+
+        assert_eq!(c.values.len(), 1);
+    }
+
+    #[test]
+    fn get_large_increment_overflowing_value_space_i32() {
+        check_rle_get_on![-i32::MAX, 0, i32::MAX];
+    }
+
     #[test]
     fn get_large_increment_overflowing_value_space_i64() {
-        let control_data = vec![-i64::MAX, 0, i64::MAX];
-        let c = ColumnRle::new(control_data.clone());
-        control_data
-            .iter()
-            .enumerate()
-            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
+        check_rle_get_on![-i64::MAX, -i64::MAX / 2, 0, i64::MAX / 2, i64::MAX];
+    }
+
+    #[test]
+    fn very_large_step_does_not_overflow() {
+        check_rle_get_on![-i64::MAX, i64::MAX];
     }
 
     #[test]
     fn get_large_increment_overflowing_value_space_u64() {
-        let control_data = vec![
+        check_rle_get_on![
             0,
             u64::MAX / 4,
             u64::MAX / 2,
             3 * (u64::MAX / 4),
             u64::MAX - 1,
         ];
-        let c = ColumnRle::new(control_data.clone());
-        control_data
-            .iter()
-            .enumerate()
-            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
     }
 
     #[test]
     fn get_large_increment_overflowing_value_space_float() {
-        let control_data = vec![
+        check_rle_get_on![
             Float::new(f32::MIN).unwrap(),
             Float::new(0.0).unwrap(),
             Float::new(f32::MAX).unwrap(),
         ];
-        let c = ColumnRle::new(control_data.clone());
-        control_data
-            .iter()
-            .enumerate()
-            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
     }
 
     #[test]
     fn get_large_increment_overflowing_value_space_double() {
-        let control_data = vec![
+        check_rle_get_on![
             Double::new(f64::MIN).unwrap(),
             Double::new(0.0).unwrap(),
             Double::new(f64::MAX).unwrap(),
         ];
-        let c = ColumnRle::new(control_data.clone());
-        control_data
-            .iter()
-            .enumerate()
-            .for_each(|(i, control_item)| assert_eq!(c.get(i), *control_item))
     }
 
     #[quickcheck]
