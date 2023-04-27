@@ -1,20 +1,13 @@
 //! Adaptive Builder to create [`VecT`] columns, based on streamed data
-use std::{cell::RefCell, collections::HashMap};
 
 use crate::{
     error::Error,
-    logical::{model::Term, types::LogicalTypeEnum},
+    physical::{datatypes::Float, management::database::Dict},
     physical::{
         datatypes::{storage_value::VecT, Double},
         dictionary::Dictionary,
     },
-    physical::{
-        datatypes::{DataValueT, Float},
-        management::database::Dict,
-    },
 };
-
-use super::parser::{all_input_consumed, parse_ground_term};
 
 #[macro_use]
 mod macros;
@@ -43,22 +36,21 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
 
-        let parsed_term =
-            all_input_consumed(parse_ground_term(&RefCell::new(HashMap::new())))(string.trim())
-                .unwrap_or(Term::StringLiteral(string.to_string())); // If no term can be parsed, consider value to be a string literal
+        // TODO: this is all super hacky but parsing proper ground terms is too slow...
+        let trimmed_string = string.trim();
 
-        // TODO: DSV parsing should depend on logical types
-        // for now we assume every string column to be of logical type Any
-        let parsed_datavalue = LogicalTypeEnum::Any
-            .ground_term_to_data_value_t(parsed_term)
-            .expect("LogicalTypeEnum::Any should work with every possible term we can get here.");
-
-        let DataValueT::String(parsed_string) = parsed_datavalue else { unreachable!("LogicalTypeEnum::Any should always be treated as String at the moment.") };
+        let string_to_add = if trimmed_string.is_empty() {
+            "\"\"".to_string()
+        } else if trimmed_string.starts_with('<') && trimmed_string.ends_with('>') {
+            trimmed_string[1..trimmed_string.len() - 1].to_string()
+        } else {
+            trimmed_string.to_string()
+        };
 
         self.value = Some(
             dictionary
                 .expect("StringColumnBuilderProxy expects a Dictionary to be provided!")
-                .add(parsed_string)
+                .add(string_to_add)
                 .try_into()?,
         );
 
@@ -78,6 +70,7 @@ impl ColumnBuilderProxy for U64ColumnBuilderProxy {
 
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
+        // TODO: this should also accept things like RdfLiterals with xsd:integer; maybe call ground term parser if native parsing fails
         self.value = Some(string.parse::<u64>()?);
         Ok(())
     }
@@ -95,6 +88,7 @@ impl ColumnBuilderProxy for U32ColumnBuilderProxy {
 
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
+        // TODO: this should also accept things like RdfLiterals with xsd:integer; maybe call ground term parser if native parsing fails
         self.value = Some(string.parse::<u32>()?);
         Ok(())
     }
@@ -112,6 +106,7 @@ impl ColumnBuilderProxy for FloatColumnBuilderProxy {
 
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
+        // TODO: this should also accept things like RdfLiterals with xsd:double; maybe call ground term parser if native parsing fails
         let val = string.parse::<f32>()?;
         self.value = Some(Float::new(val)?);
         Ok(())
@@ -130,6 +125,7 @@ impl ColumnBuilderProxy for DoubleColumnBuilderProxy {
 
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
+        // TODO: this should also accept things like RdfLiterals with xsd:double; maybe call ground term parser if native parsing fails
         let val = string.parse::<f64>()?;
         self.value = Some(Double::new(val)?);
         Ok(())

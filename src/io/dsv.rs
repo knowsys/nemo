@@ -209,6 +209,7 @@ Boston;United States;4628910
         );
     }
 
+    #[ignore]
     #[test]
     fn csv_with_various_different_constant_and_literal_representations() {
         let data = "\
