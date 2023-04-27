@@ -2,11 +2,11 @@
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
-use crate::logical::Permutator;
+use crate::logical::{model::Atom, Permutator};
 use crate::physical::management::database::ColumnOrder;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use super::super::model::{Identifier, Literal, Program, Rule, Variable};
+use super::super::model::{Identifier, Program, Rule, Variable};
 
 /// Represents an ordering of variables as [`HashMap`].
 #[repr(transparent)]
@@ -148,18 +148,18 @@ impl IterationOrder {
     }
 }
 
-fn column_order_for(lit: &Literal, var_order: &VariableOrder) -> ColumnOrder {
+fn column_order_for(atom: &Atom, var_order: &VariableOrder) -> ColumnOrder {
     let mut partial_col_order: Vec<usize> = var_order
         .iter()
         .flat_map(|var| {
-            lit.variables()
+            atom.variables()
                 .enumerate()
                 .filter(move |(_, lit_var)| *lit_var == var)
                 .map(|(i, _)| i)
         })
         .collect();
 
-    let mut remaining_vars: Vec<usize> = lit
+    let mut remaining_vars: Vec<usize> = atom
         .variables()
         .enumerate()
         .map(|(i, _)| i)
@@ -196,8 +196,8 @@ impl RuleVariableList for Vec<Variable> {
         let result: Vec<Variable> = self
             .iter()
             .filter(|var| {
-                rule.body().iter().any(|lit| {
-                    let predicate_vars: Vec<Variable> = lit.atom().variables().cloned().collect();
+                rule.positive_body().iter().any(|atom| {
+                    let predicate_vars: Vec<Variable> = atom.variables().cloned().collect();
 
                     predicate_vars.iter().any(|pred_var| pred_var == *var)
                         && predicate_vars
@@ -228,26 +228,25 @@ impl RuleVariableList for Vec<Variable> {
                 let mut extended_var_order: VariableOrder = partial_var_order.clone();
                 extended_var_order.push(var.clone());
 
-                let literals = rule
-                    .body()
+                let atoms = rule
+                    .positive_body()
                     .iter()
-                    .filter(|lit| predicate_filter(&lit.predicate()))
-                    .filter(|lit| lit.variables().any(|lit_var| lit_var == var));
+                    .filter(|atom| predicate_filter(&atom.predicate()))
+                    .filter(|atom| atom.variables().any(|atom_var| atom_var == var));
 
-                let (literals_requiring_new_orders, total_literals) =
-                    literals.fold((0, 0), |acc, lit| {
-                        let fitting_column_order_exists: bool = required_trie_column_orders
-                            .get(&lit.predicate())
-                            .map(|set| set.contains(&column_order_for(lit, &extended_var_order)))
-                            .unwrap_or(false);
+                let (atoms_requiring_new_orders, total_atoms) = atoms.fold((0, 0), |acc, atom| {
+                    let fitting_column_order_exists: bool = required_trie_column_orders
+                        .get(&atom.predicate())
+                        .map(|set| set.contains(&column_order_for(atom, &extended_var_order)))
+                        .unwrap_or(false);
 
-                        let new_col_order_required = !fitting_column_order_exists;
+                    let new_col_order_required = !fitting_column_order_exists;
 
-                        (acc.0 + usize::from(new_col_order_required), acc.1 + 1)
-                        // bool is coverted to 1 for true and 0 for false
-                    });
+                    (acc.0 + usize::from(new_col_order_required), acc.1 + 1)
+                    // bool is coverted to 1 for true and 0 for false
+                });
 
-                (literals_requiring_new_orders, total_literals)
+                (atoms_requiring_new_orders, total_atoms)
             })
             .collect();
 
@@ -311,8 +310,8 @@ impl VariableOrderBuilder<'_> {
     }
 
     fn get_already_present_idb_edb_count_for_rule_in_tries(&self, rule: &Rule) -> (usize, usize) {
-        let preds_with_tries = rule.body().iter().filter_map(|lit| {
-            let pred = lit.predicate();
+        let preds_with_tries = rule.positive_body().iter().filter_map(|atom| {
+            let pred = atom.predicate();
             self.required_trie_column_orders
                 .get(&pred)
                 .map_or(false, |orders| !orders.is_empty())
@@ -368,7 +367,7 @@ impl VariableOrderBuilder<'_> {
         let mut variable_order: VariableOrder = VariableOrder::new();
         let mut remaining_vars = {
             let remaining_vars_unpermutated: Vec<Variable> = rule
-                .body()
+                .positive_body()
                 .iter()
                 .flat_map(|lit| lit.variables())
                 .fold(vec![], |mut acc, var| {
@@ -424,18 +423,18 @@ impl VariableOrderBuilder<'_> {
         must_contain: HashSet<Variable>,
         rule: &Rule,
     ) {
-        let literals = rule.body().iter().filter(|lit| {
-            let vars: Vec<Variable> = lit.variables().cloned().collect();
+        let atoms = rule.positive_body().iter().filter(|atom| {
+            let vars: Vec<Variable> = atom.variables().cloned().collect();
             must_contain.iter().all(|var| vars.contains(var))
                 && vars.iter().all(|var| variable_order.contains(var))
         });
 
-        for lit in literals {
-            let column_ord: ColumnOrder = column_order_for(lit, variable_order);
+        for atom in atoms {
+            let column_ord: ColumnOrder = column_order_for(atom, variable_order);
 
             let set = self
                 .required_trie_column_orders
-                .entry(lit.predicate())
+                .entry(atom.predicate())
                 .or_insert_with(HashSet::new);
 
             set.insert(column_ord);

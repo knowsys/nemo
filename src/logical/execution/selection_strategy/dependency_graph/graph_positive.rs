@@ -24,7 +24,7 @@ impl DependencyGraphConstructor for GraphConstructorPositive {
         let mut predicate_to_rules_head = HashMap::<Identifier, Vec<usize>>::new();
 
         for (rule_index, rule_analysis) in rule_analyses.iter().enumerate() {
-            for body_predicate in &rule_analysis.body_predicates {
+            for body_predicate in &rule_analysis.positive_body_predicates {
                 let indices = predicate_to_rules_body
                     .entry(body_predicate.clone())
                     .or_insert(Vec::new());

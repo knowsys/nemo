@@ -371,19 +371,41 @@ impl Filter {
 pub struct Rule {
     /// Head atoms of the rule
     head: Vec<Atom>,
-    /// Body literals of the rule
-    body: Vec<Literal>,
+    /// Positive Body literals of the rule
+    positive_body: Vec<Atom>,
     /// Filters applied to the body
-    filters: Vec<Filter>,
+    positive_filters: Vec<Filter>,
+    /// Negative Body literals of the rule
+    negative_body: Vec<Atom>,
+    /// Filters applied to the body
+    negative_filters: Vec<Filter>,
 }
 
 impl Rule {
+    fn split_literal_vector(literals: Vec<Literal>) -> (Vec<Atom>, Vec<Atom>) {
+        let mut positive = Vec::new();
+        let mut negative = Vec::new();
+
+        for literal in literals {
+            match literal {
+                Literal::Positive(atom) => positive.push(atom),
+                Literal::Negative(atom) => negative.push(atom),
+            }
+        }
+
+        (positive, negative)
+    }
+
     /// Construct a new rule.
-    pub fn new(head: Vec<Atom>, body: Vec<Literal>, filters: Vec<Filter>) -> Self {
+    pub fn new(head: Vec<Atom>, body: Vec<Literal>, positive_filters: Vec<Filter>) -> Self {
+        let (positive_body, negative_body) = Self::split_literal_vector(body);
+
         Self {
             head,
-            body,
-            filters,
+            positive_body,
+            negative_body,
+            positive_filters,
+            negative_filters: Vec::new(),
         }
     }
 
@@ -492,11 +514,7 @@ impl Rule {
             }
         }
 
-        Ok(Rule {
-            head,
-            body,
-            filters,
-        })
+        Ok(Rule::new(head, body, filters))
     }
 
     /// Return the head atoms of the rule - immutable.
@@ -513,26 +531,50 @@ impl Rule {
 
     /// Return the body literals of the rule - immutable.
     #[must_use]
-    pub fn body(&self) -> &Vec<Literal> {
-        &self.body
+    pub fn positive_body(&self) -> &Vec<Atom> {
+        &self.positive_body
     }
 
     /// Return the body literals of the rule - mutable.
     #[must_use]
-    pub fn body_mut(&mut self) -> &mut Vec<Literal> {
-        &mut self.body
+    pub fn positive_body_mut(&mut self) -> &mut Vec<Atom> {
+        &mut self.positive_body
     }
 
     /// Return the filters of the rule - immutable.
     #[must_use]
-    pub fn filters(&self) -> &Vec<Filter> {
-        &self.filters
+    pub fn positive_filters(&self) -> &Vec<Filter> {
+        &self.positive_filters
     }
 
     /// Return the filters of the rule - mutable.
     #[must_use]
-    pub fn filters_mut(&mut self) -> &mut Vec<Filter> {
-        &mut self.filters
+    pub fn positive_filters_mut(&mut self) -> &mut Vec<Filter> {
+        &mut self.positive_filters
+    }
+
+    /// Return the body literals of the rule - immutable.
+    #[must_use]
+    pub fn negative_body(&self) -> &Vec<Atom> {
+        &self.negative_body
+    }
+
+    /// Return the body literals of the rule - mutable.
+    #[must_use]
+    pub fn negative_body_mut(&mut self) -> &mut Vec<Atom> {
+        &mut self.negative_body
+    }
+
+    /// Return the filters of the rule - immutable.
+    #[must_use]
+    pub fn negative_filters(&self) -> &Vec<Filter> {
+        &self.negative_filters
+    }
+
+    /// Return the filters of the rule - mutable.
+    #[must_use]
+    pub fn negative_filters_mut(&mut self) -> &mut Vec<Filter> {
+        &mut self.negative_filters
     }
 }
 
@@ -655,7 +697,8 @@ impl Program {
                 rule.head()
                     .iter()
                     .map(|atom| atom.predicate())
-                    .chain(rule.body().iter().map(|literal| literal.predicate()))
+                    .chain(rule.positive_body().iter().map(|a| a.predicate()))
+                    .chain(rule.negative_body().iter().map(|a| a.predicate()))
             })
             .chain(self.facts().iter().map(|atom| atom.0.predicate()))
             .collect()

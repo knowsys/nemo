@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Atom, Filter, Rule, Variable},
+        model::{Rule, Variable},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::SubtableExecutionPlan,
         TableManager,
@@ -25,16 +25,12 @@ pub struct SeminaiveStrategy {
 impl SeminaiveStrategy {
     /// Create new [`SeminaiveStrategy`] object.
     pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
-        // Since we don't support negation yet, we can just turn the literals into atoms
-        // TODO: Think about negation here
-        let atoms: Vec<Atom> = rule.body().iter().map(|l| l.atom().clone()).collect();
-        let filters: Vec<Filter> = rule.filters().to_vec();
         let used_variables = analysis.head_variables.clone();
 
         let join_generator = SeminaiveJoinGenerator {
-            atoms,
-            filters,
-            variables: analysis.body_variables.clone(),
+            atoms: rule.positive_body().clone(),
+            filters: rule.positive_filters().clone(),
+            variables: analysis.positive_body_variables.clone(),
             variable_types: analysis.variable_types.clone(),
         };
 

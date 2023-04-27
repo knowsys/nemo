@@ -1,8 +1,6 @@
 use std::collections::HashSet;
 
-use crate::logical::model::{
-    Atom, Filter, FilterOperation, Identifier, Literal, Program, Term, Variable,
-};
+use crate::logical::model::{Atom, Filter, FilterOperation, Identifier, Program, Term, Variable};
 
 /// Represents the result of normalizing a list of atoms.
 /// Normalized atoms do not contain constants or repeat variables in one atom.
@@ -19,8 +17,8 @@ pub struct NormalizationResult {
 /// Transforms a given atom vectors with filters into a "normalized" form.
 /// Applies equality filters, e.g., "a(x, y), b(z), y = z" will turn into "a(x, y), b(y)".
 /// Also, turns literals like "a(x, 3, x)" into "a(x, y, z), y = 3, z = x".
-pub fn normalize_atom_vector(atoms: &[&Atom], filters: &[Filter]) -> NormalizationResult {
-    let mut new_atoms: Vec<Atom> = atoms.iter().cloned().cloned().collect();
+pub fn normalize_atom_vector(atoms: &[Atom], filters: &[Filter]) -> NormalizationResult {
+    let mut new_atoms: Vec<Atom> = atoms.iter().cloned().collect();
     let mut new_filters = Vec::<Filter>::new();
 
     // Apply all equality filters
@@ -92,27 +90,15 @@ impl Program {
     /// Transforms the rules into a "normalized" form.
     pub fn normalize(&mut self) {
         for rule in self.rules_mut() {
-            let body_atoms: Vec<&Atom> = rule
-                .body()
-                .iter()
-                .map(|l| {
-                    if let Literal::Positive(a) = l {
-                        a
-                    } else {
-                        // TODO:
-                        panic!("We do not support negation yet")
-                    }
-                })
-                .collect();
+            let normalized_positive =
+                normalize_atom_vector(rule.positive_body(), rule.positive_filters());
+            let normalized_negative =
+                normalize_atom_vector(rule.negative_body(), rule.negative_filters());
 
-            let normalized_body = normalize_atom_vector(&body_atoms, rule.filters());
-            // TODO: Consider negation
-            *rule.body_mut() = normalized_body
-                .atoms
-                .iter()
-                .map(|a| Literal::Positive(a.clone()))
-                .collect();
-            *rule.filters_mut() = normalized_body.filters;
+            *rule.positive_body_mut() = normalized_positive.atoms;
+            *rule.positive_filters_mut() = normalized_positive.filters;
+            *rule.negative_body_mut() = normalized_negative.atoms;
+            *rule.negative_filters_mut() = normalized_negative.filters;
         }
     }
 }
