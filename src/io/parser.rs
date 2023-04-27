@@ -11,7 +11,6 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     Err,
 };
-use nom_locate::position;
 
 use crate::{
     error::Error,
@@ -52,13 +51,13 @@ pub fn all_input_consumed<'a, T: 'a>(
 ) -> impl FnMut(&'a str) -> Result<T, LocatedParseError> + 'a {
     let mut p = all_consuming(parser);
     move |input| {
-        let (remainder, position) = position(Span::new(input))?;
-        p(remainder).map(|(_, result)| result).map_err(|e| match e {
+        let input = Span::new(input);
+        p(input).map(|(_, result)| result).map_err(|e| match e {
             Err::Incomplete(e) => ParseError::MissingInput(match e {
                 nom::Needed::Unknown => "expected an unknown amount of further input".to_string(),
                 nom::Needed::Size(size) => format!("expected at least {size} more bytes"),
             })
-            .at(position),
+            .at(input),
             Err::Error(e) | Err::Failure(e) => e,
         })
     }
@@ -93,16 +92,15 @@ pub fn map_error<'a, T: 'a>(
     mut error: impl FnMut() -> ParseError + 'a,
 ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, T> + 'a {
     move |input| {
-        let (remainder, position) = position(input)?;
-        parser(remainder).map_err(|e| match e {
+        parser(input).map_err(|e| match e {
             Err::Incomplete(_) => e,
             Err::Error(context) => {
-                let mut err = error().at(position);
+                let mut err = error().at(input);
                 err.append(context);
                 Err::Error(err)
             }
             Err::Failure(context) => {
-                let mut err = error().at(position);
+                let mut err = error().at(input);
                 err.append(context);
                 Err::Failure(err)
             }
@@ -197,7 +195,6 @@ fn parse_iri_constant<'a>(
 ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Identifier> {
     map_error(
         move |input| {
-            let (remainder, position) = position(input)?;
             let (remainder, name) = traced(
                 "parse_iri_constant",
                 alt((
@@ -206,10 +203,10 @@ fn parse_iri_constant<'a>(
                     sparql::blank_node_label,
                     map(parse_bare_name, |name| sparql::Name::IriReference(&name)),
                 )),
-            )(remainder)?;
+            )(input)?;
 
             let resolved = resolve_prefixed_name(&prefixes.borrow(), name)
-                .map_err(|e| Err::Failure(e.at(position)))?;
+                .map_err(|e| Err::Failure(e.at(input)))?;
 
             Ok((remainder, Identifier(resolved)))
         },
@@ -325,7 +322,6 @@ impl<'a> RuleParser<'a> {
             "parse_prefix",
             map_error(
                 move |input| {
-                    let (remainder, position) = position(input)?;
                     let (remainder, (prefix, iri)) = delimited(
                         terminated(token("@prefix"), cut(multispace_or_comment1)),
                         cut(tuple((
@@ -333,12 +329,12 @@ impl<'a> RuleParser<'a> {
                             cut(sparql::iriref),
                         ))),
                         cut(self.parse_dot()),
-                    )(remainder)?;
+                    )(input)?;
 
                     log::debug!(target: "parser", r#"parse_prefix: got prefix "{prefix}" for iri "{iri}""#);
                     if self.prefixes.borrow_mut().insert(&prefix, &iri).is_some() {
                         Err(Err::Failure(
-                            ParseError::RedeclaredPrefix(prefix.to_string()).at(position),
+                            ParseError::RedeclaredPrefix(prefix.to_string()).at(input),
                         ))
                     } else {
                         Ok((remainder, prefix))
@@ -405,11 +401,10 @@ impl<'a> RuleParser<'a> {
             "parse_source",
             map_error(
                 move |input| {
-                    let (remainder, position) = position(input)?;
                     let (remainder, (predicate, arity)) = preceded(
                         terminated(token("@source"), cut(multispace_or_comment1)),
                         cut(self.parse_qualified_predicate_name()),
-                    )(remainder)?;
+                    )(input)?;
 
                     let (remainder, datasource) = cut(delimited(
                         delimited(multispace_or_comment0, token(":"), multispace_or_comment1),
@@ -467,9 +462,9 @@ impl<'a> RuleParser<'a> {
                     let source = DataSourceDeclaration::new_validated(
                         predicate,
                         arity,
-                        datasource.map_err(|e| Err::Failure(e.at(position)))?,
+                        datasource.map_err(|e| Err::Failure(e.at(input)))?,
                     )
-                    .map_err(|e| Err::Failure(e.at(position)))?;
+                    .map_err(|e| Err::Failure(e.at(input)))?;
 
                     log::trace!("Found external data source {source:?}");
                     self.sources.borrow_mut().push(source.clone());
@@ -558,7 +553,6 @@ impl<'a> RuleParser<'a> {
     pub fn parse_iri_pred(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         map_error(
             move |input| {
-                let (remainder, position) = position(input)?;
                 let (remainder, name) = traced(
                     "parse_iri_pred",
                     alt((
@@ -566,13 +560,13 @@ impl<'a> RuleParser<'a> {
                         sparql::prefixed_name,
                         sparql::blank_node_label,
                     )),
-                )(remainder)?;
+                )(input)?;
 
                 Ok((
                     remainder,
                     Identifier(
                         resolve_prefixed_name(&self.prefixes.borrow(), name)
-                            .map_err(|e| Err::Failure(e.at(position)))?,
+                            .map_err(|e| Err::Failure(e.at(input)))?,
                     ),
                 ))
             },
@@ -628,7 +622,6 @@ impl<'a> RuleParser<'a> {
             "parse_rule",
             map_error(
                 move |input| {
-                    let (remainder, position) = position(input)?;
                     let (remainder, (head, body)) = pair(
                         terminated(
                             separated_list1(self.parse_comma(), self.parse_atom()),
@@ -638,7 +631,7 @@ impl<'a> RuleParser<'a> {
                             separated_list1(self.parse_comma(), self.parse_body_expression()),
                             self.parse_dot(),
                         )),
-                    )(remainder)?;
+                    )(input)?;
 
                     log::trace!(target: "parser", r#"found rule "{head:?}" :- "{body:?}""#);
 
@@ -659,7 +652,7 @@ impl<'a> RuleParser<'a> {
                     Ok((
                         remainder,
                         Rule::new_validated(head, literals, filters)
-                            .map_err(|e| Err::Failure(e.at(position)))?,
+                            .map_err(|e| Err::Failure(e.at(input)))?,
                     ))
                 },
                 || ParseError::ExpectedRule,
