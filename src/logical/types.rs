@@ -27,9 +27,14 @@ macro_rules! generate_logical_type_enum {
         }
 
         impl LogicalTypeEnum {
-            const VARIANTS: [Self; count!($($variant_name)+)] = [
+            const _VARIANTS: [Self; count!($($variant_name)+)] = [
                 $(Self::$variant_name),+
             ];
+
+            /// Returns a list of the syntactic representations of valid types.
+            pub fn type_representations() -> Vec<&'static str> {
+                vec![$($string_repr),+]
+            }
         }
 
         impl Display for LogicalTypeEnum {
@@ -46,7 +51,7 @@ macro_rules! generate_logical_type_enum {
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s {
                     $($string_repr => Ok(Self::$variant_name)),+,
-                    _ => Err(Self::Err::ParseUnknownType(s.to_string(), Self::VARIANTS.into()))
+                    _ => Err(Self::Err::ParseUnknownType(s.to_string()))
                 }
             }
         }
