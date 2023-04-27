@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap};
 
 use crate::{
     error::Error,
-    logical::types::LogicalTypeEnum,
+    logical::{model::Term, types::LogicalTypeEnum},
     physical::{
         datatypes::{storage_value::VecT, Double},
         dictionary::Dictionary,
@@ -43,17 +43,17 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
 
-        // TODO: DSV parsing should depend on logical types
-        let parsed =
+        let parsed_term =
             all_input_consumed(parse_ground_term(&RefCell::new(HashMap::new())))(string.trim())
-                .map(|gt| {
-                    LogicalTypeEnum::Any.ground_term_to_data_value_t(gt).expect(
-                    "LogicalTypeEnum::Any should work with every possible term we can get here.",
-                )
-                })
-                .unwrap_or(DataValueT::String(format!("\"{string}\""))); // Treat term as string literal by default
+                .unwrap_or(Term::StringLiteral(string.to_string())); // If no term can be parsed, consider value to be a string literal
 
-        let DataValueT::String(parsed_string) = parsed else { unreachable!("LogicalTypeEnum::Any should always be treated as String at the moment.") };
+        // TODO: DSV parsing should depend on logical types
+        // for now we assume every string column to be of logical type Any
+        let parsed_datavalue = LogicalTypeEnum::Any
+            .ground_term_to_data_value_t(parsed_term)
+            .expect("LogicalTypeEnum::Any should work with every possible term we can get here.");
+
+        let DataValueT::String(parsed_string) = parsed_datavalue else { unreachable!("LogicalTypeEnum::Any should always be treated as String at the moment.") };
 
         self.value = Some(
             dictionary
