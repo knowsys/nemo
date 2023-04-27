@@ -34,13 +34,13 @@ pub struct TrieScanSubtract<'a> {
 
 /// Struct containing additional information for the setting up a [`TrieScanSubtract`] iterator.
 /// One of these structures should be associated with each trie that is to be subtracted.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SubtractInfo {
     /// Which layers of the main trie are subtracted.
     /// For example, if we have a main trie with for layers: a(x, y, z, w)
     /// and we want to subtract the trie associated with this struct b(y, w)
     /// this vector would contain: [1, 3]
-    used_layers: Vec<usize>,
+    pub used_layers: Vec<usize>,
 }
 
 impl SubtractInfo {

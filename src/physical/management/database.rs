@@ -10,6 +10,7 @@ use crate::physical::datatypes::storage_value::VecT;
 use crate::physical::datatypes::{DataTypeName, DataValueT, StorageValueT};
 use crate::physical::tabular::operations::materialize::materialize_up_to;
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
+use crate::physical::tabular::operations::triescan_minus::TrieScanSubtract;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::traits::table::Table;
 use crate::physical::util::mapping::permutation::Permutation;
@@ -1078,6 +1079,41 @@ impl DatabaseInstance {
                 if let Some(subiterator) = subiterator_opt {
                     let nulls_scan = TrieScanNulls::new(subiterator, *num_nulls, self.current_null);
                     Ok(Some(TrieScanEnum::TrieScanNulls(nulls_scan)))
+                } else {
+                    Ok(None)
+                }
+            }
+            ExecutionOperation::Subtract(subtable_main, subtables_subtract, infos) => {
+                if let Some(main_scan) = self.get_iterator_node(
+                    subtable_main.clone(),
+                    &type_node.subnodes[0],
+                    computation_results,
+                )? {
+                    let mut subiterators =
+                        Vec::<TrieScanEnum>::with_capacity(subtables_subtract.len());
+                    for (table_index, subtable) in subtables_subtract.iter().enumerate() {
+                        let subiterator_opt = self.get_iterator_node(
+                            subtable.clone(),
+                            &type_node.subnodes[table_index + 1],
+                            computation_results,
+                        )?;
+
+                        if let Some(subiterator) = subiterator_opt {
+                            subiterators.push(subiterator);
+                        }
+                    }
+
+                    if subiterators.is_empty() {
+                        return Ok(Some(main_scan));
+                    }
+
+                    let subtract_scan = TrieScanEnum::TrieScanSubtract(TrieScanSubtract::new(
+                        main_scan,
+                        subiterators,
+                        infos.clone(),
+                    ));
+
+                    Ok(Some(subtract_scan))
                 } else {
                     Ok(None)
                 }
