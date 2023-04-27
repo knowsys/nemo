@@ -45,7 +45,7 @@ rec {
           packages = rec {
             nemo = platform.buildRustPackage {
               pname = "nemo";
-              version = "0.1.0";
+              version = "0.1.1-dev";
               src = ./.;
 
               cargoLock.lockFile = ./Cargo.lock;
