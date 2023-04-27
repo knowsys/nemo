@@ -103,8 +103,10 @@ impl CliApp {
             .total_system_time()
             .as_millis();
 
-        let loading_preprocessing = reading_time + loading_time;
-        let reasoning_time = execution_time - loading_time;
+        // NOTE: for some reason the substration produced on overflow for me once when running the tests; so better safe than sorry now :)
+        let loading_preprocessing = reading_time.saturating_add(loading_time);
+        let reasoning_time = execution_time.saturating_sub(loading_time);
+
         let writing_time = if self.save_results {
             TimedCode::instance()
                 .sub("Output & Final Materialization")
