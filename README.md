@@ -32,6 +32,8 @@ Run the following command for an overview of current options:
 
 `nmo --help`
 
+Example Nemo programs and datasets can be found in the [Nemo Examples repository](https://github.com/knowsys/nemo-examples).
+
 ## Help
 
 Feel free to use [GitHub discussions](https://github.com/knowsys/nemo/discussions) to ask questions or talk about Nemo.
