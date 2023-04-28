@@ -17,7 +17,10 @@ Nemo is in heavy development and the current releases should still be considered
 
 ## Installation
 
-To build from source, download the source code (from a release or this repository) and run
+Archives with pre-compiled binaries for various platforms are available from the
+[Nemo releases page](https://github.com/knowsys/nemo/releases).
+To build your own version from source, you need to have an up-to-date installation of Rust.
+Download the source code (from a release or this repository) and run
 
  `cargo build -r`
  
