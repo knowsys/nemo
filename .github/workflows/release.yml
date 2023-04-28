@@ -13,10 +13,13 @@ jobs:
         include:
           - target: x86_64-pc-windows-gnu
             archive: zip
+            name: amd64-windows
           - target: x86_64-unknown-linux-musl
             archive: tar.gz
-          - target: x86_64-apple-darwin
-            archive: zip
+            name: amd64-linux
+          # - target: x86_64-apple-darwin
+          #   archive: zip
+          #   name: amd64-macos
     steps:
       - uses: actions/checkout@v3
       - name: Compile and release
@@ -26,3 +29,5 @@ jobs:
           RUSTTARGET: ${{ matrix.target }}
           EXTRA_FILES: "README.md LICENSE-APACHE LICENSE-MIT"
           TOOLCHAIN_VERSION: nightly
+          ARCHIVE_TYPES: ${{ matrix.archive }}
+          ARCHIVE_NAME: ${{ format('nemo_{0}_{1}.{2}', vars.GITHUB_REF_NAME, matrix.name, matrix.archive) }}
