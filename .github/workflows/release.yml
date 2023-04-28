@@ -25,4 +25,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # needs to be provided to change assets
           RUSTTARGET: ${{ matrix.target }}
           EXTRA_FILES: "README.md LICENSE-APACHE LICENSE-MIT"
-          SRC_DIR: "/"
