@@ -30,4 +30,4 @@ jobs:
           EXTRA_FILES: "README.md LICENSE-APACHE LICENSE-MIT"
           TOOLCHAIN_VERSION: nightly
           ARCHIVE_TYPES: ${{ matrix.archive }}
-          ARCHIVE_NAME: ${{ format('nemo_{0}_{1}.{2}', vars.GITHUB_REF_NAME, matrix.name, matrix.archive) }}
+          ARCHIVE_NAME: ${{ format('nemo_{0}_{1}', github.ref_name, matrix.name) }}
