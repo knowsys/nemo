@@ -66,12 +66,10 @@ impl RestrictedChaseStrategy {
             *is_full_existential &= is_existential;
         }
 
-        let normalized_head_variables = analysis.existential_aux_order.iter().cloned().collect();
         let head_join_atoms = analysis.existential_aux_rule.positive_body().clone();
         let head_join_filters = analysis.existential_aux_rule.positive_filters().clone();
 
         let join_generator = SeminaiveJoinGenerator {
-            variables: normalized_head_variables,
             atoms: head_join_atoms,
             filters: head_join_filters,
             variable_types: analysis.existential_aux_types.clone(),

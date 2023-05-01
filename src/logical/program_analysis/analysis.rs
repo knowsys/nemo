@@ -126,7 +126,7 @@ fn construct_existential_aux_rule(
     predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
     column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
 ) -> (Rule, VariableOrder, HashMap<Variable, LogicalTypeEnum>) {
-    let normalized_head = normalize_atom_vector(head_atoms, &[]);
+    let normalized_head = normalize_atom_vector(head_atoms, &[], &mut 0);
 
     let temp_head_identifier = get_fresh_rule_predicate(rule_index);
 

@@ -14,7 +14,7 @@ use crate::{
     },
     physical::{
         management::{
-            database::TableId,
+            database::{ColumnOrder, TableId},
             execution_plan::{ExecutionNodeRef, ExecutionPlan},
         },
         tabular::operations::{
@@ -39,33 +39,24 @@ pub(super) fn atom_binding(atom: &Atom, variable_order: &VariableOrder) -> Vec<u
 }
 
 /// Calculate helper structures that define the filters that need to be applied.
-/// TODO: Revise this when updating the type system.
 pub(super) fn compute_filters(
-    body_variables: &HashSet<Variable>,
     variable_order: &VariableOrder,
     filters: &[Filter],
     variable_types: &HashMap<Variable, LogicalTypeEnum>,
 ) -> (SelectEqualClasses, Vec<ValueAssignment>) {
-    let mut body_variables_sorted: Vec<Variable> = body_variables.clone().into_iter().collect();
-    body_variables_sorted.sort_by(|a, b| variable_order.get(a).cmp(&variable_order.get(b)));
-
-    let mut body_variables_sorted = body_variables.iter().collect::<Vec<_>>();
-    body_variables_sorted.sort_by(|a, b| {
-        variable_order
-            .get(a)
-            .unwrap()
-            .cmp(variable_order.get(b).unwrap())
-    });
-    let mut variable_to_columnindex = HashMap::new();
-    for (index, variable) in body_variables_sorted.iter().enumerate() {
-        variable_to_columnindex.insert(*variable, index);
-    }
-
     let mut filter_assignments = Vec::<ValueAssignment>::new();
     let mut filter_classes = Vec::<HashSet<&Variable>>::new();
     for filter in filters {
+        if !variable_order.contains(&filter.lhs) {
+            continue;
+        }
+
         match &filter.rhs {
             Term::Variable(right_variable) => {
+                if !variable_order.contains(right_variable) {
+                    continue;
+                }
+
                 let left_variable = &filter.lhs;
 
                 let left_index = filter_classes
@@ -113,12 +104,12 @@ pub(super) fn compute_filters(
             _ => {
                 let right_value = variable_types
                     .get(&filter.lhs)
-                    .unwrap()
+                    .expect("Each variable should have been assigned a type.")
                     .ground_term_to_data_value_t(filter.rhs.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.");
                 let interval = filter_operation_to_interval(&filter.operation, right_value);
 
                 filter_assignments.push(ValueAssignment {
-                    column_idx: *variable_to_columnindex.get(&filter.lhs).unwrap(),
+                    column_idx: *variable_order.get(&filter.lhs).expect("We skip this loop iteration if one of the filter variables is not contained in the variable order."),
                     interval,
                 });
             }
@@ -130,7 +121,7 @@ pub(super) fn compute_filters(
         .map(|s| {
             let mut r = s
                 .iter()
-                .map(|v| *variable_to_columnindex.get(v).unwrap())
+                .map(|v| *variable_order.get(v).expect("The above loop skips iterations if one of the filter variables is not contained in the variable order."))
                 .collect::<Vec<usize>>();
             r.sort();
             r
@@ -170,6 +161,25 @@ pub(super) fn subplan_union(
     let mut union_node = plan.union_empty();
     for table_id in base_tables.into_iter() {
         let base_node = plan.fetch_existing(table_id);
+        union_node.add_subnode(base_node);
+    }
+
+    union_node
+}
+
+/// Compute the subplan that represents the union of a tables within a certain step range.
+pub(super) fn subplan_union_reordered(
+    plan: &mut ExecutionPlan,
+    manager: &TableManager,
+    predicate: Identifier,
+    steps: &Range<usize>,
+    column_order: ColumnOrder,
+) -> ExecutionNodeRef {
+    let base_tables: Vec<TableId> = manager.tables_in_range(predicate, steps);
+
+    let mut union_node = plan.union_empty();
+    for table_id in base_tables.into_iter() {
+        let base_node = plan.fetch_existing_reordered(table_id, column_order.clone());
         union_node.add_subnode(base_node);
     }
 
