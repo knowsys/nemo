@@ -101,7 +101,7 @@ where
 {
     fn seek(&mut self, value: T) -> Option<T> {
         if let Some(current_value) = self.current_value {
-            if value < current_value {
+            if value <= current_value {
                 return self.current_value;
             }
         }
