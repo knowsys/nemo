@@ -68,6 +68,11 @@ impl<SubStrategy: RuleSelectionStrategy> StrategyStratifiedNegation<SubStrategy>
 
         let mut graph = NegationGraph::default();
 
+        let rule_count = rule_analyses.len();
+        for rule_index in 0..rule_count {
+            graph.add_node(rule_index);
+        }
+
         for (head_predicate, head_rules) in predicate_to_rules_head {
             if let Some(body_rules) = predicate_to_rules_body_positive.get(&head_predicate) {
                 for &head_index in &head_rules {

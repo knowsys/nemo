@@ -5,7 +5,6 @@ use std::hash::Hash;
 use std::{collections::HashMap, fmt::Debug};
 
 use petgraph::graph::NodeIndex;
-use petgraph::visit::EdgeRef;
 use petgraph::{EdgeType, Graph};
 
 /// Graph with labeled nodes.
@@ -35,7 +34,7 @@ where
 {
     /// Add a single node to the graph under a new label.
     /// Returns the [`NodeIndex`] of the new node.
-    fn add_node(&mut self, node: NodeLabel) -> NodeIndex {
+    pub fn add_node(&mut self, node: NodeLabel) -> NodeIndex {
         match self.label_map.entry(node) {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
@@ -70,24 +69,22 @@ where
     /// If the function detects a self cycle with a label contained in `by_edge_labels`
     /// it will abort the computation and return true.
     /// Otherwise it will return false.
-    fn remove_self_cycles<T>(
+    fn remove_self_cycles<T: Clone>(
         graph: &mut Graph<T, EdgeLabel, Type>,
         by_edge_labels: &[EdgeLabel],
     ) -> bool {
-        let mut edge_cycles = Vec::new();
-
         for node in graph.node_indices() {
             for edge in graph.edges_connecting(node, node) {
-                edge_cycles.push(edge.id());
                 if by_edge_labels.contains(&edge.weight()) {
                     return true;
                 }
             }
         }
 
-        for edge_cycle in edge_cycles {
-            graph.remove_edge(edge_cycle);
-        }
+        graph.retain_edges(|g, e| {
+            let (start, end) = g.edge_endpoints(e).unwrap();
+            start != end
+        });
 
         false
     }
@@ -215,5 +212,19 @@ mod test {
             stratums.unwrap(),
             vec![vec![node_a], vec![node_b, node_c], vec![node_d]]
         );
+    }
+
+    #[test]
+    fn test_non_stratifiable() {
+        let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
+
+        let node_a = String::from("A");
+        let node_b = String::from("B");
+
+        graph.add_edge(node_a.clone(), node_b.clone(), EdgeLabel::Negative);
+        graph.add_edge(node_b.clone(), node_a.clone(), EdgeLabel::Positive);
+
+        let stratums = graph.stratify(&[EdgeLabel::Negative]);
+        assert!(stratums.is_none());
     }
 }
