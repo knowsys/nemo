@@ -735,4 +735,42 @@ mod test {
         assert_eq!(sub_next(&mut sub_scan), Some(1));
         assert_eq!(sub_current(&mut sub_scan), Some(1));
     }
+
+    #[test]
+    fn test_subtract_2() {
+        let column_main_x = make_column_with_intervals_t(&[4], &[0]);
+        let column_main_y = make_column_with_intervals_t(&[0, 2], &[0]);
+        let column_main_z = make_column_with_intervals_t(&[0, 1], &[0, 1]);
+
+        let column_sub_x = make_column_with_intervals_t(&[0], &[0]);
+
+        let trie_main = Trie::new(vec![column_main_x, column_main_y, column_main_z]);
+        let trie_sub = Trie::new(vec![column_sub_x]);
+
+        let trie_scan_main = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_main));
+        let trie_scan_sub = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_sub));
+
+        let mut sub_scan = TrieScanSubtract::new(
+            trie_scan_main,
+            vec![trie_scan_sub],
+            vec![SubtractInfo::new(vec![1])],
+        );
+
+        assert!(sub_scan.current_scan().is_none());
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), Some(4));
+        assert_eq!(sub_current(&mut sub_scan), Some(4));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), Some(2));
+        assert_eq!(sub_current(&mut sub_scan), Some(2));
+
+        sub_scan.down();
+        assert_eq!(sub_current(&mut sub_scan), None);
+        assert_eq!(sub_next(&mut sub_scan), Some(1));
+        assert_eq!(sub_current(&mut sub_scan), Some(1));
+    }
 }
