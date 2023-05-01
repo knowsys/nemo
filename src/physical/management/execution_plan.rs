@@ -582,8 +582,8 @@ impl ExecutionTree {
                     .collect();
 
                 Tree::Node(
-                    format!("Subtract"),
-                    vec![subtree_main, Tree::Node(format!(""), subtrees_subtract)],
+                    String::from("Subtract"),
+                    vec![subtree_main, Tree::Node(String::new(), subtrees_subtract)],
                 )
             }
         }

@@ -507,7 +507,7 @@ impl TypeTree {
                         let main_type = schema_map
                             .get(main_layer)
                             .expect("used_layers may not contain values >= arity of the main scan");
-                        sub_schema_map.insert(subtract_layer, main_type.clone());
+                        sub_schema_map.insert(subtract_layer, *main_type);
                     }
 
                     Self::propagate_down(type_node, Some(sub_schema_map), tree_node.clone());

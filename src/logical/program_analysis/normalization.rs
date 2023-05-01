@@ -22,7 +22,7 @@ pub fn normalize_atom_vector(
     filters: &[Filter],
     term_counter: &mut usize,
 ) -> NormalizationResult {
-    let mut new_atoms: Vec<Atom> = atoms.iter().cloned().collect();
+    let mut new_atoms: Vec<Atom> = atoms.to_vec();
     let mut new_filters = Vec::<Filter>::new();
 
     // Apply all equality filters

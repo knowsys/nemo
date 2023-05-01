@@ -124,7 +124,7 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
 
             Ok(Self {
                 ordered_strata: strata,
-                substrategies: substrategies,
+                substrategies,
                 current_stratum: 0,
             })
         } else {

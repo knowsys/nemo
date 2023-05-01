@@ -120,9 +120,7 @@ impl LogicalTypeEnum {
                     Term::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
                         match datatype.as_ref() {
                             XSD_STRING => DataValueT::String(format!("\"{value}\"")),
-                            XSD_DOUBLE | XSD_DECIMAL | XSD_INTEGER => {
-                                DataValueT::String(format!("{value}"))
-                            }
+                            XSD_DOUBLE | XSD_DECIMAL | XSD_INTEGER => DataValueT::String(value),
                             _ => DataValueT::String(format!("\"{value}\"^^<{datatype}>")),
                         }
                     }

@@ -75,7 +75,7 @@ where
     ) -> bool {
         for node in graph.node_indices() {
             for edge in graph.edges_connecting(node, node) {
-                if by_edge_labels.contains(&edge.weight()) {
+                if by_edge_labels.contains(edge.weight()) {
                     return true;
                 }
             }
@@ -147,8 +147,7 @@ where
             if let Some(sccs) = stratum_to_sccs.get(&stratum) {
                 result.push(
                     sccs.iter()
-                        .map(|&i| graph_scc.node_weight(i).unwrap().clone())
-                        .flatten()
+                        .flat_map(|&i| graph_scc.node_weight(i).unwrap().clone())
                         .collect(),
                 )
             } else {
@@ -222,7 +221,7 @@ mod test {
         let node_b = String::from("B");
 
         graph.add_edge(node_a.clone(), node_b.clone(), EdgeLabel::Negative);
-        graph.add_edge(node_b.clone(), node_a.clone(), EdgeLabel::Positive);
+        graph.add_edge(node_b, node_a, EdgeLabel::Positive);
 
         let stratums = graph.stratify(&[EdgeLabel::Negative]);
         assert!(stratums.is_none());
