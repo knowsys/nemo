@@ -73,7 +73,7 @@ impl BodyStrategy for SeminaiveStrategy {
 
         if self.has_negation {
             node_seminaive = self.negation_generator.generate_plan(
-                current_plan.plan_mut(),
+                current_plan,
                 table_manager,
                 node_seminaive,
                 &variable_order,

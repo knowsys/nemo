@@ -7,12 +7,14 @@ use crate::{
         execution::planning::plan_util::{compute_filters, subplan_union_reordered},
         model::{Atom, Filter, Term, Variable},
         program_analysis::variable_order::VariableOrder,
+        table_manager::SubtableExecutionPlan,
         types::LogicalTypeEnum,
         TableManager,
     },
     physical::{
-        management::{database::ColumnOrder, execution_plan::ExecutionNodeRef, ExecutionPlan},
+        management::{database::ColumnOrder, execution_plan::ExecutionNodeRef},
         tabular::operations::{triescan_minus::SubtractInfo, triescan_project::ProjectReordering},
+        util::mapping::traits::NatMapping,
     },
 };
 
@@ -91,7 +93,7 @@ impl NegationGenerator {
     /// Generates the plan for negation.
     pub(super) fn generate_plan(
         &self,
-        plan: &mut ExecutionPlan,
+        plan: &mut SubtableExecutionPlan,
         table_manager: &TableManager,
         node_main: ExecutionNodeRef,
         variable_order_main: &VariableOrder,
@@ -103,9 +105,10 @@ impl NegationGenerator {
             .iter()
             .map(|a| {
                 let info = AtomInfo::new(variable_order_main, a);
+                subtract_infos.push(info.subtraction);
 
                 let node_union = subplan_union_reordered(
-                    plan,
+                    plan.plan_mut(),
                     table_manager,
                     a.predicate(),
                     &(0..current_step_number),
@@ -118,16 +121,22 @@ impl NegationGenerator {
                     &self.variable_types,
                 );
 
-                let node_filtered = plan.select_value(node_union, assignments);
-                let node_filtered = plan.select_equal(node_filtered, classes);
+                let node_filtered = plan.plan_mut().select_value(node_union, assignments);
+                let node_filtered = plan.plan_mut().select_equal(node_filtered, classes);
 
-                let node_projected = plan.project(node_filtered, info.projection);
-                subtract_infos.push(info.subtraction);
+                let node_result = if info.projection.is_identity() {
+                    node_filtered
+                } else {
+                    plan.add_temporary_table(node_filtered.clone(), "Subtable Negation");
 
-                node_projected
+                    plan.plan_mut().project(node_filtered, info.projection)
+                };
+
+                node_result
             })
             .collect();
 
-        plan.subtract(node_main, nodes_subtracted, subtract_infos)
+        plan.plan_mut()
+            .subtract(node_main, nodes_subtracted, subtract_infos)
     }
 }
