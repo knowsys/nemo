@@ -73,7 +73,7 @@ impl<'a> TrieScanSubtract<'a> {
             .all(|trie_subtract| trie_main.get_types().len() >= trie_subtract.get_types().len()));
         debug_assert!(infos
             .iter()
-            .all(|info| trie_main.get_types().len() > info.used_layers.len()));
+            .all(|info| trie_main.get_types().len() >= info.used_layers.len()));
         debug_assert!(
             tries_subtract
                 .iter()
