@@ -259,7 +259,6 @@ where
         subtract_indices: Vec<usize>,
         follow_indices: Vec<usize>,
     ) -> Self {
-        debug_assert!(!subtract_indices.is_empty() || !follow_indices.is_empty());
         debug_assert!(
             subtract_indices.is_empty()
                 || *subtract_indices.iter().max().unwrap() < scans_follower.len()
