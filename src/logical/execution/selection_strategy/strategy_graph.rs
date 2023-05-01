@@ -6,7 +6,7 @@ use crate::logical::{model::Rule, program_analysis::analysis::RuleAnalysis};
 
 use super::{
     dependency_graph::graph_constructor::DependencyGraphConstructor,
-    strategy::RuleSelectionStrategy,
+    strategy::{RuleSelectionStrategy, SelectionStrategyError},
 };
 
 /// Defines a rule execution strategy which respects certain dependencies between rules
@@ -26,7 +26,10 @@ pub struct StrategyDependencyGraph<
 impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStrategy>
     RuleSelectionStrategy for StrategyDependencyGraph<GraphConstructor, SubStrategy>
 {
-    fn new(rules: Vec<&Rule>, rule_analyses: Vec<&RuleAnalysis>) -> Self {
+    fn new(
+        rules: Vec<&Rule>,
+        rule_analyses: Vec<&RuleAnalysis>,
+    ) -> Result<Self, SelectionStrategyError> {
         let dependency_graph = GraphConstructor::build_graph(rules.clone(), rule_analyses.clone());
         let graph_scc = petgraph::algo::condensation(dependency_graph, true);
         let scc_sorted = petgraph::algo::toposort(&graph_scc, None)
@@ -43,15 +46,15 @@ impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStr
                 scc_rule_indices.iter().map(|&i| rule_analyses[i]).collect();
 
             ordered_sccs.push(scc_rule_indices);
-            substrategies.push(SubStrategy::new(sub_rules, sub_analyses));
+            substrategies.push(SubStrategy::new(sub_rules, sub_analyses)?);
         }
 
-        Self {
-            _constructor: PhantomData,
+        Ok(Self {
+            _constructor: PhantomData::default(),
             ordered_sccs,
             substrategies,
             current_scc_index: 0,
-        }
+        })
     }
 
     fn next_rule(&mut self, mut new_derivations: Option<bool>) -> Option<usize> {

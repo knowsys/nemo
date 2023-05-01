@@ -15,6 +15,7 @@ use nemo::{
             selection_strategy::{
                 dependency_graph::graph_positive::GraphConstructorPositive,
                 strategy_graph::StrategyDependencyGraph, strategy_round_robin::StrategyRoundRobin,
+                strategy_stratified_negation::StrategyStratifiedNegation,
             },
             ExecutionEngine,
         },
@@ -192,7 +193,9 @@ impl CliApp {
         self.prevent_accidential_overwrite(&app_state)?;
 
         let mut exec_engine = ExecutionEngine::<
-            StrategyDependencyGraph<GraphConstructorPositive, StrategyRoundRobin>,
+            StrategyStratifiedNegation<
+                StrategyDependencyGraph<GraphConstructorPositive, StrategyRoundRobin>,
+            >,
         >::initialize(app_state.program)?;
 
         TimedCode::instance().sub("Reading & Preprocessing").stop();

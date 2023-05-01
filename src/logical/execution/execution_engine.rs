@@ -76,7 +76,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let rule_strategy = Strategy::new(
             program.rules().iter().collect(),
             analysis.rule_analysis.iter().collect(),
-        );
+        )?;
 
         Ok(Self {
             program,

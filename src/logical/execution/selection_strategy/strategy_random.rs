@@ -6,7 +6,7 @@ use rand::Rng;
 
 use crate::logical::{model::Rule, program_analysis::analysis::RuleAnalysis};
 
-use super::strategy::RuleSelectionStrategy;
+use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 
 /// Defines a strategy that selects rules randomly.
 #[derive(Debug)]
@@ -19,12 +19,15 @@ pub struct StrategyRandom {
 
 impl RuleSelectionStrategy for StrategyRandom {
     /// Create new [`StrategyRandom`].
-    fn new(_rules: Vec<&Rule>, rule_analyses: Vec<&RuleAnalysis>) -> Self {
-        Self {
+    fn new(
+        _rules: Vec<&Rule>,
+        rule_analyses: Vec<&RuleAnalysis>,
+    ) -> Result<Self, SelectionStrategyError> {
+        Ok(Self {
             rule_count: rule_analyses.len(),
             no_derivations: HashSet::new(),
             current_index: 0,
-        }
+        })
     }
 
     fn next_rule(&mut self, new_derivations: Option<bool>) -> Option<usize> {
