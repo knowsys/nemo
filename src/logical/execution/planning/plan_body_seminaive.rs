@@ -43,7 +43,7 @@ impl SeminaiveStrategy {
             filters: rule.negative_filters().clone(),
         };
 
-        let has_negation = negation_generator.atoms.is_empty();
+        let has_negation = !negation_generator.atoms.is_empty();
 
         Self {
             used_variables,
