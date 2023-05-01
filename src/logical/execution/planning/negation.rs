@@ -88,7 +88,7 @@ pub(super) struct NegationGenerator {
 }
 
 impl NegationGenerator {
-    /// TODO: Description
+    /// Generates the plan for negation.
     pub(super) fn generate_plan(
         &self,
         plan: &mut ExecutionPlan,
