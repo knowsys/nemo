@@ -318,11 +318,18 @@ pub struct PrefixedStringDictionary {
 }
 
 impl Default for PrefixedStringDictionary {
+    /// Initialise a Default Prefixedstringdictionary
+    /// It contains the empty string as the first element (position 0)
     fn default() -> Self {
+        let store = Rc::new(RefCell::new(TrieNode::default()));
+
         Self {
-            ordering: Vec::new(),
-            mapping: HashMap::new(),
-            store: Rc::new(RefCell::new(TrieNode::default())),
+            ordering: vec![TrieNodeStringPair(
+                Rc::clone(&store.to_owned()),
+                Rc::new("".to_string()),
+            )],
+            mapping: HashMap::from([("".to_string(), 0)]),
+            store,
         }
     }
 }
@@ -457,31 +464,43 @@ mod test {
     }
 
     #[test]
+    fn empty_str() {
+        let mut dict = PrefixedStringDictionary::default();
+        dict.add("".to_string());
+        assert_eq!(dict.entry(0), Some("".to_string()));
+
+        let mut dict = create_dict();
+        dict.add("".to_string());
+        assert_eq!(dict.entry(0), Some("".to_string()));
+        assert_eq!(dict.entry(8), None);
+    }
+
+    #[test]
     fn entry() {
         let dict = create_dict();
-        assert_eq!(dict.entry(0), Some("a".to_string()));
-        assert_eq!(dict.entry(1), Some("b".to_string()));
-        assert_eq!(dict.entry(2), Some("c".to_string()));
-        assert_eq!(dict.entry(3), Some("Position 3".to_string()));
-        assert_eq!(dict.entry(4), Some("Position 4".to_string()));
-        assert_eq!(dict.entry(5), Some("Position 5".to_string()));
-        assert_eq!(dict.entry(6), None);
-        assert_eq!(dict.entry(3), Some("Position 3".to_string()));
+        assert_eq!(dict.entry(1), Some("a".to_string()));
+        assert_eq!(dict.entry(2), Some("b".to_string()));
+        assert_eq!(dict.entry(3), Some("c".to_string()));
+        assert_eq!(dict.entry(4), Some("Position 3".to_string()));
+        assert_eq!(dict.entry(5), Some("Position 4".to_string()));
+        assert_eq!(dict.entry(6), Some("Position 5".to_string()));
+        assert_eq!(dict.entry(7), None);
+        assert_eq!(dict.entry(4), Some("Position 3".to_string()));
     }
 
     #[test]
     fn index_of() {
         let dict = create_dict();
-        assert_eq!(dict.index_of("a".to_string().borrow()), Some(0));
-        assert_eq!(dict.index_of("b".to_string().borrow()), Some(1));
-        assert_eq!(dict.index_of("c".to_string().borrow()), Some(2));
-        assert_eq!(dict.index_of("Position 3".to_string().borrow()), Some(3));
-        assert_eq!(dict.index_of("Position 4".to_string().borrow()), Some(4));
-        assert_eq!(dict.index_of("Position 5".to_string().borrow()), Some(5));
+        assert_eq!(dict.index_of("a".to_string().borrow()), Some(1));
+        assert_eq!(dict.index_of("b".to_string().borrow()), Some(2));
+        assert_eq!(dict.index_of("c".to_string().borrow()), Some(3));
+        assert_eq!(dict.index_of("Position 3".to_string().borrow()), Some(4));
+        assert_eq!(dict.index_of("Position 4".to_string().borrow()), Some(5));
+        assert_eq!(dict.index_of("Position 5".to_string().borrow()), Some(6));
         assert_eq!(dict.index_of("d".to_string().borrow()), None);
         assert_eq!(dict.index_of("Pos".to_string().borrow()), None);
         assert_eq!(dict.index_of("Pos"), None);
-        assert_eq!(dict.index_of("b"), Some(1));
+        assert_eq!(dict.index_of("b"), Some(2));
     }
 
     #[test]
@@ -493,7 +512,7 @@ mod test {
         // now we need some children
         assert!(!dict.store.as_ref().borrow().children().is_empty());
         assert_eq!(
-            dict.entry(6),
+            dict.entry(7),
             Some("https://wikidata.org/entity/Q42".to_string())
         );
     }
@@ -507,7 +526,7 @@ mod test {
         // now we need some children
         assert!(!dict.store.as_ref().borrow().children().is_empty());
         assert_eq!(
-            dict.entry(6),
+            dict.entry(7),
             Some("https://wikidata.org/entity/Q42".to_string())
         );
         drop(dict);
@@ -522,16 +541,16 @@ mod test {
         ];
 
         for (i, str) in vec.iter().enumerate() {
-            assert_eq!(dict.add(str.to_string()), i);
+            assert_eq!(dict.add(str.to_string()), i + 1);
         }
         // duplicates
         for (i, str) in vec.iter().enumerate() {
-            assert_eq!(dict.add(str.to_string()), i);
+            assert_eq!(dict.add(str.to_string()), i + 1);
         }
 
         for (id, result) in vec.iter().enumerate() {
-            assert_eq!(dict.entry(id).unwrap(), result.to_string());
-            assert_eq!(dict.index_of(result), Some(id));
+            assert_eq!(dict.entry(id + 1).unwrap(), result.to_string());
+            assert_eq!(dict.index_of(result), Some(id + 1));
         }
     }
 }
