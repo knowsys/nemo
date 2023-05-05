@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     error::Error,
-    io::RecordWriter,
+    io::{dsv::DSVReader, RecordWriter},
     logical::{
         model::{DataSource, Identifier, Program},
         program_analysis::analysis::ProgramAnalysis,
@@ -111,12 +111,19 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the data source declarations
-        for ((predicate, _), source) in program.sources() {
+        for ((predicate, arity), source) in program.sources() {
             let new_source = match source {
-                DataSource::DsvFile { file, delimiter } => TableSource::DSV {
-                    file: *file.clone(),
-                    delimiter: *delimiter,
-                },
+                DataSource::DsvFile { file, delimiter } => {
+                    let logical_types = analysis
+                        .predicate_types
+                        .get(predicate)
+                        .cloned()
+                        .unwrap_or_else(|| (0..arity).map(|_| LogicalTypeEnum::Any).collect());
+
+                    let reader = DSVReader::dsv(*file.clone(), *delimiter, logical_types);
+
+                    TableSource::FileReader(Box::new(reader))
+                }
                 DataSource::RdfFile(_) => todo!("RDF data sources are not yet implemented"),
                 DataSource::SparqlQuery(_) => {
                     todo!("SPARQL query data sources are not yet implemented")

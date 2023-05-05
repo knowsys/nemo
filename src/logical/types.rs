@@ -3,6 +3,10 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
+use crate::io::builder_proxy::{
+    LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxy, LogicalFloat64ColumnBuilderProxy,
+    LogicalIntegerColumnBuilderProxy, PhysicalBuilderProxyEnum,
+};
 use crate::io::parser::ParseError;
 use crate::physical::datatypes::{DataTypeName, DataValueT, Double};
 
@@ -165,9 +169,21 @@ impl LogicalTypeEnum {
     /// Whether this logical type can be used to perform numeric operations.
     pub fn allows_numeric_operations(&self) -> bool {
         match self {
-            LogicalTypeEnum::Any => false,
-            LogicalTypeEnum::Integer => true,
-            LogicalTypeEnum::Float64 => true,
+            Self::Any => false,
+            Self::Integer => true,
+            Self::Float64 => true,
+        }
+    }
+
+    /// Wrap physical builder proxy into logical equivalent
+    pub fn wrap_physical_column_builder<'a: 'b, 'b>(
+        self,
+        physical: &'b mut PhysicalBuilderProxyEnum<'a>,
+    ) -> Box<dyn LogicalColumnBuilderProxy<'a, 'b> + 'b> {
+        match self {
+            Self::Any => Box::new(LogicalAnyColumnBuilderProxy::new(physical)),
+            Self::Integer => Box::new(LogicalIntegerColumnBuilderProxy::new(physical)),
+            Self::Float64 => Box::new(LogicalFloat64ColumnBuilderProxy::new(physical)),
         }
     }
 }
