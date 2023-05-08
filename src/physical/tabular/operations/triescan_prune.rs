@@ -546,12 +546,12 @@ mod test {
     }
 
     /// Creates an example trie with unmaterialized tuples
-    fn create_example_trie_scan<'a>(
-        input_trie: &'a Trie,
+    fn create_example_trie_scan(
+        input_trie: &Trie,
         layer_1_equality: u64,
         layer_3_equality: u64,
-    ) -> TrieScanPrune<'a> {
-        let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&input_trie));
+    ) -> TrieScanPrune {
+        let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(input_trie));
 
         let mut dict = Dict::default();
         let scan = TrieScanEnum::TrieScanSelectValue(TrieScanSelectValue::new(
