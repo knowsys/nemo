@@ -1,6 +1,8 @@
 use crate::physical::columnar::traits::columnscan::ColumnScanCell;
 use crate::physical::datatypes::ColumnDataType;
-use crate::physical::tabular::operations::triescan_prune::SharedTrieScanPruneState;
+use crate::physical::tabular::operations::triescan_prune::{
+    SharedTrieScanPruneState, TrieScanPruneState,
+};
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -23,7 +25,7 @@ impl<'a, T> ColumnScanPrune<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new column scan. This should not be called directory, but only by `TrieScanPrune`
+    /// Constructs a new column scan. This should not be called directly, but only by `TrieScanPrune`
     pub fn new(
         state: SharedTrieScanPruneState<'a>,
         column_scan_index: usize,
@@ -35,6 +37,12 @@ where
             reference_scan,
         }
     }
+
+    unsafe fn exclusively_get_shared_state<'b>(
+        state: &SharedTrieScanPruneState<'a>,
+    ) -> &'b mut TrieScanPruneState<'a> {
+        unsafe { &mut *state.get() }
+    }
 }
 
 impl<'a, T> Iterator for ColumnScanPrune<'a, T>
@@ -43,8 +51,17 @@ where
 {
     type Item = T;
 
+    /// Gets the next output value for a column.
+    ///
+    /// This is forwarded to `advance()` of [`crate::physical::tabular::operations::triescan_prune::TrieScanPruneState`]`.
     fn next(&mut self) -> Option<Self::Item> {
-        unsafe { (*self.state.get()).get_next_value(self.column_scan_index) };
+        let current_layer = self.column_scan_index;
+
+        unsafe {
+            let state = Self::exclusively_get_shared_state(&self.state);
+            state.advance_at_layer(current_layer, false);
+        };
+
         self.reference_scan.current()
     }
 }
@@ -54,15 +71,19 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, minimum_value: T) -> Option<T> {
-        loop {
-            match self.next() {
-                Some(next_value) => {
-                    if next_value >= minimum_value {
-                        return Some(next_value);
-                    }
-                }
-                None => return None,
-            }
+        let current_layer = self.column_scan_index;
+
+        unsafe {
+            let state = Self::exclusively_get_shared_state(&self.state);
+
+            // Advance the underlying trie scan, taking layer peeks into account
+            // This calls `seek()` and `next()` under the hood, possibly multiple times.
+            state.advance_at_layer_with_seek(
+                current_layer,
+                false,
+                self.reference_scan,
+                minimum_value,
+            )
         }
     }
 

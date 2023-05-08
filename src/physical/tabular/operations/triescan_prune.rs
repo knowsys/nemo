@@ -1,6 +1,6 @@
 use crate::physical::columnar::operations::ColumnScanPrune;
 use crate::physical::columnar::traits::columnscan::ColumnScan;
-use crate::physical::datatypes::StorageValueT;
+use crate::physical::datatypes::{ColumnDataType, StorageValueT};
 use crate::physical::{
     columnar::traits::columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
     datatypes::StorageTypeName,
@@ -36,20 +36,19 @@ pub type SharedTrieScanPruneState<'a> = Rc<UnsafeCell<TrieScanPruneState<'a>>>;
 #[derive(Debug)]
 pub struct TrieScanPruneState<'a> {
     /// Trie scan which is being pruned
-    pub input_trie_scan: TrieScanEnum<'a>,
+    input_trie_scan: TrieScanEnum<'a>,
+    /// Whether the first `external_down()` has been made (to go to layer `0`)
     initialized: bool,
     /// Current column scan layer of the input trie scan
     /// Layer zero is at to top of the trie scan
     input_trie_scan_current_layer: usize,
-    /// This vector records for every column whether if has already
-    /// been peeked into by the `advance` function.
-    /// If so, the column should ignore the first call to `next` and
-    /// instead return the result of `current`.
-    /// This is required to implement the lookahead to check if
+    /// Index of the highest layer which has been peeked into by the `advance()` function
+    /// This layer and layers below this index should ignore the next call to `advance`, because they have already been advanced to the next value behind the scenes.
+    /// This variable is required to implement the lookahead which checks if
     /// a value would exist in a materialized version of the trie scan.
-    column_peeks: Vec<bool>,
+    highest_peeked_layer: Option<usize>,
     /// Layer on which an outside consumer would believe this trie scan to be
-    /// TODO: Maybe move to the `TrieScanPrune` itself
+    /// TODO: Maybe move to the `TrieScanPrune` itself, if we do not want to use this for validating the trie is on the correct layer in `ColumnScanPrune`
     external_current_layer: usize,
 }
 
@@ -89,46 +88,67 @@ impl<'a> TrieScanPruneState<'a> {
         self.input_trie_scan_current_layer += 1;
     }
 
-    /// Moves the input trie to the target layer through `up` and `down`
-    fn go_to_layer(&mut self, target_layer: usize) {
+    /// Moves the input trie to the target layer through `up` and `down`, without advancing this trie scan at all.
+    ///
+    /// Going upwards will always work (until layer 0).
+    /// Going downwards requires that the current value of the layer is not currently `None`, the `highest_peeked_layer` is ignored and going down also works for layers which are currently peeked.
+    /// If going downwards was not possible, this method will return `false` with the input trie scan ending up on the layer where it was not possible to go down further.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that there exists no mutable reference to the column scans between `input_trie_scan_current_layer` and `target_layer` and thus the [`UnsafeCell`] is safe to access when going downwards.
+    /// This is required to check if going downwards is allowed.
+    unsafe fn try_to_go_to_layer(&mut self, target_layer: usize) -> bool {
         assert!(target_layer < self.input_trie_scan.get_types().len());
 
         // Move up or down to the correct layer
         // Note that the uppermost layer has index 0
 
-        for _ in self.input_trie_scan_current_layer..target_layer {
-            self.down();
-        }
         for _ in target_layer..self.input_trie_scan_current_layer {
             self.up();
         }
+        for _ in self.input_trie_scan_current_layer..target_layer {
+            if self
+                .current_value(self.input_trie_scan_current_layer)
+                .is_none()
+            {
+                return false;
+            }
+            self.down();
+        }
+
+        true
     }
 
-    /// Checks whether a column has been peeked already.
+    /// Returns whether a column has been peeked already.
     ///
     /// See [`TrieScanPruneState`] for more information.
     #[inline]
     pub fn is_column_peeked(&self, index: usize) -> bool {
-        self.column_peeks[index]
+        self.highest_peeked_layer.map_or(false, |p| index >= p)
     }
 
-    #[inline]
-    unsafe fn get_input_trie_current_value(&mut self, index: usize) -> Option<StorageValueT> {
-        let scan = self.input_trie_scan.get_scan(index).unwrap();
-
-        unsafe { &mut *scan.get() }.current()
-    }
-
-    #[inline]
-    unsafe fn get_input_trie_next_value(&mut self, index: usize) -> Option<StorageValueT> {
-        let scan = self.input_trie_scan.get_scan(index).unwrap();
-
-        unsafe { &mut *scan.get() }.next()
-    }
-
-    /// Gets the current output value for a column.
+    /// # Safety
     ///
-    /// This is None if the column has been peeked, otherwise the call is forwarded to the input column.
+    /// The caller must ensure that there exists no mutable reference to the column scan at `index` and thus the [`UnsafeCell`] is safe to access.
+    #[inline]
+    pub unsafe fn current_input_trie_value(&mut self, index: usize) -> Option<StorageValueT> {
+        let scan = self.input_trie_scan.get_scan(index).unwrap();
+
+        unsafe { (*scan.get()).current() }
+    }
+
+    /// # Safety
+    ///
+    /// The caller must ensure that there exists no immutable/mutable references to the column scan at `index` and thus the value inside the [`UnsafeCell`] is safe to mutate.
+    #[inline]
+    unsafe fn next_input_trie_value(&mut self, index: usize) -> Option<StorageValueT> {
+        let scan = self.input_trie_scan.get_scan(index).unwrap();
+
+        unsafe { (*scan.get()).next() }
+    }
+
+    /// Directly gets the current output value for a column ignoring layer peeks (see `highest_peeked_layer`).
     ///
     /// # Safety
     ///
@@ -136,54 +156,89 @@ impl<'a> TrieScanPruneState<'a> {
     ///
     /// TODO: Update to allow for direct access
     #[inline]
-    pub unsafe fn get_current_value(&self, index: usize) -> Option<StorageValueT> {
+    unsafe fn current_value(&self, index: usize) -> Option<StorageValueT> {
         debug_assert!(self.initialized);
-        if self.column_peeks[index] {
-            return None;
-        }
 
         let scan = self.input_trie_scan.get_scan(index).unwrap();
 
         unsafe { &*scan.get() }.current()
     }
 
-    /// Gets the next output value for a column.
+    /// Helper method for the `advance_at_layer()` and `advance_at_layer_with_seek()`
     ///
-    /// This is forwarded to `current()` of the underlying input column if the column has been peeked with the column peek being reset, otherwise to `next()`.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that there exists no immutable/mutable references to the column scan at `index` and thus the value inside the [`UnsafeCell`] is safe to mutate.
-    ///
-    /// TODO: Update to allow for direct access
-    #[inline]
-    pub unsafe fn get_next_value(&mut self, index: usize) -> Option<StorageValueT> {
-        debug_assert!(self.initialized);
-        if self.column_peeks[index] {
-            self.column_peeks[index] = false;
-            self.get_input_trie_current_value(index)
-        } else {
-            self.advance_at_layer(index, false);
+    /// Goes to next value without checking layer peeks (see `highest_peeked_layer`), and returns if a value exists.
+    fn advance_has_next_value(&mut self) -> bool {
+        // SAFETY: this requires that no other references to the current layer scan exist. We currently have no way of ensuring this.
+        let next_value = unsafe { self.next_input_trie_value(self.input_trie_scan_current_layer) };
 
-            self.get_input_trie_current_value(index)
-        }
+        next_value.is_some()
     }
 
-    /// TODO: Possibly update to allow for direct access
-    fn advance_at_layer(
+    /// Marks layers below the `target_layer` as peeked. Should only be used by the `advance()` functions.
+    fn set_highest_peeked_layer_by_target_layer(&mut self, target_layer: usize) {
+        self.highest_peeked_layer = if target_layer == self.input_trie_scan.get_types().len() - 1 {
+            None
+        } else {
+            Some(target_layer + 1)
+        };
+    }
+
+    /// Same as `advance_at_layer()`, but calls `seek()` at the target layer to find advance to the next relevant tuple more efficiently.
+    ///
+    /// Currently, this function does not support returning the uppermost changed layer. This can be implemented in the future.
+    pub fn advance_at_layer_with_seek<T: ColumnDataType>(
         &mut self,
         target_layer: usize,
         allow_advancements_above_target_layer: bool,
-    ) -> bool {
+        underlying_column_scan: &'a ColumnScanCell<'a, T>,
+        seek_minimum_value: T,
+    ) -> Option<T> {
         debug_assert!(self.initialized);
 
-        self.go_to_layer(target_layer);
-
+        // Semantics of the `boundary_layer`:
+        //   * If we're at the boundary layer, we may not call `up()`.
+        //   * If we're above the boundary layer, we may not call `up()` or advance the layer (using `next()` or by removing layer peeks)
         let boundary_layer = if allow_advancements_above_target_layer {
             0
         } else {
             target_layer
         };
+
+        // Fully handle layer peeks before advancing any layers
+        if self.is_column_peeked(target_layer) {
+            if self.highest_peeked_layer.unwrap() == target_layer
+                || allow_advancements_above_target_layer
+            {
+                // Just remove the peek to advance the layer
+                // Check if the value behind the peek satisfies the seek condition, otherwise continue search after removing the peek
+                let next_value = underlying_column_scan.current();
+                if next_value.unwrap() >= seek_minimum_value {
+                    // Mark layers below target layer as peeked
+                    self.set_highest_peeked_layer_by_target_layer(target_layer);
+
+                    return Some(next_value.unwrap());
+                }
+            } else {
+                // We would need to unpeek (advance) layers above the boundary_layer, which is not allowed
+                return None;
+            }
+        }
+        // This needs to be adjusted before returning from the function
+        self.highest_peeked_layer = None;
+
+        // SAFETY: this requires that no other references to the layers below exist. We currently have no way of ensuring this.
+        unsafe { self.try_to_go_to_layer(target_layer) };
+
+        if self.input_trie_scan_current_layer < boundary_layer {
+            // We would need to advance to even get to the target layer, but are not allowed to because of the `boundary_layer`.
+            return None;
+        }
+
+        // Whether seek was already called on the trie scan of the target layer
+        // In this case `next` can be called instead
+        let mut perform_next_instead_of_seek = false;
+
+        let mut return_value = None;
 
         // Traverse trie downwards to check if the value would actually exists in the materialized version of the trie
         // If at one layer there is no materialized value, move up, go to the next item, and move down again
@@ -192,25 +247,131 @@ impl<'a> TrieScanPruneState<'a> {
             // If there exists no value, go upwards until either
             // a new value is found or we hit the the `boundary_layer`
 
-            if self.input_trie_scan_current_layer > target_layer {
-                self.column_peeks[self.input_trie_scan_current_layer] = true;
-            }
+            let has_next_value = if self.input_trie_scan_current_layer == target_layer {
+                if perform_next_instead_of_seek {
+                    // Perform `next` instead of `seek` until we go above the `target_layer` again
+                    perform_next_instead_of_seek = true;
 
-            // SAFETY: this requires that no other references to the current layer scan exist. We currently have no way of ensuring this.
-            let next_value =
-                unsafe { self.get_input_trie_next_value(self.input_trie_scan_current_layer) };
-            if next_value.is_none() {
+                    return_value = underlying_column_scan.seek(seek_minimum_value);
+                    return_value.is_some()
+                } else {
+                    return_value = underlying_column_scan.next();
+                    return_value.is_some()
+                }
+            } else {
+                // On other layers than the `target_layer` there are no seeks going on, only `next()`
+                self.advance_has_next_value()
+            };
+
+            if has_next_value {
                 if self.input_trie_scan_current_layer == boundary_layer {
                     // Boundary layer has been reached and has no next value
-                    return false;
+
+                    // `highest_peeked_layer`has already been set to None
+                    return None;
                 } else {
                     self.up();
+                    if self.input_trie_scan_current_layer < target_layer {
+                        perform_next_instead_of_seek = true;
+                    }
                 }
             } else if self.input_trie_scan_current_layer
                 == self.input_trie_scan.get_types().len() - 1
             {
                 // Lowest layer has been reached and an materialized value has been found
-                return true;
+
+                // Mark layers below the `target_layer` as peeked
+                self.set_highest_peeked_layer_by_target_layer(target_layer);
+
+                return return_value;
+            } else {
+                self.down();
+            }
+        }
+    }
+
+    /// Moves to the next value on a given layer while ensuring that only materialized tuples are returned (see guarantees provided by [`TrieScanPrune`]).
+    ///
+    /// See documentation of function `advance_at_layer()` of [`TrieScanPrune`].
+    pub fn advance_at_layer(
+        &mut self,
+        target_layer: usize,
+        allow_advancements_above_target_layer: bool,
+    ) -> Option<usize> {
+        debug_assert!(self.initialized);
+
+        // Semantics of the `boundary_layer`:
+        //   * If we're at the boundary layer, we may not call `up()`.
+        //   * If we're above the boundary layer, we may not call `up()` or advance the layer (using `next()` or by removing layer peeks)
+        let boundary_layer = if allow_advancements_above_target_layer {
+            0
+        } else {
+            target_layer
+        };
+
+        // Fully handle layer peeks before advancing any layers
+        if self.is_column_peeked(target_layer) {
+            if self.highest_peeked_layer.unwrap() == target_layer
+                || allow_advancements_above_target_layer
+            {
+                // Just remove the peek to advance the layer
+                let old_highest_peeked_layer = self.highest_peeked_layer;
+
+                // Mark layers below target layer as peeked
+                self.set_highest_peeked_layer_by_target_layer(target_layer);
+
+                return Some(old_highest_peeked_layer.unwrap());
+            } else {
+                // We would need to unpeek (advance) layers above the boundary_layer, which is not allowed
+                return None;
+            }
+        }
+        // This needs to be adjusted before returning from the function
+        self.highest_peeked_layer = None;
+
+        // SAFETY: this requires that no other references to the layers below exist. We currently have no way of ensuring this.
+        unsafe { self.try_to_go_to_layer(target_layer) };
+
+        if self.input_trie_scan_current_layer < boundary_layer {
+            // We would need to advance to even get down to the target layer, but are not allowed to because of the `boundary_layer`.
+            return None;
+        }
+
+        // Layer with the lowest index where the trie scan has advanced to the next item, from the perspective of someone who consumes this trie scan
+        // `target_layer` must be modified to return `Some(return_value)`, thus this is a sensible initial value
+        let mut return_value = target_layer;
+
+        // Traverse trie downwards to check if the value would actually exists in the materialized version of the trie
+        // If at one layer there is no materialized value, move up, go to the next item, and move down again
+        loop {
+            // Go down one layer and check if there exists a item
+            // If there exists no value, go upwards until either
+            // a new value is found or we hit the the `boundary_layer`
+
+            let has_next_value = self.advance_has_next_value();
+
+            if !has_next_value {
+                if self.input_trie_scan_current_layer == boundary_layer {
+                    // Boundary layer has been reached and has no next value
+
+                    // `highest_peeked_layer`has already been set to None
+                    return None;
+                }
+
+                self.up();
+
+                if self.input_trie_scan_current_layer > return_value {
+                    return_value = self.input_trie_scan_current_layer;
+                }
+            } else if self.input_trie_scan_current_layer
+                == self.input_trie_scan.get_types().len() - 1
+            {
+                // Lowest layer has been reached and an materialized value has been found
+
+                // Mark layers below the `target_layer` as peeked
+                self.set_highest_peeked_layer_by_target_layer(target_layer);
+
+                return Some(return_value);
             } else {
                 self.down();
             }
@@ -228,7 +389,7 @@ impl<'a> TrieScanPrune<'a> {
         let state = Rc::new(UnsafeCell::new(TrieScanPruneState {
             input_trie_scan,
             input_trie_scan_current_layer: 0,
-            column_peeks: vec![false; target_types.len()],
+            highest_peeked_layer: None,
             initialized: false,
             external_current_layer: 0,
         }));
@@ -273,6 +434,33 @@ impl<'a> TrieScanPrune<'a> {
             target_types,
         }
     }
+
+    /// Moves to the next value on a given layer while ensuring that only materialized tuples are returned (see guarantees provided by [`TrieScanPrune`]).
+    ///
+    /// It is assumed that the trie scan has been initialized by calling `down()` at least once.
+    ///
+    /// In the future and if needed, a similar function `advance_at_layer_with_seek()` might be exposed here, too (see `advance_at_layer_with_seek()` of [`crate::physical::tabular::operations::triescan_prune::TrieScanPrune`]).
+    ///
+    ///   * `allow_advancements_above_target_layer` - Whether the underlying trie scan may be advanced on layers above the `target_layer`.
+    ///     If this is set to `false`, the `advance_at_layer()` function has the same effect as calling `next()` on the column scan at the `target_layer`, meaning that layers above the `target_layer` are seen as read-only.
+    ///     If this is set to `true`, layers above the `target_layer` once `next()` on the `target_layer` returns `None`. This allows to e.g. call `advance_at_layer()` on the bottommost layer to iterate though all the tuples of the underlying trie scan.
+    ///
+    /// Returns the uppermost layer (layer with lowest index) that has been advanced. This layer, and all the layers below, can have a new current value. This is relevant if `allow_advancements_above_target_layer` is set to `true`.
+    ///
+    /// # Panics
+    ///
+    /// If the underlying trie scan has not been initialized.
+    pub fn advance_at_layer(
+        &mut self,
+        target_layer: usize,
+        allow_advancements_above_target_layer: bool,
+    ) -> Option<usize> {
+        unsafe {
+            assert!((*self.state.get()).initialized);
+            (*self.state.get())
+                .advance_at_layer(target_layer, allow_advancements_above_target_layer)
+        }
+    }
 }
 
 impl<'a> TrieScan<'a> for TrieScanPrune<'a> {
@@ -289,7 +477,13 @@ impl<'a> TrieScan<'a> for TrieScanPrune<'a> {
     }
 
     fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
-        let current_layer = unsafe { (*self.state.get()).external_current_layer };
+        let current_layer = unsafe {
+            if !(*self.state.get()).initialized {
+                return None;
+            }
+
+            (*self.state.get()).external_current_layer
+        };
 
         Some(self.output_column_scans[current_layer].get_mut())
     }
@@ -313,6 +507,7 @@ mod test {
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
 
+    use crate::physical::util::interval::Interval;
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
@@ -330,6 +525,52 @@ mod test {
         } else {
             panic!("type should be u64");
         }
+    }
+
+    fn get_current_scan_item_at_layer(scan: &mut TrieScanPrune, layer_index: usize) -> Option<u64> {
+        if let ColumnScanT::U64(rcs) = unsafe { &*scan.get_scan(layer_index).unwrap().get() } {
+            rcs.current()
+        } else {
+            panic!("type should be u64");
+        }
+    }
+
+    /// Creates an example trie with unmaterialized tuples
+    fn create_example_trie() -> Trie {
+        let column_fst = make_column_with_intervals_t(&[1, 2], &[0, 1]);
+        let column_snd = make_column_with_intervals_t(&[4, 5, 4], &[0, 2]);
+        let column_trd = make_column_with_intervals_t(&[0, 1, 2, 1, 8], &[0, 3, 4]);
+        let column_fth = make_column_with_intervals_t(&[3, 7, 5, 7, 3, 4, 6, 7], &[0, 2, 4, 6, 7]);
+
+        Trie::new(vec![column_fst, column_snd, column_trd, column_fth])
+    }
+
+    /// Creates an example trie with unmaterialized tuples
+    fn create_example_trie_scan<'a>(
+        input_trie: &'a Trie,
+        layer_1_equality: u64,
+        layer_3_equality: u64,
+    ) -> TrieScanPrune<'a> {
+        let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&input_trie));
+
+        let mut dict = Dict::default();
+        let scan = TrieScanEnum::TrieScanSelectValue(TrieScanSelectValue::new(
+            &mut dict,
+            scan,
+            &[
+                ValueAssignment {
+                    column_idx: 1,
+                    interval: Interval::single(DataValueT::U64(layer_1_equality)),
+                },
+                ValueAssignment {
+                    column_idx: 3,
+                    interval: Interval::single(DataValueT::U64(layer_3_equality)),
+                },
+            ],
+        ));
+        let scan = TrieScanPrune::new(scan);
+
+        scan
     }
 
     #[test]
@@ -392,32 +633,9 @@ mod test {
 
     #[test]
     fn test_skip_unmaterialized_tuples() {
-        let column_fst = make_column_with_intervals_t(&[1, 2], &[0, 1]);
-        let column_snd = make_column_with_intervals_t(&[4, 5, 4], &[0, 2]);
-        let column_trd = make_column_with_intervals_t(&[0, 1, 2, 1, 8], &[0, 3, 4]);
-        let column_fth = make_column_with_intervals_t(&[3, 7, 5, 7, 3, 4, 6, 7], &[0, 2, 4, 6, 7]);
+        let trie = create_example_trie();
+        let mut scan = create_example_trie_scan(&trie, 4, 7);
 
-        let trie = Trie::new(vec![column_fst, column_snd, column_trd, column_fth]);
-        let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
-
-        let mut dict = Dict::default();
-        let scan = TrieScanEnum::TrieScanSelectValue(TrieScanSelectValue::new(
-            &mut dict,
-            scan,
-            &[
-                ValueAssignment {
-                    column_idx: 1,
-                    value: DataValueT::U64(4),
-                },
-                ValueAssignment {
-                    column_idx: 3,
-                    value: DataValueT::U64(7),
-                },
-            ],
-        ));
-        let mut scan = TrieScanPrune::new(scan);
-
-        assert_eq!(get_current_scan_item(&mut scan), None);
         scan.down();
         assert_eq!(get_current_scan_item(&mut scan), None);
         assert_eq!(get_next_scan_item(&mut scan), Some(1));
@@ -469,5 +687,62 @@ mod test {
         assert_eq!(get_current_scan_item(&mut scan), Some(7));
         assert_eq!(get_next_scan_item(&mut scan), None);
         assert_eq!(get_current_scan_item(&mut scan), None);
+    }
+
+    #[test]
+    fn test_empty_input_trie() {
+        let trie = create_example_trie();
+        // Equality on lowest layer changed to 99 to prevent any matches and create trie scan without materialized tuples
+        let mut scan = create_example_trie_scan(&trie, 4, 99);
+
+        scan.down();
+        assert_eq!(get_current_scan_item(&mut scan), None);
+        assert_eq!(get_next_scan_item(&mut scan), None);
+        assert_eq!(get_current_scan_item(&mut scan), None);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_advance_on_uninitialized_trie_scan_should_panic() {
+        let trie = create_example_trie();
+        let mut scan = create_example_trie_scan(&trie, 4, 7);
+
+        scan.advance_at_layer(0, false);
+    }
+
+    #[test]
+    fn test_advance_above_target_layer() {
+        let trie = create_example_trie();
+        let mut scan = create_example_trie_scan(&trie, 4, 7);
+
+        // Initialize trie
+        scan.down();
+
+        let lowest_layer_index = scan.get_types().len() - 1;
+
+        assert_eq!(
+            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+            None
+        );
+        scan.advance_at_layer(lowest_layer_index, true);
+        assert_eq!(
+            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+            Some(7)
+        );
+        scan.advance_at_layer(lowest_layer_index, true);
+        assert_eq!(
+            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+            Some(7)
+        );
+        scan.advance_at_layer(lowest_layer_index, true);
+        assert_eq!(
+            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+            Some(7)
+        );
+        scan.advance_at_layer(lowest_layer_index, true);
+        assert_eq!(
+            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+            None
+        );
     }
 }
