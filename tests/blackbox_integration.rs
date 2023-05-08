@@ -93,11 +93,11 @@ impl TestCase {
     }
 
     fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut cmd = Command::cargo_bin("nemo")?;
+        let mut cmd = Command::cargo_bin("nmo")?;
 
         cmd.current_dir(self.test_dir.as_path())
             .arg("-s")
-            .arg("-o")
+            .arg("-D")
             .arg(self.output_dir.path())
             .arg(self.rule_file.as_path())
             .assert()

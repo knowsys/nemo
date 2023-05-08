@@ -14,12 +14,107 @@ use crate::physical::columnar::{
     },
 };
 use crate::physical::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
+use crate::physical::dictionary::ValueSerializer;
 use crate::physical::management::ByteSized;
 use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
 use std::cell::UnsafeCell;
-use std::fmt::Debug;
 use std::iter;
 use std::mem::size_of;
+
+pub(crate) struct TrieRows<'a> {
+    data_columns: Vec<ColumnScanT<'a>>,
+    interval_columns: Vec<ColumnScanEnum<'a, usize>>,
+    interval_offsets: Vec<usize>,
+    last_row: Vec<StorageValueT>,
+}
+
+impl<'a> TrieRows<'a> {
+    /// advances the iterator one step
+    /// # Returns
+    /// * if there is a next row, the index of the first (i.e. lowest index) column with a new value
+    /// * [None] otherwise
+    fn advance(&mut self) -> Option<usize> {
+        if self.last_row.is_empty() {
+            self.last_row = self
+                .data_columns
+                .iter_mut()
+                .map(|column| column.next())
+                .collect::<Option<_>>()?;
+
+            for c in &mut self.interval_columns {
+                let interval_start_first = c.next();
+                debug_assert_eq!(interval_start_first, Some(0));
+
+                // call next to get the first interval end upon next call to current
+                let _ = c.next();
+            }
+
+            return Some(0);
+        }
+
+        let mut current_column = self.data_columns.len() - 1;
+
+        loop {
+            self.interval_offsets[current_column] += 1;
+            self.last_row[current_column] = self.data_columns[current_column].next()?;
+            let Some(interval_end) = self.interval_columns[current_column].current() else { break; };
+
+            if self.interval_offsets[current_column] < interval_end {
+                break;
+            }
+
+            let _ = self.interval_columns[current_column].next();
+            current_column -= 1;
+        }
+
+        Some(current_column)
+    }
+
+    pub fn next_changed(&mut self) -> Option<&[StorageValueT]> {
+        let updated = self.advance()?;
+        Some(&self.last_row[updated..])
+    }
+}
+
+// TODO: TrieRecord(s) should probably be moved somewhere else, alongside the table_schema
+
+pub(crate) struct TrieRecord<'a>(&'a [String]);
+
+impl<'a> IntoIterator for TrieRecord<'a> {
+    type Item = &'a String;
+    type IntoIter = std::slice::Iter<'a, String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+pub(crate) struct TrieRecords<'a> {
+    rows: TrieRows<'a>,
+    last_record: Vec<String>,
+    serializer: ValueSerializer<'a>,
+}
+
+impl<'a> TrieRecords<'a> {
+    pub fn next_record(&mut self) -> Option<TrieRecord<'_>> {
+        let changed_values = self.rows.next_changed()?;
+        let unchanged = if !self.last_record.is_empty() {
+            self.last_record.len() - changed_values.len()
+        } else {
+            0
+        };
+
+        self.last_record.truncate(unchanged);
+
+        for (offset, &value) in changed_values.iter().enumerate() {
+            let column_index = unchanged + offset;
+            let str_value = self.serializer.value_to_string(column_index, value);
+            self.last_record.push(str_value);
+        }
+
+        Some(TrieRecord(&self.last_record))
+    }
+}
 
 /// Implementation of a trie data structure.
 /// The underlying data is oragnized in IntervalColumns.
@@ -159,6 +254,29 @@ impl Trie {
 
         result_columns.reverse();
         result_columns
+    }
+
+    pub(crate) fn rows(&self) -> TrieRows<'_> {
+        let num_columns = self.columns.len();
+        let (data_columns, interval_columns) =
+            self.columns.iter().map(|col| col.as_parts()).unzip();
+
+        TrieRows {
+            data_columns,
+            interval_columns,
+            interval_offsets: vec![0; num_columns],
+            last_row: Vec::with_capacity(num_columns),
+        }
+    }
+
+    pub(crate) fn records<'a>(&'a self, serializer: ValueSerializer<'a>) -> TrieRecords<'a> {
+        let num_columns = self.columns.len();
+
+        TrieRecords {
+            rows: self.rows(),
+            last_record: Vec::with_capacity(num_columns),
+            serializer,
+        }
     }
 }
 

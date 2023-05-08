@@ -1,7 +1,6 @@
 /// A Parser for RFC 3987 IRIs
 use nom::{
     branch::alt,
-    bytes::complete::tag,
     character::complete::{digit0, one_of, satisfy},
     combinator::{opt, recognize},
     multi::{count, many0, many1, many_m_n},
@@ -10,34 +9,35 @@ use nom::{
 
 use super::{
     rfc5234::{alpha, digit, hexdig},
-    types::IntermediateResult,
+    token,
+    types::{IntermediateResult, Span},
 };
 
 use macros::traced;
 
-pub fn is_absolute(the_iri: &str) -> bool {
+pub fn is_absolute(the_iri: Span) -> bool {
     iri(the_iri).is_ok()
 }
 
-pub fn is_relative(iri: &str) -> bool {
+pub fn is_relative(iri: Span) -> bool {
     irelative_ref(iri).is_ok()
 }
 
 #[traced("parser::iri")]
-pub fn iri(input: &str) -> IntermediateResult<&str> {
+pub fn iri(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((
         scheme,
-        tag(":"),
+        token(":"),
         ihier_part,
-        opt(pair(tag("?"), iquery)),
-        opt(pair(tag("#"), ifragment)),
+        opt(pair(token("?"), iquery)),
+        opt(pair(token("#"), ifragment)),
     )))(input)
 }
 
 #[traced("parser::iri")]
-fn ihier_part(input: &str) -> IntermediateResult<&str> {
+fn ihier_part(input: Span) -> IntermediateResult<Span> {
     alt((
-        recognize(tuple((tag("//"), iauthority, ipath_abempty))),
+        recognize(tuple((token("//"), iauthority, ipath_abempty))),
         ipath_absolute,
         ipath_rootless,
         ipath_empty,
@@ -45,34 +45,34 @@ fn ihier_part(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::iri")]
-pub fn iri_reference(input: &str) -> IntermediateResult<&str> {
+pub fn iri_reference(input: Span) -> IntermediateResult<Span> {
     alt((iri, irelative_ref))(input)
 }
 
 #[allow(dead_code)]
 #[traced("parser::iri")]
-pub fn absolute_iri(input: &str) -> IntermediateResult<&str> {
+pub fn absolute_iri(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((
         scheme,
-        tag(":"),
+        token(":"),
         ihier_part,
-        opt(pair(tag("?"), iquery)),
+        opt(pair(token("?"), iquery)),
     )))(input)
 }
 
 #[traced("parser::iri")]
-pub fn irelative_ref(input: &str) -> IntermediateResult<&str> {
+pub fn irelative_ref(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((
         irelative_part,
-        opt(pair(tag("?"), iquery)),
-        opt(pair(tag("#"), ifragment)),
+        opt(pair(token("?"), iquery)),
+        opt(pair(token("#"), ifragment)),
     )))(input)
 }
 
 #[traced("parser::iri")]
-fn irelative_part(input: &str) -> IntermediateResult<&str> {
+fn irelative_part(input: Span) -> IntermediateResult<Span> {
     recognize(alt((
-        recognize(tuple((tag("//"), iauthority, ipath_abempty))),
+        recognize(tuple((token("//"), iauthority, ipath_abempty))),
         ipath_absolute,
         ipath_noscheme,
         ipath_empty,
@@ -80,32 +80,37 @@ fn irelative_part(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::iri")]
-fn iauthority(input: &str) -> IntermediateResult<&str> {
+fn iauthority(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((
-        opt(pair(iuserinfo, tag("@"))),
+        opt(pair(iuserinfo, token("@"))),
         ihost,
-        opt(pair(tag(":"), port)),
+        opt(pair(token(":"), port)),
     )))(input)
 }
 
 #[traced("parser::iri")]
-fn iuserinfo(input: &str) -> IntermediateResult<&str> {
-    recognize(many0(alt((iunreserved, pct_encoded, sub_delims, tag(":")))))(input)
+fn iuserinfo(input: Span) -> IntermediateResult<Span> {
+    recognize(many0(alt((
+        iunreserved,
+        pct_encoded,
+        sub_delims,
+        token(":"),
+    ))))(input)
 }
 
 #[traced("parser::iri")]
-fn ihost(input: &str) -> IntermediateResult<&str> {
+fn ihost(input: Span) -> IntermediateResult<Span> {
     alt((ip_literal, ipv4_address, ireg_name))(input)
 }
 
 #[traced("parser::iri")]
-fn ireg_name(input: &str) -> IntermediateResult<&str> {
+fn ireg_name(input: Span) -> IntermediateResult<Span> {
     recognize(many0(alt((iunreserved, pct_encoded, sub_delims))))(input)
 }
 
 #[allow(dead_code)]
 #[traced("parser::iri")]
-pub fn ipath(input: &str) -> IntermediateResult<&str> {
+pub fn ipath(input: Span) -> IntermediateResult<Span> {
     alt((
         ipath_abempty,
         ipath_absolute,
@@ -116,78 +121,83 @@ pub fn ipath(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::iri")]
-fn ipath_abempty(input: &str) -> IntermediateResult<&str> {
-    recognize(many0(pair(tag("/"), isegment)))(input)
+fn ipath_abempty(input: Span) -> IntermediateResult<Span> {
+    recognize(many0(pair(token("/"), isegment)))(input)
 }
 
 #[traced("parser::iri")]
-fn ipath_absolute(input: &str) -> IntermediateResult<&str> {
+fn ipath_absolute(input: Span) -> IntermediateResult<Span> {
     recognize(pair(
-        tag("/"),
-        opt(pair(isegment_nz, many0(pair(tag("/"), isegment)))),
+        token("/"),
+        opt(pair(isegment_nz, many0(pair(token("/"), isegment)))),
     ))(input)
 }
 
 #[traced("parser::iri")]
-fn ipath_noscheme(input: &str) -> IntermediateResult<&str> {
-    recognize(pair(isegment_nz_nc, many0(pair(tag("/"), isegment))))(input)
+fn ipath_noscheme(input: Span) -> IntermediateResult<Span> {
+    recognize(pair(isegment_nz_nc, many0(pair(token("/"), isegment))))(input)
 }
 
 #[traced("parser::iri")]
-fn ipath_rootless(input: &str) -> IntermediateResult<&str> {
-    recognize(pair(isegment_nz, many0(pair(tag("/"), isegment))))(input)
+fn ipath_rootless(input: Span) -> IntermediateResult<Span> {
+    recognize(pair(isegment_nz, many0(pair(token("/"), isegment))))(input)
 }
 
 #[traced("parser::iri")]
-fn ipath_empty(input: &str) -> IntermediateResult<&str> {
-    tag("")(input)
+fn ipath_empty(input: Span) -> IntermediateResult<Span> {
+    token("")(input)
 }
 
 #[traced("parser::iri")]
-fn isegment(input: &str) -> IntermediateResult<&str> {
+fn isegment(input: Span) -> IntermediateResult<Span> {
     recognize(many0(ipchar))(input)
 }
 
 #[traced("parser::iri")]
-fn isegment_nz(input: &str) -> IntermediateResult<&str> {
+fn isegment_nz(input: Span) -> IntermediateResult<Span> {
     recognize(many1(ipchar))(input)
 }
 
 #[traced("parser::iri")]
-fn isegment_nz_nc(input: &str) -> IntermediateResult<&str> {
-    recognize(many1(alt((iunreserved, pct_encoded, sub_delims, tag("@")))))(input)
+fn isegment_nz_nc(input: Span) -> IntermediateResult<Span> {
+    recognize(many1(alt((
+        iunreserved,
+        pct_encoded,
+        sub_delims,
+        token("@"),
+    ))))(input)
 }
 
 #[traced("parser::iri")]
-fn ipchar(input: &str) -> IntermediateResult<&str> {
-    alt((iunreserved, pct_encoded, sub_delims, tag(":"), tag("@")))(input)
+fn ipchar(input: Span) -> IntermediateResult<Span> {
+    alt((iunreserved, pct_encoded, sub_delims, token(":"), token("@")))(input)
 }
 
 #[traced("parser::iri")]
-fn iquery(input: &str) -> IntermediateResult<&str> {
-    recognize(many0(alt((ipchar, iprivate, tag("/"), tag("?")))))(input)
+fn iquery(input: Span) -> IntermediateResult<Span> {
+    recognize(many0(alt((ipchar, iprivate, token("/"), token("?")))))(input)
 }
 
 #[traced("parser::iri")]
-fn ifragment(input: &str) -> IntermediateResult<&str> {
-    recognize(many0(alt((ipchar, tag("/"), tag("?")))))(input)
+fn ifragment(input: Span) -> IntermediateResult<Span> {
+    recognize(many0(alt((ipchar, token("/"), token("?")))))(input)
 }
 
 #[traced("parser::iri")]
-fn iunreserved(input: &str) -> IntermediateResult<&str> {
+fn iunreserved(input: Span) -> IntermediateResult<Span> {
     alt((
         alpha,
         digit,
-        tag("-"),
-        tag("."),
-        tag("_"),
-        tag("~"),
+        token("-"),
+        token("."),
+        token("_"),
+        token("~"),
         ucschar,
     ))(input)
 }
 
 #[traced("parser::iri")]
-fn ucschar(input: &str) -> IntermediateResult<&str> {
+fn ucschar(input: Span) -> IntermediateResult<Span> {
     recognize(satisfy(|c| {
         [
             0xa0u32..=0xd7ff,
@@ -214,7 +224,7 @@ fn ucschar(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::iri")]
-fn iprivate(input: &str) -> IntermediateResult<&str> {
+fn iprivate(input: Span) -> IntermediateResult<Span> {
     recognize(satisfy(|c| {
         [0xe000u32..=0xf8ff, 0xf000..=0xffffd, 0x100000..=0x10fffd]
             .iter()
@@ -223,92 +233,92 @@ fn iprivate(input: &str) -> IntermediateResult<&str> {
 }
 
 #[traced("parser::iri")]
-fn scheme(input: &str) -> IntermediateResult<&str> {
+fn scheme(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((
         alpha,
-        many0(alt((alpha, digit, tag("+"), tag("-"), tag(".")))),
+        many0(alt((alpha, digit, token("+"), token("-"), token(".")))),
     )))(input)
 }
 
 #[traced("parser::iri")]
-fn port(input: &str) -> IntermediateResult<&str> {
+fn port(input: Span) -> IntermediateResult<Span> {
     digit0(input)
 }
 
 #[traced("parser::iri")]
-fn ip_literal(input: &str) -> IntermediateResult<&str> {
-    delimited(tag("["), alt((ipv6_address, ipv_future)), tag("]"))(input)
+fn ip_literal(input: Span) -> IntermediateResult<Span> {
+    delimited(token("["), alt((ipv6_address, ipv_future)), token("]"))(input)
 }
 
 #[traced("parser::iri")]
-fn ipv_future(input: &str) -> IntermediateResult<&str> {
+fn ipv_future(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((
-        tag("v"),
+        token("v"),
         hexdig,
-        tag("."),
-        many1(alt((unreserved, sub_delims, tag(":")))),
+        token("."),
+        many1(alt((unreserved, sub_delims, token(":")))),
     )))(input)
 }
 
 #[traced("parser::iri")]
-fn ipv6_address(input: &str) -> IntermediateResult<&str> {
-    let h16_colon = || pair(h16, tag(":"));
+fn ipv6_address(input: Span) -> IntermediateResult<Span> {
+    let h16_colon = || pair(h16, token(":"));
     alt((
         recognize(tuple((count(h16_colon(), 6), ls32))),
-        recognize(tuple((tag("::"), count(h16_colon(), 5), ls32))),
-        recognize(tuple((h16, tag("::"), count(h16_colon(), 4), ls32))),
+        recognize(tuple((token("::"), count(h16_colon(), 5), ls32))),
+        recognize(tuple((h16, token("::"), count(h16_colon(), 4), ls32))),
         recognize(tuple((
             h16_colon(),
             h16,
-            tag("::"),
+            token("::"),
             count(h16_colon(), 3),
             ls32,
         ))),
         recognize(tuple((
             count(h16_colon(), 2),
             h16,
-            tag("::"),
+            token("::"),
             count(h16_colon(), 2),
             ls32,
         ))),
         recognize(tuple((
             count(h16_colon(), 3),
             h16,
-            tag("::"),
+            token("::"),
             h16_colon(),
             ls32,
         ))),
-        recognize(tuple((count(h16_colon(), 4), h16, tag("::"), ls32))),
-        recognize(tuple((count(h16_colon(), 5), h16, tag("::"), h16))),
-        recognize(tuple((count(h16_colon(), 6), h16, tag("::")))),
+        recognize(tuple((count(h16_colon(), 4), h16, token("::"), ls32))),
+        recognize(tuple((count(h16_colon(), 5), h16, token("::"), h16))),
+        recognize(tuple((count(h16_colon(), 6), h16, token("::")))),
     ))(input)
 }
 
 #[traced("parser::iri")]
-fn h16(input: &str) -> IntermediateResult<&str> {
+fn h16(input: Span) -> IntermediateResult<Span> {
     recognize(many_m_n(1, 4, hexdig))(input)
 }
 
 #[traced("parser::iri")]
-fn ls32(input: &str) -> IntermediateResult<&str> {
-    alt((recognize(tuple((h16, tag(":"), h16))), ipv4_address))(input)
+fn ls32(input: Span) -> IntermediateResult<Span> {
+    alt((recognize(tuple((h16, token(":"), h16))), ipv4_address))(input)
 }
 
 #[traced("parser::iri")]
-fn ipv4_address(input: &str) -> IntermediateResult<&str> {
+fn ipv4_address(input: Span) -> IntermediateResult<Span> {
     recognize(tuple((
         dec_octet,
-        tag("."),
+        token("."),
         dec_octet,
-        tag("."),
+        token("."),
         dec_octet,
-        tag("."),
+        token("."),
         dec_octet,
     )))(input)
 }
 
 #[traced("parser::iri")]
-fn dec_octet(input: &str) -> IntermediateResult<&str> {
+fn dec_octet(input: Span) -> IntermediateResult<Span> {
     alt((
         digit, // 0-9
         recognize(tuple((
@@ -316,39 +326,39 @@ fn dec_octet(input: &str) -> IntermediateResult<&str> {
             satisfy(|c| ('1'..='9').contains(&c)),
             digit,
         ))),
-        recognize(tuple((tag("1"), digit, digit))), // 100-199
+        recognize(tuple((token("1"), digit, digit))), // 100-199
         recognize(tuple((
             // 200-249
-            tag("2"),
+            token("2"),
             satisfy(|c| ('0'..='4').contains(&c)),
             digit,
         ))),
-        recognize(tuple((tag("25"), satisfy(|c| ('0'..='5').contains(&c))))), // 250-255
+        recognize(tuple((token("25"), satisfy(|c| ('0'..='5').contains(&c))))), // 250-255
     ))(input)
 }
 
 #[traced("parser::iri")]
-fn pct_encoded(input: &str) -> IntermediateResult<&str> {
-    recognize(tuple((tag("%"), hexdig, hexdig)))(input)
+fn pct_encoded(input: Span) -> IntermediateResult<Span> {
+    recognize(tuple((token("%"), hexdig, hexdig)))(input)
 }
 
 #[traced("parser::iri")]
-fn unreserved(input: &str) -> IntermediateResult<&str> {
+fn unreserved(input: Span) -> IntermediateResult<Span> {
     alt((alpha, digit, recognize(one_of(r#"-._~"#))))(input)
 }
 
 #[allow(dead_code)]
 #[traced("parser::iri")]
-pub fn reserved(input: &str) -> IntermediateResult<&str> {
+pub fn reserved(input: Span) -> IntermediateResult<Span> {
     alt((gen_delims, sub_delims))(input)
 }
 
 #[traced("parser::iri")]
-fn gen_delims(input: &str) -> IntermediateResult<&str> {
+fn gen_delims(input: Span) -> IntermediateResult<Span> {
     recognize(one_of(r#":/?#[]@"#))(input)
 }
 
 #[traced("parser::iri")]
-fn sub_delims(input: &str) -> IntermediateResult<&str> {
+fn sub_delims(input: Span) -> IntermediateResult<Span> {
     recognize(one_of(r#"!$&'()*+,;="#))(input)
 }

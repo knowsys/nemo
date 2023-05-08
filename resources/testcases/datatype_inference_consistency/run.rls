@@ -1,4 +1,4 @@
-@declare a(UnsignedInteger) .
+@declare a(integer) .
 
 @source a[1]: load-csv("sources/a.csv") .
 

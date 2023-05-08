@@ -1,10 +1,10 @@
 //! Functionality which handles the execution of a program
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     error::Error,
-    io::dsv::CSVWriter,
+    io::RecordWriter,
     logical::{
         model::{DataSource, Identifier, Program},
         program_analysis::analysis::ProgramAnalysis,
@@ -12,7 +12,10 @@ use crate::{
         TableManager,
     },
     meta::TimedCode,
-    physical::{datatypes::DataValueT, management::database::TableSource},
+    physical::{
+        datatypes::DataValueT,
+        management::database::{TableId, TableSource},
+    },
 };
 
 use super::{rule_execution::RuleExecution, selection_strategy::strategy::RuleSelectionStrategy};
@@ -55,10 +58,10 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [`ExecutionEngine`].
-    pub fn initialize(mut program: Program) -> Self {
+    pub fn initialize(mut program: Program) -> Result<Self, Error> {
         program.normalize();
 
-        let analysis = program.analyze();
+        let analysis = program.analyze()?;
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
@@ -75,7 +78,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             analysis.rule_analysis.iter().collect(),
         );
 
-        Self {
+        Ok(Self {
             program,
             analysis,
             rule_strategy,
@@ -84,7 +87,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             predicate_last_union: HashMap::new(),
             rule_infos,
             current_step: 1,
-        }
+        })
     }
 
     fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {
@@ -95,9 +98,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .predicate_types
                     .get(predicate)
                     .cloned()
-                    .unwrap_or_else(|| {
-                        (0..*arity).map(|_| LogicalTypeEnum::RdfsResource).collect()
-                    }),
+                    .unwrap_or_else(|| (0..*arity).map(|_| LogicalTypeEnum::Any).collect()),
             );
         }
     }
@@ -140,7 +141,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 // TODO: get rid of unwrap
                 .map(|(i, t)| {
                     analysis.predicate_types.get(&fact.0.predicate()).unwrap()[i]
-                        .ground_term_to_data_value_t(t.clone())
+                        .ground_term_to_data_value_t(t.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.")
                 })
                 .collect();
 
@@ -239,32 +240,41 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(())
     }
 
-    /// Write the output tries that resulted form the execution to disk as CSV.
-    pub fn write_all_results(&mut self, writer: &CSVWriter) -> Result<(), Error> {
+    /// Combine the output tries that resulted form the execution.
+    pub fn combine_results(&mut self) -> Result<Vec<(Identifier, Option<TableId>)>, Error> {
+        let output_predicates = self.program.output_predicates().collect::<HashSet<_>>();
+        let mut result_ids = Vec::new();
         for predicate in &self.analysis.derived_predicates {
-            if let Some(combined_id) = self.table_manager.combine_predicate(predicate.clone())? {
-                self.table_manager
-                    .write_table_to_disk(writer, predicate, combined_id)?;
-            } else {
-                writer.create_file(predicate)?;
+            if !output_predicates.contains(predicate) {
+                continue;
             }
+
+            let table_id = self.table_manager.combine_predicate(predicate.clone())?;
+            result_ids.push((predicate.clone(), table_id));
         }
 
-        Ok(())
+        Ok(result_ids)
     }
 
-    /// Write tries for all IDB predicates to disk as CSV if present.
-    pub fn write_idb_results(&mut self, writer: &CSVWriter) -> Result<(), Error> {
-        let idbs = self.program.idb_predicates();
-        for predicate in idbs {
-            if let Some(combined_id) = self.table_manager.combine_predicate(predicate.clone())? {
-                self.table_manager
-                    .write_table_to_disk(writer, &predicate, combined_id)?
-            } else {
-                writer.create_file(&predicate)?;
+    /// Count the number of derived facts during the computation.
+    pub fn count_derived_facts(&self) -> usize {
+        let mut result = 0;
+
+        for predicate in &self.analysis.derived_predicates {
+            if let Some(count) = self.table_manager.predicate_count_rows(predicate) {
+                result += count;
             }
         }
 
-        Ok(())
+        result
+    }
+
+    /// Returns a reference to the Trie corresponding to the table_id
+    pub fn write_predicate_to_disk(
+        &self,
+        writer: &mut impl RecordWriter,
+        table_id: TableId,
+    ) -> Result<(), Error> {
+        self.table_manager.write_table_to_disk(writer, table_id)
     }
 }

@@ -2,20 +2,25 @@
 use std::{fs::read_to_string, io::ErrorKind, path::PathBuf};
 
 use clap::Parser;
+use colored::Colorize;
 
 use nemo::{
     error::Error,
     io::{
-        dsv::CSVWriter,
         parser::{all_input_consumed, RuleParser},
+        OutputFileManager,
     },
     logical::{
         execution::{
-            selection_strategy::strategy_round_robin::StrategyRoundRobin, ExecutionEngine,
+            selection_strategy::{
+                dependency_graph::graph_positive::GraphConstructorPositive,
+                strategy_graph::StrategyDependencyGraph, strategy_round_robin::StrategyRoundRobin,
+            },
+            ExecutionEngine,
         },
-        model::Program,
+        model::{OutputPredicateSelection, Program},
     },
-    meta::TimedCode,
+    meta::{timing::TimedDisplay, TimedCode},
 };
 
 /// Application state
@@ -48,23 +53,116 @@ pub struct CliApp {
     /// One or more rule program files
     #[arg(value_parser, required = true)]
     rules: Vec<PathBuf>,
-    /// Save results
+    /// Save results to files. (Also see --output-dir)
     #[arg(short, long = "save-results")]
     save_results: bool,
-    /// output directory
-    #[arg(short, long = "output", default_value = DEFAULT_OUTPUT_DIRECTORY)]
+    /// Specify directory for output files. (Only relevant if --save-results is set.)
+    #[arg(short='D', long = "output-dir", default_value = DEFAULT_OUTPUT_DIRECTORY, requires="save_results")]
     output_directory: PathBuf,
-    /// Overwrite existing files. This will remove all files in the given output directory
-    #[arg(long = "overwrite-results", default_value = "false")]
+    /// Overwrite existing files in --output-dir. (Only relevant if --save-results is set.)
+    #[arg(
+        short,
+        long = "overwrite-results",
+        default_value = "false",
+        requires = "save_results"
+    )]
     overwrite: bool,
     /// Gzip output files
-    #[arg(short, long = "gzip", default_value = "false")]
+    #[arg(
+        short,
+        long = "gzip",
+        default_value = "false",
+        requires = "save_results"
+    )]
     gz: bool,
+    /// Override @output directives and save every IDB predicate
+    #[arg(
+        long = "write-all-idb-predicates",
+        default_value = "false",
+        requires = "save_results"
+    )]
+    write_all_idb_predicates: bool,
+    /// Display detailed timing information
+    #[arg(long = "detailed-timing", default_value = "false")]
+    detailed_timing: bool,
 }
 
 impl CliApp {
+    fn print_finished_message(&self, new_facts: usize) {
+        let overall_time = TimedCode::instance().total_system_time().as_millis();
+        let reading_time = TimedCode::instance()
+            .sub("Reading & Preprocessing")
+            .total_system_time()
+            .as_millis();
+        let loading_time = TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table")
+            .total_system_time()
+            .as_millis();
+        let execution_time = TimedCode::instance()
+            .sub("Reasoning")
+            .total_system_time()
+            .as_millis();
+
+        // NOTE: for some reason the substration produced on overflow for me once when running the tests; so better safe than sorry now :)
+        let loading_preprocessing = reading_time.saturating_add(loading_time);
+        let reasoning_time = execution_time.saturating_sub(loading_time);
+
+        let writing_time = if self.save_results {
+            TimedCode::instance()
+                .sub("Output & Final Materialization")
+                .total_system_time()
+                .as_millis()
+        } else {
+            0
+        };
+
+        let max_string_len = vec![loading_preprocessing, reading_time, writing_time]
+            .iter()
+            .map(|t| t.to_string().len())
+            .max()
+            .expect("Vector is not empty")
+            + 2; // for the unit ms
+
+        println!(
+            "Reasoning completed in {}{}. Derived {} facts.",
+            overall_time.to_string().green().bold(),
+            "ms".green().bold(),
+            new_facts.to_string().green().bold(),
+        );
+
+        println!(
+            "   {0: <14} {1:>max_string_len$}ms",
+            "Loading input:", loading_preprocessing
+        );
+        println!(
+            "   {0: <14} {1:>max_string_len$}ms",
+            "Reasoning:", reasoning_time
+        );
+        if self.save_results {
+            println!(
+                "   {0: <14} {1:>max_string_len$}ms",
+                "Saving output:", writing_time
+            );
+        }
+    }
+
+    fn print_timing_stats() {
+        println!(
+            "\n{}",
+            TimedCode::instance().create_tree_string(
+                "nemo",
+                &[
+                    TimedDisplay::default(),
+                    TimedDisplay::default(),
+                    TimedDisplay::new(nemo::meta::timing::TimedSorting::LongestThreadTime, 0)
+                ]
+            )
+        );
+    }
+
     /// Application logic, based on the parsed data inside the [`CliApp`] object
     pub fn run(&mut self) -> Result<(), Error> {
+        TimedCode::instance().start();
         TimedCode::instance().sub("Reading & Preprocessing").start();
         self.init_logging();
         log::info!("Version: {}", clap::crate_version!());
@@ -83,11 +181,20 @@ impl CliApp {
             );
         }
 
-        let app_state = self.parse_rules()?;
+        let mut app_state = self.parse_rules()?;
+
+        if self.write_all_idb_predicates {
+            app_state
+                .program
+                .force_output_predicate_selection(OutputPredicateSelection::AllIDBPredicates)
+        }
 
         self.prevent_accidential_overwrite(&app_state)?;
 
-        let mut exec_engine = ExecutionEngine::<StrategyRoundRobin>::initialize(app_state.program);
+        let mut exec_engine = ExecutionEngine::<
+            StrategyDependencyGraph<GraphConstructorPositive, StrategyRoundRobin>,
+        >::initialize(app_state.program)?;
+
         TimedCode::instance().sub("Reading & Preprocessing").stop();
         TimedCode::instance().sub("Reasoning").start();
 
@@ -102,15 +209,32 @@ impl CliApp {
                 .sub("Output & Final Materialization")
                 .start();
             log::info!("writing output");
-            let csv_writer =
-                nemo::io::dsv::CSVWriter::try_new(&self.output_directory, self.overwrite, self.gz)?;
+            let file_manager =
+                OutputFileManager::try_new(&self.output_directory, self.overwrite, self.gz)?;
 
-            exec_engine.write_idb_results(&csv_writer)?;
+            let idb_tables = exec_engine.combine_results()?;
+
+            for (pred, table_id) in idb_tables {
+                let mut writer = file_manager.create_file_writer(&pred)?;
+
+                if let Some(id) = table_id {
+                    exec_engine.write_predicate_to_disk(&mut writer, id)?;
+                }
+            }
 
             TimedCode::instance()
                 .sub("Output & Final Materialization")
                 .stop();
         }
+
+        TimedCode::instance().stop();
+
+        self.print_finished_message(exec_engine.count_derived_facts());
+
+        if self.detailed_timing {
+            Self::print_timing_stats()
+        }
+
         Ok(())
     }
 
@@ -160,11 +284,10 @@ impl CliApp {
             })?);
             Ok::<(), Error>(())
         })?;
-        let input = inputs.iter_mut().fold(String::new(), |mut acc, item| {
-            acc.push_str(item);
-            acc
-        });
+        let input = inputs.join("");
         let program = all_input_consumed(parser.parse_program())(&input)?;
+        program.check_for_unsupported_features()?;
+
         log::info!("Rules parsed");
         log::trace!("{:?}", program);
 
@@ -175,34 +298,27 @@ impl CliApp {
     /// Returns an Error if files are existing without being allowed to overwrite them
     fn prevent_accidential_overwrite(&self, app_state: &AppState) -> Result<(), Error> {
         if self.save_results && !self.overwrite {
-            app_state
-                .program
-                .idb_predicates()
-                .iter()
-                .try_for_each(|pred| {
-                    let csv_writer =
-                        CSVWriter::try_new(&self.output_directory, self.overwrite, self.gz)?;
-                    let file = pred.sanitised_file_name(
-                        self.output_directory.clone(),
-                        csv_writer.compression_format,
-                    );
-                    let meta_info = file.metadata();
-                    if let Err(err) = meta_info {
-                        if err.kind() == ErrorKind::NotFound {
-                            Ok::<(), Error>(())
-                        } else {
-                            Err(Error::IO(err))
-                        }
+            app_state.program.output_predicates().try_for_each(|pred| {
+                let output_file_manager =
+                    OutputFileManager::try_new(&self.output_directory, self.overwrite, self.gz)?;
+                let file = output_file_manager.get_output_file_name(&pred);
+                let meta_info = file.metadata();
+                if let Err(err) = meta_info {
+                    if err.kind() == ErrorKind::NotFound {
+                        Ok::<(), Error>(())
                     } else {
-                        Err(Error::IOExists {
-                            error: ErrorKind::AlreadyExists.into(),
-                            filename: file
-                                .to_str()
-                                .expect("Path is expected to be valid utf-8")
-                                .to_string(),
-                        })
+                        Err(Error::IO(err))
                     }
-                })
+                } else {
+                    Err(Error::IOExists {
+                        error: ErrorKind::AlreadyExists.into(),
+                        filename: file
+                            .to_str()
+                            .expect("Path is expected to be valid utf-8")
+                            .to_string(),
+                    })
+                }
+            })
         } else {
             Ok(())
         }

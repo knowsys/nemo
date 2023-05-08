@@ -1,7 +1,7 @@
 //! Represents different data-import methods
 
-use std::fs::{create_dir_all, File, OpenOptions};
-use std::io::{BufWriter, Read, Write};
+use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
 
 use crate::error::Error;
@@ -9,26 +9,11 @@ use crate::io::builder_proxy::{
     ColumnBuilderProxy, DoubleColumnBuilderProxy, FloatColumnBuilderProxy,
     StringColumnBuilderProxy, U32ColumnBuilderProxy, U64ColumnBuilderProxy,
 };
-use crate::logical::model::Identifier;
 use crate::physical::datatypes::storage_value::VecT;
 use crate::physical::datatypes::DataTypeName;
-use crate::physical::dictionary::Dictionary;
 use crate::physical::management::database::Dict;
 use crate::physical::tabular::traits::table_schema::TableSchema;
 use csv::{Reader, ReaderBuilder};
-use flate2::write::GzEncoder;
-use flate2::Compression;
-
-use super::{FileCompression, FileFormat};
-
-/// Compression level for gzip output, cf. gzip(1):
-///
-/// > Regulate the speed of compression using the specified digit #,
-/// > where -1 or --fast indicates the fastest compression method (less
-/// > compression) and -9 or --best indicates the slowest compression
-/// > method (best compression).  The default compression level is -6
-/// > (that is, biased towards high compression at expense of speed).
-const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 
 /// A reader Object, which allows to read a DSV (delimiter separated) file
 #[derive(Debug, Clone)]
@@ -163,139 +148,6 @@ impl DSVReader {
     }
 }
 
-/// Contains all the needed information, to write results into csv-files
-#[derive(Debug)]
-pub struct CSVWriter<'a> {
-    /// The path to where the results shall be written to.
-    path: &'a PathBuf,
-    /// Overwrite files, note that the target folder will be emptied if `overwrite` is set to [true].
-    overwrite: bool,
-    /// Compression and file format.
-    pub compression_format: FileCompression,
-}
-
-impl<'a> CSVWriter<'a> {
-    /// Instantiate a [`CSVWriter`].
-    ///
-    /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
-    pub fn try_new(path: &'a PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
-        create_dir_all(path)?;
-        let file_format = FileFormat::DSV(b',');
-        let compression_format = if gzip {
-            FileCompression::Gzip(file_format)
-        } else {
-            FileCompression::None(file_format)
-        };
-        Ok(CSVWriter {
-            path,
-            overwrite,
-            compression_format,
-        })
-    }
-}
-
-impl CSVWriter<'_> {
-    /// Creates a `.csv` (or possibly a `.csv.gz`) file for predicate
-    /// [`pred`] and returns a [`BufWriter<File>`] to it.
-    pub fn create_file(&self, pred: &Identifier) -> Result<(BufWriter<File>, String), Error> {
-        let mut options = OpenOptions::new();
-        options.write(true);
-        if self.overwrite {
-            options.create(true).truncate(true);
-        } else {
-            options.create_new(true);
-        };
-        let pred_path = pred.sanitised_file_name(self.path.to_path_buf(), self.compression_format);
-        let file_name_with_extensions = pred_path
-            .to_str()
-            .expect("Path is expected to be utf-printable")
-            .to_string();
-
-        options
-            .open(&pred_path)
-            .map(|file| (BufWriter::new(file), file_name_with_extensions.clone()))
-            .map_err(|err| match err.kind() {
-                std::io::ErrorKind::AlreadyExists => Error::IOExists {
-                    error: err,
-                    filename: file_name_with_extensions,
-                },
-                _ => err.into(),
-            })
-    }
-
-    /// Writes a predicate as a csv-file into the corresponding result-directory
-    /// # Parameters
-    /// * `pred` is a [`&Identifier`], representing a predicate
-    /// * `schema` is the [`TableSchema`] associated with the prediacte
-    /// * `cols` is vector of [`VecT`] respresenting columns
-    /// * `dict` is a [`Dictionary`], containing the mapping of the internal number representation to a [`String`]
-    /// # Returns
-    /// * [`Ok`][std::result::Result::Ok] if the predicate could be written to the csv-file
-    /// * [`Error`] in case of any issues during writing the file
-    pub fn write_predicate(
-        &self,
-        pred: &Identifier,
-        schema: &TableSchema,
-        cols: Vec<VecT>,
-        dict: &Dict,
-    ) -> Result<(), Error> {
-        log::debug!("Writing {}", pred.name());
-        let (file, filename) = self.create_file(pred)?;
-        log::debug!("Outputting into {filename}");
-
-        let num_rows = if let Some(col) = cols.first() {
-            col.len()
-        } else {
-            return Ok(()); // there is nothing to write
-        };
-
-        let mut writer: Box<dyn Write> = match self.compression_format {
-            FileCompression::Gzip(_) => Box::new(GzEncoder::new(file, GZIP_COMPRESSION_LEVEL)),
-            FileCompression::None(_) => Box::new(file),
-        };
-
-        // TODO: have a similar solution as for the builder proxies for writing to prevent unpacking enums over and over again
-        for row_idx in 0..num_rows {
-            let row: Vec<String> = (0..cols.len()).map(|col_idx| {
-                match schema[col_idx] {
-                    DataTypeName::String => match &cols[col_idx] {
-                        VecT::U64(val) => dict.entry(val[row_idx].try_into().expect("We were able to store this so we should be able to read this as well.")).unwrap_or_else(|| format!("<__Null#{}>", val[row_idx])),
-                        _ => unreachable!("DataType and Storage Type are incompatible. This should never happen!"),
-                    }
-                    DataTypeName::U64 => match &cols[col_idx] {
-                        VecT::U64(val) => val[row_idx].to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
-                        _ => unreachable!("DataType and Storage Type are incompatible. This should never happen!"),
-                    }
-                    DataTypeName::U32 => match &cols[col_idx] {
-                        VecT::U32(val) => val[row_idx].to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
-                        _ => unreachable!("DataType and Storage Type are incompatible. This should never happen!"),
-                    }
-                    DataTypeName::Float => match &cols[col_idx] {
-                        VecT::Float(val) => val[row_idx].to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
-                        _ => unreachable!("DataType and Storage Type are incompatible. This should never happen!"),
-                    }
-                    DataTypeName::Double => match &cols[col_idx] {
-                        VecT::Double(val) => val[row_idx].to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
-                        _ => unreachable!("DataType and Storage Type are incompatible. This should never happen!"),
-                    }
-                }
-            }).collect();
-
-            writeln!(writer, "{}", &row.join(",")).map_err(|error| Error::IOWriting {
-                error,
-                filename: filename.clone(),
-            })?;
-        }
-
-        writer.flush().map_err(|error| Error::IOWriting {
-            error,
-            filename: filename.clone(),
-        })?;
-
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod test {
     use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
@@ -355,6 +207,78 @@ Boston;United States;4628910
                 .unwrap(),
             "4628910"
         );
+    }
+
+    #[ignore]
+    #[test]
+    fn csv_with_various_different_constant_and_literal_representations() {
+        let data = "\
+a;b;c
+Boston;United States;4628910
+<Dresden>;Germany;1234567
+My Home Town;Some<where >Nice;2
+Trailing Spaces do not belong to the name   ; What about spaces in the beginning though;123
+\"\"\"Do String literals work?\"\"\";\"\"\"Even with datatype annotation?\"\"\"^^<http://www.w3.org/2001/XMLSchema#string>;456
+The next column is empty;;789
+";
+
+        let expected_result = [
+            ("Boston", "United States", 4628910),
+            ("Dresden", "Germany", 1234567),
+            ("My Home Town", "\"Some<where >Nice\"", 2),
+            (
+                "Trailing Spaces do not belong to the name",
+                "What about spaces in the beginning though",
+                123,
+            ),
+            (
+                "\"Do String literals work?\"",
+                "\"Even with datatype annotation?\"",
+                456,
+            ),
+            ("The next column is empty", "\"\"", 789),
+        ];
+
+        let mut rdr = ReaderBuilder::new()
+            .delimiter(b';')
+            .from_reader(data.as_bytes());
+
+        let mut dict = PrefixedStringDictionary::default();
+        let csvreader = DSVReader::csv("test".into());
+        let result = csvreader.read_with_reader(
+            vec![
+                Box::<StringColumnBuilderProxy>::default(),
+                Box::<StringColumnBuilderProxy>::default(),
+                Box::<U64ColumnBuilderProxy>::default(),
+            ],
+            &mut rdr,
+            &mut dict,
+        );
+        let cols = result.unwrap();
+
+        let VecT::U64(ref col0_idx) = cols[0] else { unreachable!() };
+        let VecT::U64(ref col1_idx) = cols[1] else { unreachable!() };
+        let VecT::U64(ref col2) = cols[2] else { unreachable!() };
+
+        let col0: Vec<String> = col0_idx
+            .iter()
+            .copied()
+            .map(|idx| dict.entry(idx.try_into().unwrap()).unwrap())
+            .collect();
+        let col1: Vec<String> = col1_idx
+            .iter()
+            .copied()
+            .map(|idx| dict.entry(idx.try_into().unwrap()).unwrap())
+            .collect();
+
+        std::iter::zip(std::iter::zip(col0, col1), col2)
+            .map(|((c0, c1), c2)| (c0, c1, *c2))
+            .zip(
+                expected_result
+                    .into_iter()
+                    .map(|(e0, e1, e2)| (e0.to_string(), e1.to_string(), e2)),
+            )
+            .for_each(|(t1, t2)| assert_eq!(t1, t2));
     }
 
     #[test]

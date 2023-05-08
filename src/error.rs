@@ -1,10 +1,11 @@
 //! Error-handling module for the crate
 
-use crate::{
-    io::parser::ParseError, logical::types::LogicalTypeEnum,
-    physical::datatypes::float_is_nan::FloatIsNaN,
-};
 use thiserror::Error;
+
+use crate::{
+    io::parser::LocatedParseError, logical::program_analysis::analysis::RuleAnalysisError,
+    logical::types::TypeError, physical::datatypes::float_is_nan::FloatIsNaN,
+};
 
 /// Error-Collection for all the possible Errors occurring in this crate
 #[allow(variant_size_differences)]
@@ -40,15 +41,18 @@ pub enum Error {
     /// Error when converting floating type to integer point value
     #[error("Floating type could not be converted to integer value")]
     FloatingPointToInteger,
+    /// Rule analysis errors
+    #[error(transparent)]
+    RuleAnalysisError(#[from] RuleAnalysisError),
     /// Parse errors
     #[error(transparent)]
-    ParseError(#[from] ParseError),
+    ParseError(#[from] LocatedParseError),
+    /// Type errors
+    #[error(transparent)]
+    TypeError(#[from] TypeError),
     /// Error when giving invalid execution plan to the database instance
     #[error("The given execution plan is invalid.")]
     InvalidExecutionPlan,
-    /// Parser could not parse whole Program-file, but should have read all of it.
-    #[error("Parser could not parse the whole input file")]
-    ProgramParse,
     /// IO Error
     #[error(transparent)]
     IO(#[from] std::io::Error),
@@ -76,7 +80,7 @@ pub enum Error {
         /// Name of the file that could not be written
         filename: String,
     },
-    /// Unknown logical type name in program.
-    #[error("A predicate declaration used an unknown type ({0}). The known types are: {1:?}")]
-    ParseUnknownType(String, Vec<LogicalTypeEnum>),
+    /// CSV serialization/deserialization error
+    #[error(transparent)]
+    CsvError(#[from] csv::Error),
 }

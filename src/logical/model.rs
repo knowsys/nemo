@@ -2,17 +2,14 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Debug,
     ops::Neg,
     path::{Path, PathBuf},
 };
 
 use sanitise_file_name::{sanitise_with_options, Options};
 
-use crate::{
-    generate_forwarder,
-    io::{parser::ParseError, FileCompression},
-    physical::datatypes::Double,
-};
+use crate::{generate_forwarder, io::parser::ParseError, physical::datatypes::Double};
 
 use super::types::LogicalTypeEnum;
 
@@ -27,14 +24,54 @@ impl Identifier {
     }
 
     /// Returns a sanitised path with respect to the associated name
-    pub fn sanitised_file_name(&self, mut path: PathBuf, format: FileCompression) -> PathBuf {
+    pub fn sanitised_file_name(&self, mut path: PathBuf) -> PathBuf {
         let sanitise_options = Options::<Option<char>> {
             url_safe: true,
             ..Default::default()
         };
         let file_name = sanitise_with_options(&self.name(), &sanitise_options);
         path.push(file_name);
-        format.file_name(path)
+        path
+    }
+}
+
+impl std::fmt::Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", &self.name())
+    }
+}
+
+/// A qualified predicate name, i.e., a predicate name together with its arity.
+#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
+pub struct QualifiedPredicateName {
+    /// The predicate name
+    identifier: Identifier,
+    /// The arity
+    arity: Option<usize>,
+}
+
+impl QualifiedPredicateName {
+    /// Construct a new qualified predicate name from an identifier,
+    /// leaving the arity unspecified.
+    pub fn new(identifier: Identifier) -> Self {
+        Self {
+            identifier,
+            arity: None,
+        }
+    }
+
+    /// Construct a new qualified predicate name with the given arity.
+    pub fn with_arity(identifier: Identifier, arity: usize) -> Self {
+        Self {
+            identifier,
+            arity: Some(arity),
+        }
+    }
+}
+
+impl From<Identifier> for QualifiedPredicateName {
+    fn from(identifier: Identifier) -> Self {
+        Self::new(identifier)
     }
 }
 
@@ -47,6 +84,21 @@ pub enum Variable {
     Existential(Identifier),
 }
 
+impl Variable {
+    /// Return the name of the variable.
+    pub fn name(&self) -> String {
+        match self {
+            Self::Universal(identifier) | Self::Existential(identifier) => identifier.name(),
+        }
+    }
+}
+
+impl std::fmt::Display for Variable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", &self.name())
+    }
+}
+
 /// Terms occurring in programs.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum Term {
@@ -56,8 +108,22 @@ pub enum Term {
     Variable(Variable),
     /// A numeric literal.
     NumericLiteral(NumericLiteral),
+    /// A string literal.
+    StringLiteral(String),
     /// An RDF literal.
     RdfLiteral(RdfLiteral),
+}
+
+impl std::fmt::Display for Term {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Term::Constant(term) => write!(f, "{}", term),
+            Term::Variable(term) => write!(f, "{}", term),
+            Term::NumericLiteral(term) => write!(f, "{}", term),
+            Term::StringLiteral(term) => write!(f, "{}", term),
+            Term::RdfLiteral(term) => write!(f, "{}", term),
+        }
+    }
 }
 
 impl Term {
@@ -81,6 +147,16 @@ pub enum NumericLiteral {
     Double(Double),
 }
 
+impl std::fmt::Display for NumericLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NumericLiteral::Integer(value) => write!(f, "{value}"),
+            NumericLiteral::Decimal(left, right) => write!(f, "{left}.{right}"),
+            NumericLiteral::Double(value) => write!(f, "{value}"),
+        }
+    }
+}
+
 /// An RDF literal.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 pub enum RdfLiteral {
@@ -98,6 +174,15 @@ pub enum RdfLiteral {
         /// The datatype IRI.
         datatype: String,
     },
+}
+
+impl std::fmt::Display for RdfLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RdfLiteral::LanguageString { value, tag } => write!(f, "\"{value}\"@{tag}"),
+            RdfLiteral::DatatypeValue { value, datatype } => write!(f, "\"{value}\"^^{datatype}"),
+        }
+    }
 }
 
 /// An atom.
@@ -142,19 +227,15 @@ impl Atom {
     }
 
     /// Return all universally quantified variables in the atom.
-    pub fn universal_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
-        self.variables().filter_map(|var| match var {
-            Variable::Universal(identifier) => Some(identifier),
-            _ => None,
-        })
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.variables()
+            .filter(|var| matches!(var, Variable::Universal(_)))
     }
 
     /// Return all existentially quantified variables in the atom.
-    pub fn existential_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
-        self.variables().filter_map(|var| match var {
-            Variable::Existential(identifier) => Some(identifier),
-            _ => None,
-        })
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.variables()
+            .filter(|var| matches!(var, Variable::Existential(_)))
     }
 }
 
@@ -219,12 +300,12 @@ impl Literal {
     }
 
     /// Return the universally quantified variables in the literal.
-    pub fn universal_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
         forward_to_atom!(self, universal_variables)
     }
 
     /// Return the existentially quantified variables in the literal.
-    pub fn existential_variables(&self) -> impl Iterator<Item = &Identifier> + '_ {
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
         forward_to_atom!(self, existential_variables)
     }
 }
@@ -244,25 +325,44 @@ pub enum FilterOperation {
     GreaterThanEq,
 }
 
+impl FilterOperation {
+    /// Flips the operation: for `op`, returns a suitable operation
+    /// `op'` such that `x op y` iff `y op' x`.
+    pub fn flip(&self) -> Self {
+        match self {
+            Self::Equals => Self::Equals,
+            Self::LessThan => Self::GreaterThan,
+            Self::GreaterThan => Self::LessThan,
+            Self::LessThanEq => Self::GreaterThanEq,
+            Self::GreaterThanEq => Self::LessThanEq,
+        }
+    }
+}
+
 /// Filter of the form <variable> <operation> <term>
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct Filter {
     /// Operation to be performed
     pub operation: FilterOperation,
     /// Left-hand side
-    pub left: Variable,
+    pub lhs: Variable,
     /// Right-hand side
-    pub right: Term,
+    pub rhs: Term,
 }
 
 impl Filter {
     /// Creates a new [`Filter`]
-    pub fn new(operation: FilterOperation, left: Variable, right: Term) -> Self {
+    pub fn new(operation: FilterOperation, lhs: Variable, rhs: Term) -> Self {
         Self {
             operation,
-            left,
-            right,
+            lhs,
+            rhs,
         }
+    }
+
+    /// Creates a new [`Filter]` with the arguments flipped
+    pub fn flipped(operation: FilterOperation, lhs: Term, rhs: Variable) -> Self {
+        Self::new(operation.flip(), rhs, lhs)
     }
 }
 
@@ -335,11 +435,11 @@ impl Rule {
         }
 
         // Check if a variable occurs with both existential and universal quantification.
-        let mut universal_variables = body
+        let universal_variables = body
             .iter()
             .flat_map(|literal| literal.universal_variables())
             .collect::<HashSet<_>>();
-        universal_variables.extend(head.iter().flat_map(|atom| atom.universal_variables()));
+
         let existential_variables = head
             .iter()
             .flat_map(|atom| atom.existential_variables())
@@ -354,6 +454,42 @@ impl Rule {
             return Err(ParseError::BothQuantifiers(
                 common_variables.first().expect("is not empty here").name(),
             ));
+        }
+
+        // Check if there are universal variables in the head which do not occur in a positive body literal
+        let head_universal_variables = head
+            .iter()
+            .flat_map(|atom| atom.universal_variables())
+            .collect::<HashSet<_>>();
+
+        for head_variable in head_universal_variables {
+            if !universal_variables.contains(head_variable) {
+                return Err(ParseError::UnsafeHeadVariable(head_variable.name()));
+            }
+        }
+
+        // Check if filters are correctly formed
+        for filter in &filters {
+            let mut filter_variables = vec![&filter.lhs];
+
+            if let Term::Variable(right_variable) = &filter.rhs {
+                filter_variables.push(right_variable);
+            }
+
+            for variable in filter_variables {
+                match variable {
+                    Variable::Universal(universal_variable) => {
+                        if !positive_varibales.contains(variable) {
+                            return Err(ParseError::UnsafeFilterVariable(
+                                universal_variable.name(),
+                            ));
+                        }
+                    }
+                    Variable::Existential(existential_variable) => {
+                        return Err(ParseError::BodyExistential(existential_variable.name()))
+                    }
+                }
+            }
         }
 
         Ok(Rule {
@@ -413,6 +549,26 @@ pub enum Statement {
     Rule(Rule),
 }
 
+/// Which predicates to output
+#[derive(Debug, Eq, PartialEq, Clone, Default)]
+pub enum OutputPredicateSelection {
+    /// Output every IDB predicate
+    #[default]
+    AllIDBPredicates,
+    /// Output only selected predicates
+    SelectedPredicates(Vec<QualifiedPredicateName>),
+}
+
+impl From<Vec<QualifiedPredicateName>> for OutputPredicateSelection {
+    fn from(predicates: Vec<QualifiedPredicateName>) -> Self {
+        if predicates.is_empty() {
+            Self::AllIDBPredicates
+        } else {
+            Self::SelectedPredicates(predicates)
+        }
+    }
+}
+
 /// A full program.
 #[derive(Debug, Default)]
 pub struct Program {
@@ -422,6 +578,7 @@ pub struct Program {
     rules: Vec<Rule>,
     facts: Vec<Fact>,
     parsed_predicate_declarations: HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    output_predicates: OutputPredicateSelection,
 }
 
 impl From<Vec<Rule>> for Program {
@@ -452,6 +609,7 @@ impl Program {
         rules: Vec<Rule>,
         facts: Vec<Fact>,
         parsed_predicate_declarations: HashMap<Identifier, Vec<LogicalTypeEnum>>,
+        output_predicates: OutputPredicateSelection,
     ) -> Self {
         Self {
             base,
@@ -460,6 +618,7 @@ impl Program {
             rules,
             facts,
             parsed_predicate_declarations,
+            output_predicates,
         }
     }
 
@@ -521,6 +680,27 @@ impl Program {
             .collect()
     }
 
+    /// Return an Iterator over all output predicates
+    pub fn output_predicates(&self) -> impl Iterator<Item = Identifier> {
+        let result: Vec<_> = match &self.output_predicates {
+            OutputPredicateSelection::AllIDBPredicates => {
+                self.idb_predicates().iter().cloned().collect()
+            }
+            OutputPredicateSelection::SelectedPredicates(predicates) => predicates
+                .iter()
+                .map(
+                    |QualifiedPredicateName {
+                         identifier,
+                         arity: _,
+                     }| identifier,
+                )
+                .cloned()
+                .collect(),
+        };
+
+        result.into_iter()
+    }
+
     /// Return all prefixes in the program.
     #[must_use]
     pub fn prefixes(&self) -> &HashMap<String, String> {
@@ -544,6 +724,14 @@ impl Program {
     #[must_use]
     pub fn parsed_predicate_declarations(&self) -> HashMap<Identifier, Vec<LogicalTypeEnum>> {
         self.parsed_predicate_declarations.clone()
+    }
+
+    /// Force the given selection of output predicates.
+    pub fn force_output_predicate_selection(
+        &mut self,
+        output_predicates: OutputPredicateSelection,
+    ) {
+        self.output_predicates = output_predicates;
     }
 }
 
@@ -646,7 +834,7 @@ impl DataSource {
     }
 }
 
-impl std::fmt::Debug for DataSource {
+impl Debug for DataSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::DsvFile {

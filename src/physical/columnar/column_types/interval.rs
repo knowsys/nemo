@@ -44,6 +44,11 @@ where
         self.int_starts.len()
     }
 
+    /// Destructure into data and interval column
+    pub fn as_parts(&self) -> (&ColumnEnum<T>, &ColumnEnum<usize>) {
+        (&self.data, &self.int_starts)
+    }
+
     /// Returns the smallest and largest index of the interval with the given
     /// index.
     ///
@@ -118,6 +123,40 @@ impl ColumnWithIntervalsT {
     /// Panics if `int_idx` is out of bounds.
     pub fn int_bounds(&self, int_idx: usize) -> Range<usize> {
         forward_to_interval_column!(self, int_bounds(int_idx))
+    }
+
+    /// Destructure into a pair of data column scan and interval column
+    pub fn as_parts(&self) -> (ColumnScanT<'_>, ColumnScanEnum<'_, usize>) {
+        match self {
+            Self::U32(this) => {
+                let (data, intervals) = this.as_parts();
+                (
+                    ColumnScanT::U32(ColumnScanCell::new(data.iter())),
+                    intervals.iter(),
+                )
+            }
+            Self::U64(this) => {
+                let (data, intervals) = this.as_parts();
+                (
+                    ColumnScanT::U64(ColumnScanCell::new(data.iter())),
+                    intervals.iter(),
+                )
+            }
+            Self::Float(this) => {
+                let (data, intervals) = this.as_parts();
+                (
+                    ColumnScanT::Float(ColumnScanCell::new(data.iter())),
+                    intervals.iter(),
+                )
+            }
+            Self::Double(this) => {
+                let (data, intervals) = this.as_parts();
+                (
+                    ColumnScanT::Double(ColumnScanCell::new(data.iter())),
+                    intervals.iter(),
+                )
+            }
+        }
     }
 
     /// Return the data type name of the column.

@@ -6,6 +6,7 @@ use crate::physical::{
     datatypes::{DataValueT, StorageTypeName, StorageValueT},
     management::database::Dict,
     tabular::traits::triescan::{TrieScan, TrieScanEnum},
+    util::interval::{Interval, IntervalBound},
 };
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
@@ -178,8 +179,8 @@ pub struct TrieScanSelectValue<'a> {
 pub struct ValueAssignment {
     /// Index of the column to which the value is assigned
     pub column_idx: usize,
-    /// The value assigned to the column
-    pub value: DataValueT,
+    /// The interval assigned to the column
+    pub interval: Interval<DataValueT>,
 }
 
 impl<'a> TrieScanSelectValue<'a> {
@@ -187,7 +188,7 @@ impl<'a> TrieScanSelectValue<'a> {
     pub fn new(
         dict: &mut Dict,
         base_trie: TrieScanEnum<'a>,
-        assignemnts: &[ValueAssignment],
+        assignments: &[ValueAssignment],
     ) -> Self {
         let column_types = base_trie.get_types();
         let arity = column_types.len();
@@ -221,40 +222,67 @@ impl<'a> TrieScanSelectValue<'a> {
             }
         }
 
-        for assignemnt in assignemnts {
-            macro_rules! init_scans_for_datatype {
-                ($variant:ident) => {
-                    unsafe {
-                        let value = if let StorageValueT::$variant(value) =
-                            assignemnt.value.to_storage_value(dict)
-                        {
-                            value
+        macro_rules! translate_interval_bound {
+            ($variant:ident, $type:ty, $interval_bound:expr, $dict:expr) => {
+                match $interval_bound {
+                    IntervalBound::Inclusive(bound) => {
+                        if let StorageValueT::$variant(value) = bound.to_storage_value(dict) {
+                            IntervalBound::Inclusive(value)
                         } else {
                             panic!("Expected a column scan of type {}", stringify!($variant));
-                        };
-
-                        let scan_enum = if let ColumnScanT::$variant(scan) =
-                            &*base_trie.get_scan(assignemnt.column_idx).unwrap().get()
-                        {
-                            scan
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($variant));
-                        };
-
-                        let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanEqualValue(
-                            ColumnScanEqualValue::new(scan_enum, value),
-                        ));
-
-                        select_scans[assignemnt.column_idx] =
-                            UnsafeCell::new(ColumnScanT::$variant(next_scan));
+                        }
                     }
-                };
+                    IntervalBound::Exclusive(bound) => {
+                        if let StorageValueT::$variant(value) = bound.to_storage_value(dict) {
+                            IntervalBound::Exclusive(value)
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        }
+                    }
+                    IntervalBound::Unbounded => IntervalBound::Unbounded,
+                }
+            };
+        }
+
+        for assignment in assignments {
+            macro_rules! init_scans_for_datatype {
+                ($variant:ident, $type:ty) => {{
+                    let lower = translate_interval_bound!(
+                        $variant,
+                        $type,
+                        &assignment.interval.lower,
+                        dict
+                    );
+                    let upper = translate_interval_bound!(
+                        $variant,
+                        $type,
+                        &assignment.interval.upper,
+                        dict
+                    );
+                    let interval = Interval::new(lower, upper);
+
+                    let scan_enum = if let ColumnScanT::$variant(scan) =
+                        unsafe { &*base_trie.get_scan(assignment.column_idx).unwrap().get() }
+                    {
+                        scan
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($variant));
+                    };
+
+                    let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanEqualValue(
+                        ColumnScanEqualValue::new(scan_enum, interval),
+                    ));
+
+                    select_scans[assignment.column_idx] =
+                        UnsafeCell::new(ColumnScanT::$variant(next_scan));
+                }};
             }
-            match column_types[assignemnt.column_idx] {
-                StorageTypeName::U32 => init_scans_for_datatype!(U32),
-                StorageTypeName::U64 => init_scans_for_datatype!(U64),
-                StorageTypeName::Float => init_scans_for_datatype!(Float),
-                StorageTypeName::Double => init_scans_for_datatype!(Double),
+
+            match column_types[assignment.column_idx] {
+                StorageTypeName::U32 => init_scans_for_datatype!(U32, u32),
+                StorageTypeName::U64 => init_scans_for_datatype!(U64, u64),
+                StorageTypeName::Float => init_scans_for_datatype!(Float, Float),
+                StorageTypeName::Double => init_scans_for_datatype!(Double, Double),
             }
         }
 
@@ -309,6 +337,7 @@ mod test {
     use crate::physical::management::database::Dict;
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
+    use crate::physical::util::interval::Interval;
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
@@ -416,11 +445,11 @@ mod test {
             &[
                 ValueAssignment {
                     column_idx: 1,
-                    value: DataValueT::U64(4),
+                    interval: Interval::single(DataValueT::U64(4)),
                 },
                 ValueAssignment {
                     column_idx: 3,
-                    value: DataValueT::U64(7),
+                    interval: Interval::single(DataValueT::U64(7)),
                 },
             ],
         );

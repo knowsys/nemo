@@ -6,20 +6,25 @@ use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
     character::complete::{alpha1, digit1, multispace1, none_of, satisfy},
-    combinator::{all_consuming, map, map_res, opt, recognize, value},
+    combinator::{all_consuming, cut, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
+    Err,
 };
 
-use crate::logical::{model::*, types::LogicalTypeEnum};
+use crate::{
+    error::Error,
+    logical::{model::*, types::LogicalTypeEnum},
+};
+use macros::traced;
 
 mod types;
-use types::IntermediateResult;
+use types::{IntermediateResult, Span};
 pub(crate) mod iri;
 pub(crate) mod rfc5234;
 pub(crate) mod sparql;
 pub(crate) mod turtle;
-pub use types::{ParseError, ParseResult};
+pub use types::{LocatedParseError, ParseError, ParseResult};
 
 /// A combinator to add tracing to the parser.
 /// [fun] is an identifier for the parser and [parser] is the actual parser.
@@ -27,10 +32,10 @@ pub use types::{ParseError, ParseResult};
 fn traced<'a, T, P>(
     fun: &'static str,
     mut parser: P,
-) -> impl FnMut(&'a str) -> IntermediateResult<T>
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, T>
 where
     T: Debug,
-    P: FnMut(&'a str) -> IntermediateResult<T>,
+    P: FnMut(Span<'a>) -> IntermediateResult<'a, T>,
 {
     move |input| {
         log::trace!(target: "parser", "{fun}({input:?})");
@@ -41,38 +46,194 @@ where
 }
 
 /// A combinator that makes sure all input has been consumed.
-pub fn all_input_consumed<'a, T>(
-    parser: impl FnMut(&'a str) -> IntermediateResult<'a, T>,
-) -> impl FnMut(&'a str) -> Result<T, crate::error::Error> {
+pub fn all_input_consumed<'a, T: 'a>(
+    parser: impl FnMut(Span<'a>) -> IntermediateResult<'a, T> + 'a,
+) -> impl FnMut(&'a str) -> Result<T, LocatedParseError> + 'a {
     let mut p = all_consuming(parser);
     move |input| {
+        let input = Span::new(input);
         p(input).map(|(_, result)| result).map_err(|e| match e {
-            nom::Err::Incomplete(e) => ParseError::MissingInput(match e {
-                nom::Needed::Unknown => "expected an unknown amount of further input".to_owned(),
+            Err::Incomplete(e) => ParseError::MissingInput(match e {
+                nom::Needed::Unknown => "expected an unknown amount of further input".to_string(),
                 nom::Needed::Size(size) => format!("expected at least {size} more bytes"),
             })
-            .into(),
-            nom::Err::Error(e) | nom::Err::Failure(e) => e,
+            .at(input),
+            Err::Error(e) | Err::Failure(e) => e,
         })
     }
 }
 
 /// A combinator that recognises a comment, starting at a `%`
 /// character and ending at the end of the line.
-pub fn comment(input: &str) -> IntermediateResult<()> {
-    value((), pair(tag("%"), is_not("\n\r")))(input)
+pub fn comment(input: Span) -> IntermediateResult<()> {
+    alt((
+        value((), pair(tag("%"), is_not("\n\r"))),
+        // a comment that immediately precedes the end of the line –
+        // this must come after the normal line comment above
+        value((), tag("%")),
+    ))(input)
 }
 
 /// A combinator that recognises an arbitrary amount of whitespace and
 /// comments.
-pub fn multispace_or_comment0(input: &str) -> IntermediateResult<()> {
+pub fn multispace_or_comment0(input: Span) -> IntermediateResult<()> {
     value((), many0(alt((value((), multispace1), comment))))(input)
 }
 
 /// A combinator that recognises any non-empty amount of whitespace
 /// and comments.
-pub fn multispace_or_comment1(input: &str) -> IntermediateResult<()> {
+pub fn multispace_or_comment1(input: Span) -> IntermediateResult<()> {
     value((), many1(alt((value((), multispace1), comment))))(input)
+}
+
+/// A combinator that modifies the associated error.
+pub fn map_error<'a, T: 'a>(
+    mut parser: impl FnMut(Span<'a>) -> IntermediateResult<'a, T> + 'a,
+    mut error: impl FnMut() -> ParseError + 'a,
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, T> + 'a {
+    move |input| {
+        parser(input).map_err(|e| match e {
+            Err::Incomplete(_) => e,
+            Err::Error(context) => {
+                let mut err = error().at(input);
+                err.append(context);
+                Err::Error(err)
+            }
+            Err::Failure(context) => {
+                let mut err = error().at(input);
+                err.append(context);
+                Err::Failure(err)
+            }
+        })
+    }
+}
+
+/// A combinator that creates a parser for a specific token.
+pub fn token<'a>(token: &'a str) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    map_error(tag(token), || ParseError::ExpectedToken(token.to_string()))
+}
+
+/// A combinator that creates a parser for a specific token,
+/// surrounded by whitespace or comments.
+pub fn space_delimited_token<'a>(
+    token: &'a str,
+) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    map_error(
+        delimited(multispace_or_comment0, tag(token), multispace_or_comment0),
+        || ParseError::ExpectedToken(token.to_string()),
+    )
+}
+
+/// Expand a prefix.
+fn resolve_prefix<'a>(
+    prefixes: &'a HashMap<&'a str, &'a str>,
+    prefix: &'a str,
+) -> Result<&'a str, ParseError> {
+    prefixes
+        .get(prefix)
+        .copied()
+        .ok_or_else(|| ParseError::UndeclaredPrefix(prefix.to_string()))
+}
+
+/// Expand a prefixed name.
+fn resolve_prefixed_name(
+    prefixes: &HashMap<&str, &str>,
+    name: sparql::Name,
+) -> Result<String, ParseError> {
+    match name {
+        sparql::Name::IriReference(iri) => Ok(iri.to_string()),
+        sparql::Name::PrefixedName { prefix, local } => {
+            resolve_prefix(prefixes, prefix).map(|iri| format!("{iri}{local}"))
+        }
+        sparql::Name::BlankNode(label) => Ok(format!("_:{label}")),
+    }
+}
+
+/// Resolve prefixes in a [`turtle::RdfLiteral`].
+#[must_use]
+fn resolve_prefixed_rdf_literal(
+    prefixes: &HashMap<&str, &str>,
+    literal: turtle::RdfLiteral,
+) -> RdfLiteral {
+    match literal {
+        turtle::RdfLiteral::LanguageString { value, tag } => RdfLiteral::LanguageString {
+            value: value.to_string(),
+            tag: tag.to_string(),
+        },
+        turtle::RdfLiteral::DatatypeValue { value, datatype } => RdfLiteral::DatatypeValue {
+            value: value.to_string(),
+            datatype: resolve_prefixed_name(prefixes, datatype)
+                .expect("prefix should have been registered during parsing"),
+        },
+    }
+}
+
+#[traced("parser")]
+fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
+    map_error(
+        recognize(pair(
+            alpha1,
+            opt(preceded(
+                many0(tag(" ")),
+                separated_list1(
+                    many1(tag(" ")),
+                    many1(satisfy(|c| {
+                        ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
+                            .iter()
+                            .any(|range| range.contains(&c))
+                    })),
+                ),
+            )),
+        )),
+        || ParseError::ExpectedBareName,
+    )(input)
+}
+
+/// Parse an IRI representing a constant.
+fn parse_iri_constant<'a>(
+    prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Identifier> {
+    map_error(
+        move |input| {
+            let (remainder, name) = traced(
+                "parse_iri_constant",
+                alt((
+                    map(sparql::iriref, |name| sparql::Name::IriReference(&name)),
+                    sparql::prefixed_name,
+                    sparql::blank_node_label,
+                    map(parse_bare_name, |name| sparql::Name::IriReference(&name)),
+                )),
+            )(input)?;
+
+            let resolved = resolve_prefixed_name(&prefixes.borrow(), name)
+                .map_err(|e| Err::Failure(e.at(input)))?;
+
+            Ok((remainder, Identifier(resolved)))
+        },
+        || ParseError::ExpectedIriConstant,
+    )
+}
+
+/// Parse a ground term.
+pub fn parse_ground_term<'a>(
+    prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
+    traced(
+        "parse_ground_term",
+        map_error(
+            alt((
+                map(parse_iri_constant(prefixes), Term::Constant),
+                map(turtle::numeric_literal, Term::NumericLiteral),
+                map(turtle::rdf_literal, move |literal| {
+                    Term::RdfLiteral(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
+                }),
+                map(turtle::string, move |literal| {
+                    Term::StringLiteral(literal.to_string())
+                }),
+            )),
+            || ParseError::ExpectedGroundTerm,
+        ),
+    )
 }
 
 /// The main parser. Holds a hash map for
@@ -105,125 +266,128 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse the dot that ends declarations, optionally surrounded by spaces.
-    fn parse_dot(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced(
-            "parse_dot",
-            delimited(multispace_or_comment0, tag("."), multispace_or_comment0),
-        )
+    fn parse_dot(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_dot", space_delimited_token("."))
     }
 
     /// Parse a comma, optionally surrounded by spaces.
-    fn parse_comma(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced(
-            "parse_comma",
-            delimited(multispace_or_comment0, tag(","), multispace_or_comment0),
-        )
+    fn parse_comma(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_comma", space_delimited_token(","))
     }
 
     /// Parse a negation sign (`~`), optionally surrounded by spaces.
-    fn parse_not(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced(
-            "parse_not",
-            delimited(multispace_or_comment0, tag("~"), multispace_or_comment0),
-        )
+    fn parse_not(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_not", space_delimited_token("~"))
     }
 
     /// Parse an arrow (`:-`), optionally surrounded by spaces.
-    fn parse_arrow(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced(
-            "parse_arrow",
-            delimited(multispace_or_comment0, tag(":-"), multispace_or_comment0),
-        )
+    fn parse_arrow(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_arrow", space_delimited_token(":-"))
     }
 
     /// Parse an opening parenthesis, optionally surrounded by spaces.
-    fn parse_open_parenthesis(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced(
-            "parse_open_parenthesis",
-            delimited(multispace_or_comment0, tag("("), multispace_or_comment0),
-        )
+    fn parse_open_parenthesis(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_open_parenthesis", space_delimited_token("("))
     }
 
     /// Parse a closing parenthesis, optionally surrounded by spaces.
-    fn parse_close_parenthesis(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'_ str> {
-        traced(
-            "parse_close_parenthesis",
-            delimited(multispace_or_comment0, tag(")"), multispace_or_comment0),
-        )
+    fn parse_close_parenthesis(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_close_parenthesis", space_delimited_token(")"))
     }
 
     /// Parse a base declaration.
-    fn parse_base(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
-        traced("parse_base", move |input| {
-            let (remainder, base) = delimited(
-                terminated(tag("@base"), multispace_or_comment1),
-                sparql::iriref,
-                self.parse_dot(),
-            )(input)?;
+    fn parse_base(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+        traced(
+            "parse_base",
+            map_error(
+                move |input| {
+                    let (remainder, base) = delimited(
+                        terminated(token("@base"), cut(multispace_or_comment1)),
+                        cut(sparql::iriref),
+                        cut(self.parse_dot()),
+                    )(input)?;
 
-            log::debug!(target: "parser", r#"parse_base: set new base: "{base}""#);
-            *self.base.borrow_mut() = Some(base);
+                    log::debug!(target: "parser", r#"parse_base: set new base: "{base}""#);
+                    *self.base.borrow_mut() = Some(&base);
 
-            Ok((remainder, Identifier(base.to_owned())))
-        })
+                    Ok((remainder, Identifier(base.to_string())))
+                },
+                || ParseError::ExpectedBaseDeclaration,
+            ),
+        )
     }
 
-    fn parse_prefix(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
-        traced("parse_prefix", move |input| {
-            let (remainder, (prefix, iri)) = delimited(
-                terminated(tag("@prefix"), multispace_or_comment1),
-                tuple((
-                    terminated(sparql::pname_ns, multispace_or_comment1),
-                    sparql::iriref,
-                )),
-                self.parse_dot(),
-            )(input)?;
+    fn parse_prefix(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced(
+            "parse_prefix",
+            map_error(
+                move |input| {
+                    let (remainder, (prefix, iri)) = delimited(
+                        terminated(token("@prefix"), cut(multispace_or_comment1)),
+                        cut(tuple((
+                            cut(terminated(sparql::pname_ns, multispace_or_comment1)),
+                            cut(sparql::iriref),
+                        ))),
+                        cut(self.parse_dot()),
+                    )(input)?;
 
-            log::debug!(target: "parser", r#"parse_prefix: got prefix "{prefix}" for iri "{iri}""#);
-            if self.prefixes.borrow_mut().insert(prefix, iri).is_some() {
-                Err(nom::Err::Error(
-                    ParseError::RedeclaredPrefix(prefix.to_owned()).into(),
-                ))
-            } else {
-                Ok((remainder, prefix))
-            }
-        })
+                    log::debug!(target: "parser", r#"parse_prefix: got prefix "{prefix}" for iri "{iri}""#);
+                    if self.prefixes.borrow_mut().insert(&prefix, &iri).is_some() {
+                        Err(Err::Failure(
+                            ParseError::RedeclaredPrefix(prefix.to_string()).at(input),
+                        ))
+                    } else {
+                        Ok((remainder, prefix))
+                    }
+                },
+                || ParseError::ExpectedPrefixDeclaration,
+            ),
+        )
     }
 
     fn parse_predicate_declaration(
         &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<(Identifier, Vec<LogicalTypeEnum>)> {
-        traced("parse_predicate_declaration", move |input| {
-            let (remainder, (predicate, types)) = delimited(
-                terminated(tag("@declare"), multispace1),
-                pair(
-                    self.parse_predicate_name(),
-                    delimited(
-                        self.parse_open_parenthesis(),
-                        separated_list1(self.parse_comma(), self.parse_type_name()),
-                        self.parse_close_parenthesis(),
-                    ),
-                ),
-                self.parse_dot(),
-            )(input)?;
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, Vec<LogicalTypeEnum>)> {
+        traced(
+            "parse_predicate_declaration",
+            map_error(
+                move |input| {
+                    let (remainder, (predicate, types)) = delimited(
+                        terminated(token("@declare"), cut(multispace_or_comment1)),
+                        cut(pair(
+                            self.parse_predicate_name(),
+                            delimited(
+                                cut(self.parse_open_parenthesis()),
+                                cut(separated_list1(self.parse_comma(), self.parse_type_name())),
+                                cut(self.parse_close_parenthesis()),
+                            ),
+                        )),
+                        cut(self.parse_dot()),
+                    )(input)?;
 
-            self.predicate_declarations
-                .borrow_mut()
-                .entry(predicate.clone())
-                .or_insert(types.clone());
-            Ok((remainder, (predicate, types)))
-        })
+                    self.predicate_declarations
+                        .borrow_mut()
+                        .entry(predicate.clone())
+                        .or_insert(types.clone());
+                    Ok((remainder, (predicate, types)))
+                },
+                || ParseError::ExpectedPredicateDeclaration,
+            ),
+        )
     }
 
-    fn parse_type_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<LogicalTypeEnum> {
+    fn parse_type_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<LogicalTypeEnum> {
         traced("parse_type_name", move |input| {
-            let (remainder, type_name) = (map_res(
-                recognize(pair(alpha1, many0(none_of(",)")))),
-                |name: &str| {
-                    // NOTE: type names may not contain commata but any other character (they should start with [a-zA-Z] though)
-                    name.parse()
-                },
-            ))(input)?;
+            let (remainder, type_name) = map_error(
+                map_res(
+                    recognize(pair(alpha1, many0(none_of(",)")))),
+                    |name: Span<'a>| name.parse(),
+                    // NOTE: type names may not contain commata but any
+                    // other character (they should start with [a-zA-Z]
+                    // though)
+                ),
+                || ParseError::ExpectedLogicalTypeName,
+            )(input)?;
 
             Ok((remainder, type_name))
         })
@@ -232,261 +396,317 @@ impl<'a> RuleParser<'a> {
     /// Parses a data source declaration.
     pub fn parse_source(
         &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<DataSourceDeclaration> {
-        traced("parse_source", move |input| {
-            let (remainder, (predicate, arity)) = preceded(
-                terminated(tag("@source"), multispace_or_comment1),
-                pair(
-                    self.parse_predicate_name(),
-                    preceded(
-                        multispace_or_comment0,
-                        delimited(
-                            tag("["),
-                            map_res(digit1, |number: &str| number.parse::<usize>()),
-                            tag("]"),
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<DataSourceDeclaration> {
+        traced(
+            "parse_source",
+            map_error(
+                move |input| {
+                    let (remainder, (predicate, arity)) = preceded(
+                        terminated(token("@source"), cut(multispace_or_comment1)),
+                        cut(self.parse_qualified_predicate_name()),
+                    )(input)?;
+
+                    let (remainder, datasource) = cut(delimited(
+                        delimited(multispace_or_comment0, token(":"), multispace_or_comment1),
+                        alt((
+                            map(
+                                delimited(
+                                    preceded(token("load-csv"), cut(self.parse_open_parenthesis())),
+                                    turtle::string,
+                                    self.parse_close_parenthesis(),
+                                ),
+                                |filename| DataSource::csv_file(&filename),
+                            ),
+                            map(
+                                delimited(
+                                    preceded(token("load-tsv"), cut(self.parse_open_parenthesis())),
+                                    turtle::string,
+                                    self.parse_close_parenthesis(),
+                                ),
+                                |filename| DataSource::tsv_file(&filename),
+                            ),
+                            map(
+                                delimited(
+                                    preceded(token("load-rdf"), cut(self.parse_open_parenthesis())),
+                                    turtle::string,
+                                    self.parse_close_parenthesis(),
+                                ),
+                                |filename| DataSource::rdf_file(&filename),
+                            ),
+                            map(
+                                delimited(
+                                    preceded(token("sparql"), cut(self.parse_open_parenthesis())),
+                                    tuple((
+                                        self.parse_iri_pred(),
+                                        delimited(
+                                            self.parse_comma(),
+                                            turtle::string,
+                                            self.parse_comma(),
+                                        ),
+                                        turtle::string,
+                                    )),
+                                    self.parse_close_parenthesis(),
+                                ),
+                                |(endpoint, projection, query)| {
+                                    DataSource::sparql_query(SparqlQuery::new(
+                                        endpoint.name(),
+                                        projection.to_string(),
+                                        query.to_string(),
+                                    ))
+                                },
+                            ),
+                        )),
+                        cut(self.parse_dot()),
+                    ))(remainder)?;
+
+                    let source = DataSourceDeclaration::new_validated(
+                        predicate,
+                        arity,
+                        datasource.map_err(|e| Err::Failure(e.at(input)))?,
+                    )
+                    .map_err(|e| Err::Failure(e.at(input)))?;
+
+                    log::trace!("Found external data source {source:?}");
+                    self.sources.borrow_mut().push(source.clone());
+
+                    Ok((remainder, source))
+                },
+                || ParseError::ExpectedDataSourceDeclaration,
+            ),
+        )
+    }
+
+    /// Parses an output directive.
+    pub fn parse_output(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<QualifiedPredicateName> {
+        traced(
+            "parse_output",
+            map_error(
+                delimited(
+                    terminated(token("@output"), cut(multispace_or_comment0)),
+                    cut(alt((
+                        map_res::<_, _, _, _, Error, _, _>(
+                            self.parse_qualified_predicate_name(),
+                            |(identifier, arity)| {
+                                Ok(QualifiedPredicateName::with_arity(identifier, arity))
+                            },
                         ),
-                    ),
+                        map_res::<_, _, _, _, Error, _, _>(
+                            self.parse_predicate_name(),
+                            |identifier| Ok(identifier.into()),
+                        ),
+                    ))),
+                    cut(self.parse_dot()),
                 ),
-            )(input)?;
-
-            let (remainder, datasource) = delimited(
-                delimited(multispace_or_comment0, tag(":"), multispace_or_comment1),
-                alt((
-                    map(
-                        delimited(
-                            preceded(tag("load-csv"), self.parse_open_parenthesis()),
-                            turtle::string,
-                            self.parse_close_parenthesis(),
-                        ),
-                        DataSource::csv_file,
-                    ),
-                    map(
-                        delimited(
-                            preceded(tag("load-tsv"), self.parse_open_parenthesis()),
-                            turtle::string,
-                            self.parse_close_parenthesis(),
-                        ),
-                        DataSource::tsv_file,
-                    ),
-                    map(
-                        delimited(
-                            preceded(tag("load-rdf"), self.parse_open_parenthesis()),
-                            turtle::string,
-                            self.parse_close_parenthesis(),
-                        ),
-                        DataSource::rdf_file,
-                    ),
-                    map(
-                        delimited(
-                            preceded(tag("sparql"), self.parse_open_parenthesis()),
-                            tuple((
-                                self.parse_iri_pred(),
-                                delimited(self.parse_comma(), turtle::string, self.parse_comma()),
-                                turtle::string,
-                            )),
-                            self.parse_close_parenthesis(),
-                        ),
-                        |(endpoint, projection, query)| {
-                            DataSource::sparql_query(SparqlQuery::new(
-                                endpoint.name(),
-                                projection.to_owned(),
-                                query.to_owned(),
-                            ))
-                        },
-                    ),
-                )),
-                self.parse_dot(),
-            )(remainder)?;
-
-            let source = DataSourceDeclaration::new_validated(predicate, arity, datasource?)?;
-
-            log::trace!("Found external data source {source:?}");
-            self.sources.borrow_mut().push(source.clone());
-
-            Ok((remainder, source))
-        })
+                || ParseError::ExpectedOutputDeclaration,
+            ),
+        )
     }
 
     /// Parses a statement.
-    pub fn parse_statement(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Statement> {
+    pub fn parse_statement(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Statement> {
         traced(
             "parse_statement",
-            alt((
-                map(self.parse_fact(), Statement::Fact),
-                map(self.parse_rule(), Statement::Rule),
-            )),
+            map_error(
+                alt((
+                    map(self.parse_fact(), Statement::Fact),
+                    map(self.parse_rule(), Statement::Rule),
+                )),
+                || ParseError::ExpectedStatement,
+            ),
         )
     }
 
     /// Parse a fact.
-    pub fn parse_fact(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Fact> {
-        traced("parse_fact", move |input| {
-            let (remainder, (predicate, terms)) = terminated(
-                pair(
-                    self.parse_predicate_name(),
-                    delimited(
-                        self.parse_open_parenthesis(),
-                        separated_list1(self.parse_comma(), self.parse_ground_term()),
-                        self.parse_close_parenthesis(),
-                    ),
-                ),
-                self.parse_dot(),
-            )(input)?;
-
-            let predicate_name = predicate.name();
-            log::trace!(target: "parser", "found fact {predicate_name}({terms:?})");
-
-            Ok((remainder, Fact(Atom::new(predicate, terms))))
-        })
-    }
-
-    /// Parse an IRI which can be a predicate name.
-    pub fn parse_iri_pred(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
-        move |input| {
-            let (remainder, name) = traced(
-                "parse_iri_pred",
-                alt((
-                    map(sparql::iriref, sparql::Name::IriReference),
-                    sparql::prefixed_name,
-                    sparql::blank_node_label,
-                )),
-            )(input)?;
-
-            Ok((remainder, Identifier(self.resolve_prefixed_name(name)?)))
-        }
-    }
-
-    /// Parse an IRI representing a constant.
-    pub fn parse_iri_constant(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
-        move |input| {
-            let (remainder, name) = traced(
-                "parse_iri_constant",
-                alt((
-                    map(sparql::iriref, sparql::Name::IriReference),
-                    sparql::prefixed_name,
-                    sparql::blank_node_label,
-                    map(self.parse_bare_name(), sparql::Name::IriReference),
-                )),
-            )(input)?;
-
-            Ok((remainder, Identifier(self.resolve_prefixed_name(name)?)))
-        }
-    }
-
-    /// Parse a predicate name.
-    pub fn parse_predicate_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
+    pub fn parse_fact(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Fact> {
         traced(
-            "parse_predicate_name",
-            alt((self.parse_iri_pred(), self.parse_pred_name())),
+            "parse_fact",
+            map_error(
+                move |input| {
+                    let (remainder, (predicate, terms)) = terminated(
+                        pair(
+                            self.parse_predicate_name(),
+                            delimited(
+                                self.parse_open_parenthesis(),
+                                separated_list1(
+                                    self.parse_comma(),
+                                    parse_ground_term(&self.prefixes),
+                                ),
+                                self.parse_close_parenthesis(),
+                            ),
+                        ),
+                        self.parse_dot(),
+                    )(input)?;
+
+                    let predicate_name = predicate.name();
+                    log::trace!(target: "parser", "found fact {predicate_name}({terms:?})");
+
+                    Ok((remainder, Fact(Atom::new(predicate, terms))))
+                },
+                || ParseError::ExpectedFact,
+            ),
         )
     }
 
-    fn parse_bare_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<&'a str> {
+    /// Parse an IRI which can be a predicate name.
+    pub fn parse_iri_pred(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+        map_error(
+            move |input| {
+                let (remainder, name) = traced(
+                    "parse_iri_pred",
+                    alt((
+                        map(sparql::iriref, |name| sparql::Name::IriReference(&name)),
+                        sparql::prefixed_name,
+                        sparql::blank_node_label,
+                    )),
+                )(input)?;
+
+                Ok((
+                    remainder,
+                    Identifier(
+                        resolve_prefixed_name(&self.prefixes.borrow(), name)
+                            .map_err(|e| Err::Failure(e.at(input)))?,
+                    ),
+                ))
+            },
+            || ParseError::ExpectedIriPred,
+        )
+    }
+
+    /// Parse a predicate name.
+    pub fn parse_predicate_name(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         traced(
-            "parse_bare_name",
-            recognize(pair(
-                alpha1,
-                many0(satisfy(|c| {
-                    ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
-                        .iter()
-                        .any(|range| range.contains(&c))
-                })),
-            )),
+            "parse_predicate_name",
+            map_error(alt((self.parse_iri_pred(), self.parse_pred_name())), || {
+                ParseError::ExpectedPredicateName
+            }),
+        )
+    }
+
+    /// Parse a qualified predicate name – currently, this is a
+    /// predicate name together with its arity.
+    fn parse_qualified_predicate_name(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, usize)> {
+        traced(
+            "parse_qualified_predicate_name",
+            pair(
+                self.parse_predicate_name(),
+                preceded(
+                    multispace_or_comment0,
+                    delimited(
+                        token("["),
+                        cut(map_res(digit1, |number: Span<'a>| number.parse::<usize>())),
+                        cut(token("]")),
+                    ),
+                ),
+            ),
         )
     }
 
     /// Parse a PREDNAME, i.e., a predicate name that is not an IRI.
-    pub fn parse_pred_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
+    pub fn parse_pred_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         traced("parse_pred_name", move |input| {
-            let (remainder, name) = self.parse_bare_name()(input)?;
+            let (remainder, name) = parse_bare_name(input)?;
 
-            Ok((remainder, Identifier(name.to_owned())))
+            Ok((remainder, Identifier(name.to_string())))
         })
-    }
-
-    /// Parse a ground term.
-    pub fn parse_ground_term(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
-        traced(
-            "parse_ground_term",
-            alt((
-                map(self.parse_iri_constant(), Term::Constant),
-                map(turtle::numeric_literal, Term::NumericLiteral),
-                map(turtle::rdf_literal, move |literal| {
-                    Term::RdfLiteral(self.intern_rdf_literal(literal))
-                }),
-            )),
-        )
     }
 
     /// Parse a rule.
-    pub fn parse_rule(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Rule> {
-        traced("parse_rule", move |input| {
-            let (remainder, (head, body)) = pair(
-                terminated(
-                    separated_list1(self.parse_comma(), self.parse_atom()),
-                    self.parse_arrow(),
-                ),
-                terminated(
-                    separated_list1(self.parse_comma(), self.parse_body_expression()),
-                    self.parse_dot(),
-                ),
-            )(input)?;
+    pub fn parse_rule(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Rule> {
+        traced(
+            "parse_rule",
+            map_error(
+                move |input| {
+                    let (remainder, (head, body)) = pair(
+                        terminated(
+                            separated_list1(self.parse_comma(), self.parse_atom()),
+                            self.parse_arrow(),
+                        ),
+                        cut(terminated(
+                            separated_list1(self.parse_comma(), self.parse_body_expression()),
+                            self.parse_dot(),
+                        )),
+                    )(input)?;
 
-            log::trace!(target: "parser", r#"found rule "{head:?}" :- "{body:?}""#);
+                    log::trace!(target: "parser", r#"found rule "{head:?}" :- "{body:?}""#);
 
-            let literals = body
-                .iter()
-                .filter_map(|expr| match expr {
-                    BodyExpression::Literal(l) => Some(l.clone()),
-                    _ => None,
-                })
-                .collect();
-            let filters = body
-                .into_iter()
-                .filter_map(|expr| match expr {
-                    BodyExpression::Filter(f) => Some(f),
-                    _ => None,
-                })
-                .collect();
-            Ok((remainder, Rule::new_validated(head, literals, filters)?))
-        })
+                    let literals = body
+                        .iter()
+                        .filter_map(|expr| match expr {
+                            BodyExpression::Literal(l) => Some(l.clone()),
+                            _ => None,
+                        })
+                        .collect();
+                    let filters = body
+                        .into_iter()
+                        .filter_map(|expr| match expr {
+                            BodyExpression::Filter(f) => Some(f),
+                            _ => None,
+                        })
+                        .collect();
+                    Ok((
+                        remainder,
+                        Rule::new_validated(head, literals, filters)
+                            .map_err(|e| Err::Failure(e.at(input)))?,
+                    ))
+                },
+                || ParseError::ExpectedRule,
+            ),
+        )
     }
 
     /// Parse an atom.
-    pub fn parse_atom(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Atom> {
-        traced("parse_atom", move |input| {
-            let (remainder, predicate) = self.parse_predicate_name()(input)?;
-            let (remainder, terms) = delimited(
-                self.parse_open_parenthesis(),
-                separated_list1(self.parse_comma(), self.parse_term()),
-                self.parse_close_parenthesis(),
-            )(remainder)?;
+    pub fn parse_atom(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Atom> {
+        traced(
+            "parse_atom",
+            map_error(
+                move |input| {
+                    let (remainder, predicate) = self.parse_predicate_name()(input)?;
+                    let (remainder, terms) = delimited(
+                        self.parse_open_parenthesis(),
+                        cut(separated_list1(self.parse_comma(), self.parse_term())),
+                        cut(self.parse_close_parenthesis()),
+                    )(remainder)?;
 
-            let predicate_name = predicate.name();
-            log::trace!(target: "parser", "found atom {predicate_name}({terms:?})");
+                    let predicate_name = predicate.name();
+                    log::trace!(target: "parser", "found atom {predicate_name}({terms:?})");
 
-            Ok((remainder, Atom::new(predicate, terms)))
-        })
+                    Ok((remainder, Atom::new(predicate, terms)))
+                },
+                || ParseError::ExpectedAtom,
+            ),
+        )
     }
 
     /// Parse a term.
-    pub fn parse_term(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
+    pub fn parse_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_term",
-            alt((self.parse_ground_term(), self.parse_variable())),
+            map_error(
+                alt((parse_ground_term(&self.prefixes), self.parse_variable())),
+                || ParseError::ExpectedTerm,
+            ),
         )
     }
 
     /// Parse a variable.
-    pub fn parse_variable(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Term> {
+    pub fn parse_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_variable",
-            map(
-                alt((
-                    self.parse_universal_variable(),
-                    self.parse_existential_variable(),
-                )),
-                Term::Variable,
+            map_error(
+                map(
+                    alt((
+                        self.parse_universal_variable(),
+                        self.parse_existential_variable(),
+                    )),
+                    Term::Variable,
+                ),
+                || ParseError::ExpectedVariable,
             ),
         )
     }
@@ -494,12 +714,15 @@ impl<'a> RuleParser<'a> {
     /// Parse a universally quantified variable.
     pub fn parse_universal_variable(
         &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<Variable> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Variable> {
         traced(
             "parse_universal_variable",
-            map(
-                preceded(tag("?"), self.parse_variable_name()),
-                Variable::Universal,
+            map_error(
+                map(
+                    preceded(token("?"), cut(self.parse_variable_name())),
+                    Variable::Universal,
+                ),
+                || ParseError::ExpectedUniversalVariable,
             ),
         )
     }
@@ -507,48 +730,65 @@ impl<'a> RuleParser<'a> {
     /// Parse an existentially quantified variable.
     pub fn parse_existential_variable(
         &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<Variable> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Variable> {
         traced(
             "parse_existential_variable",
-            map(
-                preceded(tag("!"), self.parse_variable_name()),
-                Variable::Existential,
+            map_error(
+                map(
+                    preceded(token("!"), cut(self.parse_variable_name())),
+                    Variable::Existential,
+                ),
+                || ParseError::ExpectedExistentialVariable,
             ),
         )
     }
 
     /// Parse a variable name.
-    pub fn parse_variable_name(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Identifier> {
-        traced("parse_variable", move |input| {
-            let (remainder, name) = self.parse_bare_name()(input)?;
+    pub fn parse_variable_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+        traced(
+            "parse_variable",
+            map_error(
+                move |input| {
+                    let (remainder, name) = parse_bare_name(input)?;
 
-            Ok((remainder, Identifier(name.to_owned())))
-        })
+                    Ok((remainder, Identifier(name.to_string())))
+                },
+                || ParseError::ExpectedVariableName,
+            ),
+        )
     }
 
     /// Parse a literal (i.e., a possibly negated atom).
-    pub fn parse_literal(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Literal> {
+    pub fn parse_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
         traced(
             "parse_literal",
-            alt((self.parse_positive_literal(), self.parse_negative_literal())),
+            map_error(
+                alt((self.parse_negative_literal(), self.parse_positive_literal())),
+                || ParseError::ExpectedLiteral,
+            ),
         )
     }
 
     /// Parse a non-negated literal.
-    pub fn parse_positive_literal(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Literal> {
+    pub fn parse_positive_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
         traced(
             "parse_positive_literal",
-            map(self.parse_atom(), Literal::Positive),
+            map_error(map(self.parse_atom(), Literal::Positive), || {
+                ParseError::ExpectedPositiveLiteral
+            }),
         )
     }
 
     /// Parse a negated literal.
-    pub fn parse_negative_literal(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Literal> {
+    pub fn parse_negative_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
         traced(
             "parse_negative_literal",
-            map(
-                preceded(self.parse_not(), self.parse_atom()),
-                Literal::Negative,
+            map_error(
+                map(
+                    preceded(self.parse_not(), cut(self.parse_atom())),
+                    Literal::Negative,
+                ),
+                || ParseError::ExpectedNegativeLiteral,
             ),
         )
     }
@@ -556,34 +796,51 @@ impl<'a> RuleParser<'a> {
     /// Parse operation that is filters a variable
     pub fn parse_filter_operator(
         &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<FilterOperation> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<FilterOperation> {
         traced(
             "parse_filter_operator",
-            delimited(
-                multispace_or_comment0,
-                alt((
-                    value(FilterOperation::LessThanEq, tag("<=")),
-                    value(FilterOperation::LessThan, tag("<")),
-                    value(FilterOperation::Equals, tag("=")),
-                    value(FilterOperation::GreaterThanEq, tag(">=")),
-                    value(FilterOperation::GreaterThan, tag(">")),
-                )),
-                multispace_or_comment0,
+            map_error(
+                delimited(
+                    multispace_or_comment0,
+                    alt((
+                        value(FilterOperation::LessThanEq, token("<=")),
+                        value(FilterOperation::LessThan, token("<")),
+                        value(FilterOperation::Equals, token("=")),
+                        value(FilterOperation::GreaterThanEq, token(">=")),
+                        value(FilterOperation::GreaterThan, token(">")),
+                    )),
+                    multispace_or_comment0,
+                ),
+                || ParseError::ExpectedFilterOperator,
             ),
         )
     }
 
-    /// Parse expression of the for <variable> <operation> <term>
-    pub fn parse_filter_expression(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Filter> {
+    /// Parse expression of the form `<variable> <operation> <term>`
+    /// or `<term> <operation> <variable>`.
+    pub fn parse_filter_expression(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Filter> {
         traced(
             "parse_filter_expression",
-            map(
-                tuple((
-                    self.parse_universal_variable(),
-                    self.parse_filter_operator(),
-                    self.parse_term(),
+            map_error(
+                alt((
+                    map(
+                        tuple((
+                            self.parse_universal_variable(),
+                            self.parse_filter_operator(),
+                            cut(self.parse_term()),
+                        )),
+                        |(lhs, operation, rhs)| Filter::new(operation, lhs, rhs),
+                    ),
+                    map(
+                        tuple((
+                            self.parse_term(),
+                            self.parse_filter_operator(),
+                            cut(self.parse_universal_variable()),
+                        )),
+                        |(lhs, operation, rhs)| Filter::flipped(operation, lhs, rhs),
+                    ),
                 )),
-                |(left, operation, right)| Filter::new(operation, left, right),
+                || ParseError::ExpectedFilterExpression,
             ),
         )
     }
@@ -591,18 +848,21 @@ impl<'a> RuleParser<'a> {
     /// Parse body expression
     pub fn parse_body_expression(
         &'a self,
-    ) -> impl FnMut(&'a str) -> IntermediateResult<BodyExpression> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<BodyExpression> {
         traced(
             "parse_body_expression",
-            alt((
-                map(self.parse_literal(), BodyExpression::Literal),
-                map(self.parse_filter_expression(), BodyExpression::Filter),
-            )),
+            map_error(
+                alt((
+                    map(self.parse_filter_expression(), BodyExpression::Filter),
+                    map(self.parse_literal(), BodyExpression::Literal),
+                )),
+                || ParseError::ExpectedBodyExpression,
+            ),
         )
     }
 
     /// Parses a program in the rules language.
-    pub fn parse_program(&'a self) -> impl FnMut(&'a str) -> IntermediateResult<Program> {
+    pub fn parse_program(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Program> {
         traced("parse_program", move |input| {
             let (remainder, _) = multispace_or_comment0(input)?;
             let (remainder, _) = opt(self.parse_base())(remainder)?;
@@ -610,13 +870,14 @@ impl<'a> RuleParser<'a> {
             let (remainder, _) = many0(self.parse_predicate_declaration())(remainder)?;
             let (remainder, _) = many0(self.parse_source())(remainder)?;
             let (remainder, statements) = many0(self.parse_statement())(remainder)?;
+            let (remainder, output_predicates) = many0(self.parse_output())(remainder)?;
 
             let base = self.base().map(String::from);
             let prefixes = self
                 .prefixes
                 .borrow()
                 .iter()
-                .map(|(&prefix, &iri)| (prefix.to_owned(), iri.to_owned()))
+                .map(|(&prefix, &iri)| (prefix.to_string(), iri.to_string()))
                 .collect();
             let mut rules = Vec::new();
             let mut facts = Vec::new();
@@ -635,6 +896,7 @@ impl<'a> RuleParser<'a> {
                     rules,
                     facts,
                     self.predicate_declarations.borrow().clone(),
+                    output_predicates.into(),
                 ),
             ))
         })
@@ -646,31 +908,11 @@ impl<'a> RuleParser<'a> {
         *self.base.borrow()
     }
 
-    /// Expand a prefix.
-    pub fn resolve_prefix(&self, prefix: &str) -> Result<&'a str, ParseError> {
-        self.prefixes
-            .borrow()
-            .get(prefix)
-            .copied()
-            .ok_or_else(|| ParseError::UndeclaredPrefix(prefix.to_owned()))
-    }
-
-    /// Expand a prefixed name.
-    pub fn resolve_prefixed_name(&self, name: sparql::Name) -> Result<String, ParseError> {
-        match name {
-            sparql::Name::IriReference(iri) => Ok(format!("<{iri}>")),
-            sparql::Name::PrefixedName { prefix, local } => self
-                .resolve_prefix(prefix)
-                .map(|iri| format!("<{iri}{local}>")),
-            sparql::Name::BlankNode(label) => Ok(format!("_:{label}")),
-        }
-    }
-
     /// Try to expand an IRI into an absolute IRI.
     #[must_use]
-    pub fn absolutize_iri(&self, iri: &str) -> String {
+    pub fn absolutize_iri(&self, iri: Span) -> String {
         if iri::is_absolute(iri) {
-            iri.to_owned()
+            iri.to_string()
         } else {
             format!("{}{iri}", self.base().unwrap_or_default())
         }
@@ -678,34 +920,19 @@ impl<'a> RuleParser<'a> {
 
     /// Try to abbreviate an IRI given declared prefixes and base.
     #[must_use]
-    pub fn unresolve_absolute_iri(iri: &str) -> String {
+    pub fn unresolve_absolute_iri(iri: Span) -> String {
         if iri::is_relative(iri) {
-            iri.to_owned()
+            iri.to_string()
         } else {
             todo!()
-        }
-    }
-
-    /// Intern a [`turtle::RdfLiteral`].
-    #[must_use]
-    fn intern_rdf_literal(&self, literal: turtle::RdfLiteral) -> RdfLiteral {
-        match literal {
-            turtle::RdfLiteral::LanguageString { value, tag } => RdfLiteral::LanguageString {
-                value: value.to_string(),
-                tag: tag.to_string(),
-            },
-            turtle::RdfLiteral::DatatypeValue { value, datatype } => RdfLiteral::DatatypeValue {
-                value: value.to_string(),
-                datatype: self
-                    .resolve_prefixed_name(datatype)
-                    .expect("prefix should have been registered during parsing"),
-            },
         }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches::assert_matches;
+
     use test_log::test;
 
     use crate::physical::datatypes::Double;
@@ -723,12 +950,31 @@ mod test {
         };
     }
 
+    macro_rules! assert_fails {
+        ($parser:expr, $left:expr, $right:pat $(,) ?) => {
+            assert_matches!(all_input_consumed($parser)($left), Err($right));
+        };
+    }
+
+    macro_rules! assert_parse_error {
+        ($parser:expr, $left:expr, $right:pat $(,) ?) => {
+            assert_fails!($parser, $left, LocatedParseError { source: $right, .. });
+        };
+    }
+
+    macro_rules! assert_expected_token {
+        ($parser:expr, $left:expr, $right:expr $(,) ?) => {
+            let _token = String::from($right);
+            assert_parse_error!($parser, $left, ParseError::ExpectedToken(_token),);
+        };
+    }
+
     #[test]
     fn base_directive() {
         let base = "http://example.org/foo";
         let input = format!("@base <{base}> .");
         let parser = RuleParser::new();
-        let b = Identifier(base.to_owned());
+        let b = Identifier(base.to_string());
         assert!(parser.base().is_none());
         assert_parse!(parser.parse_base(), input.as_str(), b);
         assert_eq!(parser.base(), Some(base));
@@ -736,13 +982,16 @@ mod test {
 
     #[test]
     fn prefix_directive() {
-        let prefix = "foo";
+        let prefix = unsafe { Span::new_from_raw_offset(8, 1, "foo", ()) };
         let iri = "http://example.org/foo";
         let input = format!("@prefix {prefix}: <{iri}> .");
         let parser = RuleParser::new();
-        assert!(parser.resolve_prefix(prefix).is_err());
+        assert!(resolve_prefix(&parser.prefixes.borrow(), &prefix).is_err());
         assert_parse!(parser.parse_prefix(), input.as_str(), prefix);
-        assert_eq!(parser.resolve_prefix(prefix), Ok(iri));
+        assert_eq!(
+            resolve_prefix(&parser.prefixes.borrow(), &prefix).map_err(|_| ()),
+            Ok(iri)
+        );
     }
 
     #[test]
@@ -750,7 +999,7 @@ mod test {
         let parser = RuleParser::new();
         let file = "drinks.csv";
         let predicate_name = "drink";
-        let predicate = Identifier(predicate_name.to_owned());
+        let predicate = Identifier(predicate_name.to_string());
         let source = DataSourceDeclaration::new(predicate, 1, DataSource::csv_file(file).unwrap());
         // rulewerk accepts all of these variants
         let input = format!(r#"@source {predicate_name}[1]: load-csv("{file}") ."#);
@@ -769,9 +1018,9 @@ mod test {
         let predicate = "p";
         let value = "foo";
         let datatype = "bar";
-        let p = Identifier(predicate.to_owned());
-        let v = value.to_owned();
-        let t = format!("<{datatype}>");
+        let p = Identifier(predicate.to_string());
+        let v = value.to_string();
+        let t = datatype.to_string();
         let fact = format!(r#"{predicate}("{value}"^^<{datatype}>) ."#);
 
         let expected_fact = Fact(Atom::new(
@@ -790,12 +1039,12 @@ mod test {
         let parser = RuleParser::new();
         let predicate = "p";
         let name = "foo";
-        let prefix = "eg";
+        let prefix = unsafe { Span::new_from_raw_offset(8, 1, "eg", ()) };
         let iri = "http://example.org/foo";
         let prefix_declaration = format!("@prefix {prefix}: <{iri}> .");
-        let p = Identifier(predicate.to_owned());
+        let p = Identifier(predicate.to_string());
         let pn = format!("{prefix}:{name}");
-        let v = Identifier(format!("<{iri}{name}>"));
+        let v = Identifier(format!("{iri}{name}"));
         let fact = format!(r#"{predicate}({pn}) ."#);
 
         assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
@@ -810,7 +1059,7 @@ mod test {
         let parser = RuleParser::new();
         let predicate = "p";
         let name = "foo";
-        let p = Identifier(predicate.to_owned());
+        let p = Identifier(predicate.to_string());
         let pn = format!("_:{name}");
         let fact = format!(r#"{predicate}({pn}) ."#);
         let v = Identifier(pn);
@@ -824,7 +1073,7 @@ mod test {
     fn fact_numbers() {
         let parser = RuleParser::new();
         let predicate = "p";
-        let p = Identifier(predicate.to_owned());
+        let p = Identifier(predicate.to_string());
         let int = 23_i64;
         let dbl = Double::new(42.0).expect("is not NaN");
         let dec = 13.37;
@@ -843,12 +1092,55 @@ mod test {
     }
 
     #[test]
+    fn fact_rdf_literal_xsd_string() {
+        let parser = RuleParser::new();
+
+        let prefix = unsafe { Span::new_from_raw_offset(8, 1, "xsd", ()) };
+        let iri = "http://www.w3.org/2001/XMLSchema#";
+        let prefix_declaration = format!("@prefix {prefix}: <{iri}> .");
+
+        assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
+
+        let predicate = "p";
+        let value = "my nice string";
+        let datatype = "xsd:string";
+
+        let p = Identifier(predicate.to_string());
+        let v = value.to_string();
+        let fact = format!(r#"{predicate}("{value}"^^{datatype}) ."#);
+
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: v,
+                datatype: format!("{iri}string"),
+            })],
+        ));
+
+        assert_parse!(parser.parse_fact(), &fact, expected_fact,);
+    }
+
+    #[test]
+    fn fact_string_literal() {
+        let parser = RuleParser::new();
+        let predicate = "p";
+        let value = "my nice string";
+        let p = Identifier(predicate.to_string());
+        let v = value.to_string();
+        let fact = format!(r#"{predicate}("{value}") ."#);
+
+        let expected_fact = Fact(Atom::new(p, vec![Term::StringLiteral(v)]));
+
+        assert_parse!(parser.parse_fact(), &fact, expected_fact,);
+    }
+
+    #[test]
     fn fact_abstract() {
         let parser = RuleParser::new();
         let predicate = "p";
         let name = "a";
-        let p = Identifier(predicate.to_owned());
-        let a = Identifier(format!("<{name}>"));
+        let p = Identifier(predicate.to_string());
+        let a = Identifier(name.to_string());
         let fact = format!(r#"{predicate}({name}) ."#);
 
         let expected_fact = Fact(Atom::new(p, vec![Term::Constant(a)]));
@@ -862,14 +1154,15 @@ mod test {
         let predicate = "p";
         let value = "foo";
         let datatype = "bar";
-        let p = Identifier(predicate.to_owned());
-        let v = value.to_owned();
-        let t = format!("<{datatype}>");
+        let p = Identifier(predicate.to_string());
+        let v = value.to_string();
+        let t = datatype.to_string();
         let fact = format!(
             r#"{predicate}(% comment 1
                  "{value}"^^<{datatype}> % comment 2
                  ) % comment 3
-               . % comment 4"#
+               . % comment 4
+               %"#
         );
 
         let expected_fact = Fact(Atom::new(
@@ -887,17 +1180,17 @@ mod test {
     fn filter() {
         let parser = RuleParser::new();
         let aa = "A";
-        let a = Identifier(aa.to_owned());
+        let a = Identifier(aa.to_string());
         let bb = "B";
-        let b = Identifier(bb.to_owned());
+        let b = Identifier(bb.to_string());
         let pp = "P";
-        let p = Identifier(pp.to_owned());
+        let p = Identifier(pp.to_string());
         let xx = "X";
-        let x = Identifier(xx.to_owned());
+        let x = Identifier(xx.to_string());
         let yy = "Y";
-        let y = Identifier(yy.to_owned());
+        let y = Identifier(yy.to_string());
         let zz = "Z";
-        let z = Identifier(zz.to_owned());
+        let z = Identifier(zz.to_string());
 
         let rule = format!(
             "{pp}(?{xx}) :- {aa}(?{xx}, ?{yy}), ?{yy} > ?{xx}, {bb}(?{zz}), ?{xx} = 3, ?{zz} < 7, ?{xx} <= ?{zz}, ?{zz} >= ?{yy} ."
@@ -951,5 +1244,73 @@ mod test {
         );
 
         assert_parse!(parser.parse_rule(), &rule, expected_rule,);
+    }
+
+    #[test]
+    #[allow(clippy::redundant_clone)]
+    fn parse_output() {
+        let parser = RuleParser::new();
+
+        let j2 = Identifier("J2".to_string());
+
+        assert_parse!(
+            parser.parse_output(),
+            "@output J2 .",
+            QualifiedPredicateName::new(j2.clone())
+        );
+        assert_parse!(
+            parser.parse_output(),
+            "@output J2[3] .",
+            QualifiedPredicateName::with_arity(j2.clone(), 3)
+        );
+    }
+
+    #[test]
+    fn parse_errors() {
+        let parser = RuleParser::new();
+
+        assert_expected_token!(parser.parse_dot(), "", ".");
+        assert_expected_token!(parser.parse_dot(), ":-", ".");
+        assert_expected_token!(parser.parse_comma(), "", ",");
+        assert_expected_token!(parser.parse_comma(), ":-", ",");
+        assert_expected_token!(parser.parse_not(), "", "~");
+        assert_expected_token!(parser.parse_not(), ":-", "~");
+        assert_expected_token!(parser.parse_arrow(), "", ":-");
+        assert_expected_token!(parser.parse_arrow(), "-:", ":-");
+        assert_expected_token!(parser.parse_open_parenthesis(), "", "(");
+        assert_expected_token!(parser.parse_open_parenthesis(), "-:", "(");
+        assert_expected_token!(parser.parse_close_parenthesis(), "", ")");
+        assert_expected_token!(parser.parse_close_parenthesis(), "-:", ")");
+
+        assert_parse_error!(
+            parser.parse_base(),
+            "@base <example.org .",
+            ParseError::ExpectedBaseDeclaration
+        );
+
+        assert_parse_error!(
+            parser.parse_type_name(),
+            "https://example.org/non-existant-type-name",
+            ParseError::ExpectedLogicalTypeName
+        );
+
+        assert_parse_error!(parser.parse_variable(), "!23", ParseError::ExpectedVariable);
+        assert_parse_error!(parser.parse_variable(), "?23", ParseError::ExpectedVariable);
+        assert_parse_error!(
+            parser.parse_predicate_declaration(),
+            "@declare p(InvalidTypeName) .",
+            ParseError::ExpectedPredicateDeclaration
+        );
+        assert_parse_error!(
+            parser.parse_program(),
+            "@declare p(InvalidTypeName) .",
+            ParseError::ExpectedPredicateDeclaration
+        );
+
+        assert_parse_error!(
+            parser.parse_rule(),
+            r#"a(?X, !V) :- b23__#?\(?X, ?Y) ."#,
+            ParseError::ExpectedRule,
+        );
     }
 }

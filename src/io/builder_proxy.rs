@@ -1,4 +1,5 @@
 //! Adaptive Builder to create [`VecT`] columns, based on streamed data
+
 use crate::{
     error::Error,
     physical::{datatypes::Float, management::database::Dict},
@@ -7,6 +8,7 @@ use crate::{
         dictionary::Dictionary,
     },
 };
+
 #[macro_use]
 mod macros;
 
@@ -33,10 +35,22 @@ impl ColumnBuilderProxy for StringColumnBuilderProxy {
     generic_trait_impl!(VecT::U64);
     fn add(&mut self, string: &str, dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
+
+        // TODO: this is all super hacky but parsing proper ground terms is too slow...
+        let trimmed_string = string.trim();
+
+        let string_to_add = if trimmed_string.is_empty() {
+            "\"\"".to_string()
+        } else if trimmed_string.starts_with('<') && trimmed_string.ends_with('>') {
+            trimmed_string[1..trimmed_string.len() - 1].to_string()
+        } else {
+            trimmed_string.to_string()
+        };
+
         self.value = Some(
             dictionary
-                .expect("ProxyStringColumnBuilder expects a Dictionary to be provided!")
-                .add(string.to_string())
+                .expect("StringColumnBuilderProxy expects a Dictionary to be provided!")
+                .add(string_to_add)
                 .try_into()?,
         );
 
@@ -56,6 +70,7 @@ impl ColumnBuilderProxy for U64ColumnBuilderProxy {
 
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
+        // TODO: this should also accept things like RdfLiterals with xsd:integer; maybe call ground term parser if native parsing fails
         self.value = Some(string.parse::<u64>()?);
         Ok(())
     }
@@ -73,6 +88,7 @@ impl ColumnBuilderProxy for U32ColumnBuilderProxy {
 
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
+        // TODO: this should also accept things like RdfLiterals with xsd:integer; maybe call ground term parser if native parsing fails
         self.value = Some(string.parse::<u32>()?);
         Ok(())
     }
@@ -90,6 +106,7 @@ impl ColumnBuilderProxy for FloatColumnBuilderProxy {
 
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
+        // TODO: this should also accept things like RdfLiterals with xsd:double; maybe call ground term parser if native parsing fails
         let val = string.parse::<f32>()?;
         self.value = Some(Float::new(val)?);
         Ok(())
@@ -108,6 +125,7 @@ impl ColumnBuilderProxy for DoubleColumnBuilderProxy {
 
     fn add(&mut self, string: &str, _dictionary: Option<&mut Dict>) -> Result<(), Error> {
         self.commit();
+        // TODO: this should also accept things like RdfLiterals with xsd:double; maybe call ground term parser if native parsing fails
         let val = string.parse::<f64>()?;
         self.value = Some(Double::new(val)?);
         Ok(())

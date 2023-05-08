@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::path::PathBuf;
@@ -7,6 +7,7 @@ use bytesize::ByteSize;
 
 use crate::io::dsv::DSVReader;
 use crate::physical::datatypes::{DataValueT, StorageValueT};
+use crate::physical::tabular::operations::materialize::materialize_up_to;
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
 use crate::physical::tabular::traits::table::Table;
@@ -363,6 +364,19 @@ impl OrderedReferenceManager {
         self.map.remove(id)?;
         Some(())
     }
+
+    /// Return the number of rows contained in this table.
+    pub fn count_rows(&self, id: &TableId) -> usize {
+        if let Some(resolved) = self.resolve_reference(*id, &ColumnOrder::default()) {
+            // TODO: Technically we should be able to somehow count non-inmemory tables
+            // But this is not relevant for now
+            if let Some((_, TableStorage::InMemory(trie))) = resolved.map.iter().next() {
+                return trie.row_num();
+            }
+        }
+
+        0
+    }
 }
 
 impl ByteSized for OrderedReferenceManager {
@@ -445,6 +459,11 @@ impl DatabaseInstance {
         }
     }
 
+    /// Return the number of rows for a given table.
+    pub fn count_rows(&self, table_id: &TableId) -> usize {
+        self.storage_handler.count_rows(table_id)
+    }
+
     /// Return the current number of tables.
     pub fn num_tables(&self) -> usize {
         self.table_infos.len()
@@ -469,8 +488,8 @@ impl DatabaseInstance {
     }
 
     /// Returns a reference to the dictionary used for associating abstract constants with strings.
-    pub fn get_dict_constants(&self) -> Dict {
-        self.dict_constants.clone().take()
+    pub fn get_dict_constants(&self) -> Ref<'_, Dict> {
+        self.dict_constants.borrow()
     }
 
     /// Register a new table under a given name and schema.
@@ -704,8 +723,9 @@ impl DatabaseInstance {
         } else {
             let iter_opt =
                 self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
+            let cut_bottom = execution_tree.cut_bottom();
 
-            Ok(iter_opt.and_then(|mut iter| materialize(&mut iter)))
+            Ok(iter_opt.and_then(|mut iter| materialize_up_to(&mut iter, cut_bottom)))
         }
     }
 
@@ -723,15 +743,18 @@ impl DatabaseInstance {
         let mut removed_temp_ids = HashSet::<usize>::new();
 
         for (tree_id, mut execution_tree) in execution_trees {
+            log::info!("Execution step: {}", execution_tree.name());
+
+            execution_tree.satisfy_leapfrog_triejoin();
+
             if let Some(simplified_tree) = execution_tree.simplify(&removed_temp_ids) {
                 execution_tree = simplified_tree;
             } else {
                 removed_temp_ids.insert(tree_id);
+                log::info!("Result is empty. No computation was required.");
 
                 continue;
             }
-
-            execution_tree.satisfy_leapfrog_triejoin();
 
             TimedCode::instance()
                 .sub("Reasoning/Execution/Load Table")

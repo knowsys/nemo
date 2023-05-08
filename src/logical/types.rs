@@ -3,10 +3,12 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use crate::error::Error;
-use crate::physical::datatypes::{DataTypeName, DataValueT};
+use crate::io::parser::ParseError;
+use crate::physical::datatypes::{DataTypeName, DataValueT, Double};
 
 use super::model::{Identifier, NumericLiteral, RdfLiteral, Term};
+
+use thiserror::Error;
 
 macro_rules! count {
     () => (0usize);
@@ -14,7 +16,7 @@ macro_rules! count {
 }
 
 macro_rules! generate_logical_type_enum {
-    ($($variant_name:ident),+) => {
+    ($(($variant_name:ident, $string_repr: literal)),+) => {
         /// An enum capturing the logical type names and funtionality related to parsing and translating into and from physical types
         #[derive(Copy, Clone, Debug, PartialEq, Eq)]
         pub enum LogicalTypeEnum {
@@ -25,61 +27,77 @@ macro_rules! generate_logical_type_enum {
         }
 
         impl LogicalTypeEnum {
-            const VARIANTS: [Self; count!($($variant_name)+)] = [
+            const _VARIANTS: [Self; count!($($variant_name)+)] = [
                 $(Self::$variant_name),+
             ];
+
+            /// Returns a list of the syntactic representations of valid types.
+            pub fn type_representations() -> Vec<&'static str> {
+                vec![$($string_repr),+]
+            }
         }
 
         impl Display for LogicalTypeEnum {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 match self {
-                    $(Self::$variant_name => write!(f, stringify!($variant_name))),+
+                    $(Self::$variant_name => write!(f, "{}", $string_repr)),+
                 }
             }
         }
 
         impl FromStr for LogicalTypeEnum {
-            type Err = Error;
+            type Err = ParseError;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s {
-                    $(stringify!($variant_name) => Ok(Self::$variant_name)),+,
-                    _ => Err(Self::Err::ParseUnknownType(s.to_string(), Self::VARIANTS.into()))
+                    $($string_repr => Ok(Self::$variant_name)),+,
+                    _ => Err(Self::Err::ParseUnknownType(s.to_string()))
                 }
             }
         }
     };
 }
 
-generate_logical_type_enum!(RdfsResource, UnsignedInteger, Double);
+generate_logical_type_enum!((Any, "any"), (Integer, "integer"), (Float64, "float64"));
 
 impl Default for LogicalTypeEnum {
     fn default() -> Self {
-        Self::RdfsResource
+        Self::Any
     }
 }
 
 impl From<LogicalTypeEnum> for DataTypeName {
     fn from(source: LogicalTypeEnum) -> Self {
         match source {
-            LogicalTypeEnum::RdfsResource => Self::String,
-            LogicalTypeEnum::UnsignedInteger => Self::U64,
-            LogicalTypeEnum::Double => Self::Double,
+            LogicalTypeEnum::Any => Self::String,
+            LogicalTypeEnum::Integer => Self::U64,
+            LogicalTypeEnum::Float64 => Self::Double,
         }
     }
 }
 
+// TODO: probably put this closer to the parser and also have a default prefix for xsd:
+const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
+const XSD_DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
+const XSD_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
+
 impl LogicalTypeEnum {
-    // TODO: probably return result instead of panicing
     /// Convert a given ground term to a DataValueT fitting the current logical type
-    pub fn ground_term_to_data_value_t(&self, gt: Term) -> DataValueT {
-        match self {
-            Self::RdfsResource => {
+    pub fn ground_term_to_data_value_t(&self, gt: Term) -> Result<DataValueT, TypeError> {
+        let result = match self {
+            Self::Any => {
                 match gt {
                     Term::Variable(_) => {
                         panic!("Expecting ground term for conversion to DataValueT")
                     }
-                    Term::Constant(Identifier(s)) => DataValueT::String(s),
+                    Term::Constant(Identifier(s)) => {
+                        if s.starts_with(|c: char| c.is_ascii_alphabetic()) {
+                            DataValueT::String(s)
+                        } else {
+                            DataValueT::String(format!("<{s}>"))
+                        }
+                    }
                     // TODO: maybe implement display on numeric literal instead?
                     Term::NumericLiteral(NumericLiteral::Integer(i)) => {
                         DataValueT::String(i.to_string())
@@ -90,27 +108,80 @@ impl LogicalTypeEnum {
                     Term::NumericLiteral(NumericLiteral::Double(d)) => {
                         DataValueT::String(d.to_string())
                     }
+                    Term::StringLiteral(s) => DataValueT::String(format!("\"{s}\"")),
                     Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
-                        DataValueT::String(format!("{value}@{tag}"))
+                        DataValueT::String(format!("\"{value}\"@{tag}"))
                     }
                     Term::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
-                        DataValueT::String(format!("{value}^^{datatype}"))
+                        match datatype.as_ref() {
+                            XSD_STRING => DataValueT::String(format!("\"{value}\"")),
+                            XSD_DOUBLE | XSD_DECIMAL | XSD_INTEGER => {
+                                DataValueT::String(format!("{value}"))
+                            }
+                            _ => DataValueT::String(format!("\"{value}\"^^<{datatype}>")),
+                        }
                     }
                 }
             }
-            Self::UnsignedInteger => {
-                match gt {
-                    // TODO: get rid of unwrap in next line
-                    Term::NumericLiteral(NumericLiteral::Integer(i)) => DataValueT::U64(i.try_into().unwrap()),
-                    _ => panic!("Only NumericLiteral::Integer terms are supported for logical type UnsignedInteger!"),
+            Self::Integer => match gt {
+                Term::NumericLiteral(NumericLiteral::Integer(i)) => {
+                    DataValueT::U64(i.try_into().unwrap())
                 }
-            }
-            Self::Double => match gt {
-                Term::NumericLiteral(NumericLiteral::Double(d)) => DataValueT::Double(d),
-                _ => panic!(
-                    "Only NumericLiteral::Double terms are supported for logical type Double!"
-                ),
+                Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                    ref value,
+                    ref datatype,
+                }) => match datatype.as_str() {
+                    XSD_INTEGER => DataValueT::U64(
+                        value
+                            .parse()
+                            .map_err(|_err| TypeError::InvalidRuleTermConversion(gt, *self))?,
+                    ),
+                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
+                },
+                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
             },
+            Self::Float64 => match gt {
+                Term::NumericLiteral(NumericLiteral::Double(d)) => DataValueT::Double(d),
+                Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                    ref value,
+                    ref datatype,
+                }) => match datatype.as_str() {
+                    XSD_DOUBLE => DataValueT::Double(
+                        value
+                            .parse()
+                            .ok()
+                            .and_then(|d| Double::new(d).ok())
+                            .ok_or(TypeError::InvalidRuleTermConversion(gt, *self))?,
+                    ),
+                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
+                },
+                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
+            },
+        };
+
+        Ok(result)
+    }
+
+    /// Whether this logical type can be used to perform numeric operations.
+    pub fn allows_numeric_operations(&self) -> bool {
+        match self {
+            LogicalTypeEnum::Any => false,
+            LogicalTypeEnum::Integer => true,
+            LogicalTypeEnum::Float64 => true,
         }
     }
+}
+
+/// Errors that can occur during type checking
+#[derive(Error, Debug)]
+pub enum TypeError {
+    /// Conflicting type declarations
+    #[error("Conflicting type declarations. Predicate \"{0}\" at position {1} has been inferred to have the conflicting types {2} and {3}.")]
+    InvalidRuleConflictingTypes(String, usize, LogicalTypeEnum, LogicalTypeEnum),
+    /// Conflicting type conversions
+    #[error("Conflicting type declarations. The term \"{0}\" cannot be converted to a {1}.")]
+    InvalidRuleTermConversion(Term, LogicalTypeEnum),
+    /// Comparison of a non-numeric type
+    #[error("Invalid type declarations. Comparison operator can only be used with numeric types.")]
+    InvalidRuleNonNumericComparison,
 }

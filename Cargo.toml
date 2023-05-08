@@ -8,12 +8,16 @@ authors = [
 "Markus Krötzsch <markus.kroetzsch@tu-dresden.de>",
 "Maximilian Marx <maximilian.marx@tu-dresden.de>"
 ]	
-version = "0.1.0"
+version = "0.1.1-dev"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 "no-prefixed-string-dictionary" = []
+
+[[bin]]
+name = "nmo"
+path = "src/main.rs"
 
 [dependencies]
 env_logger = "*"
@@ -29,15 +33,17 @@ ascii_tree = "0.1.1"
 howlong = "0.1"
 linked-hash-map = "0.5.6"
 bytesize = "1.1.0"
-clap = {version = "4.0.32", features = [ "derive", "cargo", "env" ]}
+clap = { version = "4.0.32", features = [ "derive", "cargo", "env" ] }
 sanitise-file-name = "1.0.0"
 flate2 = "1.0.25"
 rand = "0.8.4"
 petgraph = "0.6.3"
+colored = "2"
+nom_locate = { version = "4.1.0", features = [ "runtime-dispatch-simd" ] }
 
 [dev-dependencies]
 test-log = "0.2"
-criterion = {version = "0.3", features = [ "html_reports" ] }
+criterion = { version = "0.4", features = [ "html_reports" ] }
 rand = "0.8"
 rand_pcg = "0.3"
 quickcheck = "1"
@@ -45,7 +51,7 @@ quickcheck_macros = "1"
 arbitrary = { version = "1", features = ["derive"] }
 polars = "0.25.1"
 assert_cmd = "2.0"
-predicates = "2.1"
+predicates = "3.0"
 assert_fs = "1.0"
 dir-test = "0.1"
 
@@ -57,7 +63,7 @@ panic = "unwind"
 
 [profile.release]
 panic = "unwind"
-debug=true
+debug = true
 
 #debug profile without debug assertions
 [profile.debug-noassert]
@@ -68,8 +74,8 @@ debug-assertions = false
 [profile.release-minimal]
 inherits = "release"
 panic = "abort"
-debug=false
-strip=true
+debug = false
+strip = true
 
 [profile.bench]
 inherits = "release-minimal"

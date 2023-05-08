@@ -3,10 +3,11 @@
 use super::{model::Identifier, types::LogicalTypeEnum};
 use crate::{
     error::Error,
-    io::dsv::CSVWriter,
+    io::RecordWriter,
     physical::{
+        dictionary::ValueSerializer,
         management::{
-            database::{ColumnOrder, TableId, TableSource},
+            database::{ColumnOrder, Dict, TableId, TableSource},
             execution_plan::ExecutionNodeRef,
             DatabaseInstance, ExecutionPlan,
         },
@@ -14,7 +15,7 @@ use crate::{
         util::mapping::permutation::Permutation,
     },
 };
-use std::{cmp::Ordering, collections::HashMap, hash::Hash, ops::Range};
+use std::{cell::Ref, cmp::Ordering, collections::HashMap, hash::Hash, ops::Range};
 
 /// Indicates that the table contains the union of successive tables.
 /// For example assume that for predicate p there were tables derived in steps 2, 4, 7, 10, 11.
@@ -101,6 +102,16 @@ impl SubtableHandler {
     pub fn subtable(&self, step: usize) -> Option<TableId> {
         let postion = *self.single_steps().find(|&&s| s == step)?;
         Some(self.single[postion].1)
+    }
+
+    pub fn count_rows(&self, database: &DatabaseInstance) -> usize {
+        let mut result = 0;
+
+        for (_, subtable_id) in &self.single {
+            result += database.count_rows(subtable_id);
+        }
+
+        result
     }
 
     pub fn add_single_table(&mut self, step: usize, id: TableId) {
@@ -216,6 +227,18 @@ impl SubtableExecutionPlan {
         self.execution_plan.write_temporary(node, tree_name)
     }
 
+    /// Add a temporary table to the plan.
+    /// The parameter `cut` indicates how many of the last layers will not be needed.
+    pub fn add_temporary_table_cut(
+        &mut self,
+        node: ExecutionNodeRef,
+        tree_name: &str,
+        cut: usize,
+    ) -> usize {
+        self.execution_plan
+            .write_temporary_cut(node, tree_name, cut)
+    }
+
     /// Add a permanent table ot the plan-
     pub fn add_permanent_table(
         &mut self,
@@ -287,23 +310,37 @@ impl TableManager {
         self.predicate_subtables.get(&predicate)?.last_step()
     }
 
+    /// Count all the rows that belong to a predicate.
+    pub fn predicate_count_rows(&self, predicate: &Identifier) -> Option<usize> {
+        self.predicate_subtables
+            .get(predicate)
+            .map(|s| s.count_rows(&self.database))
+    }
+
     /// Write the Trie associated with the given id to CSV.
     /// Uses the default [`ColumnOrder`]
     /// Panics if there is no trie associated with the given id.
     pub fn write_table_to_disk(
         &self,
-        writer: &CSVWriter,
-        pred: &Identifier,
+        writer: &mut impl RecordWriter,
         id: TableId,
     ) -> Result<(), Error> {
-        writer.write_predicate(
-            pred,
-            self.database.table_schema(id),
-            self.database
-                .get_trie(id, &ColumnOrder::default())
-                .as_column_vector(),
-            &self.database.get_dict_constants(),
-        )
+        let schema = self.database.table_schema(id);
+        let dict = self.database.get_dict_constants();
+        let serializer = ValueSerializer {
+            schema,
+            dict: &dict,
+        };
+        let mut records = self
+            .database
+            .get_trie(id, &ColumnOrder::default())
+            .records(serializer);
+
+        while let Some(record) = records.next_record() {
+            writer.write_record(record)?;
+        }
+
+        Ok(())
     }
 
     /// Combine all subtables of a predicate into one table
@@ -514,6 +551,11 @@ impl TableManager {
         }
 
         Ok(updated_predicates)
+    }
+
+    /// Returns a reference to the constants dictionary
+    pub fn get_dict(&self) -> Ref<'_, Dict> {
+        self.database.get_dict_constants()
     }
 }
 

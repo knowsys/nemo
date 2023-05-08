@@ -16,6 +16,7 @@ pub struct StrategyDependencyGraph<
     SubStrategy: RuleSelectionStrategy,
 > {
     _constructor: PhantomData<GraphConstructor>,
+
     ordered_sccs: Vec<Vec<usize>>,
     substrategies: Vec<SubStrategy>,
 
@@ -44,8 +45,6 @@ impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStr
             ordered_sccs.push(scc_rule_indices);
             substrategies.push(SubStrategy::new(sub_rules, sub_analyses));
         }
-
-        println!("{ordered_sccs:?}");
 
         Self {
             _constructor: PhantomData::default(),

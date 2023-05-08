@@ -1,0 +1,6 @@
+treatment(Id, Patient, Hospital, Npi, Conf1) .
+physician(Npi, Name, Spec, Conf2) .
+medprescription(Id, Patient, Npi, Doctor, Spec, Conf) .
+
+prescription(?id,?patient,?npi,!C1) :- treatment(?id,?patient,?hospital,?npi,?conf1),physician(?npi,?name,?spec,?conf2) .
+prescription(?id,?patient,?npi,!C1) :- medprescription(?id,?patient,?npi,?doctor,?spec,?conf) .

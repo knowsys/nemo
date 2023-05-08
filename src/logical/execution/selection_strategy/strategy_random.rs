@@ -28,6 +28,10 @@ impl RuleSelectionStrategy for StrategyRandom {
     }
 
     fn next_rule(&mut self, new_derivations: Option<bool>) -> Option<usize> {
+        if self.rule_count == 0 {
+            return None;
+        }
+
         if let Some(new) = new_derivations {
             if new {
                 self.no_derivations.clear();
