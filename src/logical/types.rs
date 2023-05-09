@@ -3,11 +3,12 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use crate::io::builder_proxy::{
-    LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxy, LogicalFloat64ColumnBuilderProxy,
-    LogicalIntegerColumnBuilderProxy, PhysicalBuilderProxyEnum,
-};
 use crate::io::parser::ParseError;
+use crate::logical::builder_proxy::{
+    LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxy, LogicalFloat64ColumnBuilderProxy,
+    LogicalIntegerColumnBuilderProxy,
+};
+use crate::physical::builder_proxy::PhysicalBuilderProxyEnum;
 use crate::physical::datatypes::{DataTypeName, DataValueT, Double};
 
 use super::model::{Identifier, NumericLiteral, RdfLiteral, Term};

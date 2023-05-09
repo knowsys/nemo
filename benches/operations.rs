@@ -4,15 +4,12 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use polars::prelude::{CsvReader, DataFrame, DataType, JoinType, Schema, SerReader};
 
 use nemo::{
-    io::{
+    io::{dsv::DSVReader, TableReader},
+    logical::{model::DataSource, types::LogicalTypeEnum},
+    physical::{
         builder_proxy::{
             PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy,
         },
-        dsv::DSVReader,
-        TableReader,
-    },
-    logical::{model::DataSource, types::LogicalTypeEnum},
-    physical::{
         datatypes::{storage_value::VecT, DataTypeName},
         dictionary::PrefixedStringDictionary,
         tabular::{

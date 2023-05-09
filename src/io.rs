@@ -2,16 +2,13 @@
 
 use std::io::Write;
 
-pub mod builder_proxy;
 pub mod dsv;
 pub mod output_file_manager;
 pub mod parser;
 
 pub use output_file_manager::OutputFileManager;
 
-use crate::error::Error;
-
-use self::builder_proxy::PhysicalBuilderProxyEnum;
+use crate::{error::Error, physical::builder_proxy::PhysicalBuilderProxyEnum};
 
 /// A general interface for writing records of string values
 pub trait RecordWriter {

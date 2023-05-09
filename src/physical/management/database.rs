@@ -4,10 +4,10 @@ use std::fmt::{Debug, Display};
 
 use bytesize::ByteSize;
 
-use crate::io::builder_proxy::{
+use crate::io::TableReader;
+use crate::physical::builder_proxy::{
     PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy,
 };
-use crate::io::TableReader;
 use crate::physical::datatypes::storage_value::VecT;
 use crate::physical::datatypes::{DataTypeName, DataValueT, StorageValueT};
 use crate::physical::tabular::operations::materialize::materialize_up_to;

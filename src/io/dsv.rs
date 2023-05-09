@@ -4,11 +4,11 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
-use crate::error::Error;
 use crate::logical::types::LogicalTypeEnum;
+use crate::logical::LogicalColumnBuilderProxy;
+use crate::{error::Error, physical::builder_proxy::PhysicalBuilderProxyEnum};
 use csv::{Reader, ReaderBuilder};
 
-use super::builder_proxy::{LogicalColumnBuilderProxy, PhysicalBuilderProxyEnum};
 use super::TableReader;
 
 /// A reader Object, which allows to read a DSV (delimiter separated) file
@@ -148,18 +148,16 @@ impl TableReader for DSVReader {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        io::builder_proxy::{PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy},
-        physical::{
-            datatypes::storage_value::VecT,
-            dictionary::{Dictionary, PrefixedStringDictionary},
-        },
-    };
-
-    use super::*;
-    use csv::ReaderBuilder;
     use quickcheck_macros::quickcheck;
     use test_log::test;
+
+    use super::*;
+    use crate::physical::{
+        builder_proxy::{PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy},
+        datatypes::storage_value::VecT,
+        dictionary::{Dictionary, PrefixedStringDictionary},
+    };
+    use csv::ReaderBuilder;
 
     #[test]
     fn csv_one_line() {
