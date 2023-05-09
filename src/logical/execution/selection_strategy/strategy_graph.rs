@@ -47,7 +47,7 @@ impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStr
         }
 
         Self {
-            _constructor: PhantomData::default(),
+            _constructor: PhantomData,
             ordered_sccs,
             substrategies,
             current_scc_index: 0,
