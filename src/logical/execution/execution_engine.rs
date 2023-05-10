@@ -118,8 +118,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         .predicate_types
                         .get(predicate)
                         .cloned()
-                        .unwrap_or_else(|| (0..arity).map(|_| LogicalTypeEnum::Any).collect());
-
+                        .unwrap_or_else(|| vec![LogicalTypeEnum::Any; arity]);
                     let reader = DSVReader::dsv(*file.clone(), *delimiter, logical_types);
 
                     TableSource::FileReader(Box::new(reader))
