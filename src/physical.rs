@@ -3,6 +3,7 @@
 //! It uses simplified structures and primitive datatypes that may
 //! not correspond to the view at a higher (logical) level.
 
+pub mod builder_proxy;
 pub mod columnar;
 pub mod datatypes;
 pub mod dictionary;

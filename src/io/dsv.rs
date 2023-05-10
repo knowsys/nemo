@@ -4,16 +4,12 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
-use crate::error::Error;
-use crate::io::builder_proxy::{
-    ColumnBuilderProxy, DoubleColumnBuilderProxy, FloatColumnBuilderProxy,
-    StringColumnBuilderProxy, U32ColumnBuilderProxy, U64ColumnBuilderProxy,
-};
-use crate::physical::datatypes::storage_value::VecT;
-use crate::physical::datatypes::DataTypeName;
-use crate::physical::management::database::Dict;
-use crate::physical::tabular::traits::table_schema::TableSchema;
+use crate::logical::types::LogicalTypeEnum;
+use crate::logical::LogicalColumnBuilderProxy;
+use crate::{error::Error, physical::builder_proxy::PhysicalBuilderProxyEnum};
 use csv::{Reader, ReaderBuilder};
+
+use super::TableReader;
 
 /// A reader Object, which allows to read a DSV (delimiter separated) file
 #[derive(Debug, Clone)]
@@ -21,25 +17,27 @@ pub struct DSVReader {
     file: PathBuf,
     delimiter: u8,
     escape: Option<u8>,
+    logical_types: Vec<LogicalTypeEnum>,
 }
 
 impl DSVReader {
     /// Instantiate a [DSVReader] for CSV files
-    pub fn csv(file: PathBuf) -> Self {
-        Self::dsv(file, b',')
+    pub fn csv(file: PathBuf, logical_types: Vec<LogicalTypeEnum>) -> Self {
+        Self::dsv(file, b',', logical_types)
     }
 
     /// Instantiate a [DSVReader] for TSV files
-    pub fn tsv(file: PathBuf) -> Self {
-        Self::dsv(file, b'\t')
+    pub fn tsv(file: PathBuf, logical_types: Vec<LogicalTypeEnum>) -> Self {
+        Self::dsv(file, b'\t', logical_types)
     }
 
     /// Instantiate a [DSVReader] for a given delimiter
-    pub fn dsv(file: PathBuf, delimiter: u8) -> Self {
+    pub fn dsv(file: PathBuf, delimiter: u8, logical_types: Vec<LogicalTypeEnum>) -> Self {
         Self {
             file,
             delimiter,
             escape: Some(b'\\'),
+            logical_types,
         }
     }
 
@@ -55,48 +53,14 @@ impl DSVReader {
             .double_quote(true)
             .from_reader(rdr)
     }
-    /// Read the file, using the [TableSchema] and a [dictionary][Dict]
-    /// Returns a Vector of [VecT] or a corresponding [Error]
-    pub fn read(self, schema: &TableSchema, dictionary: &mut Dict) -> Result<Vec<VecT>, Error> {
-        let gz_decoder =
-            flate2::read::GzDecoder::new(File::open(self.file.as_path()).map_err(|error| {
-                Error::IOReading {
-                    error,
-                    filename: self
-                        .file
-                        .to_str()
-                        .expect("Path is expected to be valid utf-8")
-                        .into(),
-                }
-            })?);
-        let builder = self.generate_proxies(schema);
-        if gz_decoder.header().is_some() {
-            self.read_with_reader(
-                builder,
-                &mut Self::reader(gz_decoder, self.delimiter, self.escape),
-                dictionary,
-            )
-        } else {
-            self.read_with_reader(
-                builder,
-                &mut Self::reader(
-                    File::open(self.file.as_path())?,
-                    self.delimiter,
-                    self.escape,
-                ),
-                dictionary,
-            )
-        }
-    }
 
     /// Actually reads the data from the file and distributes the different fields into the corresponding [ProxyColumnBuilder]
     /// If a field cannot be read or parsed, the line will be ignored
-    fn read_with_reader<R>(
+    fn read_with_reader<'a, 'b, R>(
         &self,
-        mut builder: Vec<Box<dyn ColumnBuilderProxy>>,
+        mut builder: Vec<Box<dyn LogicalColumnBuilderProxy<'a, 'b> + 'b>>,
         reader: &mut Reader<R>,
-        dictionary: &mut Dict,
-    ) -> Result<Vec<VecT>, Error>
+    ) -> Result<(), Error>
     where
         R: Read,
     {
@@ -104,7 +68,7 @@ impl DSVReader {
             if let Err(Error::Rollback(rollback)) =
                 row.iter().enumerate().try_for_each(|(idx, item)| {
                     if idx < builder.len() {
-                        if let Err(column_err) = builder[idx].add(item, Some(dictionary)) {
+                        if let Err(column_err) = builder[idx].add(item.to_string()) {
                             log::info!("Ignoring line {row:?}, parsing failed with: {column_err}");
                             Err(Error::Rollback(idx))
                         } else {
@@ -123,39 +87,77 @@ impl DSVReader {
                 });
             }
         }
-        let mut result = Vec::with_capacity(builder.len());
-        builder.reverse();
-        while let Some(b) = builder.pop() {
-            result.push(b.finalize());
-        }
-        Ok(result)
+
+        Ok(())
     }
 
-    /// Given a TableSchema, generates the corresponding Proxy implementation
-    fn generate_proxies(&self, schema: &TableSchema) -> Vec<Box<dyn ColumnBuilderProxy>> {
-        schema
+    fn read_into_builder_proxies_with_reader<'a: 'b, 'b, R>(
+        &self,
+        physical_builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
+        reader: &mut Reader<R>,
+    ) -> Result<(), Error>
+    where
+        R: Read,
+    {
+        let logical_builder_proxies: Vec<Box<dyn LogicalColumnBuilderProxy + 'b>> = self
+            .logical_types
             .iter()
-            .map(|data_type_name| -> Box<dyn ColumnBuilderProxy> {
-                match data_type_name {
-                    DataTypeName::String => Box::<StringColumnBuilderProxy>::default(),
-                    DataTypeName::U32 => Box::<U32ColumnBuilderProxy>::default(),
-                    DataTypeName::U64 => Box::<U64ColumnBuilderProxy>::default(),
-                    DataTypeName::Float => Box::<FloatColumnBuilderProxy>::default(),
-                    DataTypeName::Double => Box::<DoubleColumnBuilderProxy>::default(),
+            .cloned()
+            .zip(physical_builder_proxies)
+            .map(|(ty, bp)| ty.wrap_physical_column_builder::<'a, 'b>(bp))
+            .collect();
+
+        self.read_with_reader(logical_builder_proxies, reader)
+    }
+}
+
+impl TableReader for DSVReader {
+    fn read_into_builder_proxies<'a: 'b, 'b>(
+        &self,
+        physical_builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
+    ) -> Result<(), Error> {
+        let gz_decoder =
+            flate2::read::GzDecoder::new(File::open(self.file.as_path()).map_err(|error| {
+                Error::IOReading {
+                    error,
+                    filename: self
+                        .file
+                        .to_str()
+                        .expect("Path is expected to be valid utf-8")
+                        .into(),
                 }
-            })
-            .collect()
+            })?);
+
+        if gz_decoder.header().is_some() {
+            self.read_into_builder_proxies_with_reader(
+                physical_builder_proxies,
+                &mut Self::reader(gz_decoder, self.delimiter, self.escape),
+            )
+        } else {
+            self.read_into_builder_proxies_with_reader(
+                physical_builder_proxies,
+                &mut Self::reader(
+                    File::open(self.file.as_path())?,
+                    self.delimiter,
+                    self.escape,
+                ),
+            )
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::physical::dictionary::{Dictionary, PrefixedStringDictionary};
-
-    use super::*;
-    use csv::ReaderBuilder;
     use quickcheck_macros::quickcheck;
     use test_log::test;
+
+    use super::*;
+    use crate::physical::{
+        builder_proxy::{PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy},
+        datatypes::storage_value::VecT,
+        dictionary::{Dictionary, PrefixedStringDictionary},
+    };
+    use csv::ReaderBuilder;
 
     #[test]
     fn csv_one_line() {
@@ -168,26 +170,42 @@ Boston;United States;4628910
             .delimiter(b';')
             .from_reader(data.as_bytes());
 
-        let mut dict = PrefixedStringDictionary::default();
-        let csvreader = DSVReader::csv("test".into());
-        let result = csvreader.read_with_reader(
+        let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+        let csvreader = DSVReader::csv(
+            "test".into(),
             vec![
-                Box::<StringColumnBuilderProxy>::default(),
-                Box::<StringColumnBuilderProxy>::default(),
-                Box::<StringColumnBuilderProxy>::default(),
+                LogicalTypeEnum::Any,
+                LogicalTypeEnum::Any,
+                LogicalTypeEnum::Any,
             ],
-            &mut rdr,
-            &mut dict,
         );
-        let x = result.unwrap();
+        let mut builder = vec![
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+        ];
 
+        let result = csvreader.read_into_builder_proxies_with_reader(&mut builder, &mut rdr);
+
+        let x: Vec<VecT> = builder
+            .into_iter()
+            .map(|bp| match bp {
+                PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::Double(bp) => bp.finalize(),
+            })
+            .collect();
+
+        assert!(result.is_ok());
         assert_eq!(x.len(), 3);
         assert!(x.iter().all(|vect| vect.len() == 1));
         assert_eq!(
             x[0].get(0)
                 .and_then(|dvt| dvt.as_u64())
                 .and_then(|u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.entry(usize))
+                .and_then(|usize| dict.get_mut().entry(usize))
                 .unwrap(),
             "Boston"
         );
@@ -195,7 +213,7 @@ Boston;United States;4628910
             x[1].get(0)
                 .and_then(|dvt| dvt.as_u64())
                 .and_then(|u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.entry(usize))
+                .and_then(|usize| dict.get_mut().entry(usize))
                 .unwrap(),
             "United States"
         );
@@ -203,7 +221,7 @@ Boston;United States;4628910
             x[2].get(0)
                 .and_then(|dvt| dvt.as_u64())
                 .and_then(|u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.entry(usize))
+                .and_then(|usize| dict.get_mut().entry(usize))
                 .unwrap(),
             "4628910"
         );
@@ -243,18 +261,33 @@ The next column is empty;;789
             .delimiter(b';')
             .from_reader(data.as_bytes());
 
-        let mut dict = PrefixedStringDictionary::default();
-        let csvreader = DSVReader::csv("test".into());
-        let result = csvreader.read_with_reader(
+        let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+        let csvreader = DSVReader::csv(
+            "test".into(),
             vec![
-                Box::<StringColumnBuilderProxy>::default(),
-                Box::<StringColumnBuilderProxy>::default(),
-                Box::<U64ColumnBuilderProxy>::default(),
+                LogicalTypeEnum::Any,
+                LogicalTypeEnum::Any,
+                LogicalTypeEnum::Integer,
             ],
-            &mut rdr,
-            &mut dict,
         );
-        let cols = result.unwrap();
+        let mut builder = vec![
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+            PhysicalBuilderProxyEnum::U64(Default::default()),
+        ];
+        let result = csvreader.read_into_builder_proxies_with_reader(&mut builder, &mut rdr);
+        assert!(result.is_ok());
+
+        let cols: Vec<VecT> = builder
+            .into_iter()
+            .map(|bp| match bp {
+                PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::Double(bp) => bp.finalize(),
+            })
+            .collect();
 
         let VecT::U64(ref col0_idx) = cols[0] else { unreachable!() };
         let VecT::U64(ref col1_idx) = cols[1] else { unreachable!() };
@@ -263,12 +296,12 @@ The next column is empty;;789
         let col0: Vec<String> = col0_idx
             .iter()
             .copied()
-            .map(|idx| dict.entry(idx.try_into().unwrap()).unwrap())
+            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
             .collect();
         let col1: Vec<String> = col1_idx
             .iter()
             .copied()
-            .map(|idx| dict.entry(idx.try_into().unwrap()).unwrap())
+            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
             .collect();
 
         std::iter::zip(std::iter::zip(col0, col1), col2)
@@ -296,21 +329,44 @@ node03;123;123;13;55;123;invalid
             .has_headers(false)
             .from_reader(data.as_bytes());
 
-        let mut dict = PrefixedStringDictionary::default();
-        let csvreader = DSVReader::csv("test".into());
-        let builder = csvreader.generate_proxies(&TableSchema::from_vec(vec![
-            DataTypeName::String,
-            DataTypeName::U64,
-            DataTypeName::Double,
-            DataTypeName::Float,
-            DataTypeName::U64,
-            DataTypeName::String,
-        ]));
-        let imported = csvreader.read_with_reader(builder, &mut rdr, &mut dict);
+        let dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+        let csvreader = DSVReader::csv(
+            "test".into(),
+            vec![
+                LogicalTypeEnum::Any,
+                LogicalTypeEnum::Integer,
+                LogicalTypeEnum::Float64,
+                LogicalTypeEnum::Float64,
+                LogicalTypeEnum::Integer,
+                LogicalTypeEnum::Any,
+            ],
+        );
+        let mut builder = vec![
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+            PhysicalBuilderProxyEnum::U64(Default::default()),
+            PhysicalBuilderProxyEnum::Double(Default::default()),
+            PhysicalBuilderProxyEnum::Double(Default::default()),
+            PhysicalBuilderProxyEnum::U64(Default::default()),
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+        ];
+        let result = csvreader.read_into_builder_proxies_with_reader(&mut builder, &mut rdr);
 
-        assert!(imported.is_ok());
-        assert_eq!(imported.as_ref().unwrap().len(), 6);
-        assert_eq!(imported.as_ref().unwrap()[1].len(), 3);
+        let imported: Vec<VecT> = builder
+            .into_iter()
+            .map(|bp| match bp {
+                PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::Double(bp) => bp.finalize(),
+            })
+            .collect();
+
+        eprintln!("{imported:?}");
+
+        assert!(result.is_ok());
+        assert_eq!(imported.len(), 6);
+        assert_eq!(imported[1].len(), 3);
     }
 
     #[quickcheck]
@@ -343,20 +399,38 @@ node03;123;123;13;55;123;invalid
             .delimiter(b',')
             .has_headers(false)
             .from_reader(csv.as_bytes());
-        let mut dict = PrefixedStringDictionary::default();
-        let csvreader = DSVReader::csv("test".into());
-        let builder = csvreader.generate_proxies(&TableSchema::from_vec(vec![
-            DataTypeName::U64,
-            DataTypeName::Double,
-            DataTypeName::U64,
-            DataTypeName::Float,
-        ]));
+        let csvreader = DSVReader::csv(
+            "test".into(),
+            vec![
+                LogicalTypeEnum::Integer,
+                LogicalTypeEnum::Float64,
+                LogicalTypeEnum::Integer,
+                LogicalTypeEnum::Float64,
+            ],
+        );
+        let mut builder = vec![
+            PhysicalBuilderProxyEnum::U64(Default::default()),
+            PhysicalBuilderProxyEnum::Double(Default::default()),
+            PhysicalBuilderProxyEnum::U64(Default::default()),
+            PhysicalBuilderProxyEnum::Double(Default::default()),
+        ];
 
-        let imported = csvreader.read_with_reader(builder, &mut rdr, &mut dict);
+        let result = csvreader.read_into_builder_proxies_with_reader(&mut builder, &mut rdr);
 
-        assert!(imported.is_ok());
-        assert_eq!(imported.as_ref().unwrap().len(), 4);
-        assert_eq!(imported.as_ref().unwrap()[0].len(), len);
+        let imported: Vec<VecT> = builder
+            .into_iter()
+            .map(|bp| match bp {
+                PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::Double(bp) => bp.finalize(),
+            })
+            .collect();
+
+        assert!(result.is_ok());
+        assert_eq!(imported.len(), 4);
+        assert_eq!(imported[0].len(), len);
         true
     }
 }

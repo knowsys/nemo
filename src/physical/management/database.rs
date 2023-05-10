@@ -1,12 +1,15 @@
 use std::cell::{Ref, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
-use std::path::PathBuf;
 
 use bytesize::ByteSize;
 
-use crate::io::dsv::DSVReader;
-use crate::physical::datatypes::{DataValueT, StorageValueT};
+use crate::io::TableReader;
+use crate::physical::builder_proxy::{
+    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy,
+};
+use crate::physical::datatypes::storage_value::VecT;
+use crate::physical::datatypes::{DataTypeName, DataValueT, StorageValueT};
 use crate::physical::tabular::operations::materialize::materialize_up_to;
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
@@ -74,13 +77,8 @@ impl TableId {
 /// Indicates the file format of a table stored on disc.
 #[derive(Debug)]
 pub enum TableSource {
-    /// Table is contained in a DSV (delimiter-separated values) file
-    DSV {
-        /// the path to the DSV file
-        file: PathBuf,
-        /// the delimiter separating values
-        delimiter: u8,
-    },
+    /// Table read by any reader implementation
+    FileReader(Box<dyn TableReader>),
     /// Table is stored as facts in an rls file
     /// TODO: To not invoke the parser twice I just put the parsed "row-table" here.
     /// Does not seem quite right
@@ -90,19 +88,8 @@ pub enum TableSource {
 impl Display for TableSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TableSource::DSV {
-                file,
-                delimiter: b',',
-            } => write!(f, "CSV file: {}", file.display()),
-            TableSource::DSV {
-                file,
-                delimiter: b'\t',
-            } => write!(f, "TSV file: {}", file.display()),
-            TableSource::DSV { file, delimiter } => write!(
-                f,
-                "DSV file with delimiter {delimiter:?}: {}",
-                file.display()
-            ),
+            // TODO: maybe do not use the debug impl of the reader but I'm not sure if it should enforce display...; maybe have a method on it returning the file name or so?
+            TableSource::FileReader(reader) => write!(f, "TableReader implementation: {reader:?}"),
             TableSource::RLS(_) => write!(f, "Rule file"),
         }
     }
@@ -122,16 +109,42 @@ impl TableStorage {
     fn load_from_disk(
         source: &TableSource,
         schema: &TableSchema,
-        dict: &mut Dict,
+        dict: &mut RefCell<Dict>,
     ) -> Result<Trie, Error> {
         {
             log::info!("Loading source {source}");
 
             let trie = match source {
-                TableSource::DSV { file, delimiter } => {
-                    let csv_reader = DSVReader::dsv(file.clone(), *delimiter);
-                    let col_table = csv_reader.read(schema, dict)?;
+                TableSource::FileReader(reader) => {
+                    let mut builder_proxies: Vec<PhysicalBuilderProxyEnum> = schema
+                        .iter()
+                        .map(|data_type| match data_type {
+                            DataTypeName::String => PhysicalBuilderProxyEnum::String(
+                                PhysicalStringColumnBuilderProxy::new(dict),
+                            ),
+                            DataTypeName::U64 => PhysicalBuilderProxyEnum::U64(Default::default()),
+                            DataTypeName::U32 => PhysicalBuilderProxyEnum::U32(Default::default()),
+                            DataTypeName::Float => {
+                                PhysicalBuilderProxyEnum::Float(Default::default())
+                            }
+                            DataTypeName::Double => {
+                                PhysicalBuilderProxyEnum::Double(Default::default())
+                            }
+                        })
+                        .collect();
 
+                    reader.read_into_builder_proxies(&mut builder_proxies)?;
+
+                    let col_table: Vec<VecT> = builder_proxies
+                        .into_iter()
+                        .map(|bp| match bp {
+                            PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+                            PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
+                            PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
+                            PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
+                            PhysicalBuilderProxyEnum::Double(bp) => bp.finalize(),
+                        })
+                        .collect();
                     Trie::from_cols(col_table)
                 }
                 TableSource::RLS(table_rows) => {
@@ -140,7 +153,7 @@ impl TableStorage {
                         .map(|row| {
                             row.iter()
                                 .cloned()
-                                .map(|val| val.to_storage_value(dict))
+                                .map(|val| val.to_storage_value(dict.get_mut()))
                                 .collect()
                         })
                         .collect();
@@ -153,7 +166,7 @@ impl TableStorage {
     }
 
     /// Function that makes sure that underlying table is available in memory.
-    pub fn into_memory<'a>(&'a mut self, dict: &mut Dict) -> Result<&'a Trie, Error> {
+    pub fn into_memory<'a>(&'a mut self, dict: &mut RefCell<Dict>) -> Result<&'a Trie, Error> {
         match self {
             TableStorage::InMemory(_) => {}
             TableStorage::OnDisk(schema, sources) => {
@@ -632,7 +645,7 @@ impl DatabaseInstance {
             .storage_handler
             .table_storage_mut(id, &closest_order.clone())
             .expect("Call to search_closest_ordered should give us an existing order")
-            .into_memory(self.dict_constants.get_mut())?;
+            .into_memory(&mut self.dict_constants)?;
 
         if !reorder.is_identity() {
             TimedCode::instance()
@@ -853,7 +866,7 @@ impl DatabaseInstance {
         self.storage_handler
             .table_storage_mut(id, order)
             .expect("Function assumes that there is a table with the given id and order.")
-            .into_memory(self.dict_constants.get_mut())
+            .into_memory(&mut self.dict_constants)
     }
 
     /// Given a node in the execution tree returns the trie iterator

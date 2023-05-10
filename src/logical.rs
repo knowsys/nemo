@@ -1,6 +1,10 @@
 //! This module defines logical data structures and operations.
 
 pub mod permutator;
+
+pub mod builder_proxy;
+pub use builder_proxy::LogicalColumnBuilderProxy;
+
 pub use permutator::Permutator;
 
 pub mod model;

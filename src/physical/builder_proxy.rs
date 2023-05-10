@@ -1,0 +1,123 @@
+//! The physical builder proxy takes values of some input type T and provides functionality to store them in a ['VecT']
+use std::cell::RefCell;
+
+use crate::error::Error;
+
+use crate::physical::{
+    datatypes::{storage_value::VecT, Double, Float},
+    dictionary::Dictionary,
+    management::database::Dict,
+};
+
+/// Trait for a Builder Proxy, which translates a value for a particular [`DataTypeName`] to the corresponding [`StorageType`][crate::physical::datatypes::StorageType] Column elements
+pub trait ColumnBuilderProxy<T>: std::fmt::Debug {
+    /// Cache a value to be added to the ColumnBuilder. If a value is already cached, this one is actually added to the ColumnBuilder before the new value is checked
+    fn add(&mut self, input: T) -> Result<(), Error>;
+    /// Forgets a cached value
+    fn forget(&mut self);
+    /// Commits the data, cleaning the cached value while adding it to the respective ColumnBuilder
+    fn commit(&mut self);
+}
+
+macro_rules! generic_trait_impl_without_add {
+    ($storage:expr) => {
+        fn commit(&mut self) {
+            if let Some(value) = self.value.take() {
+                self.vec.push(value)
+            }
+        }
+
+        fn forget(&mut self) {
+            self.value = None;
+        }
+    };
+}
+
+macro_rules! physical_generic_trait_impl {
+    ($type:ty, $storage:expr) => {
+        impl ColumnBuilderProxy<$type> for PhysicalGenericColumnBuilderProxy<$type> {
+            generic_trait_impl_without_add!($storage);
+
+            fn add(&mut self, input: $type) -> Result<(), Error> {
+                self.commit();
+                self.value = Some(input);
+                Ok(())
+            }
+        }
+
+        impl PhysicalColumnBuilderProxy<$type> for PhysicalGenericColumnBuilderProxy<$type> {
+            fn finalize(mut self) -> VecT {
+                self.commit();
+                $storage(self.vec)
+            }
+        }
+    };
+}
+
+/// Trait for Builder Proxy for the physical layer
+pub trait PhysicalColumnBuilderProxy<T>: ColumnBuilderProxy<T> {
+    /// Writes the remaining prepared value and returns a VecT
+    fn finalize(self) -> VecT;
+}
+
+/// PhysicalBuilderProxy to add Strings
+#[derive(Debug)]
+pub struct PhysicalStringColumnBuilderProxy<'a> {
+    dict: &'a RefCell<Dict>,
+    value: Option<u64>,
+    vec: Vec<u64>,
+}
+
+impl<'a> PhysicalStringColumnBuilderProxy<'a> {
+    /// Create a new PhysicalStringColumnBuilderProxy with the given dictionary
+    pub fn new(dict: &'a RefCell<Dict>) -> Self {
+        Self {
+            dict,
+            value: Default::default(),
+            vec: Default::default(),
+        }
+    }
+}
+
+impl ColumnBuilderProxy<String> for PhysicalStringColumnBuilderProxy<'_> {
+    generic_trait_impl_without_add!(VecT::U64);
+    fn add(&mut self, input: String) -> Result<(), Error> {
+        self.commit();
+        self.value = Some(self.dict.borrow_mut().add(input).try_into()?);
+        Ok(())
+    }
+}
+
+impl PhysicalColumnBuilderProxy<String> for PhysicalStringColumnBuilderProxy<'_> {
+    fn finalize(mut self) -> VecT {
+        self.commit();
+        VecT::U64(self.vec)
+    }
+}
+
+/// PhysicalBuilderProxy to add types without special requirements (e.g. dictionary)
+#[derive(Default, Debug)]
+pub struct PhysicalGenericColumnBuilderProxy<T> {
+    value: Option<T>,
+    vec: Vec<T>,
+}
+
+physical_generic_trait_impl!(u64, VecT::U64);
+physical_generic_trait_impl!(u32, VecT::U32);
+physical_generic_trait_impl!(Float, VecT::Float);
+physical_generic_trait_impl!(Double, VecT::Double);
+
+/// Enum Collection of all physical builder proxies
+#[derive(Debug)]
+pub enum PhysicalBuilderProxyEnum<'a> {
+    /// Proxy for String Type
+    String(PhysicalStringColumnBuilderProxy<'a>),
+    /// Proxy for U64 Type
+    U64(PhysicalGenericColumnBuilderProxy<u64>),
+    /// Proxy for U32 Type
+    U32(PhysicalGenericColumnBuilderProxy<u32>),
+    /// Proxy for Float Type
+    Float(PhysicalGenericColumnBuilderProxy<Float>),
+    /// Proxy for Double Type
+    Double(PhysicalGenericColumnBuilderProxy<Double>),
+}
