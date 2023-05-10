@@ -1,4 +1,25 @@
-//! Represents different data-import methods
+/*!
+Reading of delimiter separated value files
+
+The main purpose of this module is to offer a [`DSVReader`],
+which is instantiated in the logical layer, with all information
+about a given tuple.
+It implements [`TableReader`], allowing the physical layer to provide [`PhysicalBuilderProxys`][crate::physical::builder_proxy::PhysicalColumnBuilderProxy]
+to be filled with data.
+
+# Examples
+On the logical layer, the [`DSVReader`] is created.
+The following examples will use this csv-file, which is representing a tuple with two string (logical any) and one number (logical integer) terms.
+```csv
+Boston,United States,654776
+Dresden,Germany,554649
+```
+This file can be found in the current repository at `resources/docu/examples/city_population.csv`
+## logical layer
+```
+
+```
+ */
 
 use std::fs::File;
 use std::io::Read;
@@ -228,6 +249,7 @@ Boston;United States;4628910
         );
     }
 
+    /// Ignored as normalisation is not done yet completely
     #[ignore]
     #[test]
     fn csv_with_various_different_constant_and_literal_representations() {
