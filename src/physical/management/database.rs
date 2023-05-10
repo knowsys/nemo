@@ -5,9 +5,7 @@ use std::fmt::{Debug, Display};
 use bytesize::ByteSize;
 
 use crate::io::TableReader;
-use crate::physical::builder_proxy::{
-    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy,
-};
+use crate::physical::builder_proxy::{PhysicalBuilderProxyEnum, PhysicalStringColumnBuilderProxy};
 use crate::physical::datatypes::storage_value::VecT;
 use crate::physical::datatypes::{DataTypeName, DataValueT, StorageValueT};
 use crate::physical::tabular::operations::materialize::materialize_up_to;
@@ -137,13 +135,7 @@ impl TableStorage {
 
                     let col_table: Vec<VecT> = builder_proxies
                         .into_iter()
-                        .map(|bp| match bp {
-                            PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
-                            PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
-                            PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
-                            PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
-                            PhysicalBuilderProxyEnum::Double(bp) => bp.finalize(),
-                        })
+                        .map(|bp| bp.finalize())
                         .collect();
                     Trie::from_cols(col_table)
                 }
