@@ -11,6 +11,8 @@ pub enum StorageTypeName {
     U32,
     /// Data type [`u64`].
     U64,
+    /// Data type [`i64`]
+    I64,
     /// Data type [`super::float::Float`]
     Float,
     /// Data type [`super::double::Double`]
@@ -21,14 +23,11 @@ impl StorageTypeName {
     /// Parses a string, based on the name of the Datatype
     pub fn parse(&self, string: &str) -> Result<StorageValueT, Error> {
         Ok(match self {
-            StorageTypeName::U32 => StorageValueT::U32(string.parse::<u32>()?),
-            StorageTypeName::U64 => StorageValueT::U64(string.parse::<u64>()?),
-            StorageTypeName::Float => {
-                StorageValueT::Float(super::Float::new(string.parse::<f32>()?)?)
-            }
-            StorageTypeName::Double => {
-                StorageValueT::Double(super::Double::new(string.parse::<f64>()?)?)
-            }
+            StorageTypeName::U32 => StorageValueT::U32(string.parse()?),
+            StorageTypeName::U64 => StorageValueT::U64(string.parse()?),
+            StorageTypeName::I64 => StorageValueT::I64(string.parse()?),
+            StorageTypeName::Float => StorageValueT::Float(super::Float::new(string.parse()?)?),
+            StorageTypeName::Double => StorageValueT::Double(super::Double::new(string.parse()?)?),
         })
     }
 }
@@ -38,6 +37,7 @@ impl Display for StorageTypeName {
         match self {
             StorageTypeName::U32 => write!(f, "U32"),
             StorageTypeName::U64 => write!(f, "U64"),
+            StorageTypeName::I64 => write!(f, "I64"),
             StorageTypeName::Float => write!(f, "Float"),
             StorageTypeName::Double => write!(f, "Double"),
         }

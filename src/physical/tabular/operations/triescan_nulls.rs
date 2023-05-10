@@ -56,6 +56,7 @@ impl<'a> TrieScanNulls<'a> {
                 match trie_scan.get_types()[scan_index] {
                     StorageTypeName::U32 => add_scan_for_datatype!(U32, u32),
                     StorageTypeName::U64 => add_scan_for_datatype!(U64, u64),
+                    StorageTypeName::I64 => add_scan_for_datatype!(I64, i64),
                     StorageTypeName::Float => add_scan_for_datatype!(Float, Float),
                     StorageTypeName::Double => add_scan_for_datatype!(Double, Double),
                 }

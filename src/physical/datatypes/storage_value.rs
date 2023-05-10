@@ -16,6 +16,8 @@ pub enum StorageValueT {
     U32(u32),
     /// Case u64
     U64(u64),
+    /// Case i64
+    I64(i64),
     /// Case Float
     Float(Float),
     /// Case Double
@@ -24,22 +26,31 @@ pub enum StorageValueT {
 
 impl StorageValueT {
     /// Returns either [`Option<u32>`], answering whether the [`StorageValueT`] is of this datatype
-    pub fn as_u32(&self) -> Option<u32> {
+    pub fn get_u32(&self) -> Option<u32> {
         match *self {
             StorageValueT::U32(val) => Some(val),
             _ => None,
         }
     }
+
     /// Returns either [`Option<u64>`], answering whether the [`StorageValueT`] is of this datatype
-    pub fn as_u64(&self) -> Option<u64> {
+    pub fn get_u64(&self) -> Option<u64> {
         match *self {
             StorageValueT::U64(val) => Some(val),
             _ => None,
         }
     }
 
+    /// Wraps contained [i64] value in [Option] if present, else returns [None]
+    pub fn get_i64(&self) -> Option<i64> {
+        match *self {
+            StorageValueT::I64(val) => Some(val),
+            _ => None,
+        }
+    }
+
     /// Returns either [`Option<Float>`], answering whether [`StorageValueT`] is of this datatype
-    pub fn as_float(&self) -> Option<Float> {
+    pub fn get_float(&self) -> Option<Float> {
         match *self {
             StorageValueT::Float(val) => Some(val),
             _ => None,
@@ -47,7 +58,7 @@ impl StorageValueT {
     }
 
     /// Returns either [`Option<Double>`], answering whether the [`StorageValueT`] is of this datatype
-    pub fn as_double(&self) -> Option<Double> {
+    pub fn get_double(&self) -> Option<Double> {
         match *self {
             StorageValueT::Double(val) => Some(val),
             _ => None,
@@ -57,10 +68,11 @@ impl StorageValueT {
     /// Compares its value with another given [`StorageValueT`]
     pub fn compare(&self, other: &Self) -> Option<Ordering> {
         match self {
-            StorageValueT::U32(val) => other.as_u32().map(|otherval| val.cmp(&otherval)),
-            StorageValueT::U64(val) => other.as_u64().map(|otherval| val.cmp(&otherval)),
-            StorageValueT::Float(val) => other.as_float().map(|otherval| val.cmp(&otherval)),
-            StorageValueT::Double(val) => other.as_double().map(|otherval| val.cmp(&otherval)),
+            StorageValueT::U32(val) => other.get_u32().map(|otherval| val.cmp(&otherval)),
+            StorageValueT::U64(val) => other.get_u64().map(|otherval| val.cmp(&otherval)),
+            StorageValueT::I64(val) => other.get_i64().map(|otherval| val.cmp(&otherval)),
+            StorageValueT::Float(val) => other.get_float().map(|otherval| val.cmp(&otherval)),
+            StorageValueT::Double(val) => other.get_double().map(|otherval| val.cmp(&otherval)),
         }
     }
 
@@ -69,6 +81,7 @@ impl StorageValueT {
         match self {
             Self::U32(_) => StorageTypeName::U32,
             Self::U64(_) => StorageTypeName::U64,
+            Self::I64(_) => StorageTypeName::I64,
             Self::Float(_) => StorageTypeName::Float,
             Self::Double(_) => StorageTypeName::Double,
         }
@@ -80,6 +93,7 @@ impl std::fmt::Display for StorageValueT {
         match self {
             Self::U32(val) => write!(f, "{val}"),
             Self::U64(val) => write!(f, "{val}"),
+            Self::I64(val) => write!(f, "{val}"),
             Self::Float(val) => write!(f, "{val}"),
             Self::Double(val) => write!(f, "{val}"),
         }
@@ -93,6 +107,8 @@ pub enum VecT {
     U32(Vec<u32>),
     /// Case Vec<u64>
     U64(Vec<u64>),
+    /// Case Vec<i64>
+    I64(Vec<i64>),
     /// Case Vec<Float>
     Float(Vec<Float>),
     /// Case Vec<Double>
@@ -113,6 +129,7 @@ impl VecT {
         match dtn {
             StorageTypeName::U32 => Self::U32(Vec::new()),
             StorageTypeName::U64 => Self::U64(Vec::new()),
+            StorageTypeName::I64 => Self::I64(Vec::new()),
             StorageTypeName::Float => Self::Float(Vec::new()),
             StorageTypeName::Double => Self::Double(Vec::new()),
         }
@@ -123,6 +140,7 @@ impl VecT {
         match self {
             Self::U32(_) => StorageTypeName::U32,
             Self::U64(_) => StorageTypeName::U64,
+            Self::I64(_) => StorageTypeName::I64,
             Self::Float(_) => StorageTypeName::Float,
             Self::Double(_) => StorageTypeName::Double,
         }
@@ -138,6 +156,7 @@ impl VecT {
         match self {
             VecT::U32(vec) => vec.get(index).copied().map(StorageValueT::U32),
             VecT::U64(vec) => vec.get(index).copied().map(StorageValueT::U64),
+            VecT::I64(vec) => vec.get(index).copied().map(StorageValueT::I64),
             VecT::Float(vec) => vec.get(index).copied().map(StorageValueT::Float),
             VecT::Double(vec) => vec.get(index).copied().map(StorageValueT::Double),
         }
@@ -148,19 +167,24 @@ impl VecT {
     pub(crate) fn push(&mut self, value: &StorageValueT) {
         match self {
             VecT::U32(vec) => {
-                vec.push(value.as_u32().expect(
+                vec.push(value.get_u32().expect(
                     "expecting VecT::U32 and StorageValueT::U32, but StorageValueT does not match",
                 ))
             }
             VecT::U64(vec) => {
-                vec.push(value.as_u64().expect(
+                vec.push(value.get_u64().expect(
                     "expecting VecT::U64 and StorageValueT::U64, but StorageValueT does not match",
                 ))
             }
-            VecT::Float(vec) => vec.push(value.as_float().expect(
+            VecT::I64(vec) => {
+                vec.push(value.get_i64().expect(
+                    "expecting VecT::I64 and StorageValueT::I64, but StorageValueT does not match",
+                ))
+            }
+            VecT::Float(vec) => vec.push(value.get_float().expect(
                 "expecting VecT::Float and StorageValueT::Float, but StorageValueT does not match",
             )),
-            VecT::Double(vec) => vec.push(value.as_double().expect(
+            VecT::Double(vec) => vec.push(value.get_double().expect(
                 "expecting VecT::Double and StorageValueT::Double, but StorageValueT does not match",
             )),
         };
@@ -183,6 +207,9 @@ impl VecT {
                 .get(idx_a)
                 .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
             VecT::U64(vec) => vec
+                .get(idx_a)
+                .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
+            VecT::I64(vec) => vec
                 .get(idx_a)
                 .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
             VecT::Float(vec) => vec

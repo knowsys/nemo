@@ -102,6 +102,8 @@ pub enum ColumnWithIntervalsT {
     U32(ColumnWithIntervals<u32>),
     /// Case u64
     U64(ColumnWithIntervals<u64>),
+    /// Case i64
+    I64(ColumnWithIntervals<i64>),
     /// Case Float
     Float(ColumnWithIntervals<Float>),
     /// Case Double
@@ -142,6 +144,13 @@ impl ColumnWithIntervalsT {
                     intervals.iter(),
                 )
             }
+            Self::I64(this) => {
+                let (data, intervals) = this.as_parts();
+                (
+                    ColumnScanT::I64(ColumnScanCell::new(data.iter())),
+                    intervals.iter(),
+                )
+            }
             Self::Float(this) => {
                 let (data, intervals) = this.as_parts();
                 (
@@ -164,6 +173,7 @@ impl ColumnWithIntervalsT {
         match self {
             Self::U32(_) => StorageTypeName::U32,
             Self::U64(_) => StorageTypeName::U64,
+            Self::I64(_) => StorageTypeName::I64,
             Self::Float(_) => StorageTypeName::Float,
             Self::Double(_) => StorageTypeName::Double,
         }

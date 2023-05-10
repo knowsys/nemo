@@ -203,7 +203,7 @@ Boston;United States;4628910
         assert!(x.iter().all(|vect| vect.len() == 1));
         assert_eq!(
             x[0].get(0)
-                .and_then(|dvt| dvt.as_u64())
+                .and_then(|dvt| dvt.get_u64())
                 .and_then(|u64| usize::try_from(u64).ok())
                 .and_then(|usize| dict.get_mut().entry(usize))
                 .unwrap(),
@@ -211,7 +211,7 @@ Boston;United States;4628910
         );
         assert_eq!(
             x[1].get(0)
-                .and_then(|dvt| dvt.as_u64())
+                .and_then(|dvt| dvt.get_u64())
                 .and_then(|u64| usize::try_from(u64).ok())
                 .and_then(|usize| dict.get_mut().entry(usize))
                 .unwrap(),
@@ -219,7 +219,7 @@ Boston;United States;4628910
         );
         assert_eq!(
             x[2].get(0)
-                .and_then(|dvt| dvt.as_u64())
+                .and_then(|dvt| dvt.get_u64())
                 .and_then(|u64| usize::try_from(u64).ok())
                 .and_then(|usize| dict.get_mut().entry(usize))
                 .unwrap(),

@@ -88,6 +88,8 @@ pub enum ColumnT {
     U32(ColumnEnum<u32>),
     /// Case ColumnEnum<u64>
     U64(ColumnEnum<u64>),
+    /// Case ColumnEnum<i64>
+    I64(ColumnEnum<i64>),
     /// Case ColumnEnum<Float>
     Float(ColumnEnum<Float>),
     /// Case ColumnEnum<Double>
