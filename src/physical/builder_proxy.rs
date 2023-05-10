@@ -121,3 +121,16 @@ pub enum PhysicalBuilderProxyEnum<'a> {
     /// Proxy for Double Type
     Double(PhysicalGenericColumnBuilderProxy<Double>),
 }
+
+impl PhysicalBuilderProxyEnum<'_> {
+    /// Finalize the wrapped member and returns its respective VecT
+    pub fn finalize(self) -> VecT {
+        match self {
+            PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+            PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
+            PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
+            PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
+            PhysicalBuilderProxyEnum::Double(bp) => bp.finalize(),
+        }
+    }
+}
