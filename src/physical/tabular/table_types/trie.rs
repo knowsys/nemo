@@ -198,6 +198,7 @@ impl Trie {
         {
             StorageTypeName::U32 => last_column_for_datatype!(U32),
             StorageTypeName::U64 => last_column_for_datatype!(U64),
+            StorageTypeName::I64 => last_column_for_datatype!(I64),
             StorageTypeName::Float => last_column_for_datatype!(Float),
             StorageTypeName::Double => last_column_for_datatype!(Double),
         };
@@ -245,6 +246,7 @@ impl Trie {
             match current_type {
                 StorageTypeName::U32 => push_column_for_datatype!(U32),
                 StorageTypeName::U64 => push_column_for_datatype!(U64),
+                StorageTypeName::I64 => push_column_for_datatype!(I64),
                 StorageTypeName::Float => push_column_for_datatype!(Float),
                 StorageTypeName::Double => push_column_for_datatype!(Double),
             };
@@ -324,7 +326,7 @@ impl Table for Trie {
                     .map(|_| {
                         let empty_data_col = ColumnBuilderAdaptiveT::new(StorageTypeName::U64, Default::default(), Default::default());
                         let empty_interval_col = ColumnBuilderAdaptive::<usize>::default();
-                        build_interval_column!(empty_data_col, empty_interval_col; U32; U64; Float; Double)
+                        build_interval_column!(empty_data_col, empty_interval_col; U32; U64; I64; Float; Double)
                     })
                     .collect(),
             );
@@ -339,6 +341,9 @@ impl Table for Trie {
                         "length matches since permutator is constructed from these vectores",
                     )),
                     VecT::U64(vec) => VecT::U64(permutator.permutate(vec).expect(
+                        "length matches since permutator is constructed from these vectores",
+                    )),
+                    VecT::I64(vec) => VecT::I64(permutator.permutate(vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
                     VecT::Float(vec) => VecT::Float(permutator.permutate(vec).expect(
@@ -425,7 +430,7 @@ impl Table for Trie {
             condensed_data_builders
                 .into_iter()
                 .zip(condensed_interval_starts_builders)
-                .map(|(col, iv)| build_interval_column!(col, iv; U32; U64; Float; Double))
+                .map(|(col, iv)| build_interval_column!(col, iv; U32; U64; I64; Float; Double))
                 .collect(),
         )
     }

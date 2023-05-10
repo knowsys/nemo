@@ -136,6 +136,7 @@ pub fn trie_append(
                     match trie.get_types()[*repeat_index] {
                         StorageTypeName::U32 => append_column_for_datatype!(U32, u32),
                         StorageTypeName::U64 => append_column_for_datatype!(U64, u64),
+                        StorageTypeName::I64 => append_column_for_datatype!(I64, i64),
                         StorageTypeName::Float => {
                             append_column_for_datatype!(Float, Float)
                         }
@@ -170,6 +171,7 @@ pub fn trie_append(
                     match value.to_storage_value(dict) {
                         StorageValueT::U32(value) => append_columns_for_datatype!(value, U32, u32),
                         StorageValueT::U64(value) => append_columns_for_datatype!(value, U64, u64),
+                        StorageValueT::I64(value) => append_columns_for_datatype!(value, I64, i64),
                         StorageValueT::Float(value) => {
                             append_columns_for_datatype!(value, Float, Float)
                         }
@@ -267,6 +269,7 @@ impl<'a> TrieScanAppend<'a> {
                         match trie_scan.get_types()[*repeat_index] {
                             StorageTypeName::U32 => append_repeat_for_datatype!(U32),
                             StorageTypeName::U64 => append_repeat_for_datatype!(U64),
+                            StorageTypeName::I64 => append_repeat_for_datatype!(I64),
                             StorageTypeName::Float => append_repeat_for_datatype!(Float),
                             StorageTypeName::Double => append_repeat_for_datatype!(Double),
                         }
@@ -285,6 +288,7 @@ impl<'a> TrieScanAppend<'a> {
                         match value.to_storage_value(dict) {
                             StorageValueT::U32(value) => append_constant_for_datatype!(U32, value),
                             StorageValueT::U64(value) => append_constant_for_datatype!(U64, value),
+                            StorageValueT::I64(value) => append_constant_for_datatype!(I64, value),
                             StorageValueT::Float(value) => {
                                 append_constant_for_datatype!(Float, value)
                             }
@@ -321,6 +325,7 @@ impl<'a> TrieScanAppend<'a> {
                     let reference_scan = match trie_scan.get_types()[gap_index] {
                         StorageTypeName::U32 => append_pass_for_datatype!(U32),
                         StorageTypeName::U64 => append_pass_for_datatype!(U64),
+                        StorageTypeName::I64 => append_pass_for_datatype!(I64),
                         StorageTypeName::Float => append_pass_for_datatype!(Float),
                         StorageTypeName::Double => append_pass_for_datatype!(Double),
                     };

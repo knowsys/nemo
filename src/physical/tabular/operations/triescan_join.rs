@@ -253,6 +253,7 @@ impl<'a> TrieScanJoin<'a> {
             match output_type {
                 StorageTypeName::U32 => merge_join_for_datatype!(U32, u32),
                 StorageTypeName::U64 => merge_join_for_datatype!(U64, u64),
+                StorageTypeName::I64 => merge_join_for_datatype!(I64, i64),
                 StorageTypeName::Float => merge_join_for_datatype!(Float, Float),
                 StorageTypeName::Double => merge_join_for_datatype!(Double, Double),
             }

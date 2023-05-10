@@ -162,6 +162,8 @@ pub enum ColumnBuilderAdaptiveT {
     U32(ColumnBuilderAdaptive<u32>),
     /// Case u64
     U64(ColumnBuilderAdaptive<u64>),
+    /// Case i64
+    I64(ColumnBuilderAdaptive<i64>),
     /// Case Float
     Float(ColumnBuilderAdaptive<Float>),
     /// Case Double
@@ -181,6 +183,10 @@ impl ColumnBuilderAdaptiveT {
                 target_min_length_for_rle_elements,
             )),
             StorageTypeName::U64 => Self::U64(ColumnBuilderAdaptive::new(
+                decision_threshold,
+                target_min_length_for_rle_elements,
+            )),
+            StorageTypeName::I64 => Self::I64(ColumnBuilderAdaptive::new(
                 decision_threshold,
                 target_min_length_for_rle_elements,
             )),
@@ -212,6 +218,13 @@ impl ColumnBuilderAdaptiveT {
                     panic!("value does not match AdaptiveColumn type");
                 }
             }
+            Self::I64(cb) => {
+                if let StorageValueT::I64(v) = value {
+                    cb.add(v);
+                } else {
+                    panic!("value does not match AdaptiveColumn type");
+                }
+            }
             Self::Float(cb) => {
                 if let StorageValueT::Float(v) = value {
                     cb.add(v);
@@ -234,6 +247,7 @@ impl ColumnBuilderAdaptiveT {
         match self {
             Self::U32(cb) => cb.count(),
             Self::U64(cb) => cb.count(),
+            Self::I64(cb) => cb.count(),
             Self::Float(cb) => cb.count(),
             Self::Double(cb) => cb.count(),
         }

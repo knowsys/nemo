@@ -51,6 +51,7 @@ pub fn materialize_inner(
         match column_type {
             StorageTypeName::U32 => init_builder_for_datatype!(U32),
             StorageTypeName::U64 => init_builder_for_datatype!(U64),
+            StorageTypeName::I64 => init_builder_for_datatype!(I64),
             StorageTypeName::Float => init_builder_for_datatype!(Float),
             StorageTypeName::Double => init_builder_for_datatype!(Double),
         }
@@ -192,6 +193,7 @@ pub fn materialize_inner(
             match column_type {
                 StorageTypeName::U32 => finalize_for_datatype!(U32, u32),
                 StorageTypeName::U64 => finalize_for_datatype!(U64, u64),
+                StorageTypeName::I64 => finalize_for_datatype!(I64, i64),
                 StorageTypeName::Float => finalize_for_datatype!(Float, Float),
                 StorageTypeName::Double => finalize_for_datatype!(Double, Double),
             }

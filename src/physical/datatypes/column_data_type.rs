@@ -18,6 +18,8 @@ pub trait ColumnDataType:
     + ImplicitCastInto<u32>
     + ImplicitCastFrom<u64>
     + ImplicitCastInto<u64>
+    + ImplicitCastFrom<i64>
+    + ImplicitCastInto<i64>
     + Bounded
     + RunLengthEncodable
 {
@@ -35,6 +37,8 @@ impl<T> ColumnDataType for T where
         + ImplicitCastInto<u32>
         + ImplicitCastFrom<u64>
         + ImplicitCastInto<u64>
+        + ImplicitCastFrom<i64>
+        + ImplicitCastInto<i64>
         + Bounded
         + RunLengthEncodable
 {

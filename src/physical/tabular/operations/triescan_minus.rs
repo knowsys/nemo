@@ -87,6 +87,7 @@ impl<'a> TrieScanMinus<'a> {
             match target_type {
                 StorageTypeName::U32 => init_scans_for_datatype!(U32),
                 StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::I64 => init_scans_for_datatype!(I64),
                 StorageTypeName::Float => init_scans_for_datatype!(Float),
                 StorageTypeName::Double => init_scans_for_datatype!(Double),
             };
