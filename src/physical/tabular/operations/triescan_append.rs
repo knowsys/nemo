@@ -230,144 +230,148 @@ impl<'a> TrieScanAppend<'a> {
         instructions: &[Vec<AppendInstruction>],
         target_types: Vec<StorageTypeName>,
     ) -> Self {
-        let arity = trie_scan.get_types().len();
+        let src_arity = trie_scan.get_types().len();
 
-        debug_assert!(instructions.len() == arity + 1);
-        debug_assert!(instructions
-            .iter()
-            .enumerate()
-            .all(|(i, v)| v
-                .iter()
-                .all(|a| if let AppendInstruction::RepeatColumn(e) = a {
-                    *e <= i
-                } else {
-                    true
-                })));
+        debug_assert_eq!(instructions.len(), src_arity + 1);
 
-        let mut column_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::new();
-        let mut base_indices = Vec::<usize>::with_capacity(arity);
-
-        for gap_index in 0..instructions.len() {
-            for instruction in instructions[gap_index].iter() {
-                match instruction {
-                    AppendInstruction::RepeatColumn(repeat_index) => unsafe {
-                        let referenced_scan = &*trie_scan.get_scan(*repeat_index).unwrap().get();
-
-                        macro_rules! append_repeat_for_datatype {
-                            ($variant:ident) => {{
-                                if let ColumnScanT::$variant(referenced_scan_cell) = referenced_scan
-                                {
-                                    column_scans.push(UnsafeCell::new(ColumnScanT::$variant(
-                                        ColumnScanCell::new(ColumnScanEnum::ColumnScanCopy(
-                                            ColumnScanCopy::new(referenced_scan_cell),
-                                        )),
-                                    )));
-                                }
-                            }};
-                        }
-
-                        match trie_scan.get_types()[*repeat_index] {
-                            StorageTypeName::U32 => append_repeat_for_datatype!(U32),
-                            StorageTypeName::U64 => append_repeat_for_datatype!(U64),
-                            StorageTypeName::I64 => append_repeat_for_datatype!(I64),
-                            StorageTypeName::Float => append_repeat_for_datatype!(Float),
-                            StorageTypeName::Double => append_repeat_for_datatype!(Double),
-                        }
-                    },
-                    AppendInstruction::Constant(value) => {
-                        macro_rules! append_constant_for_datatype {
-                            ($variant:ident, $value: expr) => {{
-                                column_scans.push(UnsafeCell::new(ColumnScanT::$variant(
-                                    ColumnScanCell::new(ColumnScanEnum::ColumnScanConstant(
-                                        ColumnScanConstant::new($value),
-                                    )),
-                                )));
-                            }};
-                        }
-
-                        match value.to_storage_value(dict) {
-                            StorageValueT::U32(value) => append_constant_for_datatype!(U32, value),
-                            StorageValueT::U64(value) => append_constant_for_datatype!(U64, value),
-                            StorageValueT::I64(value) => append_constant_for_datatype!(I64, value),
-                            StorageValueT::Float(value) => {
-                                append_constant_for_datatype!(Float, value)
-                            }
-                            StorageValueT::Double(value) => {
-                                append_constant_for_datatype!(Double, value)
-                            }
-                        }
-                    }
-                }
-            }
-
-            if gap_index < instructions.len() - 1 {
-                base_indices.push(column_scans.len());
-                let src_type = trie_scan.get_types()[gap_index];
-                let dst_type = target_types[gap_index];
-
-                unsafe {
-                    let base_scan = &*trie_scan.get_scan(gap_index).unwrap().get();
-
-                    macro_rules! append_pass_for_datatype {
-                        ($variant:ident) => {{
-                            if let ColumnScanT::$variant(base_scan_cell) = base_scan {
-                                ColumnScanT::$variant(ColumnScanCell::new(
-                                    ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(
-                                        base_scan_cell,
-                                    )),
-                                ))
-                            } else {
-                                panic!("Expected a column scan of type {}", stringify!($variant));
-                            }
-                        }};
-                    }
-
-                    let reference_scan = match trie_scan.get_types()[gap_index] {
-                        StorageTypeName::U32 => append_pass_for_datatype!(U32),
-                        StorageTypeName::U64 => append_pass_for_datatype!(U64),
-                        StorageTypeName::I64 => append_pass_for_datatype!(I64),
-                        StorageTypeName::Float => append_pass_for_datatype!(Float),
-                        StorageTypeName::Double => append_pass_for_datatype!(Double),
-                    };
-
-                    if src_type == dst_type {
-                        column_scans.push(UnsafeCell::new(reference_scan));
-                    } else {
-                        macro_rules! cast_reference_scan {
-                            ($src_name:ident, $dst_name:ident, $src_type:ty, $dst_type:ty) => {{
-                                let reference_scan_typed = if let ColumnScanT::$src_name(scan) =
-                                    reference_scan
-                                {
-                                    scan
-                                } else {
-                                    panic!("Expected a column scan of type {}", stringify!($type));
-                                };
-
-                                let new_scan = ColumnScanT::$dst_name(ColumnScanCell::new(
-                                    ColumnScanEnum::ColumnScanCast(ColumnScanCastEnum::$src_name(
-                                        ColumnScanCast::<$src_type, $dst_type>::new(
-                                            reference_scan_typed,
-                                        ),
-                                    )),
-                                ));
-
-                                column_scans.push(UnsafeCell::new(new_scan));
-                            }};
-                        }
-
-                        generate_cast_statements!(cast_reference_scan; src_type, dst_type);
-                    }
-                }
-            }
+        fn valid(instr: &[AppendInstruction], pos: usize) -> bool {
+            instr.iter().all(|a| {
+                let AppendInstruction::RepeatColumn(e) = a else { return true };
+                *e <= pos
+            })
         }
 
-        Self {
+        debug_assert!(instructions.iter().enumerate().all(|(i, v)| valid(v, i)));
+        debug_assert_eq!(
+            target_types.len(),
+            instructions.iter().map(|i| i.len()).sum::<usize>() + src_arity
+        );
+
+        let mut res = Self {
             trie_scan: Box::new(trie_scan),
             current_layer: None,
             target_types,
-            base_indices,
+            base_indices: Vec::new(),
             base_pointer: 0,
-            column_scans,
+            column_scans: Vec::new(),
+        };
+
+        for (src_index, insert_instructions) in instructions.iter().enumerate() {
+            for instruction in insert_instructions {
+                match instruction {
+                    AppendInstruction::RepeatColumn(repeat_index) => {
+                        res.add_repeat_column(*repeat_index)
+                    }
+                    AppendInstruction::Constant(value) => res.add_constant_column(dict, value),
+                }
+            }
+
+            if src_index < src_arity {
+                res.add_backed_column(src_index);
+            }
+        }
+
+        res
+    }
+
+    fn add_backed_column(&mut self, src_index: usize) {
+        self.base_indices.push(self.column_scans.len());
+        let src_type = self.trie_scan.get_types()[src_index];
+        let dst_type = self.target_types[self.column_scans.len()];
+
+        let base_scan = unsafe { &*self.trie_scan.get_scan(src_index).unwrap().get() };
+
+        macro_rules! append_pass_for_datatype {
+            ($variant:ident) => {{
+                if let ColumnScanT::$variant(base_scan_cell) = base_scan {
+                    ColumnScanT::$variant(ColumnScanCell::new(ColumnScanEnum::ColumnScanPass(
+                        ColumnScanPass::new(base_scan_cell),
+                    )))
+                } else {
+                    panic!("Expected a column scan of type {}", stringify!($variant));
+                }
+            }};
+        }
+
+        let reference_scan = match self.trie_scan.get_types()[src_index] {
+            StorageTypeName::U32 => append_pass_for_datatype!(U32),
+            StorageTypeName::U64 => append_pass_for_datatype!(U64),
+            StorageTypeName::I64 => append_pass_for_datatype!(I64),
+            StorageTypeName::Float => append_pass_for_datatype!(Float),
+            StorageTypeName::Double => append_pass_for_datatype!(Double),
+        };
+
+        if src_type == dst_type {
+            self.column_scans.push(UnsafeCell::new(reference_scan));
+        } else {
+            macro_rules! cast_reference_scan {
+                ($src_name:ident, $dst_name:ident, $src_type:ty, $dst_type:ty) => {{
+                    let reference_scan_typed = if let ColumnScanT::$src_name(scan) = reference_scan
+                    {
+                        scan
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($type));
+                    };
+
+                    let new_scan = ColumnScanT::$dst_name(ColumnScanCell::new(
+                        ColumnScanEnum::ColumnScanCast(ColumnScanCastEnum::$src_name(
+                            ColumnScanCast::<$src_type, $dst_type>::new(reference_scan_typed),
+                        )),
+                    ));
+
+                    self.column_scans.push(UnsafeCell::new(new_scan));
+                }};
+            }
+
+            generate_cast_statements!(cast_reference_scan; src_type, dst_type);
+        }
+    }
+
+    fn add_repeat_column(&mut self, repeat_index: usize) {
+        let referenced_scan = unsafe { &*self.trie_scan.get_scan(repeat_index).unwrap().get() };
+
+        macro_rules! append_repeat_for_datatype {
+            ($variant:ident) => {{
+                if let ColumnScanT::$variant(referenced_scan_cell) = referenced_scan {
+                    self.column_scans
+                        .push(UnsafeCell::new(ColumnScanT::$variant(ColumnScanCell::new(
+                            ColumnScanEnum::ColumnScanCopy(ColumnScanCopy::new(
+                                referenced_scan_cell,
+                            )),
+                        ))));
+                }
+            }};
+        }
+
+        match self.trie_scan.get_types()[repeat_index] {
+            StorageTypeName::U32 => append_repeat_for_datatype!(U32),
+            StorageTypeName::U64 => append_repeat_for_datatype!(U64),
+            StorageTypeName::I64 => append_repeat_for_datatype!(I64),
+            StorageTypeName::Float => append_repeat_for_datatype!(Float),
+            StorageTypeName::Double => append_repeat_for_datatype!(Double),
+        }
+    }
+
+    fn add_constant_column(&mut self, dict: &mut Dict, value: &DataValueT) {
+        macro_rules! append_constant_for_datatype {
+            ($variant:ident, $value: expr) => {{
+                self.column_scans
+                    .push(UnsafeCell::new(ColumnScanT::$variant(ColumnScanCell::new(
+                        ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new($value)),
+                    ))));
+            }};
+        }
+
+        match value.to_storage_value(dict) {
+            StorageValueT::U32(value) => append_constant_for_datatype!(U32, value),
+            StorageValueT::U64(value) => append_constant_for_datatype!(U64, value),
+            StorageValueT::I64(value) => append_constant_for_datatype!(I64, value),
+            StorageValueT::Float(value) => {
+                append_constant_for_datatype!(Float, value)
+            }
+            StorageValueT::Double(value) => {
+                append_constant_for_datatype!(Double, value)
+            }
         }
     }
 }
@@ -437,7 +441,7 @@ mod test {
             table_types::trie::{Trie, TrieScanGeneric},
             traits::triescan::{TrieScan, TrieScanEnum},
         },
-        util::make_column_with_intervals_t,
+        util::{make_column_with_intervals_t, test_util::make_column_with_intervals_int_t},
     };
 
     fn scan_next(int_scan: &mut TrieScanAppend) -> Option<u64> {
@@ -454,6 +458,37 @@ mod test {
         } else {
             panic!("type should be u64");
         }
+    }
+
+    #[test]
+    fn test_constant_types() {
+        let columns_x = make_column_with_intervals_int_t(&[0, 3, 43], &[0]);
+        let trie = Trie::new(vec![columns_x]);
+
+        let trie_generic_scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+
+        let mut dict = Dict::default();
+
+        let mut trie_append_scan = TrieScanAppend::new(
+            &mut dict,
+            trie_generic_scan,
+            &[
+                vec![AppendInstruction::Constant(DataValueT::String(
+                    "Hello".into(),
+                ))],
+                vec![],
+            ],
+            vec![StorageTypeName::U64, StorageTypeName::I64],
+        );
+
+        trie_append_scan.down();
+        let column_scan = trie_append_scan.current_scan().unwrap();
+        let ColumnScanT::U64(_) = column_scan else { panic!("wrong column type"); };
+        column_scan.next().unwrap();
+
+        trie_append_scan.down();
+        let column_scan = trie_append_scan.current_scan().unwrap();
+        let ColumnScanT::I64(_) = column_scan else { panic!("wrong column type"); };
     }
 
     #[test]

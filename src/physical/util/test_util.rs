@@ -36,6 +36,14 @@ pub fn make_column_with_intervals_t<'a>(
     ColumnWithIntervalsT::U64(make_column_with_intervals(values, ints))
 }
 
+/// Constructs ColumnWithIntervalsT (of I64 type) from Slice
+pub fn make_column_with_intervals_int_t<'a>(
+    values: &'a [i64],
+    ints: &'a [usize],
+) -> ColumnWithIntervalsT {
+    ColumnWithIntervalsT::I64(make_column_with_intervals(values, ints))
+}
+
 /// Helper function which, given a slice of sorted values,
 /// returns a slice of sorted distinct values
 fn make_distinct<T>(values: &mut [T])
