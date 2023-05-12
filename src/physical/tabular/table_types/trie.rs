@@ -446,7 +446,7 @@ impl Table for Trie {
 
         for row in rows {
             for (i, element) in row.iter().enumerate() {
-                cols[i].push(element);
+                cols[i].push(*element);
             }
         }
 
