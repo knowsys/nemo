@@ -25,54 +25,18 @@ pub enum StorageValueT {
 }
 
 impl StorageValueT {
-    /// Returns either [`Option<u32>`], answering whether the [`StorageValueT`] is of this datatype
-    pub fn get_u32(&self) -> Option<u32> {
-        match *self {
-            StorageValueT::U32(val) => Some(val),
-            _ => None,
-        }
-    }
-
-    /// Returns either [`Option<u64>`], answering whether the [`StorageValueT`] is of this datatype
-    pub fn get_u64(&self) -> Option<u64> {
-        match *self {
-            StorageValueT::U64(val) => Some(val),
-            _ => None,
-        }
-    }
-
-    /// Wraps contained [i64] value in [Option] if present, else returns [None]
-    pub fn get_i64(&self) -> Option<i64> {
-        match *self {
-            StorageValueT::I64(val) => Some(val),
-            _ => None,
-        }
-    }
-
-    /// Returns either [`Option<Float>`], answering whether [`StorageValueT`] is of this datatype
-    pub fn get_float(&self) -> Option<Float> {
-        match *self {
-            StorageValueT::Float(val) => Some(val),
-            _ => None,
-        }
-    }
-
-    /// Returns either [`Option<Double>`], answering whether the [`StorageValueT`] is of this datatype
-    pub fn get_double(&self) -> Option<Double> {
-        match *self {
-            StorageValueT::Double(val) => Some(val),
-            _ => None,
-        }
-    }
-
     /// Compares its value with another given [`StorageValueT`]
     pub fn compare(&self, other: &Self) -> Option<Ordering> {
         match self {
-            StorageValueT::U32(val) => other.get_u32().map(|otherval| val.cmp(&otherval)),
-            StorageValueT::U64(val) => other.get_u64().map(|otherval| val.cmp(&otherval)),
-            StorageValueT::I64(val) => other.get_i64().map(|otherval| val.cmp(&otherval)),
-            StorageValueT::Float(val) => other.get_float().map(|otherval| val.cmp(&otherval)),
-            StorageValueT::Double(val) => other.get_double().map(|otherval| val.cmp(&otherval)),
+            StorageValueT::U32(val) => (*other).try_into().map(|otherval| val.cmp(&otherval)).ok(),
+            StorageValueT::U64(val) => (*other).try_into().map(|otherval| val.cmp(&otherval)).ok(),
+            StorageValueT::I64(val) => (*other).try_into().map(|otherval| val.cmp(&otherval)).ok(),
+            StorageValueT::Float(val) => {
+                (*other).try_into().map(|otherval| val.cmp(&otherval)).ok()
+            }
+            StorageValueT::Double(val) => {
+                (*other).try_into().map(|otherval| val.cmp(&otherval)).ok()
+            }
         }
     }
 
@@ -87,6 +51,27 @@ impl StorageValueT {
         }
     }
 }
+
+macro_rules! storage_value_try_into {
+    ($variant:ident => $dst:ty) => {
+        impl TryFrom<StorageValueT> for $dst {
+            type Error = ();
+
+            fn try_from(value: StorageValueT) -> Result<Self, Self::Error> {
+                match value {
+                    StorageValueT::$variant(val) => Ok(val),
+                    _ => Err(()),
+                }
+            }
+        }
+    };
+}
+
+storage_value_try_into!(U32 => u32);
+storage_value_try_into!(U64 => u64);
+storage_value_try_into!(I64 => i64);
+storage_value_try_into!(Float => Float);
+storage_value_try_into!(Double => Double);
 
 impl std::fmt::Display for StorageValueT {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -164,27 +149,27 @@ impl VecT {
 
     /// Inserts the Value to the corresponding Vector if the datatypes are compatible
     /// Note that it is not checked if the [StorageValueT] has the right enum-variant
-    pub(crate) fn push(&mut self, value: &StorageValueT) {
+    pub(crate) fn push(&mut self, value: StorageValueT) {
         match self {
             VecT::U32(vec) => {
-                vec.push(value.get_u32().expect(
+                vec.push(value.try_into().expect(
                     "expecting VecT::U32 and StorageValueT::U32, but StorageValueT does not match",
                 ))
             }
             VecT::U64(vec) => {
-                vec.push(value.get_u64().expect(
+                vec.push(value.try_into().expect(
                     "expecting VecT::U64 and StorageValueT::U64, but StorageValueT does not match",
                 ))
             }
             VecT::I64(vec) => {
-                vec.push(value.get_i64().expect(
+                vec.push(value.try_into().expect(
                     "expecting VecT::I64 and StorageValueT::I64, but StorageValueT does not match",
                 ))
             }
-            VecT::Float(vec) => vec.push(value.get_float().expect(
+            VecT::Float(vec) => vec.push(value.try_into().expect(
                 "expecting VecT::Float and StorageValueT::Float, but StorageValueT does not match",
             )),
-            VecT::Double(vec) => vec.push(value.get_double().expect(
+            VecT::Double(vec) => vec.push(value.try_into().expect(
                 "expecting VecT::Double and StorageValueT::Double, but StorageValueT does not match",
             )),
         };
