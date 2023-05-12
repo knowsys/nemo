@@ -27,26 +27,32 @@ impl ValueSerializer<'_> {
                     .entry(constant as usize)
                     .unwrap_or_else(|| format!("<__Null#{constant}>"))
             }
+            DataTypeName::I64 => match value {
+                StorageValueT::I64(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distinguish them?
+                _ => unreachable!(
+                    "DataType and Storage Type are incompatible. This should never happen!"
+                ),
+            },
             DataTypeName::U64 => match value {
-                StorageValueT::U64(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
+                StorageValueT::U64(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),
             },
             DataTypeName::U32 => match value {
-                StorageValueT::U32(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
+                StorageValueT::U32(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),
             },
             DataTypeName::Float => match value {
-                StorageValueT::Float(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
+                StorageValueT::Float(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),
             },
             DataTypeName::Double => match value {
-                StorageValueT::Double(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distiguish them?
+                StorageValueT::Double(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),

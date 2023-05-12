@@ -163,19 +163,19 @@ impl RunLengthEncodable for i64 {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 /// Step type for small unsigned types like u8
-pub struct SmallUintStep(i8);
+pub struct SmallIntStep(i8);
 
-impl ByteSized for SmallUintStep {
+impl ByteSized for SmallIntStep {
     fn size_bytes(&self) -> ByteSize {
-        bytesize::ByteSize::b(std::mem::size_of::<SmallUintStep>() as u64)
+        bytesize::ByteSize::b(std::mem::size_of::<SmallIntStep>() as u64)
     }
 }
 
 impl RunLengthEncodable for u8 {
-    type Step = SmallUintStep;
+    type Step = SmallIntStep;
 
     fn diff_step(prev: Self, curr: Self) -> Option<Self::Step> {
-        Some(SmallUintStep(i8::try_from(curr as i16 - prev as i16).ok()?))
+        Some(SmallIntStep(i8::try_from(curr as i16 - prev as i16).ok()?))
     }
 
     fn get_step_increment(step: Self::Step) -> Option<Self> {
@@ -184,6 +184,22 @@ impl RunLengthEncodable for u8 {
 
     fn offset(self, inc: Self::Step, times: usize) -> Self {
         u8::try_from(self as i16 + inc.0 as i16 * times as i16).expect("multiplication overflow")
+    }
+}
+
+impl RunLengthEncodable for i8 {
+    type Step = SmallIntStep;
+
+    fn diff_step(prev: Self, curr: Self) -> Option<Self::Step> {
+        Some(SmallIntStep(curr.checked_sub(prev)?))
+    }
+
+    fn get_step_increment(step: Self::Step) -> Option<Self> {
+        Some(step.0)
+    }
+
+    fn offset(self, inc: Self::Step, times: usize) -> Self {
+        self + inc.0 * times as i8
     }
 }
 

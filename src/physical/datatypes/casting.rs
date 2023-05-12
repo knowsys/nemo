@@ -299,7 +299,7 @@ impl PartialOrd for StorageTypeName {
             Self::I64 => match other {
                 Self::U32 => Some(Ordering::Greater),
                 Self::U64 => None,
-                Self::I64 => None,
+                Self::I64 => Some(Ordering::Equal),
                 Self::Float => None,
                 Self::Double => None,
             },
@@ -328,6 +328,7 @@ impl PartialOrd for DataTypeName {
                 Self::String => None, // TODO: should be: Some(Ordering::Less); needs changes on trie level...
                 Self::U32 => Some(Ordering::Equal),
                 Self::U64 => Some(Ordering::Less),
+                Self::I64 => Some(Ordering::Less),
                 Self::Float => None,
                 Self::Double => None,
             },
@@ -335,6 +336,15 @@ impl PartialOrd for DataTypeName {
                 Self::String => None, // TODO: should be: Some(Ordering::Less); needs changes on trie level...
                 Self::U32 => Some(Ordering::Greater),
                 Self::U64 => Some(Ordering::Equal),
+                Self::I64 => None,
+                Self::Float => None,
+                Self::Double => None,
+            },
+            Self::I64 => match other {
+                Self::String => None, // TODO: should be: Some(Ordering::Less); needs changes on trie level...
+                Self::U32 => Some(Ordering::Greater),
+                Self::I64 => Some(Ordering::Equal),
+                Self::U64 => None,
                 Self::Float => None,
                 Self::Double => None,
             },

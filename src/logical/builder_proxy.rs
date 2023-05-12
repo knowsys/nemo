@@ -70,7 +70,7 @@ impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalAnyColumnBuilderProxy<
 /// LogicalBuilderProxy to add Integer
 #[derive(Debug)]
 pub struct LogicalIntegerColumnBuilderProxy<'b> {
-    physical: &'b mut PhysicalGenericColumnBuilderProxy<u64>,
+    physical: &'b mut PhysicalGenericColumnBuilderProxy<i64>,
 }
 
 impl ColumnBuilderProxy<String> for LogicalIntegerColumnBuilderProxy<'_> {
@@ -78,14 +78,14 @@ impl ColumnBuilderProxy<String> for LogicalIntegerColumnBuilderProxy<'_> {
 
     fn add(&mut self, input: String) -> Result<(), Error> {
         self.commit();
-        self.physical.add(input.parse::<u64>()?)
+        self.physical.add(input.parse::<i64>()?)
     }
 }
 
 impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalIntegerColumnBuilderProxy<'b> {
     fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
         match physical_builder_proxy {
-            PhysicalBuilderProxyEnum::U64(physical) => Self { physical },
+            PhysicalBuilderProxyEnum::I64(physical) => Self { physical },
             _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch.")
         }
     }

@@ -191,6 +191,7 @@ Boston;United States;4628910
             .into_iter()
             .map(|bp| match bp {
                 PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::I64(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
@@ -273,7 +274,7 @@ The next column is empty;;789
         let mut builder = vec![
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-            PhysicalBuilderProxyEnum::U64(Default::default()),
+            PhysicalBuilderProxyEnum::I64(Default::default()),
         ];
         let result = csvreader.read_into_builder_proxies_with_reader(&mut builder, &mut rdr);
         assert!(result.is_ok());
@@ -282,6 +283,7 @@ The next column is empty;;789
             .into_iter()
             .map(|bp| match bp {
                 PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::I64(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
@@ -343,10 +345,10 @@ node03;123;123;13;55;123;invalid
         );
         let mut builder = vec![
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-            PhysicalBuilderProxyEnum::U64(Default::default()),
+            PhysicalBuilderProxyEnum::I64(Default::default()),
             PhysicalBuilderProxyEnum::Double(Default::default()),
             PhysicalBuilderProxyEnum::Double(Default::default()),
-            PhysicalBuilderProxyEnum::U64(Default::default()),
+            PhysicalBuilderProxyEnum::I64(Default::default()),
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
         ];
         let result = csvreader.read_into_builder_proxies_with_reader(&mut builder, &mut rdr);
@@ -355,6 +357,7 @@ node03;123;123;13;55;123;invalid
             .into_iter()
             .map(|bp| match bp {
                 PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::I64(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
@@ -371,7 +374,7 @@ node03;123;123;13;55;123;invalid
 
     #[quickcheck]
     #[cfg_attr(miri, ignore)]
-    fn csv_quickchecked(u64_vec: Vec<u64>, double_vec: Vec<f64>, float_vec: Vec<f32>) -> bool {
+    fn csv_quickchecked(mut i64_vec: Vec<i64>, double_vec: Vec<f64>, float_vec: Vec<f32>) -> bool {
         let mut double_vec = double_vec
             .iter()
             .filter(|val| !val.is_nan())
@@ -382,16 +385,15 @@ node03;123;123;13;55;123;invalid
             .filter(|val| !val.is_nan())
             .copied()
             .collect::<Vec<_>>();
-        let mut u64_vec = u64_vec;
-        let len = double_vec.len().min(float_vec.len().min(u64_vec.len()));
+        let len = double_vec.len().min(float_vec.len().min(i64_vec.len()));
         double_vec.truncate(len);
         float_vec.truncate(len);
-        u64_vec.truncate(len);
+        i64_vec.truncate(len);
         let mut csv = String::new();
         for i in 0..len {
             csv = format!(
                 "{}\n{},{},{},{}",
-                csv, i, double_vec[i], u64_vec[i], float_vec[i]
+                csv, i, double_vec[i], i64_vec[i], float_vec[i]
             );
         }
 
@@ -409,9 +411,9 @@ node03;123;123;13;55;123;invalid
             ],
         );
         let mut builder = vec![
-            PhysicalBuilderProxyEnum::U64(Default::default()),
+            PhysicalBuilderProxyEnum::I64(Default::default()),
             PhysicalBuilderProxyEnum::Double(Default::default()),
-            PhysicalBuilderProxyEnum::U64(Default::default()),
+            PhysicalBuilderProxyEnum::I64(Default::default()),
             PhysicalBuilderProxyEnum::Double(Default::default()),
         ];
 
@@ -421,6 +423,7 @@ node03;123;123;13;55;123;invalid
             .into_iter()
             .map(|bp| match bp {
                 PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+                PhysicalBuilderProxyEnum::I64(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
                 PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),

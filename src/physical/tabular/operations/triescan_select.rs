@@ -128,12 +128,10 @@ impl<'a> TrieScanSelectEqual<'a> {
 }
 
 impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
-    #[allow(clippy::unnecessary_lazy_evaluations)] // not actually
-                                                   // unnecessary, as the subtraction might underflow
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
 
-        self.current_layer = self.current_layer.and_then(|index| index.checked_sub(1));
+        self.current_layer = self.current_layer.unwrap().checked_sub(1);
 
         self.base_trie.up();
     }
@@ -299,12 +297,10 @@ impl<'a> TrieScanSelectValue<'a> {
 }
 
 impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
-    #[allow(clippy::unnecessary_lazy_evaluations)] // not actually
-                                                   // unnecessary, as the subtraction might underflow
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
 
-        self.current_layer = self.current_layer.and_then(|index| index.checked_sub(1));
+        self.current_layer = self.current_layer.unwrap().checked_sub(1);
 
         self.base_trie.up();
     }

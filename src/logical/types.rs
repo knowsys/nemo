@@ -75,7 +75,7 @@ impl From<LogicalTypeEnum> for DataTypeName {
     fn from(source: LogicalTypeEnum) -> Self {
         match source {
             LogicalTypeEnum::Any => Self::String,
-            LogicalTypeEnum::Integer => Self::U64,
+            LogicalTypeEnum::Integer => Self::I64,
             LogicalTypeEnum::Float64 => Self::Double,
         }
     }
@@ -129,14 +129,12 @@ impl LogicalTypeEnum {
                 }
             }
             Self::Integer => match gt {
-                Term::NumericLiteral(NumericLiteral::Integer(i)) => {
-                    DataValueT::U64(i.try_into().unwrap())
-                }
+                Term::NumericLiteral(NumericLiteral::Integer(i)) => DataValueT::I64(i),
                 Term::RdfLiteral(RdfLiteral::DatatypeValue {
                     ref value,
                     ref datatype,
                 }) => match datatype.as_str() {
-                    XSD_INTEGER => DataValueT::U64(
+                    XSD_INTEGER => DataValueT::I64(
                         value
                             .parse()
                             .map_err(|_err| TypeError::InvalidRuleTermConversion(gt, *self))?,

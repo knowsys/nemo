@@ -17,6 +17,8 @@ pub enum DataValueT {
     U32(u32),
     /// Case u64
     U64(u64),
+    /// Case i64
+    I64(i64),
     /// Case Float
     Float(Float),
     /// Case Double
@@ -30,6 +32,7 @@ impl DataValueT {
             Self::String(_) => DataTypeName::String,
             Self::U32(_) => DataTypeName::U32,
             Self::U64(_) => DataTypeName::U64,
+            Self::I64(_) => DataTypeName::I64,
             Self::Float(_) => DataTypeName::Float,
             Self::Double(_) => DataTypeName::Double,
         }
@@ -41,6 +44,7 @@ impl DataValueT {
             Self::String(val) => StorageValueT::U64(dict.add(val.clone()).try_into().unwrap()), // dictionary indices
             Self::U32(val) => StorageValueT::U32(*val),
             Self::U64(val) => StorageValueT::U64(*val),
+            Self::I64(val) => StorageValueT::I64(*val),
             Self::Float(val) => StorageValueT::Float(*val),
             Self::Double(val) => StorageValueT::Double(*val),
         }
@@ -53,6 +57,7 @@ impl std::fmt::Display for DataValueT {
             Self::String(val) => write!(f, "{val}"),
             Self::U32(val) => write!(f, "{val}"),
             Self::U64(val) => write!(f, "{val}"),
+            Self::I64(val) => write!(f, "{val}"),
             Self::Float(val) => write!(f, "{val}"),
             Self::Double(val) => write!(f, "{val}"),
         }
