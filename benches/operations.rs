@@ -42,6 +42,7 @@ fn load_trie(
                     DataTypeName::String => PhysicalBuilderProxyEnum::String(
                         PhysicalStringColumnBuilderProxy::new(dict),
                     ),
+                    DataTypeName::I64 => PhysicalBuilderProxyEnum::I64(Default::default()),
                     DataTypeName::U64 => PhysicalBuilderProxyEnum::U64(Default::default()),
                     DataTypeName::U32 => PhysicalBuilderProxyEnum::U32(Default::default()),
                     DataTypeName::Float => PhysicalBuilderProxyEnum::Float(Default::default()),
@@ -58,6 +59,7 @@ fn load_trie(
                 .into_iter()
                 .map(|bp| match bp {
                     PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+                    PhysicalBuilderProxyEnum::I64(bp) => bp.finalize(),
                     PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
                     PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
                     PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),

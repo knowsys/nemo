@@ -103,6 +103,7 @@ pub struct PhysicalGenericColumnBuilderProxy<T> {
 }
 
 physical_generic_trait_impl!(u64, VecT::U64);
+physical_generic_trait_impl!(i64, VecT::I64);
 physical_generic_trait_impl!(u32, VecT::U32);
 physical_generic_trait_impl!(Float, VecT::Float);
 physical_generic_trait_impl!(Double, VecT::Double);
@@ -112,6 +113,8 @@ physical_generic_trait_impl!(Double, VecT::Double);
 pub enum PhysicalBuilderProxyEnum<'a> {
     /// Proxy for String Type
     String(PhysicalStringColumnBuilderProxy<'a>),
+    /// Proxy for I64 Type
+    I64(PhysicalGenericColumnBuilderProxy<i64>),
     /// Proxy for U64 Type
     U64(PhysicalGenericColumnBuilderProxy<u64>),
     /// Proxy for U32 Type
@@ -127,6 +130,7 @@ impl PhysicalBuilderProxyEnum<'_> {
     pub fn finalize(self) -> VecT {
         match self {
             PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+            PhysicalBuilderProxyEnum::I64(bp) => bp.finalize(),
             PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
             PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
             PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),

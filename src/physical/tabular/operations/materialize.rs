@@ -37,6 +37,8 @@ pub fn materialize_inner(
     let mut data_column_builders = Vec::<ColumnBuilderAdaptiveT>::new();
     let mut intervals_column_builders = Vec::<ColumnBuilderAdaptive<usize>>::new();
 
+    log::trace!("Column types: {:?}", column_types);
+
     for column_type in &column_types {
         intervals_column_builders.push(ColumnBuilderAdaptive::default());
 
@@ -118,6 +120,7 @@ pub fn materialize_inner(
                 current_num_elements[current_layer] += 1;
 
                 if is_picked {
+                    log::trace!("add [layer {current_layer}] <- {val} {trie_scan:?}");
                     data_column_builders[current_layer].add(val);
                 }
             }

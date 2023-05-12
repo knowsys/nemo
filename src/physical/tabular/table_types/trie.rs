@@ -323,8 +323,8 @@ impl Table for Trie {
             return Self::new(
                 cols
                     .into_iter()
-                    .map(|_| {
-                        let empty_data_col = ColumnBuilderAdaptiveT::new(StorageTypeName::U64, Default::default(), Default::default());
+                    .map(|v| {
+                        let empty_data_col = ColumnBuilderAdaptiveT::new(v.get_type(), Default::default(), Default::default());
                         let empty_interval_col = ColumnBuilderAdaptive::<usize>::default();
                         build_interval_column!(empty_data_col, empty_interval_col; U32; U64; I64; Float; Double)
                     })
@@ -481,6 +481,7 @@ impl<'a> TrieScanGeneric<'a> {
     /// Construct a new trie iterator but converts each column to the given types.
     pub fn new_cast(trie: &'a Trie, column_types: Vec<StorageTypeName>) -> Self {
         debug_assert!(trie.get_types().len() == column_types.len());
+        log::trace!("TrieScanGeneric: casting to {:?}", column_types);
 
         let mut layers = Vec::<UnsafeCell<ColumnScanT<'a>>>::new();
 

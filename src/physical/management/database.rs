@@ -120,6 +120,7 @@ impl TableStorage {
                             DataTypeName::String => PhysicalBuilderProxyEnum::String(
                                 PhysicalStringColumnBuilderProxy::new(dict),
                             ),
+                            DataTypeName::I64 => PhysicalBuilderProxyEnum::I64(Default::default()),
                             DataTypeName::U64 => PhysicalBuilderProxyEnum::U64(Default::default()),
                             DataTypeName::U32 => PhysicalBuilderProxyEnum::U32(Default::default()),
                             DataTypeName::Float => {
