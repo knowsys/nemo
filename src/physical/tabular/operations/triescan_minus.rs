@@ -3,7 +3,7 @@ use crate::physical::{
         operations::{ColumnScanFollow, ColumnScanMinus, ColumnScanSubtract},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::StorageTypeName,
+    datatypes::{Double, Float, StorageTypeName},
     tabular::traits::triescan::{TrieScan, TrieScanEnum},
     util::mapping::permutation::Permutation,
 };
@@ -102,47 +102,65 @@ impl<'a> TrieScanSubtract<'a> {
         let mut column_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity_main);
 
         for layer in 0..arity_main {
-            if let ColumnScanT::U64(left_scan_enum) =
-                unsafe { &*trie_main.get_scan(layer).unwrap().get() }
-            {
-                let mut scans_follower = Vec::<Option<&ColumnScanCell<'a, u64>>>::new();
+            macro_rules! subtract_for_datatype {
+                ($variant:ident, $type:ty) => {{
+                    if let ColumnScanT::$variant(left_scan_enum) =
+                        unsafe { &*trie_main.get_scan(layer).unwrap().get() }
+                    {
+                        let mut scans_follower = Vec::<Option<&ColumnScanCell<'a, $type>>>::new();
 
-                let mut subtract_indices = Vec::new();
-                let mut follow_indices = Vec::new();
+                        let mut subtract_indices = Vec::new();
+                        let mut follow_indices = Vec::new();
 
-                for (subtract_index, (trie_subtract, info)) in
-                    tries_subtract.iter().zip(infos.iter()).enumerate()
-                {
-                    let used_layer = info.used_layers.iter().position(|&l| l == layer);
-                    let is_last = layer == last_used_layers[subtract_index];
-
-                    if let Some(used_layer) = used_layer {
-                        if let ColumnScanT::U64(subtract_scan_enum) =
-                            unsafe { &*trie_subtract.get_scan(used_layer).unwrap().get() }
+                        for (subtract_index, (trie_subtract, info)) in
+                            tries_subtract.iter().zip(infos.iter()).enumerate()
                         {
-                            scans_follower.push(Some(subtract_scan_enum));
+                            let used_layer = info.used_layers.iter().position(|&l| l == layer);
+                            let is_last = layer == last_used_layers[subtract_index];
+
+                            if let Some(used_layer) = used_layer {
+                                if let ColumnScanT::$variant(subtract_scan_enum) =
+                                    unsafe { &*trie_subtract.get_scan(used_layer).unwrap().get() }
+                                {
+                                    scans_follower.push(Some(subtract_scan_enum));
+                                } else {
+                                    panic!("Expected a column scan of type {}", stringify!($type));
+                                }
+
+                                if is_last {
+                                    subtract_indices.push(subtract_index);
+                                } else {
+                                    follow_indices.push(subtract_index);
+                                }
+                            } else {
+                                scans_follower.push(None);
+                            }
                         }
 
-                        if is_last {
-                            subtract_indices.push(subtract_index);
-                        } else {
-                            follow_indices.push(subtract_index);
-                        }
+                        let new_scan = ColumnScanEnum::ColumnScanSubtract(ColumnScanSubtract::new(
+                            left_scan_enum,
+                            scans_follower,
+                            subtract_indices,
+                            follow_indices,
+                        ));
+
+                        column_scans.push(UnsafeCell::new(ColumnScanT::$variant(
+                            ColumnScanCell::new(new_scan),
+                        )));
                     } else {
-                        scans_follower.push(None);
+                        panic!("Expected a column scan of type {}", stringify!($type));
                     }
-                }
+                }};
+            }
 
-                let new_scan = ColumnScanEnum::ColumnScanSubtract(ColumnScanSubtract::new(
-                    left_scan_enum,
-                    scans_follower,
-                    subtract_indices,
-                    follow_indices,
-                ));
+            let output_type = trie_main.get_types()[layer];
 
-                column_scans.push(UnsafeCell::new(ColumnScanT::U64(ColumnScanCell::new(
-                    new_scan,
-                ))));
+            match output_type {
+                StorageTypeName::U32 => subtract_for_datatype!(U32, u32),
+                StorageTypeName::U64 => subtract_for_datatype!(U64, u64),
+                StorageTypeName::I64 => subtract_for_datatype!(I64, i64),
+                StorageTypeName::Float => subtract_for_datatype!(Float, Float),
+                StorageTypeName::Double => subtract_for_datatype!(Double, Double),
             }
         }
 
