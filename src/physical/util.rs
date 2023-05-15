@@ -1,7 +1,6 @@
 //! This module collects miscellaneous functionality.
 
 pub mod interval;
-pub mod labeled_graph;
 pub mod mapping;
 
 /// A macro that generates forwarding macros to dispatch along

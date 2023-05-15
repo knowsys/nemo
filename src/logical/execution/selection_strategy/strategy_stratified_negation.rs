@@ -4,12 +4,10 @@ use std::collections::HashMap;
 
 use petgraph::Directed;
 
-use crate::{
-    logical::{
-        model::{Identifier, Rule},
-        program_analysis::analysis::RuleAnalysis,
-    },
-    physical::util::labeled_graph::LabeledGraph,
+use crate::logical::{
+    model::{Identifier, Rule},
+    program_analysis::analysis::RuleAnalysis,
+    util::labeled_graph::LabeledGraph,
 };
 
 use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};

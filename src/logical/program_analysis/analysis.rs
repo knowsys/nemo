@@ -5,8 +5,9 @@ use crate::{
     logical::{
         model::{Atom, FilterOperation, Identifier, Literal, Program, Rule, Term, Variable},
         types::{LogicalTypeEnum, TypeError},
+        util::labeled_graph::LabeledGraph,
     },
-    physical::{management::database::ColumnOrder, util::labeled_graph::LabeledGraph},
+    physical::management::database::ColumnOrder,
 };
 
 use super::{
