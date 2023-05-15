@@ -29,7 +29,7 @@ pub struct TrieScanPrune<'a> {
 /// (at least indirectly) call `up` and `down` on the input trie.
 ///
 /// `Rc<UnsafeCell<_>>>` is required here, because we cannot guarantee that the trie scan exists longer than the individual output columns.
-/// The overhead after initialization should be negligible and the same a single pointer indirection.
+/// The overhead after initialization should be negligible and the same as a single pointer indirection.
 pub type SharedTrieScanPruneState<'a> = Rc<UnsafeCell<TrieScanPruneState<'a>>>;
 
 /// State which is shared with the individual output column scans and the trie scan
