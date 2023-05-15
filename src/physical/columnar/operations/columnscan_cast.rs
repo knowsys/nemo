@@ -13,7 +13,7 @@ use std::{fmt::Debug, marker::PhantomData, ops::Range};
 ///
 /// Values of the referenced sub scan that are not representable in the target type (either because they are
 /// to small or to large) will be ignored and no error is emitted.
-/// This behaviour is useful when implementing data base operations
+/// This behavior is useful when implementing data base operations
 /// between columns of different (but compatible in the above sense) types.
 /// E.g. performing a join of u32 columns with u64 columns.
 /// Since no non-u32 value from the u64 column can appear in u32 column they can be ignored.
@@ -49,7 +49,7 @@ where
     fn handle_error(&mut self, error: ImplicitCastError) -> Option<ToType> {
         match error {
             ImplicitCastError::Overflow => {
-                // In this case the next value is larger then the largest value reresentable in the target type
+                // In this case the next value is larger then the largest value representable in the target type
                 // Hence, we move the reference scan to the end and return None
 
                 self.reference_scan.seek(FromType::max_value());
@@ -58,13 +58,13 @@ where
                 None
             }
             ImplicitCastError::Underflow => {
-                // In this case the next value is smaller then the smallest value reresentable in the target type
+                // In this case the next value is smaller then the smallest value representable in the target type
                 // Hence, we move the reference scan to the first value that is representable in the target type
 
                 self.seek(ToType::min_value())
             }
             ImplicitCastError::NonCastable => {
-                panic!("Trying to implicitlly cast incompatble values.")
+                panic!("Trying to implicitly cast incompatible values.")
             }
         }
     }
@@ -146,8 +146,7 @@ where
 #[macro_export]
 macro_rules! generate_castable_forwarder {
     ($name:ident) => {
-        $crate::generate_forwarder!($name;
-                                    U32, U64);
+        $crate::generate_forwarder!($name; U32, U64, I64);
     }
 }
 
@@ -162,6 +161,8 @@ where
     U32(ColumnScanCast<'a, u32, ToType>),
     /// Cast from u64 to ToType
     U64(ColumnScanCast<'a, u64, ToType>),
+    /// Cast from i64 to ToType
+    I64(ColumnScanCast<'a, i64, ToType>),
 }
 
 // Generate a macro forward_to_columnscan_cell!, which takes a [`ColumnScanT`] and a function as arguments
@@ -234,58 +235,55 @@ mod test {
         assert_eq!(cast_scan.current(), None);
     }
 
-    #[cfg(signed)]
     #[test]
     fn test_flow_next() {
-        let ref_col = ColumnVector::new(vec![-1000i16, -270, -100, 0, 5, 100, 1000, 1200]);
+        let ref_col = ColumnVector::new(vec![-1000i64, -270, -100, 0, 5, 100, 1000, 1200]);
         let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
 
-        let mut cast_scan = ColumnScanCast::<i16, i8>::new(ref_col_iter);
+        let mut cast_scan = ColumnScanCast::<i64, i8>::new(ref_col_iter);
 
         assert_eq!(cast_scan.current(), None);
-        assert_eq!(cast_scan.next(), Some(-100i8));
-        assert_eq!(cast_scan.current(), Some(-100i8));
-        assert_eq!(cast_scan.next(), Some(0i8));
-        assert_eq!(cast_scan.current(), Some(0i8));
-        assert_eq!(cast_scan.next(), Some(5i8));
-        assert_eq!(cast_scan.current(), Some(5i8));
-        assert_eq!(cast_scan.next(), Some(100i8));
-        assert_eq!(cast_scan.current(), Some(100i8));
+        assert_eq!(cast_scan.next(), Some(-100));
+        assert_eq!(cast_scan.current(), Some(-100));
+        assert_eq!(cast_scan.next(), Some(0));
+        assert_eq!(cast_scan.current(), Some(0));
+        assert_eq!(cast_scan.next(), Some(5));
+        assert_eq!(cast_scan.current(), Some(5));
+        assert_eq!(cast_scan.next(), Some(100));
+        assert_eq!(cast_scan.current(), Some(100));
         assert_eq!(cast_scan.next(), None);
         assert_eq!(cast_scan.current(), None);
     }
 
-    #[cfg(signed)]
     #[test]
     fn test_flow_seek_1() {
-        let ref_col = ColumnVector::new(vec![-1000i16, -270, -100, 0, 5, 100, 1000, 1200]);
+        let ref_col = ColumnVector::new(vec![-1000i64, -270, -100, 0, 5, 100, 1000, 1200]);
         let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
 
-        let mut cast_scan = ColumnScanCast::<i16, i8>::new(ref_col_iter);
+        let mut cast_scan = ColumnScanCast::<i64, i8>::new(ref_col_iter);
 
         assert_eq!(cast_scan.current(), None);
-        assert_eq!(cast_scan.seek(-110i8), Some(-100i8));
-        assert_eq!(cast_scan.current(), Some(-100i8));
-        assert_eq!(cast_scan.seek(100i8), Some(100i8));
-        assert_eq!(cast_scan.current(), Some(100i8));
-        assert_eq!(cast_scan.seek(120i8), None);
+        assert_eq!(cast_scan.seek(-110), Some(-100));
+        assert_eq!(cast_scan.current(), Some(-100));
+        assert_eq!(cast_scan.seek(100), Some(100));
+        assert_eq!(cast_scan.current(), Some(100));
+        assert_eq!(cast_scan.seek(120), None);
         assert_eq!(cast_scan.current(), None);
     }
 
-    #[cfg(signed)]
     #[test]
     fn test_flow_seek_2() {
-        let ref_col = ColumnVector::new(vec![-100i8, 0, 5, 100]);
+        let ref_col = ColumnVector::new(vec![-100, 0, 5, 100]);
         let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
 
-        let mut cast_scan = ColumnScanCast::<i8, i16>::new(ref_col_iter);
+        let mut cast_scan = ColumnScanCast::<i32, i64>::new(ref_col_iter);
 
         assert_eq!(cast_scan.current(), None);
-        assert_eq!(cast_scan.seek(-1000i16), Some(-100i16));
-        assert_eq!(cast_scan.current(), Some(-100i16));
-        assert_eq!(cast_scan.seek(3i16), Some(5i16));
-        assert_eq!(cast_scan.current(), Some(5i16));
-        assert_eq!(cast_scan.seek(300i16), None);
+        assert_eq!(cast_scan.seek(-1000), Some(-100));
+        assert_eq!(cast_scan.current(), Some(-100));
+        assert_eq!(cast_scan.seek(3), Some(5));
+        assert_eq!(cast_scan.current(), Some(5));
+        assert_eq!(cast_scan.seek(300), None);
         assert_eq!(cast_scan.current(), None);
     }
 }

@@ -1,13 +1,16 @@
-use std::fs::File;
+use std::{cell::RefCell, fs::File};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use polars::prelude::{CsvReader, DataFrame, DataType, JoinType, Schema, SerReader};
 
 use nemo::{
-    io::dsv::DSVReader,
-    logical::model::DataSource,
+    io::{dsv::DSVReader, TableReader},
+    logical::{model::DataSource, types::LogicalTypeEnum},
     physical::{
-        datatypes::DataTypeName,
+        builder_proxy::{
+            PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy,
+        },
+        datatypes::{storage_value::VecT, DataTypeName},
         dictionary::PrefixedStringDictionary,
         tabular::{
             operations::{
@@ -20,15 +23,49 @@ use nemo::{
     },
 };
 
-fn load_trie(source: &DataSource, arity: usize, dict: &mut PrefixedStringDictionary) -> Trie {
+// NOTE: See TableStorage::load_from_disk
+fn load_trie(
+    source: &DataSource,
+    arity: usize,
+    dict: &mut RefCell<PrefixedStringDictionary>,
+) -> Trie {
     match source {
         DataSource::DsvFile { file, delimiter } => {
             // Using fallback solution to treat eveything as string for now (storing as u64 internally)
             let datatypeschema =
                 TableSchema::from_vec((0..arity).map(|_| DataTypeName::String).collect());
-            // TODO branch will be reduced to these two lines
-            let csv_reader = DSVReader::dsv(*file.clone(), *delimiter);
-            let col_table = csv_reader.read(&datatypeschema, dict).expect("Should work");
+            let logical_types = (0..arity).map(|_| LogicalTypeEnum::Any).collect();
+
+            let mut builder_proxies: Vec<PhysicalBuilderProxyEnum> = datatypeschema
+                .iter()
+                .map(|data_type| match data_type {
+                    DataTypeName::String => PhysicalBuilderProxyEnum::String(
+                        PhysicalStringColumnBuilderProxy::new(dict),
+                    ),
+                    DataTypeName::I64 => PhysicalBuilderProxyEnum::I64(Default::default()),
+                    DataTypeName::U64 => PhysicalBuilderProxyEnum::U64(Default::default()),
+                    DataTypeName::U32 => PhysicalBuilderProxyEnum::U32(Default::default()),
+                    DataTypeName::Float => PhysicalBuilderProxyEnum::Float(Default::default()),
+                    DataTypeName::Double => PhysicalBuilderProxyEnum::Double(Default::default()),
+                })
+                .collect();
+
+            let csv_reader = DSVReader::dsv(*file.clone(), *delimiter, logical_types);
+            csv_reader
+                .read_into_builder_proxies(&mut builder_proxies)
+                .expect("Should work");
+
+            let col_table: Vec<VecT> = builder_proxies
+                .into_iter()
+                .map(|bp| match bp {
+                    PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
+                    PhysicalBuilderProxyEnum::I64(bp) => bp.finalize(),
+                    PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
+                    PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
+                    PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
+                    PhysicalBuilderProxyEnum::Double(bp) => bp.finalize(),
+                })
+                .collect();
 
             let trie = Trie::from_cols(col_table);
 
@@ -44,7 +81,7 @@ fn load_trie(source: &DataSource, arity: usize, dict: &mut PrefixedStringDiction
 }
 
 pub fn benchmark_join(c: &mut Criterion) {
-    let mut dict = PrefixedStringDictionary::default();
+    let mut dict = RefCell::new(PrefixedStringDictionary::default());
 
     let table_a = DataSource::csv_file("test-files/bench-data/xe.csv").unwrap();
     let table_a_arity = 3;
@@ -131,7 +168,7 @@ pub fn benchmark_join(c: &mut Criterion) {
 }
 
 fn benchmark_project(c: &mut Criterion) {
-    let mut dict = PrefixedStringDictionary::default();
+    let mut dict = RefCell::new(PrefixedStringDictionary::default());
 
     let table_a = DataSource::csv_file("test-files/bench-data/xe.csv").unwrap();
     let table_a_arity = 3;
@@ -209,7 +246,7 @@ fn benchmark_union(c: &mut Criterion) {
     const FILE_NAME: &str = "test-files/bench-data/aux-split/aux";
     const NUM_PARTS: usize = 10;
 
-    let mut dict = PrefixedStringDictionary::default();
+    let mut dict = RefCell::new(PrefixedStringDictionary::default());
 
     let mut tries = Vec::<Trie>::new();
     let mut frames = Vec::<DataFrame>::new();

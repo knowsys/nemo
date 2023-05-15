@@ -162,6 +162,8 @@ pub enum ColumnBuilderAdaptiveT {
     U32(ColumnBuilderAdaptive<u32>),
     /// Case u64
     U64(ColumnBuilderAdaptive<u64>),
+    /// Case i64
+    I64(ColumnBuilderAdaptive<i64>),
     /// Case Float
     Float(ColumnBuilderAdaptive<Float>),
     /// Case Double
@@ -184,6 +186,10 @@ impl ColumnBuilderAdaptiveT {
                 decision_threshold,
                 target_min_length_for_rle_elements,
             )),
+            StorageTypeName::I64 => Self::I64(ColumnBuilderAdaptive::new(
+                decision_threshold,
+                target_min_length_for_rle_elements,
+            )),
             StorageTypeName::Float => Self::Float(ColumnBuilderAdaptive::new(
                 decision_threshold,
                 target_min_length_for_rle_elements,
@@ -202,28 +208,50 @@ impl ColumnBuilderAdaptiveT {
                 if let StorageValueT::U32(v) = value {
                     cb.add(v);
                 } else {
-                    panic!("value does not match AdaptiveColumn type");
+                    panic!(
+                        "value of type {} does not match AdaptiveColumn type U32",
+                        value.get_type()
+                    );
                 }
             }
             Self::U64(cb) => {
                 if let StorageValueT::U64(v) = value {
                     cb.add(v);
                 } else {
-                    panic!("value does not match AdaptiveColumn type");
+                    panic!(
+                        "value of type {} does not match AdaptiveColumn type U64",
+                        value.get_type()
+                    );
+                }
+            }
+            Self::I64(cb) => {
+                if let StorageValueT::I64(v) = value {
+                    cb.add(v);
+                } else {
+                    panic!(
+                        "value of type {} does not match AdaptiveColumn type I64",
+                        value.get_type()
+                    );
                 }
             }
             Self::Float(cb) => {
                 if let StorageValueT::Float(v) = value {
                     cb.add(v);
                 } else {
-                    panic!("value does not match AdaptiveColumn type");
+                    panic!(
+                        "value of type {} does not match AdaptiveColumn type Float",
+                        value.get_type()
+                    );
                 }
             }
             Self::Double(cb) => {
                 if let StorageValueT::Double(v) = value {
                     cb.add(v);
                 } else {
-                    panic!("value does not match AdaptiveColumn type");
+                    panic!(
+                        "value of type {} does not match AdaptiveColumn type Double",
+                        value.get_type()
+                    );
                 }
             }
         }
@@ -234,6 +262,7 @@ impl ColumnBuilderAdaptiveT {
         match self {
             Self::U32(cb) => cb.count(),
             Self::U64(cb) => cb.count(),
+            Self::I64(cb) => cb.count(),
             Self::Float(cb) => cb.count(),
             Self::Double(cb) => cb.count(),
         }

@@ -4,6 +4,11 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use crate::io::parser::ParseError;
+use crate::logical::builder_proxy::{
+    LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxy, LogicalFloat64ColumnBuilderProxy,
+    LogicalIntegerColumnBuilderProxy,
+};
+use crate::physical::builder_proxy::PhysicalBuilderProxyEnum;
 use crate::physical::datatypes::{DataTypeName, DataValueT, Double};
 
 use super::model::{Identifier, NumericLiteral, RdfLiteral, Term};
@@ -70,7 +75,7 @@ impl From<LogicalTypeEnum> for DataTypeName {
     fn from(source: LogicalTypeEnum) -> Self {
         match source {
             LogicalTypeEnum::Any => Self::String,
-            LogicalTypeEnum::Integer => Self::U64,
+            LogicalTypeEnum::Integer => Self::I64,
             LogicalTypeEnum::Float64 => Self::Double,
         }
     }
@@ -124,14 +129,12 @@ impl LogicalTypeEnum {
                 }
             }
             Self::Integer => match gt {
-                Term::NumericLiteral(NumericLiteral::Integer(i)) => {
-                    DataValueT::U64(i.try_into().unwrap())
-                }
+                Term::NumericLiteral(NumericLiteral::Integer(i)) => DataValueT::I64(i),
                 Term::RdfLiteral(RdfLiteral::DatatypeValue {
                     ref value,
                     ref datatype,
                 }) => match datatype.as_str() {
-                    XSD_INTEGER => DataValueT::U64(
+                    XSD_INTEGER => DataValueT::I64(
                         value
                             .parse()
                             .map_err(|_err| TypeError::InvalidRuleTermConversion(gt, *self))?,
@@ -165,9 +168,21 @@ impl LogicalTypeEnum {
     /// Whether this logical type can be used to perform numeric operations.
     pub fn allows_numeric_operations(&self) -> bool {
         match self {
-            LogicalTypeEnum::Any => false,
-            LogicalTypeEnum::Integer => true,
-            LogicalTypeEnum::Float64 => true,
+            Self::Any => false,
+            Self::Integer => true,
+            Self::Float64 => true,
+        }
+    }
+
+    /// Wrap physical builder proxy into logical equivalent
+    pub fn wrap_physical_column_builder<'a: 'b, 'b>(
+        self,
+        physical: &'b mut PhysicalBuilderProxyEnum<'a>,
+    ) -> Box<dyn LogicalColumnBuilderProxy<'a, 'b> + 'b> {
+        match self {
+            Self::Any => Box::new(LogicalAnyColumnBuilderProxy::new(physical)),
+            Self::Integer => Box::new(LogicalIntegerColumnBuilderProxy::new(physical)),
+            Self::Float64 => Box::new(LogicalFloat64ColumnBuilderProxy::new(physical)),
         }
     }
 }

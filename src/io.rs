@@ -2,14 +2,13 @@
 
 use std::io::Write;
 
-pub mod builder_proxy;
 pub mod dsv;
 pub mod output_file_manager;
 pub mod parser;
 
 pub use output_file_manager::OutputFileManager;
 
-use crate::error::Error;
+use crate::{error::Error, physical::builder_proxy::PhysicalBuilderProxyEnum};
 
 /// A general interface for writing records of string values
 pub trait RecordWriter {
@@ -31,4 +30,13 @@ impl<W: Write> RecordWriter for csv::Writer<W> {
         self.write_record(record)?;
         Ok(())
     }
+}
+
+/// A general interface for reading tables from files
+pub trait TableReader: std::fmt::Debug {
+    /// read the table into multiple [`ColumnBuilderProxy`]
+    fn read_into_builder_proxies<'a: 'b, 'b>(
+        &self,
+        builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
+    ) -> Result<(), Error>;
 }

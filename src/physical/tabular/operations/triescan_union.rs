@@ -68,6 +68,7 @@ impl<'a> TrieScanUnion<'a> {
             match column_types[layer_index] {
                 StorageTypeName::U32 => init_scans_for_datatype!(U32, u32),
                 StorageTypeName::U64 => init_scans_for_datatype!(U64, u64),
+                StorageTypeName::I64 => init_scans_for_datatype!(I64, i64),
                 StorageTypeName::Float => init_scans_for_datatype!(Float, Float),
                 StorageTypeName::Double => init_scans_for_datatype!(Double, Double),
             };

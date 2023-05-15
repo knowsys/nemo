@@ -14,6 +14,8 @@ pub enum DataTypeName {
     U32,
     /// Data type [`u64`].
     U64,
+    /// Data type [`i64`]
+    I64,
     /// Data type [`super::float::Float`]
     Float,
     /// Data type [`super::double::Double`]
@@ -27,6 +29,7 @@ impl DataTypeName {
             Self::String => StorageTypeName::U64, // dictionary indices
             Self::U32 => StorageTypeName::U32,
             Self::U64 => StorageTypeName::U64,
+            Self::I64 => StorageTypeName::I64,
             Self::Float => StorageTypeName::Float,
             Self::Double => StorageTypeName::Double,
         }
@@ -39,6 +42,7 @@ impl Display for DataTypeName {
             Self::String => write!(f, "String"),
             Self::U32 => write!(f, "U32"),
             Self::U64 => write!(f, "U64"),
+            Self::I64 => write!(f, "I64"),
             Self::Float => write!(f, "Float"),
             Self::Double => write!(f, "Double"),
         }

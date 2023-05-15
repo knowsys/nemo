@@ -65,6 +65,7 @@ impl<'a> TrieScanSelectEqual<'a> {
             match col_type {
                 StorageTypeName::U32 => init_scans_for_datatype!(U32),
                 StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::I64 => init_scans_for_datatype!(I64),
                 StorageTypeName::Float => init_scans_for_datatype!(Float),
                 StorageTypeName::Double => init_scans_for_datatype!(Double),
             };
@@ -111,6 +112,7 @@ impl<'a> TrieScanSelectEqual<'a> {
                 match column_types[current_member_idx] {
                     StorageTypeName::U32 => init_scans_for_datatype!(U32),
                     StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                    StorageTypeName::I64 => init_scans_for_datatype!(I64),
                     StorageTypeName::Float => init_scans_for_datatype!(Float),
                     StorageTypeName::Double => init_scans_for_datatype!(Double),
                 }
@@ -126,12 +128,10 @@ impl<'a> TrieScanSelectEqual<'a> {
 }
 
 impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
-    #[allow(clippy::unnecessary_lazy_evaluations)] // not actually
-                                                   // unnecessary, as the subtraction might underflow
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
 
-        self.current_layer = self.current_layer.and_then(|index| index.checked_sub(1));
+        self.current_layer = self.current_layer.unwrap().checked_sub(1);
 
         self.base_trie.up();
     }
@@ -217,6 +217,7 @@ impl<'a> TrieScanSelectValue<'a> {
             match col_type {
                 StorageTypeName::U32 => init_scans_for_datatype!(U32),
                 StorageTypeName::U64 => init_scans_for_datatype!(U64),
+                StorageTypeName::I64 => init_scans_for_datatype!(I64),
                 StorageTypeName::Float => init_scans_for_datatype!(Float),
                 StorageTypeName::Double => init_scans_for_datatype!(Double),
             }
@@ -281,6 +282,7 @@ impl<'a> TrieScanSelectValue<'a> {
             match column_types[assignment.column_idx] {
                 StorageTypeName::U32 => init_scans_for_datatype!(U32, u32),
                 StorageTypeName::U64 => init_scans_for_datatype!(U64, u64),
+                StorageTypeName::I64 => init_scans_for_datatype!(I64, i64),
                 StorageTypeName::Float => init_scans_for_datatype!(Float, Float),
                 StorageTypeName::Double => init_scans_for_datatype!(Double, Double),
             }
@@ -295,12 +297,10 @@ impl<'a> TrieScanSelectValue<'a> {
 }
 
 impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
-    #[allow(clippy::unnecessary_lazy_evaluations)] // not actually
-                                                   // unnecessary, as the subtraction might underflow
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
 
-        self.current_layer = self.current_layer.and_then(|index| index.checked_sub(1));
+        self.current_layer = self.current_layer.unwrap().checked_sub(1);
 
         self.base_trie.up();
     }

@@ -37,6 +37,8 @@ pub fn materialize_inner(
     let mut data_column_builders = Vec::<ColumnBuilderAdaptiveT>::new();
     let mut intervals_column_builders = Vec::<ColumnBuilderAdaptive<usize>>::new();
 
+    log::trace!("Column types: {:?}", column_types);
+
     for column_type in &column_types {
         intervals_column_builders.push(ColumnBuilderAdaptive::default());
 
@@ -51,6 +53,7 @@ pub fn materialize_inner(
         match column_type {
             StorageTypeName::U32 => init_builder_for_datatype!(U32),
             StorageTypeName::U64 => init_builder_for_datatype!(U64),
+            StorageTypeName::I64 => init_builder_for_datatype!(I64),
             StorageTypeName::Float => init_builder_for_datatype!(Float),
             StorageTypeName::Double => init_builder_for_datatype!(Double),
         }
@@ -117,6 +120,7 @@ pub fn materialize_inner(
                 current_num_elements[current_layer] += 1;
 
                 if is_picked {
+                    log::trace!("add [layer {current_layer}] <- {val} {trie_scan:?}");
                     data_column_builders[current_layer].add(val);
                 }
             }
@@ -192,6 +196,7 @@ pub fn materialize_inner(
             match column_type {
                 StorageTypeName::U32 => finalize_for_datatype!(U32, u32),
                 StorageTypeName::U64 => finalize_for_datatype!(U64, u64),
+                StorageTypeName::I64 => finalize_for_datatype!(I64, i64),
                 StorageTypeName::Float => finalize_for_datatype!(Float, Float),
                 StorageTypeName::Double => finalize_for_datatype!(Double, Double),
             }
