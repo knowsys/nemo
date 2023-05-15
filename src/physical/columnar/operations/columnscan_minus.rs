@@ -478,7 +478,7 @@ mod test {
     }
 
     #[test]
-    fn test_subtract() {
+    fn subtract() {
         let column_main = ColumnVector::new(vec![1u64, 2, 4, 5, 7, 10, 12, 14, 15]);
         let column_subtract = ColumnVector::new(vec![0u64, 2, 4, 8, 9, 12, 17]);
         let column_follow = ColumnVector::new(vec![0u64, 1, 2, 5, 8, 10, 12, 14]);

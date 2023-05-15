@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::{
     logical::{
         execution::planning::plan_util::{compute_filters, subplan_union_reordered},
-        model::{Atom, Filter, Term, Variable},
+        model::{Atom, Filter, Variable},
         program_analysis::variable_order::VariableOrder,
         table_manager::SubtableExecutionPlan,
         types::LogicalTypeEnum,
@@ -18,41 +18,36 @@ use crate::{
     },
 };
 
-struct AtomInfo {
+/// Bundels information relevant to constructing the negation sub plan of an execution plan
+/// for one atom.
+struct AtomNegationInfo {
+    /// The variable order restricted to the variables that occur in this atom.
     restricted_variable_order: VariableOrder,
+    /// Necessary reordering of the underlying table in order to comply with the above variable order.
     reorder: ColumnOrder,
+    /// [`ProjectReordering`] that encodes how auxillary variables should be projected away when subtracting the contents of this atom.
     projection: ProjectReordering,
+    /// How the contents of the atom will be subtracted from the main body join.
     subtraction: SubtractInfo,
 }
 
-impl AtomInfo {
-    fn new(positive_order: &VariableOrder, atom: &Atom) -> AtomInfo {
+impl AtomNegationInfo {
+    fn new(positive_order: &VariableOrder, atom: &Atom) -> AtomNegationInfo {
+        let atom_variables: Vec<Variable> = atom.variables().cloned().collect();
+
         let mut restricted_variable_order =
             positive_order.restrict_to(&atom.variables().cloned().collect());
 
         let old_variables = restricted_variable_order.len();
         let mut new_variables: usize = 0;
-        for term in atom.terms() {
-            if let Term::Variable(variable) = term {
-                if !restricted_variable_order.contains(variable) {
-                    restricted_variable_order.push(variable.clone());
-                    new_variables += 1;
-                }
+        for variable in &atom_variables {
+            if !restricted_variable_order.contains(variable) {
+                restricted_variable_order.push(variable.clone());
+                new_variables += 1;
             }
         }
 
         let atom_variables_reordered = restricted_variable_order.as_ordered_list();
-        let atom_variables: Vec<Variable> = atom
-            .terms()
-            .iter()
-            .map(|t| {
-                if let Term::Variable(v) = t {
-                    v.clone()
-                } else {
-                    unreachable!("Atom should have been normalized.")
-                }
-            })
-            .collect();
 
         let reorder = ColumnOrder::from_transformation(&atom_variables, &atom_variables_reordered);
         let projection = ProjectReordering::from_vector(
@@ -69,7 +64,7 @@ impl AtomInfo {
 
         let subtraction = SubtractInfo::new(used_variables);
 
-        AtomInfo {
+        AtomNegationInfo {
             restricted_variable_order,
             reorder,
             projection,
@@ -104,7 +99,7 @@ impl NegationGenerator {
             .atoms
             .iter()
             .map(|a| {
-                let info = AtomInfo::new(variable_order_main, a);
+                let info = AtomNegationInfo::new(variable_order_main, a);
                 subtract_infos.push(info.subtraction);
 
                 let node_union = subplan_union_reordered(

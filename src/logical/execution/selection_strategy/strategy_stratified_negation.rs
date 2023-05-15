@@ -128,7 +128,7 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
                 current_stratum: 0,
             })
         } else {
-            Err(SelectionStrategyError::NonStratifiableProgram)
+            Err(SelectionStrategyError::NonStratifiedProgram)
         }
     }
 

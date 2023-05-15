@@ -382,23 +382,17 @@ pub struct Rule {
 }
 
 impl Rule {
-    fn split_literal_vector(literals: Vec<Literal>) -> (Vec<Atom>, Vec<Atom>) {
-        let mut positive = Vec::new();
-        let mut negative = Vec::new();
-
-        for literal in literals {
-            match literal {
-                Literal::Positive(atom) => positive.push(atom),
-                Literal::Negative(atom) => negative.push(atom),
-            }
-        }
-
-        (positive, negative)
-    }
-
     /// Construct a new rule.
     pub fn new(head: Vec<Atom>, body: Vec<Literal>, positive_filters: Vec<Filter>) -> Self {
-        let (positive_body, negative_body) = Self::split_literal_vector(body);
+        let mut positive_body = Vec::new();
+        let mut negative_body = Vec::new();
+
+        for literal in body {
+            match literal {
+                Literal::Positive(atom) => positive_body.push(atom),
+                Literal::Negative(atom) => negative_body.push(atom),
+            }
+        }
 
         Self {
             head,
@@ -529,49 +523,68 @@ impl Rule {
         &mut self.head
     }
 
-    /// Return the body literals of the rule - immutable.
+    /// Return all the atoms occuring in this rule.
+    /// This includes the postive body atoms, the negative body atoms as well as the head atoms.
+    pub fn all_atoms(&self) -> impl Iterator<Item = &Atom> {
+        self.all_body().chain(self.head.iter())
+    }
+
+    /// Return the all the atoms of the rules.
+    /// This does not distinguish between positive and negative atoms.
+    pub fn all_body(&self) -> impl Iterator<Item = &Atom> {
+        self.positive_body.iter().chain(self.negative_body.iter())
+    }
+
+    /// Return the positive body atoms of the rule - immutable.
     #[must_use]
     pub fn positive_body(&self) -> &Vec<Atom> {
         &self.positive_body
     }
 
-    /// Return the body literals of the rule - mutable.
+    /// Return the positive body atoms of the rule - mutable.
     #[must_use]
     pub fn positive_body_mut(&mut self) -> &mut Vec<Atom> {
         &mut self.positive_body
     }
 
-    /// Return the filters of the rule - immutable.
+    /// Return all the filters of the rule.
+    pub fn all_filters(&self) -> impl Iterator<Item = &Filter> {
+        self.positive_filters
+            .iter()
+            .chain(self.negative_filters.iter())
+    }
+
+    /// Return the positive filters of the rule - immutable.
     #[must_use]
     pub fn positive_filters(&self) -> &Vec<Filter> {
         &self.positive_filters
     }
 
-    /// Return the filters of the rule - mutable.
+    /// Return the positive filters of the rule - mutable.
     #[must_use]
     pub fn positive_filters_mut(&mut self) -> &mut Vec<Filter> {
         &mut self.positive_filters
     }
 
-    /// Return the body literals of the rule - immutable.
+    /// Return the negative body atons of the rule - immutable.
     #[must_use]
     pub fn negative_body(&self) -> &Vec<Atom> {
         &self.negative_body
     }
 
-    /// Return the body literals of the rule - mutable.
+    /// Return the negative body atoms of the rule - mutable.
     #[must_use]
     pub fn negative_body_mut(&mut self) -> &mut Vec<Atom> {
         &mut self.negative_body
     }
 
-    /// Return the filters of the rule - immutable.
+    /// Return the negative filters of the rule - immutable.
     #[must_use]
     pub fn negative_filters(&self) -> &Vec<Filter> {
         &self.negative_filters
     }
 
-    /// Return the filters of the rule - mutable.
+    /// Return the negative filters of the rule - mutable.
     #[must_use]
     pub fn negative_filters_mut(&mut self) -> &mut Vec<Filter> {
         &mut self.negative_filters
@@ -696,9 +709,8 @@ impl Program {
             .flat_map(|rule| {
                 rule.head()
                     .iter()
-                    .map(|atom| atom.predicate())
-                    .chain(rule.positive_body().iter().map(|a| a.predicate()))
-                    .chain(rule.negative_body().iter().map(|a| a.predicate()))
+                    .chain(rule.all_body())
+                    .map(|a| a.predicate())
             })
             .chain(self.facts().iter().map(|atom| atom.0.predicate()))
             .collect()

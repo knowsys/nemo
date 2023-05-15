@@ -102,48 +102,47 @@ impl<'a> TrieScanSubtract<'a> {
         let mut column_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity_main);
 
         for layer in 0..arity_main {
-            unsafe {
-                if let ColumnScanT::U64(left_scan_enum) = &*trie_main.get_scan(layer).unwrap().get()
+            if let ColumnScanT::U64(left_scan_enum) =
+                unsafe { &*trie_main.get_scan(layer).unwrap().get() }
+            {
+                let mut scans_follower = Vec::<Option<&ColumnScanCell<'a, u64>>>::new();
+
+                let mut subtract_indices = Vec::new();
+                let mut follow_indices = Vec::new();
+
+                for (subtract_index, (trie_subtract, info)) in
+                    tries_subtract.iter().zip(infos.iter()).enumerate()
                 {
-                    let mut scans_follower = Vec::<Option<&ColumnScanCell<'a, u64>>>::new();
+                    let used_layer = info.used_layers.iter().position(|&l| l == layer);
+                    let is_last = layer == last_used_layers[subtract_index];
 
-                    let mut subtract_indices = Vec::new();
-                    let mut follow_indices = Vec::new();
-
-                    for (subtract_index, (trie_subtract, info)) in
-                        tries_subtract.iter().zip(infos.iter()).enumerate()
-                    {
-                        let used_layer = info.used_layers.iter().position(|&l| l == layer);
-                        let is_last = layer == last_used_layers[subtract_index];
-
-                        if let Some(used_layer) = used_layer {
-                            if let ColumnScanT::U64(subtract_scan_enum) =
-                                &*trie_subtract.get_scan(used_layer).unwrap().get()
-                            {
-                                scans_follower.push(Some(subtract_scan_enum));
-                            }
-
-                            if is_last {
-                                subtract_indices.push(subtract_index);
-                            } else {
-                                follow_indices.push(subtract_index);
-                            }
-                        } else {
-                            scans_follower.push(None);
+                    if let Some(used_layer) = used_layer {
+                        if let ColumnScanT::U64(subtract_scan_enum) =
+                            unsafe { &*trie_subtract.get_scan(used_layer).unwrap().get() }
+                        {
+                            scans_follower.push(Some(subtract_scan_enum));
                         }
+
+                        if is_last {
+                            subtract_indices.push(subtract_index);
+                        } else {
+                            follow_indices.push(subtract_index);
+                        }
+                    } else {
+                        scans_follower.push(None);
                     }
-
-                    let new_scan = ColumnScanEnum::ColumnScanSubtract(ColumnScanSubtract::new(
-                        left_scan_enum,
-                        scans_follower,
-                        subtract_indices,
-                        follow_indices,
-                    ));
-
-                    column_scans.push(UnsafeCell::new(ColumnScanT::U64(ColumnScanCell::new(
-                        new_scan,
-                    ))));
                 }
+
+                let new_scan = ColumnScanEnum::ColumnScanSubtract(ColumnScanSubtract::new(
+                    left_scan_enum,
+                    scans_follower,
+                    subtract_indices,
+                    follow_indices,
+                ));
+
+                column_scans.push(UnsafeCell::new(ColumnScanT::U64(ColumnScanCell::new(
+                    new_scan,
+                ))));
             }
         }
 
@@ -592,7 +591,7 @@ mod test {
     }
 
     #[test]
-    fn test_subtract() {
+    fn subtract() {
         let column_main_x = make_column_with_intervals_t(&[2, 4, 6, 8], &[0]);
         let column_main_y =
             make_column_with_intervals_t(&[0, 1, 5, 0, 2, 5, 2, 9, 1, 4, 5], &[0, 3, 6, 8]);
@@ -737,7 +736,7 @@ mod test {
     }
 
     #[test]
-    fn test_subtract_2() {
+    fn subtract_2() {
         let column_main_x = make_column_with_intervals_t(&[4], &[0]);
         let column_main_y = make_column_with_intervals_t(&[0, 2], &[0]);
         let column_main_z = make_column_with_intervals_t(&[0, 1], &[0, 1]);
@@ -775,7 +774,7 @@ mod test {
     }
 
     #[test]
-    fn test_subtract_3() {
+    fn subtract_3() {
         let column_main_x = make_column_with_intervals_t(&[2, 4, 8], &[0]);
         let column_main_y = make_column_with_intervals_t(&[0, 0, 5], &[0, 1, 2]);
         let column_main_z = make_column_with_intervals_t(&[0, 0, 1], &[0, 1, 2]);

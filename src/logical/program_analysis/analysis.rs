@@ -188,11 +188,7 @@ fn analyze_rule(
     let num_existential = count_distinct_existential_variables(rule);
 
     let mut variable_types: HashMap<Variable, LogicalTypeEnum> = HashMap::new();
-    for atom in rule
-        .positive_body()
-        .iter()
-        .chain(rule.negative_body().iter().chain(rule.head()))
-    {
+    for atom in rule.all_atoms() {
         for (term_position, term) in atom.terms().iter().enumerate() {
             if let Term::Variable(variable) = term {
                 if let Entry::Vacant(entry) = variable_types.entry(variable.clone()) {
@@ -208,9 +204,8 @@ fn analyze_rule(
     }
 
     let rule_all_predicates: Vec<Identifier> = rule
-        .positive_body()
-        .iter()
-        .chain(rule.negative_body().iter().chain(rule.head()))
+        .all_body()
+        .chain(rule.head())
         .map(|a| a.predicate())
         .collect();
 
@@ -319,11 +314,7 @@ impl Program {
 
         // Predicates in rules
         for rule in self.rules() {
-            for atom in rule
-                .positive_body()
-                .iter()
-                .chain(rule.negative_body().iter().chain(rule.head()))
-            {
+            for atom in rule.all_atoms() {
                 result.insert((atom.predicate(), atom.terms().len()));
             }
         }
@@ -358,11 +349,7 @@ impl Program {
         for rule in self.rules() {
             let mut variable_to_last_node = HashMap::<Variable, PredicatePosition>::new();
 
-            for atom in rule
-                .positive_body()
-                .iter()
-                .chain(rule.negative_body().iter().chain(rule.head()))
-            {
+            for atom in rule.all_atoms() {
                 for (term_position, term) in atom.terms().iter().enumerate() {
                     if let Term::Variable(variable) = term {
                         let predicate_position =
@@ -381,11 +368,7 @@ impl Program {
                 }
             }
 
-            for filter in rule
-                .positive_filters()
-                .iter()
-                .chain(rule.negative_filters())
-            {
+            for filter in rule.all_filters() {
                 let position_left = variable_to_last_node
                     .get(&filter.lhs)
                     .expect("Variables in filters should also appear in the rule body")
@@ -498,11 +481,7 @@ impl Program {
         }
 
         for rule in self.rules() {
-            for filter in rule
-                .positive_filters()
-                .iter()
-                .chain(rule.negative_filters())
-            {
+            for filter in rule.all_filters() {
                 if filter.operation != FilterOperation::Equals {
                     if let Term::Variable(_) = filter.rhs {
                         return Err(RuleAnalysisError::UnsupportedFeatureVariableComparison);
@@ -510,7 +489,7 @@ impl Program {
                 }
             }
 
-            for atom in rule.head() {
+            for atom in rule.all_atoms() {
                 // check for consistent predicate arities
                 let arity = atom.terms().len();
                 if arity != *arities.entry(atom.predicate()).or_insert(arity) {
@@ -541,11 +520,7 @@ impl Program {
         }
 
         for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
-            for filter in rule
-                .positive_filters()
-                .iter()
-                .chain(rule.negative_filters())
-            {
+            for filter in rule.all_filters() {
                 let left_variable = &filter.lhs;
                 let right_term = if let Term::Variable(_) = filter.rhs {
                     continue;

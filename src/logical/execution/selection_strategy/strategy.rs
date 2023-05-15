@@ -8,8 +8,8 @@ use crate::logical::{model::Rule, program_analysis::analysis::RuleAnalysis};
 #[derive(Error, Debug, Copy, Clone)]
 pub enum SelectionStrategyError {
     /// Non-Stratifyable
-    #[error("The rules of the program cannot be stratified.")]
-    NonStratifiableProgram,
+    #[error("The rules of the program is not stratified.")]
+    NonStratifiedProgram,
 }
 
 /// Trait that defines a strategy for rule execution,

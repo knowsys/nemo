@@ -186,7 +186,7 @@ mod test {
     }
 
     #[test]
-    fn test_stratify() {
+    fn stratification() {
         let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
 
         let node_a = String::from("A");
@@ -214,7 +214,7 @@ mod test {
     }
 
     #[test]
-    fn test_non_stratifiable() {
+    fn not_stratified() {
         let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
 
         let node_a = String::from("A");
