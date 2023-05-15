@@ -27,6 +27,7 @@ pub trait ColumnBuilderProxy<T>: std::fmt::Debug {
     fn commit(&mut self);
 }
 
+/// Generic trait implementation of the methods [`commit`][ColumnBuilderProxy::commit] and [`forget`][ColumnBuilderProxy::forget]
 macro_rules! generic_trait_impl_without_add {
     ($storage:expr) => {
         fn commit(&mut self) {
@@ -41,6 +42,7 @@ macro_rules! generic_trait_impl_without_add {
     };
 }
 
+/// Generic trait implementation, if the value type can be cast implicitly into the physical builder value type
 macro_rules! physical_generic_trait_impl {
     ($type:ty, $storage:expr) => {
         impl ColumnBuilderProxy<$type> for PhysicalGenericColumnBuilderProxy<$type> {
@@ -66,17 +68,15 @@ macro_rules! physical_generic_trait_impl {
 ///
 /// This trait allows to get a [`VecT`] representation of a [`PhysicalColumnBuilderProxy`].
 pub trait PhysicalColumnBuilderProxy<T>: ColumnBuilderProxy<T> {
-    /**
-    Writes the remaining prepared value and returns a VecT
-
-    This will call [`commit`][ColumnBuilderProxy::commit] of the [`ColumnBuilderProxy`].
-    # Note
-    Rollbacks, if necessary, need to be done before this method is called.
-    */
+    /// Writes the remaining prepared value and returns a VecT
+    ///
+    /// This will call [`commit`][ColumnBuilderProxy::commit] of the [`ColumnBuilderProxy`].
+    /// # Note
+    /// Rollbacks, if necessary, need to be done before this method is called.
     fn finalize(self) -> VecT;
 }
 
-/// PhysicalBuilderProxy to add Strings
+/// [`PhysicalBuilderProxy`] to add Strings
 #[derive(Debug)]
 pub struct PhysicalStringColumnBuilderProxy<'a> {
     dict: &'a RefCell<Dict>,
@@ -85,7 +85,7 @@ pub struct PhysicalStringColumnBuilderProxy<'a> {
 }
 
 impl<'a> PhysicalStringColumnBuilderProxy<'a> {
-    /// Create a new PhysicalStringColumnBuilderProxy with the given dictionary
+    /// Create a new [`PhysicalStringColumnBuilderProxy`] with the given [`dictionary`][Dict]
     pub fn new(dict: &'a RefCell<Dict>) -> Self {
         Self {
             dict,
@@ -111,7 +111,7 @@ impl PhysicalColumnBuilderProxy<String> for PhysicalStringColumnBuilderProxy<'_>
     }
 }
 
-/// PhysicalBuilderProxy to add types without special requirements (e.g. dictionary)
+/// [`PhysicalBuilderProxy`] to add types without special requirements (e.g. dictionary)
 #[derive(Default, Debug)]
 pub struct PhysicalGenericColumnBuilderProxy<T> {
     value: Option<T>,

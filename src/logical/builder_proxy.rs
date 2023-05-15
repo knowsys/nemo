@@ -13,12 +13,16 @@ use crate::{
 
 /// Trait capturing builder proxies that use plain string (used for parsing in logical layer)
 pub trait LogicalColumnBuilderProxy<'a, 'b>: ColumnBuilderProxy<String> {
-    /// create a new LogicalColumnBuilerProxy from the physical equivalent
+    /// create a new [`LogicalColumnBuilderProxy`] which nests its physical target equivalent [`BuilderProxy`][crate::physical::builder_proxy::PhysicalBuilderProxyEnum].
+    ///
+    /// # Panics
+    /// If the logical and the nested physical type are not compatible.
     fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self
     where
         Self: Sized;
 }
 
+/// implement the [`ColumnBuilderProxy`] trait methods [`commit`][ColumnBuilderProxy::commit] and [`forget`][ColumnBuilderProxy::forget]
 macro_rules! logical_generic_trait_impl {
     () => {
         fn commit(&mut self) {
@@ -67,7 +71,7 @@ impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalAnyColumnBuilderProxy<
     }
 }
 
-/// LogicalBuilderProxy to add Integer
+/// [`LogicalBuilderProxy`] to add Integer
 #[derive(Debug)]
 pub struct LogicalIntegerColumnBuilderProxy<'b> {
     physical: &'b mut PhysicalGenericColumnBuilderProxy<i64>,
@@ -91,7 +95,7 @@ impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalIntegerColumnBuilderPr
     }
 }
 
-/// LogicalBuilderProxy to add Float64
+/// [`LogicalBuilderProxy`] to add Float64
 #[derive(Debug)]
 pub struct LogicalFloat64ColumnBuilderProxy<'b> {
     physical: &'b mut PhysicalGenericColumnBuilderProxy<Double>,
