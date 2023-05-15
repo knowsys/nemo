@@ -1,7 +1,7 @@
 /*!
 Functionality to read and write data is implemented here.
 
-This module acts as a mediation layer between the logical and physical layer and offers Traits to allow both layers an abstract view on the io process.
+This module acts as a mediation layer between the logical and physical layer and offers traits to allow both layers an abstract view on the io process.
 */
 
 use std::io::Write;
@@ -40,8 +40,11 @@ impl<W: Write> RecordWriter for csv::Writer<W> {
 ///
 /// This is called from the physical layer to ask a reader to fill the
 /// Vector of [BuilderProxies][PhysicalBuilderProxyEnum].
+/// # Note
+/// This is the physical interface to access all readers, instantiated on the logical layer.
+/// Therefore every reader needs to implement this trait.
 pub trait TableReader: std::fmt::Debug {
-    /// read the table into multiple [`ColumnBuilderProxy`][crate::physical::builder_proxy::PhysicalColumnBuilderProxy]
+    /// Read the table into multiple [`ColumnBuilderProxy`][crate::physical::builder_proxy::PhysicalColumnBuilderProxy]
     fn read_into_builder_proxies<'a: 'b, 'b>(
         &self,
         builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
