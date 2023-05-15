@@ -397,7 +397,7 @@ impl<'a> TrieScanPrune<'a> {
         // Create one `ColumnScanPrune` for every input column
         for (i, target_type) in target_types.iter().enumerate() {
             // Generate code for every possible data type of the input column
-            macro_rules! create_column_scan_for_datatype {
+            macro_rules! create_column_scan_for_storage_type {
                 ($variant:ident, $type:ty) => {{
                     // Get input column scan
                     // SAFETY: we're the only one accessing the shared state at this moment
@@ -421,10 +421,11 @@ impl<'a> TrieScanPrune<'a> {
             }
 
             match target_type {
-                StorageTypeName::U32 => create_column_scan_for_datatype!(U32, u32),
-                StorageTypeName::U64 => create_column_scan_for_datatype!(U64, u64),
-                StorageTypeName::Float => create_column_scan_for_datatype!(Float, Float),
-                StorageTypeName::Double => create_column_scan_for_datatype!(Double, Double),
+                StorageTypeName::U32 => create_column_scan_for_storage_type!(U32, u32),
+                StorageTypeName::U64 => create_column_scan_for_storage_type!(U64, u64),
+                StorageTypeName::I64 => create_column_scan_for_storage_type!(I64, i64),
+                StorageTypeName::Float => create_column_scan_for_storage_type!(Float, Float),
+                StorageTypeName::Double => create_column_scan_for_storage_type!(Double, Double),
             };
         }
 
