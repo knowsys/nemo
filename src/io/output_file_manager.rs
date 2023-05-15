@@ -109,9 +109,9 @@ pub struct OutputFileManager<'a> {
 }
 
 impl<'a> OutputFileManager<'a> {
-    /// Instantiate a [`CSVWriter`].
+    /// Instantiate a [`OutputFileManager`].
     ///
-    /// Returns [`Ok`] if the given `path` is writeable. Otherwise an [`Error`] is thrown.
+    /// Instantiates a new [`OutputFileManager`] if the given `path` is writable. Otherwise an [`Error`] is thrown.
     pub fn try_new(path: &'a PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
         create_dir_all(path)?;
         let data_format = FileFormat::DSV(b',');
@@ -138,8 +138,10 @@ impl OutputFileManager<'_> {
         pred_path
     }
 
-    /// Creates a `.csv` (or possibly a `.csv.gz`) file for predicate
-    /// [`pred`] and returns a [`csv::Writer<>`] to it.
+    /// Creates a file for predicate
+    ///
+    /// The created file will follow the previously stated file-format and compression-method.
+    /// A specified [`pred`][Identifier] will be prepared into a [`RecordWriter`] to write the associated information.
     pub fn create_file_writer(&self, pred: &Identifier) -> Result<impl RecordWriter, Error> {
         let mut options = OpenOptions::new();
         options.write(true);

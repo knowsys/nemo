@@ -35,7 +35,7 @@ macro_rules! logical_generic_trait_impl {
     };
 }
 
-/// LogicalBuilderProxy to add Any
+/// [`LogicalColumnBuilderProxy`] to add Any
 #[derive(Debug)]
 pub struct LogicalAnyColumnBuilderProxy<'a: 'b, 'b> {
     physical: &'b mut PhysicalStringColumnBuilderProxy<'a>,
@@ -71,7 +71,7 @@ impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalAnyColumnBuilderProxy<
     }
 }
 
-/// [`LogicalBuilderProxy`] to add Integer
+/// [`LogicalColumnBuilderProxy`] to add Integer
 #[derive(Debug)]
 pub struct LogicalIntegerColumnBuilderProxy<'b> {
     physical: &'b mut PhysicalGenericColumnBuilderProxy<i64>,
@@ -95,7 +95,7 @@ impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalIntegerColumnBuilderPr
     }
 }
 
-/// [`LogicalBuilderProxy`] to add Float64
+/// [`LogicalColumnBuilderProxy`] to add Float64
 #[derive(Debug)]
 pub struct LogicalFloat64ColumnBuilderProxy<'b> {
     physical: &'b mut PhysicalGenericColumnBuilderProxy<Double>,

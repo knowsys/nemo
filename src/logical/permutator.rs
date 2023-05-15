@@ -43,7 +43,7 @@ impl Permutator {
     }
 
     /// TODO: Test if this works
-    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columnar::column::Column]
+    /// Creates [`Permutator`] based on [`data`][ColumnEnum]
     pub fn sort_from_column_range<T>(data: &ColumnEnum<T>, ranges: &[Range<usize>]) -> Permutator
     where
         T: ColumnDataType + Ord,
@@ -57,7 +57,7 @@ impl Permutator {
         }
     }
 
-    /// Creates [`Permutator`] based on a [`Column`][crate::physical::columnar::column::Column]
+    /// Creates [`Permutator`] based on [`data`][ColumnEnum]
     pub fn sort_from_column<T>(data: &ColumnEnum<T>) -> Permutator
     where
         T: ColumnDataType + Ord,
@@ -65,7 +65,7 @@ impl Permutator {
         Permutator::sort_from_column_range(data, &[(0..data.len())])
     }
 
-    /// Creates a [`Permutator`] based on a slice of [`ColumnT`][crate::physical::columnar::column::ColumnT] elements.
+    /// Creates a [`Permutator`] based on a slice of [`ColumnT`] elements.
     pub fn sort_from_columns(data_vec: &[ColumnT]) -> Result<Permutator, Error> {
         let len = if !data_vec.is_empty() {
             let len = data_vec[0].len();
@@ -86,24 +86,24 @@ impl Permutator {
         })
     }
 
-    /// Creates a [`Permutator`] based on one a list of [`VecT`][crate::physical::datatypes::data_value::VecT].
+    /// Creates a [`Permutator`] based on one a list of [`VecT`].
     ///
-    /// The sorting of values is done by taking the first [`VecT`][crate::physical::datatypes::data_value::VecT] and sort according to these values.
-    /// If two elements are the equal to each other, the next [`VecT`][crate::physical::datatypes::data_value::VecT] will be taken to check if the comparison is different.
-    /// If all [`VecT`][crate::physical::datatypes::data_value::VecT] comparisons result in equality, the original order of the two values is preserved.
+    /// The sorting of values is done by taking the first [`VecT`] and sort according to these values.
+    /// If two elements are the equal to each other, the next [`VecT`] will be taken to check if the comparison is different.
+    /// If all [`VecT`] comparisons result in equality, the original order of the two values is preserved.
     ///
-    /// Returns an Error, if the length of the given [`VecT`][crate::physical::datatypes::data_value::VecT] are different.
+    /// Returns an Error, if the length of the given [`VecT`] are different.
     pub fn sort_from_multiple_vec(data_vec: &[VecT]) -> Result<Permutator, Error> {
         Self::sort_from_multiple_vec_with_offset(data_vec, 0)
     }
 
-    /// Creates a [`Permutator`] based on one a list of [`VecT`][crate::physical::datatypes::data_value::VecT], with a given offset.
+    /// Creates a [`Permutator`] based on one a list of [`VecT`], with a given offset.
     ///
-    /// The sorting of values is done by taking the first [`VecT`][crate::physical::datatypes::data_value::VecT] and sort according to these values.
-    /// If two elements are the equal to each other, the next [`VecT`][crate::physical::datatypes::data_value::VecT] will be taken to check if the comparison is different.
-    /// If all [`VecT`][crate::physical::datatypes::data_value::VecT] comparisons result in equality, the original order of the two values is preserved.
+    /// The sorting of values is done by taking the first [`VecT`]] and sort according to these values.
+    /// If two elements are the equal to each other, the next [`VecT`] will be taken to check if the comparison is different.
+    /// If all [`VecT`] comparisons result in equality, the original order of the two values is preserved.
     ///
-    /// Returns an Error, if the length of the given [`VecT`][crate::physical::datatypes::data_value::VecT] are different.
+    /// Returns an Error, if the length of the given [`VecT`] are different.
     pub fn sort_from_multiple_vec_with_offset(
         data_vec: &[VecT],
         offset: usize,
