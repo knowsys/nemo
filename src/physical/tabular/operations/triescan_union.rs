@@ -87,12 +87,10 @@ impl<'a> TrieScanUnion<'a> {
 
 impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
     fn up(&mut self) {
-        debug_assert!(self.current_layer.is_some());
-        let up_layer = if self.current_layer.unwrap() == 0 {
-            None
-        } else {
-            Some(self.current_layer.unwrap() - 1)
-        };
+        let up_layer = self
+            .current_layer
+            .expect("calling up only allowed after calling down")
+            .checked_sub(1);
 
         for scan_index in 0..self.layers.len() {
             if self.layers[scan_index] == self.current_layer {

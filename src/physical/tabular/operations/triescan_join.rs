@@ -274,8 +274,9 @@ impl<'a> TrieScanJoin<'a> {
 
 impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
     fn up(&mut self) {
-        debug_assert!(self.current_layer.is_some());
-        let current_layer = self.current_layer.unwrap();
+        let current_layer = self
+            .current_layer
+            .expect("calling up only allowed after calling down");
         let current_scans = &self.layers_to_scans[current_layer];
 
         for &scan_index in current_scans {
@@ -307,8 +308,6 @@ impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
     }
 
     fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
-        debug_assert!(self.current_layer.is_some());
-
         Some(self.merge_joins[self.current_layer?].get_mut())
     }
 

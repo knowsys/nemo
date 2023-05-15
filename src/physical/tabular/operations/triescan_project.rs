@@ -132,8 +132,9 @@ impl<'a> TrieScanProject<'a> {
 
 impl<'a> TrieScan<'a> for TrieScanProject<'a> {
     fn up(&mut self) {
-        debug_assert!(self.current_layer.is_some());
-        let current_layer = self.current_layer.unwrap();
+        let current_layer = self
+            .current_layer
+            .expect("calling up only allowed after calling down");
 
         self.current_layer = if current_layer == 0 {
             None
@@ -267,8 +268,6 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
     }
 
     fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
-        debug_assert!(self.current_layer.is_some());
-
         Some(self.reorder_scans[self.current_layer?].get_mut())
     }
 

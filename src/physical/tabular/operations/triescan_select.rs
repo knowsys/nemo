@@ -129,9 +129,10 @@ impl<'a> TrieScanSelectEqual<'a> {
 
 impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
     fn up(&mut self) {
-        debug_assert!(self.current_layer.is_some());
-
-        self.current_layer = self.current_layer.unwrap().checked_sub(1);
+        self.current_layer = self
+            .current_layer
+            .expect("calling up only allowed after calling down")
+            .checked_sub(1);
 
         self.base_trie.up();
     }
@@ -298,10 +299,10 @@ impl<'a> TrieScanSelectValue<'a> {
 
 impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
     fn up(&mut self) {
-        debug_assert!(self.current_layer.is_some());
-
-        self.current_layer = self.current_layer.unwrap().checked_sub(1);
-
+        self.current_layer = self
+            .current_layer
+            .expect("calling up only allowed after calling down")
+            .checked_sub(1);
         self.base_trie.up();
     }
 

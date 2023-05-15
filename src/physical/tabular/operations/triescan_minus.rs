@@ -105,13 +105,10 @@ impl<'a> TrieScanMinus<'a> {
 
 impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
     fn up(&mut self) {
-        debug_assert!(self.layer_left.is_some());
-
-        self.layer_left = if self.layer_left.unwrap() == 0 {
-            None
-        } else {
-            Some(self.layer_left.unwrap() - 1)
-        };
+        self.layer_left = self
+            .layer_left
+            .expect("calling up only allowed after calling down")
+            .checked_sub(1);
 
         self.trie_left.up();
 
