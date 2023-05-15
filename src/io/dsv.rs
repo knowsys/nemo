@@ -11,13 +11,59 @@ to be filled with data.
 On the logical layer, the [`DSVReader`] is created.
 The following examples will use this csv-file, which is representing a tuple with two string (logical any) and one number (logical integer) terms.
 ```csv
-Boston,United States,654776
-Dresden,Germany,554649
+Boston,654776
+Dresden,554649
 ```
 This file can be found in the current repository at `resources/docu/examples/city_population.csv`
-## logical layer
+## Logical layer
+```
+# use std::path::PathBuf;
+# use nemo::{logical::types::LogicalTypeEnum, io::{TableReader,dsv::DSVReader}};
+# let file = PathBuf::from("resources/docu/examples/city_population.csv");
+let csv_reader = DSVReader::csv(
+    file,
+    vec![
+        LogicalTypeEnum::Any,
+        LogicalTypeEnum::Integer,
+    ],
+);
+// Pack the csv_reader into a TableReader trait object for the physical layer
+let table_reader: Box<dyn TableReader> = Box::new(csv_reader);
 ```
 
+## Physical layer
+The physical layer will only receive a trait object ['TableReader'][crate::io::TableReader], which contains
+the instantiated `csv_reader` from the above example.
+For this illustrative example the variable table_reader, as defined in the above example will be used.
+```
+# use nemo::io::TableReader;
+# use std::path::PathBuf;
+#
+# use nemo::{logical::types::LogicalTypeEnum, io::dsv::DSVReader};
+# use std::cell::RefCell;
+# use nemo::physical::builder_proxy::{
+#    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
+# };
+#
+# let file = PathBuf::from("resources/docu/examples/city_population.csv");
+#
+# let csv_reader = DSVReader::csv(
+#     file,
+#     vec![
+#         LogicalTypeEnum::Any,
+#         LogicalTypeEnum::Integer,
+#     ],
+# );
+# // defining the trait-object which is given by the logical layer
+# let table_reader:Box<dyn TableReader> = Box::new(csv_reader);
+# let mut dict = RefCell::new(nemo::physical::dictionary::PrefixedStringDictionary::default());
+let mut builder = vec![
+    PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+    PhysicalBuilderProxyEnum::U64(Default::default()),
+];
+// read the data into the builder
+let result = table_reader.read_into_builder_proxies(&mut builder);
+let columns = builder.into_iter().map(|bp| bp.finalize()).collect::<Vec<_>>();
 ```
  */
 
@@ -301,17 +347,7 @@ The next column is empty;;789
         let result = csvreader.read_into_builder_proxies_with_reader(&mut builder, &mut rdr);
         assert!(result.is_ok());
 
-        let cols: Vec<VecT> = builder
-            .into_iter()
-            .map(|bp| match bp {
-                PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
-                PhysicalBuilderProxyEnum::I64(bp) => bp.finalize(),
-                PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
-                PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
-                PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
-                PhysicalBuilderProxyEnum::Double(bp) => bp.finalize(),
-            })
-            .collect();
+        let cols: Vec<VecT> = builder.into_iter().map(|bp| bp.finalize()).collect();
 
         let VecT::U64(ref col0_idx) = cols[0] else { unreachable!() };
         let VecT::U64(ref col1_idx) = cols[1] else { unreachable!() };
