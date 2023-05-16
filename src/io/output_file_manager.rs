@@ -140,9 +140,9 @@ impl OutputFileManager<'_> {
 
     /// Creates a file for predicate.
     ///
-    /// The created file follows the previously stated file format and compression method.on.
+    /// The created file uses the set file format and compression method.
     /// Returns a [`RecordWriter`] for a file named appropriately for the given [`predicate`][Identifier]
-    pub fn create_file_writer(&self, pred: &Identifier) -> Result<impl RecordWriter, Error> {
+    pub fn create_file_writer(&self, predicate: &Identifier) -> Result<impl RecordWriter, Error> {
         let mut options = OpenOptions::new();
         options.write(true);
         if self.overwrite {
@@ -151,8 +151,8 @@ impl OutputFileManager<'_> {
             options.create_new(true);
         };
 
-        let pred_path = self.get_output_file_name(pred);
-        log::info!("Creating {} as {pred_path:?}", pred.name());
+        let pred_path = self.get_output_file_name(predicate);
+        log::info!("Creating {} as {pred_path:?}", predicate.name());
 
         let file_writer = self.compression_format.create_writer(pred_path, options)?;
         let record_writer = self.data_format.create_writer(file_writer);

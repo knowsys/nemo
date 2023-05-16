@@ -12,10 +12,11 @@ use crate::{
 };
 
 /// Trait capturing builder proxies that use plain string (used for parsing in logical layer)
+///
+/// This parses from a given logical type to the physical type, without exposing details from one layer to the other.
 pub trait LogicalColumnBuilderProxy<'a, 'b>: ColumnBuilderProxy<String> {
-    /// Create a new [`LogicalColumnBuilderProxy`] which nests its physical target equivalent [`BuilderProxy`][crate::physical::builder_proxy::PhysicalBuilderProxyEnum].
+    /// Create a new [`LogicalColumnBuilderProxy`] which is constructed from a given [`BuilderProxy`][crate::physical::builder_proxy::PhysicalBuilderProxyEnum].
     ///
-    /// This offers a representation of the parsing from a given logical type to the physical type, without exposing details from one layer to the other.
     /// # Panics
     /// If the logical and the nested physical type are not compatible, an `unreachable` panic will be thrown.
     fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self

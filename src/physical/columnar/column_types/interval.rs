@@ -13,7 +13,7 @@ use crate::physical::{
 use std::mem::size_of;
 use std::{fmt::Debug, ops::Range};
 
-/// Simple implementation of an [`Column`] that uses a second column to manage interval bounds.
+/// Simple implementation of a [`Column`] that uses a second column to manage interval bounds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColumnWithIntervals<T: RunLengthEncodable> {
     data: ColumnEnum<T>,

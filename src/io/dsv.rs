@@ -29,13 +29,13 @@
 //! let table_reader: Box<dyn TableReader> = Box::new(csv_reader);
 //! ```
 //!
-//! The example first creates a [`DSVReader`] which uses comma as its separator.
-//! Then it packs it as a trait object of type [`TableReader`], which represents the visibility for the phyical layer.
+//! The example first creates a [`DSVReader`] which uses a comma as its separator.
+//! It passes the reader to the physical layer as a [`TableReader`] object.
 //!
 //! ## Physical layer
-//! The physical layer receives a trait object [`TableReader`], containing
+//! The physical layer receives a trait object [`TableReader`], which is
 //! the instantiated `csv_reader` from the example above.
-//! For this example the same variable is used.
+//! The same variable is used.
 //! ```
 //! # use nemo::io::TableReader;
 //! # use std::path::PathBuf;
@@ -127,7 +127,7 @@ impl DSVReader {
 
     /// Static function to create a serde reader
     ///
-    /// The function takes an arbitrary [`Reader`][Read] and wraps it into a [`serde-reader`][csv::Reader] for csv
+    /// The function takes an arbitrary [`Reader`][Read] and wraps it into a [`Reader`][csv::Reader] for csv
     fn reader<R>(rdr: R, delimiter: u8, escape: Option<u8>) -> Reader<R>
     where
         R: Read,
