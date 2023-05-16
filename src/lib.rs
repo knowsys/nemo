@@ -17,7 +17,6 @@
 #![feature(is_sorted)]
 #![feature(assert_matches)]
 #![feature(iter_intersperse)]
-#![doc(test(attr(cfg_attr(miri, ignore))))]
 
 pub mod error;
 pub mod io;

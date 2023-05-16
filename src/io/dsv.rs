@@ -1,73 +1,75 @@
-/*!
-Reading of delimiter-separated value files
-
-This module provides [`DSVReader`], a [`TableReader`] that can parse DSV (delimiter-separated value) files.
-It is typically instantiated by the logical layer with the logical types corresponding to each column in the file.
-The physical layer then passes in [`PhysicalBuilderProxies`][crate::physical::builder_proxy::PhysicalColumnBuilderProxy]
-that convert the read data into the apropriate storage types.
-
-# Examples
-On the logical layer, the [`DSVReader`] is created.
-The following examples use this csv-file, which is representing a tuple with one string (logical any) and one number (logical integer) terms.
-```csv
-Boston,654776
-Dresden,554649
-```
-This file can be found in the current repository at `resources/doc/examples/city_population.csv`
-## Logical layer
-```
-# use std::path::PathBuf;
-# use nemo::{logical::types::LogicalTypeEnum, io::{TableReader,dsv::DSVReader}};
-# let file = PathBuf::from("resources/doc/examples/city_population.csv");
-let csv_reader = DSVReader::csv(
-    file,
-    vec![
-        LogicalTypeEnum::Any,
-        LogicalTypeEnum::Integer,
-    ],
-);
-// Pack the csv_reader into a TableReader trait object for the physical layer
-let table_reader: Box<dyn TableReader> = Box::new(csv_reader);
-```
-
-The example first creates a [`DSVReader`] which uses comma as its separator.
-Then it packs it as a trait object of type [`TableReader`], which represents the visibility for the phyical layer.
-
-## Physical layer
-The physical layer receives a trait object [`TableReader`], containing
-the instantiated `csv_reader` from the example above.
-For this example the same variable is used.
-```
-# use nemo::io::TableReader;
-# use std::path::PathBuf;
-#
-# use nemo::{logical::types::LogicalTypeEnum, io::dsv::DSVReader};
-# use std::cell::RefCell;
-# use nemo::physical::builder_proxy::{
-#    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
-# };
-#
-# let file = PathBuf::from("resources/doc/examples/city_population.csv");
-#
-# let csv_reader = DSVReader::csv(
-#     file,
-#     vec![
-#         LogicalTypeEnum::Any,
-#         LogicalTypeEnum::Integer,
-#     ],
-# );
-# // defining the trait-object which is given by the logical layer
-# let table_reader:Box<dyn TableReader> = Box::new(csv_reader);
-# let mut dict = RefCell::new(nemo::physical::dictionary::PrefixedStringDictionary::default());
-let mut builder = vec![
-    PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    PhysicalBuilderProxyEnum::I64(Default::default()),
-];
-// read the data into the builder
-let result = table_reader.read_into_builder_proxies(&mut builder);
-let columns = builder.into_iter().map(|bp| bp.finalize()).collect::<Vec<_>>();
-```
-*/
+//! Reading of delimiter-separated value files
+//!
+//! This module provides [`DSVReader`], a [`TableReader`] that can parse DSV (delimiter-separated value) files.
+//! It is typically instantiated by the logical layer with the logical types corresponding to each column in the file.
+//! The physical layer then passes in [`PhysicalBuilderProxies`][crate::physical::builder_proxy::PhysicalColumnBuilderProxy]
+//! that convert the read data into the apropriate storage types.
+//!
+//! # Examples
+//! On the logical layer, the [`DSVReader`] is created.
+//! The following examples use this csv-file, which is representing a tuple with one string (logical any) and one number (logical integer) terms.
+//! ```csv
+//! Boston,654776
+//! Dresden,554649
+//! ```
+//! This file can be found in the current repository at `resources/doc/examples/city_population.csv`
+//! ## Logical layer
+//! ```
+//! # use std::path::PathBuf;
+//! # use nemo::{logical::types::LogicalTypeEnum, io::{TableReader,dsv::DSVReader}};
+//! # let file = PathBuf::from("resources/doc/examples/city_population.csv");
+//! let csv_reader = DSVReader::csv(
+//!     file,
+//!     vec![
+//!         LogicalTypeEnum::Any,
+//!         LogicalTypeEnum::Integer,
+//!     ],
+//! );
+//! // Pack the csv_reader into a TableReader trait object for the physical layer
+//! let table_reader: Box<dyn TableReader> = Box::new(csv_reader);
+//! ```
+//!
+//! The example first creates a [`DSVReader`] which uses comma as its separator.
+//! Then it packs it as a trait object of type [`TableReader`], which represents the visibility for the phyical layer.
+//!
+//! ## Physical layer
+//! The physical layer receives a trait object [`TableReader`], containing
+//! the instantiated `csv_reader` from the example above.
+//! For this example the same variable is used.
+//! ```
+//! # use nemo::io::TableReader;
+//! # use std::path::PathBuf;
+//! #
+//! # use nemo::{logical::types::LogicalTypeEnum, io::dsv::DSVReader};
+//! # use std::cell::RefCell;
+//! # use nemo::physical::builder_proxy::{
+//! #    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
+//! # };
+//! # #[cfg(miri)]
+//! # fn main() {}
+//! # #[cfg(not(miri))]
+//! # fn main() {
+//! # let file = PathBuf::from("resources/doc/examples/city_population.csv");
+//! #
+//! # let csv_reader = DSVReader::csv(
+//! #     file,
+//! #     vec![
+//! #         LogicalTypeEnum::Any,
+//! #         LogicalTypeEnum::Integer,
+//! #     ],
+//! # );
+//! # // defining the trait-object which is given by the logical layer
+//! # let table_reader:Box<dyn TableReader> = Box::new(csv_reader);
+//! # let mut dict = RefCell::new(nemo::physical::dictionary::PrefixedStringDictionary::default());
+//! let mut builder = vec![
+//!     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+//!     PhysicalBuilderProxyEnum::I64(Default::default()),
+//! ];
+//! // read the data into the builder
+//! let result = table_reader.read_into_builder_proxies(&mut builder);
+//! let columns = builder.into_iter().map(|bp| bp.finalize()).collect::<Vec<_>>();
+//! # }
+//! ```
 
 use std::fs::File;
 use std::io::Read;
