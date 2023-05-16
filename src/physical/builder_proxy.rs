@@ -9,16 +9,11 @@ use crate::physical::{
     management::database::Dict,
 };
 
-/// Trait for a Builder Proxy, which translates a value for a particular `DataValue` to the corresponding [`StorageType`][crate::physical::datatypes::StorageTypeName] eolumn elements
-///
-/// The intended logic for this trait is as follows:
-/// - [`add`][Self::add]: caches a value to be added to the `StorageType`. If a value is already in the cache, the previously cached value will be [`commited`][Self::commit].
-/// - [`forget`][Self::forget]: forgets the cached value if one exists.
-/// - [`commit`][Self::commit]: takes the value which is cached and stores it in the column.
+/// Trait for a Builder Proxy, which translates a value for a generic data type `T` to the corresponding [`StorageType`][crate::physical::datatypes::StorageTypeName] column elements
 pub trait ColumnBuilderProxy<T>: std::fmt::Debug {
     /// Cache a value to be added to the ColumnBuilder. If a value is already cached, the cached value will be added to the ColumnBuilder before the new value is checked.
     ///
-    /// The add function does check if the given input can be cast or parsed into the ColumnBuilder type.
+    /// The add function checks if the given input can be cast or parsed into the ColumnBuilder type.
     /// If this is not possible a corresponding [`Error`] is returned.
     fn add(&mut self, input: T) -> Result<(), Error>;
     /// Forgets a cached value.

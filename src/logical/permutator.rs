@@ -88,8 +88,8 @@ impl Permutator {
 
     /// Creates a [`Permutator`] based on one a list of [`VecT`].
     ///
-    /// The sorting of values is done by taking the first [`VecT`] and sort according to these values.
-    /// If two elements are the equal to each other, the next [`VecT`] will be taken to check if the comparison is different.
+    /// The sorting of values is done by taking the first [`VecT`] and sorting them according to these values.
+    /// If two elements are the equal to each other, the next [`VecT`] is taken to check if the comparison is different.
     /// If all [`VecT`] comparisons result in equality, the original order of the two values is preserved.
     ///
     /// Returns an Error, if the length of the given [`VecT`] are different.
@@ -99,8 +99,8 @@ impl Permutator {
 
     /// Creates a [`Permutator`] based on one a list of [`VecT`], with a given offset.
     ///
-    /// The sorting of values is done by taking the first [`VecT`]] and sort according to these values.
-    /// If two elements are the equal to each other, the next [`VecT`] will be taken to check if the comparison is different.
+    /// The sorting of values is done by taking the first [`VecT`] and sort according to these values.
+    /// If two elements are the equal to each other, the next [`VecT`] is taken to check if the comparison is different.
     /// If all [`VecT`] comparisons result in equality, the original order of the two values is preserved.
     ///
     /// Returns an Error, if the length of the given [`VecT`] are different.

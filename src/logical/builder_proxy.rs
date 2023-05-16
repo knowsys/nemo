@@ -13,16 +13,17 @@ use crate::{
 
 /// Trait capturing builder proxies that use plain string (used for parsing in logical layer)
 pub trait LogicalColumnBuilderProxy<'a, 'b>: ColumnBuilderProxy<String> {
-    /// create a new [`LogicalColumnBuilderProxy`] which nests its physical target equivalent [`BuilderProxy`][crate::physical::builder_proxy::PhysicalBuilderProxyEnum].
+    /// Create a new [`LogicalColumnBuilderProxy`] which nests its physical target equivalent [`BuilderProxy`][crate::physical::builder_proxy::PhysicalBuilderProxyEnum].
     ///
+    /// This offers a representation of the parsing from a given logical type to the physical type, without exposing details from one layer to the other.
     /// # Panics
-    /// If the logical and the nested physical type are not compatible.
+    /// If the logical and the nested physical type are not compatible, an `unreachable` panic will be thrown.
     fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self
     where
         Self: Sized;
 }
 
-/// implement the [`ColumnBuilderProxy`] trait methods [`commit`][ColumnBuilderProxy::commit] and [`forget`][ColumnBuilderProxy::forget]
+/// Implements the type-independent [`ColumnBuilderProxy`] trait methods.
 macro_rules! logical_generic_trait_impl {
     () => {
         fn commit(&mut self) {

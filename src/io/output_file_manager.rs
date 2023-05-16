@@ -109,7 +109,7 @@ pub struct OutputFileManager<'a> {
 }
 
 impl<'a> OutputFileManager<'a> {
-    /// Instantiate a [`OutputFileManager`].
+    /// Instantiate an [`OutputFileManager`].
     ///
     /// Instantiates a new [`OutputFileManager`] if the given `path` is writable. Otherwise an [`Error`] is thrown.
     pub fn try_new(path: &'a PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
@@ -138,10 +138,10 @@ impl OutputFileManager<'_> {
         pred_path
     }
 
-    /// Creates a file for predicate
+    /// Creates a file for predicate.
     ///
-    /// The created file will follow the previously stated file-format and compression-method.
-    /// A specified [`pred`][Identifier] will be prepared into a [`RecordWriter`] to write the associated information.
+    /// The created file follows the previously stated file format and compression method.on.
+    /// Returns a [`RecordWriter`] for a file named appropriately for the given [`predicate`][Identifier]
     pub fn create_file_writer(&self, pred: &Identifier) -> Result<impl RecordWriter, Error> {
         let mut options = OpenOptions::new();
         options.write(true);

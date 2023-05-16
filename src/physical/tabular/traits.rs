@@ -6,5 +6,5 @@ pub mod table;
 /// Module for defining [`TableSchema`][table_schema::TableSchema]
 pub mod table_schema;
 
-/// Module for definint [`TrieScan`][triescan::TrieScan]
+/// Module for defining [`TrieScan`][triescan::TrieScan]
 pub mod triescan;
