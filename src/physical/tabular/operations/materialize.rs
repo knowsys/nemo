@@ -234,7 +234,7 @@ pub fn scan_is_empty(trie_scan: &mut TrieScanEnum) -> bool {
 }
 
 /// Given a TrieScan iterator, materialize its content into a trie
-/// Setting picked_columns[i] to false means that the ith column will have an empty data vector
+/// Setting picked_columns\[i\] to false means that the ith column will have an empty data vector
 /// Passing None is equivalent to passing a vector containing only true
 /// TODO: For now this function behaves the same as materialize
 /// because it doesn't work with the current implementation of project.

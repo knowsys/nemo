@@ -134,7 +134,7 @@ where
     }
 
     /// Enabled means that the minus operation is performed;
-    /// otherwise this scan acts like a [`ColumnScanPass`]
+    /// otherwise this scan acts like a [`ColumnScanPass`][super::ColumnScanPass]
     pub fn minus_enable(&mut self, enabled: bool) {
         self.enabled = enabled;
     }

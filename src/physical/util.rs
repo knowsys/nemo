@@ -81,7 +81,7 @@ macro_rules! generate_forwarder {
 }
 
 /// A specialised version of [`generate_forwarder`] for the possible
-/// variants of [`crate::physical::datatypes::data_value::StorageValueT`].
+/// variants of [`crate::physical::datatypes::storage_value::StorageValueT`].
 #[macro_export]
 macro_rules! generate_datatype_forwarder {
     ($name:ident) => {

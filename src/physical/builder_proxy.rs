@@ -76,7 +76,7 @@ pub trait PhysicalColumnBuilderProxy<T>: ColumnBuilderProxy<T> {
     fn finalize(self) -> VecT;
 }
 
-/// [`PhysicalBuilderProxy`] to add Strings
+/// [`PhysicalColumnBuilderProxy`] to add Strings
 #[derive(Debug)]
 pub struct PhysicalStringColumnBuilderProxy<'a> {
     dict: &'a RefCell<Dict>,
@@ -111,7 +111,7 @@ impl PhysicalColumnBuilderProxy<String> for PhysicalStringColumnBuilderProxy<'_>
     }
 }
 
-/// [`PhysicalBuilderProxy`] to add types without special requirements (e.g. dictionary)
+/// [`PhysicalColumnBuilderProxy`] to add types without special requirements (e.g. dictionary)
 #[derive(Default, Debug)]
 pub struct PhysicalGenericColumnBuilderProxy<T> {
     value: Option<T>,

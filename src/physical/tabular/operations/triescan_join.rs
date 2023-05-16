@@ -147,11 +147,12 @@ impl FromIterator<Vec<usize>> for JoinBindings {
     }
 }
 
-/// A [`JoinBinding`] is a vector of [`Vec<usize>`] where `binding[i]`
-/// contains which layer of the `i`-th subscan is bound to which variable
-/// (Variables are represented by their index in the variable order)
-/// So the join R(a, b) S(b, c) T(a, c) with variable order [a, b, c] is represented
-/// with the binding [[0, 1], [1, 2], [0, 2]] (assuming trie_scans = [R, S, T])
+// TODO: rustdoc for commented out type alias
+// A [`JoinBinding`] is a vector of [`Vec<usize>`] where `binding\[i\]`
+// contains which layer of the `i`-th subscan is bound to which variable
+// (Variables are represented by their index in the variable order)
+// So the join R(a, b) S(b, c) T(a, c) with variable order [a, b, c] is represented
+// with the binding [[0, 1], [1, 2], [0, 2]] (assuming trie_scans = [R, S, T])
 // pub type JoinBinding = Vec<Vec<usize>>;
 
 /// [`TrieScan`] which represents the result from joining a set of tries (given as [`TrieScan`]s),

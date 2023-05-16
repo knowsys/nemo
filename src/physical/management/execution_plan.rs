@@ -118,7 +118,7 @@ pub enum ExecutionOperation {
     Union(Vec<ExecutionNodeRef>),
     /// Table difference operation.
     Minus(ExecutionNodeRef, ExecutionNodeRef),
-    /// Table project operation; can only be applied to a [`FetchTable`] or [`FetchTemp`] node.
+    /// Table project operation; can only be applied to a `FetchTable` or `FetchTemp` node. TODO: FetchTable/Temp no longer existing in codebase
     Project(ExecutionNodeRef, ProjectReordering),
     /// Only leave entries in that have a certain value.
     SelectValue(ExecutionNodeRef, Vec<ValueAssignment>),
