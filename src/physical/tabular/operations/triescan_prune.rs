@@ -337,9 +337,9 @@ impl<'a> TrieScanPruneState<'a> {
             return None;
         }
 
-        // Layer with the lowest index where the trie scan has advanced to the next item, from the perspective of someone who consumes this trie scan
-        // `target_layer` must be modified to return `Some(return_value)`, thus this is a sensible initial value
-        let mut return_value = target_layer;
+        // Layer with the smallest index where the trie scan has advanced to the next item, from the perspective of someone who consumes this trie scan
+        // `self.input_trie_scan_current_layer` will immediately get advanced by the loop following, thus this is the initial value of this variable.
+        let mut uppermost_advanced_layer_index = self.input_trie_scan_current_layer;
 
         // Traverse trie downwards to check if the value would actually exists in the materialized version of the trie
         // If at one layer there is no materialized value, move up, go to the next item, and move down again
@@ -360,8 +360,8 @@ impl<'a> TrieScanPruneState<'a> {
 
                 self.up();
 
-                if self.input_trie_scan_current_layer > return_value {
-                    return_value = self.input_trie_scan_current_layer;
+                if self.input_trie_scan_current_layer < uppermost_advanced_layer_index {
+                    uppermost_advanced_layer_index = self.input_trie_scan_current_layer;
                 }
             } else if self.input_trie_scan_current_layer
                 == self.input_trie_scan.get_types().len() - 1
@@ -371,7 +371,7 @@ impl<'a> TrieScanPruneState<'a> {
                 // Mark layers below the `target_layer` as peeked
                 self.set_highest_peeked_layer_by_target_layer(target_layer);
 
-                return Some(return_value);
+                return Some(uppermost_advanced_layer_index);
             } else {
                 self.down();
             }
@@ -725,22 +725,22 @@ mod test {
             get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
             None
         );
-        scan.advance_at_layer(lowest_layer_index, true);
+        assert_eq!(scan.advance_at_layer(lowest_layer_index, true), Some(0));
         assert_eq!(
             get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
             Some(7)
         );
-        scan.advance_at_layer(lowest_layer_index, true);
+        assert_eq!(scan.advance_at_layer(lowest_layer_index, true), Some(2));
         assert_eq!(
             get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
             Some(7)
         );
-        scan.advance_at_layer(lowest_layer_index, true);
+        assert_eq!(scan.advance_at_layer(lowest_layer_index, true), Some(0));
         assert_eq!(
             get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
             Some(7)
         );
-        scan.advance_at_layer(lowest_layer_index, true);
+        assert_eq!(scan.advance_at_layer(lowest_layer_index, true), None);
         assert_eq!(
             get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
             None
