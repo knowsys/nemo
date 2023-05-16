@@ -164,7 +164,7 @@ impl<'a> TrieScanPruneState<'a> {
         unsafe { &*scan.get() }.current()
     }
 
-    /// Helper method for the `advance_at_layer()` and `advance_at_layer_with_seek()`
+    /// Helper method for the `advance_on_layer()` and `advance_on_layer_with_seek()`
     ///
     /// Goes to next value without checking layer peeks (see `highest_peeked_layer`), and returns if a value exists.
     fn advance_has_next_value(&mut self) -> bool {
@@ -183,10 +183,10 @@ impl<'a> TrieScanPruneState<'a> {
         };
     }
 
-    /// Same as `advance_at_layer()`, but calls `seek()` at the target layer to find advance to the next relevant tuple more efficiently.
+    /// Same as `advance_on_layer()`, but calls `seek()` at the target layer to find advance to the next relevant tuple more efficiently.
     ///
     /// Currently, this function does not support returning the uppermost changed layer. This can be implemented in the future.
-    pub fn advance_at_layer_with_seek<T: ColumnDataType>(
+    pub fn advance_on_layer_with_seek<T: ColumnDataType>(
         &mut self,
         target_layer: usize,
         allow_advancements_above_target_layer: bool,
@@ -292,8 +292,8 @@ impl<'a> TrieScanPruneState<'a> {
 
     /// Moves to the next value on a given layer while ensuring that only materialized tuples are returned (see guarantees provided by [`TrieScanPrune`]).
     ///
-    /// See documentation of function `advance_at_layer()` of [`TrieScanPrune`].
-    pub fn advance_at_layer(
+    /// See documentation of function `advance_on_layer()` of [`TrieScanPrune`].
+    pub fn advance_on_layer(
         &mut self,
         target_layer: usize,
         allow_advancements_above_target_layer: bool,
@@ -440,18 +440,18 @@ impl<'a> TrieScanPrune<'a> {
     ///
     /// It is assumed that the trie scan has been initialized by calling `down()` at least once.
     ///
-    /// In the future and if needed, a similar function `advance_at_layer_with_seek()` might be exposed here, too (see `advance_at_layer_with_seek()` of [`crate::physical::tabular::operations::triescan_prune::TrieScanPrune`]).
+    /// In the future and if needed, a similar function `advance_on_layer_with_seek()` might be exposed here, too (see `advance_on_layer_with_seek()` of [`crate::physical::tabular::operations::triescan_prune::TrieScanPrune`]).
     ///
     ///   * `allow_advancements_above_target_layer` - Whether the underlying trie scan may be advanced on layers above the `target_layer`.
-    ///     If this is set to `false`, the `advance_at_layer()` function has the same effect as calling `next()` on the column scan at the `target_layer`, meaning that layers above the `target_layer` are seen as read-only.
-    ///     If this is set to `true`, layers above the `target_layer` once `next()` on the `target_layer` returns `None`. This allows to e.g. call `advance_at_layer()` on the bottommost layer to iterate though all the tuples of the underlying trie scan.
+    ///     If this is set to `false`, the `advance_on_layer()` function has the same effect as calling `next()` on the column scan at the `target_layer`, meaning that layers above the `target_layer` are seen as read-only.
+    ///     If this is set to `true`, layers above the `target_layer` once `next()` on the `target_layer` returns `None`. This allows to e.g. call `advance_on_layer()` on the bottommost layer to iterate though all the tuples of the underlying trie scan.
     ///
     /// Returns the uppermost layer (layer with lowest index) that has been advanced. This layer, and all the layers below, can have a new current value. This is relevant if `allow_advancements_above_target_layer` is set to `true`.
     ///
     /// # Panics
     ///
     /// If the underlying trie scan has not been initialized.
-    pub fn advance_at_layer(
+    pub fn advance_on_layer(
         &mut self,
         target_layer: usize,
         allow_advancements_above_target_layer: bool,
@@ -459,7 +459,7 @@ impl<'a> TrieScanPrune<'a> {
         unsafe {
             assert!((*self.state.get()).initialized);
             (*self.state.get())
-                .advance_at_layer(target_layer, allow_advancements_above_target_layer)
+                .advance_on_layer(target_layer, allow_advancements_above_target_layer)
         }
     }
 }
@@ -708,7 +708,7 @@ mod test {
         let trie = create_example_trie();
         let mut scan = create_example_trie_scan(&trie, 4, 7);
 
-        scan.advance_at_layer(0, false);
+        scan.advance_on_layer(0, false);
     }
 
     #[test]
@@ -725,22 +725,22 @@ mod test {
             get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
             None
         );
-        assert_eq!(scan.advance_at_layer(lowest_layer_index, true), Some(0));
+        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(0));
         assert_eq!(
             get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
             Some(7)
         );
-        assert_eq!(scan.advance_at_layer(lowest_layer_index, true), Some(2));
+        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(2));
         assert_eq!(
             get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
             Some(7)
         );
-        assert_eq!(scan.advance_at_layer(lowest_layer_index, true), Some(0));
+        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(0));
         assert_eq!(
             get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
             Some(7)
         );
-        assert_eq!(scan.advance_at_layer(lowest_layer_index, true), None);
+        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), None);
         assert_eq!(
             get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
             None
