@@ -58,7 +58,7 @@
 //! # let mut dict = RefCell::new(nemo::physical::dictionary::PrefixedStringDictionary::default());
 //! let mut builder = vec![
 //!     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-//!     PhysicalBuilderProxyEnum::U64(Default::default()),
+//!     PhysicalBuilderProxyEnum::I64(Default::default()),
 //! ];
 //! // read the data into the builder
 //! let result = table_reader.read_into_builder_proxies(&mut builder);
