@@ -1,3 +1,8 @@
+use std::cell::UnsafeCell;
+use std::iter;
+use std::mem::size_of;
+use std::ops::Deref;
+
 use bytesize::ByteSize;
 
 use crate::generate_cast_statements;
@@ -20,10 +25,6 @@ use crate::physical::management::database::Dict;
 use crate::physical::management::ByteSized;
 use crate::physical::tabular::traits::table_schema::TableSchema;
 use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
-use std::cell::UnsafeCell;
-use std::iter;
-use std::mem::size_of;
-use std::ops::Deref;
 
 pub(crate) struct TrieRows<'a> {
     data_columns: Vec<ColumnScanT<'a>>,
