@@ -15,7 +15,7 @@ use crate::{
 ///
 /// This parses from a given logical type to the physical type, without exposing details from one layer to the other.
 pub trait LogicalColumnBuilderProxy<'a, 'b>: ColumnBuilderProxy<String> {
-    /// Create a new [`LogicalColumnBuilderProxy`] with a given [`BuilderProxy`][crate::physical::builder_proxy::PhysicalBuilderProxyEnum].
+    /// Create a new [`LogicalColumnBuilderProxy`] from a given [`BuilderProxy`][crate::physical::builder_proxy::PhysicalBuilderProxyEnum].
     ///
     /// # Panics
     /// If the logical and the nested physical type are not compatible, an `unreachable` panic will be thrown.
