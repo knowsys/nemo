@@ -14,8 +14,10 @@ use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 /// Iterator for a sorted interval of values
 pub trait ColumnScan: Debug + Iterator {
-    /// Find the next value that is at least as large as the given value,
+    /// Starting from the current position, find a value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value if it exists.
+    /// If the current value is already larger or equal to the given value,
+    /// this value will be returned and the `ColumnScan` will not be advanced.
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item>;
 
     /// Return the value at the current position, if any.

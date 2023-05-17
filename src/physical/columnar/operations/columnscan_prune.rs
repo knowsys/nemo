@@ -59,7 +59,7 @@ where
 
         unsafe {
             let state = Self::exclusively_get_shared_state(&self.state);
-            state.advance_at_layer(current_layer, false);
+            state.advance_on_layer(current_layer, false);
         };
 
         self.reference_scan.current()
@@ -78,7 +78,7 @@ where
 
             // Advance the underlying trie scan, taking layer peeks into account
             // This calls `seek()` and `next()` under the hood, possibly multiple times.
-            state.advance_at_layer_with_seek(
+            state.advance_on_layer_with_seek(
                 current_layer,
                 false,
                 self.reference_scan,
