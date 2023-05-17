@@ -8,7 +8,7 @@ use nemo::{
     error::Error,
     io::{
         parser::{all_input_consumed, RuleParser},
-        OutputFileManager,
+        OutputFileManager, RecordWriter,
     },
     logical::{
         execution::{
@@ -21,6 +21,7 @@ use nemo::{
         model::{OutputPredicateSelection, Program},
     },
     meta::{timing::TimedDisplay, TimedCode},
+    physical::dictionary::value_serializer::TrieSerializer,
 };
 
 /// Application state
@@ -218,7 +219,11 @@ impl CliApp {
                 let mut writer = file_manager.create_file_writer(&pred)?;
 
                 if let Some(id) = table_id {
-                    exec_engine.write_predicate_to_disk(&mut writer, id)?;
+                    let mut serializer = exec_engine.table_serializer(id);
+
+                    while let Some(record) = serializer.next_record() {
+                        writer.write_record(record)?;
+                    }
                 }
             }
 
