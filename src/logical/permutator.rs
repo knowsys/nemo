@@ -88,22 +88,19 @@ impl Permutator {
 
     /// Creates a [`Permutator`] based on one a list of [`VecT`].
     ///
-    /// The sorting of values is done by taking the first [`VecT`] and sorting them according to these values.
-    /// The sorting is done in a lexicographic order.
-    /// If all [`VecT`] comparisons result in equality, the original order of the two values is preserved.
+    /// For details on the sorting see [`sort_from_multiple_vec_with_offset`][Self::sort_from_multiple_vec_with_offset]
     ///
-    /// Returns an Error, if the length of the given [`VecT`] are different.
+    /// Returns [`Error::PermutationSortLen`] if the given [`VecT`] differ in length.
     pub fn sort_from_multiple_vec(data_vec: &[VecT]) -> Result<Permutator, Error> {
         Self::sort_from_multiple_vec_with_offset(data_vec, 0)
     }
 
     /// Creates a [`Permutator`] based on one a list of [`VecT`], with a given offset.
     ///
-    /// The sorting of values is done by taking the first [`VecT`] and sort according to these values.
     /// If two elements are the equal to each other, the next [`VecT`] is taken to check if the comparison is different.
     /// If all [`VecT`] comparisons result in equality, the original order of the two values is preserved.
     ///
-    /// Returns an Error, if the length of the given [`VecT`] are different.
+    /// Returns [`Error::PermutationSortLen`] if the given [`VecT`] differ in length.
     pub fn sort_from_multiple_vec_with_offset(
         data_vec: &[VecT],
         offset: usize,

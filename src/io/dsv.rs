@@ -34,8 +34,7 @@
 //!
 //! ## Physical layer
 //! The physical layer receives a trait object [`TableReader`], which is
-//! the instantiated `csv_reader` from the example above.
-//! The same variable is used.
+//! the instantiated `csv_reader`, stored in `table_reader` from the example above.
 //! ```
 //! # use nemo::io::TableReader;
 //! # use std::path::PathBuf;
