@@ -8,12 +8,12 @@ use crate::physical::{
 
 use super::Dictionary;
 
-/// Reads [TableSchema] and [Dict] to convert physical data types into strings
+/// Reads [TableSchema] and [Dict] to convert physical data types into strings.
 #[derive(Debug)]
 pub struct ValueSerializer<D, S> {
-    /// The dict defining the mapping between constants and strings
+    /// The dict defining the mapping between constants and strings.
     pub dict: D,
-    /// The table schema defining the mapping between physical and logical types
+    /// The table schema defining the mapping between physical and logical types.
     pub schema: S,
 }
 
@@ -22,7 +22,7 @@ where
     D: Deref<Target = Dict>,
     S: Deref<Target = TableSchema>,
 {
-    /// Convert a physical [StorageValueT] into a String
+    /// Convert a physical [StorageValueT] into a String.
     pub fn value_to_string(&self, schema_index: usize, value: StorageValueT) -> String {
         match self.schema[schema_index] {
             DataTypeName::String => {
@@ -67,15 +67,20 @@ where
     }
 }
 
-/// An iterator walking over a trie, while serializing every value
+/// An iterator walking over a trie, while serializing every value.
 pub trait TrieSerializer {
-    /// The type each field will be serialized to
+    /// The type each field will be serialized to.
+    ///
+    /// The type must trivially be convertible to a byte array, examples
+    /// for this are [`String`], [`str`] and [`[u8]`][byteslice].
+    ///
+    /// [byteslice]: slice
     type SerializedValue: AsRef<[u8]>;
-    /// The type representing an entire row of serialized values
+    /// The type representing an entire row of serialized values.
     type SerializedRecord<'a>: IntoIterator<Item = &'a Self::SerializedValue>
     where
         Self: 'a;
 
-    /// Serializes the next row in the trie and moves the iterator one step
+    /// Serializes the next row in the trie and moves the iterator one step.
     fn next_record(&mut self) -> Option<Self::SerializedRecord<'_>>;
 }
