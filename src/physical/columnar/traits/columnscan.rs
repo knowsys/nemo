@@ -387,7 +387,7 @@ where
     /// Forward `get_smallest_scans` to the underlying [`ColumnScanEnum`].
     /// This takes an exclusive reference as opposed to an immutable one, so that none of the
     /// mutating methods on &self can be called while the result is still available
-    /// (see https://github.com/knowsys/nemo/issues/137)
+    /// (see <https://github.com/knowsys/nemo/issues/137>)
     pub fn get_smallest_scans(&mut self) -> &Vec<bool> {
         unsafe { &mut *self.0.get() }.get_smallest_scans()
     }

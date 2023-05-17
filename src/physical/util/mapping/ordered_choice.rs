@@ -9,7 +9,7 @@ use std::{
 use super::{permutation::Permutation, traits::NatMapping};
 
 /// Function that representes an ordered choosing from a sorted collection.
-/// In a mathematical sense, may be viewed as an partial function [n] -> [n] that is injective.
+/// In a mathematical sense, may be viewed as a partial function \[n\] -> \[n\] that is injective.
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SortedChoice {
     /// Function is represented by a [`HashMap`] mapping the input `i` to `map.get(i)`.

@@ -1,4 +1,6 @@
-//! This module contains utility functions, like importing data from various sources
+//! Functionality to read and write data is implemented here.
+//!
+//! This module acts as a mediation layer between the logical and physical layer and offers traits to allow both layers an abstract view on the io process.
 
 use std::io::Write;
 
@@ -10,7 +12,7 @@ pub use output_file_manager::OutputFileManager;
 
 use crate::{error::Error, physical::builder_proxy::PhysicalBuilderProxyEnum};
 
-/// A general interface for writing records of string values
+/// A general interface for writing records of string values.
 pub trait RecordWriter {
     /// Write a single record.
     fn write_record<I, T>(&mut self, record: I) -> Result<(), Error>
@@ -32,9 +34,16 @@ impl<W: Write> RecordWriter for csv::Writer<W> {
     }
 }
 
-/// A general interface for reading tables from files
+/// A general interface for reading tables from files.
+///
+/// This is called from the physical layer to ask a reader to fill the
+/// Vector of [builder proxies][PhysicalBuilderProxyEnum].
+///
+/// # Note
+/// This is the physical interface to access all readers, instantiated on the logical layer.
+/// Therefore every reader needs to implement this trait.
 pub trait TableReader: std::fmt::Debug {
-    /// read the table into multiple [`ColumnBuilderProxy`]
+    /// Read the table into multiple [`ColumnBuilderProxy`][crate::physical::builder_proxy::PhysicalColumnBuilderProxy]
     fn read_into_builder_proxies<'a: 'b, 'b>(
         &self,
         builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,

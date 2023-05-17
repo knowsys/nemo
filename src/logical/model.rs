@@ -339,7 +339,7 @@ impl FilterOperation {
     }
 }
 
-/// Filter of the form <variable> <operation> <term>
+/// Filter of the form `<variable> <operation> <term>`
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct Filter {
     /// Operation to be performed

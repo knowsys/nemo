@@ -88,15 +88,15 @@ impl std::fmt::Display for StorageValueT {
 /// Enum for vectors of different supported input types
 #[derive(Debug)]
 pub enum VecT {
-    /// Case Vec<u32>
+    /// Case `Vec<u32>`
     U32(Vec<u32>),
-    /// Case Vec<u64>
+    /// Case `Vec<u64>`
     U64(Vec<u64>),
-    /// Case Vec<i64>
+    /// Case `Vec<i64>`
     I64(Vec<i64>),
-    /// Case Vec<Float>
+    /// Case `Vec<Float>`
     Float(Vec<Float>),
-    /// Case Vec<Double>
+    /// Case `Vec<Double>`
     Double(Vec<Double>),
 }
 

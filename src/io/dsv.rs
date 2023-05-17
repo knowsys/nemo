@@ -1,17 +1,96 @@
-//! Represents different data-import methods
+//! Reading of delimiter-separated value files
+//!
+//! This module provides [`DSVReader`], a [`TableReader`] that can parse DSV (delimiter-separated value) files.
+//! It is typically instantiated by the logical layer with the logical types corresponding to each column in the file.
+//! The physical layer then passes in [physical builder proxies][crate::physical::builder_proxy::PhysicalColumnBuilderProxy]
+//! that convert the read data into the appropriate storage types.
+//!
+//! # Examples
+//! On the logical layer, the [`DSVReader`] is created.
+//! The following examples use this csv-file, which is representing a tuple with one string (logical any) and one number (logical integer) terms.
+//! ```csv
+//! Boston,654776
+//! Dresden,554649
+//! ```
+//! This file can be found in the current repository at `resources/doc/examples/city_population.csv`
+//! ## Logical layer
+//! ```
+//! # use std::path::PathBuf;
+//! # use nemo::{logical::types::LogicalTypeEnum, io::{TableReader,dsv::DSVReader}};
+//! # let file = PathBuf::from("resources/doc/examples/city_population.csv");
+//! let csv_reader = DSVReader::csv(
+//!     file,
+//!     vec![
+//!         LogicalTypeEnum::Any,
+//!         LogicalTypeEnum::Integer,
+//!     ],
+//! );
+//! // Pack the csv_reader into a [`TableReader`] trait object for the physical layer
+//! let table_reader: Box<dyn TableReader> = Box::new(csv_reader);
+//! ```
+//!
+//! The example first creates a [`DSVReader`] which uses a comma as its separator.
+//! It passes the reader to the physical layer as a [`TableReader`] object.
+//!
+//! ## Physical layer
+//! The physical layer receives `table_reader`, the [`TableReader`] trait object from the example above.
+//! ```
+//! # use nemo::io::TableReader;
+//! # use std::path::PathBuf;
+//! #
+//! # use nemo::{logical::types::LogicalTypeEnum, io::dsv::DSVReader};
+//! # use std::cell::RefCell;
+//! # use nemo::physical::builder_proxy::{
+//! #    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
+//! # };
+//! # #[cfg(miri)]
+//! # fn main() {}
+//! # #[cfg(not(miri))]
+//! # fn main() {
+//! # let file = PathBuf::from("resources/doc/examples/city_population.csv");
+//! #
+//! # let csv_reader = DSVReader::csv(
+//! #     file,
+//! #     vec![
+//! #         LogicalTypeEnum::Any,
+//! #         LogicalTypeEnum::Integer,
+//! #     ],
+//! # );
+//! # let table_reader:Box<dyn TableReader> = Box::new(csv_reader);
+//! # let mut dict = RefCell::new(nemo::physical::dictionary::PrefixedStringDictionary::default());
+//! let mut builder = vec![
+//!     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+//!     PhysicalBuilderProxyEnum::I64(Default::default()),
+//! ];
+//! // Read the data into the builder
+//! let result = table_reader.read_into_builder_proxies(&mut builder);
+//! let columns = builder.into_iter().map(|bp| bp.finalize()).collect::<Vec<_>>();
+//! # }
+//! ```
 
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
+use csv::{Reader, ReaderBuilder};
+
 use crate::logical::types::LogicalTypeEnum;
 use crate::logical::LogicalColumnBuilderProxy;
 use crate::{error::Error, physical::builder_proxy::PhysicalBuilderProxyEnum};
-use csv::{Reader, ReaderBuilder};
 
-use super::TableReader;
+use crate::io::TableReader;
 
-/// A reader Object, which allows to read a DSV (delimiter separated) file
+/// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
+///
+/// By default the reader will assume the following for the input file:
+/// - no headers are given,
+/// - double quotes are allowed for string escaping
+///
+/// The reader object relates a given [file][PathBuf] in DSV format to a tuple of [logical types][LogicalTypeEnum].
+/// Via the implementation of [`TableReader`] it fills the corresponding [`PhysicalBuilderProxys`][crate::physical::builder_proxy::PhysicalBuilderProxyEnum]
+/// with the data from the file.
+/// It combines the logical and physical BuilderProxies to handle the read data according to both datatype models.
+
 #[derive(Debug, Clone)]
 pub struct DSVReader {
     file: PathBuf,
@@ -21,12 +100,12 @@ pub struct DSVReader {
 }
 
 impl DSVReader {
-    /// Instantiate a [DSVReader] for CSV files
+    /// Instantiate a [DSVReader] for CSV (comma separated values) files
     pub fn csv(file: PathBuf, logical_types: Vec<LogicalTypeEnum>) -> Self {
         Self::dsv(file, b',', logical_types)
     }
 
-    /// Instantiate a [DSVReader] for TSV files
+    /// Instantiate a [DSVReader] for TSV (tab separated values) files
     pub fn tsv(file: PathBuf, logical_types: Vec<LogicalTypeEnum>) -> Self {
         Self::dsv(file, b'\t', logical_types)
     }
@@ -42,6 +121,8 @@ impl DSVReader {
     }
 
     /// Static function to create a serde reader
+    ///
+    /// The function takes an arbitrary [`Reader`][Read] and wraps it into a [`Reader`][csv::Reader] for csv
     fn reader<R>(rdr: R, delimiter: u8, escape: Option<u8>) -> Reader<R>
     where
         R: Read,
@@ -228,6 +309,7 @@ Boston;United States;4628910
         );
     }
 
+    /// Ignored as normalisation is not done yet completely
     #[ignore]
     #[test]
     fn csv_with_various_different_constant_and_literal_representations() {
@@ -279,17 +361,7 @@ The next column is empty;;789
         let result = csvreader.read_into_builder_proxies_with_reader(&mut builder, &mut rdr);
         assert!(result.is_ok());
 
-        let cols: Vec<VecT> = builder
-            .into_iter()
-            .map(|bp| match bp {
-                PhysicalBuilderProxyEnum::String(bp) => bp.finalize(),
-                PhysicalBuilderProxyEnum::I64(bp) => bp.finalize(),
-                PhysicalBuilderProxyEnum::U64(bp) => bp.finalize(),
-                PhysicalBuilderProxyEnum::U32(bp) => bp.finalize(),
-                PhysicalBuilderProxyEnum::Float(bp) => bp.finalize(),
-                PhysicalBuilderProxyEnum::Double(bp) => bp.finalize(),
-            })
-            .collect();
+        let cols: Vec<VecT> = builder.into_iter().map(|bp| bp.finalize()).collect();
 
         let VecT::U64(ref col0_idx) = cols[0] else { unreachable!() };
         let VecT::U64(ref col1_idx) = cols[1] else { unreachable!() };

@@ -141,8 +141,8 @@ where
     }
 }
 
-/// A specialised version of [`generate_forwarder`] for the possible
-/// variants of castable types of [`crate::physical::datatypes::data_value::StorageValueT`].
+/// A specialised version of the `generate_forwarder` macro for the possible
+/// variants of castable types of [`crate::physical::datatypes::storage_value::StorageValueT`].
 #[macro_export]
 macro_rules! generate_castable_forwarder {
     ($name:ident) => {
