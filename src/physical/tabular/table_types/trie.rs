@@ -14,12 +14,16 @@ use crate::physical::columnar::{
     },
 };
 use crate::physical::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
+use crate::physical::dictionary::value_serializer::TrieSerializer;
 use crate::physical::dictionary::ValueSerializer;
+use crate::physical::management::database::Dict;
 use crate::physical::management::ByteSized;
+use crate::physical::tabular::traits::table_schema::TableSchema;
 use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
 use std::cell::UnsafeCell;
 use std::iter;
 use std::mem::size_of;
+use std::ops::Deref;
 
 pub(crate) struct TrieRows<'a> {
     data_columns: Vec<ColumnScanT<'a>>,
@@ -76,27 +80,21 @@ impl<'a> TrieRows<'a> {
     }
 }
 
-// TODO: TrieRecord(s) should probably be moved somewhere else, alongside the table_schema
-
-pub(crate) struct TrieRecord<'a>(&'a [String]);
-
-impl<'a> IntoIterator for TrieRecord<'a> {
-    type Item = &'a String;
-    type IntoIter = std::slice::Iter<'a, String>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.iter()
-    }
-}
-
-pub(crate) struct TrieRecords<'a> {
+pub(crate) struct TrieRecords<'a, D, S> {
     rows: TrieRows<'a>,
     last_record: Vec<String>,
-    serializer: ValueSerializer<'a>,
+    serializer: ValueSerializer<D, S>,
 }
 
-impl<'a> TrieRecords<'a> {
-    pub fn next_record(&mut self) -> Option<TrieRecord<'_>> {
+impl<'a, D, S> TrieSerializer for TrieRecords<'a, D, S>
+where
+    D: Deref<Target = Dict>,
+    S: Deref<Target = TableSchema>,
+{
+    type SerializedValue = String;
+    type SerializedRecord<'r> = std::slice::Iter<'r, String> where Self: 'r;
+
+    fn next_record(&mut self) -> Option<Self::SerializedRecord<'_>> {
         let changed_values = self.rows.next_changed()?;
         let unchanged = if !self.last_record.is_empty() {
             self.last_record.len() - changed_values.len()
@@ -112,7 +110,7 @@ impl<'a> TrieRecords<'a> {
             self.last_record.push(str_value);
         }
 
-        Some(TrieRecord(&self.last_record))
+        Some(self.last_record.iter())
     }
 }
 
@@ -271,7 +269,14 @@ impl Trie {
         }
     }
 
-    pub(crate) fn records<'a>(&'a self, serializer: ValueSerializer<'a>) -> TrieRecords<'a> {
+    pub(crate) fn records<'a, D, S>(
+        &'a self,
+        serializer: ValueSerializer<D, S>,
+    ) -> impl TrieSerializer + 'a
+    where
+        D: Deref<Target = Dict> + 'a,
+        S: Deref<Target = TableSchema> + 'a,
+    {
         let num_columns = self.columns.len();
 
         TrieRecords {

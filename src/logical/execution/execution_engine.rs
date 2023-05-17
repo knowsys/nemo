@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     error::Error,
-    io::{dsv::DSVReader, RecordWriter},
+    io::dsv::DSVReader,
     logical::{
         model::{DataSource, Identifier, Program},
         program_analysis::analysis::ProgramAnalysis,
@@ -14,6 +14,7 @@ use crate::{
     meta::TimedCode,
     physical::{
         datatypes::DataValueT,
+        dictionary::value_serializer::TrieSerializer,
         management::database::{TableId, TableSource},
     },
 };
@@ -275,12 +276,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         result
     }
 
-    /// Returns a reference to the Trie corresponding to the table_id
-    pub fn write_predicate_to_disk(
-        &self,
-        writer: &mut impl RecordWriter,
-        table_id: TableId,
-    ) -> Result<(), Error> {
-        self.table_manager.write_table_to_disk(writer, table_id)
+    /// Returns an iterator that provides serialized fields for each row in the specified table.
+    /// Uses the default [`ColumnOrder`]
+    /// Panics if there is no trie associated with the given id.
+    pub fn table_serializer(&self, table_id: TableId) -> impl TrieSerializer + '_ {
+        self.table_manager.table_serializer(table_id)
     }
 }

@@ -3,9 +3,8 @@
 use super::{model::Identifier, types::LogicalTypeEnum};
 use crate::{
     error::Error,
-    io::RecordWriter,
     physical::{
-        dictionary::ValueSerializer,
+        dictionary::{value_serializer::TrieSerializer, ValueSerializer},
         management::{
             database::{ColumnOrder, Dict, TableId, TableSource},
             execution_plan::ExecutionNodeRef,
@@ -317,30 +316,16 @@ impl TableManager {
             .map(|s| s.count_rows(&self.database))
     }
 
-    /// Write the Trie associated with the given id to CSV.
+    /// Returns an iterator that provides serialized fields for each row in the specified table.
     /// Uses the default [`ColumnOrder`]
     /// Panics if there is no trie associated with the given id.
-    pub fn write_table_to_disk(
-        &self,
-        writer: &mut impl RecordWriter,
-        id: TableId,
-    ) -> Result<(), Error> {
+    pub fn table_serializer(&self, id: TableId) -> impl TrieSerializer + '_ {
         let schema = self.database.table_schema(id);
         let dict = self.database.get_dict_constants();
-        let serializer = ValueSerializer {
-            schema,
-            dict: &dict,
-        };
-        let mut records = self
-            .database
+
+        self.database
             .get_trie(id, &ColumnOrder::default())
-            .records(serializer);
-
-        while let Some(record) = records.next_record() {
-            writer.write_record(record)?;
-        }
-
-        Ok(())
+            .records(ValueSerializer { schema, dict })
     }
 
     /// Combine all subtables of a predicate into one table
