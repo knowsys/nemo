@@ -81,18 +81,16 @@ use crate::{error::Error, physical::builder_proxy::PhysicalBuilderProxyEnum};
 
 use crate::io::TableReader;
 
-/**
-A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
-
-By default the reader will assume the following for the input file:
-- no headers are given,
-- double quotes are allowed for string escaping
-
-The reader object relates a given [file][PathBuf] in DSV format to a tuple of [logical types][LogicalTypeEnum].
-Via the implementation of [`TableReader`] it fills the corresponding [`PhysicalBuilderProxys`][crate::physical::builder_proxy::PhysicalBuilderProxyEnum]
-with the data from the file.
-It combines the logical and physical BuilderProxies to handle the read data according to both datatype models.
-*/
+/// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
+///
+/// By default the reader will assume the following for the input file:
+/// - no headers are given,
+/// - double quotes are allowed for string escaping
+///
+/// The reader object relates a given [file][PathBuf] in DSV format to a tuple of [logical types][LogicalTypeEnum].
+/// Via the implementation of [`TableReader`] it fills the corresponding [`PhysicalBuilderProxys`][crate::physical::builder_proxy::PhysicalBuilderProxyEnum]
+/// with the data from the file.
+/// It combines the logical and physical BuilderProxies to handle the read data according to both datatype models.
 
 #[derive(Debug, Clone)]
 pub struct DSVReader {
