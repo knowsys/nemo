@@ -1,8 +1,6 @@
-/*!
-Functionality to read and write data is implemented here.
-
-This module acts as a mediation layer between the logical and physical layer and offers traits to allow both layers an abstract view on the io process.
-*/
+//! Functionality to read and write data is implemented here.
+//!
+//! This module acts as a mediation layer between the logical and physical layer and offers traits to allow both layers an abstract view on the io process.
 
 use std::io::Write;
 
@@ -39,7 +37,8 @@ impl<W: Write> RecordWriter for csv::Writer<W> {
 /// A general interface for reading tables from files.
 ///
 /// This is called from the physical layer to ask a reader to fill the
-/// Vector of [BuilderProxies][PhysicalBuilderProxyEnum].
+/// Vector of [builder proxies][PhysicalBuilderProxyEnum].
+///
 /// # Note
 /// This is the physical interface to access all readers, instantiated on the logical layer.
 /// Therefore every reader needs to implement this trait.

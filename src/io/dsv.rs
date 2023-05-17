@@ -2,8 +2,8 @@
 //!
 //! This module provides [`DSVReader`], a [`TableReader`] that can parse DSV (delimiter-separated value) files.
 //! It is typically instantiated by the logical layer with the logical types corresponding to each column in the file.
-//! The physical layer then passes in [`PhysicalBuilderProxies`][crate::physical::builder_proxy::PhysicalColumnBuilderProxy]
-//! that convert the read data into the apropriate storage types.
+//! The physical layer then passes in [`physical builder proxies`][crate::physical::builder_proxy::PhysicalColumnBuilderProxy]
+//! that convert the read data into the appropriate storage types.
 //!
 //! # Examples
 //! On the logical layer, the [`DSVReader`] is created.
@@ -25,7 +25,7 @@
 //!         LogicalTypeEnum::Integer,
 //!     ],
 //! );
-//! // Pack the csv_reader into a TableReader trait object for the physical layer
+//! // Pack the csv_reader into a [`TableReader`] trait object for the physical layer
 //! let table_reader: Box<dyn TableReader> = Box::new(csv_reader);
 //! ```
 //!
@@ -56,14 +56,13 @@
 //! #         LogicalTypeEnum::Integer,
 //! #     ],
 //! # );
-//! # // defining the trait-object which is given by the logical layer
 //! # let table_reader:Box<dyn TableReader> = Box::new(csv_reader);
 //! # let mut dict = RefCell::new(nemo::physical::dictionary::PrefixedStringDictionary::default());
 //! let mut builder = vec![
 //!     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
 //!     PhysicalBuilderProxyEnum::I64(Default::default()),
 //! ];
-//! // read the data into the builder
+//! // Read the data into the builder
 //! let result = table_reader.read_into_builder_proxies(&mut builder);
 //! let columns = builder.into_iter().map(|bp| bp.finalize()).collect::<Vec<_>>();
 //! # }
