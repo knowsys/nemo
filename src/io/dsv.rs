@@ -2,7 +2,7 @@
 //!
 //! This module provides [`DSVReader`], a [`TableReader`] that can parse DSV (delimiter-separated value) files.
 //! It is typically instantiated by the logical layer with the logical types corresponding to each column in the file.
-//! The physical layer then passes in [`physical builder proxies`][crate::physical::builder_proxy::PhysicalColumnBuilderProxy]
+//! The physical layer then passes in [physical builder proxies][crate::physical::builder_proxy::PhysicalColumnBuilderProxy]
 //! that convert the read data into the appropriate storage types.
 //!
 //! # Examples
