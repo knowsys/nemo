@@ -130,9 +130,7 @@ mod test {
         let temp_dir = TempDir::new().unwrap();
 
         nemo_ctl.load(input).unwrap();
-        log::info!("changed to {:?}", std::env::current_dir().unwrap());
         std::env::set_current_dir("./resources/testcases/lcs-diff-computation/").unwrap();
-        log::info!("changed to {:?}", std::env::current_dir().unwrap());
         nemo_ctl.reason().unwrap();
 
         nemo_ctl
