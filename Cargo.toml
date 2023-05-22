@@ -54,6 +54,7 @@ assert_cmd = "2.0"
 predicates = "3.0"
 assert_fs = "1.0"
 dir-test = "0.1"
+serial_test= "*"
 
 [target.'cfg(unix)'.dev-dependencies]
 iai = "0.1" # needs valgrind -> unix only
