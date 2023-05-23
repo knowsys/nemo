@@ -270,8 +270,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Combine the output tries that resulted form the execution.
-    /// Returns an iterator that provides serialized fields for each row in the specified table.
-    /// Uses the default [`ColumnOrder`]
+    /// Returns a Vector of [`IdbPredicate`], which can be turned into tables by calling
+    /// [table_serializer](ExecutionEngine#method.table_serializer)
+    ///
+    /// Uses the default [`crate::physical::management::database::ColumnOrder`]
     pub fn combine_results(&mut self) -> Result<Vec<IdbPredicate>, Error> {
         let output_predicates = self.program.output_predicates().collect::<HashSet<_>>();
         let mut result_ids = Vec::new();
