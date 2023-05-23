@@ -47,8 +47,8 @@ pub enum Error {
     #[error("No inputs were specified")]
     NoInput,
     /// Error if the user asked for an unimplemented feature
-    #[error("The specified input uses {0}, which is an unimplemented feature")]
-    Unimplemented(String),
+    #[error("Multiple file support is not yet implemented")]
+    MultipleFilesNotImplemented,
     /// Rule analysis errors
     #[error(transparent)]
     RuleAnalysisError(#[from] RuleAnalysisError),

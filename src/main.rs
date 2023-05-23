@@ -101,7 +101,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     log::info!("Parsing rules ...");
 
     if cli.rules.len() > 1 {
-        return Err(Error::Unimplemented("multiple rule files".into()));
+        return Err(Error::MultipleFilesNotImplemented);
     }
 
     let rules = cli.rules.pop().ok_or(Error::NoInput)?;

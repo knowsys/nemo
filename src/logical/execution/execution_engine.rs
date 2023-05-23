@@ -289,9 +289,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         Ok(result_ids
             .into_iter()
-            .map(|(p, id)| IdbPredicate {
-                identifier: p,
-                table_id: id,
+            .map(|(identifier, table_id)| IdbPredicate {
+                identifier,
+                table_id,
             })
             .collect())
     }

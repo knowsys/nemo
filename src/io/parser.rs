@@ -26,7 +26,7 @@ pub(crate) mod sparql;
 pub(crate) mod turtle;
 pub use types::{LocatedParseError, ParseError, ParseResult};
 
-/// Parse a program in the given `input`-String and return an [`Program`].
+/// Parse a program in the given `input`-String and return a [`Program`].
 ///
 /// The program will be parsed and checked for unsupported features.
 ///
