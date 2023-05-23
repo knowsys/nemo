@@ -4,6 +4,10 @@
 //! ```
 //! # use std::fs::read_to_string;
 //! # use assert_fs::TempDir;
+//! # #[cfg(miri)]
+//! # fn main() {}
+//! # #[cfg(not(miri))]
+//! # fn main() {
 //! use nemo::api::{load,reason,write};
 //! # let path = String::from("./resources/testcases/lcs-diff-computation/run-lcs-10.rls");
 //! // assume path is a string with the path to a rules file
@@ -16,6 +20,7 @@
 //! // write the results to a temporary directory
 //! let temp_dir = TempDir::new().unwrap();
 //! write(temp_dir.to_str().unwrap().to_string(), &mut engine, results).unwrap();
+//! # }
 //! ```
 
 use std::{fs::read_to_string, path::PathBuf};
@@ -120,6 +125,7 @@ mod test {
 
     use super::*;
 
+    #[cfg_attr(miri, ignore)]
     #[test]
     fn reason() {
         let mut engine =
