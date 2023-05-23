@@ -1,6 +1,7 @@
 //! Code for timing blocks of code
 
 use ascii_tree::{write_tree, Tree};
+#[cfg(feature = "timing")]
 use howlong::*;
 use linked_hash_map::LinkedHashMap;
 use once_cell::sync::Lazy;
@@ -10,6 +11,10 @@ use std::{
     sync::{Mutex, MutexGuard},
     time::Duration,
 };
+
+// See https://doc.rust-lang.org/cargo/reference/features.html#mutually-exclusive-features
+#[cfg(all(feature = "js", feature = "timing"))]
+compile_error!("feature \"js\" and feature \"timing\" cannot be enabled at the same time, because the \"howlong\" crate does not support web assembly environments");
 
 /// Global instance of the [`TimedCode`]
 static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
@@ -23,8 +28,17 @@ pub struct TimedCodeInfo {
     total_system_time: Duration,
     total_process_time: Duration,
     total_thread_time: Duration,
+    #[cfg(not(feature = "timing"))]
+    start_system: Option<()>,
+    #[cfg(not(feature = "timing"))]
+    start_process: Option<()>,
+    #[cfg(not(feature = "timing"))]
+    start_thread: Option<()>,
+    #[cfg(feature = "timing")]
     start_system: Option<TimePoint>,
+    #[cfg(feature = "timing")]
     start_process: Option<TimePoint>,
+    #[cfg(feature = "timing")]
     start_thread: Option<TimePoint>,
     runs: u64,
 }
@@ -120,7 +134,7 @@ impl TimedCode {
 
     /// Navigate to a subblock (use forward slash to go multiple layers at once)
     pub fn sub(&mut self, name: &str) -> &mut TimedCode {
-        if cfg!(test) {
+        if cfg!(test) || cfg!(not(feature = "timing")) {
             return self;
         }
 
@@ -145,51 +159,63 @@ impl TimedCode {
 
     /// Start the next measurement
     pub fn start(&mut self) {
-        if cfg!(test) {
+        if cfg!(test) || cfg!(not(feature = "timing")) {
             return;
         }
 
         debug_assert!(self.info.start_thread.is_none());
 
-        self.info.start_system = Some(HighResolutionClock::now());
-        self.info.start_process = Some(ProcessRealCPUClock::now());
-        self.info.start_thread = Some(ThreadClock::now());
+        #[cfg(feature = "timing")]
+        {
+            self.info.start_system = Some(HighResolutionClock::now());
+            self.info.start_process = Some(ProcessRealCPUClock::now());
+            self.info.start_thread = Some(ThreadClock::now());
+        }
     }
 
     /// Stop the current measurement and save the times
     pub fn stop(&mut self) -> Duration {
-        if cfg!(test) {
+        if cfg!(test) || cfg!(not(feature = "timing")) {
             return Duration::ZERO;
         }
 
-        debug_assert!(self.info.start_system.is_some());
+        #[cfg(not(feature = "timing"))]
+        {
+            // This is not reachable, but the function would otherwise need a return value
+            panic!();
+        }
 
-        let start_system = self
-            .info
-            .start_system
-            .expect("start() must be called before calling stop()");
-        let start_process = self
-            .info
-            .start_process
-            .expect("start() must be called before calling stop()");
-        let start_thread = self
-            .info
-            .start_thread
-            .expect("start() must be called before calling stop()");
+        // Update and return timings if enabled
+        #[cfg(feature = "timing")]
+        {
+            debug_assert!(self.info.start_system.is_some());
 
-        let duration_system = HighResolutionClock::now() - start_system;
-        let duration_process = ProcessRealCPUClock::now() - start_process;
-        let duration_thread = ThreadClock::now() - start_thread;
+            let start_system = self
+                .info
+                .start_system
+                .expect("start() must be called before calling stop()");
+            let start_process = self
+                .info
+                .start_process
+                .expect("start() must be called before calling stop()");
+            let start_thread = self
+                .info
+                .start_thread
+                .expect("start() must be called before calling stop()");
 
-        self.info.total_system_time += duration_system;
-        self.info.total_process_time += duration_process;
-        self.info.total_thread_time += duration_thread;
-        self.info.start_system = None;
-        self.info.start_process = None;
-        self.info.start_thread = None;
-        self.info.runs += 1;
+            let duration_system = HighResolutionClock::now() - start_system;
+            let duration_process = ProcessRealCPUClock::now() - start_process;
+            let duration_thread = ThreadClock::now() - start_thread;
+            self.info.total_system_time += duration_system;
+            self.info.total_process_time += duration_process;
+            self.info.total_thread_time += duration_thread;
+            self.info.start_system = None;
+            self.info.start_process = None;
+            self.info.start_thread = None;
+            self.info.runs += 1;
 
-        duration_thread
+            duration_thread
+        }
     }
 
     fn apply_display_option<'a>(
