@@ -25,23 +25,23 @@ impl LoggingArgs {
     /// Sets the logging verbosity to the given log-level in the following order:
     ///  * `Info`, `Debug`, `Trace`; depending on the count of `-v`
     ///  * `Error` when `-q` is used
-    ///  * The `RUST_LOG` environment variable value
+    ///  * The `NMO_LOG` environment variable value
     ///  * `Warn` otherwise
     pub fn initialize_logging(&self) {
         let mut builder = env_logger::Builder::new();
-        let builder = builder.parse_default_env();
-        let builder = if let Some(ref level) = self.log_level {
-            builder.parse_filters(level)
+        builder.parse_env("NMO_LOG");
+        if let Some(ref level) = self.log_level {
+            builder.parse_filters(level);
         } else if self.quiet {
-            builder.filter_level(log::LevelFilter::Error)
-        } else {
+            builder.filter_level(log::LevelFilter::Error);
+        } else if self.verbose > 0 {
             builder.filter_level(match self.verbose {
                 1 => log::LevelFilter::Info,
                 2 => log::LevelFilter::Debug,
                 3 => log::LevelFilter::Trace,
                 _ => log::LevelFilter::Warn,
-            })
-        };
+            });
+        }
         builder.init();
     }
 }
