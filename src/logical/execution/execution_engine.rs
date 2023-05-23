@@ -13,9 +13,8 @@ use crate::{
     },
     meta::TimedCode,
     physical::{
-        datatypes::DataValueT,
-        dictionary::value_serializer::TrieSerializer,
-        management::database::{TableId, TableSource},
+        datatypes::DataValueT, dictionary::value_serializer::TrieSerializer,
+        management::database::TableSource,
     },
 };
 
@@ -248,9 +247,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Combine the output tries that resulted form the execution.
-    pub fn combine_results(&mut self) -> Result<Vec<(Identifier, Option<TableId>)>, Error> {
+    /// Returns an iterator that provides serialized fields for each row in the specified table.
+    /// Uses the default [`ColumnOrder`]
+    pub fn combine_results(
+        &mut self,
+    ) -> Result<Vec<(Identifier, Option<impl TrieSerializer + '_>)>, Error> {
         let output_predicates = self.program.output_predicates().collect::<HashSet<_>>();
         let mut result_ids = Vec::new();
+
         for predicate in &self.analysis.derived_predicates {
             if !output_predicates.contains(predicate) {
                 continue;
@@ -260,7 +264,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             result_ids.push((predicate.clone(), table_id));
         }
 
-        Ok(result_ids)
+        Ok(result_ids
+            .into_iter()
+            .map(|(p, id)| (p, id.map(|id| self.table_manager.table_serializer(id))))
+            .collect())
     }
 
     /// Count the number of derived facts during the computation.
@@ -274,12 +281,5 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
 
         result
-    }
-
-    /// Returns an iterator that provides serialized fields for each row in the specified table.
-    /// Uses the default [`ColumnOrder`]
-    /// Panics if there is no trie associated with the given id.
-    pub fn table_serializer(&self, table_id: TableId) -> impl TrieSerializer + '_ {
-        self.table_manager.table_serializer(table_id)
     }
 }

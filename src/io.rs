@@ -10,7 +10,12 @@ pub mod parser;
 
 pub use output_file_manager::OutputFileManager;
 
-use crate::{error::Error, physical::builder_proxy::PhysicalBuilderProxyEnum};
+use crate::{
+    error::Error,
+    physical::{
+        builder_proxy::PhysicalBuilderProxyEnum, dictionary::value_serializer::TrieSerializer,
+    },
+};
 
 /// A general interface for writing records of string values.
 pub trait RecordWriter {
@@ -20,6 +25,15 @@ pub trait RecordWriter {
         I: IntoIterator<Item = T>,
         // NOTE: instead of AsRef, custom conversion traits can later be set up
         T: AsRef<[u8]>;
+
+    /// Write a trie.
+    fn write_trie(&mut self, mut trie: impl TrieSerializer) -> Result<(), Error> {
+        while let Some(record) = trie.next_record() {
+            self.write_record(record)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<W: Write> RecordWriter for csv::Writer<W> {

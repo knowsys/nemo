@@ -2,7 +2,7 @@
 
 use std::{
     fs::{create_dir_all, OpenOptions},
-    io::Write,
+    io::{ErrorKind, Write},
     path::{Path, PathBuf},
 };
 
@@ -97,9 +97,9 @@ fn append_extension(file: &Path, ext: &str) -> String {
 
 /// Contains all the needed information, to create output file writers
 #[derive(Debug)]
-pub struct OutputFileManager<'a> {
+pub struct OutputFileManager {
     /// The path to where the results shall be written to.
-    path: &'a PathBuf,
+    path: PathBuf,
     /// Overwrite files, note that the target folder will be emptied if `overwrite` is set to [true].
     overwrite: bool,
     /// Compression and file format.
@@ -108,12 +108,12 @@ pub struct OutputFileManager<'a> {
     pub data_format: FileFormat,
 }
 
-impl<'a> OutputFileManager<'a> {
+impl OutputFileManager {
     /// Instantiate an [`OutputFileManager`].
     ///
     /// Instantiates a new [`OutputFileManager`] if the given `path` is writable. Otherwise an [`Error`] is thrown.
-    pub fn try_new(path: &'a PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
-        create_dir_all(path)?;
+    pub fn try_new(path: PathBuf, overwrite: bool, gzip: bool) -> Result<Self, Error> {
+        create_dir_all(&path)?;
         let data_format = FileFormat::DSV(b',');
         let compression_format = if gzip {
             FileCompression::Gzip
@@ -129,7 +129,7 @@ impl<'a> OutputFileManager<'a> {
     }
 }
 
-impl OutputFileManager<'_> {
+impl OutputFileManager {
     /// Get the output file name for the given predicate, including all extensions
     pub fn get_output_file_name(&self, pred: &Identifier) -> PathBuf {
         let mut pred_path = pred.sanitised_file_name(self.path.to_path_buf());
@@ -158,5 +158,29 @@ impl OutputFileManager<'_> {
         let record_writer = self.data_format.create_writer(file_writer);
 
         Ok(record_writer)
+    }
+
+    /// Checks if results shall be saved without allowing to overwrite
+    /// Returns an Error if files are existing without being allowed to overwrite them
+    pub fn prevent_accidental_overwrite(
+        &self,
+        output_predicates: impl Iterator<Item = Identifier>,
+    ) -> Result<(), Error> {
+        for pred in output_predicates {
+            let file = self.get_output_file_name(&pred);
+            let meta_info = file.metadata();
+            if let Err(err) = meta_info {
+                if err.kind() != ErrorKind::NotFound {
+                    return Err(Error::IO(err));
+                }
+            } else {
+                return Err(Error::IOExists {
+                    error: ErrorKind::AlreadyExists.into(),
+                    filename: file,
+                });
+            }
+        }
+
+        Ok(())
     }
 }

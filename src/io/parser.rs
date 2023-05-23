@@ -26,6 +26,18 @@ pub(crate) mod sparql;
 pub(crate) mod turtle;
 pub use types::{LocatedParseError, ParseError, ParseResult};
 
+/// Parse a program in the given `input`-String and return an [`Engine`].
+///
+/// The program will be parsed and checked for unsupported features.
+///
+/// # Error
+/// Returns an appropriate [`Error`][crate::error::Error] variant on parsing and feature check issues.
+pub fn parse_program(input: impl AsRef<str>) -> Result<Program, Error> {
+    let program = all_input_consumed(RuleParser::new().parse_program())(input.as_ref())?;
+    program.check_for_unsupported_features()?;
+    Ok(program)
+}
+
 /// A combinator to add tracing to the parser.
 /// [fun] is an identifier for the parser and [parser] is the actual parser.
 #[inline(always)]
