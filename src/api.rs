@@ -95,11 +95,7 @@ pub fn reason(engine: &mut Engine) -> Result<Vec<Predicate>, Error> {
     let results = engine.0.combine_results()?;
     Ok(results
         .into_iter()
-        .filter(|(_id, table_id)| table_id.is_some())
-        .map(|(id, table_id)| Predicate {
-            name: id,
-            table_id: table_id.expect("filtered all None values"),
-        })
+        .filter_map(|(name, table_id)| table_id.map(|table_id| Predicate { name, table_id }))
         .collect::<Vec<_>>())
 }
 
