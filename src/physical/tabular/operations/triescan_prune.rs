@@ -53,7 +53,7 @@ pub struct TrieScanPruneState<'a> {
 }
 
 impl<'a> TrieScanPruneState<'a> {
-    /// Decrements the [`external_current_layer`]
+    /// Decrements the `external_current_layer`
     pub fn external_up(&mut self) {
         debug_assert!(self.initialized);
         assert!(self.external_current_layer > 0);
@@ -61,7 +61,7 @@ impl<'a> TrieScanPruneState<'a> {
         self.external_current_layer -= 1;
     }
 
-    /// Increments the [`external_current_layer`]
+    /// Increments the `external_current_layer`
     pub fn external_down(&mut self) {
         if !self.initialized {
             self.initialized = true;
