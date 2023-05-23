@@ -146,10 +146,10 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
         let results = engine.combine_results()?;
 
-        for (pred, table) in results {
-            let mut writer = output_manager.create_file_writer(&pred)?;
+        for predicate in results {
+            let mut writer = output_manager.create_file_writer(predicate.identifier())?;
 
-            if let Some(table) = table {
+            if let Some(table) = engine.table_serializer(predicate) {
                 writer.write_trie(table)?;
             }
         }

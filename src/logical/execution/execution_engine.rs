@@ -13,8 +13,9 @@ use crate::{
     },
     meta::TimedCode,
     physical::{
-        datatypes::DataValueT, dictionary::value_serializer::TrieSerializer,
-        management::database::TableSource,
+        datatypes::DataValueT,
+        dictionary::value_serializer::TrieSerializer,
+        management::database::{TableId, TableSource},
     },
 };
 
@@ -54,6 +55,28 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
     rule_infos: Vec<RuleInfo>,
     current_step: usize,
+}
+
+/// Refers to a single computed relation.
+#[derive(Debug, Clone)]
+pub struct IdbPredicate {
+    /// The identifier corresponding to the predicate.
+    identifier: Identifier,
+    /// The table id corresponding to the predicate.
+    table_id: Option<TableId>,
+}
+
+impl IdbPredicate {
+    /// Get the identifier of the predicate
+    pub fn identifier(&self) -> &Identifier {
+        &self.identifier
+    }
+}
+
+impl std::fmt::Display for IdbPredicate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.identifier)
+    }
 }
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
@@ -249,9 +272,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Combine the output tries that resulted form the execution.
     /// Returns an iterator that provides serialized fields for each row in the specified table.
     /// Uses the default [`ColumnOrder`]
-    pub fn combine_results(
-        &mut self,
-    ) -> Result<Vec<(Identifier, Option<impl TrieSerializer + '_>)>, Error> {
+    pub fn combine_results(&mut self) -> Result<Vec<IdbPredicate>, Error> {
         let output_predicates = self.program.output_predicates().collect::<HashSet<_>>();
         let mut result_ids = Vec::new();
 
@@ -266,8 +287,17 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         Ok(result_ids
             .into_iter()
-            .map(|(p, id)| (p, id.map(|id| self.table_manager.table_serializer(id))))
+            .map(|(p, id)| IdbPredicate {
+                identifier: p,
+                table_id: id,
+            })
             .collect())
+    }
+
+    /// Get the table for the specified predicate if there is some.
+    pub fn table_serializer(&self, predicate: IdbPredicate) -> Option<impl TrieSerializer + '_> {
+        let table_id = predicate.table_id?;
+        Some(self.table_manager.table_serializer(table_id))
     }
 
     /// Count the number of derived facts during the computation.
