@@ -144,12 +144,10 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
             .start();
         log::info!("writing output");
 
-        let results = engine.combine_results()?;
+        for predicate in engine.program().output_predicates() {
+            let mut writer = output_manager.create_file_writer(&predicate)?;
 
-        for predicate in results {
-            let mut writer = output_manager.create_file_writer(predicate.identifier())?;
-
-            if let Some(table) = engine.table_serializer(predicate) {
+            if let Some(table) = engine.table_serializer(predicate)? {
                 writer.write_trie(table)?;
             }
         }

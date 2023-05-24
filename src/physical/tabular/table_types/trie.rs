@@ -20,100 +20,54 @@ use crate::physical::columnar::{
     },
 };
 use crate::physical::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
-use crate::physical::dictionary::value_serializer::TrieSerializer;
+use crate::physical::dictionary::value_serializer::{StorageValueMapping, TrieSerializer};
 use crate::physical::dictionary::ValueSerializer;
 use crate::physical::management::database::Dict;
 use crate::physical::management::ByteSized;
-use crate::physical::tabular::traits::partial_trie_scan::PartialTrieScan;
+use crate::physical::tabular::operations::TrieScanPrune;
+use crate::physical::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
 use crate::physical::tabular::traits::table::Table;
 use crate::physical::tabular::traits::table_schema::TableSchema;
+use crate::physical::tabular::traits::trie_scan::TrieScan;
 
-pub(crate) struct TrieRows<'a> {
-    data_columns: Vec<ColumnScanT<'a>>,
-    interval_columns: Vec<ColumnScanEnum<'a, usize>>,
-    interval_offsets: Vec<usize>,
-    last_row: Vec<StorageValueT>,
+pub(crate) struct TrieRecords<Scan, Mapping, Output> {
+    rows: Scan,
+    last_record: Vec<Output>,
+    mapping: Mapping,
 }
 
-impl<'a> TrieRows<'a> {
-    /// advances the iterator one step
-    /// # Returns
-    /// * if there is a next row, the index of the first (i.e. lowest index) column with a new value
-    /// * [None] otherwise
-    fn advance(&mut self) -> Option<usize> {
-        if self.last_row.is_empty() {
-            self.last_row = self
-                .data_columns
-                .iter_mut()
-                .map(|column| column.next())
-                .collect::<Option<_>>()?;
-
-            for c in &mut self.interval_columns {
-                let interval_start_first = c.next();
-                debug_assert_eq!(interval_start_first, Some(0));
-
-                // call next to get the first interval end upon next call to current
-                let _ = c.next();
-            }
-
-            return Some(0);
-        }
-
-        let mut current_column = self.data_columns.len() - 1;
-
-        loop {
-            self.interval_offsets[current_column] += 1;
-            self.last_row[current_column] = self.data_columns[current_column].next()?;
-            let Some(interval_end) = self.interval_columns[current_column].current() else { break; };
-
-            if self.interval_offsets[current_column] < interval_end {
-                break;
-            }
-
-            let _ = self.interval_columns[current_column].next();
-            current_column -= 1;
-        }
-
-        Some(current_column)
-    }
-
-    pub fn next_changed(&mut self) -> Option<&[StorageValueT]> {
-        let updated = self.advance()?;
-        Some(&self.last_row[updated..])
-    }
-}
-
-pub(crate) struct TrieRecords<'a, D, S> {
-    rows: TrieRows<'a>,
-    last_record: Vec<String>,
-    serializer: ValueSerializer<D, S>,
-}
-
-impl<'a, D, S> TrieSerializer for TrieRecords<'a, D, S>
+impl<Scan, Mapping, Output> TrieRecords<Scan, Mapping, Output>
 where
-    D: Deref<Target = Dict>,
-    S: Deref<Target = TableSchema>,
+    Scan: TrieScan,
+    Mapping: StorageValueMapping<Output>,
 {
-    type SerializedValue = String;
-    type SerializedRecord<'r> = std::slice::Iter<'r, String> where Self: 'r;
+    pub(crate) fn next_record(&mut self) -> Option<std::slice::Iter<'_, Output>> {
+        let arity = self.rows.column_types().len();
+        let changed_idx = self.rows.advance_on_layer(arity - 1)?;
 
-    fn next_record(&mut self) -> Option<Self::SerializedRecord<'_>> {
-        let changed_values = self.rows.next_changed()?;
-        let unchanged = if !self.last_record.is_empty() {
-            self.last_record.len() - changed_values.len()
-        } else {
-            0
-        };
+        self.last_record.truncate(changed_idx);
 
-        self.last_record.truncate(unchanged);
-
-        for (offset, &value) in changed_values.iter().enumerate() {
-            let column_index = unchanged + offset;
-            let str_value = self.serializer.value_to_string(column_index, value);
+        for layer in changed_idx..arity {
+            let value = self.rows.current(layer);
+            let str_value = self.mapping.map(value, layer);
             self.last_record.push(str_value);
         }
 
         Some(self.last_record.iter())
+    }
+}
+
+impl<D, S, Scan> TrieSerializer for TrieRecords<Scan, ValueSerializer<D, S>, String>
+where
+    D: Deref<Target = Dict>,
+    S: Deref<Target = TableSchema>,
+    Scan: TrieScan,
+{
+    type SerializedValue = String;
+    type SerializedRecord<'r> = std::slice::Iter<'r, String> where Self: 'r;
+
+    fn next_serialized(&mut self) -> Option<Self::SerializedRecord<'_>> {
+        self.next_record()
     }
 }
 
@@ -259,23 +213,14 @@ impl Trie {
         result_columns
     }
 
-    pub(crate) fn rows(&self) -> TrieRows<'_> {
-        let num_columns = self.columns.len();
-        let (data_columns, interval_columns) =
-            self.columns.iter().map(|col| col.as_parts()).unzip();
-
-        TrieRows {
-            data_columns,
-            interval_columns,
-            interval_offsets: vec![0; num_columns],
-            last_row: Vec::with_capacity(num_columns),
-        }
+    pub(crate) fn scan(&self) -> impl TrieScan + '_ {
+        TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(self)))
     }
 
-    pub(crate) fn records<'a, D, S>(
+    pub(crate) fn records<'a, D, S, Output>(
         &'a self,
         serializer: ValueSerializer<D, S>,
-    ) -> impl TrieSerializer + 'a
+    ) -> TrieRecords<impl TrieScan + 'a, ValueSerializer<D, S>, Output>
     where
         D: Deref<Target = Dict> + 'a,
         S: Deref<Target = TableSchema> + 'a,
@@ -283,9 +228,9 @@ impl Trie {
         let num_columns = self.columns.len();
 
         TrieRecords {
-            rows: self.rows(),
+            rows: self.scan(),
             last_record: Vec::with_capacity(num_columns),
-            serializer,
+            mapping: serializer,
         }
     }
 }

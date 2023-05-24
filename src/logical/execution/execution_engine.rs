@@ -1,6 +1,6 @@
 //! Functionality which handles the execution of a program
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     error::Error,
@@ -13,9 +13,8 @@ use crate::{
     },
     meta::TimedCode,
     physical::{
-        datatypes::DataValueT,
-        dictionary::value_serializer::TrieSerializer,
-        management::database::{TableId, TableSource},
+        datatypes::DataValueT, dictionary::value_serializer::TrieSerializer,
+        management::database::TableSource,
     },
 };
 
@@ -55,28 +54,6 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
     rule_infos: Vec<RuleInfo>,
     current_step: usize,
-}
-
-/// Refers to a single computed relation.
-#[derive(Debug, Clone)]
-pub struct IdbPredicate {
-    /// The identifier corresponding to the predicate.
-    identifier: Identifier,
-    /// The table id corresponding to the predicate.
-    table_id: Option<TableId>,
-}
-
-impl IdbPredicate {
-    /// Get the identifier of the predicate
-    pub fn identifier(&self) -> &Identifier {
-        &self.identifier
-    }
-}
-
-impl std::fmt::Display for IdbPredicate {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.identifier)
-    }
 }
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
@@ -272,37 +249,30 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(())
     }
 
-    /// Combine the output tries that resulted form the execution.
-    /// Returns a Vector of [`IdbPredicate`], which can be turned into tables by calling
-    /// [table_serializer](ExecutionEngine#method.table_serializer)
-    ///
-    /// Uses the default [`crate::physical::management::database::ColumnOrder`]
-    pub fn combine_results(&mut self) -> Result<Vec<IdbPredicate>, Error> {
-        let output_predicates = self.program.output_predicates().collect::<HashSet<_>>();
-        let mut result_ids = Vec::new();
-
-        for predicate in &self.analysis.derived_predicates {
-            if !output_predicates.contains(predicate) {
-                continue;
-            }
-
-            let table_id = self.table_manager.combine_predicate(predicate.clone())?;
-            result_ids.push((predicate.clone(), table_id));
-        }
-
-        Ok(result_ids
-            .into_iter()
-            .map(|(identifier, table_id)| IdbPredicate {
-                identifier,
-                table_id,
-            })
-            .collect())
+    /// Get a reference to the loaded program.
+    pub fn program(&self) -> &Program {
+        &self.program
     }
 
-    /// Get the table for the specified predicate if there is some.
-    pub fn table_serializer(&self, predicate: IdbPredicate) -> Option<impl TrieSerializer + '_> {
-        let table_id = predicate.table_id?;
-        Some(self.table_manager.table_serializer(table_id))
+    /// Creates a [`TrieSerializer`] for the resulting facts, if there are any.
+    pub fn table_serializer(
+        &mut self,
+        predicate: Identifier,
+    ) -> Result<Option<impl TrieSerializer + '_>, Error> {
+        let table_id = self.table_manager.combine_predicate(predicate)?;
+        Ok(table_id.map(|id| self.table_manager.table_serializer(id)))
+    }
+
+    /// Creates an [`Iterator`] over the resulting facts of a predicate.
+    pub fn table_scan(
+        &mut self,
+        predicate: Identifier,
+    ) -> Result<impl Iterator<Item = Vec<DataValueT>> + '_, Error> {
+        Ok(self
+            .table_manager
+            .combine_predicate(predicate)?
+            .into_iter()
+            .flat_map(|id| self.table_manager.table_values(id)))
     }
 
     /// Count the number of derived facts during the computation.
