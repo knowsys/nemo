@@ -323,18 +323,25 @@ impl TableManager {
     /// Returns an iterator that provides serialized fields for each row in the specified table.
     /// Uses the default [`ColumnOrder`]
     /// Panics if there is no trie associated with the given id.
-    pub fn table_serializer(&self, id: TableId) -> impl TrieSerializer + '_ {
+    pub fn table_serializer(&mut self, id: TableId) -> Result<impl TrieSerializer + '_, Error> {
+        let _ = self
+            .database
+            .get_trie_or_load(id, &ColumnOrder::default())?;
         let schema = self.database.table_schema(id);
         let dict = self.database.get_dict_constants();
 
-        self.database
+        Ok(self
+            .database
             .get_trie(id, &ColumnOrder::default())
-            .records(ValueSerializer { schema, dict })
+            .records(ValueSerializer { schema, dict }))
     }
 
     /// Returns an iterator over the specified table.
     /// Uses the default [`ColumnOrder`]
-    pub fn table_values(&self, id: TableId) -> impl Iterator<Item = Vec<DataValueT>> + '_ {
+    pub fn table_values(
+        &mut self,
+        id: TableId,
+    ) -> Result<impl Iterator<Item = Vec<DataValueT>> + '_, Error> {
         struct OwnedRecords<'a, S>(
             TrieRecords<S, ValueSerializer<Ref<'a, Dict>, &'a TableSchema>, DataValueT>,
         );
@@ -348,14 +355,17 @@ impl TableManager {
             }
         }
 
+        let _ = self
+            .database
+            .get_trie_or_load(id, &ColumnOrder::default())?;
         let schema = self.database.table_schema(id);
         let dict = self.database.get_dict_constants();
 
-        OwnedRecords(
+        Ok(OwnedRecords(
             self.database
                 .get_trie(id, &ColumnOrder::default())
                 .records(ValueSerializer { schema, dict }),
-        )
+        ))
     }
 
     /// Combine all subtables of a predicate into one table

@@ -259,20 +259,23 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         predicate: Identifier,
     ) -> Result<Option<impl TrieSerializer + '_>, Error> {
-        let table_id = self.table_manager.combine_predicate(predicate)?;
-        Ok(table_id.map(|id| self.table_manager.table_serializer(id)))
+        let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
+            return Ok(None);
+        };
+
+        Ok(Some(self.table_manager.table_serializer(table_id)?))
     }
 
     /// Creates an [`Iterator`] over the resulting facts of a predicate.
     pub fn table_scan(
         &mut self,
         predicate: Identifier,
-    ) -> Result<impl Iterator<Item = Vec<DataValueT>> + '_, Error> {
-        Ok(self
-            .table_manager
-            .combine_predicate(predicate)?
-            .into_iter()
-            .flat_map(|id| self.table_manager.table_values(id)))
+    ) -> Result<Option<impl Iterator<Item = Vec<DataValueT>> + '_>, Error> {
+        let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
+            return Ok(None);
+        };
+
+        Ok(Some(self.table_manager.table_values(table_id)?))
     }
 
     /// Count the number of derived facts during the computation.
