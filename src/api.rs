@@ -75,7 +75,7 @@ pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
     engine.program().output_predicates().collect()
 }
 
-/// Writes all result [`predicates`][Predicate] in the vector `predicates` into the directory specified in `path`.
+/// Writes all result [`predicates`][Identifier] in the vector `predicates` into the directory specified in `path`.
 pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> Result<(), Error> {
     let output_dir = PathBuf::from(path);
     let file_manager = OutputFileManager::try_new(output_dir, true, false)?;
