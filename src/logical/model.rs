@@ -570,7 +570,7 @@ impl From<Vec<QualifiedPredicateName>> for OutputPredicateSelection {
 }
 
 /// A full program.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Program {
     base: Option<String>,
     prefixes: HashMap<String, String>,

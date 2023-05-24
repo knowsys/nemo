@@ -61,7 +61,7 @@ rec {
           };
 
           devShells.default = pkgs.mkShell {
-            RUST_LOG = "debug";
+            NMO_LOG = "debug";
             RUST_BACKTRACE = 1;
 
             shellHook = ''
