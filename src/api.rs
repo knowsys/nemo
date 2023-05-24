@@ -101,7 +101,7 @@ mod test {
         std::env::set_current_dir("./resources/testcases/lcs-diff-computation/").unwrap();
         let results = super::reason(&mut engine).unwrap();
         std::env::set_current_dir(cur_dir).unwrap();
-        assert_eq!(results.len(), 22); // 2 empty tables, which are _not_ omitted
+        assert_eq!(results.len(), 22);
 
         // writing only the results where the predicates contain an "i"
         let results = results

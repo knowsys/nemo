@@ -18,9 +18,9 @@
 #![feature(assert_matches)]
 #![feature(iter_intersperse)]
 
+pub mod api;
 pub mod error;
 pub mod io;
 pub mod logical;
 pub mod meta;
 pub mod physical;
-pub mod api;
