@@ -1,12 +1,19 @@
 use std::ops::Deref;
 
 use crate::physical::{
-    datatypes::{DataTypeName, StorageValueT},
+    datatypes::{DataTypeName, DataValueT, StorageValueT},
     management::database::Dict,
     tabular::traits::table_schema::TableSchema,
 };
 
 use super::Dictionary;
+
+/// Helper trait for mapping [`StorageValueT`] back into some (higher level) value space
+/// by virtue of the schema index, a value appears at (inside a table).
+pub trait StorageValueMapping<Output> {
+    /// Map the [`StorageValueT`], which appeared at index `layer` to the Output type.
+    fn map(&self, value: StorageValueT, layer: usize) -> Output;
+}
 
 /// Reads [TableSchema] and [Dict] to convert physical data types into strings.
 #[derive(Debug)]
@@ -17,53 +24,65 @@ pub struct ValueSerializer<D, S> {
     pub schema: S,
 }
 
-impl<D, S> ValueSerializer<D, S>
+impl<D, S> StorageValueMapping<DataValueT> for ValueSerializer<D, S>
 where
     D: Deref<Target = Dict>,
     S: Deref<Target = TableSchema>,
 {
-    /// Convert a physical [StorageValueT] into a String.
-    pub fn value_to_string(&self, schema_index: usize, value: StorageValueT) -> String {
-        match self.schema[schema_index] {
+    fn map(&self, value: StorageValueT, layer: usize) -> DataValueT {
+        match self.schema[layer] {
             DataTypeName::String => {
                 let StorageValueT::U64(constant) = value else {
                     unreachable!("strings are always encoded as U64 constants") 
                 };
-                self.dict
-                    .entry(constant as usize)
-                    .unwrap_or_else(|| format!("<__Null#{constant}>"))
+                DataValueT::String(
+                    self.dict
+                        .entry(constant as usize)
+                        .unwrap_or_else(|| format!("<__Null#{constant}>")),
+                )
             }
             DataTypeName::I64 => match value {
-                StorageValueT::I64(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distinguish them?
+                StorageValueT::I64(val) => DataValueT::I64(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),
             },
             DataTypeName::U64 => match value {
-                StorageValueT::U64(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distinguish them?
+                StorageValueT::U64(val) => DataValueT::U64(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),
             },
             DataTypeName::U32 => match value {
-                StorageValueT::U32(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distinguish them?
+                StorageValueT::U32(val) => DataValueT::U32(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),
             },
             DataTypeName::Float => match value {
-                StorageValueT::Float(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distinguish them?
+                StorageValueT::Float(val) => DataValueT::Float(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),
             },
             DataTypeName::Double => match value {
-                StorageValueT::Double(val) => val.to_string(), // TODO: do we allow nulls here? if yes, how do we distinguish them?
+                StorageValueT::Double(val) => DataValueT::Double(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),
             },
         }
+    }
+}
+
+impl<D, S> StorageValueMapping<String> for ValueSerializer<D, S>
+where
+    D: Deref<Target = Dict>,
+    S: Deref<Target = TableSchema>,
+{
+    fn map(&self, value: StorageValueT, layer: usize) -> String {
+        let data_value: DataValueT = self.map(value, layer);
+        data_value.to_string()
     }
 }
 
@@ -82,5 +101,17 @@ pub trait TrieSerializer {
         Self: 'a;
 
     /// Serializes the next row in the trie and moves the iterator one step.
-    fn next_record(&mut self) -> Option<Self::SerializedRecord<'_>>;
+    fn next_serialized(&mut self) -> Option<Self::SerializedRecord<'_>>;
+}
+
+impl<T: TrieSerializer> TrieSerializer for Option<T> {
+    type SerializedValue = T::SerializedValue;
+    type SerializedRecord<'a> = T::SerializedRecord<'a> where T: 'a;
+
+    fn next_serialized(&mut self) -> Option<Self::SerializedRecord<'_>> {
+        match self {
+            Some(inner) => inner.next_serialized(),
+            None => None,
+        }
+    }
 }

@@ -31,14 +31,14 @@ use crate::{
         parser::{all_input_consumed, RuleParser},
         OutputFileManager, RecordWriter,
     },
-    logical::execution::{DefaultExecutionEngine, ExecutionEngine},
+    logical::{
+        execution::{DefaultExecutionEngine, ExecutionEngine},
+        model::Identifier,
+    },
 };
 
 /// Reasoning Engine exposed by the API
 pub type Engine = DefaultExecutionEngine;
-
-/// Predicate representation for results
-pub type Predicate = crate::logical::execution::execution_engine::IdbPredicate;
 
 /// Load the given `file` and load the program from the file.
 ///
@@ -62,23 +62,27 @@ pub fn load_string(input: String) -> Result<Engine, Error> {
     ExecutionEngine::initialize(program)
 }
 
-/// Executes the reasoning process of the [`Engine`] and returns a vector of result [`predicates`][Predicate].
+/// Executes the reasoning process of the [`Engine`].
 ///
 /// # Note
 /// If there have been `@source` routines in the parsed rules, all relative paths are resolved with the current working directory
-pub fn reason(engine: &mut Engine) -> Result<Vec<Predicate>, Error> {
-    engine.execute()?;
-    engine.combine_results()
+pub fn reason(engine: &mut Engine) -> Result<(), Error> {
+    engine.execute()
+}
+
+/// Get a [`Vec`] of all output predicates, that are computed by the engine.
+pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
+    engine.program().output_predicates().collect()
 }
 
 /// Writes all result [`predicates`][Predicate] in the vector `predicates` into the directory specified in `path`.
-pub fn write(path: String, engine: &mut Engine, predicates: Vec<Predicate>) -> Result<(), Error> {
+pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> Result<(), Error> {
     let output_dir = PathBuf::from(path);
     let file_manager = OutputFileManager::try_new(output_dir, true, false)?;
 
     for predicate in predicates {
-        let mut writer = file_manager.create_file_writer(predicate.identifier())?;
-        let Some(serializer) = engine.table_serializer(predicate) else { continue; };
+        let mut writer = file_manager.create_file_writer(&predicate)?;
+        let Some(serializer) = engine.table_serializer(predicate)? else { continue; };
         writer.write_trie(serializer)?;
     }
 
@@ -98,12 +102,11 @@ mod test {
             load("./resources/testcases/lcs-diff-computation/run-lcs-10.rls".into()).unwrap();
         let cur_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir("./resources/testcases/lcs-diff-computation/").unwrap();
-        let results = super::reason(&mut engine).unwrap();
+        super::reason(&mut engine).unwrap();
         std::env::set_current_dir(cur_dir).unwrap();
-        assert_eq!(results.len(), 22);
 
         // writing only the results where the predicates contain an "i"
-        let results = results
+        let results = output_predicates(&engine)
             .into_iter()
             .filter(|pred| pred.to_string().contains('i'))
             .collect::<Vec<_>>();

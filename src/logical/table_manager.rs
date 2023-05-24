@@ -4,13 +4,17 @@ use super::{model::Identifier, types::LogicalTypeEnum};
 use crate::{
     error::Error,
     physical::{
+        datatypes::DataValueT,
         dictionary::{value_serializer::TrieSerializer, ValueSerializer},
         management::{
             database::{ColumnOrder, Dict, TableId, TableSource},
             execution_plan::ExecutionNodeRef,
             DatabaseInstance, ExecutionPlan,
         },
-        tabular::{table_types::trie::Trie, traits::table_schema::TableSchema},
+        tabular::{
+            table_types::trie::{Trie, TrieRecords},
+            traits::{table_schema::TableSchema, trie_scan::TrieScan},
+        },
         util::mapping::permutation::Permutation,
     },
 };
@@ -326,6 +330,32 @@ impl TableManager {
         self.database
             .get_trie(id, &ColumnOrder::default())
             .records(ValueSerializer { schema, dict })
+    }
+
+    /// Returns an iterator over the specified table.
+    /// Uses the default [`ColumnOrder`]
+    pub fn table_values(&self, id: TableId) -> impl Iterator<Item = Vec<DataValueT>> + '_ {
+        struct OwnedRecords<'a, S>(
+            TrieRecords<S, ValueSerializer<Ref<'a, Dict>, &'a TableSchema>, DataValueT>,
+        );
+
+        impl<'a, S: TrieScan> Iterator for OwnedRecords<'a, S> {
+            type Item = Vec<DataValueT>;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                let rec = self.0.next_record()?;
+                Some(rec.cloned().collect())
+            }
+        }
+
+        let schema = self.database.table_schema(id);
+        let dict = self.database.get_dict_constants();
+
+        OwnedRecords(
+            self.database
+                .get_trie(id, &ColumnOrder::default())
+                .records(ValueSerializer { schema, dict }),
+        )
     }
 
     /// Combine all subtables of a predicate into one table

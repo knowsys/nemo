@@ -28,7 +28,7 @@ pub trait RecordWriter {
 
     /// Write a trie.
     fn write_trie(&mut self, mut trie: impl TrieSerializer) -> Result<(), Error> {
-        while let Some(record) = trie.next_record() {
+        while let Some(record) = trie.next_serialized() {
             self.write_record(record)?;
         }
 
