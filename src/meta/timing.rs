@@ -1,6 +1,7 @@
 //! Code for timing blocks of code
 
 use ascii_tree::{write_tree, Tree};
+#[cfg(feature = "timing")]
 use howlong::*;
 use linked_hash_map::LinkedHashMap;
 use once_cell::sync::Lazy;
@@ -10,6 +11,10 @@ use std::{
     sync::{Mutex, MutexGuard},
     time::Duration,
 };
+
+// See https://doc.rust-lang.org/cargo/reference/features.html#mutually-exclusive-features
+#[cfg(all(feature = "js", feature = "timing"))]
+compile_error!("feature \"js\" and feature \"timing\" cannot be enabled at the same time, because the \"howlong\" crate does not support web assembly environments");
 
 /// Global instance of the [`TimedCode`]
 static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
@@ -23,8 +28,21 @@ pub struct TimedCodeInfo {
     total_system_time: Duration,
     total_process_time: Duration,
     total_thread_time: Duration,
+    #[cfg(not(feature = "timing"))]
+    start_system: Option<()>,
+    #[cfg(not(feature = "timing"))]
+    #[allow(dead_code)]
+    start_process: Option<()>,
+    #[cfg(not(feature = "timing"))]
+    #[allow(dead_code)]
+    start_thread: Option<()>,
+    #[cfg(feature = "timing")]
     start_system: Option<TimePoint>,
+    #[cfg(feature = "timing")]
+    #[allow(dead_code)]
     start_process: Option<TimePoint>,
+    #[cfg(feature = "timing")]
+    #[allow(dead_code)]
     start_thread: Option<TimePoint>,
     runs: u64,
 }
@@ -120,7 +138,7 @@ impl TimedCode {
 
     /// Navigate to a subblock (use forward slash to go multiple layers at once)
     pub fn sub(&mut self, name: &str) -> &mut TimedCode {
-        if cfg!(test) {
+        if cfg!(test) || cfg!(not(feature = "timing")) {
             return self;
         }
 
@@ -143,12 +161,13 @@ impl TimedCode {
         self.info.total_system_time
     }
 
-    /// Start the next measurement
-    pub fn start(&mut self) {
-        if cfg!(test) {
-            return;
-        }
+    /// No-op because time measurement is disabled
+    #[cfg(any(test, not(feature = "timing")))]
+    pub fn start(&mut self) {}
 
+    /// Start the next measurement
+    #[cfg(all(not(test), feature = "timing"))]
+    pub fn start(&mut self) {
         debug_assert!(self.info.start_thread.is_none());
 
         self.info.start_system = Some(HighResolutionClock::now());
@@ -156,12 +175,15 @@ impl TimedCode {
         self.info.start_thread = Some(ThreadClock::now());
     }
 
-    /// Stop the current measurement and save the times
+    /// No-op because time measurement is disabled
+    #[cfg(any(test, not(feature = "timing")))]
     pub fn stop(&mut self) -> Duration {
-        if cfg!(test) {
-            return Duration::ZERO;
-        }
+        Duration::ZERO
+    }
 
+    /// Stop the current measurement and save the times
+    #[cfg(all(not(test), feature = "timing"))]
+    pub fn stop(&mut self) -> Duration {
         debug_assert!(self.info.start_system.is_some());
 
         let start_system = self
@@ -180,7 +202,6 @@ impl TimedCode {
         let duration_system = HighResolutionClock::now() - start_system;
         let duration_process = ProcessRealCPUClock::now() - start_process;
         let duration_thread = ThreadClock::now() - start_thread;
-
         self.info.total_system_time += duration_system;
         self.info.total_process_time += duration_process;
         self.info.total_thread_time += duration_thread;
