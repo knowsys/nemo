@@ -250,7 +250,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Get a reference to the loaded program.
-    pub fn program(&self) -> &Program {
+    pub fn program(&self) -> &ChaseProgram {
         &self.program
     }
 
