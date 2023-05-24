@@ -31,14 +31,18 @@ pub struct TimedCodeInfo {
     #[cfg(not(feature = "timing"))]
     start_system: Option<()>,
     #[cfg(not(feature = "timing"))]
+    #[allow(dead_code)]
     start_process: Option<()>,
     #[cfg(not(feature = "timing"))]
+    #[allow(dead_code)]
     start_thread: Option<()>,
     #[cfg(feature = "timing")]
     start_system: Option<TimePoint>,
     #[cfg(feature = "timing")]
+    #[allow(dead_code)]
     start_process: Option<TimePoint>,
     #[cfg(feature = "timing")]
+    #[allow(dead_code)]
     start_thread: Option<TimePoint>,
     runs: u64,
 }
@@ -157,65 +161,56 @@ impl TimedCode {
         self.info.total_system_time
     }
 
-    /// Start the next measurement
-    pub fn start(&mut self) {
-        if cfg!(test) || cfg!(not(feature = "timing")) {
-            return;
-        }
+    /// No-op because time measurement is disabled
+    #[cfg(any(test, not(feature = "timing")))]
+    pub fn start(&mut self) {}
 
+    /// Start the next measurement
+    #[cfg(all(not(test), feature = "timing"))]
+    pub fn start(&mut self) {
         debug_assert!(self.info.start_thread.is_none());
 
-        #[cfg(feature = "timing")]
-        {
-            self.info.start_system = Some(HighResolutionClock::now());
-            self.info.start_process = Some(ProcessRealCPUClock::now());
-            self.info.start_thread = Some(ThreadClock::now());
-        }
+        self.info.start_system = Some(HighResolutionClock::now());
+        self.info.start_process = Some(ProcessRealCPUClock::now());
+        self.info.start_thread = Some(ThreadClock::now());
+    }
+
+    /// No-op because time measurement is disabled
+    #[cfg(any(test, not(feature = "timing")))]
+    pub fn stop(&mut self) -> Duration {
+        Duration::ZERO
     }
 
     /// Stop the current measurement and save the times
+    #[cfg(all(not(test), feature = "timing"))]
     pub fn stop(&mut self) -> Duration {
-        if cfg!(test) || cfg!(not(feature = "timing")) {
-            return Duration::ZERO;
-        }
+        debug_assert!(self.info.start_system.is_some());
 
-        #[cfg(not(feature = "timing"))]
-        {
-            // This is not reachable, but the function would otherwise need a return value
-            panic!();
-        }
+        let start_system = self
+            .info
+            .start_system
+            .expect("start() must be called before calling stop()");
+        let start_process = self
+            .info
+            .start_process
+            .expect("start() must be called before calling stop()");
+        let start_thread = self
+            .info
+            .start_thread
+            .expect("start() must be called before calling stop()");
 
-        // Update and return timings if enabled
-        #[cfg(feature = "timing")]
-        {
-            debug_assert!(self.info.start_system.is_some());
+        let duration_system = HighResolutionClock::now() - start_system;
+        let duration_process = ProcessRealCPUClock::now() - start_process;
+        let duration_thread = ThreadClock::now() - start_thread;
+        self.info.total_system_time += duration_system;
+        self.info.total_process_time += duration_process;
+        self.info.total_thread_time += duration_thread;
+        self.info.start_system = None;
+        self.info.start_process = None;
+        self.info.start_thread = None;
+        self.info.runs += 1;
 
-            let start_system = self
-                .info
-                .start_system
-                .expect("start() must be called before calling stop()");
-            let start_process = self
-                .info
-                .start_process
-                .expect("start() must be called before calling stop()");
-            let start_thread = self
-                .info
-                .start_thread
-                .expect("start() must be called before calling stop()");
-
-            let duration_system = HighResolutionClock::now() - start_system;
-            let duration_process = ProcessRealCPUClock::now() - start_process;
-            let duration_thread = ThreadClock::now() - start_thread;
-            self.info.total_system_time += duration_system;
-            self.info.total_process_time += duration_process;
-            self.info.total_thread_time += duration_thread;
-            self.info.start_system = None;
-            self.info.start_process = None;
-            self.info.start_thread = None;
-            self.info.runs += 1;
-
-            duration_thread
-        }
+        duration_thread
     }
 
     fn apply_display_option<'a>(
