@@ -8,18 +8,19 @@
 //! # fn main() {}
 //! # #[cfg(not(miri))]
 //! # fn main() {
-//! use nemo::api::{load,reason,write};
+//! use nemo::api::{load,reason,output_predicates,write};
 //! # let path = String::from("./resources/testcases/lcs-diff-computation/run-lcs-10.rls");
 //! // assume path is a string with the path to a rules file
 //! let mut engine = load(path.into()).unwrap();
 //! # let cur_dir = std::env::current_dir().unwrap();
 //! # std::env::set_current_dir("./resources/testcases/lcs-diff-computation/").unwrap();
 //! // reasoning on the rule file
-//! let results = reason(&mut engine).unwrap();
+//! reason(&mut engine).unwrap();
 //! # std::env::set_current_dir(cur_dir).unwrap();
 //! // write the results to a temporary directory
 //! let temp_dir = TempDir::new().unwrap();
-//! write(temp_dir.to_str().unwrap().to_string(), &mut engine, results).unwrap();
+//! let predicates = output_predicates(&engine);
+//! write(temp_dir.to_str().unwrap().to_string(), &mut engine, predicates).unwrap();
 //! # }
 //! ```
 
