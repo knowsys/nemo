@@ -291,35 +291,35 @@ Boston;United States;4628910
         );
     }
 
-    /// Ignored as normalisation is not done yet completely
-    #[ignore]
     #[test]
     fn csv_with_various_different_constant_and_literal_representations() {
         let data = "\
-a;b;c
-Boston;United States;4628910
-<Dresden>;Germany;1234567
-My Home Town;Some<where >Nice;2
-Trailing Spaces do not belong to the name   ; What about spaces in the beginning though;123
-\"\"\"Do String literals work?\"\"\";\"\"\"Even with datatype annotation?\"\"\"^^<http://www.w3.org/2001/XMLSchema#string>;456
-The next column is empty;;789
+a;b;c;d
+Boston;United States;Some String;4628910
+<Dresden>;Germany;Another String;1234567
+My Home Town;Some<where >Nice;<https://string.parsing.should/not/change#that>;2
+Trailing Spaces do not belong to the name   ; What about spaces in the beginning though;  what happens to spaces in string parsing?  ;123
+\"\"\"Do String literals work?\"\"\";\"\"\"Even with datatype annotation?\"\"\"^^<http://www.w3.org/2001/XMLSchema#string>;\"\"\"even string literals should just be piped through\"\"\"^^<http://www.w3.org/2001/XMLSchema#string>;456
+The next 2 columns are empty;;;789
 ";
 
         let expected_result = [
-            ("Boston", "United States", 4628910),
-            ("Dresden", "Germany", 1234567),
-            ("My Home Town", "\"Some<where >Nice\"", 2),
+            ("Boston", "United States", "Some String", 4628910),
+            ("Dresden", "Germany", "Another String", 1234567),
+            ("My Home Town", "\"Some<where >Nice\"", "<https://string.parsing.should/not/change#that>", 2),
             (
                 "Trailing Spaces do not belong to the name",
                 "What about spaces in the beginning though",
+                "  what happens to spaces in string parsing?  ",
                 123,
             ),
             (
                 "\"Do String literals work?\"",
                 "\"Even with datatype annotation?\"",
+                "\"even string literals should just be piped through\"^^<http://www.w3.org/2001/XMLSchema#string>",
                 456,
             ),
-            ("The next column is empty", "\"\"", 789),
+            ("The next 2 columns are empty", "\"\"", "", 789),
         ];
 
         let mut rdr = ReaderBuilder::new()
@@ -332,10 +332,12 @@ The next column is empty;;789
             vec![
                 LogicalTypeEnum::Any,
                 LogicalTypeEnum::Any,
+                LogicalTypeEnum::String,
                 LogicalTypeEnum::Integer,
             ],
         );
         let mut builder = vec![
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
             PhysicalBuilderProxyEnum::I64(Default::default()),
@@ -347,7 +349,8 @@ The next column is empty;;789
 
         let VecT::U64(ref col0_idx) = cols[0] else { unreachable!() };
         let VecT::U64(ref col1_idx) = cols[1] else { unreachable!() };
-        let VecT::U64(ref col2) = cols[2] else { unreachable!() };
+        let VecT::U64(ref col2_idx) = cols[2] else { unreachable!() };
+        let VecT::I64(ref col3) = cols[3] else { unreachable!() };
 
         let col0: Vec<String> = col0_idx
             .iter()
@@ -359,13 +362,18 @@ The next column is empty;;789
             .copied()
             .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
             .collect();
+        let col2: Vec<String> = col2_idx
+            .iter()
+            .copied()
+            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+            .collect();
 
-        std::iter::zip(std::iter::zip(col0, col1), col2)
-            .map(|((c0, c1), c2)| (c0, c1, *c2))
+        std::iter::zip(std::iter::zip(std::iter::zip(col0, col1), col2), col3)
+            .map(|(((c0, c1), c2), c3)| (c0, c1, c2, *c3))
             .zip(
                 expected_result
                     .into_iter()
-                    .map(|(e0, e1, e2)| (e0.to_string(), e1.to_string(), e2)),
+                    .map(|(e0, e1, e2, e3)| (e0.to_string(), e1.to_string(), e2.to_string(), e3)),
             )
             .for_each(|(t1, t2)| assert_eq!(t1, t2));
     }

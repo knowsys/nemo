@@ -13,7 +13,6 @@ use crate::{
     model::{chase_model::ChaseProgram, DataSource, Identifier, Program},
     program_analysis::analysis::ProgramAnalysis,
     table_manager::TableManager,
-    types::LogicalTypeEnum,
 };
 
 use super::{rule_execution::RuleExecution, selection_strategy::strategy::RuleSelectionStrategy};
@@ -92,14 +91,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {
-        for (predicate, arity) in &analysis.all_predicates {
+        for (predicate, _) in &analysis.all_predicates {
             table_manager.register_predicate(
                 predicate.clone(),
                 analysis
                     .predicate_types
                     .get(predicate)
                     .cloned()
-                    .unwrap_or_else(|| (0..*arity).map(|_| LogicalTypeEnum::Any).collect()),
+                    .expect("All predicates should have types by now."),
             );
         }
     }
@@ -112,15 +111,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the data source declarations
-        for ((predicate, arity), source) in program.sources() {
+        for ((predicate, _), source) in program.sources() {
             let new_source = match source {
                 DataSource::DsvFile { file, delimiter } => {
                     let logical_types = analysis
                         .predicate_types
                         .get(predicate)
                         .cloned()
-                        .unwrap_or_else(|| vec![LogicalTypeEnum::Any; arity]);
-                    let reader = DSVReader::dsv(file.to_path_buf(), *delimiter, logical_types);
+                        .expect("All predicates should have types by now.");
+                    let reader = DSVReader::dsv(*file.clone(), *delimiter, logical_types);
 
                     TableSource::FileReader(Box::new(reader))
                 }

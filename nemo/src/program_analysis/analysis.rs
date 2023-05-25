@@ -392,12 +392,30 @@ impl ChaseProgram {
         position_graph: &PositionGraph,
         all_predicates: &HashSet<(Identifier, usize)>,
     ) -> Result<HashMap<Identifier, Vec<LogicalTypeEnum>>, TypeError> {
+        // Type declarations are known in the start: Explicit declarations and default types for data sources as fallback
+        let starting_predicate_types = {
+            let pred_decls = self.parsed_predicate_declarations();
+            let source_decls = self
+                .sources()
+                .map(|((pred, arity), source)| (pred.clone(), vec![source.default_type(); arity]))
+                .collect::<HashMap<_, _>>();
+
+            let mut starting_predicate_types = source_decls;
+            starting_predicate_types.extend(pred_decls); // NOTE: pred_decls may intentianally overwrite source_decls
+            starting_predicate_types
+        };
+
         // Initialize predicate types with the user provided values
-        let mut predicate_types: HashMap<Identifier, Vec<Option<LogicalTypeEnum>>> = self
-            .parsed_predicate_declarations()
-            .into_iter()
-            .map(|(predicate, types)| (predicate, types.into_iter().map(Some).collect()))
-            .collect();
+        let mut predicate_types: HashMap<Identifier, Vec<Option<LogicalTypeEnum>>> =
+            starting_predicate_types
+                .iter()
+                .map(|(predicate, types)| {
+                    (
+                        predicate.clone(),
+                        types.clone().into_iter().map(Some).collect(),
+                    )
+                })
+                .collect();
 
         // Set all predicates that did not receive explicit type information to `None` which represents unknown.
         for (predicate, arity) in all_predicates {
@@ -407,7 +425,7 @@ impl ChaseProgram {
         }
 
         // If there is an existential variable at some potion,
-        // it will be assigned to the type `LogicalTypeEnum::RdfsResource`
+        // it will be assigned to the type `LogicalTypeEnum::Any`
         for rule in self.rules() {
             for atom in rule.head() {
                 for (term_index, term) in atom.terms().iter().enumerate() {
@@ -422,7 +440,7 @@ impl ChaseProgram {
         }
 
         // Propagate each type from its declaration
-        for (predicate, types) in self.parsed_predicate_declarations() {
+        for (predicate, types) in starting_predicate_types {
             for (position, logical_type) in types.into_iter().enumerate() {
                 let predicate_position = PredicatePosition::new(predicate.clone(), position);
 

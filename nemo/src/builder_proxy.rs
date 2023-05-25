@@ -1,14 +1,20 @@
 //! The logical builder proxy concept allows to transform a given String, representing some data in a logical datatype
 //! into some value, which can be given to the physical layer to store the data accordingly to its type
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use nemo_physical::{
     builder_proxy::{
         ColumnBuilderProxy, PhysicalBuilderProxyEnum, PhysicalGenericColumnBuilderProxy,
         PhysicalStringColumnBuilderProxy,
     },
-    datatypes::Double,
+    datatypes::{DataValueT, Double},
 };
 
+use crate::io::parser::{all_input_consumed, parse_ground_term};
+
+use super::{model::Term, types::LogicalTypeEnum};
 use crate::error::ReadingError;
 
 /// Trait capturing builder proxies that use plain string (used for parsing in logical layer)
@@ -47,31 +53,48 @@ impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: String) -> Result<(), ReadingError> {
-        const XSD_STRING_LITERAL_SUFFIX: &str = r#""^^<http://www.w3.org/2001/XMLSchema#string>"#;
-
         self.commit();
 
-        // TODO: this is all super hacky but parsing proper ground terms is too slow...
-        let trimmed_string = input.trim();
+        let parsed_term =
+            all_input_consumed(parse_ground_term(&RefCell::new(HashMap::new())))(input.trim())
+                .unwrap_or(Term::StringLiteral(input.clone()));
 
-        let string_to_add = if trimmed_string.is_empty() {
-            "\"\"".to_string()
-        } else if trimmed_string.starts_with('<') && trimmed_string.ends_with('>') {
-            trimmed_string[1..trimmed_string.len() - 1].to_string()
-        } else if trimmed_string.starts_with('"')
-            && trimmed_string.ends_with(XSD_STRING_LITERAL_SUFFIX)
-        {
-            trimmed_string[..(trimmed_string.len() - XSD_STRING_LITERAL_SUFFIX.len()) + 1]
-                .to_string()
-        } else {
-            trimmed_string.to_string()
-        };
+        let parsed_datavalue = LogicalTypeEnum::Any
+            .ground_term_to_data_value_t(parsed_term)
+            .expect("LogicalTypeEnum::Any should work with every possible term we can get here.");
 
-        self.physical.add(string_to_add)
+        let DataValueT::String(parsed_string) = parsed_datavalue else { unreachable!("LogicalTypeEnum::Any should always be treated as String at the moment.") };
+
+        self.physical.add(parsed_string)
     }
 }
 
 impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalAnyColumnBuilderProxy<'a, 'b> {
+    fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
+        match physical_builder_proxy {
+            PhysicalBuilderProxyEnum::String(physical) => Self { physical },
+            _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch.")
+        }
+    }
+}
+
+/// [`LogicalColumnBuilderProxy`] to add String
+#[derive(Debug)]
+pub struct LogicalStringColumnBuilderProxy<'a: 'b, 'b> {
+    physical: &'b mut PhysicalStringColumnBuilderProxy<'a>,
+}
+
+impl ColumnBuilderProxy<String> for LogicalStringColumnBuilderProxy<'_, '_> {
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: String) -> Result<(), ReadingError> {
+        self.commit();
+        // NOTE: we just pipe the string through as is, in particular we do not parse potential RDF terms
+        self.physical.add(input)
+    }
+}
+
+impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalStringColumnBuilderProxy<'a, 'b> {
     fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
         match physical_builder_proxy {
             PhysicalBuilderProxyEnum::String(physical) => Self { physical },

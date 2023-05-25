@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use crate::builder_proxy::{
     LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxy, LogicalFloat64ColumnBuilderProxy,
-    LogicalIntegerColumnBuilderProxy,
+    LogicalIntegerColumnBuilderProxy, LogicalStringColumnBuilderProxy,
 };
 use crate::io::parser::ParseError;
 use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
@@ -63,7 +63,12 @@ macro_rules! generate_logical_type_enum {
     };
 }
 
-generate_logical_type_enum!((Any, "any"), (Integer, "integer"), (Float64, "float64"));
+generate_logical_type_enum!(
+    (Any, "any"),
+    (String, "string"),
+    (Integer, "integer"),
+    (Float64, "float64")
+);
 
 impl Default for LogicalTypeEnum {
     fn default() -> Self {
@@ -75,6 +80,7 @@ impl From<LogicalTypeEnum> for DataTypeName {
     fn from(source: LogicalTypeEnum) -> Self {
         match source {
             LogicalTypeEnum::Any => Self::String,
+            LogicalTypeEnum::String => Self::String,
             LogicalTypeEnum::Integer => Self::I64,
             LogicalTypeEnum::Float64 => Self::Double,
         }
@@ -126,6 +132,23 @@ impl LogicalTypeEnum {
                     }
                 }
             }
+            Self::String => {
+                match gt {
+                    Term::StringLiteral(s) => DataValueT::String(s),
+                    // TODO: is it correct to support language strings here omitting the language info?
+                    Term::RdfLiteral(RdfLiteral::LanguageString { value, .. }) => {
+                        DataValueT::String(value)
+                    }
+                    Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                        ref value,
+                        ref datatype,
+                    }) => match datatype.as_str() {
+                        XSD_STRING => DataValueT::String(value.to_string()),
+                        _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
+                    },
+                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
+                }
+            }
             Self::Integer => match gt {
                 Term::NumericLiteral(NumericLiteral::Integer(i)) => DataValueT::I64(i),
                 Term::RdfLiteral(RdfLiteral::DatatypeValue {
@@ -167,6 +190,7 @@ impl LogicalTypeEnum {
     pub fn allows_numeric_operations(&self) -> bool {
         match self {
             Self::Any => false,
+            Self::String => false,
             Self::Integer => true,
             Self::Float64 => true,
         }
@@ -179,6 +203,7 @@ impl LogicalTypeEnum {
     ) -> Box<dyn LogicalColumnBuilderProxy<'a, 'b> + 'b> {
         match self {
             Self::Any => Box::new(LogicalAnyColumnBuilderProxy::new(physical)),
+            Self::String => Box::new(LogicalStringColumnBuilderProxy::new(physical)),
             Self::Integer => Box::new(LogicalIntegerColumnBuilderProxy::new(physical)),
             Self::Float64 => Box::new(LogicalFloat64ColumnBuilderProxy::new(physical)),
         }

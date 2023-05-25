@@ -839,6 +839,15 @@ impl DataSource {
     pub fn sparql_query(query: SparqlQuery) -> Result<Self, ParseError> {
         Ok(Self::SparqlQuery(Box::new(query)))
     }
+
+    /// Get the logical types that should be used for columns in the datasource if no type declaration is given explicitely
+    pub fn default_type(&self) -> LogicalTypeEnum {
+        match self {
+            Self::DsvFile { .. } => LogicalTypeEnum::String,
+            Self::RdfFile(_) => LogicalTypeEnum::Any,
+            Self::SparqlQuery(_) => LogicalTypeEnum::Any,
+        }
+    }
 }
 
 impl Debug for DataSource {
