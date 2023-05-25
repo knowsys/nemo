@@ -1,3 +1,6 @@
+@declare sourceA(any, any).
+@declare sourceB(any, any).
+
 @source sourceA[2]: load-csv("sources/dataA.csv").
 @source sourceB[2]: load-csv("sources/dataB.csv").
 

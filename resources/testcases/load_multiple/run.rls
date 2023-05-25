@@ -2,11 +2,11 @@
 @source source[3]: load-csv("sources/dataB.csv").
 @source source[3]: load-csv("sources/dataC.csv").
 
-source(A, B, C) .
-source(B, C, D) .
-source(Q, B, C) .
+source("A", "B", "C") .
+source("B", "C", "D") .
+source("Q", "B", "C") .
 
 combined(?X, ?Y, ?Z) :- source(?X, ?Y, ?Z) .
 
-constant(?X) :- combined(?X, B, C) .
-constant(?X) :- combined(?X, Y, ?Z) .
+constant(?X) :- combined(?X, "B", "C") .
+constant(?X) :- combined(?X, "Y", ?Z) .
