@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Identifier, Rule, Term, Variable},
+        model::{chase_model::ChaseRule, Identifier, Term, Variable},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::{SubtableExecutionPlan, SubtableIdentifier},
         TableManager,
@@ -45,7 +45,7 @@ pub struct RestrictedChaseStrategy {
 
 impl RestrictedChaseStrategy {
     /// Create a new [`RestrictedChaseStrategy`] object.
-    pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
+    pub fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
         let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();
 

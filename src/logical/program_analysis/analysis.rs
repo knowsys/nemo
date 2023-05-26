@@ -3,7 +3,8 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use crate::{
     error::Error,
     logical::{
-        model::{Atom, FilterOperation, Identifier, Literal, Program, Rule, Term, Variable},
+        model::chase_model::{ChaseProgram, ChaseRule},
+        model::{Atom, FilterOperation, Identifier, Literal, Term, Variable},
         types::{LogicalTypeEnum, TypeError},
         util::labeled_graph::LabeledGraph,
     },
@@ -47,7 +48,7 @@ pub struct RuleAnalysis {
     pub num_existential: usize,
 
     /// Rule that represents the calculation of the satisfied matches for an existential rule.
-    pub existential_aux_rule: Rule,
+    pub existential_aux_rule: ChaseRule,
     /// The associated variable order for the join of the head atoms
     pub existential_aux_order: VariableOrder,
     /// The types associated with the auxillary rule
@@ -77,7 +78,7 @@ pub enum RuleAnalysisError {
 }
 
 /// Return true if there is a predicate in the positive part of the rule that also appears in the head of the rule.
-fn is_recursive(rule: &Rule) -> bool {
+fn is_recursive(rule: &ChaseRule) -> bool {
     rule.head().iter().any(|h| {
         rule.positive_body()
             .iter()
@@ -85,7 +86,7 @@ fn is_recursive(rule: &Rule) -> bool {
     })
 }
 
-fn count_distinct_existential_variables(rule: &Rule) -> usize {
+fn count_distinct_existential_variables(rule: &ChaseRule) -> usize {
     let mut existentials = HashSet::<Variable>::new();
 
     for head_atom in rule.head() {
@@ -126,7 +127,7 @@ fn construct_existential_aux_rule(
     head_atoms: &Vec<Atom>,
     predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
     column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
-) -> (Rule, VariableOrder, HashMap<Variable, LogicalTypeEnum>) {
+) -> (ChaseRule, VariableOrder, HashMap<Variable, LogicalTypeEnum>) {
     let normalized_head = normalize_atom_vector(head_atoms, &[], &mut 0);
 
     let temp_head_identifier = get_fresh_rule_predicate(rule_index);
@@ -158,7 +159,7 @@ fn construct_existential_aux_rule(
     }
 
     let temp_head_atom = Atom::new(temp_head_identifier, term_vec);
-    let temp_rule = Rule::new(
+    let temp_rule = ChaseRule::new(
         vec![temp_head_atom],
         normalized_head
             .atoms
@@ -180,7 +181,7 @@ fn construct_existential_aux_rule(
 }
 
 fn analyze_rule(
-    rule: &Rule,
+    rule: &ChaseRule,
     promising_variable_orders: Vec<VariableOrder>,
     promising_column_orders: &[HashMap<Identifier, HashSet<ColumnOrder>>],
     rule_index: usize,
@@ -221,7 +222,7 @@ fn analyze_rule(
             )
         } else {
             (
-                Rule::new(vec![], vec![], vec![]),
+                ChaseRule::new(vec![], vec![], vec![]),
                 VariableOrder::new(),
                 HashMap::new(),
             )
@@ -290,7 +291,7 @@ pub struct ProgramAnalysis {
     pub position_graph: PositionGraph,
 }
 
-impl Program {
+impl ChaseProgram {
     /// Collect all predicates that appear in a head atom into a [`HashSet`]
     fn get_head_predicates(&self) -> HashSet<Identifier> {
         let mut result = HashSet::<Identifier>::new();

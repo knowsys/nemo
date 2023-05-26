@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use petgraph::Directed;
 
 use crate::logical::{
-    model::{Identifier, Rule},
+    model::{chase_model::ChaseRule, Identifier},
     program_analysis::analysis::RuleAnalysis,
     util::labeled_graph::LabeledGraph,
 };
@@ -98,7 +98,7 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
 {
     /// Create new [`StrategyStratifiedNegation`].
     fn new(
-        rules: Vec<&Rule>,
+        rules: Vec<&ChaseRule>,
         rule_analyses: Vec<&RuleAnalysis>,
     ) -> Result<Self, SelectionStrategyError> {
         let graph = Self::build_graph(&rule_analyses);
@@ -109,7 +109,7 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
             for stratum in &mut strata {
                 stratum.sort();
 
-                let sub_rules: Vec<&Rule> = stratum.iter().map(|&i| rules[i]).collect();
+                let sub_rules: Vec<&ChaseRule> = stratum.iter().map(|&i| rules[i]).collect();
                 let sub_analyses: Vec<&RuleAnalysis> =
                     stratum.iter().map(|&i| rule_analyses[i]).collect();
 

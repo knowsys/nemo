@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 
-use crate::logical::{model::Rule, program_analysis::analysis::RuleAnalysis};
+use crate::logical::{model::chase_model::ChaseRule, program_analysis::analysis::RuleAnalysis};
 
 use super::{
     dependency_graph::graph_constructor::DependencyGraphConstructor,
@@ -27,7 +27,7 @@ impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStr
     RuleSelectionStrategy for StrategyDependencyGraph<GraphConstructor, SubStrategy>
 {
     fn new(
-        rules: Vec<&Rule>,
+        rules: Vec<&ChaseRule>,
         rule_analyses: Vec<&RuleAnalysis>,
     ) -> Result<Self, SelectionStrategyError> {
         let dependency_graph = GraphConstructor::build_graph(rules.clone(), rule_analyses.clone());
@@ -41,7 +41,7 @@ impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStr
         for scc in scc_sorted {
             let scc_rule_indices = graph_scc[scc].clone();
 
-            let sub_rules: Vec<&Rule> = scc_rule_indices.iter().map(|&i| rules[i]).collect();
+            let sub_rules: Vec<&ChaseRule> = scc_rule_indices.iter().map(|&i| rules[i]).collect();
             let sub_analyses: Vec<&RuleAnalysis> =
                 scc_rule_indices.iter().map(|&i| rule_analyses[i]).collect();
 

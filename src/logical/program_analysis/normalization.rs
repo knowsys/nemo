@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
-use crate::logical::model::{Atom, Filter, FilterOperation, Identifier, Program, Term, Variable};
+use crate::logical::model::chase_model::ChaseProgram;
+use crate::logical::model::{Atom, Filter, FilterOperation, Identifier, Term, Variable};
 
 /// Represents the result of normalizing a list of atoms.
 /// Normalized atoms do not contain constants or repeat variables in one atom.
@@ -87,7 +88,7 @@ pub fn normalize_atom_vector(
     }
 }
 
-impl Program {
+impl ChaseProgram {
     /// Transforms the rules into a "normalized" form.
     pub fn normalize(&mut self) {
         for rule in self.rules_mut() {

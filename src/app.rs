@@ -289,7 +289,6 @@ impl CliApp {
         })?;
         let input = inputs.join("");
         let program = all_input_consumed(parser.parse_program())(&input)?;
-        program.check_for_unsupported_features()?;
 
         log::info!("Rules parsed");
         log::trace!("{:?}", program);

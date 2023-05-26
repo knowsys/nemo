@@ -1,4 +1,4 @@
-//! The physical builder proxy takes values of some input type T and provides functionality to store them in a ['VecT']
+//! The physical builder proxy takes values of some input type `T` and provides functionality to store them in a ['VecT']
 use std::cell::RefCell;
 
 use crate::error::Error;
@@ -9,16 +9,20 @@ use crate::physical::{
     management::database::Dict,
 };
 
-/// Trait for a Builder Proxy, which translates a value for a particular [`DataTypeName`] to the corresponding [`StorageType`][crate::physical::datatypes::StorageType] Column elements
+/// Trait for a Builder Proxy, which translates a value for a generic data type `T` to the corresponding [`StorageType`][crate::physical::datatypes::StorageTypeName] column elements
 pub trait ColumnBuilderProxy<T>: std::fmt::Debug {
-    /// Cache a value to be added to the ColumnBuilder. If a value is already cached, this one is actually added to the ColumnBuilder before the new value is checked
+    /// Cache a value to be added to the ColumnBuilder. If a value is already cached, the cached value will be added to the ColumnBuilder before the new value is checked.
+    ///
+    /// The add function checks if the given input can be cast or parsed into the ColumnBuilder type.
+    /// If this is not possible a corresponding [`Error`] is returned.
     fn add(&mut self, input: T) -> Result<(), Error>;
-    /// Forgets a cached value
+    /// Forgets a cached value.
     fn forget(&mut self);
-    /// Commits the data, cleaning the cached value while adding it to the respective ColumnBuilder
+    /// Commits the data, cleaning the cached value while adding it to the respective ColumnBuilder.
     fn commit(&mut self);
 }
 
+/// Generic trait implementation of the methods [`commit`][ColumnBuilderProxy::commit] and [`forget`][ColumnBuilderProxy::forget]
 macro_rules! generic_trait_impl_without_add {
     ($storage:expr) => {
         fn commit(&mut self) {
@@ -33,6 +37,7 @@ macro_rules! generic_trait_impl_without_add {
     };
 }
 
+/// Generic trait implementation, if the value type can be cast implicitly into the physical builder value type
 macro_rules! physical_generic_trait_impl {
     ($type:ty, $storage:expr) => {
         impl ColumnBuilderProxy<$type> for PhysicalGenericColumnBuilderProxy<$type> {
@@ -55,12 +60,18 @@ macro_rules! physical_generic_trait_impl {
 }
 
 /// Trait for Builder Proxy for the physical layer
+///
+/// This trait allows to get a [`VecT`] representation of a [`PhysicalColumnBuilderProxy`].
 pub trait PhysicalColumnBuilderProxy<T>: ColumnBuilderProxy<T> {
     /// Writes the remaining prepared value and returns a VecT
+    ///
+    /// This will call [`commit`][ColumnBuilderProxy::commit] of the [`ColumnBuilderProxy`].
+    /// # Note
+    /// Rollbacks, if necessary, need to be done before this method is called.
     fn finalize(self) -> VecT;
 }
 
-/// PhysicalBuilderProxy to add Strings
+/// [`PhysicalColumnBuilderProxy`] to add Strings
 #[derive(Debug)]
 pub struct PhysicalStringColumnBuilderProxy<'a> {
     dict: &'a RefCell<Dict>,
@@ -69,7 +80,7 @@ pub struct PhysicalStringColumnBuilderProxy<'a> {
 }
 
 impl<'a> PhysicalStringColumnBuilderProxy<'a> {
-    /// Create a new PhysicalStringColumnBuilderProxy with the given dictionary
+    /// Create a new [`PhysicalStringColumnBuilderProxy`] with the given [`dictionary`][Dict]
     pub fn new(dict: &'a RefCell<Dict>) -> Self {
         Self {
             dict,
@@ -95,7 +106,7 @@ impl PhysicalColumnBuilderProxy<String> for PhysicalStringColumnBuilderProxy<'_>
     }
 }
 
-/// PhysicalBuilderProxy to add types without special requirements (e.g. dictionary)
+/// [`PhysicalColumnBuilderProxy`] to add types without special requirements (e.g. dictionary)
 #[derive(Default, Debug)]
 pub struct PhysicalGenericColumnBuilderProxy<T> {
     value: Option<T>,

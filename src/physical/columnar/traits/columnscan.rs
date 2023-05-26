@@ -16,8 +16,10 @@ use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 /// Iterator for a sorted interval of values
 pub trait ColumnScan: Debug + Iterator {
-    /// Find the next value that is at least as large as the given value,
+    /// Starting from the current position, find a value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value if it exists.
+    /// If the current value is already larger or equal to the given value,
+    /// this value will be returned and the `ColumnScan` will not be advanced.
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item>;
 
     /// Return the value at the current position, if any.
@@ -410,7 +412,7 @@ where
     /// Forward `get_smallest_scans` to the underlying [`ColumnScanEnum`].
     /// This takes an exclusive reference as opposed to an immutable one, so that none of the
     /// mutating methods on &self can be called while the result is still available
-    /// (see https://github.com/knowsys/nemo/issues/137)
+    /// (see <https://github.com/knowsys/nemo/issues/137>)
     pub fn get_smallest_scans(&mut self) -> &Vec<bool> {
         unsafe { &mut *self.0.get() }.get_smallest_scans()
     }

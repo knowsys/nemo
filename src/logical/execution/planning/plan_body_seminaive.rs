@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Rule, Variable},
+        model::{chase_model::ChaseRule, Variable},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::SubtableExecutionPlan,
         TableManager,
@@ -27,7 +27,7 @@ pub struct SeminaiveStrategy {
 
 impl SeminaiveStrategy {
     /// Create new [`SeminaiveStrategy`] object.
-    pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
+    pub fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let used_variables = analysis.head_variables.clone();
 
         let join_generator = SeminaiveJoinGenerator {

@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::logical::{model::Rule, program_analysis::analysis::RuleAnalysis};
+use crate::logical::{program_analysis::analysis::RuleAnalysis, model::chase_model::ChaseRule};
 
 /// Errors that can occur while creating a strategy.
 #[derive(Error, Debug, Copy, Clone)]
@@ -17,7 +17,7 @@ pub enum SelectionStrategyError {
 pub trait RuleSelectionStrategy: std::fmt::Debug {
     /// Create a new [`RuleSelectionStrategy`] object.
     fn new(
-        rules: Vec<&Rule>,
+        rules: Vec<&ChaseRule>,
         rule_analyses: Vec<&RuleAnalysis>,
     ) -> Result<Self, SelectionStrategyError>
     where

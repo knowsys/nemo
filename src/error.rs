@@ -1,5 +1,7 @@
 //! Error-handling module for the crate
 
+use std::path::PathBuf;
+
 use thiserror::Error;
 
 use crate::{
@@ -46,6 +48,12 @@ pub enum Error {
     /// Error when converting floating type to integer point value
     #[error("Floating type could not be converted to integer value")]
     FloatingPointToInteger,
+    /// Error if no input rule files are specified
+    #[error("No inputs were specified")]
+    NoInput,
+    /// Error if the user asked for an unimplemented feature
+    #[error("Multiple file support is not yet implemented")]
+    MultipleFilesNotImplemented,
     /// Rule analysis errors
     #[error(transparent)]
     RuleAnalysisError(#[from] RuleAnalysisError),
@@ -67,7 +75,7 @@ pub enum Error {
         /// Contains the wrapped error
         error: std::io::Error,
         /// Filename which caused the error
-        filename: String,
+        filename: PathBuf,
     },
     /// Errors on reading a file
     #[error("Failed to read \"{filename}\": {error}.")]
@@ -75,7 +83,7 @@ pub enum Error {
         /// Contains the wrapped error
         error: std::io::Error,
         /// Filename which caused the error
-        filename: String,
+        filename: PathBuf,
     },
     /// Error during a Write operation
     #[error("Failed to write \"{filename}\": {error}")]

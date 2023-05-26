@@ -4,9 +4,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     error::Error,
-    io::{dsv::DSVReader, RecordWriter},
+    io::dsv::DSVReader,
     logical::{
-        model::{DataSource, Identifier, Program},
+        model::{chase_model::ChaseProgram, DataSource, Identifier, Program},
         program_analysis::analysis::ProgramAnalysis,
         types::LogicalTypeEnum,
         TableManager,
@@ -14,6 +14,7 @@ use crate::{
     meta::TimedCode,
     physical::{
         datatypes::DataValueT,
+        dictionary::value_serializer::TrieSerializer,
         management::database::{TableId, TableSource},
     },
 };
@@ -42,7 +43,7 @@ impl RuleInfo {
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
 pub struct ExecutionEngine<RuleSelectionStrategy> {
-    program: Program,
+    program: ChaseProgram,
     analysis: ProgramAnalysis,
 
     rule_strategy: RuleSelectionStrategy,
@@ -56,9 +57,34 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     current_step: usize,
 }
 
+/// Refers to a single computed relation.
+#[derive(Debug, Clone)]
+pub struct IdbPredicate {
+    /// The identifier corresponding to the predicate.
+    identifier: Identifier,
+    /// The table id corresponding to the predicate.
+    table_id: Option<TableId>,
+}
+
+impl IdbPredicate {
+    /// Get the identifier of the predicate
+    pub fn identifier(&self) -> &Identifier {
+        &self.identifier
+    }
+}
+
+impl std::fmt::Display for IdbPredicate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.identifier)
+    }
+}
+
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [`ExecutionEngine`].
-    pub fn initialize(mut program: Program) -> Result<Self, Error> {
+    pub fn initialize(program: Program) -> Result<Self, Error> {
+        let mut program: ChaseProgram = program.into();
+
+        program.check_for_unsupported_features()?;
         program.normalize();
 
         let analysis = program.analyze()?;
@@ -105,7 +131,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     fn add_sources(
         table_manager: &mut TableManager,
-        program: &Program,
+        program: &ChaseProgram,
         analysis: &ProgramAnalysis,
     ) {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
@@ -247,9 +273,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Combine the output tries that resulted form the execution.
-    pub fn combine_results(&mut self) -> Result<Vec<(Identifier, Option<TableId>)>, Error> {
+    /// Returns a Vector of [`IdbPredicate`], which can be turned into tables by calling
+    /// [table_serializer](ExecutionEngine#method.table_serializer)
+    ///
+    /// Uses the default [`crate::physical::management::database::ColumnOrder`]
+    pub fn combine_results(&mut self) -> Result<Vec<IdbPredicate>, Error> {
         let output_predicates = self.program.output_predicates().collect::<HashSet<_>>();
         let mut result_ids = Vec::new();
+
         for predicate in &self.analysis.derived_predicates {
             if !output_predicates.contains(predicate) {
                 continue;
@@ -259,7 +290,19 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             result_ids.push((predicate.clone(), table_id));
         }
 
-        Ok(result_ids)
+        Ok(result_ids
+            .into_iter()
+            .map(|(identifier, table_id)| IdbPredicate {
+                identifier,
+                table_id,
+            })
+            .collect())
+    }
+
+    /// Get the table for the specified predicate if there is some.
+    pub fn table_serializer(&self, predicate: IdbPredicate) -> Option<impl TrieSerializer + '_> {
+        let table_id = predicate.table_id?;
+        Some(self.table_manager.table_serializer(table_id))
     }
 
     /// Count the number of derived facts during the computation.
@@ -273,14 +316,5 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
 
         result
-    }
-
-    /// Returns a reference to the Trie corresponding to the table_id
-    pub fn write_predicate_to_disk(
-        &self,
-        writer: &mut impl RecordWriter,
-        table_id: TableId,
-    ) -> Result<(), Error> {
-        self.table_manager.write_table_to_disk(writer, table_id)
     }
 }

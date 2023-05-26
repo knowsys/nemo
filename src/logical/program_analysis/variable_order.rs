@@ -2,11 +2,12 @@
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
-use crate::logical::{model::Atom, Permutator};
+use crate::logical::model::chase_model::{ChaseProgram, ChaseRule};
+use crate::logical::model::{Atom, Identifier, Variable};
+use crate::logical::Permutator;
 use crate::physical::management::database::ColumnOrder;
-use std::collections::{BTreeMap, HashMap, HashSet};
 
-use super::super::model::{Identifier, Program, Rule, Variable};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// Represents an ordering of variables as [`HashMap`].
 #[repr(transparent)]
@@ -175,13 +176,13 @@ trait RuleVariableList {
     fn filter_cartesian_product(
         self,
         partial_var_order: &VariableOrder,
-        rule: &Rule,
+        rule: &ChaseRule,
     ) -> Vec<Variable>;
 
     fn filter_tries<P: FnMut(&Identifier) -> bool>(
         self,
         partial_var_order: &VariableOrder,
-        rule: &Rule,
+        rule: &ChaseRule,
         required_trie_column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
         predicate_filter: P,
     ) -> Vec<Variable>;
@@ -191,7 +192,7 @@ impl RuleVariableList for Vec<Variable> {
     fn filter_cartesian_product(
         self,
         partial_var_order: &VariableOrder,
-        rule: &Rule,
+        rule: &ChaseRule,
     ) -> Vec<Variable> {
         let result: Vec<Variable> = self
             .iter()
@@ -218,7 +219,7 @@ impl RuleVariableList for Vec<Variable> {
     fn filter_tries<P: FnMut(&Identifier) -> bool>(
         self,
         partial_var_order: &VariableOrder,
-        rule: &Rule,
+        rule: &ChaseRule,
         required_trie_column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
         mut predicate_filter: P,
     ) -> Vec<Variable> {
@@ -274,7 +275,7 @@ impl RuleVariableList for Vec<Variable> {
 }
 
 struct VariableOrderBuilder<'a> {
-    program: &'a Program,
+    program: &'a ChaseProgram,
     iteration_order_within_rule: IterationOrder,
     required_trie_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>, // maps predicates to sets of column orders
     idb_preds: HashSet<Identifier>,
@@ -289,7 +290,7 @@ struct BuilderResult {
 
 impl VariableOrderBuilder<'_> {
     fn build_for(
-        program: &Program,
+        program: &ChaseProgram,
         iteration_order_within_rule: IterationOrder,
         initial_column_orders: HashMap<Identifier, HashSet<ColumnOrder>>,
     ) -> BuilderResult {
@@ -309,7 +310,10 @@ impl VariableOrderBuilder<'_> {
         }
     }
 
-    fn get_already_present_idb_edb_count_for_rule_in_tries(&self, rule: &Rule) -> (usize, usize) {
+    fn get_already_present_idb_edb_count_for_rule_in_tries(
+        &self,
+        rule: &ChaseRule,
+    ) -> (usize, usize) {
         let preds_with_tries = rule.positive_body().iter().filter_map(|atom| {
             let pred = atom.predicate();
             self.required_trie_column_orders
@@ -331,7 +335,7 @@ impl VariableOrderBuilder<'_> {
 
     fn generate_variable_orders(&mut self) -> Vec<VariableOrder> {
         // NOTE: We use a BTreeMap to determinise the iteration order for easier debugging; this should not be performance critical
-        let mut remaining_rules: BTreeMap<usize, &Rule> =
+        let mut remaining_rules: BTreeMap<usize, &ChaseRule> =
             self.program.rules().iter().enumerate().collect();
 
         let mut result: Vec<(usize, VariableOrder)> =
@@ -363,7 +367,7 @@ impl VariableOrderBuilder<'_> {
         result.into_iter().map(|(_, ord)| ord).collect()
     }
 
-    fn generate_variable_order_for_rule(&mut self, rule: &Rule) -> VariableOrder {
+    fn generate_variable_order_for_rule(&mut self, rule: &ChaseRule) -> VariableOrder {
         let mut variable_order: VariableOrder = VariableOrder::new();
         let mut remaining_vars = {
             let remaining_vars_unpermutated: Vec<Variable> = rule
@@ -421,7 +425,7 @@ impl VariableOrderBuilder<'_> {
         &mut self,
         variable_order: &VariableOrder,
         must_contain: HashSet<Variable>,
-        rule: &Rule,
+        rule: &ChaseRule,
     ) {
         let atoms = rule.positive_body().iter().filter(|atom| {
             let vars: Vec<Variable> = atom.variables().cloned().collect();
@@ -456,7 +460,7 @@ pub(super) struct BuilderResultVariants {
 }
 
 pub(super) fn build_preferable_variable_orders(
-    program: &Program,
+    program: &ChaseProgram,
     initial_column_orders: Option<HashMap<Identifier, HashSet<ColumnOrder>>>,
 ) -> BuilderResultVariants {
     let iteration_orders = [
@@ -517,18 +521,18 @@ pub(super) fn build_preferable_variable_orders(
 
 #[cfg(test)]
 mod test {
+    use super::{IterationOrder, RuleVariableList, VariableOrder};
+
+    use crate::logical::model::chase_model::{ChaseProgram, ChaseRule};
+    use crate::logical::model::{
+        Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Term, Variable,
+    };
     use crate::physical::management::database::ColumnOrder;
 
-    use super::{
-        super::super::model::{
-            Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Program, Rule, Term,
-            Variable,
-        },
-        IterationOrder, RuleVariableList, VariableOrder,
-    };
     use std::collections::{HashMap, HashSet};
 
-    type TestRuleSetWithAdditionalInfo = (Vec<Rule>, Vec<Vec<Variable>>, Vec<(Identifier, usize)>);
+    type TestRuleSetWithAdditionalInfo =
+        (Vec<ChaseRule>, Vec<Vec<Variable>>, Vec<(Identifier, usize)>);
 
     impl VariableOrder {
         fn from_vec(vec: Vec<Variable>) -> Self {
@@ -579,7 +583,7 @@ mod test {
         assert_eq!(expected_6, results_6);
     }
 
-    fn get_test_rule_with_vars_where_predicates_are_different() -> (Rule, Vec<Variable>) {
+    fn get_test_rule_with_vars_where_predicates_are_different() -> (ChaseRule, Vec<Variable>) {
         let a = Identifier("a".to_string());
         let b = Identifier("b".to_string());
         let c = Identifier("c".to_string());
@@ -593,7 +597,7 @@ mod test {
         let tz = Term::Variable(z.clone());
 
         (
-            Rule::new(
+            ChaseRule::new(
                 vec![Atom::new(c, vec![tx.clone(), tz.clone()])],
                 vec![
                     Literal::Positive(Atom::new(a, vec![tx, ty.clone()])),
@@ -605,7 +609,7 @@ mod test {
         )
     }
 
-    fn get_test_rule_with_vars_where_predicates_are_the_same() -> (Rule, Vec<Variable>) {
+    fn get_test_rule_with_vars_where_predicates_are_the_same() -> (ChaseRule, Vec<Variable>) {
         let a = Identifier("a".to_string());
 
         let x = Variable::Universal(Identifier("x".to_string()));
@@ -617,7 +621,7 @@ mod test {
         let tz = Term::Variable(z.clone());
 
         (
-            Rule::new(
+            ChaseRule::new(
                 vec![Atom::new(a.clone(), vec![tx.clone(), tz.clone()])],
                 vec![
                     Literal::Positive(Atom::new(a.clone(), vec![tx, ty.clone()])),
@@ -723,12 +727,12 @@ mod test {
 
     #[test]
     fn build_preferable_variable_orders_with_different_predicate_rule() {
-        let (rules, var_lists): (Vec<Rule>, Vec<Vec<Variable>>) =
+        let (rules, var_lists): (Vec<ChaseRule>, Vec<Vec<Variable>>) =
             vec![get_test_rule_with_vars_where_predicates_are_different()]
                 .into_iter()
                 .unzip();
 
-        let program: Program = rules.into();
+        let program: ChaseProgram = rules.into();
 
         let rule_vars = &var_lists[0];
         let rule_var_orders: Vec<VariableOrder> = vec![
@@ -752,12 +756,12 @@ mod test {
 
     #[test]
     fn build_preferable_variable_orders_with_same_predicate_rule() {
-        let (rules, var_lists): (Vec<Rule>, Vec<Vec<Variable>>) =
+        let (rules, var_lists): (Vec<ChaseRule>, Vec<Vec<Variable>>) =
             vec![get_test_rule_with_vars_where_predicates_are_the_same()]
                 .into_iter()
                 .unzip();
 
-        let program: Program = rules.into();
+        let program: ChaseProgram = rules.into();
 
         let rule_vars = &var_lists[0];
         let rule_var_orders: Vec<VariableOrder> = vec![
@@ -781,14 +785,14 @@ mod test {
 
     #[test]
     fn build_preferable_variable_orders_with_both_rules() {
-        let (rules, var_lists): (Vec<Rule>, Vec<Vec<Variable>>) = vec![
+        let (rules, var_lists): (Vec<ChaseRule>, Vec<Vec<Variable>>) = vec![
             get_test_rule_with_vars_where_predicates_are_different(),
             get_test_rule_with_vars_where_predicates_are_the_same(),
         ]
         .into_iter()
         .unzip();
 
-        let program: Program = rules.into();
+        let program: ChaseProgram = rules.into();
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
@@ -852,7 +856,7 @@ mod test {
 
         let (rules, variables) = [
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(init.clone(), vec![tc.clone()])],
                     vec![Literal::Positive(Atom::new(
                         is_main_class,
@@ -863,7 +867,7 @@ mod test {
                 vec![c.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), tc.clone()],
@@ -874,7 +878,7 @@ mod test {
                 vec![c.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![
                         Atom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
                         Atom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
@@ -894,7 +898,7 @@ mod test {
                 vec![c.clone(), y.clone(), d1.clone(), d2.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), ty.clone()],
@@ -916,7 +920,7 @@ mod test {
                 vec![c.clone(), d1, d2, y.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(xe, vec![tc.clone(), tr.clone(), te.clone()])],
                     vec![
                         Literal::Positive(Atom::new(sub_class_of, vec![te, ty.clone()])),
@@ -938,7 +942,7 @@ mod test {
         let (rules, var_lists, predicates) =
             get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant();
 
-        let program: Program = (
+        let program: ChaseProgram = (
             vec![
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),
@@ -1080,7 +1084,7 @@ mod test {
 
         let (rules, variables) = [
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(init.clone(), vec![tc.clone()])],
                     vec![Literal::Positive(Atom::new(
                         is_main_class.clone(),
@@ -1091,7 +1095,7 @@ mod test {
                 vec![c.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), tc.clone()],
@@ -1102,7 +1106,7 @@ mod test {
                 vec![c.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![
                         Atom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
                         Atom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
@@ -1122,7 +1126,7 @@ mod test {
                 vec![c.clone(), y.clone(), d1.clone(), d2.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), ty.clone()],
@@ -1144,7 +1148,7 @@ mod test {
                 vec![c.clone(), d1, d2, y.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(
                         xe.clone(),
                         vec![tc.clone(), tr.clone(), te.clone()],
@@ -1164,7 +1168,7 @@ mod test {
                 vec![e.clone(), y.clone(), r.clone(), c.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(
                         aux_subsub_ext.clone(),
                         vec![td.clone(), tr.clone(), ty.clone()],
@@ -1185,7 +1189,7 @@ mod test {
                 vec![r.clone(), s.clone(), y.clone(), d.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(
                         aux.clone(),
                         vec![tc.clone(), tr.clone(), ty.clone()],
@@ -1205,7 +1209,7 @@ mod test {
                 vec![c.clone(), d.clone(), r.clone(), y.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(
                         sub_class_of.clone(),
                         vec![te.clone(), ty.clone()],
@@ -1222,7 +1226,7 @@ mod test {
                 vec![c.clone(), r.clone(), e.clone(), y],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), te.clone()],
@@ -1242,7 +1246,7 @@ mod test {
                 vec![c.clone(), d.clone(), e.clone()],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(
                         xe.clone(),
                         vec![td.clone(), ts.clone(), te.clone()],
@@ -1262,7 +1266,7 @@ mod test {
                 vec![c.clone(), r1, e.clone(), d, r2, s1, s2, s],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(init, vec![tc.clone()])],
                     vec![Literal::Positive(Atom::new(xe, vec![tc, tr, te]))],
                     vec![],
@@ -1270,7 +1274,7 @@ mod test {
                 vec![c, r, e],
             ),
             (
-                Rule::new(
+                ChaseRule::new(
                     vec![Atom::new(main_sub_class_of, vec![ta.clone(), tb.clone()])],
                     vec![
                         Literal::Positive(Atom::new(sub_class_of, vec![ta.clone(), tb.clone()])),
@@ -1292,7 +1296,7 @@ mod test {
     fn build_preferable_variable_orders_with_el_without_constant() {
         let (rules, var_lists, predicates) = get_el_test_ruleset_without_constants();
 
-        let program: Program = (
+        let program: ChaseProgram = (
             vec![
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),

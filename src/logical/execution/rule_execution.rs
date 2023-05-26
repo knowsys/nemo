@@ -3,7 +3,7 @@
 use crate::{
     error::Error,
     logical::{
-        model::{Identifier, Rule},
+        model::{Identifier, chase_model::ChaseRule},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::SubtableExecutionPlan,
         TableManager,
@@ -29,7 +29,7 @@ pub struct RuleExecution {
 
 impl RuleExecution {
     /// Create new [`RuleExecution`].
-    pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
+    pub fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let body_strategy = Box::new(SeminaiveStrategy::initialize(rule, analysis));
         let head_strategy: Box<dyn HeadStrategy> = if analysis.is_existential {
             Box::new(RestrictedChaseStrategy::initialize(rule, analysis))
