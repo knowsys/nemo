@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::logical::{program_analysis::analysis::RuleAnalysis, model::chase_model::ChaseRule};
+use crate::logical::{model::chase_model::ChaseRule, program_analysis::analysis::RuleAnalysis};
 
 /// Errors that can occur while creating a strategy.
 #[derive(Error, Debug, Copy, Clone)]

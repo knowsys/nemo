@@ -2,7 +2,7 @@
 
 use petgraph::{adj::NodeIndex, Directed, Graph};
 
-use crate::logical::{program_analysis::analysis::RuleAnalysis, model::chase_model::ChaseRule};
+use crate::logical::{model::chase_model::ChaseRule, program_analysis::analysis::RuleAnalysis};
 
 /// Graph that represents a prioritization between rules.
 pub type DependencyGraph = Graph<NodeIndex<usize>, (), Directed>;

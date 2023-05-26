@@ -3,7 +3,7 @@
 use crate::{
     error::Error,
     logical::{
-        model::{Identifier, chase_model::ChaseRule},
+        model::{chase_model::ChaseRule, Identifier},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::SubtableExecutionPlan,
         TableManager,
