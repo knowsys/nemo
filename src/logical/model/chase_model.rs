@@ -9,6 +9,7 @@ use super::rule_model::{
     OutputPredicateSelection, QualifiedPredicateName, Term, Variable,
 };
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Rule {
     /// Head atoms of the rule
@@ -23,6 +24,7 @@ pub struct Rule {
     negative_filters: Vec<Filter>,
 }
 
+#[allow(dead_code)]
 impl Rule {
     /// Construct a new rule.
     pub fn new(head: Vec<Atom>, body: Vec<Literal>, positive_filters: Vec<Filter>) -> Self {
@@ -245,6 +247,7 @@ impl TryFrom<super::rule_model::Rule> for Rule {
     }
 }
 
+#[allow(dead_code)]
 /// A full program.
 #[derive(Debug, Default, Clone)]
 pub struct Program {
@@ -276,6 +279,7 @@ impl From<(Vec<DataSourceDeclaration>, Vec<Rule>)> for Program {
     }
 }
 
+#[allow(dead_code)]
 impl Program {
     /// Construct a new program.
     pub fn new(
