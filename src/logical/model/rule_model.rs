@@ -9,10 +9,9 @@ use std::{
 
 use sanitise_file_name::{sanitise_with_options, Options};
 
-use crate::{
-    generate_forwarder, io::parser::ParseError, logical::types::LogicalTypeEnum,
-    physical::datatypes::Double,
-};
+use crate::{generate_forwarder, io::parser::ParseError, physical::datatypes::Double};
+
+use crate::logical::types::LogicalTypeEnum;
 
 /// An identifier for, e.g., a Term or a Predicate.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
@@ -46,9 +45,9 @@ impl std::fmt::Display for Identifier {
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 pub struct QualifiedPredicateName {
     /// The predicate name
-    identifier: Identifier,
+    pub(crate) identifier: Identifier,
     /// The arity
-    arity: Option<usize>,
+    pub(crate) arity: Option<usize>,
 }
 
 impl QualifiedPredicateName {
@@ -571,7 +570,7 @@ impl From<Vec<QualifiedPredicateName>> for OutputPredicateSelection {
 }
 
 /// A full program.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Program {
     base: Option<String>,
     prefixes: HashMap<String, String>,
@@ -859,9 +858,9 @@ impl Debug for DataSource {
 /// A Data source declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataSourceDeclaration {
-    predicate: Identifier,
-    arity: usize,
-    source: DataSource,
+    pub(crate) predicate: Identifier,
+    pub(crate) arity: usize,
+    pub(crate) source: DataSource,
 }
 
 impl DataSourceDeclaration {
