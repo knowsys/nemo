@@ -5,8 +5,10 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::{
-    io::parser::LocatedParseError, logical::program_analysis::analysis::RuleAnalysisError,
-    logical::types::TypeError, physical::datatypes::float_is_nan::FloatIsNaN,
+    io::parser::LocatedParseError,
+    logical::program_analysis::analysis::RuleAnalysisError,
+    logical::{execution::selection_strategy::strategy::SelectionStrategyError, types::TypeError},
+    physical::datatypes::float_is_nan::FloatIsNaN,
 };
 
 /// Error-Collection for all the possible Errors occurring in this crate
@@ -34,6 +36,9 @@ pub enum Error {
     /// Permutation shall be applied to a too small amount of data
     #[error("Permutation data length ({0}) is smaller than the sort_vec length ({1}) + the offset of {2}")]
     PermutationApplyWrongLen(usize, usize, usize),
+    /// Build selection strategy errror
+    #[error(transparent)]
+    SelectionStrategyError(#[from] SelectionStrategyError),
     /// Error when converting integer type to floating point value
     #[error("Usize value `{0}` could not be converted to floating point value")]
     UsizeToFloatingPointValue(usize),

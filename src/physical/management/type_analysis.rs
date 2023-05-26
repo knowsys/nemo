@@ -315,6 +315,34 @@ impl TypeTree {
 
                 Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
+            ExecutionOperation::Subtract(node_main, nodes_subtract, infos) => {
+                let mut subtype_nodes = Vec::<TypeTreeNode>::with_capacity(nodes_subtract.len());
+                subtype_nodes.push(Self::propagate_up(
+                    instance,
+                    previous_trees,
+                    node_main.clone(),
+                )?);
+
+                for (node, info) in nodes_subtract.iter().zip(infos) {
+                    let subtype_node = Self::propagate_up(instance, previous_trees, node.clone())?;
+
+                    for (subtract_layer, main_layer) in info.used_layers.iter().enumerate() {
+                        let current_main = subtype_nodes[0].schema.get_entry(*main_layer);
+                        let current_subtract = subtype_node.schema.get_entry(subtract_layer);
+
+                        if !Self::compatible(current_main, current_subtract) {
+                            return Err(Error::InvalidExecutionPlan);
+                        }
+                    }
+
+                    subtype_nodes.push(subtype_node);
+                }
+
+                Ok(TypeTreeNode::new(
+                    subtype_nodes[0].schema.clone(),
+                    subtype_nodes,
+                ))
+            }
         }
     }
 
@@ -459,6 +487,36 @@ impl TypeTree {
                     &mut type_node.subnodes[0],
                     Some(schema_map),
                     subtree.clone(),
+                );
+            }
+            ExecutionOperation::Subtract(node_main, nodes_subtract, infos) => {
+                let mut schema_map = HashMap::<usize, DataTypeName>::new();
+                for (column_index, schema_entry) in type_node.schema.iter().enumerate() {
+                    schema_map.insert(column_index, *schema_entry);
+                }
+
+                for ((type_node, tree_node), info) in type_node
+                    .subnodes
+                    .iter_mut()
+                    .skip(1)
+                    .zip(nodes_subtract.iter())
+                    .zip(infos.iter())
+                {
+                    let mut sub_schema_map = HashMap::<usize, DataTypeName>::new();
+                    for (subtract_layer, main_layer) in info.used_layers.iter().enumerate() {
+                        let main_type = schema_map
+                            .get(main_layer)
+                            .expect("used_layers may not contain values >= arity of the main scan");
+                        sub_schema_map.insert(subtract_layer, *main_type);
+                    }
+
+                    Self::propagate_down(type_node, Some(sub_schema_map), tree_node.clone());
+                }
+
+                Self::propagate_down(
+                    &mut type_node.subnodes[0],
+                    Some(schema_map),
+                    node_main.clone(),
                 );
             }
         }

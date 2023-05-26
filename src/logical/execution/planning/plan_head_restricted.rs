@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Identifier, Rule, Term, Variable},
+        model::{chase_model::ChaseRule, Identifier, Term, Variable},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::{SubtableExecutionPlan, SubtableIdentifier},
         TableManager,
@@ -45,7 +45,7 @@ pub struct RestrictedChaseStrategy {
 
 impl RestrictedChaseStrategy {
     /// Create a new [`RestrictedChaseStrategy`] object.
-    pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
+    pub fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
         let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();
 
@@ -66,17 +66,10 @@ impl RestrictedChaseStrategy {
             *is_full_existential &= is_existential;
         }
 
-        let normalized_head_variables = analysis.existential_aux_order.iter().cloned().collect();
-        let head_join_atoms = analysis
-            .existential_aux_rule
-            .body()
-            .iter()
-            .map(|l| l.atom().clone())
-            .collect();
-        let head_join_filters = analysis.existential_aux_rule.filters().to_vec();
+        let head_join_atoms = analysis.existential_aux_rule.positive_body().clone();
+        let head_join_filters = analysis.existential_aux_rule.positive_filters().clone();
 
         let join_generator = SeminaiveJoinGenerator {
-            variables: normalized_head_variables,
             atoms: head_join_atoms,
             filters: head_join_filters,
             variable_types: analysis.existential_aux_types.clone(),

@@ -34,7 +34,6 @@ pub use types::{LocatedParseError, ParseError, ParseResult};
 /// Returns an appropriate [`Error`][crate::error::Error] variant on parsing and feature check issues.
 pub fn parse_program(input: impl AsRef<str>) -> Result<Program, Error> {
     let program = all_input_consumed(RuleParser::new().parse_program())(input.as_ref())?;
-    program.check_for_unsupported_features()?;
     Ok(program)
 }
 

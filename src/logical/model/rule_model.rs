@@ -117,11 +117,11 @@ pub enum Term {
 impl std::fmt::Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Term::Constant(term) => write!(f, "{}", term),
-            Term::Variable(term) => write!(f, "{}", term),
-            Term::NumericLiteral(term) => write!(f, "{}", term),
-            Term::StringLiteral(term) => write!(f, "{}", term),
-            Term::RdfLiteral(term) => write!(f, "{}", term),
+            Term::Constant(term) => write!(f, "{term}"),
+            Term::Variable(term) => write!(f, "{term}"),
+            Term::NumericLiteral(term) => write!(f, "{term}"),
+            Term::StringLiteral(term) => write!(f, "{term}"),
+            Term::RdfLiteral(term) => write!(f, "{term}"),
         }
     }
 }

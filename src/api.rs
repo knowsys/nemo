@@ -59,7 +59,6 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// Returns an appropriate [`Error`][crate::error::Error] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
     let program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
-    program.check_for_unsupported_features()?;
     ExecutionEngine::initialize(program)
 }
 

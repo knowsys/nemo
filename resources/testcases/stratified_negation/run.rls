@@ -1,0 +1,12 @@
+@source equal[2]: load-csv("sources/equal.csv").
+@source data[2]: load-csv("sources/data.csv").
+
+equal(b, b) .
+equal(c, c) .
+
+start(a) .
+end(z) .
+
+equal(?X, ?X) :- start(?X) .
+result(?X, ?Y) :- data(?X, ?Y), ~equal(?X, ?Y).
+equal(?X, ?X) :- end(?X) .

@@ -877,10 +877,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c85e1d9ab2eadba7e5040d4e09cbd6d072b76a557ad64e797c2cb9d4da21d7e4"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -1342,7 +1340,6 @@ dependencies = [
  "dir-test",
  "env_logger 0.10.0",
  "flate2",
- "getrandom",
  "howlong",
  "iai",
  "linked-hash-map",

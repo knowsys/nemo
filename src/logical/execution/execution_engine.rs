@@ -6,7 +6,7 @@ use crate::{
     error::Error,
     io::dsv::DSVReader,
     logical::{
-        model::{DataSource, Identifier, Program},
+        model::{chase_model::ChaseProgram, DataSource, Identifier, Program},
         program_analysis::analysis::ProgramAnalysis,
         types::LogicalTypeEnum,
         TableManager,
@@ -43,7 +43,7 @@ impl RuleInfo {
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
 pub struct ExecutionEngine<RuleSelectionStrategy> {
-    program: Program,
+    program: ChaseProgram,
     analysis: ProgramAnalysis,
 
     rule_strategy: RuleSelectionStrategy,
@@ -81,7 +81,10 @@ impl std::fmt::Display for IdbPredicate {
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [`ExecutionEngine`].
-    pub fn initialize(mut program: Program) -> Result<Self, Error> {
+    pub fn initialize(program: Program) -> Result<Self, Error> {
+        let mut program: ChaseProgram = program.into();
+
+        program.check_for_unsupported_features()?;
         program.normalize();
 
         let analysis = program.analyze()?;
@@ -99,7 +102,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let rule_strategy = Strategy::new(
             program.rules().iter().collect(),
             analysis.rule_analysis.iter().collect(),
-        );
+        )?;
 
         Ok(Self {
             program,
@@ -128,7 +131,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     fn add_sources(
         table_manager: &mut TableManager,
-        program: &Program,
+        program: &ChaseProgram,
         analysis: &ProgramAnalysis,
     ) {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();

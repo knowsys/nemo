@@ -2,6 +2,7 @@ use crate::generate_forwarder;
 use crate::physical::columnar::traits::columnscan::ColumnScanT;
 use crate::physical::datatypes::StorageTypeName;
 use crate::physical::tabular::operations::triescan_append::TrieScanAppend;
+use crate::physical::tabular::operations::triescan_minus::TrieScanSubtract;
 use crate::physical::tabular::operations::{
     TrieScanJoin, TrieScanMinus, TrieScanNulls, TrieScanProject, TrieScanPrune,
     TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion,
@@ -55,6 +56,8 @@ pub enum TrieScanEnum<'a> {
     TrieScanAppend(TrieScanAppend<'a>),
     /// Case TrieScanAppend
     TrieScanNulls(TrieScanNulls<'a>),
+    /// Case TrieScanSubtract
+    TrieScanSubtract(TrieScanSubtract<'a>),
 }
 
 generate_forwarder!(forward_to_scan;
@@ -67,7 +70,8 @@ generate_forwarder!(forward_to_scan;
     TrieScanSelectValue,
     TrieScanUnion,
     TrieScanAppend,
-    TrieScanNulls
+    TrieScanNulls,
+    TrieScanSubtract
 );
 
 impl<'a> TrieScan<'a> for TrieScanEnum<'a> {

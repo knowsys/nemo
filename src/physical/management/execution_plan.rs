@@ -10,7 +10,8 @@ use ascii_tree::{write_tree, Tree};
 use crate::physical::{
     tabular::operations::{
         triescan_append::AppendInstruction, triescan_join::JoinBindings,
-        triescan_project::ProjectReordering, triescan_select::SelectEqualClasses, ValueAssignment,
+        triescan_minus::SubtractInfo, triescan_project::ProjectReordering,
+        triescan_select::SelectEqualClasses, ValueAssignment,
     },
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
@@ -86,12 +87,20 @@ impl ExecutionNodeRef {
             ExecutionOperation::Union(subnodes) => subnodes.clone(),
             ExecutionOperation::FetchExisting(_, _) => vec![],
             ExecutionOperation::FetchNew(_) => vec![],
-            ExecutionOperation::Minus(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::Minus(subnode_left, subnode_right) => {
+                vec![subnode_left.clone(), subnode_right.clone()]
+            }
             ExecutionOperation::Project(subnode, _) => vec![subnode.clone()],
             ExecutionOperation::SelectValue(subnode, _) => vec![subnode.clone()],
             ExecutionOperation::SelectEqual(subnode, _) => vec![subnode.clone()],
             ExecutionOperation::AppendColumns(subnode, _) => vec![subnode.clone()],
             ExecutionOperation::AppendNulls(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::Subtract(subnode_main, subnodes_subtract, _) => {
+                let mut cloned = subnodes_subtract.clone();
+                cloned.push(subnode_main.clone());
+
+                cloned
+            }
         }
     }
 }
@@ -128,6 +137,8 @@ pub enum ExecutionOperation {
     AppendColumns(ExecutionNodeRef, Vec<Vec<AppendInstruction>>),
     /// Append (the given number of) columns containing fresh nulls.
     AppendNulls(ExecutionNodeRef, usize),
+    /// Operation wich subtracts multiple tables (potentially of different arities) from another table.
+    Subtract(ExecutionNodeRef, Vec<ExecutionNodeRef>, Vec<SubtractInfo>),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently.
@@ -229,6 +240,17 @@ impl ExecutionPlan {
     /// Return [`ExecutionNodeRef`] for subtracting one table from another.
     pub fn minus(&mut self, left: ExecutionNodeRef, right: ExecutionNodeRef) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Minus(left, right);
+        self.push_and_return_ref(new_operation)
+    }
+
+    /// Return [`ExecutionNodeRef`] for subtracting one table from another.
+    pub fn subtract(
+        &mut self,
+        main: ExecutionNodeRef,
+        subtracted: Vec<ExecutionNodeRef>,
+        subtract_infos: Vec<SubtractInfo>,
+    ) -> ExecutionNodeRef {
+        let new_operation = ExecutionOperation::Subtract(main, subtracted, subtract_infos);
         self.push_and_return_ref(new_operation)
     }
 
@@ -410,6 +432,16 @@ impl ExecutionPlan {
                 let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
                 new_plan.append_nulls(new_subnode, *num_null_cols)
             }
+            ExecutionOperation::Subtract(subnode_main, subnodes_subtract, subtract_infos) => {
+                let new_main = Self::copy_subgraph(new_plan, subnode_main.clone(), write_node_ids);
+                let new_subtract = subnodes_subtract
+                    .iter()
+                    .cloned()
+                    .map(|n| Self::copy_subgraph(new_plan, n, write_node_ids))
+                    .collect();
+
+                new_plan.subtract(new_main, new_subtract, subtract_infos.clone())
+            }
         }
     }
 
@@ -541,6 +573,18 @@ impl ExecutionTree {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
                 Tree::Node(format!("Append Nulls {num_nulls}"), vec![subtree])
+            }
+            ExecutionOperation::Subtract(subnode_main, subnodes_subtract, _) => {
+                let subtree_main = Self::ascii_tree_recursive(subnode_main.clone());
+                let subtrees_subtract: Vec<Tree> = subnodes_subtract
+                    .iter()
+                    .map(|n| Self::ascii_tree_recursive(n.clone()))
+                    .collect();
+
+                Tree::Node(
+                    String::from("Subtract"),
+                    vec![subtree_main, Tree::Node(String::new(), subtrees_subtract)],
+                )
             }
         }
     }
@@ -699,6 +743,35 @@ impl ExecutionTree {
                     Some(new_tree.append_nulls(simplified, *num_nulls))
                 }
             }
+            ExecutionOperation::Subtract(subnode_main, subnodes_subtract, subtract_infos) => {
+                let simplified_main =
+                    Self::simplify_recursive(new_tree, subnode_main.clone(), removed_tables)?;
+
+                let mut simplified_infos =
+                    Vec::<SubtractInfo>::with_capacity(subnodes_subtract.len());
+                let mut simplified_subtract_nodes =
+                    Vec::<ExecutionNodeRef>::with_capacity(subnodes_subtract.len());
+
+                for (subnode, info) in subnodes_subtract.iter().zip(subtract_infos.iter()) {
+                    let simplified_opt =
+                        Self::simplify_recursive(new_tree, subnode.clone(), removed_tables);
+
+                    if let Some(simplified) = simplified_opt {
+                        simplified_subtract_nodes.push(simplified);
+                        simplified_infos.push(info.clone());
+                    }
+                }
+
+                if simplified_subtract_nodes.is_empty() {
+                    return Some(simplified_main);
+                }
+
+                Some(new_tree.subtract(
+                    simplified_main,
+                    simplified_subtract_nodes,
+                    simplified_infos,
+                ))
+            }
         }
     }
 
@@ -814,6 +887,16 @@ impl ExecutionTree {
                 // Will update it then
                 assert!(permutation.is_identity());
                 Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
+            }
+            ExecutionOperation::Subtract(subnode_main, subnodes_subtract, _) => {
+                // TODO: A few other changes are needed to make this a bit simpler.
+                // Will update it then
+                assert!(permutation.is_identity());
+
+                Self::satisfy_leapfrog_recurisve(subnode_main.clone(), permutation.clone());
+                for subnode in subnodes_subtract {
+                    Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
+                }
             }
         }
     }

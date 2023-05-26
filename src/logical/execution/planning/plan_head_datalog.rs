@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::{
     logical::{
         execution::execution_engine::RuleInfo,
-        model::{Identifier, Rule},
+        model::{chase_model::ChaseRule, Identifier},
         program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
         table_manager::{SubtableExecutionPlan, SubtableIdentifier},
         TableManager,
@@ -31,7 +31,7 @@ pub struct DatalogStrategy {
 
 impl DatalogStrategy {
     /// Create a new [`DatalogStrategy`] object.
-    pub fn initialize(rule: &Rule, analysis: &RuleAnalysis) -> Self {
+    pub fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let mut predicate_to_atoms = HashMap::<Identifier, Vec<HeadInstruction>>::new();
 
         for head_atom in rule.head() {
@@ -42,7 +42,7 @@ impl DatalogStrategy {
             atoms.push(head_instruction_from_atom(head_atom, analysis));
         }
 
-        let num_body_variables = analysis.body_variables.len();
+        let num_body_variables = analysis.positive_body_variables.len();
 
         Self {
             predicate_to_atoms,

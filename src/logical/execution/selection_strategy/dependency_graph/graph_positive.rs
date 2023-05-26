@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use crate::logical::{
-    model::{Identifier, Rule},
+    model::{chase_model::ChaseRule, Identifier},
     program_analysis::analysis::RuleAnalysis,
 };
 
@@ -16,7 +16,7 @@ use super::graph_constructor::{DependencyGraph, DependencyGraphConstructor};
 pub struct GraphConstructorPositive {}
 
 impl DependencyGraphConstructor for GraphConstructorPositive {
-    fn build_graph(rules: Vec<&Rule>, rule_analyses: Vec<&RuleAnalysis>) -> DependencyGraph {
+    fn build_graph(rules: Vec<&ChaseRule>, rule_analyses: Vec<&RuleAnalysis>) -> DependencyGraph {
         debug_assert!(rules.len() == rule_analyses.len());
         let rule_count = rules.len();
 
@@ -24,7 +24,7 @@ impl DependencyGraphConstructor for GraphConstructorPositive {
         let mut predicate_to_rules_head = HashMap::<Identifier, Vec<usize>>::new();
 
         for (rule_index, rule_analysis) in rule_analyses.iter().enumerate() {
-            for body_predicate in &rule_analysis.body_predicates {
+            for body_predicate in &rule_analysis.positive_body_predicates {
                 let indices = predicate_to_rules_body
                     .entry(body_predicate.clone())
                     .or_insert(Vec::new());

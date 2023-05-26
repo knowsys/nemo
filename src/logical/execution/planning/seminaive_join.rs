@@ -1,6 +1,6 @@
 //! Defines the function that performs a seminaive join over a list of atoms.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     logical::{
@@ -17,11 +17,9 @@ use crate::{
 
 use super::plan_util::{atom_binding, compute_filters, subplan_union};
 
-/// Generator creating excution trees for seminaive joins of a fixed set of [`Atom`]s and [`Filter`]s
+/// Generator for creating excution plans for seminaive joins of a fixed set of [`Atom`]s and [`Filter`]s.
 #[derive(Debug)]
 pub struct SeminaiveJoinGenerator {
-    /// the variables as determined by the rule analysis
-    pub variables: HashSet<Variable>,
     /// logical types of the variables
     pub variable_types: HashMap<Variable, LogicalTypeEnum>,
     /// the atoms to join
@@ -126,12 +124,8 @@ impl SeminaiveJoinGenerator {
         }
 
         // Apply filters
-        let (filter_classes, filter_assignments) = compute_filters(
-            &self.variables,
-            variable_order,
-            &self.filters,
-            &self.variable_types,
-        );
+        let (filter_classes, filter_assignments) =
+            compute_filters(variable_order, &self.filters, &self.variable_types);
 
         let node_select_value = plan.select_value(seminaive_union, filter_assignments);
 

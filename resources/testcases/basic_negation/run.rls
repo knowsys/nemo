@@ -1,0 +1,20 @@
+@declare main(integer, integer, integer) .
+@declare s1(integer) .
+@declare s2(integer, integer) .
+@declare s3(integer, integer, integer) .
+
+@source main[3]: load-csv("sources/main.csv").
+@source s1[1]: load-csv("sources/S1.csv").
+@source s2[2]: load-csv("sources/S2.csv").
+@source s3[3]: load-csv("sources/S3.csv").
+
+singlePositionX(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s1(?X) .
+singlePositionY(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s1(?Y) .
+singlePositionZ(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s1(?Z) .
+
+multiple(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s1(?X), ~s2(?X, ?Y), ~s2(?X, ?Z), ~s2(?Y, ?Z) .
+reordered(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s2(?Z, ?Y) .
+
+filteredX(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s3(?X, 5, ?X) .
+filteredY(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s3(4, ?Y, ?Y) .
+filteredZ(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s3(?Z, ?Z, 7) .

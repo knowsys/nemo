@@ -3,10 +3,12 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use crate::{
     error::Error,
     logical::{
-        model::{Atom, FilterOperation, Identifier, Literal, Program, Rule, Term, Variable},
+        model::chase_model::{ChaseProgram, ChaseRule},
+        model::{Atom, FilterOperation, Identifier, Literal, Term, Variable},
         types::{LogicalTypeEnum, TypeError},
+        util::labeled_graph::LabeledGraph,
     },
-    physical::{management::database::ColumnOrder, util::labeled_graph::NodeLabeledGraph},
+    physical::management::database::ColumnOrder,
 };
 
 use super::{
@@ -24,23 +26,29 @@ pub struct RuleAnalysis {
     pub is_existential: bool,
     /// Whether an atom in the head also occurs in the body.
     pub is_recursive: bool,
-    /// Whether the rule has filter that need to be applied.
-    pub has_filters: bool,
+    /// Whether the rule has positive filters that need to be applied.
+    pub has_positive_filters: bool,
+    /// Whether the rule has negative filters that need to be applied.
+    pub has_negative_filters: bool,
 
-    /// Predicates appearing in the body.
-    pub body_predicates: HashSet<Identifier>,
+    /// Predicates appearing in the positive part of the body.
+    pub positive_body_predicates: HashSet<Identifier>,
+    /// Predicates appearing in the negative part of the body.
+    pub negative_body_predicates: HashSet<Identifier>,
     /// Predicates appearing in the head.
     pub head_predicates: HashSet<Identifier>,
 
-    /// Variables occuring in the body.
-    pub body_variables: HashSet<Variable>,
+    /// Variables occuring in the positive part of the body.
+    pub positive_body_variables: HashSet<Variable>,
+    /// Variables occuring in the positive part of the body.
+    pub negative_body_variables: HashSet<Variable>,
     /// Variables occuring in the head.
     pub head_variables: HashSet<Variable>,
     /// Number of existential variables.
     pub num_existential: usize,
 
     /// Rule that represents the calculation of the satisfied matches for an existential rule.
-    pub existential_aux_rule: Rule,
+    pub existential_aux_rule: ChaseRule,
     /// The associated variable order for the join of the head atoms
     pub existential_aux_order: VariableOrder,
     /// The types associated with the auxillary rule
@@ -69,16 +77,16 @@ pub enum RuleAnalysisError {
     UnsupportedFeatureVariableComparison,
 }
 
-fn is_recursive(rule: &Rule) -> bool {
+/// Return true if there is a predicate in the positive part of the rule that also appears in the head of the rule.
+fn is_recursive(rule: &ChaseRule) -> bool {
     rule.head().iter().any(|h| {
-        rule.body()
+        rule.positive_body()
             .iter()
-            .filter(|b| b.is_positive())
             .any(|b| h.predicate() == b.predicate())
     })
 }
 
-fn count_distinct_existential_variables(rule: &Rule) -> usize {
+fn count_distinct_existential_variables(rule: &ChaseRule) -> usize {
     let mut existentials = HashSet::<Variable>::new();
 
     for head_atom in rule.head() {
@@ -92,7 +100,7 @@ fn count_distinct_existential_variables(rule: &Rule) -> usize {
     existentials.len()
 }
 
-fn get_variables(atoms: &[&Atom]) -> HashSet<Variable> {
+fn get_variables(atoms: &[Atom]) -> HashSet<Variable> {
     let mut result = HashSet::new();
     for atom in atoms {
         for term in atom.terms() {
@@ -104,7 +112,7 @@ fn get_variables(atoms: &[&Atom]) -> HashSet<Variable> {
     result
 }
 
-fn get_predicates(atoms: &[&Atom]) -> HashSet<Identifier> {
+fn get_predicates(atoms: &[Atom]) -> HashSet<Identifier> {
     atoms.iter().map(|a| a.predicate()).collect()
 }
 
@@ -116,11 +124,11 @@ fn get_fresh_rule_predicate(rule_index: usize) -> Identifier {
 
 fn construct_existential_aux_rule(
     rule_index: usize,
-    head_atoms: &Vec<&Atom>,
+    head_atoms: &Vec<Atom>,
     predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
     column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
-) -> (Rule, VariableOrder, HashMap<Variable, LogicalTypeEnum>) {
-    let normalized_head = normalize_atom_vector(head_atoms, &[]);
+) -> (ChaseRule, VariableOrder, HashMap<Variable, LogicalTypeEnum>) {
+    let normalized_head = normalize_atom_vector(head_atoms, &[], &mut 0);
 
     let temp_head_identifier = get_fresh_rule_predicate(rule_index);
 
@@ -151,7 +159,7 @@ fn construct_existential_aux_rule(
     }
 
     let temp_head_atom = Atom::new(temp_head_identifier, term_vec);
-    let temp_rule = Rule::new(
+    let temp_rule = ChaseRule::new(
         vec![temp_head_atom],
         normalized_head
             .atoms
@@ -173,19 +181,16 @@ fn construct_existential_aux_rule(
 }
 
 fn analyze_rule(
-    rule: &Rule,
+    rule: &ChaseRule,
     promising_variable_orders: Vec<VariableOrder>,
     promising_column_orders: &[HashMap<Identifier, HashSet<ColumnOrder>>],
     rule_index: usize,
     type_declarations: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
 ) -> RuleAnalysis {
-    let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
-    let head_atoms: Vec<&Atom> = rule.head().iter().collect();
-
     let num_existential = count_distinct_existential_variables(rule);
 
     let mut variable_types: HashMap<Variable, LogicalTypeEnum> = HashMap::new();
-    for atom in body_atoms.iter().chain(head_atoms.iter()) {
+    for atom in rule.all_atoms() {
         for (term_position, term) in atom.terms().iter().enumerate() {
             if let Term::Variable(variable) = term {
                 if let Entry::Vacant(entry) = variable_types.entry(variable.clone()) {
@@ -200,23 +205,24 @@ fn analyze_rule(
         }
     }
 
-    let rule_preds: Vec<Identifier> = body_atoms
-        .iter()
-        .chain(head_atoms.iter())
+    let rule_all_predicates: Vec<Identifier> = rule
+        .all_body()
+        .chain(rule.head())
         .map(|a| a.predicate())
         .collect();
+
     let (existential_aux_rule, existential_aux_order, existential_aux_types) =
         if num_existential > 0 {
             // TODO: We only consider the first variable order
             construct_existential_aux_rule(
                 rule_index,
-                &head_atoms,
+                rule.head(),
                 type_declarations,
                 &promising_column_orders[0],
             )
         } else {
             (
-                Rule::new(vec![], vec![], vec![]),
+                ChaseRule::new(vec![], vec![], vec![]),
                 VariableOrder::new(),
                 HashMap::new(),
             )
@@ -225,11 +231,14 @@ fn analyze_rule(
     RuleAnalysis {
         is_existential: num_existential > 0,
         is_recursive: is_recursive(rule),
-        has_filters: !rule.filters().is_empty(),
-        body_predicates: get_predicates(&body_atoms),
-        head_predicates: get_predicates(&head_atoms),
-        body_variables: get_variables(&body_atoms),
-        head_variables: get_variables(&head_atoms),
+        has_positive_filters: !rule.positive_filters().is_empty(),
+        has_negative_filters: !rule.negative_filters().is_empty(),
+        positive_body_predicates: get_predicates(rule.positive_body()),
+        negative_body_predicates: get_predicates(rule.negative_body()),
+        head_predicates: get_predicates(rule.head()),
+        positive_body_variables: get_variables(rule.positive_body()),
+        negative_body_variables: get_variables(rule.negative_body()),
+        head_variables: get_variables(rule.head()),
         num_existential,
         existential_aux_rule,
         existential_aux_order,
@@ -238,7 +247,11 @@ fn analyze_rule(
         variable_types,
         predicate_types: type_declarations
             .iter()
-            .filter_map(|(k, v)| rule_preds.contains(k).then(|| (k.clone(), v.clone())))
+            .filter_map(|(k, v)| {
+                rule_all_predicates
+                    .contains(k)
+                    .then(|| (k.clone(), v.clone()))
+            })
             .collect(),
     }
 }
@@ -261,7 +274,7 @@ impl PredicatePosition {
 }
 
 /// Graph that represents a prioritization between rules.
-pub type PositionGraph = NodeLabeledGraph<PredicatePosition, Undirected>;
+pub type PositionGraph = LabeledGraph<PredicatePosition, (), Undirected>;
 
 /// Contains useful information about the
 #[derive(Debug)]
@@ -278,7 +291,7 @@ pub struct ProgramAnalysis {
     pub position_graph: PositionGraph,
 }
 
-impl Program {
+impl ChaseProgram {
     /// Collect all predicates that appear in a head atom into a [`HashSet`]
     fn get_head_predicates(&self) -> HashSet<Identifier> {
         let mut result = HashSet::<Identifier>::new();
@@ -303,12 +316,8 @@ impl Program {
 
         // Predicates in rules
         for rule in self.rules() {
-            for body_atom in rule.body() {
-                result.insert((body_atom.predicate(), body_atom.terms().len()));
-            }
-
-            for head_atom in rule.head() {
-                result.insert((head_atom.predicate(), head_atom.terms().len()));
+            for atom in rule.all_atoms() {
+                result.insert((atom.predicate(), atom.terms().len()));
             }
         }
 
@@ -324,11 +333,8 @@ impl Program {
                 continue;
             }
 
-            let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
-            let head_atoms: Vec<&Atom> = rule.head().iter().collect();
-
-            let body_variables = get_variables(&body_atoms);
-            let head_variables = get_variables(&head_atoms);
+            let body_variables = get_variables(rule.positive_body());
+            let head_variables = get_variables(rule.head());
 
             let predicate = get_fresh_rule_predicate(rule_index);
             let arity = head_variables.difference(&body_variables).count();
@@ -343,12 +349,9 @@ impl Program {
         let mut graph = PositionGraph::default();
 
         for rule in self.rules() {
-            let body_atoms: Vec<&Atom> = rule.body().iter().map(|l| l.atom()).collect();
-            let head_atoms: Vec<&Atom> = rule.head().iter().collect();
-
             let mut variable_to_last_node = HashMap::<Variable, PredicatePosition>::new();
 
-            for atom in body_atoms.iter().chain(head_atoms.iter()) {
+            for atom in rule.all_atoms() {
                 for (term_position, term) in atom.terms().iter().enumerate() {
                     if let Term::Variable(variable) = term {
                         let predicate_position =
@@ -357,7 +360,7 @@ impl Program {
                         match variable_to_last_node.entry(variable.clone()) {
                             Entry::Occupied(mut entry) => {
                                 let last_position = entry.insert(predicate_position.clone());
-                                graph.add_edge(last_position, predicate_position);
+                                graph.add_edge(last_position, predicate_position, ());
                             }
                             Entry::Vacant(entry) => {
                                 entry.insert(predicate_position);
@@ -367,7 +370,7 @@ impl Program {
                 }
             }
 
-            for filter in rule.filters() {
+            for filter in rule.all_filters() {
                 let position_left = variable_to_last_node
                     .get(&filter.lhs)
                     .expect("Variables in filters should also appear in the rule body")
@@ -379,7 +382,7 @@ impl Program {
                         .expect("Variables in filters should also appear in the rule body")
                         .clone();
 
-                    graph.add_edge(position_left, position_right);
+                    graph.add_edge(position_left, position_right, ());
                 }
             }
         }
@@ -480,21 +483,7 @@ impl Program {
         }
 
         for rule in self.rules() {
-            for atom in rule.body() {
-                // check for negation
-                if matches!(atom, Literal::Negative(_)) {
-                    return Err(RuleAnalysisError::UnsupportedFeatureNegation);
-                }
-
-                // check for consistent predicate arities
-                let arity = atom.terms().len();
-                if arity != *arities.entry(atom.predicate()).or_insert(arity) {
-                    return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
-                }
-            }
-
-            // check for comparisons
-            for filter in rule.filters() {
+            for filter in rule.all_filters() {
                 if filter.operation != FilterOperation::Equals {
                     if let Term::Variable(_) = filter.rhs {
                         return Err(RuleAnalysisError::UnsupportedFeatureVariableComparison);
@@ -502,7 +491,7 @@ impl Program {
                 }
             }
 
-            for atom in rule.head() {
+            for atom in rule.all_atoms() {
                 // check for consistent predicate arities
                 let arity = atom.terms().len();
                 if arity != *arities.entry(atom.predicate()).or_insert(arity) {
@@ -533,7 +522,7 @@ impl Program {
         }
 
         for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
-            for filter in rule.filters() {
+            for filter in rule.all_filters() {
                 let left_variable = &filter.lhs;
                 let right_term = if let Term::Variable(_) = filter.rhs {
                     continue;

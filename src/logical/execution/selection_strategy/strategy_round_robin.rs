@@ -1,8 +1,8 @@
 //! Defines the execution strategy by which each rule is applied in the order it appears.
 
-use crate::logical::{model::Rule, program_analysis::analysis::RuleAnalysis};
+use crate::logical::{model::chase_model::ChaseRule, program_analysis::analysis::RuleAnalysis};
 
-use super::strategy::RuleSelectionStrategy;
+use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 
 /// Defines a strategy whereby each rule is applied one after another in the order they appear in the rule file.
 /// Once every rule was applied it loops back to the first one.
@@ -19,15 +19,18 @@ pub struct StrategyRoundRobin {
 
 impl RuleSelectionStrategy for StrategyRoundRobin {
     /// Create new [`StrategyRoundRobin`].
-    fn new(_rules: Vec<&Rule>, rule_analyses: Vec<&RuleAnalysis>) -> Self {
+    fn new(
+        _rules: Vec<&ChaseRule>,
+        rule_analyses: Vec<&RuleAnalysis>,
+    ) -> Result<Self, SelectionStrategyError> {
         let self_recursive = rule_analyses.iter().map(|a| a.is_recursive).collect();
 
-        Self {
+        Ok(Self {
             rule_count: rule_analyses.len(),
             self_recursive,
             without_derivation: 0,
             current_rule_index: 0,
-        }
+        })
     }
 
     fn next_rule(&mut self, new_derivations: Option<bool>) -> Option<usize> {

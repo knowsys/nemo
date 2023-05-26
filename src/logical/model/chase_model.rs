@@ -2,16 +2,19 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{io::parser::ParseError, logical::types::LogicalTypeEnum};
+use crate::logical::types::LogicalTypeEnum;
 
-use super::rule_model::{
-    Atom, DataSource, DataSourceDeclaration, Fact, Filter, Identifier, Literal,
-    OutputPredicateSelection, QualifiedPredicateName, Term, Variable,
+use super::{
+    rule_model::{
+        Atom, DataSource, DataSourceDeclaration, Fact, Filter, Identifier, Literal,
+        OutputPredicateSelection, QualifiedPredicateName,
+    },
+    Program, Rule,
 };
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-pub struct Rule {
+pub struct ChaseRule {
     /// Head atoms of the rule
     head: Vec<Atom>,
     /// Positive Body literals of the rule
@@ -25,7 +28,7 @@ pub struct Rule {
 }
 
 #[allow(dead_code)]
-impl Rule {
+impl ChaseRule {
     /// Construct a new rule.
     pub fn new(head: Vec<Atom>, body: Vec<Literal>, positive_filters: Vec<Filter>) -> Self {
         let mut positive_body = Vec::new();
@@ -45,114 +48,6 @@ impl Rule {
             positive_filters,
             negative_filters: Vec::new(),
         }
-    }
-
-    /// Construct a new rule, validating constraints on variable usage.
-    pub(crate) fn new_validated(
-        head: Vec<Atom>,
-        body: Vec<Literal>,
-        filters: Vec<Filter>,
-    ) -> Result<Self, ParseError> {
-        // Check if existential variables occur in the body.
-        let existential_variables = body
-            .iter()
-            .flat_map(|literal| literal.existential_variables())
-            .collect::<Vec<_>>();
-
-        if !existential_variables.is_empty() {
-            return Err(ParseError::BodyExistential(
-                existential_variables
-                    .first()
-                    .expect("is not empty here")
-                    .name(),
-            ));
-        }
-
-        // Check if some variable in the body occurs only in negative literals.
-        let (positive, negative): (Vec<_>, Vec<_>) = body
-            .iter()
-            .cloned()
-            .partition(|literal| literal.is_positive());
-        let negative_variables = negative
-            .iter()
-            .flat_map(|literal| literal.universal_variables())
-            .collect::<HashSet<_>>();
-        let positive_varibales = positive
-            .iter()
-            .flat_map(|literal| literal.universal_variables())
-            .collect();
-        let negative_variables = negative_variables
-            .difference(&positive_varibales)
-            .collect::<Vec<_>>();
-
-        if !negative_variables.is_empty() {
-            return Err(ParseError::UnsafeNegatedVariable(
-                negative_variables
-                    .first()
-                    .expect("is not empty here")
-                    .name(),
-            ));
-        }
-
-        // Check if a variable occurs with both existential and universal quantification.
-        let universal_variables = body
-            .iter()
-            .flat_map(|literal| literal.universal_variables())
-            .collect::<HashSet<_>>();
-
-        let existential_variables = head
-            .iter()
-            .flat_map(|atom| atom.existential_variables())
-            .collect();
-
-        let common_variables = universal_variables
-            .intersection(&existential_variables)
-            .take(1)
-            .collect::<Vec<_>>();
-
-        if !common_variables.is_empty() {
-            return Err(ParseError::BothQuantifiers(
-                common_variables.first().expect("is not empty here").name(),
-            ));
-        }
-
-        // Check if there are universal variables in the head which do not occur in a positive body literal
-        let head_universal_variables = head
-            .iter()
-            .flat_map(|atom| atom.universal_variables())
-            .collect::<HashSet<_>>();
-
-        for head_variable in head_universal_variables {
-            if !universal_variables.contains(head_variable) {
-                return Err(ParseError::UnsafeHeadVariable(head_variable.name()));
-            }
-        }
-
-        // Check if filters are correctly formed
-        for filter in &filters {
-            let mut filter_variables = vec![&filter.lhs];
-
-            if let Term::Variable(right_variable) = &filter.rhs {
-                filter_variables.push(right_variable);
-            }
-
-            for variable in filter_variables {
-                match variable {
-                    Variable::Universal(universal_variable) => {
-                        if !positive_varibales.contains(variable) {
-                            return Err(ParseError::UnsafeFilterVariable(
-                                universal_variable.name(),
-                            ));
-                        }
-                    }
-                    Variable::Existential(existential_variable) => {
-                        return Err(ParseError::BodyExistential(existential_variable.name()))
-                    }
-                }
-            }
-        }
-
-        Ok(Rule::new(head, body, filters))
     }
 
     /// Return the head atoms of the rule - immutable.
@@ -235,11 +130,9 @@ impl Rule {
     }
 }
 
-impl TryFrom<super::rule_model::Rule> for Rule {
-    type Error = ParseError;
-
-    fn try_from(rule: super::rule_model::Rule) -> Result<Self, Self::Error> {
-        Self::new_validated(
+impl From<Rule> for ChaseRule {
+    fn from(rule: Rule) -> ChaseRule {
+        ChaseRule::new(
             rule.head().to_vec(),
             rule.body().to_vec(),
             rule.filters().to_vec(),
@@ -250,18 +143,18 @@ impl TryFrom<super::rule_model::Rule> for Rule {
 #[allow(dead_code)]
 /// A full program.
 #[derive(Debug, Default, Clone)]
-pub struct Program {
+pub struct ChaseProgram {
     base: Option<String>,
     prefixes: HashMap<String, String>,
     sources: Vec<DataSourceDeclaration>,
-    rules: Vec<Rule>,
+    rules: Vec<ChaseRule>,
     facts: Vec<Fact>,
     parsed_predicate_declarations: HashMap<Identifier, Vec<LogicalTypeEnum>>,
     output_predicates: OutputPredicateSelection,
 }
 
-impl From<Vec<Rule>> for Program {
-    fn from(rules: Vec<Rule>) -> Self {
+impl From<Vec<ChaseRule>> for ChaseProgram {
+    fn from(rules: Vec<ChaseRule>) -> Self {
         Self {
             rules,
             ..Default::default()
@@ -269,8 +162,8 @@ impl From<Vec<Rule>> for Program {
     }
 }
 
-impl From<(Vec<DataSourceDeclaration>, Vec<Rule>)> for Program {
-    fn from((sources, rules): (Vec<DataSourceDeclaration>, Vec<Rule>)) -> Self {
+impl From<(Vec<DataSourceDeclaration>, Vec<ChaseRule>)> for ChaseProgram {
+    fn from((sources, rules): (Vec<DataSourceDeclaration>, Vec<ChaseRule>)) -> Self {
         Self {
             sources,
             rules,
@@ -280,13 +173,13 @@ impl From<(Vec<DataSourceDeclaration>, Vec<Rule>)> for Program {
 }
 
 #[allow(dead_code)]
-impl Program {
+impl ChaseProgram {
     /// Construct a new program.
     pub fn new(
         base: Option<String>,
         prefixes: HashMap<String, String>,
         sources: Vec<DataSourceDeclaration>,
-        rules: Vec<Rule>,
+        rules: Vec<ChaseRule>,
         facts: Vec<Fact>,
         parsed_predicate_declarations: HashMap<Identifier, Vec<LogicalTypeEnum>>,
         output_predicates: OutputPredicateSelection,
@@ -310,13 +203,13 @@ impl Program {
 
     /// Return all rules in the program - immutable.
     #[must_use]
-    pub fn rules(&self) -> &Vec<Rule> {
+    pub fn rules(&self) -> &Vec<ChaseRule> {
         &self.rules
     }
 
     /// Return all rules in the program - mutable.
     #[must_use]
-    pub fn rules_mut(&mut self) -> &mut Vec<Rule> {
+    pub fn rules_mut(&mut self) -> &mut Vec<ChaseRule> {
         &mut self.rules
     }
 
@@ -415,11 +308,9 @@ impl Program {
     }
 }
 
-impl TryFrom<super::rule_model::Program> for Program {
-    type Error = ParseError;
-
-    fn try_from(value: super::rule_model::Program) -> Result<Self, Self::Error> {
-        Ok(Self::new(
+impl From<Program> for ChaseProgram {
+    fn from(value: Program) -> Self {
+        Self::new(
             value.base(),
             value.prefixes().clone(),
             value
@@ -431,8 +322,8 @@ impl TryFrom<super::rule_model::Program> for Program {
             value
                 .rules()
                 .iter()
-                .map(|rule| rule.clone().try_into())
-                .collect::<Result<Vec<_>, _>>()?,
+                .map(|rule| rule.clone().into())
+                .collect(),
             value.facts().to_vec(),
             value.parsed_predicate_declarations(),
             value
@@ -443,6 +334,6 @@ impl TryFrom<super::rule_model::Program> for Program {
                 })
                 .collect::<Vec<_>>()
                 .into(),
-        ))
+        )
     }
 }

@@ -100,7 +100,7 @@ impl<'a> TrieScanProject<'a> {
                         if let ColumnWithIntervalsT::$variant(col) = trie.get_column(col_index) {
                             col
                         } else {
-                            panic!("Do other cases later")
+                            panic!("Expected a column scan of type {}", stringify!($type));
                         };
 
                     reorder_scans.push(UnsafeCell::new(ColumnScanT::$variant(
@@ -152,11 +152,11 @@ impl<'a> TrieScan<'a> for TrieScanProject<'a> {
 
         macro_rules! down_for_datatype {
             ($variant:ident) => {{
-                let next_column = if let ColumnWithIntervalsT::U64(col) = next_column
+                let next_column = if let ColumnWithIntervalsT::$variant(col) = next_column
                 {
                     col
                 } else {
-                    panic!("Do other cases later")
+                    panic!("Expected a column scan of type {}", stringify!($type));
                 };
 
                 let next_ranges = if self.current_layer.is_none() {
