@@ -137,7 +137,7 @@ pub enum ExecutionOperation {
     AppendColumns(ExecutionNodeRef, Vec<Vec<AppendInstruction>>),
     /// Append (the given number of) columns containing fresh nulls.
     AppendNulls(ExecutionNodeRef, usize),
-    /// Operation wich subtracts a list multiple table potentially of different arities from another table.
+    /// Operation wich subtracts multiple tables (potentially of different arities) from another table.
     Subtract(ExecutionNodeRef, Vec<ExecutionNodeRef>, Vec<SubtractInfo>),
 }
 

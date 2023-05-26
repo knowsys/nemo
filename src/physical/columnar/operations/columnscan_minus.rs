@@ -347,11 +347,10 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.current_value = if let Some(next_value) = self.scan_main.next() {
-            self.move_follow_scans(next_value)
-        } else {
-            None
-        };
+        self.current_value = self
+            .scan_main
+            .next()
+            .and_then(|next_value| self.move_follow_scans(next_value));
 
         self.current_value
     }
@@ -362,11 +361,10 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        self.current_value = if let Some(next_value) = self.scan_main.seek(value) {
-            self.move_follow_scans(next_value)
-        } else {
-            None
-        };
+        self.current_value = self
+            .scan_main
+            .seek(value)
+            .and_then(|next_value| self.move_follow_scans(next_value));
 
         self.current_value
     }
