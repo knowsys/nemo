@@ -51,6 +51,19 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all -- --check
 
+  doc:
+    name: Verify crate documentation
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -Dwarnings
+      RUSTDOCFLAGS: -Dwarnings
+    steps:
+      - uses: actions/checkout@v3
+      - uses: hecrj/setup-rust-action@v1
+        with:
+          rust-version: nightly
+      - run: cargo doc --workspace
+
   miri:
     name: Check for undefined behaviour with miri
     runs-on: ubuntu-latest
