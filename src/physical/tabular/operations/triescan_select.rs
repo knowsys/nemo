@@ -5,7 +5,7 @@ use crate::physical::{
     },
     datatypes::{DataValueT, StorageTypeName, StorageValueT},
     management::database::Dict,
-    tabular::traits::triescan::{TrieScan, TrieScanEnum},
+    tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
     util::interval::{Interval, IntervalBound},
 };
 use std::cell::UnsafeCell;
@@ -127,7 +127,7 @@ impl<'a> TrieScanSelectEqual<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieScanSelectEqual<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanSelectEqual<'a> {
     fn up(&mut self) {
         self.current_layer = self
             .current_layer
@@ -297,7 +297,7 @@ impl<'a> TrieScanSelectValue<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieScanSelectValue<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanSelectValue<'a> {
     fn up(&mut self) {
         self.current_layer = self
             .current_layer
@@ -337,7 +337,7 @@ mod test {
     use crate::physical::datatypes::DataValueT;
     use crate::physical::management::database::Dict;
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
-    use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
+    use crate::physical::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
     use crate::physical::util::interval::Interval;
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;

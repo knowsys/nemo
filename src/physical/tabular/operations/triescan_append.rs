@@ -22,8 +22,8 @@ use crate::{
         tabular::{
             table_types::trie::Trie,
             traits::{
+                partial_trie_scan::{PartialTrieScan, TrieScanEnum},
                 table::Table,
-                triescan::{TrieScan, TrieScanEnum},
             },
         },
     },
@@ -193,7 +193,7 @@ pub fn trie_append(
     Trie::new(Vec::<ColumnWithIntervalsT>::from(new_columns))
 }
 
-/// [`TrieScan`] which appends columns to an existing [`TrieScan`].
+/// [`PartialTrieScan`] which appends columns to an existing [`PartialTrieScan`].
 #[derive(Debug)]
 pub struct TrieScanAppend<'a> {
     /// Trie scans to which new columns will be appended.
@@ -376,7 +376,7 @@ impl<'a> TrieScanAppend<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieScanAppend<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanAppend<'a> {
     fn up(&mut self) {
         if self.current_layer.is_none() {
             return;
@@ -439,7 +439,7 @@ mod test {
         tabular::{
             operations::triescan_append::{AppendInstruction, TrieScanAppend},
             table_types::trie::{Trie, TrieScanGeneric},
-            traits::triescan::{TrieScan, TrieScanEnum},
+            traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
         },
         util::{make_column_with_intervals_t, test_util::make_column_with_intervals_int_t},
     };

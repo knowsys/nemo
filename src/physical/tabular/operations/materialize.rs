@@ -1,260 +1,87 @@
 use crate::physical::{
     columnar::{
         adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
-        column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-        traits::{columnbuilder::ColumnBuilder, columnscan::ColumnScan},
+        traits::columnbuilder::ColumnBuilder,
     },
-    datatypes::{Double, Float, StorageTypeName},
-    tabular::{
-        table_types::trie::Trie,
-        traits::triescan::{TrieScan, TrieScanEnum},
-    },
+    datatypes::StorageTypeName,
+    tabular::{table_types::trie::Trie, traits::trie_scan::TrieScan},
 };
 
 /// Given a TrieScan iterator, materialize its content into a trie
-/// If `picked_columns` is provided we will only store values for columns
-/// for which the respective entry in this vector is set to true
-/// If `check_empty` is set to true it will only try to find the first entry and then abort
-pub fn materialize_inner(
-    trie_scan: &mut TrieScanEnum,
-    picked_columns: Option<Vec<bool>>,
-    cut_bottom: usize,
-    check_empty: bool,
-) -> Option<Trie> {
-    // Keep track of the number of next calls; used for logging
-    let mut next_count: usize = 0;
+/// For the last `cut` layers only checks the existence of a value and does not materialize it fully.
+pub fn materialize_up_to(trie_scan: &mut impl TrieScan, cut: usize) -> Option<Trie> {
+    let num_columns = trie_scan.column_types().len() - cut;
 
-    // Used types will be the same as in the trie scan
-    let column_types = trie_scan.get_types().clone();
-    let arity = column_types.len();
-
-    if arity == 0 {
-        return Some(Trie::new(vec![]));
-    }
-
-    // Setup column builders
-    let mut result_columns = Vec::<ColumnWithIntervalsT>::with_capacity(arity);
-    let mut data_column_builders = Vec::<ColumnBuilderAdaptiveT>::new();
-    let mut intervals_column_builders = Vec::<ColumnBuilderAdaptive<usize>>::new();
-
-    log::trace!("Column types: {:?}", column_types);
-
-    for column_type in &column_types {
-        intervals_column_builders.push(ColumnBuilderAdaptive::default());
-
-        macro_rules! init_builder_for_datatype {
-            ($variant:ident) => {{
-                data_column_builders.push(ColumnBuilderAdaptiveT::$variant(
-                    ColumnBuilderAdaptive::default(),
-                ))
-            }};
-        }
-
-        match column_type {
-            StorageTypeName::U32 => init_builder_for_datatype!(U32),
-            StorageTypeName::U64 => init_builder_for_datatype!(U64),
-            StorageTypeName::I64 => init_builder_for_datatype!(I64),
-            StorageTypeName::Float => init_builder_for_datatype!(Float),
-            StorageTypeName::Double => init_builder_for_datatype!(Double),
-        }
-    }
-
-    // Consider the path we currently span in the depth-first search.
-    // current_row[i] = true means that for the ith value in the current path
-    // we have already reached the bottom starting from that value (by an alternative path)
-    // meaning that this value has to be added before leaving it
-    let mut current_row: Vec<bool> = vec![false; arity - 1];
-
-    // Contains for each layer the current number of entries in the data vector
-    let mut current_num_elements: Vec<usize> = vec![0usize; arity];
-
-    // Contains for each layer the number of entries in the data vector at the last time the interval column has been updated
-    let mut prev_num_elements: Vec<usize> = vec![0usize; arity];
-
-    // Current layer in the depth-first search
-    let mut current_layer: usize = 0;
-
-    // Whether the result contians at least one element
-    let mut is_empty = true;
-
-    // Iterate through the trie_scan in a depth-first-search manner
-    trie_scan.down();
-    loop {
-        // It is important to know when we reached the bottom as only those values will be added to the result
-        let is_last_layer = current_layer >= arity - 1;
-
-        // Whether the content of this layer is important for the overall output
-        // If this layer is "cut" then it is enough to check whether there is at least one value in this layer
-        let is_layer_cut = current_layer >= arity - cut_bottom;
-
-        // In each loop iteration we perform a sideways step, then if not on the last layer go down
-        // (unless a sideways step is impossible in which case we go up)
-        // next_value is the value on which the down operation will be performed
-        // current_value is the value we are leaving behind
-        // If there exists a path from current_value to the bottom (which we keep track of with the current_row variable)
-        // then it has to be added to a column builder
-        let current_value = trie_scan.current_scan().unwrap().current();
-
-        let next_value = if is_layer_cut
-            && (is_last_layer || current_row[current_layer])
-            && (!is_last_layer || current_value.is_some())
-        {
-            // We ignore the rest of the layer if
-            // * This layer is cut
-            // * If it is not the last layer but `current_row` indicates that `current_value` should be part of the output
-            // * If it is the last layer and the previous iteration already proved the existence of a value on this layer
-            None
-        } else {
-            next_count += 1;
-            trie_scan.current_scan().unwrap().next()
-        };
-
-        if let Some(val) = current_value {
-            if is_last_layer || current_row[current_layer] {
-                let is_picked = if let Some(picked_columns) = &picked_columns {
-                    picked_columns[current_layer]
-                } else {
-                    true
-                };
-
-                current_num_elements[current_layer] += 1;
-
-                if is_picked {
-                    log::trace!("add [layer {current_layer}] <- {val} {trie_scan:?}");
-                    data_column_builders[current_layer].add(val);
-                }
-            }
-
-            if !is_last_layer {
-                current_row[current_layer] = false;
-            }
-        } else if is_last_layer && next_value.is_some() {
-            current_row.fill(true);
-            is_empty = false;
-
-            // At this point we know that the result will contain at least one variable
-            if check_empty {
-                break;
-            }
-        }
-
-        if next_value.is_none() {
-            // Next value being None means that the currently built sorted interval of values is finished
-            // and we therefore know the starting point of the next interval
-            let current_data_len = current_num_elements[current_layer];
-            let prev_data_len = &mut prev_num_elements[current_layer];
-
-            // Check if new values have been added since last time
-            if current_data_len > *prev_data_len {
-                intervals_column_builders[current_layer].add(*prev_data_len);
-                *prev_data_len = current_data_len;
-            }
-
-            // Since the next value is None we need to go up
-            // If we are in the first layer then this means that the computation is finished
-            if current_layer == 0 {
-                break;
-            }
-
-            trie_scan.up();
-            current_layer -= 1;
-
-            // So that we don't go up and down in the same loop iteration
-            continue;
-        }
-
-        if !is_last_layer {
-            trie_scan.down();
-            current_layer += 1;
-        }
-    }
-
-    if !is_empty {
-        // Collect data from column builders
-        for column_type in column_types {
-            macro_rules! finalize_for_datatype {
-                ($variant:ident, $type:ty) => {{
-                    let current_data_builder: ColumnBuilderAdaptive<$type> =
-                        if let ColumnBuilderAdaptiveT::$variant(cb) = data_column_builders.remove(0)
-                        {
-                            cb
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($type));
-                        };
-                    let current_interval_builder = intervals_column_builders.remove(0);
-
-                    let next_interval_column =
-                        ColumnWithIntervalsT::$variant(ColumnWithIntervals::new(
-                            current_data_builder.finalize(),
-                            current_interval_builder.finalize(),
-                        ));
-
-                    result_columns.push(next_interval_column);
+    let mut data_column_builders: Vec<_> = trie_scan
+        .column_types()
+        .iter()
+        .take(num_columns)
+        .map(|column_type| {
+            macro_rules! init_builder_for_datatype {
+                ($variant:ident) => {{
+                    ColumnBuilderAdaptiveT::$variant(ColumnBuilderAdaptive::default())
                 }};
             }
 
             match column_type {
-                StorageTypeName::U32 => finalize_for_datatype!(U32, u32),
-                StorageTypeName::U64 => finalize_for_datatype!(U64, u64),
-                StorageTypeName::I64 => finalize_for_datatype!(I64, i64),
-                StorageTypeName::Float => finalize_for_datatype!(Float, Float),
-                StorageTypeName::Double => finalize_for_datatype!(Double, Double),
+                StorageTypeName::U32 => init_builder_for_datatype!(U32),
+                StorageTypeName::U64 => init_builder_for_datatype!(U64),
+                StorageTypeName::I64 => init_builder_for_datatype!(I64),
+                StorageTypeName::Float => init_builder_for_datatype!(Float),
+                StorageTypeName::Double => init_builder_for_datatype!(Double),
             }
+        })
+        .collect();
+
+    let mut intervals_column_builder = Vec::with_capacity(num_columns);
+    intervals_column_builder.resize_with(num_columns, ColumnBuilderAdaptive::<usize>::default);
+
+    let mut changed_layer = trie_scan.advance_on_layer(num_columns - 1)?;
+    debug_assert_eq!(changed_layer, 0);
+    intervals_column_builder[0].add(0);
+
+    loop {
+        for i in changed_layer..num_columns {
+            if i < num_columns - 1 {
+                intervals_column_builder[i + 1].add(data_column_builders[i + 1].count())
+            }
+            data_column_builders[i].add(trie_scan.current(i));
         }
 
-        let result = Trie::new(result_columns);
-
-        log::info!(
-            "Materialize: Next: {next_count}, Elements: {}, Quotient: {}",
-            result.num_elements(),
-            num::ToPrimitive::to_f64(&next_count).unwrap()
-                / num::ToPrimitive::to_f64(&result.num_elements()).unwrap()
-        );
-
-        return Some(result);
+        if let Some(next_changed_layer) = trie_scan.advance_on_layer(num_columns - 1) {
+            changed_layer = next_changed_layer;
+        } else {
+            break;
+        }
     }
 
-    None
+    let columns = data_column_builders
+        .into_iter()
+        .zip(intervals_column_builder.into_iter())
+        .map(|(d, i)| d.finalize(i));
+
+    Some(columns.collect())
 }
 
 /// Given a TrieScan iterator, materialize its content into a trie
-pub fn materialize(trie_scan: &mut TrieScanEnum) -> Option<Trie> {
-    materialize_inner(trie_scan, None, 0, false)
-}
-
-/// Given a TrieScan iterator, materialize its content into a trie
-/// For the last `cut` layers only checks the existence of a value and does not materialize it fully.
-pub fn materialize_up_to(trie_scan: &mut TrieScanEnum, cut: usize) -> Option<Trie> {
-    materialize_inner(trie_scan, None, cut, false)
+pub fn materialize(trie_scan: &mut impl TrieScan) -> Option<Trie> {
+    materialize_up_to(trie_scan, 0)
 }
 
 /// Tests whether an iterator is empty by materializing it until the first element
-pub fn scan_is_empty(trie_scan: &mut TrieScanEnum) -> bool {
-    materialize_inner(trie_scan, None, 0, true).is_some()
-}
-
-/// Materialize the content of an iterator into a trie.
-///
-/// Given a TrieScan iterator, materialize its content into a trie.
-/// Setting `picked_columns[i]` to false means that the ith column will have an empty data vector
-/// Passing None is equivalent to passing a vector containing only true
-/// TODO: For now this function behaves the same as materialize
-/// because it doesn't work with the current implementation of project.
-/// This function might also be removed entirely in the future since it didn't have that much of an performance impact.
-pub fn materialize_subset(
-    trie_scan: &mut TrieScanEnum,
-    _picked_columns: Vec<bool>,
-) -> Option<Trie> {
-    materialize_inner(trie_scan, None, 0, false)
+pub fn scan_is_empty(trie_scan: &mut impl TrieScan) -> bool {
+    trie_scan
+        .advance_on_layer(trie_scan.column_types().len())
+        .is_some()
 }
 
 #[cfg(test)]
 mod test {
     use super::materialize;
     use crate::physical::columnar::traits::column::Column;
-    use crate::physical::tabular::operations::{JoinBindings, TrieScanJoin};
+    use crate::physical::tabular::operations::{JoinBindings, TrieScanJoin, TrieScanPrune};
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
-    use crate::physical::tabular::traits::triescan::TrieScanEnum;
+    use crate::physical::tabular::traits::partial_trie_scan::TrieScanEnum;
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
@@ -274,9 +101,9 @@ mod test {
         let column_vec = vec![column_fst, column_snd, column_trd];
 
         let trie = Trie::new(column_vec);
-        let mut trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+        let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let materialized_trie = materialize(&mut trie_iter).unwrap();
+        let materialized_trie = materialize(&mut TrieScanPrune::new(trie_iter)).unwrap();
 
         let mat_in_col_fst = materialized_trie.get_column(0).as_u64().unwrap();
         let mat_in_col_snd = materialized_trie.get_column(1).as_u64().unwrap();
@@ -337,7 +164,7 @@ mod test {
         let trie_a = Trie::new(vec![column_a_x, column_a_y]);
         let trie_b = Trie::new(vec![column_b_y, column_b_z]);
 
-        let mut join_iter = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
+        let join_iter = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
             vec![
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
                 TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
@@ -345,7 +172,7 @@ mod test {
             &JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         ));
 
-        let materialized_join = materialize(&mut join_iter).unwrap();
+        let materialized_join = materialize(&mut TrieScanPrune::new(join_iter)).unwrap();
 
         let mat_in_col_fst = materialized_join.get_column(0).as_u64().unwrap();
         let mat_in_col_snd = materialized_join.get_column(1).as_u64().unwrap();

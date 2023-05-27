@@ -4,7 +4,7 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{Double, Float, StorageTypeName},
-    tabular::traits::triescan::{TrieScan, TrieScanEnum},
+    tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
 
@@ -155,7 +155,7 @@ impl FromIterator<Vec<usize>> for JoinBindings {
 // with the binding [[0, 1], [1, 2], [0, 2]] (assuming trie_scans = [R, S, T])
 // pub type JoinBinding = Vec<Vec<usize>>;
 
-/// [`TrieScan`] which represents the result from joining a set of tries (given as [`TrieScan`]s),
+/// [`PartialTrieScan`] which represents the result from joining a set of tries (given as [`PartialTrieScan`]s),
 #[derive(Debug)]
 pub struct TrieScanJoin<'a> {
     /// Trie scans of which the join is computed
@@ -273,7 +273,7 @@ impl<'a> TrieScanJoin<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieScanJoin<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
     fn up(&mut self) {
         let current_layer = self
             .current_layer
@@ -334,10 +334,10 @@ mod test {
         columnbuilder::ColumnBuilder,
         columnscan::ColumnScanT,
     };
-    use crate::physical::tabular::operations::materialize;
     use crate::physical::tabular::operations::triescan_join::JoinBindings;
+    use crate::physical::tabular::operations::{materialize, TrieScanPrune};
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
-    use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
+    use crate::physical::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
 
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
@@ -586,7 +586,10 @@ mod test {
             &JoinBindings::new(vec![vec![0, 2], vec![1, 2]]),
         );
 
-        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
+        let join_trie = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanJoin(
+            join_iter,
+        )))
+        .unwrap();
 
         let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 
@@ -637,7 +640,10 @@ mod test {
             &JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         );
 
-        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
+        let join_trie = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanJoin(
+            join_iter,
+        )))
+        .unwrap();
 
         let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 
@@ -696,7 +702,10 @@ mod test {
             &JoinBindings::new(vec![vec![1, 2], vec![0, 1]]),
         );
 
-        let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
+        let join_trie = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanJoin(
+            join_iter,
+        )))
+        .unwrap();
 
         let join_col_fst = join_trie.get_column(0).as_u64().unwrap();
 

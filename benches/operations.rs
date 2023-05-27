@@ -15,10 +15,10 @@ use nemo::{
         tabular::{
             operations::{
                 materialize, triescan_project::ProjectReordering, JoinBindings, TrieScanJoin,
-                TrieScanProject, TrieScanUnion,
+                TrieScanProject, TrieScanPrune, TrieScanUnion,
             },
             table_types::trie::{Trie, TrieScanGeneric},
-            traits::{table::Table, table_schema::TableSchema, triescan::TrieScanEnum},
+            traits::{partial_trie_scan::TrieScanEnum, table::Table, table_schema::TableSchema},
         },
     },
 };
@@ -105,7 +105,9 @@ pub fn benchmark_join(c: &mut Criterion) {
                 )
             },
             |join_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter));
+                let _ = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanJoin(
+                    join_iter,
+                )));
             },
         );
     });
@@ -186,7 +188,10 @@ fn benchmark_project(c: &mut Criterion) {
         &JoinBindings::new(vec![vec![0, 1, 2], vec![0, 1, 3]]),
     );
 
-    let join_trie = materialize(&mut TrieScanEnum::TrieScanJoin(join_iter)).unwrap();
+    let join_trie = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanJoin(
+        join_iter,
+    )))
+    .unwrap();
 
     let mut group_ours = c.benchmark_group("trie_project");
     group_ours.sample_size(10);
@@ -194,7 +199,9 @@ fn benchmark_project(c: &mut Criterion) {
         b.iter_with_setup(
             || TrieScanProject::new(&join_trie, ProjectReordering::from_vector(vec![0, 3], 4)),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
+                let _ = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanProject(
+                    project_iter,
+                )));
             },
         );
     });
@@ -202,7 +209,9 @@ fn benchmark_project(c: &mut Criterion) {
         b.iter_with_setup(
             || TrieScanProject::new(&join_trie, ProjectReordering::from_vector(vec![0, 1], 4)),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
+                let _ = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanProject(
+                    project_iter,
+                )));
             },
         );
     });
@@ -210,7 +219,9 @@ fn benchmark_project(c: &mut Criterion) {
         b.iter_with_setup(
             || TrieScanProject::new(&join_trie, ProjectReordering::from_vector(vec![2, 3], 4)),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
+                let _ = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanProject(
+                    project_iter,
+                )));
             },
         );
     });
@@ -219,7 +230,9 @@ fn benchmark_project(c: &mut Criterion) {
         b.iter_with_setup(
             || TrieScanProject::new(&trie_b, ProjectReordering::from_vector(vec![0, 2, 1], 4)),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
+                let _ = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanProject(
+                    project_iter,
+                )));
             },
         );
     });
@@ -227,7 +240,9 @@ fn benchmark_project(c: &mut Criterion) {
         b.iter_with_setup(
             || TrieScanProject::new(&trie_b, ProjectReordering::from_vector(vec![1, 0, 2], 4)),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
+                let _ = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanProject(
+                    project_iter,
+                )));
             },
         );
     });
@@ -235,7 +250,9 @@ fn benchmark_project(c: &mut Criterion) {
         b.iter_with_setup(
             || TrieScanProject::new(&trie_b, ProjectReordering::from_vector(vec![2, 1, 0], 4)),
             |project_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieScanProject(project_iter));
+                let _ = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanProject(
+                    project_iter,
+                )));
             },
         );
     });
@@ -294,7 +311,9 @@ fn benchmark_union(c: &mut Criterion) {
                 )
             },
             |union_iter| {
-                let _ = materialize(&mut TrieScanEnum::TrieScanUnion(union_iter));
+                let _ = materialize(&mut TrieScanPrune::new(TrieScanEnum::TrieScanUnion(
+                    union_iter,
+                )));
             },
         );
     });
