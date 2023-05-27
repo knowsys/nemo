@@ -4,12 +4,12 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{Double, Float, StorageTypeName},
-    tabular::traits::triescan::{TrieScan, TrieScanEnum},
+    tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
 };
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
-/// [`TrieScan`] representing a union of other trie iterators
+/// [`PartialTrieScan`] representing a union of other trie iterators
 #[derive(Debug)]
 pub struct TrieScanUnion<'a> {
     /// Trie scans for which the join is computed
@@ -85,7 +85,7 @@ impl<'a> TrieScanUnion<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieScanUnion<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
     fn up(&mut self) {
         let up_layer = self
             .current_layer
@@ -152,7 +152,7 @@ mod test {
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
     use crate::physical::tabular::operations::{JoinBindings, TrieScanJoin};
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
-    use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
+    use crate::physical::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 

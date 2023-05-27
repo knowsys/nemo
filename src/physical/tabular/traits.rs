@@ -6,5 +6,8 @@ pub mod table;
 /// Module for defining [`TableSchema`][table_schema::TableSchema]
 pub mod table_schema;
 
-/// Module for defining [`TrieScan`][triescan::TrieScan]
-pub mod triescan;
+/// Module defining the [`PartialTrieScan`][partial_trie_scan::PartialTrieScan] interface
+pub mod partial_trie_scan;
+
+/// Module defining the [`TrieScan`][trie_scan::TrieScan] interface
+pub mod trie_scan;

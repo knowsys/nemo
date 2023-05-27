@@ -3,7 +3,9 @@ use crate::physical::datatypes::{
 };
 use std::fmt::Debug;
 
+use super::column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
 use super::column_types::{rle::ColumnBuilderRle, vector::ColumnVector};
+
 use super::traits::{
     column::{Column, ColumnEnum},
     columnbuilder::ColumnBuilder,
@@ -265,6 +267,30 @@ impl ColumnBuilderAdaptiveT {
             Self::I64(cb) => cb.count(),
             Self::Float(cb) => cb.count(),
             Self::Double(cb) => cb.count(),
+        }
+    }
+
+    /// Turn the column builder into the finalized Column
+    pub fn finalize(self, interval_column: ColumnBuilderAdaptive<usize>) -> ColumnWithIntervalsT {
+        match self {
+            ColumnBuilderAdaptiveT::U32(c) => ColumnWithIntervalsT::U32(ColumnWithIntervals::new(
+                c.finalize(),
+                interval_column.finalize(),
+            )),
+            ColumnBuilderAdaptiveT::U64(c) => ColumnWithIntervalsT::U64(ColumnWithIntervals::new(
+                c.finalize(),
+                interval_column.finalize(),
+            )),
+            ColumnBuilderAdaptiveT::I64(c) => ColumnWithIntervalsT::I64(ColumnWithIntervals::new(
+                c.finalize(),
+                interval_column.finalize(),
+            )),
+            ColumnBuilderAdaptiveT::Float(c) => ColumnWithIntervalsT::Float(
+                ColumnWithIntervals::new(c.finalize(), interval_column.finalize()),
+            ),
+            ColumnBuilderAdaptiveT::Double(c) => ColumnWithIntervalsT::Double(
+                ColumnWithIntervals::new(c.finalize(), interval_column.finalize()),
+            ),
         }
     }
 }

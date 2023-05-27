@@ -4,25 +4,25 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{Double, Float, StorageTypeName},
-    tabular::traits::triescan::{TrieScan, TrieScanEnum},
+    tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
     util::mapping::permutation::Permutation,
 };
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
-/// [`TrieScan`] that subtracts from a "main" [`TrieScan`] a list of "subtract" [`TrieScan`],
+/// [`PartialTrieScan`] that subtracts from a "main" [`PartialTrieScan`] a list of "subtract" [`PartialTrieScan`],
 /// i.e. the results contains all elements that are in main but not in one of the subtract scans.
 /// This can also handle subtracting tables of different arities.
 #[derive(Debug)]
 pub struct TrieScanSubtract<'a> {
-    /// [`TrieScan`] from which elements are being subtracted
+    /// [`PartialTrieScan`] from which elements are being subtracted
     trie_main: Box<TrieScanEnum<'a>>,
     /// Elements that are subtracted
     tries_subtract: Vec<TrieScanEnum<'a>>,
 
-    /// For each [`TrieScan`] in `trie_subtract`, additional information relevant for this scan.
+    /// For each [`PartialTrieScan`] in `trie_subtract`, additional information relevant for this scan.
     infos: Vec<SubtractInfo>,
-    /// For each [`TrieScan`] in `trie_subtract`, which layer this trie scan is currently on.
+    /// For each [`PartialTrieScan`] in `trie_subtract`, which layer this trie scan is currently on.
     subtract_current_layers: Vec<usize>,
 
     /// Current layer of this scan.
@@ -175,7 +175,7 @@ impl<'a> TrieScanSubtract<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieScanSubtract<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
     fn up(&mut self) {
         debug_assert!(self.current_layer.is_some());
         let current_layer = self.current_layer.unwrap();
@@ -272,10 +272,10 @@ impl<'a> TrieScan<'a> for TrieScanSubtract<'a> {
     }
 }
 
-/// [`TrieScan`] containg all elements from a "left" [`TrieScan`] that are not in the "right" [`TrieScan`]  
+/// [`PartialTrieScan`] containg all elements from a "left" [`PartialTrieScan`] that are not in the "right" [`PartialTrieScan`]  
 #[derive(Debug)]
 pub struct TrieScanMinus<'a> {
-    /// [`TrieScan`] from which elements are being subtracted
+    /// [`PartialTrieScan`] from which elements are being subtracted
     trie_left: Box<TrieScanEnum<'a>>,
 
     /// Elements that are subtracted
@@ -366,7 +366,7 @@ impl<'a> TrieScanMinus<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieScanMinus<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanMinus<'a> {
     fn up(&mut self) {
         self.layer_left = self
             .layer_left
@@ -438,7 +438,7 @@ mod test {
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
     use crate::physical::tabular::operations::triescan_minus::{SubtractInfo, TrieScanSubtract};
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
-    use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
+    use crate::physical::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
     use crate::physical::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 

@@ -8,6 +8,7 @@ use bytesize::ByteSize;
 use crate::generate_cast_statements;
 use crate::logical::Permutator;
 use crate::physical::columnar::operations::{ColumnScanCast, ColumnScanCastEnum};
+
 use crate::physical::columnar::traits::columnscan::{ColumnScanCell, ColumnScanEnum};
 use crate::physical::columnar::{
     adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
@@ -23,8 +24,9 @@ use crate::physical::dictionary::value_serializer::TrieSerializer;
 use crate::physical::dictionary::ValueSerializer;
 use crate::physical::management::database::Dict;
 use crate::physical::management::ByteSized;
+use crate::physical::tabular::traits::partial_trie_scan::PartialTrieScan;
+use crate::physical::tabular::traits::table::Table;
 use crate::physical::tabular::traits::table_schema::TableSchema;
-use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
 
 pub(crate) struct TrieRows<'a> {
     data_columns: Vec<ColumnScanT<'a>>,
@@ -468,7 +470,16 @@ impl Table for Trie {
     }
 }
 
-/// Implementation of [`TrieScan`] for a [`Trie`].
+impl FromIterator<ColumnWithIntervalsT> for Trie {
+    fn from_iter<T: IntoIterator<Item = ColumnWithIntervalsT>>(iter: T) -> Self {
+        let columns: Vec<ColumnWithIntervalsT> = iter.into_iter().collect();
+        let types = columns.iter().map(|c| c.get_type()).collect();
+
+        Self { columns, types }
+    }
+}
+
+/// Implementation of [`PartialTrieScan`] for a [`Trie`].
 #[derive(Debug)]
 pub struct TrieScanGeneric<'a> {
     trie: &'a Trie,
@@ -529,7 +540,7 @@ impl<'a> TrieScanGeneric<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieScanGeneric<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
     fn up(&mut self) {
         self.current_layer = self.current_layer.and_then(|index| index.checked_sub(1));
     }
@@ -588,7 +599,7 @@ mod test {
     use super::{Trie, TrieScanGeneric};
     use crate::physical::columnar::traits::columnscan::ColumnScanT;
     use crate::physical::datatypes::{storage_value::VecT, StorageValueT};
-    use crate::physical::tabular::traits::{table::Table, triescan::TrieScan};
+    use crate::physical::tabular::traits::{partial_trie_scan::PartialTrieScan, table::Table};
     use crate::physical::util::make_column_with_intervals_t;
     use test_log::test;
 

@@ -14,7 +14,7 @@ use std::fmt::Debug;
 /// Iterator for a Trie datastructure.
 /// Allows for vertical traversal through the tree and can return
 /// its current position as a [`ColumnScanT`] object.
-pub trait TrieScan<'a>: Debug {
+pub trait PartialTrieScan<'a>: Debug {
     /// Return to the upper layer.
     /// This may only be called if the trie scan is not already at the topmost layer. TODO: Is this restriction required? Check implementations if you want to change this
     fn up(&mut self);
@@ -74,7 +74,7 @@ generate_forwarder!(forward_to_scan;
     TrieScanSubtract
 );
 
-impl<'a> TrieScan<'a> for TrieScanEnum<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
     fn up(&mut self) {
         forward_to_scan!(self, up)
     }

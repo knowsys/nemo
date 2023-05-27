@@ -6,10 +6,10 @@ use crate::physical::{
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::StorageTypeName,
-    tabular::traits::triescan::{TrieScan, TrieScanEnum},
+    tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
 };
 
-/// [`TrieScan`] which appends columns with nulls at the end of another [`TrieScan`].
+/// [`PartialTrieScan`] which appends columns with nulls at the end of another [`PartialTrieScan`].
 #[derive(Debug)]
 pub struct TrieScanNulls<'a> {
     /// Trie scans to which new columns will be appended.
@@ -86,7 +86,7 @@ impl<'a> TrieScanNulls<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieScanNulls<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanNulls<'a> {
     fn up(&mut self) {
         if self.current_layer.is_none() {
             return;
@@ -133,7 +133,7 @@ mod test {
         columnar::traits::columnscan::ColumnScanT,
         tabular::{
             table_types::trie::{Trie, TrieScanGeneric},
-            traits::triescan::{TrieScan, TrieScanEnum},
+            traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
         },
         util::make_column_with_intervals_t,
     };

@@ -1,10 +1,11 @@
 use crate::physical::columnar::operations::ColumnScanPrune;
 use crate::physical::columnar::traits::columnscan::ColumnScan;
 use crate::physical::datatypes::{ColumnDataType, StorageValueT};
+use crate::physical::tabular::traits::trie_scan::TrieScan;
 use crate::physical::{
     columnar::traits::columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
     datatypes::StorageTypeName,
-    tabular::traits::triescan::{TrieScan, TrieScanEnum},
+    tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
 };
 use std::cell::UnsafeCell;
 use std::{fmt::Debug, rc::Rc};
@@ -465,7 +466,7 @@ impl<'a> TrieScanPrune<'a> {
     }
 }
 
-impl<'a> TrieScan<'a> for TrieScanPrune<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanPrune<'a> {
     fn up(&mut self) {
         unsafe {
             (*self.state.get()).external_up();
@@ -499,6 +500,29 @@ impl<'a> TrieScan<'a> for TrieScanPrune<'a> {
     }
 }
 
+impl<'a> TrieScan for TrieScanPrune<'a> {
+    fn advance_on_layer(&mut self, layer: usize) -> Option<usize> {
+        if !unsafe { (*self.state.get()).initialized } {
+            for _ in 0..=layer {
+                self.down();
+            }
+        }
+
+        self.advance_on_layer(layer, true)
+    }
+
+    fn current(&mut self, layer: usize) -> StorageValueT {
+        self.output_column_scans[layer]
+            .get_mut()
+            .current()
+            .expect("advance_at_layer needs to return Some before this is called")
+    }
+
+    fn column_types(&self) -> &[StorageTypeName] {
+        &self.target_types
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::TrieScanPrune;
@@ -507,7 +531,7 @@ mod test {
     use crate::physical::management::database::Dict;
     use crate::physical::tabular::operations::{TrieScanSelectValue, ValueAssignment};
     use crate::physical::tabular::table_types::trie::{Trie, TrieScanGeneric};
-    use crate::physical::tabular::traits::triescan::{TrieScan, TrieScanEnum};
+    use crate::physical::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
 
     use crate::physical::util::interval::Interval;
     use crate::physical::util::test_util::make_column_with_intervals_t;

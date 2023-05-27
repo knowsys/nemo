@@ -12,6 +12,7 @@ use crate::physical::tabular::operations::materialize::materialize_up_to;
 use crate::physical::tabular::operations::project_reorder::project_and_reorder;
 use crate::physical::tabular::operations::triescan_minus::TrieScanSubtract;
 use crate::physical::tabular::operations::triescan_project::ProjectReordering;
+use crate::physical::tabular::operations::TrieScanPrune;
 use crate::physical::tabular::traits::table::Table;
 use crate::physical::util::mapping::permutation::Permutation;
 use crate::physical::util::mapping::traits::NatMapping;
@@ -25,7 +26,7 @@ use crate::{
             TrieScanUnion,
         },
         table_types::trie::{Trie, TrieScanGeneric},
-        traits::{table_schema::TableSchema, triescan::TrieScanEnum},
+        traits::{partial_trie_scan::TrieScanEnum, table_schema::TableSchema},
     },
 };
 
@@ -179,10 +180,10 @@ impl TableStorage {
                         .iter()
                         .map(|t| TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(t)))
                         .collect();
-                    let mut union_iter =
+                    let union_iter =
                         TrieScanEnum::TrieScanUnion(TrieScanUnion::new(loaded_tries_iters));
 
-                    materialize(&mut union_iter).unwrap()
+                    materialize(&mut TrieScanPrune::new(union_iter)).unwrap()
                 };
 
                 *self = TableStorage::InMemory(new_trie);
@@ -732,7 +733,8 @@ impl DatabaseInstance {
                 self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
             let cut_bottom = execution_tree.cut_bottom();
 
-            Ok(iter_opt.and_then(|mut iter| materialize_up_to(&mut iter, cut_bottom)))
+            Ok(iter_opt
+                .and_then(|iter| materialize_up_to(&mut TrieScanPrune::new(iter), cut_bottom)))
         }
     }
 
