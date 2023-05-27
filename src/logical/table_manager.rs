@@ -491,13 +491,16 @@ impl TableManager {
     ) -> Result<Option<TableId>, Error> {
         let combined_order: ColumnOrder = ColumnOrder::default();
 
-        let tables = self.tables_in_range(predicate.clone(), &range);
-
-        if tables.is_empty() {
-            return Ok(None);
-        }
-
         let name = self.generate_table_name_combined(predicate.clone(), &combined_order, &range);
+        let Some(subtable_handler) = self.predicate_subtables.get_mut(&predicate) else {
+            return Ok(None);
+        };
+
+        let tables = subtable_handler.cover_range(&range);
+
+        if tables.len() == 1 {
+            return Ok(Some(tables[0]));
+        }
 
         let mut union_plan = ExecutionPlan::default();
         let fetch_nodes = tables
@@ -505,17 +508,14 @@ impl TableManager {
             .map(|id| union_plan.fetch_existing(*id))
             .collect();
         let union_node = union_plan.union(fetch_nodes);
-        let plan_id = union_plan.write_permanent(union_node, "Combinding Tables", &name);
+        let plan_id = union_plan.write_permanent(union_node, "Combining Tables", &name);
 
         let execution_result = self.database.execute_plan(union_plan)?;
         let table_id = execution_result
             .get(&plan_id)
             .expect("Combining multiple non-empty tables should result in a non-empty table.");
 
-        self.predicate_subtables
-            .get_mut(&predicate)
-            .expect("Function should have been left earlier if this is the case.")
-            .add_combined_table(&range, *table_id);
+        subtable_handler.add_combined_table(&range, *table_id);
 
         Ok(Some(*table_id))
     }
