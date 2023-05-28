@@ -41,6 +41,12 @@ impl std::fmt::Display for Identifier {
     }
 }
 
+impl From<String> for Identifier {
+    fn from(value: String) -> Self {
+        Identifier(value)
+    }
+}
+
 /// A qualified predicate name, i.e., a predicate name together with its arity.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 pub struct QualifiedPredicateName {
