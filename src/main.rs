@@ -125,7 +125,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         output_manager.prevent_accidental_overwrite(program.output_predicates())?;
     }
 
-    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(program)?;
+    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(program.into())?;
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
     TimedCode::instance().sub("Reasoning").start();

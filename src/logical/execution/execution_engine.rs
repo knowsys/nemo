@@ -6,7 +6,7 @@ use crate::{
     error::Error,
     io::dsv::DSVReader,
     logical::{
-        model::{chase_model::ChaseProgram, DataSource, Identifier, Program},
+        model::{chase_model::ChaseProgram, DataSource, Identifier},
         program_analysis::analysis::ProgramAnalysis,
         types::LogicalTypeEnum,
         TableManager,
@@ -58,9 +58,7 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [`ExecutionEngine`].
-    pub fn initialize(program: Program) -> Result<Self, Error> {
-        let mut program: ChaseProgram = program.into();
-
+    pub fn initialize(mut program: ChaseProgram) -> Result<Self, Error> {
         program.check_for_unsupported_features()?;
         program.normalize();
 
