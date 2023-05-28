@@ -9,7 +9,7 @@ use crate::physical::{
 use super::Dictionary;
 
 /// Helper trait for mapping [`StorageValueT`] back into some (higher level) value space
-/// by virtue of the schema index, a value appears at (inside a table).
+/// by virtue of the schema index that a value appears at (inside a table).
 pub trait StorageValueMapping<Output> {
     /// Map the [`StorageValueT`], which appeared at index `layer` to the Output type.
     fn map(&self, value: StorageValueT, layer: usize) -> Output;
