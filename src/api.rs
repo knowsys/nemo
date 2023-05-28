@@ -8,7 +8,7 @@
 //! # fn main() {}
 //! # #[cfg(not(miri))]
 //! # fn main() {
-//! use nemo::api::{load,reason,output_predicates,write};
+//! use nemo::api::{load, reason, output_predicates, write};
 //! # let path = String::from("./resources/testcases/lcs-diff-computation/run-lcs-10.rls");
 //! // assume path is a string with the path to a rules file
 //! let mut engine = load(path.into()).unwrap();
@@ -66,12 +66,12 @@ pub fn load_string(input: String) -> Result<Engine, Error> {
 /// Executes the reasoning process of the [`Engine`].
 ///
 /// # Note
-/// If there have been `@source` routines in the parsed rules, all relative paths are resolved with the current working directory
+/// If there are `@source` routines in the parsed rules, all relative paths are resolved with the current working directory
 pub fn reason(engine: &mut Engine) -> Result<(), Error> {
     engine.execute()
 }
 
-/// Get a [`Vec`] of all output predicates, that are computed by the engine.
+/// Get a [`Vec`] of all output predicates that are computed by the engine.
 pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
     engine.program().output_predicates().collect()
 }
