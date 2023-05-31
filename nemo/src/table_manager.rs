@@ -326,8 +326,7 @@ impl TableManager {
     pub fn table_serializer(&mut self, id: TableId) -> Result<impl TrieSerializer + '_, Error> {
         let _ = self
             .database
-            .get_trie_or_load(id, &ColumnOrder::default())
-            .map_err(|e| Error::PhysicalError(e.into()))?;
+            .get_trie_or_load(id, &ColumnOrder::default())?;
         let schema = self.database.table_schema(id);
         let dict = self.database.get_dict_constants();
 
@@ -358,8 +357,7 @@ impl TableManager {
 
         let _ = self
             .database
-            .get_trie_or_load(id, &ColumnOrder::default())
-            .map_err(|e| Error::PhysicalError(e.into()))?;
+            .get_trie_or_load(id, &ColumnOrder::default())?;
         let schema = self.database.table_schema(id);
         let dict = self.database.get_dict_constants();
 

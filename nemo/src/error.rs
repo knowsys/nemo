@@ -65,3 +65,9 @@ pub enum Error {
     #[error(transparent)]
     PhysicalError(#[from] nemo_physical::error::Error),
 }
+
+impl From<ReadingError> for Error {
+    fn from(value: ReadingError) -> Self {
+        Self::PhysicalError(value.into())
+    }
+}

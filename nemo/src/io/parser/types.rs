@@ -279,19 +279,13 @@ impl FromExternalError<Span<'_>, ParseError> for LocatedParseError {
 
 impl FromExternalError<Span<'_>, ParseIntError> for LocatedParseError {
     fn from_external_error(input: Span, _kind: ErrorKind, e: ParseIntError) -> Self {
-        ParseError::ExternalError(Box::new(crate::error::Error::PhysicalError(
-            crate::error::ReadingError::into(e.into()),
-        )))
-        .at(input)
+        ParseError::ExternalError(Box::new(crate::error::ReadingError::into(e.into()))).at(input)
     }
 }
 
 impl FromExternalError<Span<'_>, ParseFloatError> for LocatedParseError {
     fn from_external_error(input: Span, _kind: ErrorKind, e: ParseFloatError) -> Self {
-        ParseError::ExternalError(Box::new(crate::error::Error::PhysicalError(
-            crate::error::ReadingError::into(e.into()),
-        )))
-        .at(input)
+        ParseError::ExternalError(Box::new(crate::error::ReadingError::into(e.into()))).at(input)
     }
 }
 
@@ -301,6 +295,6 @@ impl FromExternalError<Span<'_>, crate::error::ReadingError> for LocatedParseErr
         _kind: ErrorKind,
         e: crate::error::ReadingError,
     ) -> Self {
-        ParseError::ExternalError(Box::new(crate::error::Error::PhysicalError(e.into()))).at(input)
+        ParseError::ExternalError(Box::new(e.into())).at(input)
     }
 }

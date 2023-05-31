@@ -103,14 +103,9 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     }
 
     let rules = cli.rules.pop().ok_or(Error::NoInput)?;
-    let rules_content = read_to_string(rules.clone()).map_err(|err| {
-        Error::PhysicalError(
-            ReadingError::IOReading {
-                error: err,
-                filename: rules,
-            }
-            .into(),
-        )
+    let rules_content = read_to_string(rules.clone()).map_err(|err| ReadingError::IOReading {
+        error: err,
+        filename: rules,
     })?;
 
     let mut program = parse_program(rules_content)?;
