@@ -11,6 +11,9 @@ authors = [
 version = "0.1.1-dev"
 edition = "2021"
 
+[features]
+no-prefixed-string-dictionary = ["nemo/no-prefixed-string-dictionary"]
+
 [[bin]]
 name = "nmo"
 path = "src/main.rs"

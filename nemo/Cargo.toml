@@ -17,10 +17,8 @@ default = ["timing"]
 # Enables the "js" feature of the "getrandom" crate
 # This feature cannot be used together with the "timing" feature, because the "howlong" crate does not support web assembly environments
 js = ["getrandom/js"]
-# Enables time measurements using the "howlong" crate
-# If this feature is not enabled, all time measurements will display zero instead
-timing = ["dep:howlong"]
 no-prefixed-string-dictionary = []
+timing = [ "nemo-physical/timing" ]
 
 [dependencies]
 log = "0.4"
@@ -34,9 +32,8 @@ flate2 = "1"
 sanitise-file-name = "1.0.0"
 nom_locate = { version = "4.1.0", features = [ "runtime-dispatch-simd" ] }
 getrandom = {version = "0.2.9", default-features = false}
-howlong = { version = "0.1", optional = true }
 
-nemo-physical = { path = "../nemo-physical"}
+nemo-physical = { path = "../nemo-physical", default-features = false }
 
 [dev-dependencies]
 env_logger = "*"
