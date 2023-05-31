@@ -17,7 +17,7 @@ default = ["timing"]
 # Enables the "js" feature of the "getrandom" crate
 # This feature cannot be used together with the "timing" feature, because the "howlong" crate does not support web assembly environments
 js = ["getrandom/js"]
-no-prefixed-string-dictionary = []
+no-prefixed-string-dictionary = [ "nemo-physical/no-prefixed-string-dictionary" ]
 timing = [ "nemo-physical/timing" ]
 
 [dependencies]
