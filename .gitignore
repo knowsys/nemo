@@ -26,3 +26,6 @@ flycheck_*.el
 
 # nix build
 /result
+
+# ide settings
+/.vscode

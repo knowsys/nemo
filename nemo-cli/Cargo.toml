@@ -1,0 +1,32 @@
+[package]
+name = "nemo-cli"
+authors = [
+"Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
+"Lukas Gerlach <lukas.gerlach@tu-dresden.de>",
+"Philipp Hanisch <philipp.hanisch1@tu-dresden.de>",
+"Alex Ivliev <alex.ivliev@tu-dresden.de>",
+"Markus Krötzsch <markus.kroetzsch@tu-dresden.de>",
+"Maximilian Marx <maximilian.marx@tu-dresden.de>"
+]	
+version = "0.1.1-dev"
+edition = "2021"
+
+[[bin]]
+name = "nmo"
+path = "src/main.rs"
+
+[dependencies]
+log = { version = "0.4", features = [ "max_level_trace", "release_max_level_info" ] }
+clap = { version = "4.0.32", features = [ "derive", "cargo", "env" ] }
+colored = "2"
+env_logger = "*"
+superslice = "1"
+
+nemo = { path = "../nemo" }
+
+[dev-dependencies]
+assert_cmd = "2.0"
+assert_fs = "1.0.13"
+dir-test = "0.1"
+predicates = "3.0"
+test-log = "0.2"

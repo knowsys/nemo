@@ -1,71 +1,10 @@
-[package]
-name = "nemo"
-authors = [
-"Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
-"Lukas Gerlach <lukas.gerlach@tu-dresden.de>",
-"Philipp Hanisch <philipp.hanisch1@tu-dresden.de>",
-"Alex Ivliev <alex.ivliev@tu-dresden.de>",
-"Markus Krötzsch <markus.kroetzsch@tu-dresden.de>",
-"Maximilian Marx <maximilian.marx@tu-dresden.de>"
-]	
-version = "0.1.1-dev"
-edition = "2021"
+[workspace]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[features]
-default = ["timing"]
-# Allows building for web assembly environments
-# Enables the "js" feature of the "getrandom" crate
-# This feature cannot be used together with the "timing" feature, because the "howlong" crate does not support web assembly environments
-js = ["getrandom/js"]
-# Enables time measurements using the "howlong" crate
-# If this feature is not enabled, all time measurements will display zero instead
-timing = ["dep:howlong"]
-no-prefixed-string-dictionary = []
-
-[[bin]]
-name = "nmo"
-path = "src/main.rs"
-
-[dependencies]
-env_logger = "*"
-log = { version = "0.4", features = [ "max_level_trace", "release_max_level_info" ] }
-csv = "1.1.6"
-thiserror = "1.0"
-num = "0.4.0"
-nom = "7.1.1"
-superslice = "1"
-macros = { path = "libs/macros" }
-once_cell = "1.15.0"
-ascii_tree = "0.1.1"
-howlong = { version = "0.1", optional = true }
-linked-hash-map = "0.5.6"
-bytesize = "1.1.0"
-clap = { version = "4.0.32", features = [ "derive", "cargo", "env" ] }
-sanitise-file-name = "1.0.0"
-flate2 = "1.0.25"
-rand = "0.8.4"
-petgraph = "0.6.3"
-colored = "2"
-nom_locate = { version = "4.1.0", features = [ "runtime-dispatch-simd" ] }
-getrandom = {version = "0.2.9", default-features = false}
-
-[dev-dependencies]
-test-log = "0.2"
-criterion = { version = "0.4", features = [ "html_reports" ] }
-rand = "0.8"
-rand_pcg = "0.3"
-quickcheck = "1"
-quickcheck_macros = "1"
-arbitrary = { version = "1", features = ["derive"] }
-polars = "0.25.1"
-assert_cmd = "2.0"
-predicates = "3.0"
-assert_fs = "1.0"
-dir-test = "0.1"
-
-[target.'cfg(unix)'.dev-dependencies]
-iai = "0.1" # needs valgrind -> unix only
+members = [
+    "nemo",
+    "nemo-cli",
+    "nemo-physical",
+]
 
 [profile.dev]
 panic = "unwind"
@@ -88,16 +27,3 @@ strip = true
 
 [profile.bench]
 inherits = "release-minimal"
-
-[[bench]]
-name = "seek"
-harness = false
-
-# iai - based benchmarks, only on unix
-[[bench]]
-name = "seek_iai"
-harness = false
-
-[[bench]]
-name = "operations"
-harness = false
