@@ -1,6 +1,6 @@
 use super::run_length_encodable::FloatingStep;
 use super::{FloatIsNaN, FloorToUsize, RunLengthEncodable};
-use crate::error::Error;
+use crate::error::{Error, ReadingError};
 use num::{Bounded, CheckedMul, FromPrimitive, One, Zero};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
@@ -20,7 +20,7 @@ impl Double {
     ///
     /// # Errors
     /// The given `value` is [`f64::NAN`].
-    pub fn new(value: f64) -> Result<Double, Error> {
+    pub fn new(value: f64) -> Result<Double, ReadingError> {
         if value.is_nan() {
             return Err(FloatIsNaN.into());
         }
@@ -129,7 +129,7 @@ impl fmt::Display for Double {
 }
 
 impl TryFrom<f64> for Double {
-    type Error = Error;
+    type Error = ReadingError;
 
     fn try_from(value: f64) -> Result<Self, Self::Error> {
         Self::new(value)
@@ -146,9 +146,9 @@ impl TryFrom<usize> for Double {
     type Error = Error;
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
-        f64::from_usize(value)
-            .ok_or(Error::UsizeToFloatingPointValue(value))
-            .and_then(Double::new)
+        let res = f64::from_usize(value).ok_or(Error::UsizeToFloatingPointValue(value))?;
+
+        Ok(Double::new(res)?)
     }
 }
 

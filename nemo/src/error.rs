@@ -9,6 +9,8 @@ use crate::{
     program_analysis::analysis::RuleAnalysisError, types::TypeError,
 };
 
+pub use nemo_physical::error::ReadingError;
+
 /// Error-Collection for all the possible Errors occurring in this crate
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]

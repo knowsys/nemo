@@ -9,6 +9,8 @@ use nemo_physical::{
     datatypes::Double,
 };
 
+use crate::error::ReadingError;
+
 /// Trait capturing builder proxies that use plain string (used for parsing in logical layer)
 ///
 /// This parses from a given logical type to the physical type, without exposing details from one layer to the other.
@@ -44,7 +46,7 @@ pub struct LogicalAnyColumnBuilderProxy<'a: 'b, 'b> {
 impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
-    fn add(&mut self, input: String) -> Result<(), nemo_physical::error::Error> {
+    fn add(&mut self, input: String) -> Result<(), ReadingError> {
         self.commit();
 
         // TODO: this is all super hacky but parsing proper ground terms is too slow...
@@ -80,7 +82,7 @@ pub struct LogicalIntegerColumnBuilderProxy<'b> {
 impl ColumnBuilderProxy<String> for LogicalIntegerColumnBuilderProxy<'_> {
     logical_generic_trait_impl!();
 
-    fn add(&mut self, input: String) -> Result<(), nemo_physical::error::Error> {
+    fn add(&mut self, input: String) -> Result<(), ReadingError> {
         self.commit();
         self.physical.add(input.parse::<i64>()?)
     }
@@ -104,7 +106,7 @@ pub struct LogicalFloat64ColumnBuilderProxy<'b> {
 impl ColumnBuilderProxy<String> for LogicalFloat64ColumnBuilderProxy<'_> {
     logical_generic_trait_impl!();
 
-    fn add(&mut self, input: String) -> Result<(), nemo_physical::error::Error> {
+    fn add(&mut self, input: String) -> Result<(), ReadingError> {
         self.commit();
         self.physical.add(Double::new(input.parse::<f64>()?)?)
     }

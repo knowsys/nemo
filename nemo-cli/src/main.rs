@@ -26,12 +26,11 @@ use clap::Parser;
 use cli::CliApp;
 use colored::Colorize;
 use nemo::{
-    error::Error,
+    error::{Error, ReadingError},
     execution::{DefaultExecutionEngine, ExecutionEngine},
     io::{parser::parse_program, RecordWriter},
     meta::{timing::TimedDisplay, TimedCode},
     model::OutputPredicateSelection,
-    nemo_physical,
 };
 
 fn print_finished_message(new_facts: usize, saving: bool) {
@@ -104,11 +103,15 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     }
 
     let rules = cli.rules.pop().ok_or(Error::NoInput)?;
-    let rules_content =
-        read_to_string(rules.clone()).map_err(|err| nemo_physical::error::Error::IOReading {
-            error: err,
-            filename: rules,
-        })?;
+    let rules_content = read_to_string(rules.clone()).map_err(|err| {
+        Error::PhysicalError(
+            ReadingError::IOReading {
+                error: err,
+                filename: rules,
+            }
+            .into(),
+        )
+    })?;
 
     let mut program = parse_program(rules_content)?;
 

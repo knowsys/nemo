@@ -22,7 +22,7 @@ impl Float {
     /// The given `value` is [`f32::NAN`].
     pub fn new(value: f32) -> Result<Float, Error> {
         if value.is_nan() {
-            return Err(FloatIsNaN.into());
+            return Err(Error::ReadingError(FloatIsNaN.into()));
         }
 
         Ok(Float(value))

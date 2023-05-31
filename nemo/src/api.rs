@@ -27,7 +27,7 @@
 use std::{fs::read_to_string, path::PathBuf};
 
 use crate::{
-    error::Error,
+    error::{Error, ReadingError},
     execution::{DefaultExecutionEngine, ExecutionEngine},
     io::{
         parser::{all_input_consumed, RuleParser},
@@ -43,11 +43,12 @@ pub type Engine = DefaultExecutionEngine;
 ///
 /// For details see [`load_string`]
 pub fn load(file: PathBuf) -> Result<Engine, Error> {
-    let input =
-        read_to_string(file.clone()).map_err(|err| nemo_physical::error::Error::IOReading {
+    let input = read_to_string(file.clone())
+        .map_err(|err| ReadingError::IOReading {
             error: err,
             filename: file,
-        })?;
+        })
+        .map_err(|e| Error::PhysicalError(e.into()))?;
     load_string(input)
 }
 

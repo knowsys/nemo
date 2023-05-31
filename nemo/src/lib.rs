@@ -20,7 +20,7 @@
 
 /// The crate for underlying physical operations.
 #[macro_use]
-pub extern crate nemo_physical;
+extern crate nemo_physical;
 
 pub mod api;
 pub mod error;

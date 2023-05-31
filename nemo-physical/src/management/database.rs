@@ -17,7 +17,7 @@ use crate::tabular::traits::table::Table;
 use crate::util::mapping::permutation::Permutation;
 use crate::util::mapping::traits::NatMapping;
 use crate::{
-    error::Error,
+    error::{Error, ReadingError},
     meta::TimedCode,
     tabular::{
         operations::{
@@ -110,7 +110,7 @@ impl TableStorage {
         source: &TableSource,
         schema: &TableSchema,
         dict: &mut RefCell<Dict>,
-    ) -> Result<Trie, Error> {
+    ) -> Result<Trie, ReadingError> {
         {
             log::info!("Loading source {source}");
 
@@ -161,7 +161,10 @@ impl TableStorage {
     }
 
     /// Function that makes sure that underlying table is available in memory.
-    pub fn into_memory<'a>(&'a mut self, dict: &mut RefCell<Dict>) -> Result<&'a Trie, Error> {
+    pub fn into_memory<'a>(
+        &'a mut self,
+        dict: &mut RefCell<Dict>,
+    ) -> Result<&'a Trie, ReadingError> {
         match self {
             TableStorage::InMemory(_) => {}
             TableStorage::OnDisk(schema, sources) => {
@@ -625,7 +628,11 @@ impl DatabaseInstance {
     ///     * Reorder an existing table if the table is not available in the requested order
     ///     * Load a table from disk if it currently not in memory
     /// Panics if the requested table does not exist.
-    fn make_available_in_memory(&mut self, id: TableId, order: &ColumnOrder) -> Result<(), Error> {
+    fn make_available_in_memory(
+        &mut self,
+        id: TableId,
+        order: &ColumnOrder,
+    ) -> Result<(), ReadingError> {
         let arity = self.table_arity(id);
         let available_orders = self
             .storage_handler
@@ -858,7 +865,7 @@ impl DatabaseInstance {
         &'a mut self,
         id: TableId,
         order: &ColumnOrder,
-    ) -> Result<&'a Trie, Error> {
+    ) -> Result<&'a Trie, ReadingError> {
         self.storage_handler
             .table_storage_mut(id, order)
             .expect("Function assumes that there is a table with the given id and order.")

@@ -1,7 +1,7 @@
 //! The physical builder proxy takes values of some input type `T` and provides functionality to store them in a ['VecT']
 use std::cell::RefCell;
 
-use crate::error::Error;
+use crate::error::ReadingError;
 
 use crate::{
     datatypes::{storage_value::VecT, Double, Float},
@@ -14,8 +14,8 @@ pub trait ColumnBuilderProxy<T>: std::fmt::Debug {
     /// Cache a value to be added to the ColumnBuilder. If a value is already cached, the cached value will be added to the ColumnBuilder before the new value is checked.
     ///
     /// The add function checks if the given input can be cast or parsed into the ColumnBuilder type.
-    /// If this is not possible a corresponding [`Error`] is returned.
-    fn add(&mut self, input: T) -> Result<(), Error>;
+    /// If this is not possible a corresponding [`ReadingError`] is returned.
+    fn add(&mut self, input: T) -> Result<(), ReadingError>;
     /// Forgets a cached value.
     fn forget(&mut self);
     /// Commits the data, cleaning the cached value while adding it to the respective ColumnBuilder.
@@ -43,7 +43,7 @@ macro_rules! physical_generic_trait_impl {
         impl ColumnBuilderProxy<$type> for PhysicalGenericColumnBuilderProxy<$type> {
             generic_trait_impl_without_add!($storage);
 
-            fn add(&mut self, input: $type) -> Result<(), Error> {
+            fn add(&mut self, input: $type) -> Result<(), ReadingError> {
                 self.commit();
                 self.value = Some(input);
                 Ok(())
@@ -92,7 +92,7 @@ impl<'a> PhysicalStringColumnBuilderProxy<'a> {
 
 impl ColumnBuilderProxy<String> for PhysicalStringColumnBuilderProxy<'_> {
     generic_trait_impl_without_add!(VecT::U64);
-    fn add(&mut self, input: String) -> Result<(), Error> {
+    fn add(&mut self, input: String) -> Result<(), ReadingError> {
         self.commit();
         self.value = Some(self.dict.borrow_mut().add(input).try_into()?);
         Ok(())

@@ -1,7 +1,7 @@
 //! This modules defines the [`TableReader`] trait, which is part of the interface to nmo_logical.
 //!
 
-use crate::{builder_proxy::PhysicalBuilderProxyEnum, error::Error};
+use crate::{builder_proxy::PhysicalBuilderProxyEnum, error::ReadingError};
 
 /// A general interface for reading tables from files.
 ///
@@ -16,5 +16,5 @@ pub trait TableReader: std::fmt::Debug {
     fn read_into_builder_proxies<'a: 'b, 'b>(
         &self,
         builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
-    ) -> Result<(), Error>;
+    ) -> Result<(), ReadingError>;
 }

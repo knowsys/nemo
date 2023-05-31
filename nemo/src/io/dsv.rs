@@ -79,7 +79,7 @@ use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
 use nemo_physical::table_reader::TableReader;
 
 use crate::builder_proxy::LogicalColumnBuilderProxy;
-use crate::error::Error;
+use crate::error::{Error, ReadingError};
 use crate::types::LogicalTypeEnum;
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
@@ -143,7 +143,7 @@ impl DSVReader {
         &self,
         mut builder: Vec<Box<dyn LogicalColumnBuilderProxy<'a, 'b> + 'b>>,
         reader: &mut Reader<R>,
-    ) -> Result<(), nemo_physical::error::Error>
+    ) -> Result<(), ReadingError>
     where
         R: Read,
     {
@@ -178,7 +178,7 @@ impl DSVReader {
         &self,
         physical_builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
         reader: &mut Reader<R>,
-    ) -> Result<(), nemo_physical::error::Error>
+    ) -> Result<(), ReadingError>
     where
         R: Read,
     {
@@ -198,10 +198,10 @@ impl TableReader for DSVReader {
     fn read_into_builder_proxies<'a: 'b, 'b>(
         &self,
         physical_builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
-    ) -> Result<(), nemo_physical::error::Error> {
+    ) -> Result<(), ReadingError> {
         let gz_decoder =
             flate2::read::GzDecoder::new(File::open(self.file.as_path()).map_err(|error| {
-                nemo_physical::error::Error::IOReading {
+                ReadingError::IOReading {
                     error,
                     filename: self
                         .file
