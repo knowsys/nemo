@@ -293,20 +293,24 @@ Boston;United States;4628910
 
     #[test]
     fn csv_with_various_different_constant_and_literal_representations() {
-        let data = "\
-a;b;c;d
+        let data = r#"a;b;c;d
 Boston;United States;Some String;4628910
 <Dresden>;Germany;Another String;1234567
 My Home Town;Some<where >Nice;<https://string.parsing.should/not/change#that>;2
 Trailing Spaces do not belong to the name   ; What about spaces in the beginning though;  what happens to spaces in string parsing?  ;123
-\"\"\"Do String literals work?\"\"\";\"\"\"Even with datatype annotation?\"\"\"^^<http://www.w3.org/2001/XMLSchema#string>;\"\"\"even string literals should just be piped through\"\"\"^^<http://www.w3.org/2001/XMLSchema#string>;456
+"""Do String literals work?""";"""Even with datatype annotation?"""^^<http://www.w3.org/2001/XMLSchema#string>;"""even string literals should just be piped through"""^^<http://www.w3.org/2001/XMLSchema#string>;456
 The next 2 columns are empty;;;789
-";
+"#;
 
         let expected_result = [
             ("Boston", "United States", "Some String", 4628910),
             ("Dresden", "Germany", "Another String", 1234567),
-            ("My Home Town", "\"Some<where >Nice\"", "<https://string.parsing.should/not/change#that>", 2),
+            (
+                "My Home Town",
+                r#""Some<where >Nice""#,
+                "<https://string.parsing.should/not/change#that>",
+                2,
+            ),
             (
                 "Trailing Spaces do not belong to the name",
                 "What about spaces in the beginning though",
@@ -314,12 +318,12 @@ The next 2 columns are empty;;;789
                 123,
             ),
             (
-                "\"Do String literals work?\"",
-                "\"Even with datatype annotation?\"",
-                "\"even string literals should just be piped through\"^^<http://www.w3.org/2001/XMLSchema#string>",
+                r#""Do String literals work?""#,
+                r#""Even with datatype annotation?""#,
+                r#""even string literals should just be piped through"^^<http://www.w3.org/2001/XMLSchema#string>"#,
                 456,
             ),
-            ("The next 2 columns are empty", "\"\"", "", 789),
+            ("The next 2 columns are empty", r#""""#, "", 789),
         ];
 
         let mut rdr = ReaderBuilder::new()
