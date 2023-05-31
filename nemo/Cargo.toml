@@ -1,0 +1,64 @@
+[package]
+name = "nemo"
+version = "0.1.1-dev"
+authors = [
+"Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
+"Lukas Gerlach <lukas.gerlach@tu-dresden.de>",
+"Philipp Hanisch <philipp.hanisch1@tu-dresden.de>",
+"Alex Ivliev <alex.ivliev@tu-dresden.de>",
+"Markus Krötzsch <markus.kroetzsch@tu-dresden.de>",
+"Maximilian Marx <maximilian.marx@tu-dresden.de>"
+]	
+edition = "2021"
+
+[features]
+default = ["timing"]
+# Allows building for web assembly environments
+# Enables the "js" feature of the "getrandom" crate
+# This feature cannot be used together with the "timing" feature, because the "howlong" crate does not support web assembly environments
+js = ["getrandom/js"]
+no-prefixed-string-dictionary = [ "nemo-physical/no-prefixed-string-dictionary" ]
+timing = [ "nemo-physical/timing" ]
+
+[dependencies]
+log = "0.4"
+nom = "7.1.1"
+macros = { path = "../libs/macros" }
+petgraph = "0.6.3"
+rand = "0.8.5"
+csv = "1.1.6"
+thiserror = "1.0"
+flate2 = "1"
+sanitise-file-name = "1.0.0"
+nom_locate = { version = "4.1.0", features = [ "runtime-dispatch-simd" ] }
+getrandom = {version = "0.2.9", default-features = false}
+
+nemo-physical = { path = "../nemo-physical", default-features = false }
+
+[dev-dependencies]
+env_logger = "*"
+assert_fs = "1.0"
+test-log = "0.2"
+quickcheck = "1"
+quickcheck_macros = "1"
+
+# crates needed for benchmarking only
+criterion = { version = "0.4", features = [ "html_reports" ] }
+rand_pcg = "0.3"
+polars = "0.25.1"
+
+[target.'cfg(unix)'.dev-dependencies]
+iai = "0.1" # needs valgrind -> unix only
+
+[[bench]]
+name = "seek"
+harness = false
+
+# iai - based benchmarks, only on unix
+[[bench]]
+name = "seek_iai"
+harness = false
+
+[[bench]]
+name = "operations"
+harness = false
