@@ -4,6 +4,7 @@ members = [
     "nemo",
     "nemo-cli",
     "nemo-physical",
+    "nemo-python",
 ]
 
 [profile.dev]

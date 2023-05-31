@@ -37,3 +37,6 @@ mod table_manager;
 mod util;
 
 pub use nemo_physical::meta;
+
+// TODO: this is a temporary reexport, as long as the datatype mapping is not fully implemented
+pub use nemo_physical::datatypes;
