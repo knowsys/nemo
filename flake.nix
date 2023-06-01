@@ -63,6 +63,25 @@ rec {
               buildAndTestSubdir = "nemo-cli";
             };
 
+            nemo-python = pkgs.python3Packages.buildPythonPackage {
+              pname = "nemo-python";
+              src = ./.;
+              inherit (nemo) version meta;
+
+              cargoDeps = platform.importCargoLock { lockFile = ./Cargo.lock; };
+
+              nativeBuildInputs = with platform; [
+                cargoSetupHook
+                maturinBuildHook
+              ];
+              buildAndTestSubdir = "nemo-python";
+
+              doCheck = false; # no python tests yet
+            };
+
+            python3 = pkgs.python3.withPackages (ps: [ nemo-python ]);
+            python = python3;
+
             default = nemo;
           };
 
