@@ -55,6 +55,12 @@ rec {
                 homepage = "htps://github.com/knowsys/nemo";
                 license = [ pkgs.lib.licenses.asl20 pkgs.lib.licenses.mit ];
               };
+
+              nativeBuildInputs = with platform; [
+                cargoBuildHook
+                cargoCheckHook
+              ];
+              buildAndTestSubdir = "nemo-cli";
             };
 
             default = nemo;
