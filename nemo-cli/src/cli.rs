@@ -102,7 +102,7 @@ impl OutputArgs {
     }
 }
 
-/// Nemo 2 CLI
+/// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
 pub struct CliApp {
