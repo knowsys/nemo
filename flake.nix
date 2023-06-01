@@ -3,7 +3,7 @@ rec {
     "nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
 
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs = {
