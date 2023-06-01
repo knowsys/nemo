@@ -9,13 +9,33 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  build:
-    name: Build using the nix flake
+  build-nemo:
+    name: Build nemo using the nix flake
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - uses: cachix/install-nix-action@v20
+    - uses: cachix/install-nix-action@v21
       with:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
-    - run: nix build
+    - run: nix build .#nemo
+
+  build-python:
+    name: Build nemo-python using the nix flake
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: cachix/install-nix-action@v21
+      with:
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+    - run: nix build .#nemo-python
+    - run: nix flake check
+
+  evaluate:
+    name: Make sure that the nix flake evaluates
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: cachix/install-nix-action@v21
+      with:
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
     - run: nix flake check
