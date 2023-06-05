@@ -28,10 +28,10 @@ Options:
 
 ## Log-Levels
 
-Logging is controlled by the following parameters (in order of decreasing precedence):
+The log-level is set by the following parameters (in order of decreasing precedence):
 
-* `Info`, `Debug`, `Trace`; depending on the count of `-v`
-* `Error` when `-q` is used
+* `info`, `debug`, `trace`; depending on the count of `-v`
+* `error` when `-q` is used
 * value of `--log`
 * value of the `NMO_LOG` environment variable
-* `Warn` otherwise
+* `warn` otherwise
