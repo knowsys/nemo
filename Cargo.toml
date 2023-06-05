@@ -5,6 +5,7 @@ members = [
     "nemo-cli",
     "nemo-physical",
     "nemo-python",
+    "nemo-wasm",
 ]
 
 [profile.dev]

@@ -1353,6 +1353,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nemo-wasm"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "nemo",
+ "nemo-physical",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "nom"
 version = "5.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
