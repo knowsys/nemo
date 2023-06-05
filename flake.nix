@@ -202,3 +202,6 @@ rec {
       };
     };
 }
+# Local Variables:
+# apheleia-formatter: alejandra
+# End:
