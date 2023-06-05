@@ -1,6 +1,6 @@
 # nemo
 
-This library crate provides all required components for the nemo rule engine. Internally it is based on [nemo-physical](../nemo-physical/README.md), which implements the needed physical database operaions.
+This library crate provides all required components for the nemo rule engine. Internally it is based on [nemo-physical](../nemo-physical/README.md), which implements the needed physical database operations.
 
 You can access the functionality of this crate via the `nmo` command line interface ([nemo-cli](../nemo-cli/README.md)) or through various language bindings ([nemo-python](../nemo-python/README.md), [nemo-wasm](../nemo-wasm/README.md)).
 
@@ -14,4 +14,4 @@ Running a nemo `Program` can be roughly structured into three different phases:
 
 - **Output** - this is implemented in the `io` module.
 
-If you just want an easy to use interface, have a look at the `api` module, which provides convinient access to some common operations.
+If you just want an easy to use interface, have a look at the `api` module, which provides convenient access to some common operations.
