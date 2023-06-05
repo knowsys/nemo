@@ -13,6 +13,14 @@ You will need to install [maturin](https://www.maturin.rs/). To try these bindin
 maturin develop
 ```
 
+### Build using **nix**
+
+If you want to run a python session with with the `nmo_python` wheel installed, you can run the following command in the top-level directory of this repository:
+
+```
+nix run .#python
+```
+
 ## Example usage
 ```python
 from nmo_python import load_string, NemoEngine, NemoOutputManager
