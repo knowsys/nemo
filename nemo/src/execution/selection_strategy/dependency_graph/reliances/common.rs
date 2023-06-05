@@ -2,7 +2,7 @@
 
 use crate::util::class_assignment::ClassAssignment;
 
-use super::rules::{GroundAtom, GroundTerm, Term, Variable};
+use super::rules::{Formula, GroundAtom, GroundTerm, Rule, Term, Variable};
 
 #[derive(Debug)]
 pub(super) struct Interpretation {
@@ -16,6 +16,10 @@ impl Interpretation {
 
     pub fn extend(&mut self, other: Interpretation) {
         self.atoms.extend(other.atoms)
+    }
+
+    pub fn atoms(&self) -> &Vec<GroundAtom> {
+        &self.atoms
     }
 }
 
@@ -41,4 +45,24 @@ fn unify_terms(
             Term::Ground(ground_target) => ground_source == ground_target,
         },
     }
+}
+
+fn extend(
+    mapping_domain: &mut Vec<usize>,
+    formula_source: &Formula,
+    formula_target: &Formula,
+    assignment: &VariableAssignment,
+) -> bool {
+    let body_target_start: usize = *mapping_domain.last().unwrap_or_else(|| &0);
+
+    for (index_target, atom_target) in formula_target
+        .atoms()
+        .iter()
+        .enumerate()
+        .skip(body_target_start)
+    {
+        mapping_domain.push(index_target);
+    }
+
+    todo!()
 }

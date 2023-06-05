@@ -61,8 +61,8 @@ pub(super) struct Atom {
 /// Same as an [`Atom`] which only contains [`GroundTerm`]s.
 #[derive(Debug)]
 pub(super) struct GroundAtom {
-    predicate: PredicateId,
-    terms: Vec<GroundTerm>,
+    pub predicate: PredicateId,
+    pub terms: Vec<GroundTerm>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -171,18 +171,22 @@ impl Rule {
     }
 
     fn get_or_add_variable(
-        variable_map: &mut HashMap<model::Variable, VariableId>,
+        variable_map: &mut HashMap<(usize, model::Variable), VariableId>,
         variable: &model::Variable,
+        rule_index: usize,
     ) -> VariableId {
         let count = variable_map.len();
-        *variable_map.entry(variable.clone()).or_insert(count)
+        *variable_map
+            .entry((rule_index, variable.clone()))
+            .or_insert(count)
     }
 
     fn translate_term<'a>(
         constant_list: &mut Vec<model::Term>,
-        variable_map: &mut HashMap<model::Variable, VariableId>,
+        variable_map: &mut HashMap<(usize, model::Variable), VariableId>,
         filter_assignments: &'a HashMap<model::Variable, model::Term>,
         mut model_term: &'a model::Term,
+        rule_index: usize,
     ) -> Term {
         if let model::Term::Variable(model_variable) = model_term {
             if let Some(assigned_constant_term) = filter_assignments.get(model_variable) {
@@ -191,7 +195,7 @@ impl Rule {
         }
 
         if let model::Term::Variable(model_variable) = model_term {
-            let variable_id = Self::get_or_add_variable(variable_map, model_variable);
+            let variable_id = Self::get_or_add_variable(variable_map, model_variable, rule_index);
             match model_variable {
                 model::Variable::Universal(_) => Term::Variable(Variable::Universal(variable_id)),
                 model::Variable::Existential(_) => {
@@ -206,8 +210,9 @@ impl Rule {
 
     fn from_parsed_rule(
         constant_list: &mut Vec<model::Term>,
-        variable_map: &mut HashMap<model::Variable, VariableId>,
+        variable_map: &mut HashMap<(usize, model::Variable), VariableId>,
         rule: &model::Rule,
+        rule_index: usize,
     ) -> Self {
         let mut filter_assignments = HashMap::<model::Variable, model::Term>::new();
 
@@ -235,7 +240,13 @@ impl Rule {
                     .terms()
                     .iter()
                     .map(|t| {
-                        Self::translate_term(constant_list, variable_map, &filter_assignments, t)
+                        Self::translate_term(
+                            constant_list,
+                            variable_map,
+                            &filter_assignments,
+                            t,
+                            rule_index,
+                        )
                     })
                     .collect();
 
@@ -253,7 +264,15 @@ impl Rule {
             let reliance_terms = model_atom
                 .terms()
                 .iter()
-                .map(|t| Self::translate_term(constant_list, variable_map, &filter_assignments, t))
+                .map(|t| {
+                    Self::translate_term(
+                        constant_list,
+                        variable_map,
+                        &filter_assignments,
+                        t,
+                        rule_index,
+                    )
+                })
                 .collect();
 
             head.push(Atom {
@@ -277,11 +296,14 @@ impl Program {
     /// Create a [`Program`] from set list of parsed rules
     pub fn from_parsed_rules(model_rules: &[model::Rule]) -> Self {
         let mut constant_list = Vec::<model::Term>::new();
-        let mut variable_map = HashMap::<model::Variable, VariableId>::new();
+        let mut variable_map = HashMap::<(usize, model::Variable), VariableId>::new();
 
         let rules = model_rules
             .iter()
-            .map(|r| Rule::from_parsed_rule(&mut constant_list, &mut variable_map, r))
+            .enumerate()
+            .map(|(index, rule)| {
+                Rule::from_parsed_rule(&mut constant_list, &mut variable_map, rule, index)
+            })
             .collect();
 
         Self { rules }
