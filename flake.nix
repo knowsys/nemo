@@ -87,7 +87,7 @@ rec {
                 export XDG_CACHE_HOME=$TMPDIR/.cache
 
                 cd $src
-                wasm-pack build --target ${target} --weak-refs --mode=no-install --out-dir=$out/lib/node_modules/${pname} nemo-wasm --frozen
+                wasm-pack build --target ${target} --weak-refs --mode=no-install --out-dir=$out/lib/node_modules/${pname} nemo-wasm
 
                 runHook postBuild
               '';
