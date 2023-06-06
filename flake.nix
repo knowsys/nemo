@@ -186,6 +186,7 @@ rec {
               pkgs.rust-analyzer
               pkgs.cargo-audit
               pkgs.cargo-license
+              pkgs.cargo-tarpaulin
               pkgs.gnuplot
               pkgs.maturin
               pkgs.python3
@@ -193,8 +194,7 @@ rec {
               self.packages."${pkgs.system}".wasm-bindgen-cli
               pkgs.nodejs
             ]
-            ++ (ifNotOn ["aarch64-linux" "aarch64-darwin" "i686-linux"]
-              [pkgs.cargo-tarpaulin])
+            # valgrind is linux-only
             ++ (ifNotOn ["aarch64-darwin" "x86_64-darwin"] [pkgs.valgrind]);
         };
 
