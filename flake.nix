@@ -26,10 +26,11 @@ rec {
 
       overlays.default = final: prev: let
         pkgs = self.packages."${final.system}";
+        lib = self.channels.nixpkgs."${final.system}";
       in {
         inherit (pkgs) nemo nemo-python nemo-wasm wasm-bindgen-cli;
 
-        nodePackages.nemo-wasm = pkgs.nemo-wasm-node;
+        nodePackages = lib.makeExtensible (lib.extends pkgs.nodePackages prev.nodePackages);
       };
 
       outputsBuilder = channels: let
