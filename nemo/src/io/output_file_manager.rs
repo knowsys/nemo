@@ -166,6 +166,10 @@ impl OutputFileManager {
         &self,
         output_predicates: impl Iterator<Item = Identifier>,
     ) -> Result<(), Error> {
+        if self.overwrite {
+            return Ok(());
+        }
+
         for pred in output_predicates {
             let file = self.get_output_file_name(&pred);
             let meta_info = file.metadata();
