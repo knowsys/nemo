@@ -1,7 +1,7 @@
 //! Functionality for implementing self-restraint reliances.
 
 use super::{
-    common::{RelianceImplementation, VariableAssignment},
+    common::{RelianceImplementation, RelianceType, VariableAssignment},
     rules::{Rule, Term},
 };
 
@@ -25,5 +25,17 @@ impl RelianceImplementation for SelfRestraintReliance {
         assignment: &VariableAssignment,
     ) -> super::common::RelianceCheckResult {
         todo!()
+    }
+
+    fn formula_source(rule: &Rule) -> &super::rules::Formula {
+        rule.head()
+    }
+
+    fn formula_target(rule: &Rule) -> &super::rules::Formula {
+        rule.head()
+    }
+
+    fn reliance_type() -> RelianceType {
+        RelianceType::Restraint
     }
 }

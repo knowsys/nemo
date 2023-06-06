@@ -1,7 +1,9 @@
 //! Functionality for implementing restraint reliances.
 
+use crate::util::class_assignment::ClassValue;
+
 use super::{
-    common::{RelianceCheckResult, RelianceImplementation, VariableAssignment},
+    common::{RelianceCheckResult, RelianceImplementation, VariableAssignment, RelianceType},
     rules::{Atom, Rule, Term, Variable},
 };
 
@@ -11,7 +13,7 @@ pub(super) struct RestraintReliance {}
 impl RestraintReliance {
     fn term_assigned_to_null(term: &Term, assignment: &VariableAssignment) -> bool {
         if let Term::Variable(variable_target) = term {
-            if let Some(assigned_target) = assignment.value(variable_target) {
+            if let ClassValue::Assigned(assigned_target) = assignment.value(variable_target) {
                 return assigned_target.is_null();
             }
         }
@@ -23,7 +25,7 @@ impl RestraintReliance {
         for atom in atoms {
             for term in &atom.terms {
                 if let Term::Variable(variable) = term {
-                    if let Some(assigned_value) = assignment.value(variable) {
+                    if let ClassValue::Assigned(assigned_value) = assignment.value(variable) {
                         if assigned_value.is_null() {
                             return true;
                         }
@@ -36,12 +38,15 @@ impl RestraintReliance {
     }
 
     /// ????
-    fn check_existential_variable(atoms: &[Atom], assignment: &VariableAssignment) -> Option<usize> {
+    fn check_existential_variable(
+        atoms: &[Atom],
+        assignment: &VariableAssignment,
+    ) -> Option<usize> {
         for (atom_index, atom) in atoms.iter().enumerate() {
             for term in &atom.terms {
                 if let Term::Variable(variable) = term {
-                    if variable.is_existential() && assignment.value(variable).is_none() {
-                        return Some(atom_index)
+                    if variable.is_existential() && !assignment.value(variable).is_assigned() {
+                        return Some(atom_index);
                     }
                 }
             }
@@ -77,9 +82,21 @@ impl RelianceImplementation for RestraintReliance {
             return RelianceCheckResult::Abort;
         }
 
-        let unmapped_existential_count = Self::count_existential_variable(&head_target_notmapped.atoms(), assignment);
-        if unmapped_existential_count > 0
+        // let unmapped_existential_count =
+        //     Self::count_existential_variable(&head_target_notmapped.atoms(), assignment);
 
         todo!()
+    }
+
+    fn formula_source(rule: &Rule) -> &super::rules::Formula {
+        rule.head()
+    }
+
+    fn formula_target(rule: &Rule) -> &super::rules::Formula {
+        rule.head()
+    }
+
+    fn reliance_type() -> RelianceType {
+        RelianceType::Restraint
     }
 }

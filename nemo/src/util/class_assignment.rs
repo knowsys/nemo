@@ -35,21 +35,38 @@ where
     }
 }
 
+///
+#[derive(Debug)]
+pub enum ClassValue<'a, ElementType, ValueType> {
+    /// Element is assigned to the following value.
+    Assigned(&'a ValueType),
+    /// Element is not assigned to any value
+    /// and is member of the equivalence class with this representative.
+    Unassigned(&'a ElementType),
+}
+
+impl<'a, ElementType, ValueType> ClassValue<'a, ElementType, ValueType> {
+    pub fn is_assigned(&self) -> bool {
+        matches!(self, ClassValue::Assigned(_))
+    }
+}
+
 impl<ElementType, ValueType> ClassAssignment<ElementType, ValueType>
 where
     ElementType: Hash + Eq + Clone,
     ValueType: Eq + Clone,
 {
-    /// Return the underlying equivalence relation.
-    pub fn relation(&self) -> &EquivalenceRelation<ElementType> {
-        &self.relation
-    }
-
     /// Return the value assigned to the equivalence class of the given element.
-    pub fn value(&self, element: &ElementType) -> Option<&ValueType> {
-        let class_id = self.relation.class(element)?;
-
-        self.assignment.get(&class_id)
+    pub fn value<'a>(&'a self, element: &'a ElementType) -> ClassValue<'a, ElementType, ValueType> {
+        if let Some(class_id) = self.relation.class(element) {
+            if let Some(assigned_value) = self.assignment.get(&class_id) {
+                return ClassValue::Assigned(assigned_value);
+            } else {
+                return ClassValue::Unassigned(self.relation.representative(class_id));
+            }
+        } else {
+            return ClassValue::Unassigned(element);
+        }
     }
 
     /// Assign a value to a given equivalence class.

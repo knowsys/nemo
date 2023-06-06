@@ -3,7 +3,10 @@
 
 use std::collections::HashMap;
 
-use crate::model;
+use crate::{
+    model::{self, Identifier},
+    util::class_assignment::ClassValue,
+};
 
 use super::common::{Interpretation, VariableAssignment};
 
@@ -14,7 +17,7 @@ pub(super) type VariableId = usize;
 /// the computation of reliances we just use this numeric label instead.
 pub(super) type ConstantId = usize;
 /// Unique identifier for a predicate symbol
-pub(super) type PredicateId = model::Identifier;
+pub(super) type PredicateId = Identifier;
 
 /// Represents a (universal or existential) variable.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -24,12 +27,13 @@ pub(super) enum Variable {
 }
 
 impl Variable {
-    pub fn is_universal(&self) -> bool {
-        matches!(self, Variable::Universal(_))
-    }
-
     pub fn is_existential(&self) -> bool {
         matches!(self, Variable::Existential(_))
+    }
+
+    #[allow(dead_code)]
+    pub fn is_universal(&self) -> bool {
+        matches!(self, Variable::Universal(_))
     }
 }
 
@@ -57,19 +61,34 @@ pub(super) enum Term {
     Ground(GroundTerm),
 }
 
-impl Term {
-    pub fn is_existential(&self) -> bool {
-        matches!(self, Term::Variable(Variable::Existential(_)))
+impl From<Variable> for Term {
+    fn from(value: Variable) -> Self {
+        Term::Variable(value)
     }
+}
 
+impl From<GroundTerm> for Term {
+    fn from(value: GroundTerm) -> Self {
+        Term::Ground(value)
+    }
+}
+
+impl Term {
     pub fn is_universal(&self) -> bool {
         matches!(self, Term::Variable(Variable::Universal(_)))
     }
 
+    #[allow(dead_code)]
+    pub fn is_existential(&self) -> bool {
+        matches!(self, Term::Variable(Variable::Existential(_)))
+    }
+
+    #[allow(dead_code)]
     pub fn is_ground(&self) -> bool {
         matches!(self, Term::Ground(_))
     }
 
+    #[allow(dead_code)]
     pub fn is_null(&self) -> bool {
         matches!(self, Term::Ground(GroundTerm::Null(_)))
     }
@@ -83,6 +102,14 @@ pub(super) struct Atom {
 }
 
 impl Atom {
+    #[cfg(test)]
+    pub fn new(predicate: &str, terms: Vec<Term>) -> Self {
+        Self {
+            predicate: Identifier(predicate.to_string()),
+            terms,
+        }
+    }
+
     pub fn compatible(&self, other: &Self) -> bool {
         self.predicate == other.predicate && self.terms.len() == other.terms.len()
     }
@@ -90,12 +117,20 @@ impl Atom {
 
 /// Same as an [`Atom`] which only contains [`GroundTerm`]s.
 #[derive(Debug, Clone)]
-pub(super) struct GroundAtom {
+pub(super) struct Fact {
     pub predicate: PredicateId,
     pub terms: Vec<GroundTerm>,
 }
 
-impl GroundAtom {
+impl Fact {
+    #[cfg(test)]
+    pub fn new(predicate: &str, terms: Vec<GroundTerm>) -> Self {
+        Self {
+            predicate: Identifier(predicate.to_string()),
+            terms,
+        }
+    }
+
     pub fn compatible(&self, other: &Atom) -> bool {
         self.predicate == other.predicate && self.terms.len() == other.terms.len()
     }
@@ -168,10 +203,11 @@ impl Formula {
                                 return term;
                             }
 
-                            if let Some(assigned) = assignment.value(&variable) {
-                                Term::Ground(*assigned)
-                            } else {
-                                term
+                            match assignment.value(&variable) {
+                                ClassValue::Assigned(value) => Term::Ground(*value),
+                                ClassValue::Unassigned(representative) => {
+                                    Term::Ground(GroundTerm::GroundedVariable(*representative))
+                                }
                             }
                         }
                         Term::Ground(_) => term,
@@ -184,21 +220,20 @@ impl Formula {
     }
 
     pub fn apply_grounding(&self, assignment: &VariableAssignment) -> Interpretation {
-        let mut new_atoms = Vec::<GroundAtom>::with_capacity(self.len());
+        let mut new_atoms = Vec::<Fact>::with_capacity(self.len());
         for atom in self.atoms() {
-            new_atoms.push(GroundAtom {
+            new_atoms.push(Fact {
                 predicate: atom.predicate.clone(),
                 terms: atom
                     .terms
                     .iter()
                     .map(|&term| match term {
-                        Term::Variable(variable) => {
-                            if let Some(assigned) = assignment.value(&variable) {
-                                *assigned
-                            } else {
-                                unreachable!("If the assignment is a grounding then every variable must be assigned to a ground term.");
+                        Term::Variable(variable) => match assignment.value(&variable) {
+                            ClassValue::Assigned(value) => *value,
+                            ClassValue::Unassigned(representative) => {
+                                GroundTerm::GroundedVariable(*representative)
                             }
-                        }
+                        },
                         Term::Ground(ground_term) => ground_term,
                     })
                     .collect(),
@@ -392,6 +427,7 @@ impl Rule {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct Program {
     rules: Vec<Rule>,
 }
@@ -416,12 +452,4 @@ impl Program {
     pub fn rules(&self) -> &Vec<Rule> {
         &self.rules
     }
-}
-
-/// Pair of rules for which a reliance should be computed.
-pub(super) struct RulePair {
-    /// Source node of the reliance.
-    pub source: Rule,
-    /// Target node of the reliance.
-    pub target: Rule,
 }

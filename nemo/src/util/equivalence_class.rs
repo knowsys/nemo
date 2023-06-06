@@ -17,6 +17,7 @@ where
 
     element_to_class: HashMap<ElementId, ClassId>,
     class_to_elements: HashMap<ClassId, HashSet<ElementId>>,
+    class_to_representative: HashMap<ClassId, ElementId>,
 
     current_class: ClassId,
 }
@@ -30,6 +31,7 @@ where
             elements: Default::default(),
             element_to_class: Default::default(),
             class_to_elements: Default::default(),
+            class_to_representative: Default::default(),
             current_class: Default::default(),
         }
     }
@@ -90,6 +92,7 @@ where
 
         let new_class = self.new_class();
         self.assign_class(element_id, new_class);
+        self.class_to_representative.insert(new_class, element_id);
 
         (element_id, new_class)
     }
@@ -125,6 +128,17 @@ where
                 .get(&element_id)
                 .expect("Every registered element must be assigned to a class"),
         )
+    }
+
+    /// Return a representative of a given equivalence class
+    ///
+    /// # Panics
+    /// Panics if the provided class does not exist.
+    pub fn representative(&self, class: ClassId) -> &TypeElements {
+        &self.elements[*self
+            .class_to_representative
+            .get(&class)
+            .expect("Function assumes that class exists.")]
     }
 
     /// Merges `class_b` into `class_a`.

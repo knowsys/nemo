@@ -5,6 +5,7 @@ use std::hash::Hash;
 use std::{collections::HashMap, fmt::Debug};
 
 use petgraph::graph::NodeIndex;
+use petgraph::visit::EdgeRef;
 use petgraph::{EdgeType, Graph};
 
 /// Graph with labeled nodes.
@@ -60,9 +61,68 @@ where
         self.graph.add_edge(node_from, node_to, edge_label);
     }
 
+    /// Return whether the graph contains a (directed) edge between the given nodes.
+    pub fn contains_edge(&self, from: &NodeLabel, to: &NodeLabel) -> bool {
+        let from_index = if let Some(index) = self.get_node(from) {
+            index
+        } else {
+            return false;
+        };
+
+        let to_index = if let Some(index) = self.get_node(to) {
+            index
+        } else {
+            return false;
+        };
+
+        self.graph.contains_edge(from_index, to_index)
+    }
+
+    /// Return whether the graph contains a (directed) edge between the given nodes
+    /// with the supplied edge label.
+    pub fn contains_labeled_edge(
+        &self,
+        from: &NodeLabel,
+        to: &NodeLabel,
+        label: &EdgeLabel,
+    ) -> bool {
+        let from_index = if let Some(index) = self.get_node(from) {
+            index
+        } else {
+            return false;
+        };
+
+        let to_index = if let Some(index) = self.get_node(to) {
+            index
+        } else {
+            return false;
+        };
+
+        self.graph
+            .edges_connecting(from_index, to_index)
+            .any(|e| e.weight() == label)
+    }
+
     /// Return a reference to the underlying [`Graph`].
     pub fn graph(&self) -> &Graph<NodeLabel, EdgeLabel, Type> {
         &self.graph
+    }
+
+    /// Return an iterator over all the edges in the graph.
+    /// Each item is a 3-tuple containing the source node, target node and the edge label 
+    /// in that order.
+    pub fn edges(&self) -> impl Iterator<Item = (&NodeLabel, &NodeLabel, &EdgeLabel)> {
+        self.graph.edge_references().map(|e| {
+            (
+                self.graph
+                    .node_weight(e.source())
+                    .expect("Every connected node must exist."),
+                self.graph
+                    .node_weight(e.target())
+                    .expect("Every connected node must exist."),
+                e.weight(),
+            )
+        })
     }
 
     /// Remove every edge that connects a node to itself.

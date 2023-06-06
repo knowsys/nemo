@@ -1,11 +1,14 @@
 //! Functionality for implementing positive reliances.
 
-use crate::execution::selection_strategy::dependency_graph::reliances::{
-    rules::AssignmentRestriction, satisfy::is_satisfiable,
+use crate::{
+    execution::selection_strategy::dependency_graph::reliances::{
+        rules::AssignmentRestriction, satisfy::is_satisfiable,
+    },
+    util::class_assignment::ClassValue,
 };
 
 use super::{
-    common::{RelianceCheckResult, RelianceImplementation, VariableAssignment},
+    common::{RelianceCheckResult, RelianceImplementation, RelianceType, VariableAssignment},
     rules::{Atom, Rule, Term},
 };
 
@@ -14,7 +17,7 @@ pub(super) struct PositiveReliance {}
 impl PositiveReliance {
     fn term_assigned_to_null(term: &Term, assignment: &VariableAssignment) -> bool {
         if let Term::Variable(variable_target) = term {
-            if let Some(assigned_target) = assignment.value(variable_target) {
+            if let ClassValue::Assigned(assigned_target) = assignment.value(variable_target) {
                 return assigned_target.is_null();
             }
         }
@@ -26,7 +29,7 @@ impl PositiveReliance {
         for atom in atoms {
             for term in &atom.terms {
                 if let Term::Variable(variable) = term {
-                    if let Some(assigned_value) = assignment.value(variable) {
+                    if let ClassValue::Assigned(assigned_value) = assignment.value(variable) {
                         if assigned_value.is_null() {
                             return true;
                         }
@@ -106,5 +109,17 @@ impl RelianceImplementation for PositiveReliance {
         }
 
         RelianceCheckResult::Success
+    }
+
+    fn formula_source(rule: &Rule) -> &super::rules::Formula {
+        rule.head()
+    }
+
+    fn formula_target(rule: &Rule) -> &super::rules::Formula {
+        rule.body()
+    }
+
+    fn reliance_type() -> RelianceType {
+        RelianceType::Positive
     }
 }
