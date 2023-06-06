@@ -65,9 +65,7 @@ impl SatisfySearchSpace {
         let mut options = Vec::<ExistentialMapping>::new();
 
         for ground_atom in interpretation.atoms() {
-            if atom.predicate != ground_atom.predicate
-                || atom.terms.len() != ground_atom.terms.len()
-            {
+            if !ground_atom.compatible(atom) {
                 continue;
             }
 

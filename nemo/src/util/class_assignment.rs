@@ -8,7 +8,7 @@ use std::{
 };
 
 /// Represents a partial function from an equivalence class to some target type.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct ClassAssignment<ElementType, ValueType>
 where
     ElementType: Hash + Eq + Clone,
@@ -20,6 +20,19 @@ where
     /// If a class is not contained in this map
     /// then it is intepreted as "unassigned".
     assignment: HashMap<ClassId, ValueType>,
+}
+
+impl<ElementType, ValueType> Default for ClassAssignment<ElementType, ValueType>
+where
+    ElementType: Hash + Eq + Clone,
+    ValueType: Eq + Clone,
+{
+    fn default() -> Self {
+        Self {
+            relation: Default::default(),
+            assignment: Default::default(),
+        }
+    }
 }
 
 impl<ElementType, ValueType> ClassAssignment<ElementType, ValueType>

@@ -2,7 +2,8 @@
 //! https://iccl.inf.tu-dresden.de/web/Inproceedings3338
 
 mod common;
+mod positive;
+mod restraint;
 mod rules;
 mod satisfy;
-
-pub mod positive;
+mod self_restraint;

@@ -8,7 +8,7 @@ pub type ElementId = usize;
 pub type ClassId = usize;
 
 /// Represents an equivalence relation over a set of elements.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct EquivalenceRelation<TypeElements>
 where
     TypeElements: Eq + Clone,
@@ -19,6 +19,20 @@ where
     class_to_elements: HashMap<ClassId, HashSet<ElementId>>,
 
     current_class: ClassId,
+}
+
+impl<TypeElements> Default for EquivalenceRelation<TypeElements>
+where
+    TypeElements: Eq + Clone,
+{
+    fn default() -> Self {
+        Self {
+            elements: Default::default(),
+            element_to_class: Default::default(),
+            class_to_elements: Default::default(),
+            current_class: Default::default(),
+        }
+    }
 }
 
 impl<TypeElements> EquivalenceRelation<TypeElements>

@@ -44,6 +44,12 @@ pub(super) enum GroundTerm {
     Null(VariableId),
 }
 
+impl GroundTerm {
+    pub fn is_null(&self) -> bool {
+        matches!(self, GroundTerm::Null(_))
+    }
+}
+
 /// Term encoding used for computing reliances.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(super) enum Term {
@@ -51,18 +57,48 @@ pub(super) enum Term {
     Ground(GroundTerm),
 }
 
+impl Term {
+    pub fn is_existential(&self) -> bool {
+        matches!(self, Term::Variable(Variable::Existential(_)))
+    }
+
+    pub fn is_universal(&self) -> bool {
+        matches!(self, Term::Variable(Variable::Universal(_)))
+    }
+
+    pub fn is_ground(&self) -> bool {
+        matches!(self, Term::Ground(_))
+    }
+
+    pub fn is_null(&self) -> bool {
+        matches!(self, Term::Ground(GroundTerm::Null(_)))
+    }
+}
+
 /// Atom encoding used for computing reliances.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct Atom {
     pub predicate: PredicateId,
     pub terms: Vec<Term>,
 }
 
+impl Atom {
+    pub fn compatible(&self, other: &Self) -> bool {
+        self.predicate == other.predicate && self.terms.len() == other.terms.len()
+    }
+}
+
 /// Same as an [`Atom`] which only contains [`GroundTerm`]s.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct GroundAtom {
     pub predicate: PredicateId,
     pub terms: Vec<GroundTerm>,
+}
+
+impl GroundAtom {
+    pub fn compatible(&self, other: &Atom) -> bool {
+        self.predicate == other.predicate && self.terms.len() == other.terms.len()
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -87,9 +123,34 @@ impl Formula {
         &self.0
     }
 
+    pub fn split(&self, mapping: &Vec<usize>) -> (Formula, Formula) {
+        debug_assert!(mapping.is_sorted());
+
+        let mut atoms_in = Vec::<Atom>::with_capacity(mapping.len());
+        let mut atoms_out = Vec::<Atom>::with_capacity(self.0.len());
+
+        let mut current_mapping_index = 0;
+        for (atom_index, atom) in self.atoms().iter().enumerate() {
+            let mapping_value = if current_mapping_index < mapping.len() {
+                mapping[current_mapping_index]
+            } else {
+                self.atoms().len()
+            };
+
+            if atom_index == mapping_value {
+                atoms_in.push(atom.clone());
+                current_mapping_index += 1;
+            } else {
+                atoms_out.push(atom.clone());
+            }
+        }
+
+        (Formula::new(atoms_in), Formula::new(atoms_out))
+    }
+
     pub fn apply_assignment(
         &self,
-        assignment: &mut VariableAssignment,
+        assignment: &VariableAssignment,
         restriction: AssignmentRestriction,
     ) -> Self {
         let mut new_atoms = Vec::<Atom>::with_capacity(self.len());
@@ -146,6 +207,27 @@ impl Formula {
 
         Interpretation::new(new_atoms)
     }
+
+    pub fn apply_restricted(&self) -> Formula {
+        let mut new_atoms = Vec::<Atom>::with_capacity(self.len());
+        for atom in self.atoms() {
+            new_atoms.push(Atom {
+                predicate: atom.predicate.clone(),
+                terms: atom
+                    .terms
+                    .iter()
+                    .map(|&term| match term {
+                        Term::Variable(Variable::Existential(existential_variable)) => {
+                            Term::Ground(GroundTerm::Null(existential_variable))
+                        }
+                        _ => term,
+                    })
+                    .collect(),
+            });
+        }
+
+        Self(new_atoms)
+    }
 }
 
 /// Rule encoding used for computing reliances.
@@ -153,6 +235,8 @@ impl Formula {
 pub(super) struct Rule {
     body: Formula,
     head: Formula,
+
+    is_existential: bool,
 }
 
 impl Rule {
@@ -259,9 +343,11 @@ impl Rule {
             }
         }
 
+        let mut is_existential = false;
+
         for model_atom in rule.head() {
             let reliance_predicate = model_atom.predicate();
-            let reliance_terms = model_atom
+            let reliance_terms: Vec<Term> = model_atom
                 .terms()
                 .iter()
                 .map(|t| {
@@ -275,6 +361,11 @@ impl Rule {
                 })
                 .collect();
 
+            is_existential |= reliance_terms
+                .iter()
+                .position(|t| matches!(t, Term::Variable(Variable::Existential(_))))
+                .is_some();
+
             head.push(Atom {
                 terms: reliance_terms,
                 predicate: reliance_predicate,
@@ -284,7 +375,20 @@ impl Rule {
         Self {
             body: Formula(body),
             head: Formula(head),
+            is_existential,
         }
+    }
+
+    pub fn is_existential(&self) -> bool {
+        self.is_existential
+    }
+
+    pub fn body(&self) -> &Formula {
+        &self.body
+    }
+
+    pub fn head(&self) -> &Formula {
+        &self.head
     }
 }
 
@@ -307,6 +411,10 @@ impl Program {
             .collect();
 
         Self { rules }
+    }
+
+    pub fn rules(&self) -> &Vec<Rule> {
+        &self.rules
     }
 }
 
