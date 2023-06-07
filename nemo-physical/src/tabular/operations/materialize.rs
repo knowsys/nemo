@@ -10,6 +10,10 @@ use crate::{
 /// Given a TrieScan iterator, materialize its content into a trie
 /// For the last `cut` layers only checks the existence of a value and does not materialize it fully.
 pub fn materialize_up_to(trie_scan: &mut impl TrieScan, cut: usize) -> Option<Trie> {
+    if trie_scan.column_types().is_empty() {
+        return None;
+    }
+
     let num_columns = trie_scan.column_types().len() - cut;
 
     let mut data_column_builders: Vec<_> = trie_scan
