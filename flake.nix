@@ -103,7 +103,7 @@ rec {
 
             meta = {
               inherit description;
-              homepage = "htps://github.com/knowsys/nemo";
+              homepage = "https://github.com/knowsys/nemo";
               license = [pkgs.lib.licenses.asl20 pkgs.lib.licenses.mit];
             };
 
