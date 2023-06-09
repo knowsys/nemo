@@ -224,7 +224,13 @@ impl RelianceGraphConstructor {
                         }
                         finish_set.insert(index_target);
 
-                        let rule_target = &self.program.rules()[index_target];
+                        let mut rule_target = &self.program.rules()[index_target];
+                        let rule_target_renamed: Rule;
+
+                        if index_source == index_target {
+                            rule_target_renamed = rule_target.clone().name_apart_variables();
+                            rule_target = &rule_target_renamed;
+                        }
 
                         let assignment = VariableAssignment::default();
                         let mut mapping_domain = Vec::<usize>::default();
@@ -238,7 +244,7 @@ impl RelianceGraphConstructor {
                             reliance_graph.add_edge(
                                 index_source,
                                 index_target,
-                                RelianceType::Positive,
+                                Implementation::reliance_type(),
                             );
                         }
                     }
@@ -507,18 +513,18 @@ mod test {
 
     // #[test]
     // fn restraint_simple_1() {
-    //     let rule_a = "h(x, v) :- b(x)";
-    //     let rule_b = "h(x, y) :- a(x, y)";
-    //     let expected = vec![(0, 1, RelianceType::Restraint)];
+    //     let rule_a = "h(?x, !v) :- b(?x).";
+    //     let rule_b = "h(?x, ?y) :- a(?x, ?y).";
+    //     let expected = vec![(1, 0, RelianceType::Restraint)];
 
     //     test_graph(rule_a, rule_b, expected);
     // }
 
     // #[test]
     // fn restraint_simple_2() {
-    //     let rule_a = "h(x, v, w), b(y, w, const) :- a(x, y)";
-    //     let rule_b = "h(x, y, w), b(x, w, const) :- c(x, y)";
-    //     let expected = vec![(0, 1, RelianceType::Restraint)];
+    //     let rule_a = "h(?x, !v, !w), b(?y, !w, const) :- a(?x, ?y).";
+    //     let rule_b = "h(?x, ?y, !w), b(?x, !w, const) :- c(?x, ?y).";
+    //     let expected = vec![(1, 0, RelianceType::Restraint)];
 
     //     test_graph(rule_a, rule_b, expected);
     // }
@@ -528,10 +534,313 @@ mod test {
     //     // Even though a(x, x), c(x, x) and h(x, x, n, n) will be present after applying rule_a,
     //     // rule_b is still applicable because there is no h(x, x, x, x)
 
-    //     let rule_a = "h(x, y, v, v), h(y, x, v, v) :- a(x, y)";
-    //     let rule_b = "h(x, y, x, y), c(x, x), a(x, x) :- c(x, y)";
-    //     let expected = vec![(0, 1, RelianceType::Restraint)];
+    //     let rule_a = "h(?x, ?y, !v, !v), h(?y, ?x, !v, !v) :- a(?x, ?y).";
+    //     let rule_b = "h(?x, ?y, ?x, ?y), c(?x, ?x), a(?x, ?x) :- c(?x, ?y).";
+    //     let expected = vec![(1, 0, RelianceType::Restraint)];
 
     //     test_graph(rule_a, rule_b, expected);
+    // }
+
+    // #[test]
+    // fn restraint_psi1ibm_phi1phi2() {
+    //     // rule_b is not applicable because the preconditions of rule_a and rule_b
+    //     // as well as the result of applying rule_a satisfies rule_b
+
+    //     let rule_a = "h(?x, ?y, ?y, !v):- a(?x, ?y).";
+    //     let rule_b = "h(?x, ?x, ?y, !v), c(!w, !w), a(?x, ?x) :- c(?x, ?y).";
+    //     let expected = vec![];
+
+    //     test_graph(rule_a, rule_b, expected);
+    // }
+
+    // #[test]
+    // fn restraint_psi1ibm_phi1phi2psi22() {
+    //     // Using one of the h atoms in the mapping forces ?x = ?y.
+    //     // If exactly one of the h atoms is used then the missing h(x, x, x, x) atom has to be supplied
+    //     // after applying rule_a.
+    //     // But then, this atom together with the preconditions for rule_a and rule_n satisfy rule_b.
+    //     // Hence, both h atoms have to be mapped.
+
+    //     // TODO: What about the r atom ???
+
+    //     let rule_a = "r(!v), h(?x, ?y, !v, !v), h(y, x, !v, !v) :- a(?x, ?y).";
+    //     let rule_b = "r(?x), h(?x, ?y, ?x, ?y), c(?x, ?x), a(?x, ?x) :- c(?x, ?y).";
+    //     let expected = vec![(1, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule_a, rule_b, expected);
+    // }
+
+    // #[test]
+    // fn restraint_psi1ibm_phi2() {
+    //     // There can only be an alternative match if ?z = ?y in rule_b.
+    //     // But then it would be satisfied.
+
+    //     let rule_a = "a(?x, !v, !v) :- b(x).";
+    //     let rule_b = "a(?x, ?z, ?y) :- a(?x, ?y, ?z).";
+    //     let expected = vec![];
+
+    //     test_graph(rule_a, rule_b, expected);
+    // }
+
+    // #[test]
+    // fn restraint_psi2iam_phi2() {
+    //     // Alternative match forces ?x = ?y in rule_a
+    //     // But then rule_a would be satisifed
+
+    //     let rule_a = "b(?y, ?x, !v) :- b(?x, ?y, ?z).";
+    //     let rule_b = "b(?x, ?x, ?x) :- a(?x).";
+    //     let expected = vec![];
+
+    //     test_graph(rule_a, rule_b, expected);
+    // }
+
+    // #[test]
+    // fn restraint_null_1() {
+    //     // Universal variable ?x in rule_a would be assigned to the
+    //     // null resulting from the existential variable !v in rule_b
+
+    //     let rule_a = "h(?x, !v, !w) :- b(?x).";
+    //     let rule_b = "h(!v, ?x, ?y) :- a(?x, ?y).";
+    //     let expected = vec![];
+
+    //     test_graph(rule_a, rule_b, expected);
+    // }
+
+    // #[test]
+    // fn restraint_null_2() {
+    //     // Universal variable ?y in rule_a would be assigned to the
+    //     // null resulting from the existential variable !v in rule_b
+
+    //     let rule_a = "h(?x, ?y, !w) :- a(?x, ?y).";
+    //     let rule_b = "h(?x, !v, !w) :- b(?x).";
+    //     let expected = vec![];
+
+    //     test_graph(rule_a, rule_b, expected);
+    // }
+
+    // #[test]
+    // fn restraint_null_3() {
+    //     // Existential variable !w in rule_a is assigned to the nulls
+    //     // resulting from the existentials !v and !w in rule_b at the same time
+
+    //     // However, because these are multi-piece rules there should be a self-restraint for both of them
+
+    //     let rule_a = "q(?x), h(?x, !w, !w) :- a(?x, ?y).";
+    //     let rule_b = "r(?x), h(?y, !v, !w) :- b(?x).";
+    //     let expected = vec![
+    //         (0, 0, RelianceType::Restraint),
+    //         (1, 1, RelianceType::Restraint),
+    //     ];
+
+    //     test_graph(rule_a, rule_b, expected);
+    // }
+
+    // #[test]
+    // fn restraint_null_4() {
+    //     // Unifiying the h atoms forces the existential variable !w in rule_a
+    //     // to be assigned to the null of the existential !v in rule_b.
+    //     // But since rule_b does not produce a b-atom that null would have to be present
+    //     // before the application of rule_b, which is impossible
+
+    //     let rule_a = "h(?x, !v, !w), b(?y, !w) :- a(?x, ?y).";
+    //     let rule_b = "h(?x, !v, !v) :- c(?x).";
+    //     let expected = vec![];
+
+    //     test_graph(rule_a, rule_b, expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_im() {
+    //     // TODO: ??
+
+    //     let rule = "r(?x, ?x, !w), r(?x, !v, !w), r(?x, !v, !t) :- b(?x).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_markus() {
+    //     // TODO: ??
+
+    //     let rule = "r(?x, ?x, !w), r(?x, !v, !w), a(!v) :- b(?x).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_markus_extended() {
+    //     // TODO: ??
+
+    //     let rule = "d(!w, !q), c(!v, !t), r(?x, ?x, !w), r(?x, !v, !w), a(!v) :- b(?x).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_multi_piece() {
+    //     // Existential rules consisting of multiple head pieces
+    //     // (i.e. there is a partition of the head atoms such that no existential variable is shared)
+    //     // always lead to a self-restraint
+
+    //     let rule = "h(?x, !v), r(?x) :- b(?x).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_twice() {
+    //     // Self-restraints from multiple applications of the same rule
+    //     // First rule application with d(1, 2)
+    //     // Second rule application with d(1, n(v))
+    //     // Alternative Match: n(v) -> n(v), n(w_1) -> n(w_2)
+
+    //     let rule = "e(?x, !v, !w), e(?x, ?y, !v) :- d(?x, ?y).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_1() {
+    //     // Impossible to have a restraint within one rule application (no valid mapping from one q to the other)
+    //     // Not possible to have a restraint from two rule applications
+
+    //     let rule = "q(?x, !v), q(!v, ?x) :- p(?x, ?y).";
+    //     let expected = vec![];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_2() {
+    //     let rule = "q(!v) :- p(?x).";
+    //     let expected = vec![];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_3() {
+    //     let rule = "q(?x, !v) :- p(?x).";
+    //     let expected = vec![];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_4() {
+    //     let rule = "q(?x, !v), r(!v) :- p(?x).";
+    //     let expected = vec![];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_5() {
+    //     // No restraint for one rule application (if !v -> ?x then the first q atom cannot be mapped)
+    //     // Restraint when applying this rule multiple times:
+    //     // n(v_1) -> n(v_1); n(w_1) -> n(w_2)
+
+    //     let rule = "q(?x, !v), q(!v, !w) :- p(?x, ?y).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_6() {
+    //     // Restraint since this is a mult-piece rule
+
+    //     let rule = "q(!v, ?x), q(?x, !w) :- p(?x).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_7() {
+    //     // !v maps to ?x
+    //     // Also this is a multi-piece rule
+
+    //     let rule = "q(!v, ?x), q(?x, ?y) :- p(?x, ?y).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_8() {
+    //     // Single rule application: Not possible since there is no way to remap !v
+    //     // Multiple rule applications:
+    //     // First: p(1, 1)
+    //     // Second: p(1, 2)
+
+    //     let rule = "q(?x, !v), q(?y, !v) :- p(?x, ?y).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_9() {
+    //     // Cannot produce restraint in one application since it does not have repeated predicates in the head
+    //     // Multiple rule application also don't work
+
+    //     let rule = "q(?x, !v, !v), r(!v, !w) :- p(?x).";
+    //     let expected = vec![];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_10() {
+    //     // !w -> !u or the other way around
+
+    //     let rule = "q(?x, !u, !v), q(?x, !w, !v), r(!u, !v, !w) :- p(?x).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_11() {
+    //     // Single rule application: !w -> !u; !v -> !v; !u -> !u
+    //     // Multiple rule applications:
+    //     // Use the same atom mapping as above
+    //     // First rule application: p(1, 2, 2)
+    //     // Seocnd rule application: p(1, 2, 3)
+
+    //     let rule = "q(?x, !u, !v), q(?y, !v, !u), q(?z, !v, !w) :- p(?x, ?y, ?z).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_12() {
+    //     // Single rule application: Not possible since there is no way to remap !u
+    //     // Multiple rule applications:
+    //     // First: p(1, 1, 1)
+    //     // Second: p(1, 2, 3)
+
+    //     let rule = "q(?x, !u), q(?y, !u), q(?z, !u) :- p(?x, ?y, ?z).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
+    // }
+
+    // #[test]
+    // fn self_restraint_larry_13() {
+    //     // Single rule application: Not possible since there is no way to remap !v
+    //     // Multiple rule applications: Not possible
+
+    //     let rule = "q(?x, ?y, !v), q(?x, !v, ?y) :- p(?x, ?y).";
+    //     let expected = vec![(0, 0, RelianceType::Restraint)];
+
+    //     test_graph(rule, "", expected);
     // }
 }

@@ -11,7 +11,7 @@ use crate::{
 use super::common::{Interpretation, VariableAssignment};
 
 /// Unique identifier for a variable.
-pub(super) type VariableId = usize;
+pub(super) type VariableId = isize;
 /// Unique identifier for a constant
 /// Since the actual value (and type of value) is not relevant for
 /// the computation of reliances we just use this numeric label instead.
@@ -29,6 +29,16 @@ pub(super) enum Variable {
 impl Variable {
     pub fn is_existential(&self) -> bool {
         matches!(self, Variable::Existential(_))
+    }
+
+    pub fn name_apart(self) -> Self {
+        let mut result = self.clone();
+
+        match &mut result {
+            Variable::Universal(id) | Variable::Existential(id) => *id *= -1,
+        }
+
+        result
     }
 
     #[allow(dead_code)]
@@ -142,7 +152,7 @@ pub(super) enum AssignmentRestriction {
     Universal,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct Formula(Vec<Atom>);
 
 impl Formula {
@@ -263,10 +273,22 @@ impl Formula {
 
         Self(new_atoms)
     }
+
+    pub fn name_apart_variables(mut self) -> Self {
+        for atom in &mut self.0 {
+            for term in &mut atom.terms {
+                if let Term::Variable(variable) = term {
+                    variable.name_apart();
+                }
+            }
+        }
+
+        self
+    }
 }
 
 /// Rule encoding used for computing reliances.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct Rule {
     body: Formula,
     head: Formula,
@@ -297,7 +319,7 @@ impl Rule {
         let count = variable_map.len();
         *variable_map
             .entry((rule_index, variable.clone()))
-            .or_insert(count)
+            .or_insert(count as VariableId)
     }
 
     fn translate_term<'a>(
@@ -424,6 +446,14 @@ impl Rule {
 
     pub fn head(&self) -> &Formula {
         &self.head
+    }
+
+    pub fn name_apart_variables(self) -> Self {
+        Self {
+            body: self.body.name_apart_variables(),
+            head: self.head.name_apart_variables(),
+            is_existential: self.is_existential,
+        }
     }
 }
 
