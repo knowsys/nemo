@@ -158,8 +158,7 @@ impl RelianceGraphConstructor {
         rule_source: &Rule,
         rule_target: &Rule,
     ) -> bool {
-        let body_target_start = *mapping_domain.last().unwrap_or_else(|| &0);
-        return true;
+        let body_target_start = mapping_domain.last().map_or_else(|| 0, |&s| s + 1);
 
         for (index_target, atom_target) in Implementation::formula_target(rule_target)
             .atoms()
@@ -169,7 +168,10 @@ impl RelianceGraphConstructor {
         {
             mapping_domain.push(index_target);
 
-            for atom_source in Implementation::formula_source(rule_source).atoms() {
+            for atom_source in Implementation::formula_source(rule_source)
+                .apply_restricted()
+                .atoms()
+            {
                 if let Some(extended_assignment) =
                     Self::extend_assignment::<Implementation>(atom_source, atom_target, assignment)
                 {
@@ -180,7 +182,7 @@ impl RelianceGraphConstructor {
                         &extended_assignment,
                     ) {
                         RelianceCheckResult::Abort => {
-                            return false;
+                            continue;
                         }
                         RelianceCheckResult::Success => {
                             return true;
@@ -340,7 +342,7 @@ mod test {
     fn positive_null_1() {
         // Unifcation forces a null to be present before applying rule_a
 
-        let rule_a = "h(?x, !y) :- b(?x).";
+        let rule_a = "h(?x, !v) :- b(?x).";
         let rule_b = "c(?y) :- h(?y, ?y).";
         let expected = vec![];
 
@@ -349,6 +351,17 @@ mod test {
 
     #[test]
     fn positive_null_2() {
+        // Unifcation forces a null to be present before applying rule_a
+
+        let rule_a = "h(!v, !x) :- b(?x).";
+        let rule_b = "c(?y) :- h(?y, ?y).";
+        let expected = vec![];
+
+        test_graph(rule_a, rule_b, expected);
+    }
+
+    #[test]
+    fn positive_null_3() {
         // There is no way to obtain c(null) from applying rule_a
 
         let rule_a = "h(?x, !v) :- b(?x).";
@@ -383,7 +396,7 @@ mod test {
 
     #[test]
     fn positive_psi1ia_ext() {
-        // To prove the reliance it is neccessary to extend the mapping to include the h(x, x) atom
+        // To prove the reliance, it is neccessary to extend the mapping to include the h(x, x) atom
         // Otherwise rule_a will be satisfied
 
         let rule_a = "h(?x, ?x), h(?x, !v), c(!v, ?x) :- c(?x, ?x), b(?x).";
@@ -431,10 +444,12 @@ mod test {
     #[test]
     fn positive_psi2ib_phi1() {
         // Precondition of rule_a satisfies rule_b
+        // Hence there is no reliance from rule_a to rule_b
+        // However, there is still one from rule_b to rule_a
 
         let rule_a = "b(?x, ?y):- a(?x, ?y).";
         let rule_b = "a(?x, !v) :- b(?x, ?y).";
-        let expected = vec![];
+        let expected = vec![(1, 0, RelianceType::Positive)];
 
         test_graph(rule_a, rule_b, expected);
     }
@@ -474,7 +489,7 @@ mod test {
     fn positive_unification_1() {
         let rule_a = "h(?x, ?x, const) :- b(?x).";
         let rule_b = "c(!w) :- h(?y, other, ?y).";
-        let expected = vec![(0, 1, RelianceType::Positive)];
+        let expected = vec![];
 
         test_graph(rule_a, rule_b, expected);
     }

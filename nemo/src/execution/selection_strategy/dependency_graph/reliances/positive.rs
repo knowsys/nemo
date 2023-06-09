@@ -75,7 +75,7 @@ impl RelianceImplementation for PositiveReliance {
             .extend(body_target_notmapped.apply_grounding(assignment));
 
         let interpretation_after_source = interpretation_before_source.clone().extend(
-            rule_target
+            rule_source
                 .head()
                 .apply_restricted()
                 .apply_grounding(assignment),
