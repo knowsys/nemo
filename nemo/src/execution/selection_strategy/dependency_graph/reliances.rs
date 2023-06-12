@@ -5,6 +5,7 @@ pub mod common;
 
 mod positive;
 mod restraint;
+mod rule_hash;
 mod rules;
 mod satisfy;
 mod self_restraint;

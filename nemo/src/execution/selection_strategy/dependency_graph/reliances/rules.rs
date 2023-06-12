@@ -48,7 +48,7 @@ impl Variable {
 }
 
 /// Representation of non-variable term.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) enum GroundTerm {
     /// "Normal" constant that may occur within a rule.
     Constant(ConstantId),
@@ -65,7 +65,7 @@ impl GroundTerm {
 }
 
 /// Term encoding used for computing reliances.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub(super) enum Term {
     Variable(Variable),
     Ground(GroundTerm),
@@ -105,7 +105,7 @@ impl Term {
 }
 
 /// Atom encoding used for computing reliances.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub(super) struct Atom {
     pub predicate: PredicateId,
     pub terms: Vec<Term>,
@@ -152,7 +152,7 @@ pub(super) enum AssignmentRestriction {
     Universal,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub(super) struct Formula(Vec<Atom>);
 
 impl Formula {
@@ -288,7 +288,7 @@ impl Formula {
 }
 
 /// Rule encoding used for computing reliances.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub(super) struct Rule {
     body: Formula,
     head: Formula,
