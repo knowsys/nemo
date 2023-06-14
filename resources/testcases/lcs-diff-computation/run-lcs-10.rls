@@ -12,11 +12,6 @@
 
 %%% Input data: two documents, A and B, that consist of a sequence of letters (or lines) to diff over:
 
-@declare docA(any, any).
-@declare docB(any, any).
-@declare s(any, any).
-@declare sLetter(any, any).
-
 % @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 % These files can be created with the python script call
@@ -26,8 +21,8 @@
 @source s[2]: load-csv("lcs10-succ.csv") .
 @source sLetter[2]: load-csv("lcs10-letters.csv") .
 
-docAend(?X) :- docA(?X,ENDOFA) .
-docBend(?X) :- docB(?X,ENDOFB) .
+docAend(?X) :- docA(?X,"ENDOFA") .
+docBend(?X) :- docB(?X,"ENDOFB") .
 
 infDocA(?P,?C) :- docA(?P,?C).
 infDocB(?P,?C) :- docB(?P,?C).

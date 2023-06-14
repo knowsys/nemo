@@ -1,5 +1,3 @@
-@declare data(any, any).
-
 @source data[2]: load-csv("sources/data.csv").
 
 result(?X, ?X) :- data(?X, ?X) .
