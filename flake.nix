@@ -45,16 +45,14 @@ rec {
           rustc = toolchain;
         };
       in rec {
-        apps = rec {
-          nemo = utils.lib.mkApp {
-            drv = packages.nemo;
-            exePath = "/bin/nmo";
+        packages = let
+          version = "0.1.1-dev";
+          meta = {
+            inherit description;
+            homepage = "https://github.com/knowsys/nemo";
+            license = [pkgs.lib.licenses.asl20 pkgs.lib.licenses.mit];
           };
 
-          default = nemo;
-        };
-
-        packages = let
           buildWasm = target: {
             pname,
             src,
@@ -96,16 +94,11 @@ rec {
         in rec {
           nemo = platform.buildRustPackage {
             pname = "nemo";
-            version = "0.1.1-dev";
             src = ./.;
+            meta = meta // {mainProgram = "nmo";};
+            inherit version;
 
             cargoLock.lockFile = ./Cargo.lock;
-
-            meta = {
-              inherit description;
-              homepage = "https://github.com/knowsys/nemo";
-              license = [pkgs.lib.licenses.asl20 pkgs.lib.licenses.mit];
-            };
 
             nativeBuildInputs = with platform; [
               cargoBuildHook
@@ -117,7 +110,7 @@ rec {
           nemo-python = pkgs.python3Packages.buildPythonPackage {
             pname = "nemo-python";
             src = ./.;
-            inherit (nemo) version meta;
+            inherit version meta;
 
             cargoDeps = platform.importCargoLock {lockFile = ./Cargo.lock;};
 
@@ -133,12 +126,12 @@ rec {
           nemo-wasm-node = buildWasm "nodejs" {
             pname = "nemo-wasm";
             src = ./.;
-            inherit (nemo) version meta;
+            inherit version meta;
           };
           nemo-wasm-bundler = buildWasm "bundler" {
             pname = "nemo-wasm";
             src = ./.;
-            inherit (nemo) version meta;
+            inherit version meta;
           };
           nemo-wasm = nemo-wasm-bundler;
 
