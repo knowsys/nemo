@@ -273,6 +273,59 @@ impl PredicatePosition {
 /// Graph that represents a prioritization between rules.
 pub type PositionGraph = LabeledGraph<PredicatePosition, (), Undirected>;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum TypeRequirement {
+    Hard(LogicalTypeEnum),
+    Soft(LogicalTypeEnum),
+    None,
+}
+
+impl TypeRequirement {
+    fn max_opt(self, other: Self) -> Option<Self> {
+        Some(match self.partial_cmp(&other)? {
+            std::cmp::Ordering::Less => other,
+            std::cmp::Ordering::Equal => self,
+            std::cmp::Ordering::Greater => self,
+        })
+    }
+}
+
+impl From<TypeRequirement> for Option<LogicalTypeEnum> {
+    fn from(source: TypeRequirement) -> Self {
+        match source {
+            TypeRequirement::Hard(t) => Some(t),
+            TypeRequirement::Soft(t) => Some(t),
+            TypeRequirement::None => None,
+        }
+    }
+}
+
+impl PartialOrd for TypeRequirement {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self {
+            Self::Hard(t1) => {
+                if let Self::Hard(t2) = other {
+                    (t1 == t2).then_some(std::cmp::Ordering::Equal)
+                } else {
+                    Some(std::cmp::Ordering::Greater)
+                }
+            }
+            Self::Soft(t1) => match other {
+                Self::Hard(_) => Some(std::cmp::Ordering::Less),
+                Self::Soft(t2) => (t1 == t2).then_some(std::cmp::Ordering::Equal),
+                Self::None => Some(std::cmp::Ordering::Greater),
+            },
+            Self::None => {
+                if matches!(other, Self::None) {
+                    Some(std::cmp::Ordering::Equal)
+                } else {
+                    Some(std::cmp::Ordering::Less)
+                }
+            }
+        }
+    }
+}
+
 /// Contains useful information about the
 #[derive(Debug)]
 pub struct ProgramAnalysis {
@@ -392,56 +445,103 @@ impl ChaseProgram {
         position_graph: &PositionGraph,
         all_predicates: &HashSet<(Identifier, usize)>,
     ) -> Result<HashMap<Identifier, Vec<LogicalTypeEnum>>, TypeError> {
-        // Type declarations are known in the start: Explicit declarations and default types for data sources as fallback
-        let starting_predicate_types = {
-            let pred_decls = self.parsed_predicate_declarations();
-            let source_decls = self
-                .sources()
-                .map(|((pred, arity), source)| (pred.clone(), vec![source.default_type(); arity]))
-                .collect::<HashMap<_, _>>();
-
-            let mut starting_predicate_types = source_decls;
-            starting_predicate_types.extend(pred_decls); // NOTE: pred_decls may intentianally overwrite source_decls
-            starting_predicate_types
-        };
-
-        // Initialize predicate types with the user provided values
-        let mut predicate_types: HashMap<Identifier, Vec<Option<LogicalTypeEnum>>> =
-            starting_predicate_types
+        let mut predicate_types: HashMap<Identifier, Vec<TypeRequirement>> = {
+            let pred_decls = self
+                .parsed_predicate_declarations()
                 .iter()
-                .map(|(predicate, types)| {
+                .map(|(pred, types)| {
                     (
-                        predicate.clone(),
-                        types.clone().into_iter().map(Some).collect(),
+                        pred.clone(),
+                        types
+                            .iter()
+                            .cloned()
+                            .map(TypeRequirement::Hard)
+                            .collect::<Vec<_>>(),
                     )
                 })
-                .collect();
+                .collect::<HashMap<_, _>>();
 
-        // Set all predicates that did not receive explicit type information to `None` which represents unknown.
-        for (predicate, arity) in all_predicates {
-            predicate_types
-                .entry(predicate.clone())
-                .or_insert(vec![None; *arity]);
-        }
+            let source_decls = self
+                .sources()
+                .map(|((pred, arity), source)| {
+                    (
+                        pred.clone(),
+                        vec![TypeRequirement::Soft(source.default_type()); arity],
+                    )
+                })
+                .collect::<HashMap<_, _>>();
 
-        // If there is an existential variable at some potion,
-        // it will be assigned to the type `LogicalTypeEnum::Any`
-        for rule in self.rules() {
-            for atom in rule.head() {
-                for (term_index, term) in atom.terms().iter().enumerate() {
-                    if let Term::Variable(Variable::Existential(_)) = term {
-                        let types = predicate_types
-                            .get_mut(&atom.predicate())
-                            .expect("All predicates should have been assigned a type");
-                        types[term_index] = Some(LogicalTypeEnum::Any);
-                    }
-                }
+            let existential_decls = self
+                .rules()
+                .iter()
+                .flat_map(|r| r.head())
+                .map(|a| {
+                    (
+                        a.predicate(),
+                        a.terms()
+                            .iter()
+                            .map(|t| {
+                                if matches!(t, Term::Variable(Variable::Existential(_))) {
+                                    TypeRequirement::Hard(LogicalTypeEnum::Any)
+                                } else {
+                                    TypeRequirement::None
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+
+            let mut predicate_types = source_decls;
+            predicate_types.extend(pred_decls);
+            for (pred, exis_types) in existential_decls {
+                // keep track of error that might occur on conflicting type changes
+                let mut types_not_in_conflict: Result<_, _> = Ok(());
+
+                let pred_clone = pred.clone();
+
+                predicate_types
+                    .entry(pred)
+                    .and_modify(|ts| {
+                        ts.iter_mut()
+                            .zip(&exis_types)
+                            .enumerate()
+                            .for_each(|(index, (t, et))| match t.max_opt(*et) {
+                                Some(res) => {
+                                    *t = res;
+                                }
+                                None => {
+                                    types_not_in_conflict = Err(TypeError::InvalidRuleConflictingTypes(
+                                        pred_clone.0.clone(),
+                                        index,
+                                        Option::<LogicalTypeEnum>::from(*t).expect(
+                                            "if the type requirement is none, there is a maximum",
+                                        ),
+                                        Option::<LogicalTypeEnum>::from(*et).expect(
+                                            "if the type requirement is none, there is a maximum",
+                                        ),
+                                    ));
+                                }
+                            })
+                    })
+                    .or_insert(exis_types);
+
+                // abort if there is a type error
+                types_not_in_conflict?
             }
-        }
+            for (predicate, arity) in all_predicates {
+                predicate_types
+                    .entry(predicate.clone())
+                    .or_insert(vec![TypeRequirement::None; *arity]);
+            }
+            predicate_types
+        };
+
+        let initial_types = predicate_types.clone();
 
         // Propagate each type from its declaration
-        for (predicate, types) in starting_predicate_types {
-            for (position, logical_type) in types.into_iter().enumerate() {
+        for (predicate, types) in initial_types {
+            for (position, logical_type_requirement) in types.into_iter().enumerate() {
                 let predicate_position = PredicatePosition::new(predicate.clone(), position);
 
                 if let Some(start_node) = position_graph.get_node(&predicate_position) {
@@ -453,22 +553,24 @@ impl ChaseProgram {
                             .node_weight(next_node)
                             .expect("The DFS iterator guarantees that every node exists.");
 
-                        let current_type_opt = &mut predicate_types
+                        let current_type_requirement = &mut predicate_types
                             .get_mut(&next_position.predicate)
                             .expect("The initialization step inserted every known predicate")
                             [next_position.position];
 
-                        if let Some(current_type) = current_type_opt {
-                            if *current_type != logical_type {
-                                return Err(TypeError::InvalidRuleConflictingTypes(
-                                    next_position.predicate.0.clone(),
-                                    next_position.position + 1,
-                                    *current_type,
-                                    logical_type,
-                                ));
-                            }
+                        if let Some(max) =
+                            current_type_requirement.max_opt(logical_type_requirement)
+                        {
+                            *current_type_requirement = max;
                         } else {
-                            *current_type_opt = Some(logical_type);
+                            return Err(TypeError::InvalidRuleConflictingTypes(
+                                next_position.predicate.0.clone(),
+                                next_position.position + 1,
+                                Option::<LogicalTypeEnum>::from(*current_type_requirement)
+                                    .expect("if the type requirement is none, there is a maximum"),
+                                Option::<LogicalTypeEnum>::from(logical_type_requirement)
+                                    .expect("if the type requirement is none, there is a maximum"),
+                            ));
                         }
                     }
                 }
@@ -481,7 +583,10 @@ impl ChaseProgram {
             .map(|(predicate, types)| {
                 (
                     predicate,
-                    types.into_iter().map(|t| t.unwrap_or_default()).collect(),
+                    types
+                        .into_iter()
+                        .map(|t| Option::<LogicalTypeEnum>::from(t).unwrap_or_default())
+                        .collect(),
                 )
             })
             .collect();
