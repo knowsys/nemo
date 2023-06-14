@@ -55,6 +55,8 @@ pub struct QualifiedPredicateName {
     pub(crate) identifier: Identifier,
     /// The arity
     pub(crate) arity: Option<usize>,
+    /// The logical types
+    pub(crate) logical_types: Option<Vec<LogicalTypeEnum>>,
 }
 
 impl QualifiedPredicateName {
@@ -64,14 +66,20 @@ impl QualifiedPredicateName {
         Self {
             identifier,
             arity: None,
+            logical_types: None,
         }
     }
 
     /// Construct a new qualified predicate name with the given arity.
-    pub fn with_arity(identifier: Identifier, arity: usize) -> Self {
+    pub fn with_arity_and_opt_types(
+        identifier: Identifier,
+        arity: usize,
+        logical_types: Option<Vec<LogicalTypeEnum>>,
+    ) -> Self {
         Self {
             identifier,
             arity: Some(arity),
+            logical_types,
         }
     }
 }
@@ -695,12 +703,7 @@ impl Program {
             }
             OutputPredicateSelection::SelectedPredicates(predicates) => predicates
                 .iter()
-                .map(
-                    |QualifiedPredicateName {
-                         identifier,
-                         arity: _,
-                     }| identifier,
-                )
+                .map(|QualifiedPredicateName { identifier, .. }| identifier)
                 .cloned()
                 .collect(),
         };
@@ -715,10 +718,17 @@ impl Program {
     }
 
     /// Return all data sources in the program.
-    pub fn sources(&self) -> impl Iterator<Item = ((&Identifier, usize), &DataSource)> {
-        self.sources
-            .iter()
-            .map(|source| ((&source.predicate, source.arity), &source.source))
+    pub fn sources(
+        &self,
+    ) -> impl Iterator<Item = (&Identifier, usize, &Vec<LogicalTypeEnum>, &DataSource)> {
+        self.sources.iter().map(|source| {
+            (
+                &source.predicate,
+                source.arity,
+                &source.input_types,
+                &source.source,
+            )
+        })
     }
 
     /// Look up a given prefix.
@@ -876,15 +886,22 @@ impl Debug for DataSource {
 pub struct DataSourceDeclaration {
     pub(crate) predicate: Identifier,
     pub(crate) arity: usize,
+    pub(crate) input_types: Vec<LogicalTypeEnum>,
     pub(crate) source: DataSource,
 }
 
 impl DataSourceDeclaration {
     /// Construct a new data source declaration.
-    pub fn new(predicate: Identifier, arity: usize, source: DataSource) -> Self {
+    pub fn new(
+        predicate: Identifier,
+        arity: usize,
+        input_types: Option<Vec<LogicalTypeEnum>>,
+        source: DataSource,
+    ) -> Self {
         Self {
             predicate,
             arity,
+            input_types: input_types.unwrap_or(vec![source.default_type(); arity]),
             source,
         }
     }
@@ -893,6 +910,7 @@ impl DataSourceDeclaration {
     pub(crate) fn new_validated(
         predicate: Identifier,
         arity: usize,
+        input_types: Option<Vec<LogicalTypeEnum>>,
         source: DataSource,
     ) -> Result<Self, ParseError> {
         match source {
@@ -923,10 +941,16 @@ impl DataSourceDeclaration {
             }
         };
 
-        Ok(Self {
-            predicate,
-            arity,
-            source,
-        })
+        if let Some(input_types) = input_types.clone() {
+            if input_types.len() != arity {
+                return Err(ParseError::SourceInvalidTypeArity(
+                    predicate.name(),
+                    arity,
+                    input_types.len(),
+                ));
+            }
+        }
+
+        Ok(Self::new(predicate, arity, input_types, source))
     }
 }

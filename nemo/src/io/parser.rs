@@ -8,7 +8,7 @@ use nom::{
     character::complete::{alpha1, digit1, multispace1, none_of, satisfy},
     combinator::{all_consuming, cut, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list1},
-    sequence::{delimited, pair, preceded, terminated, tuple},
+    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
     Err,
 };
 
@@ -411,10 +411,11 @@ impl<'a> RuleParser<'a> {
             "parse_source",
             map_error(
                 move |input| {
-                    let (remainder, (predicate, arity)) = preceded(
-                        terminated(token("@source"), cut(multispace_or_comment1)),
-                        cut(self.parse_qualified_predicate_name()),
-                    )(input)?;
+                    let (remainder, (predicate, (arity, input_types))) =
+                        preceded(
+                            terminated(token("@source"), cut(multispace_or_comment1)),
+                            cut(self.parse_qualified_predicate_name()),
+                        )(input)?;
 
                     let (remainder, datasource) = cut(delimited(
                         delimited(multispace_or_comment0, token(":"), multispace_or_comment1),
@@ -472,6 +473,7 @@ impl<'a> RuleParser<'a> {
                     let source = DataSourceDeclaration::new_validated(
                         predicate,
                         arity,
+                        input_types,
                         datasource.map_err(|e| Err::Failure(e.at(input)))?,
                     )
                     .map_err(|e| Err::Failure(e.at(input)))?;
@@ -498,8 +500,12 @@ impl<'a> RuleParser<'a> {
                     cut(alt((
                         map_res::<_, _, _, _, Error, _, _>(
                             self.parse_qualified_predicate_name(),
-                            |(identifier, arity)| {
-                                Ok(QualifiedPredicateName::with_arity(identifier, arity))
+                            |(identifier, (arity, logical_types))| {
+                                Ok(QualifiedPredicateName::with_arity_and_opt_types(
+                                    identifier,
+                                    arity,
+                                    logical_types,
+                                ))
                             },
                         ),
                         map_res::<_, _, _, _, Error, _, _>(
@@ -600,17 +606,26 @@ impl<'a> RuleParser<'a> {
     /// predicate name together with its arity.
     fn parse_qualified_predicate_name(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, usize)> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, (usize, Option<Vec<LogicalTypeEnum>>))>
+    {
         traced(
             "parse_qualified_predicate_name",
             pair(
                 self.parse_predicate_name(),
                 preceded(
                     multispace_or_comment0,
-                    delimited(
-                        token("["),
-                        cut(map_res(digit1, |number: Span<'a>| number.parse::<usize>())),
-                        cut(token("]")),
+                    separated_pair(
+                        delimited(
+                            token("["),
+                            cut(map_res(digit1, |number: Span<'a>| number.parse::<usize>())),
+                            cut(token("]")),
+                        ),
+                        multispace_or_comment0,
+                        opt(delimited(
+                            self.parse_open_parenthesis(),
+                            cut(separated_list1(self.parse_comma(), self.parse_type_name())),
+                            cut(self.parse_close_parenthesis()),
+                        )),
                     ),
                 ),
             ),
@@ -1010,7 +1025,8 @@ mod test {
         let file = "drinks.csv";
         let predicate_name = "drink";
         let predicate = Identifier(predicate_name.to_string());
-        let source = DataSourceDeclaration::new(predicate, 1, DataSource::csv_file(file).unwrap());
+        let source =
+            DataSourceDeclaration::new(predicate, 1, None, DataSource::csv_file(file).unwrap());
         // rulewerk accepts all of these variants
         let input = format!(r#"@source {predicate_name}[1]: load-csv("{file}") ."#);
         assert_parse!(parser.parse_source(), &input, source);
@@ -1019,6 +1035,10 @@ mod test {
         let input = format!(r#"@source {predicate_name}[1] : load-csv ( "{file}" ) ."#);
         assert_parse!(parser.parse_source(), &input, source);
         let input = format!(r#"@source {predicate_name} [1] : load-csv ( "{file}" ) ."#);
+        assert_parse!(parser.parse_source(), &input, source);
+        let input = format!(r#"@source {predicate_name}[1](string): load-csv ( "{file}" ) ."#);
+        assert_parse!(parser.parse_source(), &input, source);
+        let input = format!(r#"@source {predicate_name} [1] (string) : load-csv ( "{file}" ) ."#);
         assert_parse!(parser.parse_source(), &input, source);
     }
 
@@ -1271,7 +1291,7 @@ mod test {
         assert_parse!(
             parser.parse_output(),
             "@output J2[3] .",
-            QualifiedPredicateName::with_arity(j2.clone(), 3)
+            QualifiedPredicateName::with_arity_and_opt_types(j2.clone(), 3, None)
         );
     }
 

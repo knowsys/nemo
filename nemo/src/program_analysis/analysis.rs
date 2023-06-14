@@ -360,7 +360,7 @@ impl ChaseProgram {
         let mut result = HashSet::<(Identifier, usize)>::new();
 
         // Predicates in source statments
-        for ((predicate, arity), _) in self.sources() {
+        for (predicate, arity, _, _) in self.sources() {
             result.insert((predicate.clone(), arity));
         }
 
@@ -454,7 +454,7 @@ impl ChaseProgram {
                         pred.clone(),
                         types
                             .iter()
-                            .cloned()
+                            .copied()
                             .map(TypeRequirement::Hard)
                             .collect::<Vec<_>>(),
                     )
@@ -463,10 +463,14 @@ impl ChaseProgram {
 
             let source_decls = self
                 .sources()
-                .map(|((pred, arity), source)| {
+                .map(|(pred, _, input_types, _)| {
                     (
                         pred.clone(),
-                        vec![TypeRequirement::Soft(source.default_type()); arity],
+                        input_types
+                            .iter()
+                            .copied()
+                            .map(TypeRequirement::Soft)
+                            .collect::<Vec<_>>(),
                     )
                 })
                 .collect::<HashMap<_, _>>();
@@ -598,7 +602,7 @@ impl ChaseProgram {
     pub fn check_for_unsupported_features(&self) -> Result<(), RuleAnalysisError> {
         let mut arities = HashMap::new();
 
-        for ((predicate, arity), _) in self.sources() {
+        for (predicate, arity, _, _) in self.sources() {
             arities.insert(predicate.clone(), arity);
         }
 

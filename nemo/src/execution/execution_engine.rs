@@ -13,6 +13,7 @@ use crate::{
     model::{chase_model::ChaseProgram, DataSource, Identifier, Program},
     program_analysis::analysis::ProgramAnalysis,
     table_manager::TableManager,
+    types::LogicalTypeEnum,
 };
 
 use super::{rule_execution::RuleExecution, selection_strategy::strategy::RuleSelectionStrategy};
@@ -111,7 +112,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the data source declarations
-        for ((predicate, _), source) in program.sources() {
+        for (predicate, _, input_types, source) in program.sources() {
             let new_source = match source {
                 DataSource::DsvFile { file, delimiter } => {
                     let logical_types = analysis
@@ -119,7 +120,19 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         .get(predicate)
                         .cloned()
                         .expect("All predicates should have types by now.");
-                    let reader = DSVReader::dsv(*file.clone(), *delimiter, logical_types);
+
+                    let reader_types = logical_types
+                        .iter()
+                        .zip(input_types)
+                        .map(|(lt, it)| {
+                            if *lt == LogicalTypeEnum::Any && *it == LogicalTypeEnum::String {
+                                LogicalTypeEnum::String
+                            } else {
+                                *lt
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    let reader = DSVReader::dsv(*file.clone(), *delimiter, reader_types);
 
                     TableSource::FileReader(Box::new(reader))
                 }

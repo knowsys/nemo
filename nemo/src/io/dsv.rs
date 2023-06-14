@@ -303,27 +303,27 @@ The next 2 columns are empty;;;789
 "#;
 
         let expected_result = [
-            ("Boston", "United States", "Some String", 4628910),
-            ("Dresden", "Germany", "Another String", 1234567),
+            ("Boston", "United States", r#""Some String""#, 4628910),
+            ("Dresden", "Germany", r#""Another String""#, 1234567),
             (
                 "My Home Town",
                 r#""Some<where >Nice""#,
-                "<https://string.parsing.should/not/change#that>",
+                r#""<https://string.parsing.should/not/change#that>""#,
                 2,
             ),
             (
                 "Trailing Spaces do not belong to the name",
                 "What about spaces in the beginning though",
-                "  what happens to spaces in string parsing?  ",
+                r#""  what happens to spaces in string parsing?  ""#,
                 123,
             ),
             (
                 r#""Do String literals work?""#,
                 r#""Even with datatype annotation?""#,
-                r#""even string literals should just be piped through"^^<http://www.w3.org/2001/XMLSchema#string>"#,
+                r#"""even string literals should just be piped through"^^<http://www.w3.org/2001/XMLSchema#string>""#,
                 456,
             ),
-            ("The next 2 columns are empty", r#""""#, "", 789),
+            ("The next 2 columns are empty", r#""""#, r#""""#, 789),
         ];
 
         let mut rdr = ReaderBuilder::new()

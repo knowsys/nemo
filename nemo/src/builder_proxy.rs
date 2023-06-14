@@ -90,7 +90,9 @@ impl ColumnBuilderProxy<String> for LogicalStringColumnBuilderProxy<'_, '_> {
     fn add(&mut self, input: String) -> Result<(), ReadingError> {
         self.commit();
         // NOTE: we just pipe the string through as is, in particular we do not parse potential RDF terms
-        self.physical.add(input)
+        // NOTE: we store the string in the same format as it would be stored in an any column;
+        // this is important since right now we simetimes use the LogicalStringColumnBuilderProxy to directly write data that is known to only be strings into an any column and not only into string columns
+        self.physical.add(format!("\"{input}\""))
     }
 }
 

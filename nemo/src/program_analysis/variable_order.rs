@@ -477,7 +477,7 @@ pub(super) fn build_preferable_variable_orders(
             .collect();
         let source_preds: HashSet<(Identifier, usize)> = program
             .sources()
-            .map(|((p, a), _)| (p.clone(), a))
+            .map(|(p, a, _, _)| (p.clone(), a))
             .collect();
 
         let preds = fact_preds.union(&source_preds);
@@ -947,26 +947,31 @@ mod test {
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),
                     predicates[1].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[2].0.clone(),
                     predicates[2].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[3].0.clone(),
                     predicates[3].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[4].0.clone(),
                     predicates[4].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[6].0.clone(),
                     predicates[6].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
             ],
@@ -1301,36 +1306,43 @@ mod test {
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),
                     predicates[1].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[2].0.clone(),
                     predicates[2].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[3].0.clone(),
                     predicates[3].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[4].0.clone(),
                     predicates[4].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[6].0.clone(),
                     predicates[6].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[8].0.clone(),
                     predicates[8].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[10].0.clone(),
                     predicates[10].1,
+                    None,
                     DataSource::csv_file("").unwrap(),
                 ),
             ],

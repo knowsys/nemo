@@ -23,7 +23,7 @@ macro_rules! count {
 macro_rules! generate_logical_type_enum {
     ($(($variant_name:ident, $string_repr: literal)),+) => {
         /// An enum capturing the logical type names and funtionality related to parsing and translating into and from physical types
-        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+        #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
         pub enum LogicalTypeEnum {
             $(
                 /// $variant_name
@@ -134,16 +134,16 @@ impl LogicalTypeEnum {
             }
             Self::String => {
                 match gt {
-                    Term::StringLiteral(s) => DataValueT::String(s),
+                    Term::StringLiteral(s) => DataValueT::String(format!("\"{s}\"")),
                     // TODO: is it correct to support language strings here omitting the language info?
                     Term::RdfLiteral(RdfLiteral::LanguageString { value, .. }) => {
-                        DataValueT::String(value)
+                        DataValueT::String(format!("\"{value}\""))
                     }
                     Term::RdfLiteral(RdfLiteral::DatatypeValue {
                         ref value,
                         ref datatype,
                     }) => match datatype.as_str() {
-                        XSD_STRING => DataValueT::String(value.to_string()),
+                        XSD_STRING => DataValueT::String(format!("\"{value}\"")),
                         _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
                     },
                     _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),

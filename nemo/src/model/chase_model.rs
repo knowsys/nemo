@@ -261,12 +261,7 @@ impl ChaseProgram {
             }
             OutputPredicateSelection::SelectedPredicates(predicates) => predicates
                 .iter()
-                .map(
-                    |QualifiedPredicateName {
-                         identifier,
-                         arity: _,
-                     }| identifier,
-                )
+                .map(|QualifiedPredicateName { identifier, .. }| identifier)
                 .cloned()
                 .collect(),
         };
@@ -281,10 +276,17 @@ impl ChaseProgram {
     }
 
     /// Return all data sources in the program.
-    pub fn sources(&self) -> impl Iterator<Item = ((&Identifier, usize), &DataSource)> {
-        self.sources
-            .iter()
-            .map(|source| ((&source.predicate, source.arity), &source.source))
+    pub fn sources(
+        &self,
+    ) -> impl Iterator<Item = (&Identifier, usize, &Vec<LogicalTypeEnum>, &DataSource)> {
+        self.sources.iter().map(|source| {
+            (
+                &source.predicate,
+                source.arity,
+                &source.input_types,
+                &source.source,
+            )
+        })
     }
 
     /// Look up a given prefix.
@@ -315,8 +317,13 @@ impl From<Program> for ChaseProgram {
             value.prefixes().clone(),
             value
                 .sources()
-                .map(|((predicate, arity), source)| {
-                    DataSourceDeclaration::new(predicate.clone(), arity, source.clone())
+                .map(|(predicate, arity, input_types, source)| {
+                    DataSourceDeclaration::new(
+                        predicate.clone(),
+                        arity,
+                        Some(input_types.clone()),
+                        source.clone(),
+                    )
                 })
                 .collect(),
             value
@@ -328,10 +335,7 @@ impl From<Program> for ChaseProgram {
             value.parsed_predicate_declarations(),
             value
                 .output_predicates()
-                .map(|identifier| QualifiedPredicateName {
-                    identifier,
-                    arity: None,
-                })
+                .map(|identifier| QualifiedPredicateName::new(identifier))
                 .collect::<Vec<_>>()
                 .into(),
         )
