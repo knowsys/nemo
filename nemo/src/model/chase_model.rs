@@ -335,7 +335,7 @@ impl From<Program> for ChaseProgram {
             value.parsed_predicate_declarations(),
             value
                 .output_predicates()
-                .map(|identifier| QualifiedPredicateName::new(identifier))
+                .map(QualifiedPredicateName::new)
                 .collect::<Vec<_>>()
                 .into(),
         )
