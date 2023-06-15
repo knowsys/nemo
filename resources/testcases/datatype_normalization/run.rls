@@ -4,7 +4,7 @@
 @declare b(any) .
 @declare c(any) .
 
-@source b[1]: load-csv("sources/b.csv") .
+@source b[1](any): load-csv("sources/b.csv") .
 
 a(Some Constant With Spaces).
 a(<AnotherConstant>).

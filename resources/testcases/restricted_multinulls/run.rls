@@ -1,4 +1,4 @@
-@source data[2]: load-csv("sources/data.csv").
+@source data[2](any, any): load-csv("sources/data.csv").
 
 result(?X, ?X) :- data(?X, ?X) .
 result(!W, ?X), result(?X, !V) :- data(?X, ?Y) .
