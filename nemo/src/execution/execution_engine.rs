@@ -290,6 +290,48 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(Some(self.table_manager.table_values(table_id)?))
     }
 
+    /// Creates an [`Iterator`] over the resulting facts of a predicate.
+    pub fn output_serialization(
+        &mut self,
+        predicate: Identifier,
+    ) -> Result<Option<impl Iterator<Item = Vec<String>> + '_>, Error> {
+        let Some(table_id) = self.table_manager.combine_predicate(predicate.clone())? else {
+            return Ok(None);
+        };
+
+        let predicate_types: &Vec<LogicalTypeEnum> = self
+            .analysis
+            .predicate_types
+            .get(&predicate)
+            .expect("All predicates should have types by now.");
+
+        Ok(Some(self.table_manager.table_values(table_id)?.map(
+            |record| {
+                // TODO: respect output declaration types from program here
+                record
+                    .into_iter()
+                    .zip(predicate_types.iter())
+                    .map(|(dvt, lt)| {
+                        if *lt == LogicalTypeEnum::String {
+                            dvt.to_string()
+                                .strip_prefix('"')
+                                .expect(
+                                    "Logical String representation should be wrapped in quotes.",
+                                )
+                                .strip_suffix('"')
+                                .expect(
+                                    "Logical String representation should be wrapped in quotes.",
+                                )
+                                .to_string()
+                        } else {
+                            dvt.to_string()
+                        }
+                    })
+                    .collect()
+            },
+        )))
+    }
+
     /// Count the number of derived facts during the computation.
     pub fn count_derived_facts(&self) -> usize {
         let mut result = 0;
