@@ -621,6 +621,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::cast_possible_truncation)]
     fn u32_construction() {
         let raw_data: Vec<u32> = get_control_data().iter().map(|x| *x as u32).collect();
         let expected: ColumnRle<u32> = get_test_column_u32();
