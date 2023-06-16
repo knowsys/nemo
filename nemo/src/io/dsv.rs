@@ -69,7 +69,6 @@
 //! # }
 //! ```
 
-use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
@@ -81,6 +80,8 @@ use nemo_physical::table_reader::TableReader;
 use crate::builder_proxy::LogicalColumnBuilderProxy;
 use crate::error::{Error, ReadingError};
 use crate::types::LogicalTypeEnum;
+
+use crate::read_from_possibly_compressed_file;
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
 ///
@@ -199,33 +200,22 @@ impl TableReader for DSVReader {
         &self,
         physical_builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
     ) -> Result<(), ReadingError> {
-        let gz_decoder =
-            flate2::read::GzDecoder::new(File::open(self.file.as_path()).map_err(|error| {
-                ReadingError::IOReading {
-                    error,
-                    filename: self
-                        .file
-                        .to_str()
-                        .expect("Path is expected to be valid utf-8")
-                        .into(),
-                }
-            })?);
-
-        if gz_decoder.header().is_some() {
-            self.read_into_builder_proxies_with_reader(
-                physical_builder_proxies,
-                &mut Self::reader(gz_decoder, self.delimiter, self.escape),
-            )
-        } else {
-            self.read_into_builder_proxies_with_reader(
-                physical_builder_proxies,
-                &mut Self::reader(
-                    File::open(self.file.as_path())?,
-                    self.delimiter,
-                    self.escape,
-                ),
-            )
-        }
+        read_from_possibly_compressed_file!(
+            self.file,
+            compressed: gz_decoder =>
+            {
+                self.read_into_builder_proxies_with_reader(
+                    physical_builder_proxies,
+                    &mut Self::reader(gz_decoder, self.delimiter, self.escape),
+                )
+            },
+            uncompressed: file => {
+                self.read_into_builder_proxies_with_reader(
+                    physical_builder_proxies,
+                    &mut Self::reader(file, self.delimiter, self.escape),
+                )
+            },
+        )
     }
 }
 
