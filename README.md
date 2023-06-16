@@ -13,7 +13,11 @@ Goals of Nemo are performance, declarativity, versatility, and reliability. It i
 
 Nemo's datatypes allow the use of RDF-style data values but also "plain" names and constants in any of these formats.
 
-Nemo is in heavy development and the current releases should still be considered unstable. 
+The following publication gives a first overview of the system and can be used for citing Nemo:
+
+* Alex Ivliev, Stefan Ellmauthaler, Lukas Gerlach, Maximilian Marx, Matthias Meißner, Simon Meusel, Markus Krötzsch: **[Nemo: First Glimpse of a New Rule Engine](https://iccl.inf.tu-dresden.de/web/Inproceedings3354/en).** _Proceedings 39th International Conference on Logic Programming: ICLP 2023 Technical Communications_, 2023. EPTCS, to appear. <a href="https://iccl.inf.tu-dresden.de/web/Inproceedings3354/en">PDF + bibtex</a>
+
+Nemo is in heavy development and the current releases should still be considered unstable.
 
 ## Installation
 
