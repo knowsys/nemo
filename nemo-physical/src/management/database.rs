@@ -565,6 +565,7 @@ impl DatabaseInstance {
     /// Finally, we go one layer down to reach 0 (+-0).
     /// This gives us an overall score of 3.
     /// Returned value is 0 if and only if from == to.
+    #[allow(clippy::cast_possible_wrap)]
     fn distance(from: &ColumnOrder, to: &ColumnOrder) -> usize {
         let max_len = from.last_mapped().max(to.last_mapped()).unwrap_or(0);
 
