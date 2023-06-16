@@ -44,3 +44,34 @@ impl<W: Write> RecordWriter for csv::Writer<W> {
         Ok(())
     }
 }
+
+#[macro_export]
+/// Transparently read from a file that might be compressed.
+///
+/// `file` is the [`PathBuf`] to read from. If it is a gzip-compressed
+/// file, this calls `c` with `crdr` bound to the [`GzDecoder`]. If it
+/// is not a gzip-compressed file, call `u` with `urdr` bound to the
+/// [`File`].
+macro_rules! read_from_possibly_compressed_file {
+    ($file:expr, compressed: $crdr:ident => $c:block, uncompressed: $urdr:ident => $u:block $(,)?) => {{
+        let $crdr =
+            flate2::read::GzDecoder::new(std::fs::File::open($file.clone()).map_err(|error| {
+                $crate::error::ReadingError::IOReading {
+                    error,
+                    filename: $file
+                        .clone()
+                        .to_str()
+                        .expect("Path should be valid UTF-8")
+                        .into(),
+                }
+            })?);
+
+        if $crdr.header().is_some() {
+            // file is compressed, read from here
+            $c
+        } else {
+            let $urdr = std::fs::File::open($file.clone())?;
+            $u
+        }
+    }};
+}
