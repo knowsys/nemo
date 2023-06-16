@@ -13,7 +13,7 @@ Goals of Nemo are performance, declarativity, versatility, and reliability. It i
 
 Nemo's datatypes allow the use of RDF-style data values but also "plain" names and constants in any of these formats.
 
-The following publication gives a first overview of the system and can be used for citing Nemo:
+The following [publication](https://github.com/knowsys/nemo/wiki/Publications) gives a first overview of the system and can be used for citing Nemo:
 
 * Alex Ivliev, Stefan Ellmauthaler, Lukas Gerlach, Maximilian Marx, Matthias Meißner, Simon Meusel, Markus Krötzsch: **[Nemo: First Glimpse of a New Rule Engine](https://iccl.inf.tu-dresden.de/web/Inproceedings3354/en).** _Proceedings 39th International Conference on Logic Programming: ICLP 2023 Technical Communications_, 2023. EPTCS, to appear. <a href="https://iccl.inf.tu-dresden.de/web/Inproceedings3354/en">PDF + bibtex</a>
 
@@ -40,6 +40,7 @@ Example Nemo programs and datasets can be found in the [Nemo Examples repository
 
 ## Help
 
+Detailed information for users and developers is found in the [Nemo documentation](https://github.com/knowsys/nemo/wiki/Nemo-documentation).
 Feel free to use [GitHub discussions](https://github.com/knowsys/nemo/discussions) to ask questions or talk about Nemo.
 
 [Bug reports](https://github.com/knowsys/nemo/issues) are also very welcome.
