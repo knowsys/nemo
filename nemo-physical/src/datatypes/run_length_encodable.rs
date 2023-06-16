@@ -183,6 +183,8 @@ impl RunLengthEncodable for u8 {
     }
 
     fn offset(self, inc: Self::Step, times: usize) -> Self {
+        let times =
+            u8::try_from(times).expect("rle-element should not be greater than value range");
         u8::try_from(self as i16 + inc.0 as i16 * times as i16).expect("multiplication overflow")
     }
 }
@@ -199,7 +201,9 @@ impl RunLengthEncodable for i8 {
     }
 
     fn offset(self, inc: Self::Step, times: usize) -> Self {
-        self + inc.0 * times as i8
+        let times =
+            i8::try_from(times).expect("rle-element should not be greater than value range");
+        self + inc.0 * times
     }
 }
 

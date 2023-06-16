@@ -14,7 +14,9 @@
     unused_import_braces,
     unused_qualifications,
     unused_extern_crates,
-    variant_size_differences
+    variant_size_differences,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap
 )]
 #![feature(macro_metavar_expr)]
 #![feature(is_sorted)]
