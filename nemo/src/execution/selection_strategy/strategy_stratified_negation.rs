@@ -120,6 +120,10 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
                 stratum.sort();
             }
 
+            if strata.len() > 1 {
+                log::info!("Stratified program: {strata:?}")
+            }
+
             Ok(Self {
                 ordered_strata: strata,
                 substrategies,
