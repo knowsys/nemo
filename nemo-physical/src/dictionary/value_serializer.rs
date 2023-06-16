@@ -5,6 +5,7 @@ use crate::{
     management::database::Dict,
     tabular::traits::table_schema::TableSchema,
 };
+use std::convert::TryFrom;
 
 use super::Dictionary;
 
@@ -36,8 +37,9 @@ where
                     unreachable!("strings are always encoded as U64 constants") 
                 };
                 DataValueT::String(
-                    self.dict
-                        .entry(constant as usize)
+                    usize::try_from(constant)
+                        .ok()
+                        .and_then(|constant| self.dict.entry(constant))
                         .unwrap_or_else(|| format!("<__Null#{constant}>")),
                 )
             }
