@@ -133,6 +133,12 @@ where
                                 .get(&neighbor)
                                 .expect("Topolical sorting should ensure that there is an entry."),
                         );
+                    } else {
+                        stratum = stratum.max(
+                            *scc_to_stratum
+                                .get(&neighbor)
+                                .expect("Topolical sorting should ensure that there is an entry."),
+                        );
                     }
                 }
             }
@@ -201,16 +207,37 @@ mod test {
         graph.add_edge(node_c.clone(), node_d.clone(), EdgeLabel::Positive);
         graph.add_edge(node_c.clone(), node_d.clone(), EdgeLabel::Negative);
 
-        let mut stratums = graph.stratify(&[EdgeLabel::Negative]);
+        let mut stratums = graph.stratify(&[EdgeLabel::Negative]).unwrap();
         for stratum in &mut stratums {
             stratum.sort();
         }
 
-        assert!(stratums.is_some());
         assert_eq!(
-            stratums.unwrap(),
+            stratums,
             vec![vec![node_a], vec![node_b, node_c], vec![node_d]]
         );
+    }
+
+    #[test]
+    fn stratification_2() {
+        let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
+
+        let node_a = String::from("A");
+        let node_b = String::from("B");
+        let node_c = String::from("C");
+        let node_d = String::from("D");
+
+        graph.add_edge(node_a.clone(), node_c.clone(), EdgeLabel::Negative);
+        graph.add_edge(node_b.clone(), node_c.clone(), EdgeLabel::Positive);
+        graph.add_edge(node_c.clone(), node_d.clone(), EdgeLabel::Positive);
+
+        let mut stratums = graph.stratify(&[EdgeLabel::Negative]).unwrap();
+
+        for stratum in &mut stratums {
+            stratum.sort();
+        }
+
+        assert_eq!(stratums, vec![vec![node_a, node_b], vec![node_c, node_d]]);
     }
 
     #[test]
