@@ -1,6 +1,6 @@
 //! Reading of RDF 1.1 N-Triples files
 use std::{
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader},
     path::PathBuf,
 };
 
@@ -8,7 +8,10 @@ use nemo_physical::{
     builder_proxy::PhysicalBuilderProxyEnum, error::ReadingError, table_reader::TableReader,
 };
 
-use crate::{read_from_possibly_compressed_file, types::LogicalTypeEnum};
+use crate::{
+    io::parser::ntriples::triple_or_comment, read_from_possibly_compressed_file,
+    types::LogicalTypeEnum,
+};
 
 /// A [`TableReader`] for RDF 1.1 N-Triples files.
 #[derive(Debug, Clone)]
@@ -22,14 +25,13 @@ impl NTriplesReader {
         Self { file }
     }
 
-    fn read_with_buf_reader<'a, 'b, R>(
+    fn read_with_buf_reader<'a, 'b>(
         &self,
         physical_builder_proxies: &'b mut [PhysicalBuilderProxyEnum<'a>],
-        reader: &mut BufReader<R>,
+        reader: &mut impl BufRead,
     ) -> Result<(), ReadingError>
     where
         'a: 'b,
-        R: Read,
     {
         let mut builders = physical_builder_proxies
             .iter_mut()
@@ -41,7 +43,7 @@ impl NTriplesReader {
         for (row, line) in reader.lines().enumerate() {
             let line = line.map_err(ReadingError::from)?;
             // split line
-            match crate::io::parser::ntriples::triple(line.as_str().into()) {
+            match triple_or_comment(line.as_str()) {
                 Ok(None) => (), // line was a comment, ignore
                 Ok(Some((subject, predicate, object))) => {
                     builders[0]
@@ -60,7 +62,7 @@ impl NTriplesReader {
             }
         }
 
-        todo!()
+        Ok(())
     }
 }
 
@@ -72,5 +74,79 @@ impl TableReader for NTriplesReader {
         read_from_possibly_compressed_file!(self.file, |reader| {
             self.read_with_buf_reader(builder_proxies, &mut BufReader::new(reader))
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::cell::RefCell;
+
+    use nemo_physical::{
+        builder_proxy::{PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy},
+        dictionary::{Dictionary, PrefixedStringDictionary},
+    };
+    use test_log::test;
+
+    use super::*;
+
+    #[test]
+    fn example_1() {
+        let mut data = r#"<http://one.example/subject1> <http://one.example/predicate1> <http://one.example/object1> . # comments here
+                      # or on a line by themselves
+                      _:subject1 <http://an.example/predicate1> "object1" .
+                      _:subject2 <http://an.example/predicate2> "object2" .
+                      "#.as_bytes();
+
+        let dict = RefCell::new(PrefixedStringDictionary::default());
+        let mut builders = vec![
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+        ];
+        let reader = NTriplesReader::new("".into());
+        let result = reader.read_with_buf_reader(&mut builders, &mut data);
+        assert!(result.is_ok());
+
+        let columns = builders
+            .into_iter()
+            .map(|builder| match builder {
+                PhysicalBuilderProxyEnum::String(b) => b.finalize(),
+                _ => unreachable!("only string columns here"),
+            })
+            .collect::<Vec<_>>();
+
+        log::debug!("columns: {columns:?}");
+        let triples = (0..=2)
+            .map(|idx| {
+                columns
+                    .iter()
+                    .map(|column| {
+                        column
+                            .get(idx)
+                            .and_then(|value| value.try_into().ok())
+                            .and_then(|u64: u64| usize::try_from(u64).ok())
+                            .and_then(|usize| dict.borrow_mut().entry(usize))
+                            .unwrap()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        log::debug!("triple: {triples:?}");
+        assert_eq!(
+            triples[0],
+            vec![
+                "http://one.example/subject1",
+                "http://one.example/predicate1",
+                "http://one.example/object1"
+            ]
+        );
+        assert_eq!(
+            triples[1],
+            vec!["_:subject1", "http://an.example/predicate1", r#""object1""#]
+        );
+        assert_eq!(
+            triples[2],
+            vec!["_:subject2", "http://an.example/predicate2", r#""object2""#]
+        );
     }
 }
