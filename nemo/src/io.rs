@@ -5,6 +5,7 @@
 use std::io::Write;
 
 pub mod dsv;
+pub mod ntriples;
 pub mod output_file_manager;
 pub mod parser;
 
