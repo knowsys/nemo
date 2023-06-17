@@ -3,15 +3,17 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{anychar, multispace0, multispace1, none_of},
+    character::complete::{anychar, multispace0, multispace1, none_of, one_of, satisfy},
     combinator::{cut, map, opt, recognize, value},
-    multi::many0,
-    sequence::{delimited, preceded, terminated, tuple},
+    multi::{many0, many1, separated_list0},
+    sequence::{delimited, pair, preceded, terminated, tuple},
 };
+
+use crate::io::parser::rfc5234::digit;
 
 use super::{
     all_input_consumed,
-    sparql::blank_node_label,
+    sparql::pn_chars_base,
     token, traced,
     turtle::{langtoken, string_literal_quote, uchar},
     types::{IntermediateResult, Span},
@@ -56,20 +58,45 @@ fn multispace_or_comment0(input: Span) -> IntermediateResult<()> {
     value((), many0(alt((value((), multispace1), comment))))(input)
 }
 
+// Subtly different from [`parser::sparql::pn_chars_u`]
+#[traced("parser::ntriples")]
+fn pn_chars_u(input: Span) -> IntermediateResult<Span> {
+    alt((pn_chars_base, recognize(one_of("_:"))))(input)
+}
+
+#[traced("parser::ntriples")]
+pub fn pn_chars(input: Span) -> IntermediateResult<Span> {
+    alt((
+        pn_chars_u,
+        token("-"),
+        digit,
+        token("\u{00B7}"),
+        recognize(satisfy(|c| {
+            [0x0300u32..=0x036F, 0x203F..=0x2040]
+                .iter()
+                .any(|range| range.contains(&c.into()))
+        })),
+    ))(input)
+}
+
+#[traced("parser::ntriples")]
+fn blank_node_label(input: Span) -> IntermediateResult<Span> {
+    recognize(preceded(
+        token("_:"),
+        pair(
+            alt((pn_chars_u, digit)),
+            opt(separated_list0(many1(token(".")), many0(pn_chars))),
+        ),
+    ))(input)
+}
+
 #[traced("parser::ntriples")]
 fn triple(input: Span) -> IntermediateResult<(Span, Span, Span)> {
     tuple((
-        delimited(
-            multispace0,
-            // TODO: PN_CHARS_U (used `in blank_node_label`) differs
-            // between N-Triples and SPARQL grammars, make sure they
-            // accept the same languages
-            alt((iriref, recognize(blank_node_label))),
-            multispace1,
-        ),
+        delimited(multispace0, alt((iriref, blank_node_label)), multispace1),
         terminated(iriref, multispace1),
         terminated(
-            alt((iriref, recognize(blank_node_label), literal)),
+            alt((iriref, blank_node_label, literal)),
             delimited(multispace1, token("."), multispace_or_comment0),
         ),
     ))(input)
