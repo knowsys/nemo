@@ -61,7 +61,8 @@ impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
         } else if trimmed_string.starts_with('"')
             && trimmed_string.ends_with(XSD_STRING_LITERAL_SUFFIX)
         {
-            trimmed_string[1..XSD_STRING_LITERAL_SUFFIX.len()].to_string()
+            trimmed_string[..(trimmed_string.len() - XSD_STRING_LITERAL_SUFFIX.len()) + 1]
+                .to_string()
         } else {
             trimmed_string.to_string()
         };
