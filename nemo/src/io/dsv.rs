@@ -200,22 +200,12 @@ impl TableReader for DSVReader {
         &self,
         physical_builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
     ) -> Result<(), ReadingError> {
-        read_from_possibly_compressed_file!(
-            self.file,
-            compressed: gz_decoder =>
-            {
-                self.read_into_builder_proxies_with_reader(
-                    physical_builder_proxies,
-                    &mut Self::reader(gz_decoder, self.delimiter, self.escape),
-                )
-            },
-            uncompressed: file => {
-                self.read_into_builder_proxies_with_reader(
-                    physical_builder_proxies,
-                    &mut Self::reader(file, self.delimiter, self.escape),
-                )
-            },
-        )
+        read_from_possibly_compressed_file!(self.file, |reader| {
+            self.read_into_builder_proxies_with_reader(
+                physical_builder_proxies,
+                &mut Self::reader(reader, self.delimiter, self.escape),
+            )
+        })
     }
 }
 
