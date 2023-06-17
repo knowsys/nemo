@@ -9,7 +9,7 @@ use nemo_physical::{
 
 use crate::{
     error::Error,
-    io::dsv::DSVReader,
+    io::{dsv::DSVReader, ntriples::NTriplesReader},
     model::{chase_model::ChaseProgram, DataSource, Identifier, Program},
     program_analysis::analysis::ProgramAnalysis,
     table_manager::TableManager,
@@ -120,11 +120,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         .get(predicate)
                         .cloned()
                         .unwrap_or_else(|| vec![LogicalTypeEnum::Any; arity]);
-                    let reader = DSVReader::dsv(*file.clone(), *delimiter, logical_types);
+                    let reader = DSVReader::dsv(file.to_path_buf(), *delimiter, logical_types);
 
                     TableSource::FileReader(Box::new(reader))
                 }
-                DataSource::RdfFile(_) => todo!("RDF data sources are not yet implemented"),
+                DataSource::RdfFile(file) => {
+                    TableSource::FileReader(Box::new(NTriplesReader::new(file.to_path_buf())))
+                }
                 DataSource::SparqlQuery(_) => {
                     todo!("SPARQL query data sources are not yet implemented")
                 }
