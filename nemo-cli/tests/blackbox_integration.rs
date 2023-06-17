@@ -64,6 +64,8 @@ fn test(fixture: Fixture<&str>) {
         .unwrap();
     assert!(path.exists());
 
+    _ = env_logger::builder().is_test(true).try_init();
+
     let test_case = TestCase::test_from_rule_file(path).unwrap();
     test_case.run().unwrap();
 }

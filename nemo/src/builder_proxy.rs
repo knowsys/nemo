@@ -47,6 +47,8 @@ impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: String) -> Result<(), ReadingError> {
+        const XSD_STRING_LITERAL_SUFFIX: &str = r#""^^<http://www.w3.org/2001/XMLSchema#string>"#;
+
         self.commit();
 
         // TODO: this is all super hacky but parsing proper ground terms is too slow...
@@ -56,6 +58,10 @@ impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
             "\"\"".to_string()
         } else if trimmed_string.starts_with('<') && trimmed_string.ends_with('>') {
             trimmed_string[1..trimmed_string.len() - 1].to_string()
+        } else if trimmed_string.starts_with('"')
+            && trimmed_string.ends_with(XSD_STRING_LITERAL_SUFFIX)
+        {
+            trimmed_string[1..XSD_STRING_LITERAL_SUFFIX.len()].to_string()
         } else {
             trimmed_string.to_string()
         };
