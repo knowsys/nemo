@@ -50,3 +50,7 @@ pub use columnscan_nulls::ColumnScanNulls;
 pub mod columnscan_cast;
 pub use columnscan_cast::ColumnScanCast;
 pub use columnscan_cast::ColumnScanCastEnum;
+
+/// Module for defining [`ColumnScanArithmetic`].
+pub mod columnscan_arithmetic;
+pub use columnscan_arithmetic::ColumnScanArithmetic;

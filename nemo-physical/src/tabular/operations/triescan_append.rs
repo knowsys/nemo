@@ -1,11 +1,16 @@
-use std::{cell::UnsafeCell, collections::VecDeque, ops::Range};
+use std::{
+    cell::UnsafeCell,
+    collections::{HashMap, VecDeque},
+    ops::Range,
+};
 
 use crate::{
     columnar::{
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         column_types::rle::{ColumnBuilderRle, ColumnRle},
         operations::{
-            ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant, ColumnScanCopy, ColumnScanPass,
+            columnscan_arithmetic::OperationTreeT, ColumnScanArithmetic, ColumnScanCast,
+            ColumnScanCastEnum, ColumnScanConstant, ColumnScanCopy, ColumnScanPass,
         },
         traits::{
             column::Column,
@@ -24,8 +29,11 @@ use crate::{
             table::Table,
         },
     },
+    util::mapping::permutation::Permutation,
 };
 use std::num::NonZeroUsize;
+
+use super::TrieScanPrune;
 
 /// Helper function which, given a continuous range, expands it in such a way
 /// that all of the child nodes are covered as well.
@@ -55,6 +63,9 @@ pub enum AppendInstruction {
     /// Must contain schema information.
     /// In this case whether the constant is associated with a dict
     Constant(DataValueT),
+    /// Add a column which results from performing a given mathematical operation
+    /// based on existing columns.
+    Operation(OperationTreeT),
 }
 
 /// Appends columns to an existing trie and returns the modified trie.
@@ -177,6 +188,7 @@ pub fn trie_append(
                         }
                     };
                 }
+                AppendInstruction::Operation(_) => todo!(),
             }
         }
 
@@ -194,7 +206,7 @@ pub fn trie_append(
 #[derive(Debug)]
 pub struct TrieScanAppend<'a> {
     /// Trie scans to which new columns will be appended.
-    trie_scan: Box<TrieScanEnum<'a>>,
+    trie_scan: TrieScanPrune<'a>,
 
     /// Layer we are currently at in the resulting trie.
     current_layer: Option<usize>,
@@ -247,7 +259,7 @@ impl<'a> TrieScanAppend<'a> {
         );
 
         let mut res = Self {
-            trie_scan: Box::new(trie_scan),
+            trie_scan: TrieScanPrune::new(trie_scan),
             current_layer: None,
             target_types,
             base_indices: Vec::new(),
@@ -256,12 +268,15 @@ impl<'a> TrieScanAppend<'a> {
         };
 
         for (src_index, insert_instructions) in instructions.iter().enumerate() {
-            for instruction in insert_instructions {
+            for instruction in insert_instructions.into_iter() {
                 match instruction {
                     AppendInstruction::RepeatColumn(repeat_index) => {
                         res.add_repeat_column(*repeat_index)
                     }
                     AppendInstruction::Constant(value) => res.add_constant_column(dict, value),
+                    AppendInstruction::Operation(operation_tree) => {
+                        res.add_operation_column(operation_tree.clone())
+                    }
                 }
             }
 
@@ -271,6 +286,53 @@ impl<'a> TrieScanAppend<'a> {
         }
 
         res
+    }
+
+    fn add_operation_column(&mut self, operation_tree: OperationTreeT) {
+        let src_type = operation_tree.data_type().to_storage_type_name();
+        let dst_type = self.target_types[self.column_scans.len()];
+
+        macro_rules! input_for_datatype {
+            ($src_name:ident, $dst_name:ident, $src_type:ty, $dst_type:ty) => {{
+                let mut column_map = HashMap::<usize, usize>::new();
+                let mut input_scans = Vec::new();
+
+                for (loop_index, src_index) in operation_tree.input_indices().iter().enumerate() {
+                    let base_scan = unsafe { &*self.trie_scan.get_scan(*src_index).unwrap().get() };
+
+                    if let ColumnScanT::$src_name(base_scan_cell) = base_scan {
+                        input_scans.push(base_scan_cell);
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($variant));
+                    }
+
+                    column_map.insert(*src_index, loop_index);
+                }
+
+                let column_map = Permutation::from_map(column_map);
+                let operation_tree = if let OperationTreeT::$src_name(mut tree) = operation_tree {
+                    tree.apply_permutation(&column_map);
+                    tree
+                } else {
+                    panic!("Expected operation tree of type {}", stringify!($variant));
+                };
+
+                let new_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanArithmetic(
+                    ColumnScanArithmetic::new(input_scans, operation_tree),
+                ));
+
+                let new_scan_cast = ColumnScanCell::new(ColumnScanEnum::ColumnScanCast(
+                    ColumnScanCastEnum::$src_name(ColumnScanCast::<$src_type, $dst_type>::new(
+                        new_scan,
+                    )),
+                ));
+
+                self.column_scans
+                    .push(UnsafeCell::new(ColumnScanT::$dst_name(new_scan_cast)));
+            }};
+        }
+
+        generate_cast_statements!(input_for_datatype; src_type, dst_type);
     }
 
     fn add_backed_column(&mut self, src_index: usize) {

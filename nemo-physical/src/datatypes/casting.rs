@@ -362,6 +362,26 @@ impl PartialOrd for DataTypeName {
     }
 }
 
+/// Trait for partially ordered sets
+/// which allows you to get the greatest element that is comparable to a given element.
+pub trait PartialUpperBound {
+    /// Return the greatest element comparable to the given element.
+    fn partial_upper_bound(&self) -> Self;
+}
+
+impl PartialUpperBound for DataTypeName {
+    fn partial_upper_bound(&self) -> Self {
+        match self {
+            DataTypeName::String => DataTypeName::String,
+            DataTypeName::U32 => DataTypeName::U64,
+            DataTypeName::U64 => DataTypeName::U64,
+            DataTypeName::I64 => DataTypeName::I64,
+            DataTypeName::Float => DataTypeName::Float,
+            DataTypeName::Double => DataTypeName::Double,
+        }
+    }
+}
+
 /// Used to generate the match statements covering all the possible combinations
 /// of implicitly castable types.
 /// For each combinations, calls another macro which takes as input the type names
