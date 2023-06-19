@@ -45,7 +45,7 @@ jobs:
           name="${{ format('nemo_{0}_{1}', github.ref_name, matrix.name) }}"
           mkdir -p "$name"
 
-          cp {README.MD,LICENSE-APACHE,LICENSE-MIT} "$name"
+          cp {README.md,LICENSE-APACHE,LICENSE-MIT} "$name"
           if [ "${{ matrix.os }}" = "windows-2022" ]; then
             cp "target/${{ matrix.target }}/release/nmo.exe" "$name/"
             7z a "$name.zip" "$name"
