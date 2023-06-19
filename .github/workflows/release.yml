@@ -31,11 +31,13 @@ jobs:
         with:
           rust-version: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
+      - name: Install cross
+        run: cargo install cross
       - name: Build release binary
-        run: cargo build --verbose --release --bin=nmo --target=${{ matrix.target }}
+        run: cross build --verbose --release --bin=nmo --target=${{ matrix.target }}
       - name: Strip release binaries (linux and darwin)
         if: matrix.build == 'linux' || matrix.build == 'darwin'
-        run: strip "target/${{ matrix.target }}/release/nmo
+        run: strip "target/${{ matrix.target }}/release/nmo"
       - name: Build archive
         shell: bash
         run: |
