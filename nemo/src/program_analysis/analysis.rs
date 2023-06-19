@@ -15,7 +15,10 @@ use super::{
     variable_order::{build_preferable_variable_orders, BuilderResultVariants, VariableOrder},
 };
 
-use petgraph::{visit::Dfs, Undirected};
+use petgraph::{
+    visit::{Dfs, EdgeFiltered},
+    Directed,
+};
 use thiserror::Error;
 
 /// Contains useful information for a (existential) rule
@@ -270,8 +273,14 @@ impl PredicatePosition {
     }
 }
 
+/// Edge Types in Position Graph for Type Analysis
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum PositionGraphEdge {
+    WithinBody,
+    BodyToHead,
+}
 /// Graph that represents a prioritization between rules.
-pub type PositionGraph = LabeledGraph<PredicatePosition, (), Undirected>;
+pub type PositionGraph = LabeledGraph<PredicatePosition, PositionGraphEdge, Directed>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum TypeRequirement {
@@ -303,16 +312,14 @@ impl From<TypeRequirement> for Option<LogicalTypeEnum> {
 impl PartialOrd for TypeRequirement {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self {
-            Self::Hard(t1) => {
-                if let Self::Hard(t2) = other {
-                    (t1 == t2).then_some(std::cmp::Ordering::Equal)
-                } else {
-                    Some(std::cmp::Ordering::Greater)
-                }
-            }
+            Self::Hard(t1) => match other {
+                Self::Hard(t2) => (t1 == t2).then_some(std::cmp::Ordering::Equal),
+                Self::Soft(t2) => (t1 >= t2).then_some(std::cmp::Ordering::Greater),
+                Self::None => Some(std::cmp::Ordering::Greater),
+            },
             Self::Soft(t1) => match other {
-                Self::Hard(_) => Some(std::cmp::Ordering::Less),
-                Self::Soft(t2) => (t1 == t2).then_some(std::cmp::Ordering::Equal),
+                Self::Hard(t2) => (t1 <= t2).then_some(std::cmp::Ordering::Less),
+                Self::Soft(t2) => t1.partial_cmp(t2),
                 Self::None => Some(std::cmp::Ordering::Greater),
             },
             Self::None => {
@@ -399,40 +406,84 @@ impl ChaseProgram {
         let mut graph = PositionGraph::default();
 
         for rule in self.rules() {
-            let mut variable_to_last_node = HashMap::<Variable, PredicatePosition>::new();
+            let mut variables_to_head_positions =
+                HashMap::<Variable, Vec<PredicatePosition>>::new();
 
-            for atom in rule.all_atoms() {
+            for atom in rule.head() {
                 for (term_position, term) in atom.terms().iter().enumerate() {
                     if let Term::Variable(variable) = term {
                         let predicate_position =
                             PredicatePosition::new(atom.predicate(), term_position);
 
-                        match variable_to_last_node.entry(variable.clone()) {
-                            Entry::Occupied(mut entry) => {
-                                let last_position = entry.insert(predicate_position.clone());
-                                graph.add_edge(last_position, predicate_position, ());
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(predicate_position);
+                        variables_to_head_positions
+                            .entry(variable.clone())
+                            .and_modify(|e| e.push(predicate_position.clone()))
+                            .or_insert(vec![predicate_position]);
+                    }
+                }
+            }
+
+            let mut variables_to_last_node = HashMap::<Variable, PredicatePosition>::new();
+
+            for atom in rule.all_body() {
+                for (term_position, term) in atom.terms().iter().enumerate() {
+                    if let Term::Variable(variable) = term {
+                        let predicate_position =
+                            PredicatePosition::new(atom.predicate(), term_position);
+
+                        // NOTE: we connect each body position to each head position of the same variable
+                        if let Some(head_positions) = variables_to_head_positions.get(variable) {
+                            for pos in head_positions {
+                                graph.add_edge(
+                                    predicate_position.clone(),
+                                    pos.clone(),
+                                    PositionGraphEdge::BodyToHead,
+                                );
                             }
                         }
+
+                        // NOTE: we do not fully interconnect body positions as we start DFS from
+                        // each possible position later covering all possible combinations
+                        // nonetheless
+                        variables_to_last_node
+                            .entry(variable.clone())
+                            .and_modify(|entry| {
+                                let last_position =
+                                    std::mem::replace(entry, predicate_position.clone());
+                                graph.add_edge(
+                                    last_position.clone(),
+                                    predicate_position.clone(),
+                                    PositionGraphEdge::WithinBody,
+                                );
+                                graph.add_edge(
+                                    predicate_position.clone(),
+                                    last_position,
+                                    PositionGraphEdge::WithinBody,
+                                );
+                            })
+                            .or_insert(predicate_position);
                     }
                 }
             }
 
             for filter in rule.all_filters() {
-                let position_left = variable_to_last_node
+                let position_left = variables_to_last_node
                     .get(&filter.lhs)
                     .expect("Variables in filters should also appear in the rule body")
                     .clone();
 
                 if let Term::Variable(variable_right) = &filter.rhs {
-                    let position_right = variable_to_last_node
+                    let position_right = variables_to_last_node
                         .get(variable_right)
                         .expect("Variables in filters should also appear in the rule body")
                         .clone();
 
-                    graph.add_edge(position_left, position_right, ());
+                    graph.add_edge(
+                        position_left.clone(),
+                        position_right.clone(),
+                        PositionGraphEdge::WithinBody,
+                    );
+                    graph.add_edge(position_right, position_left, PositionGraphEdge::WithinBody);
                 }
             }
         }
@@ -543,13 +594,18 @@ impl ChaseProgram {
 
         let initial_types = predicate_types.clone();
 
-        // Propagate each type from its declaration
         for (predicate, types) in initial_types {
             for (position, logical_type_requirement) in types.into_iter().enumerate() {
                 let predicate_position = PredicatePosition::new(predicate.clone(), position);
 
                 if let Some(start_node) = position_graph.get_node(&predicate_position) {
-                    let mut dfs = Dfs::new(position_graph.graph(), start_node);
+                    // Propagate each type from its declaration
+                    let mut dfs = Dfs::new(
+                        &EdgeFiltered::from_fn(position_graph.graph(), |e| {
+                            *e.weight() == PositionGraphEdge::BodyToHead
+                        }),
+                        start_node,
+                    );
 
                     while let Some(next_node) = dfs.next(position_graph.graph()) {
                         let next_position = position_graph
@@ -567,6 +623,42 @@ impl ChaseProgram {
                         {
                             *current_type_requirement = max;
                         } else {
+                            return Err(TypeError::InvalidRuleConflictingTypes(
+                                next_position.predicate.0.clone(),
+                                next_position.position + 1,
+                                Option::<LogicalTypeEnum>::from(*current_type_requirement)
+                                    .expect("if the type requirement is none, there is a maximum"),
+                                Option::<LogicalTypeEnum>::from(logical_type_requirement)
+                                    .expect("if the type requirement is none, there is a maximum"),
+                            ));
+                        }
+                    }
+
+                    // Check compatibility of body types without overwriting
+                    let mut dfs = Dfs::new(
+                        &EdgeFiltered::from_fn(position_graph.graph(), |e| {
+                            *e.weight() == PositionGraphEdge::WithinBody
+                        }),
+                        start_node,
+                    );
+
+                    while let Some(next_node) = dfs.next(position_graph.graph()) {
+                        let next_position = position_graph
+                            .graph()
+                            .node_weight(next_node)
+                            .expect("The DFS iterator guarantees that every node exists.");
+
+                        let current_type_requirement = &mut predicate_types
+                            .get_mut(&next_position.predicate)
+                            .expect("The initialization step inserted every known predicate")
+                            [next_position.position];
+
+                        if current_type_requirement
+                            .max_opt(logical_type_requirement)
+                            .is_none()
+                        {
+                            // TODO: maybe just throw a warning here? (comparison of incompatible
+                            // types can be done but will trivially result in inequality)
                             return Err(TypeError::InvalidRuleConflictingTypes(
                                 next_position.predicate.0.clone(),
                                 next_position.position + 1,

@@ -49,7 +49,7 @@ impl From<String> for Identifier {
 }
 
 /// A qualified predicate name, i.e., a predicate name together with its arity.
-#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd)]
 pub struct QualifiedPredicateName {
     /// The predicate name
     pub(crate) identifier: Identifier,

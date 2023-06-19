@@ -23,7 +23,7 @@ macro_rules! count {
 macro_rules! generate_logical_type_enum {
     ($(($variant_name:ident, $string_repr: literal)),+) => {
         /// An enum capturing the logical type names and funtionality related to parsing and translating into and from physical types
-        #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+        #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
         pub enum LogicalTypeEnum {
             $(
                 /// $variant_name
@@ -70,6 +70,35 @@ generate_logical_type_enum!(
     (Float64, "float64")
 );
 
+impl PartialOrd for LogicalTypeEnum {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self {
+            Self::Any => {
+                if matches!(other, Self::Any) {
+                    Some(std::cmp::Ordering::Equal)
+                } else {
+                    Some(std::cmp::Ordering::Greater)
+                }
+            }
+            Self::String => match other {
+                Self::Any => Some(std::cmp::Ordering::Less),
+                Self::String => Some(std::cmp::Ordering::Equal),
+                _ => None,
+            },
+            Self::Integer => match other {
+                Self::Any => Some(std::cmp::Ordering::Less),
+                Self::Integer => Some(std::cmp::Ordering::Equal),
+                _ => None,
+            },
+            Self::Float64 => match other {
+                Self::Any => Some(std::cmp::Ordering::Less),
+                Self::Float64 => Some(std::cmp::Ordering::Equal),
+                _ => None,
+            },
+        }
+    }
+}
+
 impl Default for LogicalTypeEnum {
     fn default() -> Self {
         Self::Any
@@ -103,7 +132,7 @@ impl LogicalTypeEnum {
                         panic!("Expecting ground term for conversion to DataValueT")
                     }
                     Term::Constant(Identifier(s)) => {
-                        if s.starts_with(|c: char| c.is_ascii_alphabetic()) {
+                        if s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
                             DataValueT::String(s)
                         } else {
                             DataValueT::String(format!("<{s}>"))
