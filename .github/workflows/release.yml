@@ -42,7 +42,7 @@ jobs:
       - name: Build archive
         shell: bash
         run: |
-          name="${{ format('nemo_{0}_{1}', github.ref_name, matrix.name) }}"
+          name="${{ format('nemo_{0}_{1}', github.ref_name, matrix.target) }}"
           mkdir -p "$name"
 
           cp {README.md,LICENSE-APACHE,LICENSE-MIT} "$name"
