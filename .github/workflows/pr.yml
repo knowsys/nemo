@@ -23,8 +23,6 @@ jobs:
         with:
           rust-version: ${{ matrix.rust }}
       - run: cargo test --verbose
-      #- run: cargo test --verbose --workspace --all-features
-      #- run: cargo test --verbose --workspace --no-default-features
 
   clippy:
     name: Lint with clippy
@@ -38,8 +36,6 @@ jobs:
           components: clippy
           rust-version: nightly
       - run: cargo clippy --all-targets --verbose
-      # - run: cargo clippy --workspace --all-targets --verbose --no-default-features
-      # - run: cargo clippy --workspace --all-targets --verbose --all-features
 
   rustfmt:
     name: Verify code formatting
