@@ -4,30 +4,55 @@ on:
     types: [created]
 
 jobs:
-  release:
-    name: release ${{ matrix.target }}
+  release-linux:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: x86_64-pc-windows-gnu
-            archive: zip
-            name: amd64-windows
-          - target: x86_64-unknown-linux-musl
-            archive: tar.gz
-            name: amd64-linux
-          # - target: x86_64-apple-darwin
-          #   archive: zip
-          #   name: amd64-macos
     steps:
-      - uses: actions/checkout@v3
-      - name: Compile and release
-        uses: rust-build/rust-build.action@latest
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          default: true
+          override: true
+
+      - name: Build rust binary
+        run: cargo build --workspace --release --target=x86_64-unknown-linux-gnu && strip target/release/nmo
+
+      - name: Create archive
+        run: mv target/release/nmo . && tar -cf nmo-linux-gnu.tar.gz nmo README.md LICENSE-APACHE LICENSE-MIT
+
+      - name: Upload artifact
+        uses: softprops/action-gh-release@v1
+        with:
+          files: nmo-linux-gnu.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # needs to be provided to change assets
-          RUSTTARGET: ${{ matrix.target }}
-          EXTRA_FILES: "README.md LICENSE-APACHE LICENSE-MIT"
-          TOOLCHAIN_VERSION: nightly
-          ARCHIVE_TYPES: ${{ matrix.archive }}
-          ARCHIVE_NAME: ${{ format('nemo_{0}_{1}', github.ref_name, matrix.name) }}
+
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          default: true
+          override: true
+
+      - name: Build rust binary
+        run: cargo build --workspace --release --target=x86_64-pc-windows-gnu
+
+      - name: Create archive
+        run: mv target/release/nmo . && 7z a -tzip nmo-windows-gnu nmo README.md LICENSE-APACHE LICENSE-MIT
+
+      - name: Upload artifact
+        uses: softprops/action-gh-release@v1
+        with:
+          files: nmo-windows-gnu.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # needs to be provided to change assets
+
