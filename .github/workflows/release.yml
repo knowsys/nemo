@@ -48,14 +48,16 @@ jobs:
           cp {README.md,LICENSE-APACHE,LICENSE-MIT} "$name"
           if [ "${{ matrix.os }}" = "windows-2022" ]; then
             cp "target/${{ matrix.target }}/release/nmo.exe" "$name/"
-            7z a "$name.zip" "$name"
-            echo ASSET=$name.zip >> $GITHUB_ENV
+            asset=$name.zip
+            7z a "$asset" "$name"
+            echo ASSET=$asset >> $GITHUB_ENV
           else
             cp "target/${{ matrix.target }}/release/nmo" "$name/"
-            tar czf "$name.tar.xg" "$name"
-            echo ASSET=$name.tar.gz
+            asset=$name.tar.gz
+            tar czf "$asset" "$name"
+            echo ASSET=$asset >> $GITHUB_ENV
           fi
-          sha256sum "$ASSET" >> "$ASSET.sha256sum"
+          sha256sum "$asset" > "$asset.sha256sum"
       - name: Upload release archive
         uses: actions/upload-release-asset@v1.0.2
         env:
