@@ -11,23 +11,63 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-pc-windows-gnu
-            archive: zip
-            name: amd64-windows
-          - target: x86_64-unknown-linux-musl
-            archive: tar.gz
-            name: amd64-linux
-          # - target: x86_64-apple-darwin
-          #   archive: zip
-          #   name: amd64-macos
+          - build: linux
+            os: ubuntu-22.04
+            rust: nightly
+            target: x86_64-unknown-linux-gnu
+          - build: windows-gnu
+            os: windows-2022
+            rust: nightly
+            target: x86_64-pc-windows-gnu
+          - build: darwin
+            os: macos-12
+            rust: nightly
+            target: x86_64-apple-darwin
     steps:
-      - uses: actions/checkout@v3
-      - name: Compile and release
-        uses: rust-build/rust-build.action@latest
+      - name: Check out repository
+        uses: actions/checkout@v3
+      - name: Install rust toolchain
+        uses: hecrj/setup-rust-action@v1
+        with:
+          rust-version: ${{ matrix.rust }}
+          targets: ${{ matrix.target }}
+      - name: Build release binary
+        run: cargo build --verbose --release --bin=nmo --target=${{ matrix.target }}
+      - name: Strip release binaries (linux and darwin)
+        if: matrix.build == 'linux' || matrix.build == 'darwin'
+        run: strip "target/${{ matrix.target }}/release/nmo
+      - name: Build archive
+        shell: bash
+        run: |
+          name="${{ format('nemo_{0}_{1}', github.ref_name, matrix.name) }}"
+          mkdir -p "$name"
+
+          cp {README.MD,LICENSE-APACHE,LICENSE-MIT} "$name"
+          if [ "${{ matrix.os }}" = "windows-2022" ]; then
+            cp "target/${{ matrix.target }}/release/nmo.exe" "$name/"
+            7z a "$name.zip" "$name"
+            echo ASSET=$name.zip >> $GITHUB_ENV
+          else
+            cp "target/${{ matrix.target }}/release/nmo "$name/"
+            tar czf "$name.tar.xg" "$name"
+            echo ASSET=$name.tar.gz
+          fi
+          sha256sum "$ASSET" >> "$ASSET.sha256sum"
+      - name: Upload release archive
+        uses: actions/upload-release-asset@v1.0.2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # needs to be provided to change assets
-          RUSTTARGET: ${{ matrix.target }}
-          EXTRA_FILES: "README.md LICENSE-APACHE LICENSE-MIT"
-          TOOLCHAIN_VERSION: nightly
-          ARCHIVE_TYPES: ${{ matrix.archive }}
-          ARCHIVE_NAME: ${{ format('nemo_{0}_{1}', github.ref_name, matrix.name) }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.ASSET }}
+          asset_name: ${{ env.ASSET }}
+          asset_content_type: application/octet-stream
+      - name: Upload release checksum
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: "${{ env.ASSET }}.sha256sum"
+          asset_name: "${{ env.ASSET }}.sha256sum"
+          asset_content_type: text/plain
