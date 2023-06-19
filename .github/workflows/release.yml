@@ -51,7 +51,7 @@ jobs:
             7z a "$name.zip" "$name"
             echo ASSET=$name.zip >> $GITHUB_ENV
           else
-            cp "target/${{ matrix.target }}/release/nmo "$name/"
+            cp "target/${{ matrix.target }}/release/nmo" "$name/"
             tar czf "$name.tar.xg" "$name"
             echo ASSET=$name.tar.gz
           fi
