@@ -19,10 +19,11 @@ jobs:
             os: windows-2022
             rust: nightly
             target: x86_64-pc-windows-gnu
-          - build: darwin
-            os: macos-12
-            rust: nightly
-            target: x86_64-apple-darwin
+          # howlong is apparently broken on darwin, not only when cross-compiling
+          # - build: darwin
+          #   os: macos-12
+          #   rust: nightly
+          #   target: x86_64-apple-darwin
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
@@ -34,7 +35,7 @@ jobs:
       - name: Install cross
         run: cargo install cross
       - name: Build release binary
-        run: cross build --verbose --release --bin=nmo --target=${{ matrix.target }}
+        run: cross build --release --bin=nmo --target=${{ matrix.target }}
       - name: Strip release binaries (linux and darwin)
         if: matrix.build == 'linux' || matrix.build == 'darwin'
         run: strip "target/${{ matrix.target }}/release/nmo"
