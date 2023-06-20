@@ -21,7 +21,6 @@ log = { version = "0.4", features = [ "max_level_trace", "release_max_level_info
 clap = { version = "4.0.32", features = [ "derive", "cargo", "env" ] }
 colored = "2"
 env_logger = "*"
-superslice = "1"
 
 nemo = { path = "../nemo" }
 
