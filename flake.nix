@@ -46,7 +46,7 @@ rec {
         };
       in rec {
         packages = let
-          version = "0.2.0";
+          version = "0.2.1-dev";
           meta = {
             inherit description;
             homepage = "https://github.com/knowsys/nemo";

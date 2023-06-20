@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "nemo"
-version = "0.2.0"
+version = "0.2.1-dev"
 dependencies = [
  "assert_fs",
  "criterion",
@@ -1442,7 +1442,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-cli"
-version = "0.2.0"
+version = "0.2.1-dev"
 dependencies = [
  "assert_cmd",
  "assert_fs",
@@ -1458,7 +1458,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-physical"
-version = "0.2.0"
+version = "0.2.1-dev"
 dependencies = [
  "arbitrary",
  "ascii_tree",
@@ -1478,7 +1478,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-python"
-version = "0.2.0"
+version = "0.2.1-dev"
 dependencies = [
  "nemo",
  "pyo3",
@@ -1486,7 +1486,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-wasm"
-version = "0.2.0"
+version = "0.2.1-dev"
 dependencies = [
  "js-sys",
  "nemo",
@@ -2534,9 +2534,9 @@ checksum = "06f6b473c37f9add4cf1df5b4d66a8ef58ab6c895f1a3b3f949cf3e21230140e"
 
 [[package]]
 name = "target-lexicon"
-version = "0.12.7"
+version = "0.12.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd1ba337640d60c3e96bc6f0638a939b9c9a7f2c316a1598c279828b3d1dc8c5"
+checksum = "1b1c7f239eb94671427157bd93b3694320f3668d4e1eff08c7285366fd777fac"
 
 [[package]]
 name = "tempfile"
