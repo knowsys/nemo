@@ -1,9 +1,14 @@
 [package]
 name = "nemo-python"
-version = "0.2.0"
-edition = "2021"
+description = "Python bindings for nemo, a fast in-memory rule engine"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 name = "nmo_python"
 crate-type = ["cdylib"]

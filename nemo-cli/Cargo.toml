@@ -1,15 +1,13 @@
 [package]
 name = "nemo-cli"
-authors = [
-"Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
-"Lukas Gerlach <lukas.gerlach@tu-dresden.de>",
-"Philipp Hanisch <philipp.hanisch1@tu-dresden.de>",
-"Alex Ivliev <alex.ivliev@tu-dresden.de>",
-"Markus Krötzsch <markus.kroetzsch@tu-dresden.de>",
-"Maximilian Marx <maximilian.marx@tu-dresden.de>"
-]	
-version = "0.2.0"
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
 
 [features]
 no-prefixed-string-dictionary = ["nemo/no-prefixed-string-dictionary"]

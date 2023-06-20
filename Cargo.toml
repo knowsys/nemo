@@ -8,6 +8,25 @@ members = [
     "nemo-wasm",
 ]
 
+[workspace.package]
+description = "nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory"
+version = "0.2.0"
+authors = [
+"Alex Ivliev <alex.ivliev@tu-dresden.de>",
+"Lukas Gerlach <lukas.gerlach@tu-dresden.de>",
+"Markus Krötzsch <markus.kroetzsch@tu-dresden.de>",
+"Matthias Meissner <matthias.meissner2@mailbox.tu-dresden.de>",
+"Maximilian Marx <maximilian.marx@tu-dresden.de>",
+"Philipp Hanisch <philipp.hanisch1@tu-dresden.de>",
+"Simon Meusel <simon.meusel@mailbox.tu-dresden.de>",
+"Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
+]
+edition = "2021"
+homepage = "https://github.com/knowsys/nemo"
+license = "APACHE-2.0 OR MIT"
+readme = "README.md"
+repository = "https://github.com/knowsys/nemo"
+
 [profile.dev]
 panic = "unwind"
 
