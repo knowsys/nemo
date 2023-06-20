@@ -46,10 +46,11 @@ rec {
         };
       in rec {
         packages = let
-          version = "0.2.1-dev";
+          cargoMeta = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package;
+          inherit (cargoMeta) version;
           meta = {
             inherit description;
-            homepage = "https://github.com/knowsys/nemo";
+            inherit (cargoMeta) homepage;
             license = [pkgs.lib.licenses.asl20 pkgs.lib.licenses.mit];
           };
 
