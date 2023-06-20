@@ -1,7 +1,9 @@
 use std::{cell::RefCell, fs::File};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use polars::prelude::{CsvReader, DataFrame, DataType, JoinType, Schema, SerReader};
+use polars::prelude::{
+    CsvReader, DataFrame, DataFrameJoinOps, DataType, JoinType, Schema, SerReader,
+};
 
 use nemo_physical::{
     builder_proxy::{
@@ -115,32 +117,38 @@ pub fn benchmark_join(c: &mut Criterion) {
     let file_a = File::open("test-files/bench-data/xe.csv").expect("could not open file");
     let file_b = File::open("test-files/bench-data/aux.csv").expect("could not open file");
 
-    let table_a_schema = Schema::new()
-        .insert_index(0, "AX".to_string(), DataType::Utf8)
-        .unwrap()
-        .insert_index(0, "AY".to_string(), DataType::Utf8)
-        .unwrap()
-        .insert_index(0, "AZ".to_string(), DataType::Utf8)
+    let mut table_a_schema = Schema::new();
+    table_a_schema
+        .insert_at_index(0, "AX".into(), DataType::Utf8)
+        .unwrap();
+    table_a_schema
+        .insert_at_index(0, "AY".into(), DataType::Utf8)
+        .unwrap();
+    table_a_schema
+        .insert_at_index(0, "AZ".into(), DataType::Utf8)
         .unwrap();
 
     let table_a = CsvReader::new(file_a)
-        .with_schema(&table_a_schema)
+        .with_schema(table_a_schema.into())
         .has_header(false)
         .finish()
         .unwrap()
         .sort(["AX", "AY"], vec![false, false])
         .unwrap();
 
-    let table_b_schema = Schema::new()
-        .insert_index(0, "BX".to_string(), DataType::Utf8)
-        .unwrap()
-        .insert_index(0, "BY".to_string(), DataType::Utf8)
-        .unwrap()
-        .insert_index(0, "BZ".to_string(), DataType::Utf8)
+    let mut table_b_schema = Schema::new();
+    table_b_schema
+        .insert_at_index(0, "BX".into(), DataType::Utf8)
+        .unwrap();
+    table_b_schema
+        .insert_at_index(0, "BY".into(), DataType::Utf8)
+        .unwrap();
+    table_b_schema
+        .insert_at_index(0, "BZ".into(), DataType::Utf8)
         .unwrap();
 
     let table_b = CsvReader::new(file_b)
-        .with_schema(&table_b_schema)
+        .with_schema(table_b_schema.into())
         .has_header(false)
         .finish()
         .unwrap()
@@ -278,16 +286,20 @@ fn benchmark_union(c: &mut Criterion) {
         tries.push(load_trie(&table_source, table_arity, &mut dict));
 
         let file = File::open(filename).expect("could not open file");
-        let table_schema = Schema::new()
-            .insert_index(0, "X".to_string(), DataType::Utf8)
-            .unwrap()
-            .insert_index(0, "Y".to_string(), DataType::Utf8)
-            .unwrap()
-            .insert_index(0, "Z".to_string(), DataType::Utf8)
+        let mut table_schema = Schema::new();
+        table_schema
+            .insert_at_index(0, "X".into(), DataType::Utf8)
+            .unwrap();
+
+        table_schema
+            .insert_at_index(0, "Y".into(), DataType::Utf8)
+            .unwrap();
+        table_schema
+            .insert_at_index(0, "Z".into(), DataType::Utf8)
             .unwrap();
 
         let frame = CsvReader::new(file)
-            .with_schema(&table_schema)
+            .with_schema(table_schema.into())
             .has_header(false)
             .finish()
             .unwrap()
@@ -332,7 +344,7 @@ fn benchmark_union(c: &mut Criterion) {
                 }
 
                 union_frame
-                    .unique(None, polars::prelude::UniqueKeepStrategy::First)
+                    .unique(None, polars::prelude::UniqueKeepStrategy::First, None)
                     .unwrap();
             },
         );
