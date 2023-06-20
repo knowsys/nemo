@@ -526,6 +526,7 @@ impl<'a> TrieScan for TrieScanPrune<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanPrune;
+    use crate::columnar::operations::columnscan_equal_value::IntervalValue;
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;
@@ -593,12 +594,20 @@ mod test {
             scan,
             &[
                 ValueAssignment {
-                    column_idx: 1,
-                    interval: Interval::single(DataValueT::U64(layer_1_equality)),
+                    column_idx_value: 1,
+                    column_idx_lower: None,
+                    column_idx_upper: None,
+                    interval: Interval::single(IntervalValue::Constant(DataValueT::U64(
+                        layer_1_equality,
+                    ))),
                 },
                 ValueAssignment {
-                    column_idx: 3,
-                    interval: Interval::single(DataValueT::U64(layer_3_equality)),
+                    column_idx_value: 3,
+                    column_idx_lower: None,
+                    column_idx_upper: None,
+                    interval: Interval::single(IntervalValue::Constant(DataValueT::U64(
+                        layer_3_equality,
+                    ))),
                 },
             ],
         ));

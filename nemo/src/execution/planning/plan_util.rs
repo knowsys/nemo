@@ -6,6 +6,7 @@ use std::{
 };
 
 use nemo_physical::{
+    columnar::operations::columnscan_equal_value::IntervalValue,
     management::{
         database::{ColumnOrder, TableId},
         execution_plan::{ExecutionNodeRef, ExecutionPlan},
@@ -45,17 +46,18 @@ pub(super) fn compute_filters(
     let mut filter_assignments = Vec::<ValueAssignment>::new();
     let mut filter_classes = Vec::<HashSet<&Variable>>::new();
     for filter in filters {
-        if !variable_order.contains(&filter.lhs) {
+        let left_variable = &filter.lhs;
+        if !variable_order.contains(left_variable) {
             continue;
         }
 
-        match &filter.rhs {
-            Term::Variable(right_variable) => {
+        // Case 1: Variables equals another variable
+        // In this case, we need to update the `filter_classes`
+        if filter.operation == FilterOperation::Equals {
+            if let Term::Variable(right_variable) = &filter.rhs {
                 if !variable_order.contains(right_variable) {
                     continue;
                 }
-
-                let left_variable = &filter.lhs;
 
                 let left_index = filter_classes
                     .iter()
@@ -98,16 +100,70 @@ pub(super) fn compute_filters(
                         }
                     },
                 }
+
+                continue;
+            }
+        }
+
+        // Case 2: Variable is compared to another variable or with a constant
+        // In this case, we need to update the `filter_assignments`
+
+        match &filter.rhs {
+            Term::Variable(right_variable) => {
+                if !variable_order.contains(right_variable) {
+                    continue;
+                }
+
+                let column_idx_left = *variable_order
+                    .get(left_variable)
+                    .expect("Loop iteration is skipped for unknown variables.");
+                let column_idx_right = *variable_order
+                    .get(right_variable)
+                    .expect("Loop iteration is skipped for unknown variables.");
+
+                let (column_idx_value, column_idx_bound, operation) =
+                    if column_idx_left > column_idx_right {
+                        (column_idx_left, column_idx_right, filter.operation)
+                    } else {
+                        (column_idx_right, column_idx_left, filter.operation.flip())
+                    };
+
+                let (column_idx_lower, column_idx_upper) = if operation
+                    == FilterOperation::GreaterThan
+                    || operation == FilterOperation::GreaterThanEq
+                {
+                    (Some(column_idx_bound), None)
+                } else if operation == FilterOperation::LessThan
+                    || operation == FilterOperation::LessThanEq
+                {
+                    (None, Some(column_idx_bound))
+                } else {
+                    unreachable!()
+                };
+
+                let interval = filter_operation_to_interval(&operation, IntervalValue::Column);
+
+                filter_assignments.push(ValueAssignment {
+                    column_idx_value,
+                    column_idx_lower,
+                    column_idx_upper,
+                    interval,
+                });
             }
             _ => {
                 let right_value = variable_types
                     .get(&filter.lhs)
                     .expect("Each variable should have been assigned a type.")
                     .ground_term_to_data_value_t(filter.rhs.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.");
-                let interval = filter_operation_to_interval(&filter.operation, right_value);
+                let interval = filter_operation_to_interval(
+                    &filter.operation,
+                    IntervalValue::Constant(right_value),
+                );
 
                 filter_assignments.push(ValueAssignment {
-                    column_idx: *variable_order.get(&filter.lhs).expect("We skip this loop iteration if one of the filter variables is not contained in the variable order."),
+                    column_idx_value: *variable_order.get(&filter.lhs).expect("We skip this loop iteration if one of the filter variables is not contained in the variable order."),
+                    column_idx_lower: None,
+                    column_idx_upper: None,
                     interval,
                 });
             }
@@ -129,7 +185,10 @@ pub(super) fn compute_filters(
     (filter_classes, filter_assignments)
 }
 
-fn filter_operation_to_interval<T: Clone>(operation: &FilterOperation, value: T) -> Interval<T> {
+fn filter_operation_to_interval<T: Clone>(
+    operation: &FilterOperation,
+    value: IntervalValue<T>,
+) -> Interval<IntervalValue<T>> {
     match operation {
         FilterOperation::Equals => Interval::single(value),
         FilterOperation::LessThan => {
