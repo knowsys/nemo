@@ -1,6 +1,6 @@
 [package]
 name = "nemo"
-version = "0.1.1-dev"
+version = "0.2.0"
 authors = [
 "Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
 "Lukas Gerlach <lukas.gerlach@tu-dresden.de>",

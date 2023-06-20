@@ -8,7 +8,7 @@ authors = [
 "Markus Krötzsch <markus.kroetzsch@tu-dresden.de>",
 "Maximilian Marx <maximilian.marx@tu-dresden.de>"
 ]	
-version = "0.1.1-dev"
+version = "0.2.0"
 edition = "2021"
 
 [features]
