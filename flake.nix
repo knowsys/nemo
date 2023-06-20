@@ -142,19 +142,19 @@ rec {
             NODE_PATH=${nemo-wasm-node}/lib/node_modules''${NODE_PATH:+":$NODE_PATH"} ${pkgs.nodejs}/bin/node $@
           '';
 
-          # wasm-pack expects wasm-bindgen 0.2.86,
+          # wasm-pack expects wasm-bindgen 0.2.87,
           # but nixpkgs currently only has 0.2.84
           wasm-bindgen-cli = pkgs.wasm-bindgen-cli.overrideAttrs (old: rec {
-            version = "0.2.86";
+            version = "0.2.87";
             src = pkgs.fetchCrate {
               inherit (old) pname;
               inherit version;
-              sha256 = "sha256-56EOiLbdgAcoTrkyvB3t9TjtLaRvGxFUXx4haLwE2QY=";
+              sha256 = "sha256-0u9bl+FkXEK2b54n7/l9JOCtKo+pb42GF9E1EnAUQa0=";
             };
 
             cargoDeps = platform.fetchCargoTarball {
               inherit src;
-              hash = "sha256-zQtr47XIb3G43j2IbQR+mHVnJbSriEhwOBQ7HA+YdKE=";
+              hash = "sha256-GncJhqH/ZYFu/NPRpkpcHJiSq6lC5WQXo/Fmy3iyviA=";
             };
 
             doCheck = false;
