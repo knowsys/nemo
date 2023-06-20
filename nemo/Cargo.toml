@@ -43,9 +43,9 @@ quickcheck = "1"
 quickcheck_macros = "1"
 
 # crates needed for benchmarking only
-criterion = { version = "0.4", features = [ "html_reports" ] }
+criterion = { version = "0.5", features = [ "html_reports" ] }
 rand_pcg = "0.3"
-polars = "0.25.1"
+polars = "0.30"
 
 [target.'cfg(unix)'.dev-dependencies]
 iai = "0.1" # needs valgrind -> unix only
