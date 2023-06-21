@@ -136,11 +136,11 @@ where
         for lower_bound in &self.lower_bounds {
             match lower_bound {
                 FilterBound::Inclusive(bound) => {
-                    let bound_value = self.get_bound(&bound);
+                    let bound_value = self.get_bound(bound);
                     self.scan_value.seek(bound_value);
                 }
                 FilterBound::Exclusive(bound) => {
-                    let bound_value = self.get_bound(&bound);
+                    let bound_value = self.get_bound(bound);
                     if let Some(seeked) = self.scan_value.seek(bound_value) {
                         if seeked == bound_value {
                             self.scan_value.next();
