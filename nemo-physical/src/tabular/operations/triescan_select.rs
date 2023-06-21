@@ -408,7 +408,7 @@ mod test {
         }
     }
 
-    fn select_val_next(scan: &mut TrieScanRestrictValues) -> Option<u64> {
+    fn restrict_val_next(scan: &mut TrieScanRestrictValues) -> Option<u64> {
         if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.next()
         } else {
@@ -416,7 +416,7 @@ mod test {
         }
     }
 
-    fn select_val_current(scan: &mut TrieScanRestrictValues) -> Option<u64> {
+    fn restrict_val_current(scan: &mut TrieScanRestrictValues) -> Option<u64> {
         if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.current()
         } else {
@@ -480,7 +480,7 @@ mod test {
     }
 
     #[test]
-    fn test_select_value() {
+    fn trie_restrict_value_constant() {
         let column_fst = make_column_with_intervals_t(&[1], &[0]);
         let column_snd = make_column_with_intervals_t(&[4, 5], &[0]);
         let column_trd = make_column_with_intervals_t(&[0, 1, 2, 1], &[0, 3]);
@@ -490,7 +490,7 @@ mod test {
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
         let mut dict = Dict::default();
-        let mut select_iter = TrieScanRestrictValues::new(
+        let mut restrict_iter = TrieScanRestrictValues::new(
             &mut dict,
             trie_iter,
             &HashMap::from([
@@ -519,49 +519,101 @@ mod test {
             ]),
         );
 
-        assert_eq!(select_val_current(&mut select_iter), None);
-        select_iter.down();
-        assert_eq!(select_val_current(&mut select_iter), None);
-        assert_eq!(select_val_next(&mut select_iter), Some(1));
-        assert_eq!(select_val_current(&mut select_iter), Some(1));
-        select_iter.down();
-        assert_eq!(select_val_current(&mut select_iter), None);
-        assert_eq!(select_val_next(&mut select_iter), Some(4));
-        assert_eq!(select_val_current(&mut select_iter), Some(4));
-        select_iter.down();
-        assert_eq!(select_val_current(&mut select_iter), None);
-        assert_eq!(select_val_next(&mut select_iter), Some(0));
-        assert_eq!(select_val_current(&mut select_iter), Some(0));
-        select_iter.down();
-        assert_eq!(select_val_current(&mut select_iter), None);
-        assert_eq!(select_val_next(&mut select_iter), Some(7));
-        assert_eq!(select_val_current(&mut select_iter), Some(7));
-        assert_eq!(select_val_next(&mut select_iter), None);
-        assert_eq!(select_val_current(&mut select_iter), None);
-        select_iter.up();
-        assert_eq!(select_val_next(&mut select_iter), Some(1));
-        assert_eq!(select_val_current(&mut select_iter), Some(1));
-        select_iter.down();
-        assert_eq!(select_val_current(&mut select_iter), None);
-        assert_eq!(select_val_next(&mut select_iter), Some(7));
-        assert_eq!(select_val_current(&mut select_iter), Some(7));
-        assert_eq!(select_val_next(&mut select_iter), None);
-        assert_eq!(select_val_current(&mut select_iter), None);
-        select_iter.up();
-        assert_eq!(select_val_next(&mut select_iter), Some(2));
-        assert_eq!(select_val_current(&mut select_iter), Some(2));
-        select_iter.down();
-        assert_eq!(select_val_current(&mut select_iter), None);
-        assert_eq!(select_val_next(&mut select_iter), None);
-        assert_eq!(select_val_current(&mut select_iter), None);
-        select_iter.up();
-        assert_eq!(select_val_next(&mut select_iter), None);
-        assert_eq!(select_val_current(&mut select_iter), None);
-        select_iter.up();
-        assert_eq!(select_val_next(&mut select_iter), None);
-        assert_eq!(select_val_current(&mut select_iter), None);
-        select_iter.up();
-        assert_eq!(select_val_next(&mut select_iter), None);
-        assert_eq!(select_val_current(&mut select_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(1));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(1));
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(4));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(4));
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(0));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(0));
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(7));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(7));
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.up();
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(1));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(1));
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(7));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(7));
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.up();
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(2));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(2));
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.up();
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.up();
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.up();
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+    }
+
+    #[test]
+    fn trie_restrict_value_column() {
+        let column_fst = make_column_with_intervals_t(&[1, 5, 8], &[0]);
+        let column_snd = make_column_with_intervals_t(&[5, 2, 4, 7, 5], &[0, 1, 4]);
+
+        let trie = Trie::new(vec![column_fst, column_snd]);
+        let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+
+        let mut dict = Dict::default();
+        let mut restrict_iter = TrieScanRestrictValues::new(
+            &mut dict,
+            trie_iter,
+            &HashMap::from([(
+                1,
+                ValueAssignment {
+                    lower_bounds: vec![],
+                    upper_bounds: vec![FilterBound::Exclusive(FilterValue::Column(0))],
+                },
+            )]),
+        );
+
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(1));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(1));
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.up();
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(5));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(5));
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(2));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(2));
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(4));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(4));
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.up();
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(8));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(8));
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(5));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(5));
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
     }
 }
