@@ -272,53 +272,84 @@ mod test {
     use test_log::test;
 
     #[test]
-    fn test_u64_equal() {
+    fn restrict_equal() {
         let col = ColumnVector::new(vec![1u64, 4, 8]);
         let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(col.iter()));
 
-        let mut equal_scan = ColumnScanRestrictValues::new(
+        let mut restrict_scan = ColumnScanRestrictValues::new(
             &col_iter,
             vec![],
             vec![FilterBound::Inclusive(FilterValue::Constant(4))],
             vec![FilterBound::Inclusive(FilterValue::Constant(4))],
         );
 
-        assert_eq!(equal_scan.current(), None);
-        assert_eq!(equal_scan.next(), Some(4));
-        assert_eq!(equal_scan.current(), Some(4));
-        assert_eq!(equal_scan.next(), None);
-        assert_eq!(equal_scan.current(), None);
+        assert_eq!(restrict_scan.current(), None);
+        assert_eq!(restrict_scan.next(), Some(4));
+        assert_eq!(restrict_scan.current(), Some(4));
+        assert_eq!(restrict_scan.next(), None);
+        assert_eq!(restrict_scan.current(), None);
 
         let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(col.iter()));
-        let mut equal_scan = ColumnScanRestrictValues::new(
+        let mut restrict_scan = ColumnScanRestrictValues::new(
             &col_iter,
             vec![],
             vec![FilterBound::Inclusive(FilterValue::Constant(7))],
             vec![FilterBound::Inclusive(FilterValue::Constant(7))],
         );
-        assert_eq!(equal_scan.current(), None);
-        assert_eq!(equal_scan.next(), None);
-        assert_eq!(equal_scan.current(), None);
+        assert_eq!(restrict_scan.current(), None);
+        assert_eq!(restrict_scan.next(), None);
+        assert_eq!(restrict_scan.current(), None);
     }
 
     #[test]
-    fn test_u64_interval() {
+    fn restrict_interval() {
         let col = ColumnVector::new(vec![1u64, 2, 4, 8]);
         let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(col.iter()));
 
-        let mut equal_scan = ColumnScanRestrictValues::new(
+        let mut restrict_scan = ColumnScanRestrictValues::new(
             &col_iter,
             vec![],
             vec![FilterBound::Exclusive(FilterValue::Constant(1))],
             vec![FilterBound::Inclusive(FilterValue::Constant(4))],
         );
 
-        assert_eq!(equal_scan.current(), None);
-        assert_eq!(equal_scan.next(), Some(2));
-        assert_eq!(equal_scan.current(), Some(2));
-        assert_eq!(equal_scan.next(), Some(4));
-        assert_eq!(equal_scan.current(), Some(4));
-        assert_eq!(equal_scan.next(), None);
-        assert_eq!(equal_scan.current(), None);
+        assert_eq!(restrict_scan.current(), None);
+        assert_eq!(restrict_scan.next(), Some(2));
+        assert_eq!(restrict_scan.current(), Some(2));
+        assert_eq!(restrict_scan.next(), Some(4));
+        assert_eq!(restrict_scan.current(), Some(4));
+        assert_eq!(restrict_scan.next(), None);
+        assert_eq!(restrict_scan.current(), None);
+    }
+
+    #[test]
+    fn restrict_columns() {
+        let column_value = ColumnVector::new(vec![1u64, 2, 4, 6, 8]);
+        let column_bounds = ColumnVector::new(vec![2u64, 7]);
+
+        let value_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_value.iter()));
+        let lower_bound =
+            ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_bounds.iter()));
+        let upper_bound =
+            ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_bounds.iter()));
+
+        lower_bound.next();
+        upper_bound.next();
+        upper_bound.next();
+
+        let mut restrict_scan = ColumnScanRestrictValues::new(
+            &value_iter,
+            vec![&lower_bound, &upper_bound],
+            vec![FilterBound::Exclusive(FilterValue::Column(0))],
+            vec![FilterBound::Inclusive(FilterValue::Column(1))],
+        );
+
+        assert_eq!(restrict_scan.current(), None);
+        assert_eq!(restrict_scan.next(), Some(4));
+        assert_eq!(restrict_scan.current(), Some(4));
+        assert_eq!(restrict_scan.next(), Some(6));
+        assert_eq!(restrict_scan.current(), Some(6));
+        assert_eq!(restrict_scan.next(), None);
+        assert_eq!(restrict_scan.current(), None);
     }
 }
