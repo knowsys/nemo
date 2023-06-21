@@ -86,7 +86,7 @@ enum ColumnScanStatus {
 
 /// [`ColumnScan`] which allows its sub scan to only jump to a certain value
 #[derive(Debug)]
-pub struct ColumnScanEqualValue<'a, T>
+pub struct ColumnScanRestrictValues<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -103,18 +103,18 @@ where
     /// Status of this scan.
     status: ColumnScanStatus,
 }
-impl<'a, T> ColumnScanEqualValue<'a, T>
+impl<'a, T> ColumnScanRestrictValues<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new [`ColumnScanEqualValue`].
+    /// Constructs a new [`ColumnScanRestrictValues`].
     pub fn new(
         scan_value: &'a ColumnScanCell<'a, T>,
         scans_restriction: Vec<&'a ColumnScanCell<'a, T>>,
         lower_bounds: Vec<FilterBound<T>>,
         upper_bounds: Vec<FilterBound<T>>,
-    ) -> ColumnScanEqualValue<'a, T> {
-        ColumnScanEqualValue {
+    ) -> ColumnScanRestrictValues<'a, T> {
+        ColumnScanRestrictValues {
             scan_value,
             scans_restriction,
             lower_bounds,
@@ -183,7 +183,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for ColumnScanEqualValue<'a, T>
+impl<'a, T> Iterator for ColumnScanRestrictValues<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -210,7 +210,7 @@ where
     }
 }
 
-impl<'a, T> ColumnScan for ColumnScanEqualValue<'a, T>
+impl<'a, T> ColumnScan for ColumnScanRestrictValues<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -260,14 +260,14 @@ where
 mod test {
     use crate::columnar::{
         column_types::vector::ColumnVector,
-        operations::columnscan_equal_value::{FilterBound, FilterValue},
+        operations::columnscan_restrict_values::{FilterBound, FilterValue},
         traits::{
             column::Column,
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
         },
     };
 
-    use super::ColumnScanEqualValue;
+    use super::ColumnScanRestrictValues;
 
     use test_log::test;
 
@@ -276,7 +276,7 @@ mod test {
         let col = ColumnVector::new(vec![1u64, 4, 8]);
         let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(col.iter()));
 
-        let mut equal_scan = ColumnScanEqualValue::new(
+        let mut equal_scan = ColumnScanRestrictValues::new(
             &col_iter,
             vec![],
             vec![FilterBound::Inclusive(FilterValue::Constant(4))],
@@ -290,7 +290,7 @@ mod test {
         assert_eq!(equal_scan.current(), None);
 
         let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(col.iter()));
-        let mut equal_scan = ColumnScanEqualValue::new(
+        let mut equal_scan = ColumnScanRestrictValues::new(
             &col_iter,
             vec![],
             vec![FilterBound::Inclusive(FilterValue::Constant(7))],
@@ -306,7 +306,7 @@ mod test {
         let col = ColumnVector::new(vec![1u64, 2, 4, 8]);
         let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(col.iter()));
 
-        let mut equal_scan = ColumnScanEqualValue::new(
+        let mut equal_scan = ColumnScanRestrictValues::new(
             &col_iter,
             vec![],
             vec![FilterBound::Exclusive(FilterValue::Constant(1))],

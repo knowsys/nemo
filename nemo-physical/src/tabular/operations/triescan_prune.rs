@@ -528,7 +528,7 @@ mod test {
     use std::collections::HashMap;
 
     use super::TrieScanPrune;
-    use crate::columnar::operations::columnscan_equal_value::{FilterBound, FilterValue};
+    use crate::columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue};
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;

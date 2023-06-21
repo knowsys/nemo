@@ -6,7 +6,7 @@ use std::{
 };
 
 use nemo_physical::{
-    columnar::operations::columnscan_equal_value::{FilterBound, FilterValue},
+    columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue},
     datatypes::DataValueT,
     management::{
         database::{ColumnOrder, TableId},

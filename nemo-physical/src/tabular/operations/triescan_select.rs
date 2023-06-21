@@ -1,8 +1,8 @@
 use crate::{
     columnar::{
         operations::{
-            columnscan_equal_value::{FilterBound, FilterValue},
-            ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanPass,
+            columnscan_restrict_values::{FilterBound, FilterValue},
+            ColumnScanEqualColumn, ColumnScanPass, ColumnScanRestrictValues,
         },
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
@@ -169,7 +169,7 @@ pub struct TrieScanSelectValue<'a> {
     /// Base trie on which the filter is applied
     base_trie: Box<TrieScanEnum<'a>>,
 
-    /// For each layer in the resulting trie, contains a [`ColumnScanEqualValue`]
+    /// For each layer in the resulting trie, contains a [`ColumnScanRestrictValues`]
     /// Note: Reason for using [`UnsafeCell`] is explained for [`TrieScanJoin`]
     select_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 
@@ -313,8 +313,8 @@ impl<'a> TrieScanSelectValue<'a> {
                         }
                     }
 
-                    let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanEqualValue(
-                        ColumnScanEqualValue::new(
+                    let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanRestrictValues(
+                        ColumnScanRestrictValues::new(
                             scan_value,
                             scans_restriction,
                             lower_bounds,
@@ -382,7 +382,7 @@ mod test {
     use std::collections::HashMap;
 
     use super::{TrieScanSelectEqual, TrieScanSelectValue, ValueAssignment};
-    use crate::columnar::operations::columnscan_equal_value::{FilterBound, FilterValue};
+    use crate::columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue};
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;

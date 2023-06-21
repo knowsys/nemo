@@ -1,8 +1,7 @@
 use super::super::column_types::{rle::ColumnScanRle, vector::ColumnScanVector};
 use super::super::operations::{
-    ColumnScanCastEnum, ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanFollow,
-    ColumnScanJoin, ColumnScanMinus, ColumnScanPass, ColumnScanPrune, ColumnScanReorder,
-    ColumnScanUnion,
+    ColumnScanCastEnum, ColumnScanEqualColumn, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus,
+    ColumnScanPass, ColumnScanPrune, ColumnScanReorder, ColumnScanRestrictValues, ColumnScanUnion,
 };
 
 use crate::columnar::operations::{
@@ -61,8 +60,8 @@ where
     ColumnScanReorder(ColumnScanReorder<'a, T>),
     /// Case ColumnScanEqualColumn
     ColumnScanEqualColumn(ColumnScanEqualColumn<'a, T>),
-    /// Case ColumnScanEqualValue
-    ColumnScanEqualValue(ColumnScanEqualValue<'a, T>),
+    /// Case ColumnScanRestrictValues
+    ColumnScanRestrictValues(ColumnScanRestrictValues<'a, T>),
     /// Case ColumnScanJoin
     ColumnScanPass(ColumnScanPass<'a, T>),
     /// Case ColumnScanPrune
@@ -139,12 +138,12 @@ where
     }
 }
 
-impl<'a, T> From<ColumnScanEqualValue<'a, T>> for ColumnScanEnum<'a, T>
+impl<'a, T> From<ColumnScanRestrictValues<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColumnScanEqualValue<'a, T>) -> Self {
-        Self::ColumnScanEqualValue(cs)
+    fn from(cs: ColumnScanRestrictValues<'a, T>) -> Self {
+        Self::ColumnScanRestrictValues(cs)
     }
 }
 
@@ -282,7 +281,7 @@ generate_forwarder!(forward_to_columnscan;
     ColumnScanJoin,
     ColumnScanReorder,
     ColumnScanEqualColumn,
-    ColumnScanEqualValue,
+    ColumnScanRestrictValues,
     ColumnScanPass,
     ColumnScanPrune,
     ColumnScanFollow,

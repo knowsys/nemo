@@ -12,9 +12,9 @@ pub use columnscan_reorder::ColumnScanReorder;
 pub mod columnscan_equal_column;
 pub use columnscan_equal_column::ColumnScanEqualColumn;
 
-/// Module for defining [`ColumnScanEqualValue`]
-pub mod columnscan_equal_value;
-pub use columnscan_equal_value::ColumnScanEqualValue;
+/// Module for defining [`ColumnScanRestrictValues`]
+pub mod columnscan_restrict_values;
+pub use columnscan_restrict_values::ColumnScanRestrictValues;
 
 /// Module for defining [`ColumnScanPass`]
 pub mod columnscan_pass;
