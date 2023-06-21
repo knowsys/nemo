@@ -5,7 +5,7 @@ use crate::tabular::operations::triescan_append::TrieScanAppend;
 use crate::tabular::operations::triescan_minus::TrieScanSubtract;
 use crate::tabular::operations::{
     TrieScanJoin, TrieScanMinus, TrieScanNulls, TrieScanProject, TrieScanPrune,
-    TrieScanSelectEqual, TrieScanSelectValue, TrieScanUnion,
+    TrieScanRestrictValues, TrieScanSelectEqual, TrieScanUnion,
 };
 use crate::tabular::table_types::trie::TrieScanGeneric;
 use std::cell::UnsafeCell;
@@ -50,8 +50,8 @@ pub enum TrieScanEnum<'a> {
     TrieScanUnion(TrieScanUnion<'a>),
     /// Case TrieScanSelectEqual
     TrieScanSelectEqual(TrieScanSelectEqual<'a>),
-    /// Case TrieScanSelectValue
-    TrieScanSelectValue(TrieScanSelectValue<'a>),
+    /// Case TrieScanRestrictValues
+    TrieScanRestrictValues(TrieScanRestrictValues<'a>),
     /// Case TrieScanAppend
     TrieScanAppend(TrieScanAppend<'a>),
     /// Case TrieScanAppend
@@ -67,7 +67,7 @@ generate_forwarder!(forward_to_scan;
     TrieScanPrune,
     TrieScanMinus,
     TrieScanSelectEqual,
-    TrieScanSelectValue,
+    TrieScanRestrictValues,
     TrieScanUnion,
     TrieScanAppend,
     TrieScanNulls,

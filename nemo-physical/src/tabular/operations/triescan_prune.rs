@@ -532,7 +532,7 @@ mod test {
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;
-    use crate::tabular::operations::{TrieScanSelectValue, ValueAssignment};
+    use crate::tabular::operations::{TrieScanRestrictValues, ValueAssignment};
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
 
@@ -590,7 +590,7 @@ mod test {
         let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(input_trie));
 
         let mut dict = Dict::default();
-        let scan = TrieScanEnum::TrieScanSelectValue(TrieScanSelectValue::new(
+        let scan = TrieScanEnum::TrieScanRestrictValues(TrieScanRestrictValues::new(
             &mut dict,
             scan,
             &HashMap::from([

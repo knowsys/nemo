@@ -163,9 +163,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanSelectEqual<'a> {
     }
 }
 
-/// Trie iterator enforcing conditions which state that some columns should have the same value
+/// Trie iterator enforcing conditions on the input trie expressed as lower and upper bounds
 #[derive(Debug)]
-pub struct TrieScanSelectValue<'a> {
+pub struct TrieScanRestrictValues<'a> {
     /// Base trie on which the filter is applied
     base_trie: Box<TrieScanEnum<'a>>,
 
@@ -177,7 +177,8 @@ pub struct TrieScanSelectValue<'a> {
     current_layer: Option<usize>,
 }
 
-/// Struct representing the restriction of a column to a certain value
+/// Struct representing the restriction of a column to a certain values
+/// bounded by the given lower and upper bounds.
 #[derive(Debug, Default, Clone)]
 pub struct ValueAssignment {
     /// List of lower bounds that the column must satisfy.
@@ -186,8 +187,8 @@ pub struct ValueAssignment {
     pub upper_bounds: Vec<FilterBound<DataValueT>>,
 }
 
-impl<'a> TrieScanSelectValue<'a> {
-    /// Construct new TrieScanSelectValue object.
+impl<'a> TrieScanRestrictValues<'a> {
+    /// Construct new TrieScanRestrictValues object.
     pub fn new(
         dict: &mut Dict,
         base_trie: TrieScanEnum<'a>,
@@ -344,7 +345,7 @@ impl<'a> TrieScanSelectValue<'a> {
     }
 }
 
-impl<'a> PartialTrieScan<'a> for TrieScanSelectValue<'a> {
+impl<'a> PartialTrieScan<'a> for TrieScanRestrictValues<'a> {
     fn up(&mut self) {
         self.current_layer = self
             .current_layer
@@ -381,7 +382,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSelectValue<'a> {
 mod test {
     use std::collections::HashMap;
 
-    use super::{TrieScanSelectEqual, TrieScanSelectValue, ValueAssignment};
+    use super::{TrieScanRestrictValues, TrieScanSelectEqual, ValueAssignment};
     use crate::columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue};
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
@@ -407,7 +408,7 @@ mod test {
         }
     }
 
-    fn select_val_next(scan: &mut TrieScanSelectValue) -> Option<u64> {
+    fn select_val_next(scan: &mut TrieScanRestrictValues) -> Option<u64> {
         if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.next()
         } else {
@@ -415,7 +416,7 @@ mod test {
         }
     }
 
-    fn select_val_current(scan: &mut TrieScanSelectValue) -> Option<u64> {
+    fn select_val_current(scan: &mut TrieScanRestrictValues) -> Option<u64> {
         if let ColumnScanT::U64(rcs) = scan.current_scan()? {
             rcs.current()
         } else {
@@ -489,7 +490,7 @@ mod test {
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
         let mut dict = Dict::default();
-        let mut select_iter = TrieScanSelectValue::new(
+        let mut select_iter = TrieScanRestrictValues::new(
             &mut dict,
             trie_iter,
             &HashMap::from([
