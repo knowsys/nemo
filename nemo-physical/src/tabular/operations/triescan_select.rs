@@ -1,18 +1,17 @@
 use crate::{
     columnar::{
         operations::{
-            columnscan_equal_value::IntervalValue, ColumnScanEqualColumn, ColumnScanEqualValue,
-            ColumnScanPass,
+            columnscan_equal_value::{FilterBound, FilterValue},
+            ColumnScanEqualColumn, ColumnScanEqualValue, ColumnScanPass,
         },
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::{DataValueT, StorageTypeName, StorageValueT},
+    datatypes::{DataValueT, Double, Float, StorageTypeName, StorageValueT},
     management::database::Dict,
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
-    util::interval::{Interval, IntervalBound},
 };
-use std::cell::UnsafeCell;
-use std::fmt::Debug;
+use std::{cell::UnsafeCell, collections::HashMap};
+use std::{collections::hash_map::Entry, fmt::Debug};
 
 /// [`SelectEqualClasses`] contains a vectors that indicate which column indices should be forced to the same value
 /// E.g. for R(a, a, b, c, d, c) eq_classes = [[0, 1], [3, 5]]
@@ -179,16 +178,12 @@ pub struct TrieScanSelectValue<'a> {
 }
 
 /// Struct representing the restriction of a column to a certain value
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct ValueAssignment {
-    /// Index of the column to which the value is assigned
-    pub column_idx_value: usize,
-    /// Optional index of the column containing the lower bound
-    pub column_idx_lower: Option<usize>,
-    /// Optional index of the column containing the lower bound
-    pub column_idx_upper: Option<usize>,
-    /// The interval assigned to the column
-    pub interval: Interval<IntervalValue<DataValueT>>,
+    /// List of lower bounds that the column must satisfy.
+    pub lower_bounds: Vec<FilterBound<DataValueT>>,
+    /// List of upper bounds that the column must satisfy.
+    pub upper_bounds: Vec<FilterBound<DataValueT>>,
 }
 
 impl<'a> TrieScanSelectValue<'a> {
@@ -196,7 +191,7 @@ impl<'a> TrieScanSelectValue<'a> {
     pub fn new(
         dict: &mut Dict,
         base_trie: TrieScanEnum<'a>,
-        assignments: &[ValueAssignment],
+        assignments: &HashMap<usize, ValueAssignment>,
     ) -> Self {
         let column_types = base_trie.get_types();
         let arity = column_types.len();
@@ -231,96 +226,108 @@ impl<'a> TrieScanSelectValue<'a> {
             }
         }
 
-        macro_rules! translate_interval_bound {
-            ($variant:ident, $type:ty, $interval_bound:expr, $dict:expr) => {
-                match $interval_bound {
-                    IntervalBound::Inclusive(bound) => {
-                        if let IntervalValue::Constant(constant) = bound {
-                            if let StorageValueT::$variant(value) = constant.to_storage_value(dict)
+        macro_rules! translate_filter_bound {
+            ($variant:ident, $filter_bound:expr, $dict:expr) => {
+                match $filter_bound {
+                    FilterBound::Inclusive(value) => match value {
+                        FilterValue::Column(index) => {
+                            FilterBound::Inclusive(FilterValue::Column(*index))
+                        }
+                        FilterValue::Constant(constant) => {
+                            if let StorageValueT::$variant(constant_typed) =
+                                constant.to_storage_value($dict)
                             {
-                                IntervalBound::Inclusive(IntervalValue::Constant(value))
+                                FilterBound::Inclusive(FilterValue::Constant(constant_typed))
                             } else {
                                 panic!("Expected a column scan of type {}", stringify!($variant));
                             }
-                        } else {
-                            IntervalBound::Inclusive(IntervalValue::Column)
                         }
-                    }
-                    IntervalBound::Exclusive(bound) => {
-                        if let IntervalValue::Constant(constant) = bound {
-                            if let StorageValueT::$variant(value) = constant.to_storage_value(dict)
+                    },
+                    FilterBound::Exclusive(value) => match value {
+                        FilterValue::Column(index) => {
+                            FilterBound::Exclusive(FilterValue::Column(*index))
+                        }
+                        FilterValue::Constant(constant) => {
+                            if let StorageValueT::$variant(constant_typed) =
+                                constant.to_storage_value($dict)
                             {
-                                IntervalBound::Exclusive(IntervalValue::Constant(value))
+                                FilterBound::Exclusive(FilterValue::Constant(constant_typed))
                             } else {
                                 panic!("Expected a column scan of type {}", stringify!($variant));
                             }
-                        } else {
-                            IntervalBound::Exclusive(IntervalValue::Column)
                         }
-                    }
-                    IntervalBound::Unbounded => IntervalBound::Unbounded,
+                    },
                 }
             };
         }
 
-        for assignment in assignments {
+        for (column_idx_value, assignment) in assignments {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident, $type:ty) => {{
-                    let lower = translate_interval_bound!(
-                        $variant,
-                        $type,
-                        &assignment.interval.lower,
-                        dict
-                    );
-                    let upper = translate_interval_bound!(
-                        $variant,
-                        $type,
-                        &assignment.interval.upper,
-                        dict
-                    );
-                    let interval = Interval::new(lower, upper);
-
-                    let scan_enum = if let ColumnScanT::$variant(scan) = unsafe {
-                        &*base_trie
-                            .get_scan(assignment.column_idx_value)
-                            .unwrap()
-                            .get()
-                    } {
+                    let scan_value = if let ColumnScanT::$variant(scan) =
+                        unsafe { &*base_trie.get_scan(*column_idx_value).unwrap().get() }
+                    {
                         scan
                     } else {
                         panic!("Expected a column scan of type {}", stringify!($variant));
                     };
 
-                    let scan_lower = assignment.column_idx_lower.map(|idx| {
-                        if let ColumnScanT::$variant(scan) =
-                            unsafe { (&*base_trie.get_scan(idx).unwrap().get()) }
-                        {
-                            scan
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($variant));
-                        }
-                    });
+                    let mut column_map = HashMap::<usize, usize>::new();
+                    let mut scans_restriction = Vec::new();
+                    let mut lower_bounds: Vec<FilterBound<$type>> = assignment
+                        .lower_bounds
+                        .iter()
+                        .map(|b| translate_filter_bound!($variant, b, dict))
+                        .collect();
+                    let mut upper_bounds: Vec<FilterBound<$type>> = assignment
+                        .upper_bounds
+                        .iter()
+                        .map(|b| translate_filter_bound!($variant, b, dict))
+                        .collect();
 
-                    let scan_upper = assignment.column_idx_upper.map(|idx| {
-                        if let ColumnScanT::$variant(scan) =
-                            unsafe { (&*base_trie.get_scan(idx).unwrap().get()) }
-                        {
-                            scan
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($variant));
+                    for bound in lower_bounds.iter_mut().chain(upper_bounds.iter_mut()) {
+                        if let Some(bound_index) = bound.column_index_mut() {
+                            let map_len = column_map.len();
+                            let mapped_index = match column_map.entry(*bound_index) {
+                                Entry::Occupied(entry) => *entry.get(),
+                                Entry::Vacant(entry) => {
+                                    entry.insert(map_len);
+                                    let referenced_scan = if let ColumnScanT::$variant(scan) =
+                                        unsafe { &*base_trie.get_scan(*bound_index).unwrap().get() }
+                                    {
+                                        scan
+                                    } else {
+                                        panic!(
+                                            "Expected a column scan of type {}",
+                                            stringify!($variant)
+                                        );
+                                    };
+
+                                    scans_restriction.push(referenced_scan);
+
+                                    map_len
+                                }
+                            };
+
+                            *bound_index = mapped_index;
                         }
-                    });
+                    }
 
                     let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanEqualValue(
-                        ColumnScanEqualValue::new(scan_enum, scan_lower, scan_upper, interval),
+                        ColumnScanEqualValue::new(
+                            scan_value,
+                            scans_restriction,
+                            lower_bounds,
+                            upper_bounds,
+                        ),
                     ));
 
-                    select_scans[assignment.column_idx_value] =
+                    select_scans[*column_idx_value] =
                         UnsafeCell::new(ColumnScanT::$variant(next_scan));
                 }};
             }
 
-            match column_types[assignment.column_idx_value] {
+            match column_types[*column_idx_value] {
                 StorageTypeName::U32 => init_scans_for_datatype!(U32, u32),
                 StorageTypeName::U64 => init_scans_for_datatype!(U64, u64),
                 StorageTypeName::I64 => init_scans_for_datatype!(I64, i64),
@@ -372,14 +379,15 @@ impl<'a> PartialTrieScan<'a> for TrieScanSelectValue<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use super::{TrieScanSelectEqual, TrieScanSelectValue, ValueAssignment};
-    use crate::columnar::operations::columnscan_equal_value::IntervalValue;
+    use crate::columnar::operations::columnscan_equal_value::{FilterBound, FilterValue};
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
-    use crate::util::interval::Interval;
     use crate::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
@@ -484,21 +492,32 @@ mod test {
         let mut select_iter = TrieScanSelectValue::new(
             &mut dict,
             trie_iter,
-            &[
-                ValueAssignment {
-                    column_idx_value: 1,
-                    column_idx_lower: None,
-                    column_idx_upper: None,
-                    interval: Interval::single(IntervalValue::Constant(DataValueT::U64(4))),
-                },
-                ValueAssignment {
-                    column_idx_value: 3,
-                    column_idx_lower: None,
-                    column_idx_upper: None,
-                    interval: Interval::single(IntervalValue::Constant(DataValueT::U64(7))),
-                },
-            ],
+            &HashMap::from([
+                (
+                    1,
+                    ValueAssignment {
+                        lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+                            DataValueT::U64(4),
+                        ))],
+                        upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+                            DataValueT::U64(4),
+                        ))],
+                    },
+                ),
+                (
+                    3,
+                    ValueAssignment {
+                        lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+                            DataValueT::U64(7),
+                        ))],
+                        upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+                            DataValueT::U64(7),
+                        ))],
+                    },
+                ),
+            ]),
         );
+
         assert_eq!(select_val_current(&mut select_iter), None);
         select_iter.down();
         assert_eq!(select_val_current(&mut select_iter), None);

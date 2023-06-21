@@ -1,24 +1,78 @@
 use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
-use crate::{
-    datatypes::ColumnDataType,
-    util::interval::{Interval, IntervalBound},
-};
+use crate::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
-/// Interval bound which may either be a constant or given as a column scan value.
+/// Concrete value a interval bound can take.
 #[derive(Debug, Clone)]
-pub enum IntervalValue<T>
+pub enum FilterValue<T>
 where
     T: Clone,
 {
-    /// Interval bound is given as a value pointed by a column scan
-    Column,
-    /// Interval bound is a constant
+    /// Interval bound is given as a value pointed by a column scan with the given index.
+    Column(usize),
+    /// Interval bound by the given constant.
     Constant(T),
 }
 
-/// Interval with bounds that may either be a constants or given as column scan values.
-pub type ColumnScanInterval<T> = Interval<IntervalValue<T>>;
+impl<T> FilterValue<T>
+where
+    T: Clone,
+{
+    /// Return the column index this value refers to.
+    /// Returns None if this is a constant.
+    pub fn column_index(&self) -> Option<usize> {
+        if let Self::Column(index) = self {
+            Some(*index)
+        } else {
+            None
+        }
+    }
+
+    /// Return a mutable reference to the column index this value refers to.
+    /// Returns None if this is a constant.
+    pub fn column_index_mut(&mut self) -> Option<&mut usize> {
+        if let Self::Column(index) = self {
+            Some(index)
+        } else {
+            None
+        }
+    }
+}
+
+/// Represents a bound
+#[derive(Debug, Clone)]
+pub enum FilterBound<T>
+where
+    T: Clone,
+{
+    /// Bound includes the given value.
+    Inclusive(FilterValue<T>),
+    /// Bound exclusdes the given value.
+    Exclusive(FilterValue<T>),
+}
+
+impl<T> FilterBound<T>
+where
+    T: Clone,
+{
+    /// Return the column index which this bound references.
+    /// Return `None` if the bound is given by a constant.
+    pub fn column_index(&self) -> Option<usize> {
+        match self {
+            FilterBound::Inclusive(value) | FilterBound::Exclusive(value) => value.column_index(),
+        }
+    }
+
+    /// Return a mutable reference to the column index which this bound references.
+    /// Return `None` if the bound is given by a constant.
+    pub fn column_index_mut(&mut self) -> Option<&mut usize> {
+        match self {
+            FilterBound::Inclusive(value) | FilterBound::Exclusive(value) => {
+                value.column_index_mut()
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 enum ColumnScanStatus {
@@ -38,13 +92,13 @@ where
 {
     /// The sub scan that provides the values
     scan_value: &'a ColumnScanCell<'a, T>,
-    /// Optional lower bound in form of another sub scan.
-    scan_lower: Option<&'a ColumnScanCell<'a, T>>,
-    /// Optional upper bound in form of another sub scan.
-    scan_upper: Option<&'a ColumnScanCell<'a, T>>,
+    /// The sub scans relative to which `scan_value` will be restricted.
+    scans_restriction: Vec<&'a ColumnScanCell<'a, T>>,
 
-    /// The value the scan jumps to
-    interval: ColumnScanInterval<T>,
+    /// Lower bounds for the value of `scan_value`.
+    lower_bounds: Vec<FilterBound<T>>,
+    /// Upper bounds for the vlaue of `scan_value`.
+    upper_bounds: Vec<FilterBound<T>>,
 
     /// Status of this scan.
     status: ColumnScanStatus,
@@ -56,95 +110,77 @@ where
     /// Constructs a new [`ColumnScanEqualValue`].
     pub fn new(
         scan_value: &'a ColumnScanCell<'a, T>,
-        scan_lower: Option<&'a ColumnScanCell<'a, T>>,
-        scan_upper: Option<&'a ColumnScanCell<'a, T>>,
-        interval: ColumnScanInterval<T>,
+        scans_restriction: Vec<&'a ColumnScanCell<'a, T>>,
+        lower_bounds: Vec<FilterBound<T>>,
+        upper_bounds: Vec<FilterBound<T>>,
     ) -> ColumnScanEqualValue<'a, T> {
         ColumnScanEqualValue {
             scan_value,
-            scan_lower,
-            scan_upper,
-            interval,
+            scans_restriction,
+            lower_bounds,
+            upper_bounds,
             status: ColumnScanStatus::Before,
         }
     }
 
-    fn get_bound_lower(&self, value: &IntervalValue<T>) -> T {
+    fn get_bound(&self, value: &FilterValue<T>) -> T {
         match value {
-            IntervalValue::Column => self.scan_lower.expect("If the bound is set to Column then scan_lower must be Some").current().expect("ColumnScan must be built in such a way, that the input scans always point to a value."),
-            IntervalValue::Constant(constant) => *constant,
+            FilterValue::Column(index) => self.scans_restriction[*index]
+                .current()
+                .expect("If the bound is set to Column then scan_lower must be Some"),
+            FilterValue::Constant(constant) => *constant,
         }
     }
 
-    fn get_bound_upper(&self, value: &IntervalValue<T>) -> T {
-        match value {
-            IntervalValue::Column => self.scan_upper.expect("If the bound is set to Column then scan_lower must be Some").current().expect("ColumnScan must be built in such a way, that the input scans always point to a value."),
-            IntervalValue::Constant(constant) => *constant,
-        }
-    }
-
-    fn satisfy_lower_bound(&mut self) {
-        match &self.interval.lower {
-            IntervalBound::Inclusive(bound) => {
-                let bound_value = self.get_bound_lower(&bound);
-                self.scan_value.seek(bound_value);
-            }
-            IntervalBound::Exclusive(bound) => {
-                let bound_value = self.get_bound_lower(&bound);
-                if let Some(seeked) = self.scan_value.seek(bound_value) {
-                    if seeked == bound_value {
-                        self.scan_value.next();
+    fn satisfy_lower_bounds(&mut self) {
+        for lower_bound in &self.lower_bounds {
+            match lower_bound {
+                FilterBound::Inclusive(bound) => {
+                    let bound_value = self.get_bound(&bound);
+                    self.scan_value.seek(bound_value);
+                }
+                FilterBound::Exclusive(bound) => {
+                    let bound_value = self.get_bound(&bound);
+                    if let Some(seeked) = self.scan_value.seek(bound_value) {
+                        if seeked == bound_value {
+                            self.scan_value.next();
+                        }
                     }
                 }
             }
-            IntervalBound::Unbounded => {
-                self.scan_value.next();
-            }
+        }
+
+        if self.lower_bounds.is_empty() {
+            self.scan_value.next();
         }
 
         self.status = ColumnScanStatus::Within;
     }
 
-    fn check_upper_bound(&self) -> bool {
+    fn check_upper_bounds(&self) -> bool {
         if let Some(current) = self.current() {
-            match &self.interval.upper {
-                IntervalBound::Inclusive(bound) => {
-                    let bound_value = self.get_bound_upper(&bound);
+            let mut satisfied = true;
 
-                    current <= bound_value
-                }
-                IntervalBound::Exclusive(bound) => {
-                    let bound_value = self.get_bound_upper(&bound);
+            for upper_bound in &self.upper_bounds {
+                match upper_bound {
+                    FilterBound::Inclusive(bound) => {
+                        let bound_value = self.get_bound(bound);
 
-                    current < bound_value
+                        satisfied &= current <= bound_value;
+                    }
+                    FilterBound::Exclusive(bound) => {
+                        let bound_value = self.get_bound(bound);
+
+                        satisfied &= current < bound_value;
+                    }
                 }
-                IntervalBound::Unbounded => true,
             }
-        } else {
-            false
+
+            return satisfied;
         }
+
+        false
     }
-
-    // /// Move the inner scan to such a position that it satisfies the lower bound of the interval.
-    // /// Returns true if the inner iterator has been moved.
-    // fn satisfy_lower_bound(&mut self) -> bool {
-    //     match self.interval.lower {
-    //         IntervalBound::Inclusive(bound) => {
-    //             self.scan_value.seek(bound);
-    //             true
-    //         }
-    //         IntervalBound::Exclusive(bound) => {
-    //             if let Some(seeked) = self.scan_value.seek(bound) {
-    //                 if seeked == bound {
-    //                     self.scan_value.next();
-    //                 }
-    //             }
-
-    //             true
-    //         }
-    //         IntervalBound::Unbounded => false,
-    //     }
-    // }
 }
 
 impl<'a, T> Iterator for ColumnScanEqualValue<'a, T>
@@ -156,7 +192,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         match self.status {
             ColumnScanStatus::Before => {
-                self.satisfy_lower_bound();
+                self.satisfy_lower_bounds();
                 self.status = ColumnScanStatus::Within;
             }
             ColumnScanStatus::Within => {
@@ -165,7 +201,7 @@ where
             ColumnScanStatus::After => return None,
         }
 
-        if self.check_upper_bound() {
+        if self.check_upper_bounds() {
             self.current()
         } else {
             self.status = ColumnScanStatus::After;
@@ -181,7 +217,7 @@ where
     fn seek(&mut self, value: T) -> Option<T> {
         match self.status {
             ColumnScanStatus::Before => {
-                self.satisfy_lower_bound();
+                self.satisfy_lower_bounds();
                 self.status = ColumnScanStatus::Within;
 
                 self.scan_value.seek(value);
@@ -192,7 +228,7 @@ where
             ColumnScanStatus::After => return None,
         }
 
-        if self.check_upper_bound() {
+        if self.check_upper_bounds() {
             self.current()
         } else {
             self.status = ColumnScanStatus::After;
@@ -222,16 +258,13 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        columnar::{
-            column_types::vector::ColumnVector,
-            operations::columnscan_equal_value::IntervalValue,
-            traits::{
-                column::Column,
-                columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
-            },
+    use crate::columnar::{
+        column_types::vector::ColumnVector,
+        operations::columnscan_equal_value::{FilterBound, FilterValue},
+        traits::{
+            column::Column,
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
         },
-        util::interval::{Interval, IntervalBound},
     };
 
     use super::ColumnScanEqualValue;
@@ -245,10 +278,11 @@ mod test {
 
         let mut equal_scan = ColumnScanEqualValue::new(
             &col_iter,
-            None,
-            None,
-            Interval::single(IntervalValue::Constant(4)),
+            vec![],
+            vec![FilterBound::Inclusive(FilterValue::Constant(4))],
+            vec![FilterBound::Inclusive(FilterValue::Constant(4))],
         );
+
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), Some(4));
         assert_eq!(equal_scan.current(), Some(4));
@@ -258,9 +292,9 @@ mod test {
         let col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(col.iter()));
         let mut equal_scan = ColumnScanEqualValue::new(
             &col_iter,
-            None,
-            None,
-            Interval::single(IntervalValue::Constant(7)),
+            vec![],
+            vec![FilterBound::Inclusive(FilterValue::Constant(7))],
+            vec![FilterBound::Inclusive(FilterValue::Constant(7))],
         );
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), None);
@@ -274,12 +308,9 @@ mod test {
 
         let mut equal_scan = ColumnScanEqualValue::new(
             &col_iter,
-            None,
-            None,
-            Interval::new(
-                IntervalBound::Exclusive(IntervalValue::Constant(1)),
-                IntervalBound::Inclusive(IntervalValue::Constant(4)),
-            ),
+            vec![],
+            vec![FilterBound::Exclusive(FilterValue::Constant(1))],
+            vec![FilterBound::Inclusive(FilterValue::Constant(4))],
         );
 
         assert_eq!(equal_scan.current(), None);

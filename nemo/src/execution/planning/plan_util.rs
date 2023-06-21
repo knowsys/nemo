@@ -6,7 +6,8 @@ use std::{
 };
 
 use nemo_physical::{
-    columnar::operations::columnscan_equal_value::IntervalValue,
+    columnar::operations::columnscan_equal_value::{FilterBound, FilterValue},
+    datatypes::DataValueT,
     management::{
         database::{ColumnOrder, TableId},
         execution_plan::{ExecutionNodeRef, ExecutionPlan},
@@ -14,7 +15,6 @@ use nemo_physical::{
     tabular::operations::{
         triescan_append::AppendInstruction, triescan_select::SelectEqualClasses, ValueAssignment,
     },
-    util::interval::{Interval, IntervalBound},
 };
 
 use crate::{
@@ -42,8 +42,8 @@ pub(super) fn compute_filters(
     variable_order: &VariableOrder,
     filters: &[Filter],
     variable_types: &HashMap<Variable, LogicalTypeEnum>,
-) -> (SelectEqualClasses, Vec<ValueAssignment>) {
-    let mut filter_assignments = Vec::<ValueAssignment>::new();
+) -> (SelectEqualClasses, HashMap<usize, ValueAssignment>) {
+    let mut filter_assignments = HashMap::<usize, ValueAssignment>::new();
     let mut filter_classes = Vec::<HashSet<&Variable>>::new();
     for filter in filters {
         let left_variable = &filter.lhs;
@@ -128,44 +128,36 @@ pub(super) fn compute_filters(
                         (column_idx_right, column_idx_left, filter.operation.flip())
                     };
 
-                let (column_idx_lower, column_idx_upper) = if operation
-                    == FilterOperation::GreaterThan
-                    || operation == FilterOperation::GreaterThanEq
-                {
-                    (Some(column_idx_bound), None)
-                } else if operation == FilterOperation::LessThan
-                    || operation == FilterOperation::LessThanEq
-                {
-                    (None, Some(column_idx_bound))
-                } else {
-                    unreachable!()
-                };
+                let current_assignment = filter_assignments
+                    .entry(column_idx_value)
+                    .or_insert(ValueAssignment::default());
 
-                let interval = filter_operation_to_interval(&operation, IntervalValue::Column);
-
-                filter_assignments.push(ValueAssignment {
-                    column_idx_value,
-                    column_idx_lower,
-                    column_idx_upper,
-                    interval,
-                });
+                add_bound(
+                    &operation,
+                    FilterValue::Column(column_idx_bound),
+                    &mut current_assignment.lower_bounds,
+                    &mut current_assignment.upper_bounds,
+                );
             }
             _ => {
+                let column_idx_value = *variable_order
+                    .get(&filter.lhs)
+                    .expect("Loop iteration is skipped for unknown variables.");
                 let right_value = variable_types
                     .get(&filter.lhs)
                     .expect("Each variable should have been assigned a type.")
                     .ground_term_to_data_value_t(filter.rhs.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.");
-                let interval = filter_operation_to_interval(
-                    &filter.operation,
-                    IntervalValue::Constant(right_value),
-                );
 
-                filter_assignments.push(ValueAssignment {
-                    column_idx_value: *variable_order.get(&filter.lhs).expect("We skip this loop iteration if one of the filter variables is not contained in the variable order."),
-                    column_idx_lower: None,
-                    column_idx_upper: None,
-                    interval,
-                });
+                let current_assignment = filter_assignments
+                    .entry(column_idx_value)
+                    .or_insert(ValueAssignment::default());
+
+                add_bound(
+                    &filter.operation,
+                    FilterValue::Constant(right_value),
+                    &mut current_assignment.lower_bounds,
+                    &mut current_assignment.upper_bounds,
+                );
             }
         }
     }
@@ -185,24 +177,21 @@ pub(super) fn compute_filters(
     (filter_classes, filter_assignments)
 }
 
-fn filter_operation_to_interval<T: Clone>(
+fn add_bound(
     operation: &FilterOperation,
-    value: IntervalValue<T>,
-) -> Interval<IntervalValue<T>> {
+    value: FilterValue<DataValueT>,
+    lower_bounds: &mut Vec<FilterBound<DataValueT>>,
+    upper_bounds: &mut Vec<FilterBound<DataValueT>>,
+) {
     match operation {
-        FilterOperation::Equals => Interval::single(value),
-        FilterOperation::LessThan => {
-            Interval::new(IntervalBound::Unbounded, IntervalBound::Exclusive(value))
+        FilterOperation::Equals => {
+            lower_bounds.push(FilterBound::Inclusive(value.clone()));
+            upper_bounds.push(FilterBound::Inclusive(value))
         }
-        FilterOperation::GreaterThan => {
-            Interval::new(IntervalBound::Exclusive(value), IntervalBound::Unbounded)
-        }
-        FilterOperation::LessThanEq => {
-            Interval::new(IntervalBound::Unbounded, IntervalBound::Inclusive(value))
-        }
-        FilterOperation::GreaterThanEq => {
-            Interval::new(IntervalBound::Inclusive(value), IntervalBound::Unbounded)
-        }
+        FilterOperation::LessThan => upper_bounds.push(FilterBound::Exclusive(value)),
+        FilterOperation::GreaterThan => lower_bounds.push(FilterBound::Exclusive(value)),
+        FilterOperation::LessThanEq => upper_bounds.push(FilterBound::Inclusive(value)),
+        FilterOperation::GreaterThanEq => lower_bounds.push(FilterBound::Inclusive(value)),
     }
 }
 
