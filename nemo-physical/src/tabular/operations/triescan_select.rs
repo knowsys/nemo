@@ -10,8 +10,8 @@ use crate::{
     management::database::Dict,
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
 };
+use std::fmt::Debug;
 use std::{cell::UnsafeCell, collections::HashMap};
-use std::{collections::hash_map::Entry, fmt::Debug};
 
 /// [`SelectEqualClasses`] contains a vectors that indicate which column indices should be forced to the same value
 /// E.g. for R(a, a, b, c, d, c) eq_classes = [[0, 1], [3, 5]]
@@ -289,10 +289,8 @@ impl<'a> TrieScanRestrictValues<'a> {
                     for bound in lower_bounds.iter_mut().chain(upper_bounds.iter_mut()) {
                         if let Some(bound_index) = bound.column_index_mut() {
                             let map_len = column_map.len();
-                            let mapped_index = match column_map.entry(*bound_index) {
-                                Entry::Occupied(entry) => *entry.get(),
-                                Entry::Vacant(entry) => {
-                                    entry.insert(map_len);
+                            let mapped_index =
+                                *column_map.entry(*bound_index).or_insert_with(|| {
                                     let referenced_scan = if let ColumnScanT::$variant(scan) =
                                         unsafe { &*base_trie.get_scan(*bound_index).unwrap().get() }
                                     {
@@ -307,8 +305,7 @@ impl<'a> TrieScanRestrictValues<'a> {
                                     scans_restriction.push(referenced_scan);
 
                                     map_len
-                                }
-                            };
+                                });
 
                             *bound_index = mapped_index;
                         }

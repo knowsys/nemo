@@ -2,7 +2,7 @@ use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
-/// Concrete value a interval bound can take.
+/// Concrete value an interval bound can take.
 #[derive(Debug, Clone)]
 pub enum FilterValue<T>
 where
@@ -21,20 +21,18 @@ where
     /// Return the column index this value refers to.
     /// Returns None if this is a constant.
     pub fn column_index(&self) -> Option<usize> {
-        if let Self::Column(index) = self {
-            Some(*index)
-        } else {
-            None
+        match self {
+            FilterValue::Column(index) => Some(*index),
+            FilterValue::Constant(_) => None,
         }
     }
 
     /// Return a mutable reference to the column index this value refers to.
     /// Returns None if this is a constant.
     pub fn column_index_mut(&mut self) -> Option<&mut usize> {
-        if let Self::Column(index) = self {
-            Some(index)
-        } else {
-            None
+        match self {
+            FilterValue::Column(index) => Some(index),
+            FilterValue::Constant(_) => None,
         }
     }
 }
