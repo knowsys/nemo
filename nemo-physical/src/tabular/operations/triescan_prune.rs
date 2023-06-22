@@ -525,15 +525,17 @@ impl<'a> TrieScan for TrieScanPrune<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use super::TrieScanPrune;
+    use crate::columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue};
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;
-    use crate::tabular::operations::{TrieScanSelectValue, ValueAssignment};
+    use crate::tabular::operations::{TrieScanRestrictValues, ValueAssignment};
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
 
-    use crate::util::interval::Interval;
     use crate::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
@@ -588,19 +590,33 @@ mod test {
         let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(input_trie));
 
         let mut dict = Dict::default();
-        let scan = TrieScanEnum::TrieScanSelectValue(TrieScanSelectValue::new(
+        let scan = TrieScanEnum::TrieScanRestrictValues(TrieScanRestrictValues::new(
             &mut dict,
             scan,
-            &[
-                ValueAssignment {
-                    column_idx: 1,
-                    interval: Interval::single(DataValueT::U64(layer_1_equality)),
-                },
-                ValueAssignment {
-                    column_idx: 3,
-                    interval: Interval::single(DataValueT::U64(layer_3_equality)),
-                },
-            ],
+            &HashMap::from([
+                (
+                    1,
+                    ValueAssignment {
+                        lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+                            DataValueT::U64(layer_1_equality),
+                        ))],
+                        upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+                            DataValueT::U64(layer_1_equality),
+                        ))],
+                    },
+                ),
+                (
+                    3,
+                    ValueAssignment {
+                        lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+                            DataValueT::U64(layer_3_equality),
+                        ))],
+                        upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+                            DataValueT::U64(layer_3_equality),
+                        ))],
+                    },
+                ),
+            ]),
         ));
         let scan = TrieScanPrune::new(scan);
 

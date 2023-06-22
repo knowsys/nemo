@@ -12,10 +12,10 @@ pub use triescan_project::TrieScanProject;
 pub mod triescan_prune;
 pub use triescan_prune::TrieScanPrune;
 
-/// Module for defining [`TrieScanSelectEqual`] and [`TrieScanSelectValue`]
+/// Module for defining [`TrieScanSelectEqual`] and [`TrieScanRestrictValues`]
 pub mod triescan_select;
+pub use triescan_select::TrieScanRestrictValues;
 pub use triescan_select::TrieScanSelectEqual;
-pub use triescan_select::TrieScanSelectValue;
 pub use triescan_select::ValueAssignment;
 
 /// Module for defining [`TrieScanMinus`]

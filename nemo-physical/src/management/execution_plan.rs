@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt::Debug,
     rc::{Rc, Weak},
 };
@@ -130,7 +130,7 @@ pub enum ExecutionOperation {
     /// Table project operation; can only be applied to a `FetchTable` or `FetchTemp` node. TODO: FetchTable/Temp no longer existing in codebase
     Project(ExecutionNodeRef, ProjectReordering),
     /// Only leave entries in that have a certain value.
-    SelectValue(ExecutionNodeRef, Vec<ValueAssignment>),
+    SelectValue(ExecutionNodeRef, HashMap<usize, ValueAssignment>),
     /// Only leave entries in that contain equal values in certain columns.
     SelectEqual(ExecutionNodeRef, SelectEqualClasses),
     /// Append certain columns to the trie.
@@ -268,7 +268,7 @@ impl ExecutionPlan {
     pub fn select_value(
         &mut self,
         subnode: ExecutionNodeRef,
-        assigments: Vec<ValueAssignment>,
+        assigments: HashMap<usize, ValueAssignment>,
     ) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::SelectValue(subnode, assigments);
         self.push_and_return_ref(new_operation)

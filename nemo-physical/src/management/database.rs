@@ -22,7 +22,7 @@ use crate::{
     tabular::{
         operations::{
             materialize::materialize, triescan_append::TrieScanAppend, TrieScanJoin, TrieScanMinus,
-            TrieScanNulls, TrieScanProject, TrieScanSelectEqual, TrieScanSelectValue,
+            TrieScanNulls, TrieScanProject, TrieScanRestrictValues, TrieScanSelectEqual,
             TrieScanUnion,
         },
         table_types::trie::{Trie, TrieScanGeneric},
@@ -1035,12 +1035,12 @@ impl DatabaseInstance {
                 )?;
 
                 if let Some(subiterator) = subiterator_opt {
-                    let select_scan = TrieScanSelectValue::new(
+                    let restrict_scan = TrieScanRestrictValues::new(
                         &mut self.dict_constants.borrow_mut(),
                         subiterator,
                         assignments,
                     );
-                    Ok(Some(TrieScanEnum::TrieScanSelectValue(select_scan)))
+                    Ok(Some(TrieScanEnum::TrieScanRestrictValues(restrict_scan)))
                 } else {
                     Ok(None)
                 }

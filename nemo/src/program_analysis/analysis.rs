@@ -72,9 +72,6 @@ pub enum RuleAnalysisError {
     /// Unsupported feature: Overloading of predicate names by arity/type
     #[error("Overloading of predicate names by arity is currently not supported.")]
     UnsupportedFeaturePredicateOverloading,
-    /// Unsupported feature: Comparison between variables
-    #[error("Comparison operation between two variables are currently not supported.")]
-    UnsupportedFeatureVariableComparison,
 }
 
 /// Return true if there is a predicate in the positive part of the rule that also appears in the head of the rule.
@@ -483,14 +480,6 @@ impl ChaseProgram {
         }
 
         for rule in self.rules() {
-            for filter in rule.all_filters() {
-                if filter.operation != FilterOperation::Equals {
-                    if let Term::Variable(_) = filter.rhs {
-                        return Err(RuleAnalysisError::UnsupportedFeatureVariableComparison);
-                    }
-                }
-            }
-
             for atom in rule.all_atoms() {
                 // check for consistent predicate arities
                 let arity = atom.terms().len();

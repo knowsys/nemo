@@ -1,0 +1,40 @@
+@declare a(integer, integer) .
+@declare b(integer, integer, integer) .
+
+a(1, 3).
+a(3, 1).
+a(2, 4).
+a(2, 5).
+a(7, 5).
+a(7, 3).
+a(2, 1).
+a(9, 2).
+a(4, 4).
+a(8, 8).
+
+b(1, 12, 1).
+b(5, 13, 5).
+b(5,  5, 5).
+b(7,  4, 7).
+b(7,  7, 7).
+b(7, 10, 7).
+b(7, 12, 7).
+b(7, 16, 7).
+b(2,  2, 4).
+b(6,  3, 3).
+
+g_un(?x, ?y) :- a(?x, ?y), ?x > ?y .
+g_eq(?x, ?y) :- a(?x, ?y), ?x >= ?y .
+l_un(?x, ?y) :- a(?x, ?y), ?x < ?y .
+l_eq(?x, ?y) :- a(?x, ?y), ?x <= ?y .
+
+r_xy(?x, ?y) :- a(?x, ?y), ?x < ?y .
+r_yx(?x, ?y) :- a(?x, ?y), ?y > ?x .
+
+equal(?x, ?y) :- a(?x, ?y), ?x <= ?y, ?y <= ?x .
+contra(?x, ?y) :- a(?x, ?y), ?x > ?y, ?y > ?x .
+
+multi(?x, ?y) :- a(?x, ?y), ?x > 2, ?x >= ?y, 4 >= ?y.
+
+combine(?x, ?y, ?z) :- b(?x, ?y, ?x), a(?x, ?z), ?y > ?x, ?z < 4.
+

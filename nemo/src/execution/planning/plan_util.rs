@@ -6,6 +6,8 @@ use std::{
 };
 
 use nemo_physical::{
+    columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue},
+    datatypes::DataValueT,
     management::{
         database::{ColumnOrder, TableId},
         execution_plan::{ExecutionNodeRef, ExecutionPlan},
@@ -13,7 +15,6 @@ use nemo_physical::{
     tabular::operations::{
         triescan_append::AppendInstruction, triescan_select::SelectEqualClasses, ValueAssignment,
     },
-    util::interval::{Interval, IntervalBound},
 };
 
 use crate::{
@@ -41,21 +42,22 @@ pub(super) fn compute_filters(
     variable_order: &VariableOrder,
     filters: &[Filter],
     variable_types: &HashMap<Variable, LogicalTypeEnum>,
-) -> (SelectEqualClasses, Vec<ValueAssignment>) {
-    let mut filter_assignments = Vec::<ValueAssignment>::new();
+) -> (SelectEqualClasses, HashMap<usize, ValueAssignment>) {
+    let mut filter_assignments = HashMap::<usize, ValueAssignment>::new();
     let mut filter_classes = Vec::<HashSet<&Variable>>::new();
     for filter in filters {
-        if !variable_order.contains(&filter.lhs) {
+        let left_variable = &filter.lhs;
+        if !variable_order.contains(left_variable) {
             continue;
         }
 
-        match &filter.rhs {
-            Term::Variable(right_variable) => {
+        // Case 1: Variables equals another variable
+        // In this case, we need to update the `filter_classes`
+        if filter.operation == FilterOperation::Equals {
+            if let Term::Variable(right_variable) = &filter.rhs {
                 if !variable_order.contains(right_variable) {
                     continue;
                 }
-
-                let left_variable = &filter.lhs;
 
                 let left_index = filter_classes
                     .iter()
@@ -98,18 +100,64 @@ pub(super) fn compute_filters(
                         }
                     },
                 }
+
+                continue;
+            }
+        }
+
+        // Case 2: Variable is compared to another variable or with a constant
+        // In this case, we need to update the `filter_assignments`
+
+        match &filter.rhs {
+            Term::Variable(right_variable) => {
+                if !variable_order.contains(right_variable) {
+                    continue;
+                }
+
+                let column_idx_left = *variable_order
+                    .get(left_variable)
+                    .expect("Loop iteration is skipped for unknown variables.");
+                let column_idx_right = *variable_order
+                    .get(right_variable)
+                    .expect("Loop iteration is skipped for unknown variables.");
+
+                let (column_idx_value, column_idx_bound, operation) =
+                    if column_idx_left > column_idx_right {
+                        (column_idx_left, column_idx_right, filter.operation)
+                    } else {
+                        (column_idx_right, column_idx_left, filter.operation.flip())
+                    };
+
+                let current_assignment = filter_assignments
+                    .entry(column_idx_value)
+                    .or_insert(ValueAssignment::default());
+
+                add_bound(
+                    &operation,
+                    FilterValue::Column(column_idx_bound),
+                    &mut current_assignment.lower_bounds,
+                    &mut current_assignment.upper_bounds,
+                );
             }
             _ => {
+                let column_idx_value = *variable_order
+                    .get(&filter.lhs)
+                    .expect("Loop iteration is skipped for unknown variables.");
                 let right_value = variable_types
                     .get(&filter.lhs)
                     .expect("Each variable should have been assigned a type.")
                     .ground_term_to_data_value_t(filter.rhs.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.");
-                let interval = filter_operation_to_interval(&filter.operation, right_value);
 
-                filter_assignments.push(ValueAssignment {
-                    column_idx: *variable_order.get(&filter.lhs).expect("We skip this loop iteration if one of the filter variables is not contained in the variable order."),
-                    interval,
-                });
+                let current_assignment = filter_assignments
+                    .entry(column_idx_value)
+                    .or_insert(ValueAssignment::default());
+
+                add_bound(
+                    &filter.operation,
+                    FilterValue::Constant(right_value),
+                    &mut current_assignment.lower_bounds,
+                    &mut current_assignment.upper_bounds,
+                );
             }
         }
     }
@@ -129,21 +177,21 @@ pub(super) fn compute_filters(
     (filter_classes, filter_assignments)
 }
 
-fn filter_operation_to_interval<T: Clone>(operation: &FilterOperation, value: T) -> Interval<T> {
+fn add_bound(
+    operation: &FilterOperation,
+    value: FilterValue<DataValueT>,
+    lower_bounds: &mut Vec<FilterBound<DataValueT>>,
+    upper_bounds: &mut Vec<FilterBound<DataValueT>>,
+) {
     match operation {
-        FilterOperation::Equals => Interval::single(value),
-        FilterOperation::LessThan => {
-            Interval::new(IntervalBound::Unbounded, IntervalBound::Exclusive(value))
+        FilterOperation::Equals => {
+            lower_bounds.push(FilterBound::Inclusive(value.clone()));
+            upper_bounds.push(FilterBound::Inclusive(value))
         }
-        FilterOperation::GreaterThan => {
-            Interval::new(IntervalBound::Exclusive(value), IntervalBound::Unbounded)
-        }
-        FilterOperation::LessThanEq => {
-            Interval::new(IntervalBound::Unbounded, IntervalBound::Inclusive(value))
-        }
-        FilterOperation::GreaterThanEq => {
-            Interval::new(IntervalBound::Inclusive(value), IntervalBound::Unbounded)
-        }
+        FilterOperation::LessThan => upper_bounds.push(FilterBound::Exclusive(value)),
+        FilterOperation::GreaterThan => lower_bounds.push(FilterBound::Exclusive(value)),
+        FilterOperation::LessThanEq => upper_bounds.push(FilterBound::Inclusive(value)),
+        FilterOperation::GreaterThanEq => lower_bounds.push(FilterBound::Inclusive(value)),
     }
 }
 
