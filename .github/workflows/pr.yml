@@ -85,10 +85,11 @@ jobs:
       with:
         python-version: '3.10'
     - name: create python3 venv
-      run: python -m venv venv && source venv/bin/activate
+      run: python -m venv venv
     - name: build python bindings
       uses: PyO3/maturin-action@v1
       with:
         command: develop
+        before-script-linux: venv/bin/activate
     - name: run python tests
       run: python nemo-python/tests/unittest.py resources/testcases
