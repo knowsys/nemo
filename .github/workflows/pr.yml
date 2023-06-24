@@ -91,4 +91,4 @@ jobs:
     - name: install python bindings
       run: ls target/wheels/*.whl | xargs pip install
     - name: run python tests
-      run: python nemo-python/tests/unittest.py resources/testcases
+      run: python nemo-python/tests/test.py resources/testcases
