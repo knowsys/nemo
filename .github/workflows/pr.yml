@@ -75,3 +75,20 @@ jobs:
           rust-version: nightly
       - run: cargo miri setup
       - run: cargo miri test
+
+  test-python:
+    name: Test python bindings
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: create python3 venv
+      run: python -m venv venv && source venv/bin/activate
+    - name: build python bindings
+      uses: PyO3/maturin-action@v1
+      with:
+        command: develop
+    - name: run python tests
+      run: python nemo-python/tests/unittest.py resources/testcases
