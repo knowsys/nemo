@@ -92,3 +92,16 @@ jobs:
       run: ls target/wheels/*.whl | xargs pip install
     - name: run python tests
       run: python nemo-python/tests/test.py resources/testcases
+
+  pycodestyle:
+    name: Check python code formatting
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: install pycodestyle
+      run: pip install pycodestyle
+    - name: run pycodestyle
+      run: pycodestyle nemo-python
