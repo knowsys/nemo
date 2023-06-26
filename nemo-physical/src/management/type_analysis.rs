@@ -300,7 +300,7 @@ impl TypeTree {
                                 // TODO: This is a weird requirement
                                 assert_eq!(tree_type, operation_type);
 
-                                for column_index in tree.input_indices() {
+                                for &column_index in tree.input_indices() {
                                     let current_type = subtype_node
                                         .schema
                                         .get_entry(column_index)
@@ -491,7 +491,7 @@ impl TypeTree {
                 for instructions in instructions {
                     for instruction in instructions {
                         if let AppendInstruction::Operation(tree) = instruction {
-                            for input_index in tree.input_indices() {
+                            for &input_index in tree.input_indices() {
                                 let max_type = schema_map
                                     .get(&input_index)
                                     .expect(

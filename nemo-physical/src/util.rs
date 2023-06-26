@@ -1,6 +1,8 @@
 //! This module collects miscellaneous functionality.
 
 pub mod mapping;
+pub mod operator_tree;
+pub use operator_tree::OperationTree;
 
 /// A macro that generates forwarding macros to dispatch along
 /// datatype-tagged enums.

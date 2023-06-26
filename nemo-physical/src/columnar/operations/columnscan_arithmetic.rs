@@ -1,147 +1,11 @@
 use super::super::traits::columnscan::ColumnScan;
 use crate::{
-    columnar::traits::columnscan::ColumnScanCell,
-    datatypes::{ColumnDataType, DataTypeName, Double, Float},
-    generate_datatype_forwarder,
-    util::mapping::permutation::Permutation,
+    columnar::traits::columnscan::ColumnScanCell, datatypes::ColumnDataType, util::OperationTree,
 };
 use std::{fmt::Debug, ops::Range};
 
-/// Tree representing a mathematical term.
-#[derive(Debug, Clone)]
-pub enum OperationTree<T> {
-    /// Value is tied to the current value of a column_scan
-    Variable(usize),
-    /// Value is the given constant.
-    Constant(T),
-    /// Value is the sum of the values of the two subtrees.
-    Addition(Box<OperationTree<T>>, Box<OperationTree<T>>),
-    /// Value is the difference of the value of the two subtrees.
-    Subtraction(Box<OperationTree<T>>, Box<OperationTree<T>>),
-    /// Value is the product of the values of the two subtrees.
-    Multiplication(Box<OperationTree<T>>, Box<OperationTree<T>>),
-    /// Value is the quotient of the values of the  two subtrees.
-    Division(Box<OperationTree<T>>, Box<OperationTree<T>>),
-}
-
-impl<T> OperationTree<T> {
-    /// Create a new [`OperationTree`] which evaluates
-    /// to the value pointed to by [`ColumnScan`] with the given index.
-    pub fn variable(index: usize) -> Self {
-        Self::Variable(index)
-    }
-
-    /// Create a new [`OperationTree`] which evaluates to the given constant.
-    pub fn constant(value: T) -> Self {
-        Self::Constant(value)
-    }
-
-    /// Create a new [`OperationTree`] which evaluates
-    /// to the sum of the given [`OperationTree`].
-    pub fn addition(left: OperationTree<T>, right: OperationTree<T>) -> Self {
-        Self::Addition(Box::new(left), Box::new(right))
-    }
-
-    /// Create a new [`OperationTree`] which evaluates
-    /// to the difference of the given [`OperationTree`].
-    pub fn subtraction(left: OperationTree<T>, right: OperationTree<T>) -> Self {
-        Self::Subtraction(Box::new(left), Box::new(right))
-    }
-
-    /// Create a new [`OperationTree`] which evaluates
-    /// to the product of the given [`OperationTree`].
-    pub fn multiplication(left: OperationTree<T>, right: OperationTree<T>) -> Self {
-        Self::Multiplication(Box::new(left), Box::new(right))
-    }
-
-    /// Create a new [`OperationTree`] which evaluates
-    /// to the quotient of the given [`OperationTree`].
-    pub fn division(left: OperationTree<T>, right: OperationTree<T>) -> Self {
-        Self::Division(Box::new(left), Box::new(right))
-    }
-}
-
-impl<T> OperationTree<T> {
-    fn input_indices_recursive(tree: &OperationTree<T>) -> Vec<usize> {
-        let mut result = Vec::<usize>::new();
-
-        result.extend(match tree {
-            OperationTree::Variable(variable) => vec![*variable],
-            OperationTree::Constant(_) => vec![],
-            OperationTree::Addition(left, right)
-            | OperationTree::Subtraction(left, right)
-            | OperationTree::Multiplication(left, right)
-            | OperationTree::Division(left, right) => {
-                let mut sub_vector = Vec::<usize>::new();
-                sub_vector.extend(Self::input_indices_recursive(left));
-                sub_vector.extend(Self::input_indices_recursive(right));
-
-                sub_vector
-            }
-        });
-
-        result
-    }
-
-    /// Return all indices that are used in the input of the [`OperationTree`].
-    pub fn input_indices(&self) -> Vec<usize> {
-        Self::input_indices_recursive(self)
-    }
-
-    fn apply_permutation_recursive(tree: &mut OperationTree<T>, permutation: &Permutation) {
-        match tree {
-            OperationTree::Variable(variable) => *variable = permutation.get(*variable),
-            OperationTree::Constant(_) => {}
-            OperationTree::Addition(left, right)
-            | OperationTree::Subtraction(left, right)
-            | OperationTree::Multiplication(left, right)
-            | OperationTree::Division(left, right) => {
-                Self::apply_permutation_recursive(left, permutation);
-                Self::apply_permutation_recursive(right, permutation);
-            }
-        }
-    }
-
-    /// Apply a [`Permutation`] to the input column indices of the [`OperationTree`].
-    pub fn apply_permutation(&mut self, permutation: &Permutation) {
-        Self::apply_permutation_recursive(self, permutation);
-    }
-}
-
-/// Variant of an [`OperationTree`] for each [`crate::datatypes::StorageTypeName`].
-#[derive(Debug, Clone)]
-pub enum OperationTreeT {
-    /// Data type [`u32`].
-    U32(OperationTree<u32>),
-    /// Data type [`u64`].
-    U64(OperationTree<u64>),
-    /// Data type [`i64`]
-    I64(OperationTree<i64>),
-    /// Data type [`Float`]
-    Float(OperationTree<Float>),
-    /// Data type [`Double`]
-    Double(OperationTree<Double>),
-}
-
-generate_datatype_forwarder!(forward_to_type);
-
-impl OperationTreeT {
-    /// Return all indices that are used in the input of the [`OperationTreeT`].
-    pub fn input_indices(&self) -> Vec<usize> {
-        forward_to_type!(self, input_indices())
-    }
-
-    /// Return the [`DataTypeName`] for this operation.
-    pub fn data_type(&self) -> DataTypeName {
-        match self {
-            OperationTreeT::U32(_) => DataTypeName::U32,
-            OperationTreeT::U64(_) => DataTypeName::U64,
-            OperationTreeT::I64(_) => DataTypeName::I64,
-            OperationTreeT::Float(_) => DataTypeName::Float,
-            OperationTreeT::Double(_) => DataTypeName::Double,
-        }
-    }
-}
+/// Represents an [`OperationTree`] where variables are given as indices to a vector of column scans.
+pub type IndexOperationTree<TypeConstant> = OperationTree<TypeConstant, usize>;
 
 /// Cursor position of the scan
 #[derive(Debug, Eq, PartialEq)]
@@ -165,7 +29,7 @@ where
     value: Option<T>,
 
     /// [`OperationTree`] representing the operation that will be performed
-    operation: OperationTree<T>,
+    operation: IndexOperationTree<T>,
 
     /// Where the virtual cursor is.
     cursor: CursorPosition,
@@ -175,7 +39,10 @@ where
     T: ColumnDataType,
 {
     /// Constructs a new [`ColumnScanArithmetic`].
-    pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>, operation: OperationTree<T>) -> Self {
+    pub fn new(
+        column_scans: Vec<&'a ColumnScanCell<'a, T>>,
+        operation: IndexOperationTree<T>,
+    ) -> Self {
         Self {
             column_scans,
             operation,
@@ -184,7 +51,7 @@ where
         }
     }
 
-    fn evaluate_recursive(&self, operation: &OperationTree<T>) -> Option<T> {
+    fn evaluate_recursive(&self, operation: &IndexOperationTree<T>) -> Option<T> {
         match operation {
             OperationTree::Variable(index) => self.column_scans[*index].current(),
             OperationTree::Constant(constant) => Some(*constant),
@@ -278,7 +145,7 @@ where
 mod test {
     use crate::columnar::{
         column_types::vector::{ColumnScanVector, ColumnVector},
-        operations::columnscan_arithmetic::OperationTree,
+        operations::columnscan_arithmetic::{IndexOperationTree, OperationTree},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 
@@ -299,7 +166,7 @@ mod test {
         let scan_b_cell = ColumnScanCell::new(scan_b);
 
         // a + (b/2 - 1) * 5
-        let operation: OperationTree<u64> = OperationTree::addition(
+        let operation: IndexOperationTree<u64> = OperationTree::addition(
             OperationTree::variable(0),
             OperationTree::multiplication(
                 OperationTree::subtraction(

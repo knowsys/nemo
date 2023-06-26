@@ -9,7 +9,7 @@ use crate::{
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         column_types::rle::{ColumnBuilderRle, ColumnRle},
         operations::{
-            columnscan_arithmetic::OperationTreeT, ColumnScanArithmetic, ColumnScanCast,
+            columnscan_arithmetic::IndexOperationTree, ColumnScanArithmetic, ColumnScanCast,
             ColumnScanCastEnum, ColumnScanConstant, ColumnScanCopy, ColumnScanPass,
         },
         traits::{
@@ -19,8 +19,8 @@ use crate::{
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         },
     },
-    datatypes::{DataValueT, StorageTypeName, StorageValueT},
-    generate_cast_statements,
+    datatypes::{DataTypeName, DataValueT, Double, Float, StorageTypeName, StorageValueT},
+    generate_cast_statements, generate_datatype_forwarder,
     management::database::Dict,
     tabular::{
         table_types::trie::Trie,
@@ -54,6 +54,41 @@ fn expand_range(columns: &[ColumnWithIntervalsT], range: Range<usize>) -> Range<
     current_range
 }
 
+/// Variant of an [`IndexOperationTree`] for each [`crate::datatypes::StorageTypeName`].
+#[derive(Debug, Clone)]
+pub enum IndexOperationTreeT {
+    /// Data type [`u32`].
+    U32(IndexOperationTree<u32>),
+    /// Data type [`u64`].
+    U64(IndexOperationTree<u64>),
+    /// Data type [`i64`]
+    I64(IndexOperationTree<i64>),
+    /// Data type [`Float`]
+    Float(IndexOperationTree<Float>),
+    /// Data type [`Double`]
+    Double(IndexOperationTree<Double>),
+}
+
+generate_datatype_forwarder!(forward_to_type);
+
+impl IndexOperationTreeT {
+    /// Return all indices that are used in the input of the [`OperationTreeT`].
+    pub fn input_indices(&self) -> Vec<&usize> {
+        forward_to_type!(self, variables)
+    }
+
+    /// Return the [`DataTypeName`] for this operation.
+    pub fn data_type(&self) -> DataTypeName {
+        match self {
+            IndexOperationTreeT::U32(_) => DataTypeName::U32,
+            IndexOperationTreeT::U64(_) => DataTypeName::U64,
+            IndexOperationTreeT::I64(_) => DataTypeName::I64,
+            IndexOperationTreeT::Float(_) => DataTypeName::Float,
+            IndexOperationTreeT::Double(_) => DataTypeName::Double,
+        }
+    }
+}
+
 /// Enum which represents an instruction to modify a trie by appending certain columns.
 #[derive(Debug, Clone)]
 pub enum AppendInstruction {
@@ -65,7 +100,7 @@ pub enum AppendInstruction {
     Constant(DataValueT),
     /// Add a column which results from performing a given mathematical operation
     /// based on existing columns.
-    Operation(OperationTreeT),
+    Operation(IndexOperationTreeT),
 }
 
 /// Appends columns to an existing trie and returns the modified trie.
@@ -288,7 +323,7 @@ impl<'a> TrieScanAppend<'a> {
         res
     }
 
-    fn add_operation_column(&mut self, operation_tree: OperationTreeT) {
+    fn add_operation_column(&mut self, operation_tree: IndexOperationTreeT) {
         let src_type = operation_tree.data_type().to_storage_type_name();
         let dst_type = self.target_types[self.column_scans.len()];
 
@@ -297,7 +332,9 @@ impl<'a> TrieScanAppend<'a> {
                 let mut column_map = HashMap::<usize, usize>::new();
                 let mut input_scans = Vec::new();
 
-                for (loop_index, src_index) in operation_tree.input_indices().iter().enumerate() {
+                for (loop_index, src_index) in
+                    operation_tree.input_indices().into_iter().enumerate()
+                {
                     let base_scan = unsafe { &*self.trie_scan.get_scan(*src_index).unwrap().get() };
 
                     if let ColumnScanT::$src_name(base_scan_cell) = base_scan {
@@ -310,12 +347,16 @@ impl<'a> TrieScanAppend<'a> {
                 }
 
                 let column_map = Permutation::from_map(column_map);
-                let operation_tree = if let OperationTreeT::$src_name(mut tree) = operation_tree {
-                    tree.apply_permutation(&column_map);
-                    tree
-                } else {
-                    panic!("Expected operation tree of type {}", stringify!($variant));
-                };
+                let operation_tree =
+                    if let IndexOperationTreeT::$src_name(mut tree) = operation_tree {
+                        for index in tree.variables_mut() {
+                            *index = column_map.get(*index);
+                        }
+
+                        tree
+                    } else {
+                        panic!("Expected operation tree of type {}", stringify!($variant));
+                    };
 
                 let new_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanArithmetic(
                     ColumnScanArithmetic::new(input_scans, operation_tree),
