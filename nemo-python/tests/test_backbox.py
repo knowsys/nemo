@@ -2,14 +2,13 @@ import unittest
 import csv
 import os
 import math
-import sys
 from os.path import dirname, exists, abspath, isfile
 
 from nmo_python import load_file, NemoEngine
 
 
 def stringify(value):
-    if not type(value) is float:
+    if not isinstance(value, float):
         return str(value)
 
     if math.floor(value) == value:
@@ -18,9 +17,9 @@ def stringify(value):
     return str(value)
 
 
-def end_to_end_test(path):
+def end_to_end_test(test_path):
     def run_test(self):
-        os.chdir(path)
+        os.chdir(test_path)
         for file in os.listdir("."):
             if not isfile(file) or not file.endswith(".rls"):
                 continue
