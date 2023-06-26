@@ -5,7 +5,7 @@ import math
 import sys
 from os.path import dirname, exists, abspath, isfile
 
-from nmo_python import load_string, load_file, NemoEngine, NemoOutputManager
+from nmo_python import load_string, load_file, NemoEngine
 
 
 class TestStringMethods(unittest.TestCase):
@@ -55,7 +55,9 @@ def end_to_end_test(path):
             engine.reason()
 
             for relation in program.output_predicates():
-                results_file_name = f"{program_name}/{relation}.csv"
+                results_file_name = os.path.join(
+                    program_name, f"{relation}.csv"
+                )
                 if not exists(results_file_name):
                     continue
 
@@ -67,7 +69,7 @@ def end_to_end_test(path):
 
                         self.assertTrue(
                             result in expected,
-                            f"error at {path}/{relation}",
+                            f"error at {relation}",
                         )
 
     return run_test
