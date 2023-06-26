@@ -71,3 +71,33 @@ jobs:
           rust-version: nightly
       - run: cargo miri setup
       - run: cargo miri test
+
+  test-python:
+    name: Test python bindings
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: build python bindings
+      uses: PyO3/maturin-action@v1
+      with:
+        working-directory: 'nemo-python'
+    - name: install python bindings
+      run: ls target/wheels/*.whl | xargs pip install
+    - name: run python tests
+      run: python -m unittest discover -s nemo-python/tests -v
+
+  pycodestyle:
+    name: Check python code formatting
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: install pycodestyle
+      run: pip install pycodestyle
+    - name: run pycodestyle
+      run: pycodestyle nemo-python

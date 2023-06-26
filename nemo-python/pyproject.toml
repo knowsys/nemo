@@ -14,3 +14,6 @@ classifiers = [
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+
+[tool.black]
+line-length = 79
