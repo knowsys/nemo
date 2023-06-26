@@ -3,12 +3,13 @@ import csv
 import os
 import math
 import sys
+from os.path import dirname, exists, abspath, isfile
 
 from nmo_python import load_string, load_file, NemoEngine, NemoOutputManager
 
 
 class TestStringMethods(unittest.TestCase):
-    def test_reason(self):
+    def test_example(self):
         rules = """
         data(1,2) .
         data(hi,42) .
@@ -41,15 +42,11 @@ def stringify(value):
     return str(value)
 
 
-class TestEndToEnd(unittest.TestCase):
-    def __init__(self, path, *args, **kwargs):
-        super(TestEndToEnd, self).__init__(*args, **kwargs)
-        self.path = path
-
-    def test_end_to_end(self):
-        os.chdir(self.path)
+def end_to_end_test(path):
+    def run_test(self):
+        os.chdir(path)
         for file in os.listdir("."):
-            if not os.path.isfile(file) or not file.endswith(".rls"):
+            if not isfile(file) or not file.endswith(".rls"):
                 continue
 
             program_name = file.removesuffix(".rls")
@@ -59,7 +56,7 @@ class TestEndToEnd(unittest.TestCase):
 
             for relation in program.output_predicates():
                 results_file_name = f"{program_name}/{relation}.csv"
-                if not os.path.exists(results_file_name):
+                if not exists(results_file_name):
                     continue
 
                 with open(results_file_name) as results_file:
@@ -68,21 +65,27 @@ class TestEndToEnd(unittest.TestCase):
                     for result in engine.result(relation):
                         result = [stringify(v) for v in result]
 
-                        self.assertIn(
-                            result,
-                            expected,
-                            f"error at {self.path}/{relation}",
+                        self.assertTrue(
+                            result in expected,
+                            f"error at {path}/{relation}",
                         )
 
+    return run_test
 
-suite = unittest.TestSuite()
-suite.addTest(TestStringMethods("test_reason"))
 
-test_cases = sys.argv[-1]
+class TestEndToEnd(unittest.TestCase):
+    pass
 
-for directory in os.listdir(test_cases):
-    path = os.path.abspath(os.path.join(test_cases, directory))
-    suite.addTest(TestEndToEnd(path, "test_end_to_end"))
 
-runner = unittest.TextTestRunner(verbosity=2)
-runner.run(suite)
+test_cases_dir = os.path.join(
+    dirname(__file__), "..", "..", "resources", "testcases"
+)
+
+for directory in os.listdir(test_cases_dir):
+    path = abspath(os.path.join(test_cases_dir, directory))
+    test_fun = classmethod(end_to_end_test(path))
+    test_fun.__name__ = "test_" + directory
+    setattr(TestEndToEnd, test_fun.__name__, test_fun)
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

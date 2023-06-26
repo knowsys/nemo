@@ -91,7 +91,7 @@ jobs:
     - name: install python bindings
       run: ls target/wheels/*.whl | xargs pip install
     - name: run python tests
-      run: python nemo-python/tests/test.py resources/testcases
+      run: python -m unittest discover -s nemo-python/tests -v
 
   pycodestyle:
     name: Check python code formatting
