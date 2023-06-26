@@ -44,8 +44,15 @@ def end_to_end_test(test_path):
 
                         self.assertTrue(
                             result in expected,
-                            f"error at {relation}",
+                            f"unexpected {result} in {relation}",
                         )
+
+                        expected.remove(result)
+
+                    self.assertTrue(
+                        len(expected) == 0,
+                        f"missing results in {relation}: {expected}",
+                    )
 
     return run_test
 
