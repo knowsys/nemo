@@ -35,3 +35,7 @@ class TestOutputManager(unittest.TestCase):
             with open(results_file_name) as results_file:
                 results = list(csv.reader(results_file))
                 self.assertEqual(results, expected_result)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
