@@ -6,7 +6,7 @@ import csv
 from nmo_python import load_string, NemoEngine, NemoOutputManager
 
 
-class TestOutputManager(unittest.TestCase):
+class TestExample(unittest.TestCase):
     def setUp(self):
         self.rules = """
         data(1,2) .
