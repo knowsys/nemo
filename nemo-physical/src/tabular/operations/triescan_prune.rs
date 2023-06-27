@@ -528,11 +528,15 @@ mod test {
     use std::collections::HashMap;
 
     use super::TrieScanPrune;
+    use crate::columnar::column_types::interval::ColumnWithIntervalsT;
     use crate::columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue};
+    use crate::columnar::traits::column::Column;
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;
-    use crate::tabular::operations::{TrieScanRestrictValues, ValueAssignment};
+    use crate::tabular::operations::{
+        materialize, JoinBindings, TrieScanJoin, TrieScanRestrictValues, ValueAssignment,
+    };
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
 
@@ -953,5 +957,44 @@ mod test {
         assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
         assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(2));
         assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
+    }
+
+    #[test]
+    fn as_partial() {
+        let column_a_x = make_column_with_intervals_t(&[1, 2], &[0, 1]);
+        let column_a_y = make_column_with_intervals_t(&[0, 3, 4, 5, 2, 4, 7], &[0, 4]);
+        let column_b = make_column_with_intervals_t(&[0, 4], &[0]);
+
+        let trie_a = Trie::new(vec![column_a_x, column_a_y]);
+        let trie_b = Trie::new(vec![column_b]);
+
+        let scan_a = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
+            TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
+        ));
+        let scan_b = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
+            TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
+        ));
+
+        let scan_join = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
+            vec![scan_a, scan_b],
+            &JoinBindings::new(vec![vec![0, 1], vec![1]]),
+        ));
+
+        let result = materialize(&mut TrieScanPrune::new(scan_join)).unwrap();
+
+        let expected_data = vec![0u64, 4, 4];
+        let expected_interval = vec![0usize, 2];
+
+        let (data, interval) = if let ColumnWithIntervalsT::U64(column) = result.get_column(1) {
+            (
+                column.get_data_column().iter().collect::<Vec<u64>>(),
+                column.get_int_column().iter().collect::<Vec<usize>>(),
+            )
+        } else {
+            unreachable!()
+        };
+
+        assert_eq!(expected_data, data);
+        assert_eq!(expected_interval, interval);
     }
 }
