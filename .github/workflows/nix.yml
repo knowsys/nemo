@@ -47,3 +47,13 @@ jobs:
     - uses: DeterminateSystems/nix-installer-action@v4
     - uses: DeterminateSystems/magic-nix-cache-action@v1
     - run: nix build .#nemo-wasm
+
+  test-python:
+    needs: build-python
+    name: Test nemo-python using the nix flake
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: DeterminateSystems/nix-installer-action@v4
+    - uses: DeterminateSystems/magic-nix-cache-action@v1
+    - run: nix run .#python3 -- -m unittest discover -s nemo-python/tests -v
