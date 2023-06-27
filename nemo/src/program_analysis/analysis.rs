@@ -5,7 +5,7 @@ use nemo_physical::management::database::ColumnOrder;
 use crate::{
     error::Error,
     model::chase_model::{ChaseProgram, ChaseRule},
-    model::{Atom, FilterOperation, Identifier, Literal, Term, Variable},
+    model::{chase_model::ChaseAtom, FilterOperation, Identifier, Term, Variable},
     types::{LogicalTypeEnum, TypeError},
     util::labeled_graph::LabeledGraph,
 };
@@ -100,7 +100,7 @@ fn count_distinct_existential_variables(rule: &ChaseRule) -> usize {
     existentials.len()
 }
 
-fn get_variables(atoms: &[Atom]) -> HashSet<Variable> {
+fn get_variables(atoms: &[ChaseAtom]) -> HashSet<Variable> {
     let mut result = HashSet::new();
     for atom in atoms {
         for term in atom.terms() {
@@ -112,7 +112,7 @@ fn get_variables(atoms: &[Atom]) -> HashSet<Variable> {
     result
 }
 
-fn get_predicates(atoms: &[Atom]) -> HashSet<Identifier> {
+fn get_predicates(atoms: &[ChaseAtom]) -> HashSet<Identifier> {
     atoms.iter().map(|a| a.predicate()).collect()
 }
 
@@ -124,7 +124,7 @@ fn get_fresh_rule_predicate(rule_index: usize) -> Identifier {
 
 fn construct_existential_aux_rule(
     rule_index: usize,
-    head_atoms: &Vec<Atom>,
+    head_atoms: &Vec<ChaseAtom>,
     predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
     column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
 ) -> (ChaseRule, VariableOrder, HashMap<Variable, LogicalTypeEnum>) {
@@ -158,15 +158,14 @@ fn construct_existential_aux_rule(
         }
     }
 
-    let temp_head_atom = Atom::new(temp_head_identifier, term_vec);
+    let temp_head_atom = ChaseAtom::new(temp_head_identifier, term_vec);
     let temp_rule = ChaseRule::new(
         vec![temp_head_atom],
-        normalized_head
-            .atoms
-            .into_iter()
-            .map(Literal::Positive)
-            .collect(),
+        HashMap::default(),
+        normalized_head.atoms,
         normalized_head.filters,
+        vec![],
+        vec![],
     );
 
     let temp_program = vec![temp_rule.clone()].into();
@@ -219,11 +218,7 @@ fn analyze_rule(
                 &promising_column_orders[0],
             )
         } else {
-            (
-                ChaseRule::new(vec![], vec![], vec![]),
-                VariableOrder::new(),
-                HashMap::new(),
-            )
+            (ChaseRule::default(), VariableOrder::new(), HashMap::new())
         };
 
     RuleAnalysis {
@@ -837,9 +832,8 @@ mod test {
 
     use crate::{
         model::{
-            chase_model::{ChaseProgram, ChaseRule},
-            ArityOrTypes, Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Term,
-            Variable,
+            chase_model::{ChaseAtom, ChaseProgram, ChaseRule},
+            ArityOrTypes, DataSource, DataSourceDeclaration, Identifier, Term, Variable,
         },
         program_analysis::analysis::get_fresh_rule_predicate,
         types::LogicalTypeEnum,
@@ -862,18 +856,24 @@ mod test {
 
         // A(x) :- B(x), C(x).
         let basic_rule = ChaseRule::new(
-            vec![Atom::new(a.clone(), vec![tx.clone()])],
+            vec![ChaseAtom::new(a.clone(), vec![tx.clone()])],
+            HashMap::new(),
             vec![
-                Literal::Positive(Atom::new(b.clone(), vec![tx.clone()])),
-                Literal::Positive(Atom::new(c.clone(), vec![tx.clone()])),
+                ChaseAtom::new(b.clone(), vec![tx.clone()]),
+                ChaseAtom::new(c.clone(), vec![tx.clone()]),
             ],
+            vec![],
+            vec![],
             vec![],
         );
 
         // R(x, !z) :- A(x).
         let exis_rule = ChaseRule::new(
-            vec![Atom::new(r.clone(), vec![tx.clone(), tz])],
-            vec![Literal::Positive(Atom::new(a.clone(), vec![tx]))],
+            vec![ChaseAtom::new(r.clone(), vec![tx.clone(), tz])],
+            HashMap::new(),
+            vec![ChaseAtom::new(a.clone(), vec![tx])],
+            vec![],
+            vec![],
             vec![],
         );
 

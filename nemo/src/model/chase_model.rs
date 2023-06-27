@@ -9,20 +9,82 @@ use super::{
         Atom, DataSource, DataSourceDeclaration, Fact, Filter, Identifier, Literal,
         OutputPredicateSelection, QualifiedPredicateName,
     },
-    ArityOrTypes, Program, Rule,
+    ArityOrTypes, Program, Rule, Term, Variable,
 };
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
+pub struct ChaseAtom {
+    predicate: Identifier,
+    terms: Vec<Term>,
+}
+
+impl From<Atom> for ChaseAtom {
+    fn from(atom: Atom) -> Self {
+        Self {
+            predicate: atom.predicate(),
+            terms: atom.terms().clone(),
+        }
+    }
+}
+
+impl ChaseAtom {
+    /// Construct a new Atom.
+    pub fn new(predicate: Identifier, terms: Vec<Term>) -> Self {
+        Self { predicate, terms }
+    }
+
+    /// Return the predicate [`Identifier`].
+    #[must_use]
+    pub fn predicate(&self) -> Identifier {
+        self.predicate.clone()
+    }
+
+    /// Return the terms in the atom - immutable.
+    #[must_use]
+    pub fn terms(&self) -> &Vec<Term> {
+        &self.terms
+    }
+
+    /// Return the terms in the atom - mutable.
+    #[must_use]
+    pub fn terms_mut(&mut self) -> &mut Vec<Term> {
+        &mut self.terms
+    }
+
+    /// Return all variables in the atom.
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.terms().iter().filter_map(|term| match term {
+            Term::Variable(var) => Some(var),
+            _ => None,
+        })
+    }
+
+    /// Return all universally quantified variables in the atom.
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.variables()
+            .filter(|var| matches!(var, Variable::Universal(_)))
+    }
+
+    /// Return all existentially quantified variables in the atom.
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.variables()
+            .filter(|var| matches!(var, Variable::Existential(_)))
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default)]
 pub struct ChaseRule {
     /// Head atoms of the rule
-    head: Vec<Atom>,
+    head: Vec<ChaseAtom>,
+    /// Head constructions
+    constructors: HashMap<Variable, ()>,
     /// Positive Body literals of the rule
-    positive_body: Vec<Atom>,
+    positive_body: Vec<ChaseAtom>,
     /// Filters applied to the body
     positive_filters: Vec<Filter>,
     /// Negative Body literals of the rule
-    negative_body: Vec<Atom>,
+    negative_body: Vec<ChaseAtom>,
     /// Filters applied to the body
     negative_filters: Vec<Filter>,
 }
@@ -30,59 +92,56 @@ pub struct ChaseRule {
 #[allow(dead_code)]
 impl ChaseRule {
     /// Construct a new rule.
-    pub fn new(head: Vec<Atom>, body: Vec<Literal>, positive_filters: Vec<Filter>) -> Self {
-        let mut positive_body = Vec::new();
-        let mut negative_body = Vec::new();
-
-        for literal in body {
-            match literal {
-                Literal::Positive(atom) => positive_body.push(atom),
-                Literal::Negative(atom) => negative_body.push(atom),
-            }
-        }
-
+    pub fn new(
+        head: Vec<ChaseAtom>,
+        constructors: HashMap<Variable, ()>,
+        positive_body: Vec<ChaseAtom>,
+        positive_filters: Vec<Filter>,
+        negative_body: Vec<ChaseAtom>,
+        negative_filters: Vec<Filter>,
+    ) -> Self {
         Self {
             head,
+            constructors,
             positive_body,
-            negative_body,
             positive_filters,
-            negative_filters: Vec::new(),
+            negative_body,
+            negative_filters,
         }
     }
-
     /// Return the head atoms of the rule - immutable.
     #[must_use]
-    pub fn head(&self) -> &Vec<Atom> {
+    pub fn head(&self) -> &Vec<ChaseAtom> {
         &self.head
     }
 
     /// Return the head atoms of the rule - mutable.
     #[must_use]
-    pub fn head_mut(&mut self) -> &mut Vec<Atom> {
+    pub fn head_mut(&mut self) -> &mut Vec<ChaseAtom> {
         &mut self.head
     }
 
     /// Return all the atoms occuring in this rule.
     /// This includes the postive body atoms, the negative body atoms as well as the head atoms.
-    pub fn all_atoms(&self) -> impl Iterator<Item = &Atom> {
+    pub fn all_atoms(&self) -> impl Iterator<Item = &ChaseAtom> {
         self.all_body().chain(self.head.iter())
     }
 
     /// Return the all the atoms of the rules.
     /// This does not distinguish between positive and negative atoms.
-    pub fn all_body(&self) -> impl Iterator<Item = &Atom> {
+    pub fn all_body(&self) -> impl Iterator<Item = &ChaseAtom> {
         self.positive_body.iter().chain(self.negative_body.iter())
     }
 
     /// Return the positive body atoms of the rule - immutable.
     #[must_use]
-    pub fn positive_body(&self) -> &Vec<Atom> {
+    pub fn positive_body(&self) -> &Vec<ChaseAtom> {
         &self.positive_body
     }
 
     /// Return the positive body atoms of the rule - mutable.
     #[must_use]
-    pub fn positive_body_mut(&mut self) -> &mut Vec<Atom> {
+    pub fn positive_body_mut(&mut self) -> &mut Vec<ChaseAtom> {
         &mut self.positive_body
     }
 
@@ -107,13 +166,13 @@ impl ChaseRule {
 
     /// Return the negative body atons of the rule - immutable.
     #[must_use]
-    pub fn negative_body(&self) -> &Vec<Atom> {
+    pub fn negative_body(&self) -> &Vec<ChaseAtom> {
         &self.negative_body
     }
 
     /// Return the negative body atoms of the rule - mutable.
     #[must_use]
-    pub fn negative_body_mut(&mut self) -> &mut Vec<Atom> {
+    pub fn negative_body_mut(&mut self) -> &mut Vec<ChaseAtom> {
         &mut self.negative_body
     }
 
@@ -132,11 +191,24 @@ impl ChaseRule {
 
 impl From<Rule> for ChaseRule {
     fn from(rule: Rule) -> ChaseRule {
-        ChaseRule::new(
-            rule.head().to_vec(),
-            rule.body().to_vec(),
-            rule.filters().to_vec(),
-        )
+        let mut positive_body = Vec::new();
+        let mut negative_body = Vec::new();
+
+        for literal in rule.body().iter().cloned() {
+            match literal {
+                Literal::Positive(atom) => positive_body.push(atom.into()),
+                Literal::Negative(atom) => negative_body.push(atom.into()),
+            }
+        }
+
+        Self {
+            head: rule.head().iter().cloned().map(|a| a.into()).collect(),
+            constructors: HashMap::default(),
+            positive_body,
+            negative_body,
+            positive_filters: rule.filters().clone(),
+            negative_filters: Vec::new(),
+        }
     }
 }
 

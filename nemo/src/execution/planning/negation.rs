@@ -10,7 +10,7 @@ use nemo_physical::{
 
 use crate::{
     execution::planning::plan_util::{compute_filters, subplan_union_reordered},
-    model::{Atom, Filter, Variable},
+    model::{chase_model::ChaseAtom, Filter, Variable},
     program_analysis::variable_order::VariableOrder,
     table_manager::{SubtableExecutionPlan, TableManager},
     types::LogicalTypeEnum,
@@ -30,7 +30,7 @@ struct AtomNegationInfo {
 }
 
 impl AtomNegationInfo {
-    fn new(positive_order: &VariableOrder, atom: &Atom) -> AtomNegationInfo {
+    fn new(positive_order: &VariableOrder, atom: &ChaseAtom) -> AtomNegationInfo {
         let atom_variables: Vec<Variable> = atom.variables().cloned().collect();
 
         let mut restricted_variable_order =
@@ -77,7 +77,7 @@ pub(super) struct NegationGenerator {
     /// Logical types of all the variables.
     pub variable_types: HashMap<Variable, LogicalTypeEnum>,
     /// The negated atoms.
-    pub atoms: Vec<Atom>,
+    pub atoms: Vec<ChaseAtom>,
     /// The negated filters.
     pub filters: Vec<Filter>,
 }

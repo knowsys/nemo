@@ -2,8 +2,8 @@
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
-use crate::model::chase_model::{ChaseProgram, ChaseRule};
-use crate::model::{Atom, Identifier, Variable};
+use crate::model::chase_model::{ChaseAtom, ChaseProgram, ChaseRule};
+use crate::model::{Identifier, Variable};
 use nemo_physical::management::database::ColumnOrder;
 use nemo_physical::permutator::Permutator;
 
@@ -149,7 +149,7 @@ impl IterationOrder {
     }
 }
 
-fn column_order_for(atom: &Atom, var_order: &VariableOrder) -> ColumnOrder {
+fn column_order_for(atom: &ChaseAtom, var_order: &VariableOrder) -> ColumnOrder {
     let mut partial_col_order: Vec<usize> = var_order
         .iter()
         .flat_map(|var| {
@@ -523,9 +523,9 @@ pub(super) fn build_preferable_variable_orders(
 mod test {
     use super::{IterationOrder, RuleVariableList, VariableOrder};
 
-    use crate::model::chase_model::{ChaseProgram, ChaseRule};
+    use crate::model::chase_model::{ChaseAtom, ChaseProgram, ChaseRule};
     use crate::model::{
-        ArityOrTypes, Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Term, Variable,
+        ArityOrTypes, DataSource, DataSourceDeclaration, Identifier, Term, Variable,
     };
     use nemo_physical::management::database::ColumnOrder;
 
@@ -598,11 +598,14 @@ mod test {
 
         (
             ChaseRule::new(
-                vec![Atom::new(c, vec![tx.clone(), tz.clone()])],
+                vec![ChaseAtom::new(c, vec![tx.clone(), tz.clone()])],
+                HashMap::default(),
                 vec![
-                    Literal::Positive(Atom::new(a, vec![tx, ty.clone()])),
-                    Literal::Positive(Atom::new(b, vec![ty, tz])),
+                    ChaseAtom::new(a, vec![tx, ty.clone()]),
+                    ChaseAtom::new(b, vec![ty, tz]),
                 ],
+                vec![],
+                vec![],
                 vec![],
             ),
             vec![x, y, z],
@@ -622,11 +625,14 @@ mod test {
 
         (
             ChaseRule::new(
-                vec![Atom::new(a.clone(), vec![tx.clone(), tz.clone()])],
+                vec![ChaseAtom::new(a.clone(), vec![tx.clone(), tz.clone()])],
+                HashMap::default(),
                 vec![
-                    Literal::Positive(Atom::new(a.clone(), vec![tx, ty.clone()])),
-                    Literal::Positive(Atom::new(a, vec![ty, tz])),
+                    ChaseAtom::new(a.clone(), vec![tx, ty.clone()]),
+                    ChaseAtom::new(a, vec![ty, tz]),
                 ],
+                vec![],
+                vec![],
                 vec![],
             ),
             vec![x, y, z],
@@ -857,22 +863,25 @@ mod test {
         let (rules, variables) = [
             (
                 ChaseRule::new(
-                    vec![Atom::new(init.clone(), vec![tc.clone()])],
-                    vec![Literal::Positive(Atom::new(
-                        is_main_class,
-                        vec![tc.clone()],
-                    ))],
+                    vec![ChaseAtom::new(init.clone(), vec![tc.clone()])],
+                    HashMap::default(),
+                    vec![ChaseAtom::new(is_main_class, vec![tc.clone()])],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone()],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(
+                    vec![ChaseAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), tc.clone()],
                     )],
-                    vec![Literal::Positive(Atom::new(init, vec![tc.clone()]))],
+                    HashMap::default(),
+                    vec![ChaseAtom::new(init, vec![tc.clone()])],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone()],
@@ -880,52 +889,49 @@ mod test {
             (
                 ChaseRule::new(
                     vec![
-                        Atom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
-                        Atom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
                     ],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(
-                            sub_class_of.clone(),
-                            vec![tc.clone(), ty.clone()],
-                        )),
-                        Literal::Positive(Atom::new(
-                            conj.clone(),
-                            vec![ty.clone(), td1.clone(), td2.clone()],
-                        )),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), ty.clone()]),
+                        ChaseAtom::new(conj.clone(), vec![ty.clone(), td1.clone(), td2.clone()]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone(), y.clone(), d1.clone(), d2.clone()],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(
+                    vec![ChaseAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), ty.clone()],
                     )],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(
-                            sub_class_of.clone(),
-                            vec![tc.clone(), td1.clone()],
-                        )),
-                        Literal::Positive(Atom::new(
-                            sub_class_of.clone(),
-                            vec![tc.clone(), td2.clone()],
-                        )),
-                        Literal::Positive(Atom::new(conj, vec![ty.clone(), td1, td2])),
-                        Literal::Positive(Atom::new(is_sub_class, vec![ty.clone()])),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
+                        ChaseAtom::new(conj, vec![ty.clone(), td1, td2]),
+                        ChaseAtom::new(is_sub_class, vec![ty.clone()]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone(), d1, d2, y.clone()],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(xe, vec![tc.clone(), tr.clone(), te.clone()])],
+                    vec![ChaseAtom::new(xe, vec![tc.clone(), tr.clone(), te.clone()])],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(sub_class_of, vec![te, ty.clone()])),
-                        Literal::Positive(Atom::new(exists, vec![ty, tr, tc])),
+                        ChaseAtom::new(sub_class_of, vec![te, ty.clone()]),
+                        ChaseAtom::new(exists, vec![ty, tr, tc]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![e, y, r, c],
@@ -1085,22 +1091,25 @@ mod test {
         let (rules, variables) = [
             (
                 ChaseRule::new(
-                    vec![Atom::new(init.clone(), vec![tc.clone()])],
-                    vec![Literal::Positive(Atom::new(
-                        is_main_class.clone(),
-                        vec![tc.clone()],
-                    ))],
+                    vec![ChaseAtom::new(init.clone(), vec![tc.clone()])],
+                    HashMap::default(),
+                    vec![ChaseAtom::new(is_main_class.clone(), vec![tc.clone()])],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone()],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(
+                    vec![ChaseAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), tc.clone()],
                     )],
-                    vec![Literal::Positive(Atom::new(init.clone(), vec![tc.clone()]))],
+                    HashMap::default(),
+                    vec![ChaseAtom::new(init.clone(), vec![tc.clone()])],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone()],
@@ -1108,179 +1117,170 @@ mod test {
             (
                 ChaseRule::new(
                     vec![
-                        Atom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
-                        Atom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
                     ],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(
-                            sub_class_of.clone(),
-                            vec![tc.clone(), ty.clone()],
-                        )),
-                        Literal::Positive(Atom::new(
-                            conj.clone(),
-                            vec![ty.clone(), td1.clone(), td2.clone()],
-                        )),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), ty.clone()]),
+                        ChaseAtom::new(conj.clone(), vec![ty.clone(), td1.clone(), td2.clone()]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone(), y.clone(), d1.clone(), d2.clone()],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(
+                    vec![ChaseAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), ty.clone()],
                     )],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(
-                            sub_class_of.clone(),
-                            vec![tc.clone(), td1.clone()],
-                        )),
-                        Literal::Positive(Atom::new(
-                            sub_class_of.clone(),
-                            vec![tc.clone(), td2.clone()],
-                        )),
-                        Literal::Positive(Atom::new(conj, vec![ty.clone(), td1, td2])),
-                        Literal::Positive(Atom::new(is_sub_class.clone(), vec![ty.clone()])),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
+                        ChaseAtom::new(conj, vec![ty.clone(), td1, td2]),
+                        ChaseAtom::new(is_sub_class.clone(), vec![ty.clone()]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone(), d1, d2, y.clone()],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(
+                    vec![ChaseAtom::new(
                         xe.clone(),
                         vec![tc.clone(), tr.clone(), te.clone()],
                     )],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(
-                            sub_class_of.clone(),
-                            vec![te.clone(), ty.clone()],
-                        )),
-                        Literal::Positive(Atom::new(
-                            exists.clone(),
-                            vec![ty.clone(), tr.clone(), tc.clone()],
-                        )),
+                        ChaseAtom::new(sub_class_of.clone(), vec![te.clone(), ty.clone()]),
+                        ChaseAtom::new(exists.clone(), vec![ty.clone(), tr.clone(), tc.clone()]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![e.clone(), y.clone(), r.clone(), c.clone()],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(
+                    vec![ChaseAtom::new(
                         aux_subsub_ext.clone(),
                         vec![td.clone(), tr.clone(), ty.clone()],
                     )],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(
-                            sub_prop.clone(),
-                            vec![tr.clone(), ts.clone()],
-                        )),
-                        Literal::Positive(Atom::new(
-                            exists,
-                            vec![ty.clone(), ts.clone(), td.clone()],
-                        )),
-                        Literal::Positive(Atom::new(is_sub_class, vec![ty.clone()])),
+                        ChaseAtom::new(sub_prop.clone(), vec![tr.clone(), ts.clone()]),
+                        ChaseAtom::new(exists, vec![ty.clone(), ts.clone(), td.clone()]),
+                        ChaseAtom::new(is_sub_class, vec![ty.clone()]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![r.clone(), s.clone(), y.clone(), d.clone()],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(
+                    vec![ChaseAtom::new(
                         aux.clone(),
                         vec![tc.clone(), tr.clone(), ty.clone()],
                     )],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(
-                            sub_class_of.clone(),
-                            vec![tc.clone(), td.clone()],
-                        )),
-                        Literal::Positive(Atom::new(
-                            aux_subsub_ext,
-                            vec![td.clone(), tr.clone(), ty.clone()],
-                        )),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td.clone()]),
+                        ChaseAtom::new(aux_subsub_ext, vec![td.clone(), tr.clone(), ty.clone()]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone(), d.clone(), r.clone(), y.clone()],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(
+                    vec![ChaseAtom::new(
                         sub_class_of.clone(),
                         vec![te.clone(), ty.clone()],
                     )],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(
-                            xe.clone(),
-                            vec![tc.clone(), tr.clone(), te.clone()],
-                        )),
-                        Literal::Positive(Atom::new(aux, vec![tc.clone(), tr.clone(), ty])),
+                        ChaseAtom::new(xe.clone(), vec![tc.clone(), tr.clone(), te.clone()]),
+                        ChaseAtom::new(aux, vec![tc.clone(), tr.clone(), ty]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone(), r.clone(), e.clone(), y],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(
+                    vec![ChaseAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), te.clone()],
                     )],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(
-                            sub_class_of.clone(),
-                            vec![tc.clone(), td.clone()],
-                        )),
-                        Literal::Positive(Atom::new(
-                            sub_class_of.clone(),
-                            vec![td.clone(), te.clone()],
-                        )),
+                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td.clone()]),
+                        ChaseAtom::new(sub_class_of.clone(), vec![td.clone(), te.clone()]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone(), d.clone(), e.clone()],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(
+                    vec![ChaseAtom::new(
                         xe.clone(),
                         vec![td.clone(), ts.clone(), te.clone()],
                     )],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(
-                            xe.clone(),
-                            vec![tc.clone(), tr1.clone(), te.clone()],
-                        )),
-                        Literal::Positive(Atom::new(xe.clone(), vec![td, tr2.clone(), tc.clone()])),
-                        Literal::Positive(Atom::new(sub_prop.clone(), vec![tr1, ts1.clone()])),
-                        Literal::Positive(Atom::new(sub_prop, vec![tr2, ts2.clone()])),
-                        Literal::Positive(Atom::new(sub_prop_chain, vec![ts1, ts2, ts])),
+                        ChaseAtom::new(xe.clone(), vec![tc.clone(), tr1.clone(), te.clone()]),
+                        ChaseAtom::new(xe.clone(), vec![td, tr2.clone(), tc.clone()]),
+                        ChaseAtom::new(sub_prop.clone(), vec![tr1, ts1.clone()]),
+                        ChaseAtom::new(sub_prop, vec![tr2, ts2.clone()]),
+                        ChaseAtom::new(sub_prop_chain, vec![ts1, ts2, ts]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c.clone(), r1, e.clone(), d, r2, s1, s2, s],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(init, vec![tc.clone()])],
-                    vec![Literal::Positive(Atom::new(xe, vec![tc, tr, te]))],
+                    vec![ChaseAtom::new(init, vec![tc.clone()])],
+                    HashMap::default(),
+                    vec![ChaseAtom::new(xe, vec![tc, tr, te])],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![c, r, e],
             ),
             (
                 ChaseRule::new(
-                    vec![Atom::new(main_sub_class_of, vec![ta.clone(), tb.clone()])],
+                    vec![ChaseAtom::new(
+                        main_sub_class_of,
+                        vec![ta.clone(), tb.clone()],
+                    )],
+                    HashMap::default(),
                     vec![
-                        Literal::Positive(Atom::new(sub_class_of, vec![ta.clone(), tb.clone()])),
-                        Literal::Positive(Atom::new(is_main_class.clone(), vec![ta])),
-                        Literal::Positive(Atom::new(is_main_class, vec![tb])),
+                        ChaseAtom::new(sub_class_of, vec![ta.clone(), tb.clone()]),
+                        ChaseAtom::new(is_main_class.clone(), vec![ta]),
+                        ChaseAtom::new(is_main_class, vec![tb]),
                     ],
+                    vec![],
+                    vec![],
                     vec![],
                 ),
                 vec![a, b],

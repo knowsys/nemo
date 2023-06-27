@@ -18,7 +18,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    model::{Atom, Filter, FilterOperation, Identifier, Term, Variable},
+    model::{chase_model::ChaseAtom, Filter, FilterOperation, Identifier, Term, Variable},
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::TableManager,
     types::LogicalTypeEnum,
@@ -29,7 +29,7 @@ use crate::{
 ///     * a(x, y, z) with atom order [0, 1, 2] and variable order [y, z, x] results in [1, 2, 0]
 /// This function for computing JoinBindings:
 ///         - Example: For a leapfrog join a(x, y, z) b(z, y) with order [x, y, z] you'd obtain [[0, 1, 2], [2, 1]]
-pub(super) fn atom_binding(atom: &Atom, variable_order: &VariableOrder) -> Vec<usize> {
+pub(super) fn atom_binding(atom: &ChaseAtom, variable_order: &VariableOrder) -> Vec<usize> {
     atom.terms().iter().map(|t| if let Term::Variable(variable) = t {
         *variable_order.get(variable).unwrap()
     } else {
@@ -238,7 +238,7 @@ pub(super) fn subplan_union_reordered(
 #[derive(Debug)]
 pub(super) struct HeadInstruction {
     /// Reduced form of the the atom which only contains duplicate variables, constants or existential variables.
-    pub reduced_atom: Atom,
+    pub reduced_atom: ChaseAtom,
     /// The [`AppendInstruction`]s to get the original atom.
     pub append_instructions: Vec<Vec<AppendInstruction>>,
     /// The arity of the original atom.
@@ -247,7 +247,10 @@ pub(super) struct HeadInstruction {
 
 /// Given an atom, bring compute the corresponding [`HeadInstruction`].
 /// TODO: This needs to be revised once the Type System on the logical layer has been implemented.
-pub(super) fn head_instruction_from_atom(atom: &Atom, analysis: &RuleAnalysis) -> HeadInstruction {
+pub(super) fn head_instruction_from_atom(
+    atom: &ChaseAtom,
+    analysis: &RuleAnalysis,
+) -> HeadInstruction {
     let arity = atom.terms().len();
     let mut reduced_terms = Vec::<Term>::with_capacity(arity);
     let mut append_instructions = Vec::<Vec<AppendInstruction>>::new();
@@ -288,7 +291,7 @@ pub(super) fn head_instruction_from_atom(atom: &Atom, analysis: &RuleAnalysis) -
         }
     }
 
-    let reduced_atom = Atom::new(atom.predicate(), reduced_terms);
+    let reduced_atom = ChaseAtom::new(atom.predicate(), reduced_terms);
 
     HeadInstruction {
         reduced_atom,

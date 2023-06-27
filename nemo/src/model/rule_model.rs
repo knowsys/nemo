@@ -165,10 +165,7 @@ impl std::fmt::Display for Term {
 impl Term {
     /// Check if the term is ground.
     pub fn is_ground(&self) -> bool {
-        matches!(
-            self,
-            Self::Constant(_) | Self::NumericLiteral(_) | Self::RdfLiteral(_)
-        )
+        !matches!(self, Self::Variable(_))
     }
 }
 
