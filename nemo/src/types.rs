@@ -86,12 +86,12 @@ impl PartialOrd for LogicalTypeEnum {
                 _ => None,
             },
             Self::Integer => match other {
-                Self::Any => Some(std::cmp::Ordering::Less),
+                Self::Any => None, // TODO: should be the following once reasoning supports casting: Some(std::cmp::Ordering::Less),
                 Self::Integer => Some(std::cmp::Ordering::Equal),
                 _ => None,
             },
             Self::Float64 => match other {
-                Self::Any => Some(std::cmp::Ordering::Less),
+                Self::Any => None, // TODO: should be the following once reasoning supports casting: Some(std::cmp::Ordering::Less),
                 Self::Float64 => Some(std::cmp::Ordering::Equal),
                 _ => None,
             },
