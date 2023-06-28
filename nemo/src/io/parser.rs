@@ -2,17 +2,16 @@
 
 use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
+use crate::{error::Error, model::*, types::LogicalTypeEnum};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
-    character::complete::{alpha1, digit1, multispace1, none_of, satisfy},
+    character::complete::{alpha1, digit1, multispace0, multispace1, none_of, satisfy},
     combinator::{all_consuming, cut, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
     Err,
 };
-
-use crate::{error::Error, model::*, types::LogicalTypeEnum};
 
 use macros::traced;
 
@@ -555,6 +554,9 @@ impl<'a> RuleParser<'a> {
                     let predicate_name = predicate.name();
                     log::trace!(target: "parser", "found fact {predicate_name}({terms:?})");
 
+                    // We do not allow complex term trees in facts for now
+                    let terms = terms.into_iter().map(TermTree::leaf).collect();
+
                     Ok((remainder, Fact(Atom::new(predicate, terms))))
                 },
                 || ParseError::ExpectedFact,
@@ -697,6 +699,9 @@ impl<'a> RuleParser<'a> {
                     let predicate_name = predicate.name();
                     log::trace!(target: "parser", "found atom {predicate_name}({terms:?})");
 
+                    // TODO: Change this
+                    let terms = terms.into_iter().map(TermTree::leaf).collect();
+
                     Ok((remainder, Atom::new(predicate, terms)))
                 },
                 || ParseError::ExpectedAtom,
@@ -833,6 +838,113 @@ impl<'a> RuleParser<'a> {
                     multispace_or_comment0,
                 ),
                 || ParseError::ExpectedFilterOperator,
+            ),
+        )
+    }
+
+    pub fn arithmetic_parse_parens(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+        traced(
+            "arithmetic_parse_parens",
+            map_error(
+                delimited(
+                    multispace0,
+                    delimited(tag("("), self.arithmetic_parse_dash_operation(), tag(")")),
+                    multispace0,
+                ),
+                || todo!(),
+            ),
+        )
+    }
+
+    pub fn arithmetic_parse_factor(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+        traced(
+            "arithmetic_parse_factor",
+            map_error(
+                alt((
+                    map(self.parse_term(), TermTree::leaf),
+                    self.arithmetic_parse_parens(),
+                )),
+                || todo!(),
+            ),
+        )
+    }
+
+    fn arithmetic_fold_expression(
+        initial: TermTree,
+        sequence: Vec<(TermOperation, TermTree)>,
+    ) -> TermTree {
+        sequence.into_iter().fold(initial, |acc, pair| {
+            let (operation, expression) = pair;
+            match operation {
+                TermOperation::Addition => {
+                    TermTree::tree(TermOperation::Addition, vec![acc, expression])
+                }
+                TermOperation::Subtraction => {
+                    TermTree::tree(TermOperation::Subtraction, vec![acc, expression])
+                }
+                TermOperation::Multiplication => {
+                    TermTree::tree(TermOperation::Multiplication, vec![acc, expression])
+                }
+                TermOperation::Division => {
+                    TermTree::tree(TermOperation::Division, vec![acc, expression])
+                }
+                TermOperation::Term(term) => TermTree::leaf(term),
+            }
+        })
+    }
+
+    pub fn arithmetic_parse_point_operation(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+        traced(
+            "arithmetic_parse_point_operation",
+            map_error(
+                map(
+                    pair(
+                        self.arithmetic_parse_factor(),
+                        many0(alt((
+                            map(preceded(tag("*"), self.arithmetic_parse_factor()), |r| {
+                                (TermOperation::Multiplication, r)
+                            }),
+                            map(preceded(tag("/"), self.arithmetic_parse_factor()), |r| {
+                                (TermOperation::Division, r)
+                            }),
+                        ))),
+                    ),
+                    |(initial, sequence)| Self::arithmetic_fold_expression(initial, sequence),
+                ),
+                || todo!(),
+            ),
+        )
+    }
+
+    pub fn arithmetic_parse_dash_operation(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+        traced(
+            "arithmetic_parse_point_operation",
+            map_error(
+                map(
+                    pair(
+                        self.arithmetic_parse_point_operation(),
+                        many0(alt((
+                            map(
+                                preceded(tag("+"), self.arithmetic_parse_point_operation()),
+                                |r| (TermOperation::Addition, r),
+                            ),
+                            map(
+                                preceded(tag("-"), self.arithmetic_parse_point_operation()),
+                                |r| (TermOperation::Subtraction, r),
+                            ),
+                        ))),
+                    ),
+                    |(initial, sequence)| Self::arithmetic_fold_expression(initial, sequence),
+                ),
+                || todo!(),
             ),
         )
     }
@@ -1064,10 +1176,12 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                value: v,
-                datatype: t,
-            })],
+            vec![TermTree::leaf(Term::RdfLiteral(
+                RdfLiteral::DatatypeValue {
+                    value: v,
+                    datatype: t,
+                },
+            ))],
         ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
@@ -1088,7 +1202,7 @@ mod test {
 
         assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
 
-        let expected_fact = Fact(Atom::new(p, vec![Term::Constant(v)]));
+        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::Constant(v))]));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1103,7 +1217,7 @@ mod test {
         let fact = format!(r#"{predicate}({pn}) ."#);
         let v = Identifier(pn);
 
-        let expected_fact = Fact(Atom::new(p, vec![Term::Constant(v)]));
+        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::Constant(v))]));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1121,9 +1235,9 @@ mod test {
         let expected_fact = Fact(Atom::new(
             p,
             vec![
-                Term::NumericLiteral(NumericLiteral::Integer(int)),
-                Term::NumericLiteral(NumericLiteral::Double(dbl)),
-                Term::NumericLiteral(NumericLiteral::Decimal(13, 37)),
+                TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(int))),
+                TermTree::leaf(Term::NumericLiteral(NumericLiteral::Double(dbl))),
+                TermTree::leaf(Term::NumericLiteral(NumericLiteral::Decimal(13, 37))),
             ],
         ));
 
@@ -1150,10 +1264,12 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                value: v,
-                datatype: format!("{iri}string"),
-            })],
+            vec![TermTree::leaf(Term::RdfLiteral(
+                RdfLiteral::DatatypeValue {
+                    value: v,
+                    datatype: format!("{iri}string"),
+                },
+            ))],
         ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
@@ -1168,7 +1284,7 @@ mod test {
         let v = value.to_string();
         let fact = format!(r#"{predicate}("{value}") ."#);
 
-        let expected_fact = Fact(Atom::new(p, vec![Term::StringLiteral(v)]));
+        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::StringLiteral(v))]));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1182,7 +1298,7 @@ mod test {
         let a = Identifier(name.to_string());
         let fact = format!(r#"{predicate}({name}) ."#);
 
-        let expected_fact = Fact(Atom::new(p, vec![Term::Constant(a)]));
+        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::Constant(a))]));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1206,10 +1322,12 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                value: v,
-                datatype: t,
-            })],
+            vec![TermTree::leaf(Term::RdfLiteral(
+                RdfLiteral::DatatypeValue {
+                    value: v,
+                    datatype: t,
+                },
+            ))],
         ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
@@ -1238,19 +1356,23 @@ mod test {
         let expected_rule = Rule::new(
             vec![Atom::new(
                 p,
-                vec![Term::Variable(Variable::Universal(x.clone()))],
+                vec![TermTree::leaf(Term::Variable(Variable::Universal(
+                    x.clone(),
+                )))],
             )],
             vec![
                 Literal::Positive(Atom::new(
                     a,
                     vec![
-                        Term::Variable(Variable::Universal(x.clone())),
-                        Term::Variable(Variable::Universal(y.clone())),
+                        TermTree::leaf(Term::Variable(Variable::Universal(x.clone()))),
+                        TermTree::leaf(Term::Variable(Variable::Universal(y.clone()))),
                     ],
                 )),
                 Literal::Positive(Atom::new(
                     b,
-                    vec![Term::Variable(Variable::Universal(z.clone()))],
+                    vec![TermTree::leaf(Term::Variable(Variable::Universal(
+                        z.clone(),
+                    )))],
                 )),
             ],
             vec![

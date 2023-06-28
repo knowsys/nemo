@@ -1,11 +1,59 @@
 use super::super::traits::columnscan::ColumnScan;
 use crate::{
-    columnar::traits::columnscan::ColumnScanCell, datatypes::ColumnDataType, util::OperationTree,
+    columnar::traits::columnscan::ColumnScanCell, datatypes::ColumnDataType,
+    util::tagged_tree::TaggedTree,
 };
 use std::{fmt::Debug, ops::Range};
 
-/// Represents an [`OperationTree`] where variables are given as indices to a vector of column scans.
-pub type IndexOperationTree<TypeConstant> = OperationTree<TypeConstant, usize>;
+/// Operation that can be exectued by a [`ColumnScanArithmetic`].
+#[derive(Debug, Clone)]
+pub enum ArithmeticOperation<T> {
+    /// Value is the given constant.
+    Constant(T),
+    /// Value is read off the column scan with the given index.
+    ColumnScan(usize),
+    /// Value is the sum of the values of the given subtrees.
+    Addition,
+    /// Value is the difference between the value of the first subtree and the second.
+    Subtraction,
+    /// Value is the product of the values of the given subtrees.
+    Multiplication,
+    /// Value is the quotient of the value of the first subtree and the second.
+    Division,
+}
+
+/// A [`TaggedTree`] that represents a series of arithmetic operations to be executed by the [`ColumnScanArithmetic`].
+pub type OperationTree<T> = TaggedTree<ArithmeticOperation<T>>;
+
+impl<T> OperationTree<T> {
+    /// Return a list of all the column scan indices used in this tree.
+    pub fn input_indices(&self) -> Vec<&usize> {
+        self.leaves()
+            .into_iter()
+            .filter_map(|l| {
+                if let ArithmeticOperation::ColumnScan(index) = l {
+                    Some(index)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Return a list with mutable references to all column scan indices used in this tree.
+    pub fn input_indices_mut(&mut self) -> Vec<&mut usize> {
+        self.leaves_mut()
+            .into_iter()
+            .filter_map(|l| {
+                if let ArithmeticOperation::ColumnScan(index) = l {
+                    Some(index)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
 
 /// Cursor position of the scan
 #[derive(Debug, Eq, PartialEq)]
@@ -29,20 +77,18 @@ where
     value: Option<T>,
 
     /// [`OperationTree`] representing the operation that will be performed
-    operation: IndexOperationTree<T>,
+    operation: OperationTree<T>,
 
     /// Where the virtual cursor is.
     cursor: CursorPosition,
 }
+
 impl<'a, T> ColumnScanArithmetic<'a, T>
 where
     T: ColumnDataType,
 {
     /// Constructs a new [`ColumnScanArithmetic`].
-    pub fn new(
-        column_scans: Vec<&'a ColumnScanCell<'a, T>>,
-        operation: IndexOperationTree<T>,
-    ) -> Self {
+    pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>, operation: OperationTree<T>) -> Self {
         Self {
             column_scans,
             operation,
@@ -51,26 +97,40 @@ where
         }
     }
 
-    fn evaluate_recursive(&self, operation: &IndexOperationTree<T>) -> Option<T> {
-        match operation {
-            OperationTree::Variable(index) => self.column_scans[*index].current(),
-            OperationTree::Constant(constant) => Some(*constant),
-            OperationTree::Addition(left, right) => Some(
-                self.evaluate_recursive(left.as_ref())?
-                    + self.evaluate_recursive(right.as_ref())?,
-            ),
-            OperationTree::Subtraction(left, right) => Some(
-                self.evaluate_recursive(left.as_ref())?
-                    - self.evaluate_recursive(right.as_ref())?,
-            ),
-            OperationTree::Multiplication(left, right) => Some(
-                self.evaluate_recursive(left.as_ref())?
-                    * self.evaluate_recursive(right.as_ref())?,
-            ),
-            OperationTree::Division(left, right) => Some(
-                self.evaluate_recursive(left.as_ref())?
-                    / self.evaluate_recursive(right.as_ref())?,
-            ),
+    fn evaluate_recursive(&self, tree: &OperationTree<T>) -> Option<T> {
+        match &tree.tag {
+            ArithmeticOperation::ColumnScan(index) => self.column_scans[*index].current(),
+            ArithmeticOperation::Constant(constant) => Some(*constant),
+            ArithmeticOperation::Addition => {
+                let mut result = T::zero();
+                for subtree in &tree.subtrees {
+                    result = result + self.evaluate_recursive(subtree)?;
+                }
+                Some(result)
+            }
+            ArithmeticOperation::Subtraction => {
+                let left = self.evaluate_recursive(&tree.subtrees[0])?;
+                let right = self.evaluate_recursive(&tree.subtrees[1])?;
+
+                Some(left - right)
+            }
+            ArithmeticOperation::Multiplication => {
+                let mut result = T::one();
+                for subtree in &tree.subtrees {
+                    result = result * self.evaluate_recursive(subtree)?;
+                }
+                Some(result)
+            }
+            ArithmeticOperation::Division => {
+                let left = self.evaluate_recursive(&tree.subtrees[0])?;
+                let right = self.evaluate_recursive(&tree.subtrees[1])?;
+
+                if right == T::zero() {
+                    return None;
+                }
+
+                Some(left / right)
+            }
         }
     }
 
@@ -145,11 +205,11 @@ where
 mod test {
     use crate::columnar::{
         column_types::vector::{ColumnScanVector, ColumnVector},
-        operations::columnscan_arithmetic::{IndexOperationTree, OperationTree},
+        operations::columnscan_arithmetic::OperationTree,
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 
-    use super::ColumnScanArithmetic;
+    use super::{ArithmeticOperation, ColumnScanArithmetic};
 
     use test_log::test;
 
@@ -166,16 +226,29 @@ mod test {
         let scan_b_cell = ColumnScanCell::new(scan_b);
 
         // a + (b/2 - 1) * 5
-        let operation: IndexOperationTree<u64> = OperationTree::addition(
-            OperationTree::variable(0),
-            OperationTree::multiplication(
-                OperationTree::subtraction(
-                    OperationTree::division(OperationTree::variable(1), OperationTree::constant(2)),
-                    OperationTree::constant(1),
+        let operation: OperationTree<u64> = OperationTree::tree(
+            ArithmeticOperation::Addition,
+            vec![
+                OperationTree::leaf(ArithmeticOperation::ColumnScan(0)),
+                OperationTree::tree(
+                    ArithmeticOperation::Multiplication,
+                    vec![
+                        OperationTree::tree(
+                            ArithmeticOperation::Subtraction,
+                            vec![OperationTree::tree(
+                                ArithmeticOperation::Division,
+                                vec![
+                                    OperationTree::leaf(ArithmeticOperation::ColumnScan(1)),
+                                    OperationTree::leaf(ArithmeticOperation::Constant(2)),
+                                ],
+                            )],
+                        ),
+                        OperationTree::leaf(ArithmeticOperation::Constant(5)),
+                    ],
                 ),
-                OperationTree::constant(5),
-            ),
+            ],
         );
+
         let scans = vec![&scan_a_cell, &scan_b_cell];
         let mut arithmetic = ColumnScanArithmetic::new(scans, operation);
 

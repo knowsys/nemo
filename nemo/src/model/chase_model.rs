@@ -9,7 +9,7 @@ use super::{
         Atom, DataSource, DataSourceDeclaration, Fact, Filter, Identifier, Literal,
         OutputPredicateSelection, QualifiedPredicateName,
     },
-    ArityOrTypes, Program, Rule, Term, Variable,
+    ArityOrTypes, Program, Rule, Term, TermOperation, TermTree, Variable,
 };
 
 #[derive(Debug, Clone)]
@@ -18,19 +18,29 @@ pub struct ChaseAtom {
     terms: Vec<Term>,
 }
 
-impl From<Atom> for ChaseAtom {
-    fn from(atom: Atom) -> Self {
-        Self {
-            predicate: atom.predicate(),
-            terms: atom.terms().clone(),
-        }
-    }
-}
-
 impl ChaseAtom {
     /// Construct a new Atom.
     pub fn new(predicate: Identifier, terms: Vec<Term>) -> Self {
         Self { predicate, terms }
+    }
+
+    pub fn from_flat_atom(atom: Atom) -> Self {
+        let terms: Vec<Term> = atom
+            .terms()
+            .into_iter()
+            .map(|t| {
+                if let TermOperation::Term(term) = t.operation() {
+                    term.clone()
+                } else {
+                    panic!("Expected term trees that are only leaves");
+                }
+            })
+            .collect();
+
+        Self {
+            predicate: atom.predicate(),
+            terms,
+        }
     }
 
     /// Return the predicate [`Identifier`].
@@ -78,7 +88,7 @@ pub struct ChaseRule {
     /// Head atoms of the rule
     head: Vec<ChaseAtom>,
     /// Head constructions
-    constructors: HashMap<Variable, ()>,
+    constructors: HashMap<Variable, TermTree>,
     /// Positive Body literals of the rule
     positive_body: Vec<ChaseAtom>,
     /// Filters applied to the body
@@ -94,7 +104,7 @@ impl ChaseRule {
     /// Construct a new rule.
     pub fn new(
         head: Vec<ChaseAtom>,
-        constructors: HashMap<Variable, ()>,
+        constructors: HashMap<Variable, TermTree>,
         positive_body: Vec<ChaseAtom>,
         positive_filters: Vec<Filter>,
         negative_body: Vec<ChaseAtom>,
@@ -196,14 +206,38 @@ impl From<Rule> for ChaseRule {
 
         for literal in rule.body().iter().cloned() {
             match literal {
-                Literal::Positive(atom) => positive_body.push(atom.into()),
-                Literal::Negative(atom) => negative_body.push(atom.into()),
+                Literal::Positive(atom) => positive_body.push(ChaseAtom::from_flat_atom(atom)),
+                Literal::Negative(atom) => negative_body.push(ChaseAtom::from_flat_atom(atom)),
             }
         }
 
+        let mut constructors = HashMap::<Variable, TermTree>::new();
+        let mut head_atoms = Vec::<ChaseAtom>::new();
+        let mut term_counter: usize = 1;
+        for atom in rule.head() {
+            let mut new_terms = Vec::<Term>::new();
+
+            for term_tree in atom.terms() {
+                if let TermOperation::Term(term) = term_tree.operation() {
+                    new_terms.push(term.clone());
+                } else {
+                    let new_variable =
+                        Variable::Universal(Identifier(format!("HEAD_OPERATION_{term_counter}")));
+                    new_terms.push(Term::Variable(new_variable.clone()));
+                    let exists = constructors.insert(new_variable, term_tree.clone());
+
+                    assert!(exists.is_none())
+                }
+
+                term_counter += 1;
+            }
+
+            head_atoms.push(ChaseAtom::new(atom.predicate(), new_terms));
+        }
+
         Self {
-            head: rule.head().iter().cloned().map(|a| a.into()).collect(),
-            constructors: HashMap::default(),
+            head: head_atoms,
+            constructors,
             positive_body,
             negative_body,
             positive_filters: rule.filters().clone(),

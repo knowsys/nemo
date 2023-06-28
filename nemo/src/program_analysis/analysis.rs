@@ -5,7 +5,7 @@ use nemo_physical::management::database::ColumnOrder;
 use crate::{
     error::Error,
     model::chase_model::{ChaseProgram, ChaseRule},
-    model::{chase_model::ChaseAtom, FilterOperation, Identifier, Term, Variable},
+    model::{chase_model::ChaseAtom, FilterOperation, Identifier, Term, TermOperation, Variable},
     types::{LogicalTypeEnum, TypeError},
     util::labeled_graph::LabeledGraph,
 };
@@ -738,9 +738,15 @@ impl ChaseProgram {
                 .get(&fact.0.predicate())
                 .expect("Previous analysis should have assigned a type vector to each predicate.");
 
-            for (term_index, ground_term) in fact.0.terms().iter().enumerate() {
-                let logical_type = predicate_types[term_index];
-                logical_type.ground_term_to_data_value_t(ground_term.clone())?;
+            for (term_index, ground_term_tree) in fact.0.terms().iter().enumerate() {
+                if let TermOperation::Term(ground_term) = ground_term_tree.operation() {
+                    let logical_type = predicate_types[term_index];
+                    logical_type.ground_term_to_data_value_t(ground_term.clone())?;
+                } else {
+                    unreachable!(
+                        "Its assumed that facts do not contain complicated expressions (for now?)"
+                    );
+                }
             }
         }
 
