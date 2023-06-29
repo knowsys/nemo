@@ -279,15 +279,47 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Creates an [`Iterator`] over the resulting facts of a predicate.
+    // TODO: we probably want to return some logical value here, e.g. an RDF Term or a string or an
+    // integer; not a DataValueT
     pub fn table_scan(
         &mut self,
         predicate: Identifier,
     ) -> Result<Option<impl Iterator<Item = Vec<DataValueT>> + '_>, Error> {
-        let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
+        let Some(table_id) = self.table_manager.combine_predicate(predicate.clone())? else {
             return Ok(None);
         };
 
-        Ok(Some(self.table_manager.table_values(table_id)?))
+        let predicate_types: &Vec<LogicalTypeEnum> = self
+            .analysis
+            .predicate_types
+            .get(&predicate)
+            .expect("All predicates should have types by now.");
+
+        Ok(Some(self.table_manager.table_values(table_id)?.map(
+            |record| {
+                // TODO: respect output declaration types from program here
+                record
+                    .into_iter()
+                    .zip(predicate_types.iter())
+                    .map(|(dvt, lt)| {
+                        if *lt == LogicalTypeEnum::String {
+                            DataValueT::String(dvt.to_string()
+                                .strip_prefix('"')
+                                .expect(
+                                    "Logical String representation should be wrapped in quotes.",
+                                )
+                                .strip_suffix('"')
+                                .expect(
+                                    "Logical String representation should be wrapped in quotes.",
+                                )
+                                .to_string())
+                        } else {
+                            dvt
+                        }
+                    })
+                    .collect()
+            },
+        )))
     }
 
     /// Creates an [`Iterator`] over the resulting facts of a predicate.
