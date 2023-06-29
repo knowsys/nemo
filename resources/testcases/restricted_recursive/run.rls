@@ -1,5 +1,5 @@
-@source sourceA[2](any, any): load-csv("sources/dataA.csv").
-@source sourceB[2](any, any): load-csv("sources/dataB.csv").
+@source sourceA[any, any]: load-csv("sources/dataA.csv").
+@source sourceB[any, any]: load-csv("sources/dataB.csv").
 
 resultA(?X, ?Y) :- sourceA(?X, ?Y) .
 resultB(?X, ?Y) :- sourceB(?X, ?Y) .

@@ -525,7 +525,7 @@ mod test {
 
     use crate::model::chase_model::{ChaseProgram, ChaseRule};
     use crate::model::{
-        Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Term, Variable,
+        ArityOrTypes, Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Term, Variable,
     };
     use nemo_physical::management::database::ColumnOrder;
 
@@ -946,32 +946,27 @@ mod test {
             vec![
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),
-                    predicates[1].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[1].1),
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[2].0.clone(),
-                    predicates[2].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[2].1),
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[3].0.clone(),
-                    predicates[3].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[3].1),
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[4].0.clone(),
-                    predicates[4].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[4].1),
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[6].0.clone(),
-                    predicates[6].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[6].1),
                     DataSource::csv_file("").unwrap(),
                 ),
             ],
@@ -1305,44 +1300,37 @@ mod test {
             vec![
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),
-                    predicates[1].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[1].1),
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[2].0.clone(),
-                    predicates[2].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[2].1),
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[3].0.clone(),
-                    predicates[3].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[3].1),
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[4].0.clone(),
-                    predicates[4].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[4].1),
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[6].0.clone(),
-                    predicates[6].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[6].1),
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[8].0.clone(),
-                    predicates[8].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[8].1),
                     DataSource::csv_file("").unwrap(),
                 ),
                 DataSourceDeclaration::new(
                     predicates[10].0.clone(),
-                    predicates[10].1,
-                    None,
+                    ArityOrTypes::Arity(predicates[10].1),
                     DataSource::csv_file("").unwrap(),
                 ),
             ],

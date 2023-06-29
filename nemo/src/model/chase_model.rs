@@ -9,7 +9,7 @@ use super::{
         Atom, DataSource, DataSourceDeclaration, Fact, Filter, Identifier, Literal,
         OutputPredicateSelection, QualifiedPredicateName,
     },
-    Program, Rule,
+    ArityOrTypes, Program, Rule,
 };
 
 #[allow(dead_code)]
@@ -317,11 +317,10 @@ impl From<Program> for ChaseProgram {
             value.prefixes().clone(),
             value
                 .sources()
-                .map(|(predicate, arity, input_types, source)| {
+                .map(|(predicate, _arity, input_types, source)| {
                     DataSourceDeclaration::new(
                         predicate.clone(),
-                        arity,
-                        Some(input_types.clone()),
+                        ArityOrTypes::Types(input_types.clone()),
                         source.clone(),
                     )
                 })

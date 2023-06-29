@@ -48,6 +48,31 @@ impl From<String> for Identifier {
     }
 }
 
+/// An enum capturing a predicates types or just its arity
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+pub enum ArityOrTypes {
+    /// Variant only capturing the arity of a predicate
+    Arity(usize),
+    /// Variant capturing the types of a predicate, allowing to infer the arity
+    Types(Vec<LogicalTypeEnum>),
+}
+
+impl ArityOrTypes {
+    fn arity(&self) -> usize {
+        match self {
+            Self::Arity(u) => *u,
+            Self::Types(ts) => ts.len(),
+        }
+    }
+
+    fn types_owned(self) -> Option<Vec<LogicalTypeEnum>> {
+        match self {
+            Self::Types(ts) => Some(ts),
+            _ => None,
+        }
+    }
+}
+
 /// A qualified predicate name, i.e., a predicate name together with its arity.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd)]
 pub struct QualifiedPredicateName {
@@ -70,16 +95,12 @@ impl QualifiedPredicateName {
         }
     }
 
-    /// Construct a new qualified predicate name with the given arity.
-    pub fn with_arity_and_opt_types(
-        identifier: Identifier,
-        arity: usize,
-        logical_types: Option<Vec<LogicalTypeEnum>>,
-    ) -> Self {
+    /// Construct a new qualified predicate name with the given arity or a list of types.
+    pub fn with_arity_or_types(identifier: Identifier, arity_or_types: ArityOrTypes) -> Self {
         Self {
             identifier,
-            arity: Some(arity),
-            logical_types,
+            arity: Some(arity_or_types.arity()),
+            logical_types: arity_or_types.types_owned(),
         }
     }
 }
@@ -892,16 +913,15 @@ pub struct DataSourceDeclaration {
 
 impl DataSourceDeclaration {
     /// Construct a new data source declaration.
-    pub fn new(
-        predicate: Identifier,
-        arity: usize,
-        input_types: Option<Vec<LogicalTypeEnum>>,
-        source: DataSource,
-    ) -> Self {
+    pub fn new(predicate: Identifier, arity_or_types: ArityOrTypes, source: DataSource) -> Self {
+        let arity = arity_or_types.arity();
+
         Self {
             predicate,
             arity,
-            input_types: input_types.unwrap_or(vec![source.default_type(); arity]),
+            input_types: arity_or_types
+                .types_owned()
+                .unwrap_or(vec![source.default_type(); arity]),
             source,
         }
     }
@@ -909,10 +929,11 @@ impl DataSourceDeclaration {
     /// Construct a new data source declaration, validating constraints on, e.g., arity.
     pub(crate) fn new_validated(
         predicate: Identifier,
-        arity: usize,
-        input_types: Option<Vec<LogicalTypeEnum>>,
+        arity_or_types: ArityOrTypes,
         source: DataSource,
     ) -> Result<Self, ParseError> {
+        let arity = arity_or_types.arity();
+
         match source {
             DataSource::DsvFile {
                 file: _,
@@ -941,16 +962,6 @@ impl DataSourceDeclaration {
             }
         };
 
-        if let Some(input_types) = input_types.clone() {
-            if input_types.len() != arity {
-                return Err(ParseError::SourceInvalidTypeArity(
-                    predicate.name(),
-                    arity,
-                    input_types.len(),
-                ));
-            }
-        }
-
-        Ok(Self::new(predicate, arity, input_types, source))
+        Ok(Self::new(predicate, arity_or_types, source))
     }
 }

@@ -100,9 +100,6 @@ pub enum ParseError {
         r#"SPARQL data source for predicate "{0}" has arity {1}, but {2} variables are given"#
     )]
     SparqlSourceInvalidArity(String, usize, usize),
-    /// A data source declarations types do not match its arity.
-    #[error(r#"Data source for predicate "{0}" has arity "{1}" but {2} types are given."#)]
-    SourceInvalidTypeArity(String, usize, usize),
     /// Unknown logical type name in program.
     #[error(
         "A predicate declaration used an unknown type ({0}). The known types are: {}",

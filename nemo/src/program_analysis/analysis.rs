@@ -838,7 +838,8 @@ mod test {
     use crate::{
         model::{
             chase_model::{ChaseProgram, ChaseRule},
-            Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Term, Variable,
+            ArityOrTypes, Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Term,
+            Variable,
         },
         program_analysis::analysis::get_fresh_rule_predicate,
         types::LogicalTypeEnum,
@@ -1061,8 +1062,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 b.clone(),
-                1,
-                None,
+                ArityOrTypes::Arity(1),
                 DataSource::csv_file("").unwrap(),
             )],
             vec![basic_rule, exis_rule],
@@ -1099,8 +1099,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 c.clone(),
-                1,
-                None,
+                ArityOrTypes::Arity(1),
                 DataSource::csv_file("").unwrap(),
             )],
             vec![basic_rule, exis_rule],
@@ -1139,8 +1138,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 c,
-                1,
-                None,
+                ArityOrTypes::Arity(1),
                 DataSource::csv_file("").unwrap(),
             )],
             vec![basic_rule, exis_rule],
@@ -1167,8 +1165,7 @@ mod test {
                 Default::default(),
                 vec![DataSourceDeclaration::new(
                     c,
-                    1,
-                    Some(vec![LogicalTypeEnum::Any]),
+                    ArityOrTypes::Types(vec![LogicalTypeEnum::Any]),
                     DataSource::csv_file("").unwrap(),
                 )],
                 vec![basic_rule, exis_rule],
@@ -1197,8 +1194,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 b.clone(),
-                1,
-                None,
+                ArityOrTypes::Arity(1),
                 DataSource::csv_file("").unwrap(),
             )],
             vec![basic_rule, exis_rule],
@@ -1237,8 +1233,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 r.clone(),
-                2,
-                None,
+                ArityOrTypes::Arity(2),
                 DataSource::csv_file("").unwrap(),
             )],
             vec![basic_rule, exis_rule],

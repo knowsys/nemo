@@ -372,7 +372,10 @@ The next 2 columns are empty;;;789
             .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
             .collect();
 
-        std::iter::zip(std::iter::zip(std::iter::zip(col0, col1), col2), col3)
+        col0.into_iter()
+            .zip(col1)
+            .zip(col2)
+            .zip(col3)
             .map(|(((c0, c1), c2), c3)| (c0, c1, c2, *c3))
             .zip(
                 expected_result

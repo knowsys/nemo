@@ -91,7 +91,7 @@ impl ColumnBuilderProxy<String> for LogicalStringColumnBuilderProxy<'_, '_> {
         self.commit();
         // NOTE: we just pipe the string through as is, in particular we do not parse potential RDF terms
         // NOTE: we store the string in the same format as it would be stored in an any column;
-        // this is important since right now we simetimes use the LogicalStringColumnBuilderProxy to directly write data that is known to only be strings into an any column and not only into string columns
+        // this is important since right now we sometimes use the LogicalStringColumnBuilderProxy to directly write data that is known to only be strings into an any column and not only into string columns
         self.physical.add(format!("\"{input}\""))
     }
 }
