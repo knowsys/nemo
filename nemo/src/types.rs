@@ -201,7 +201,7 @@ impl LogicalTypeEnum {
                     ref value,
                     ref datatype,
                 }) => match datatype.as_str() {
-                    XSD_DOUBLE | XSD_DECIMAL | XSD_INTEGER => DataValueT::Double(
+                    XSD_DOUBLE => DataValueT::Double(
                         value
                             .parse()
                             .ok()
