@@ -140,13 +140,13 @@ impl LogicalTypeEnum {
                     }
                     // TODO: maybe implement display on numeric literal instead?
                     Term::NumericLiteral(NumericLiteral::Integer(i)) => {
-                        DataValueT::String(i.to_string())
+                        DataValueT::String(format!("\"{i}\"^^<{XSD_INTEGER}>"))
                     }
                     Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
-                        DataValueT::String(format!("{a}.{b}"))
+                        DataValueT::String(format!("\"{a}.{b}\"^^<{XSD_DECIMAL}>"))
                     }
                     Term::NumericLiteral(NumericLiteral::Double(d)) => {
-                        DataValueT::String(d.to_string())
+                        DataValueT::String(format!("\"{d}\"^^<{XSD_DOUBLE}>"))
                     }
                     Term::StringLiteral(s) => DataValueT::String(format!("\"{s}\"")),
                     Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
@@ -155,29 +155,25 @@ impl LogicalTypeEnum {
                     Term::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
                         match datatype.as_ref() {
                             XSD_STRING => DataValueT::String(format!("\"{value}\"")),
-                            XSD_DOUBLE | XSD_DECIMAL | XSD_INTEGER => DataValueT::String(value),
                             _ => DataValueT::String(format!("\"{value}\"^^<{datatype}>")),
                         }
                     }
                 }
             }
-            Self::String => {
-                match gt {
-                    Term::StringLiteral(s) => DataValueT::String(format!("\"{s}\"")),
-                    // TODO: is it correct to support language strings here omitting the language info?
-                    Term::RdfLiteral(RdfLiteral::LanguageString { value, .. }) => {
-                        DataValueT::String(format!("\"{value}\""))
-                    }
-                    Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                        ref value,
-                        ref datatype,
-                    }) => match datatype.as_str() {
-                        XSD_STRING => DataValueT::String(format!("\"{value}\"")),
-                        _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-                    },
-                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
+            Self::String => match gt {
+                Term::StringLiteral(s) => DataValueT::String(format!("\"{s}\"")),
+                Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
+                    DataValueT::String(format!("\"{value}\"@{tag}"))
                 }
-            }
+                Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                    ref value,
+                    ref datatype,
+                }) => match datatype.as_str() {
+                    XSD_STRING => DataValueT::String(format!("\"{value}\"")),
+                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
+                },
+                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
+            },
             Self::Integer => match gt {
                 Term::NumericLiteral(NumericLiteral::Integer(i)) => DataValueT::I64(i),
                 Term::RdfLiteral(RdfLiteral::DatatypeValue {

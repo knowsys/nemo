@@ -287,7 +287,7 @@ Boston;United States;4628910
                 .and_then(|u64: u64| usize::try_from(u64).ok())
                 .and_then(|usize| dict.get_mut().entry(usize))
                 .unwrap(),
-            "4628910"
+            r#""4628910"^^<http://www.w3.org/2001/XMLSchema#integer>"#
         );
     }
 
