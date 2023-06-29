@@ -191,6 +191,12 @@ impl LogicalTypeEnum {
             },
             Self::Float64 => match gt {
                 Term::NumericLiteral(NumericLiteral::Double(d)) => DataValueT::Double(d),
+                Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
+                    DataValueT::Double(Double::from_number(format!("{a}.{b}").parse().unwrap()))
+                }
+                Term::NumericLiteral(NumericLiteral::Integer(a)) => {
+                    DataValueT::Double(Double::from_number(a as f64))
+                }
                 Term::RdfLiteral(RdfLiteral::DatatypeValue {
                     ref value,
                     ref datatype,
