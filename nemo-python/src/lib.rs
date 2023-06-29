@@ -125,8 +125,10 @@ impl NemoEngine {
             .create_file_writer(&identifier)
             .py_res()?;
 
-        if let Some(table) = self.0.table_serializer(identifier).py_res()? {
-            writer.write_trie(table).py_res()?;
+        if let Some(record_iter) = self.0.output_serialization(identifier).py_res()? {
+            for record in record_iter {
+                writer.write_record(record).py_res()?;
+            }
         }
 
         Ok(())

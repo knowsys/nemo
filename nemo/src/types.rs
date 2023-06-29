@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use crate::builder_proxy::{
     LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxy, LogicalFloat64ColumnBuilderProxy,
-    LogicalIntegerColumnBuilderProxy,
+    LogicalIntegerColumnBuilderProxy, LogicalStringColumnBuilderProxy,
 };
 use crate::io::parser::ParseError;
 use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
@@ -23,7 +23,7 @@ macro_rules! count {
 macro_rules! generate_logical_type_enum {
     ($(($variant_name:ident, $string_repr: literal)),+) => {
         /// An enum capturing the logical type names and funtionality related to parsing and translating into and from physical types
-        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+        #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
         pub enum LogicalTypeEnum {
             $(
                 /// $variant_name
@@ -63,7 +63,41 @@ macro_rules! generate_logical_type_enum {
     };
 }
 
-generate_logical_type_enum!((Any, "any"), (Integer, "integer"), (Float64, "float64"));
+generate_logical_type_enum!(
+    (Any, "any"),
+    (String, "string"),
+    (Integer, "integer"),
+    (Float64, "float64")
+);
+
+impl PartialOrd for LogicalTypeEnum {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self {
+            Self::Any => {
+                if matches!(other, Self::Any) {
+                    Some(std::cmp::Ordering::Equal)
+                } else {
+                    Some(std::cmp::Ordering::Greater)
+                }
+            }
+            Self::String => match other {
+                Self::Any => Some(std::cmp::Ordering::Less),
+                Self::String => Some(std::cmp::Ordering::Equal),
+                _ => None,
+            },
+            Self::Integer => match other {
+                Self::Any => None, // TODO: should be the following once reasoning supports casting: Some(std::cmp::Ordering::Less),
+                Self::Integer => Some(std::cmp::Ordering::Equal),
+                _ => None,
+            },
+            Self::Float64 => match other {
+                Self::Any => None, // TODO: should be the following once reasoning supports casting: Some(std::cmp::Ordering::Less),
+                Self::Float64 => Some(std::cmp::Ordering::Equal),
+                _ => None,
+            },
+        }
+    }
+}
 
 impl Default for LogicalTypeEnum {
     fn default() -> Self {
@@ -75,6 +109,7 @@ impl From<LogicalTypeEnum> for DataTypeName {
     fn from(source: LogicalTypeEnum) -> Self {
         match source {
             LogicalTypeEnum::Any => Self::String,
+            LogicalTypeEnum::String => Self::String,
             LogicalTypeEnum::Integer => Self::I64,
             LogicalTypeEnum::Float64 => Self::Double,
         }
@@ -97,7 +132,7 @@ impl LogicalTypeEnum {
                         panic!("Expecting ground term for conversion to DataValueT")
                     }
                     Term::Constant(Identifier(s)) => {
-                        if s.starts_with(|c: char| c.is_ascii_alphabetic()) {
+                        if s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
                             DataValueT::String(s)
                         } else {
                             DataValueT::String(format!("<{s}>"))
@@ -105,13 +140,13 @@ impl LogicalTypeEnum {
                     }
                     // TODO: maybe implement display on numeric literal instead?
                     Term::NumericLiteral(NumericLiteral::Integer(i)) => {
-                        DataValueT::String(i.to_string())
+                        DataValueT::String(format!("\"{i}\"^^<{XSD_INTEGER}>"))
                     }
                     Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
-                        DataValueT::String(format!("{a}.{b}"))
+                        DataValueT::String(format!("\"{a}.{b}\"^^<{XSD_DECIMAL}>"))
                     }
                     Term::NumericLiteral(NumericLiteral::Double(d)) => {
-                        DataValueT::String(d.to_string())
+                        DataValueT::String(format!("\"{d}\"^^<{XSD_DOUBLE}>"))
                     }
                     Term::StringLiteral(s) => DataValueT::String(format!("\"{s}\"")),
                     Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
@@ -120,12 +155,25 @@ impl LogicalTypeEnum {
                     Term::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
                         match datatype.as_ref() {
                             XSD_STRING => DataValueT::String(format!("\"{value}\"")),
-                            XSD_DOUBLE | XSD_DECIMAL | XSD_INTEGER => DataValueT::String(value),
                             _ => DataValueT::String(format!("\"{value}\"^^<{datatype}>")),
                         }
                     }
                 }
             }
+            Self::String => match gt {
+                Term::StringLiteral(s) => DataValueT::String(format!("\"{s}\"")),
+                Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
+                    DataValueT::String(format!("\"{value}\"@{tag}"))
+                }
+                Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                    ref value,
+                    ref datatype,
+                }) => match datatype.as_str() {
+                    XSD_STRING => DataValueT::String(format!("\"{value}\"")),
+                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
+                },
+                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
+            },
             Self::Integer => match gt {
                 Term::NumericLiteral(NumericLiteral::Integer(i)) => DataValueT::I64(i),
                 Term::RdfLiteral(RdfLiteral::DatatypeValue {
@@ -167,6 +215,7 @@ impl LogicalTypeEnum {
     pub fn allows_numeric_operations(&self) -> bool {
         match self {
             Self::Any => false,
+            Self::String => false,
             Self::Integer => true,
             Self::Float64 => true,
         }
@@ -179,6 +228,7 @@ impl LogicalTypeEnum {
     ) -> Box<dyn LogicalColumnBuilderProxy<'a, 'b> + 'b> {
         match self {
             Self::Any => Box::new(LogicalAnyColumnBuilderProxy::new(physical)),
+            Self::String => Box::new(LogicalStringColumnBuilderProxy::new(physical)),
             Self::Integer => Box::new(LogicalIntegerColumnBuilderProxy::new(physical)),
             Self::Float64 => Box::new(LogicalFloat64ColumnBuilderProxy::new(physical)),
         }

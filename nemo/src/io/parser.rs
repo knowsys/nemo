@@ -390,7 +390,7 @@ impl<'a> RuleParser<'a> {
         traced("parse_type_name", move |input| {
             let (remainder, type_name) = map_error(
                 map_res(
-                    recognize(pair(alpha1, many0(none_of(",)")))),
+                    recognize(pair(alpha1, many0(none_of(",)] ")))),
                     |name: Span<'a>| name.parse(),
                     // NOTE: type names may not contain commata but any
                     // other character (they should start with [a-zA-Z]
@@ -411,7 +411,7 @@ impl<'a> RuleParser<'a> {
             "parse_source",
             map_error(
                 move |input| {
-                    let (remainder, (predicate, arity)) = preceded(
+                    let (remainder, (predicate, arity_or_types)) = preceded(
                         terminated(token("@source"), cut(multispace_or_comment1)),
                         cut(self.parse_qualified_predicate_name()),
                     )(input)?;
@@ -471,7 +471,7 @@ impl<'a> RuleParser<'a> {
 
                     let source = DataSourceDeclaration::new_validated(
                         predicate,
-                        arity,
+                        arity_or_types,
                         datasource.map_err(|e| Err::Failure(e.at(input)))?,
                     )
                     .map_err(|e| Err::Failure(e.at(input)))?;
@@ -498,8 +498,11 @@ impl<'a> RuleParser<'a> {
                     cut(alt((
                         map_res::<_, _, _, _, Error, _, _>(
                             self.parse_qualified_predicate_name(),
-                            |(identifier, arity)| {
-                                Ok(QualifiedPredicateName::with_arity(identifier, arity))
+                            |(identifier, arity_or_types)| {
+                                Ok(QualifiedPredicateName::with_arity_or_types(
+                                    identifier,
+                                    arity_or_types,
+                                ))
                             },
                         ),
                         map_res::<_, _, _, _, Error, _, _>(
@@ -600,7 +603,7 @@ impl<'a> RuleParser<'a> {
     /// predicate name together with its arity.
     fn parse_qualified_predicate_name(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, usize)> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, ArityOrTypes)> {
         traced(
             "parse_qualified_predicate_name",
             pair(
@@ -609,7 +612,15 @@ impl<'a> RuleParser<'a> {
                     multispace_or_comment0,
                     delimited(
                         token("["),
-                        cut(map_res(digit1, |number: Span<'a>| number.parse::<usize>())),
+                        cut(alt((
+                            map_res(digit1, |number: Span<'a>| {
+                                number.parse::<usize>().map(ArityOrTypes::Arity)
+                            }),
+                            map(
+                                separated_list1(self.parse_comma(), self.parse_type_name()),
+                                ArityOrTypes::Types,
+                            ),
+                        ))),
                         cut(token("]")),
                     ),
                 ),
@@ -1010,16 +1021,34 @@ mod test {
         let file = "drinks.csv";
         let predicate_name = "drink";
         let predicate = Identifier(predicate_name.to_string());
-        let source = DataSourceDeclaration::new(predicate, 1, DataSource::csv_file(file).unwrap());
+        let default_source = DataSourceDeclaration::new(
+            predicate.clone(),
+            ArityOrTypes::Arity(1),
+            DataSource::csv_file(file).unwrap(),
+        );
+        let any_and_int_source = DataSourceDeclaration::new(
+            predicate,
+            ArityOrTypes::Types(vec![LogicalTypeEnum::Any, LogicalTypeEnum::Integer]),
+            DataSource::csv_file(file).unwrap(),
+        );
         // rulewerk accepts all of these variants
         let input = format!(r#"@source {predicate_name}[1]: load-csv("{file}") ."#);
-        assert_parse!(parser.parse_source(), &input, source);
+        assert_parse!(parser.parse_source(), &input, default_source);
         let input = format!(r#"@source {predicate_name}[1] : load-csv("{file}") ."#);
-        assert_parse!(parser.parse_source(), &input, source);
+        assert_parse!(parser.parse_source(), &input, default_source);
         let input = format!(r#"@source {predicate_name}[1] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, source);
+        assert_parse!(parser.parse_source(), &input, default_source);
         let input = format!(r#"@source {predicate_name} [1] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, source);
+        assert_parse!(parser.parse_source(), &input, default_source);
+        let input = format!(r#"@source {predicate_name}[string]: load-csv ( "{file}" ) ."#);
+        assert_parse!(parser.parse_source(), &input, default_source);
+        let input = format!(r#"@source {predicate_name} [string] : load-csv ( "{file}" ) ."#);
+        assert_parse!(parser.parse_source(), &input, default_source);
+        let input = format!(r#"@source {predicate_name}[any, integer]: load-csv ( "{file}" ) ."#);
+        assert_parse!(parser.parse_source(), &input, any_and_int_source);
+        let input =
+            format!(r#"@source {predicate_name} [any  ,  integer] : load-csv ( "{file}" ) ."#);
+        assert_parse!(parser.parse_source(), &input, any_and_int_source);
     }
 
     #[test]
@@ -1271,7 +1300,7 @@ mod test {
         assert_parse!(
             parser.parse_output(),
             "@output J2[3] .",
-            QualifiedPredicateName::with_arity(j2.clone(), 3)
+            QualifiedPredicateName::with_arity_or_types(j2.clone(), ArityOrTypes::Arity(3))
         );
     }
 

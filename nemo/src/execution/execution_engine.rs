@@ -92,14 +92,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {
-        for (predicate, arity) in &analysis.all_predicates {
+        for (predicate, _) in &analysis.all_predicates {
             table_manager.register_predicate(
                 predicate.clone(),
                 analysis
                     .predicate_types
                     .get(predicate)
                     .cloned()
-                    .unwrap_or_else(|| (0..*arity).map(|_| LogicalTypeEnum::Any).collect()),
+                    .expect("All predicates should have types by now."),
             );
         }
     }
@@ -112,15 +112,27 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the data source declarations
-        for ((predicate, arity), source) in program.sources() {
+        for (predicate, _, input_types, source) in program.sources() {
             let new_source = match source {
                 DataSource::DsvFile { file, delimiter } => {
                     let logical_types = analysis
                         .predicate_types
                         .get(predicate)
                         .cloned()
-                        .unwrap_or_else(|| vec![LogicalTypeEnum::Any; arity]);
-                    let reader = DSVReader::dsv(file.to_path_buf(), *delimiter, logical_types);
+                        .expect("All predicates should have types by now.");
+
+                    let reader_types = logical_types
+                        .iter()
+                        .zip(input_types)
+                        .map(|(lt, it)| {
+                            if *lt == LogicalTypeEnum::Any && *it == LogicalTypeEnum::String {
+                                LogicalTypeEnum::String
+                            } else {
+                                *lt
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    let reader = DSVReader::dsv(*file.clone(), *delimiter, reader_types);
 
                     TableSource::FileReader(Box::new(reader))
                 }
@@ -267,15 +279,89 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Creates an [`Iterator`] over the resulting facts of a predicate.
+    // TODO: we probably want to return some logical value here, e.g. an RDF Term or a string or an
+    // integer; not a DataValueT
     pub fn table_scan(
         &mut self,
         predicate: Identifier,
     ) -> Result<Option<impl Iterator<Item = Vec<DataValueT>> + '_>, Error> {
-        let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
+        let Some(table_id) = self.table_manager.combine_predicate(predicate.clone())? else {
             return Ok(None);
         };
 
-        Ok(Some(self.table_manager.table_values(table_id)?))
+        let predicate_types: &Vec<LogicalTypeEnum> = self
+            .analysis
+            .predicate_types
+            .get(&predicate)
+            .expect("All predicates should have types by now.");
+
+        Ok(Some(self.table_manager.table_values(table_id)?.map(
+            |record| {
+                // TODO: respect output declaration types from program here
+                record
+                    .into_iter()
+                    .zip(predicate_types.iter())
+                    .map(|(dvt, lt)| {
+                        if *lt == LogicalTypeEnum::String {
+                            DataValueT::String(dvt.to_string()
+                                .strip_prefix('"')
+                                .expect(
+                                    "Logical String representation should be wrapped in quotes.",
+                                )
+                                .strip_suffix('"')
+                                .expect(
+                                    "Logical String representation should be wrapped in quotes.",
+                                )
+                                .to_string())
+                        } else {
+                            dvt
+                        }
+                    })
+                    .collect()
+            },
+        )))
+    }
+
+    /// Creates an [`Iterator`] over the resulting facts of a predicate.
+    pub fn output_serialization(
+        &mut self,
+        predicate: Identifier,
+    ) -> Result<Option<impl Iterator<Item = Vec<String>> + '_>, Error> {
+        let Some(table_id) = self.table_manager.combine_predicate(predicate.clone())? else {
+            return Ok(None);
+        };
+
+        let predicate_types: &Vec<LogicalTypeEnum> = self
+            .analysis
+            .predicate_types
+            .get(&predicate)
+            .expect("All predicates should have types by now.");
+
+        Ok(Some(self.table_manager.table_values(table_id)?.map(
+            |record| {
+                // TODO: respect output declaration types from program here
+                record
+                    .into_iter()
+                    .zip(predicate_types.iter())
+                    .map(|(dvt, lt)| {
+                        if *lt == LogicalTypeEnum::String {
+                            dvt.to_string()
+                                .strip_prefix('"')
+                                .expect(
+                                    "Logical String representation should be wrapped in quotes.",
+                                )
+                                .strip_suffix('"')
+                                .expect(
+                                    "Logical String representation should be wrapped in quotes.",
+                                )
+                                .to_string()
+                        } else {
+                            dvt.to_string()
+                        }
+                    })
+                    .collect()
+            },
+        )))
     }
 
     /// Count the number of derived facts during the computation.

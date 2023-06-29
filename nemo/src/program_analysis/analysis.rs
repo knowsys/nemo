@@ -1,4 +1,4 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use nemo_physical::management::database::ColumnOrder;
 
@@ -15,7 +15,10 @@ use super::{
     variable_order::{build_preferable_variable_orders, BuilderResultVariants, VariableOrder},
 };
 
-use petgraph::{visit::Dfs, Undirected};
+use petgraph::{
+    visit::{Dfs, EdgeFiltered},
+    Directed,
+};
 use thiserror::Error;
 
 /// Contains useful information for a (existential) rule
@@ -190,14 +193,12 @@ fn analyze_rule(
     for atom in rule.all_atoms() {
         for (term_position, term) in atom.terms().iter().enumerate() {
             if let Term::Variable(variable) = term {
-                if let Entry::Vacant(entry) = variable_types.entry(variable.clone()) {
-                    let assigned_type = type_declarations
+                variable_types.entry(variable.clone()).or_insert(
+                    type_declarations
                         .get(&atom.predicate())
                         .expect("Every predicate should have recived type information.")
-                        [term_position];
-
-                    entry.insert(assigned_type);
-                }
+                        [term_position],
+                );
             }
         }
     }
@@ -270,8 +271,91 @@ impl PredicatePosition {
     }
 }
 
+/// Edge Types in Position Graph for Type Analysis
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum PositionGraphEdge {
+    WithinBody,
+    BodyToHead,
+}
 /// Graph that represents a prioritization between rules.
-pub type PositionGraph = LabeledGraph<PredicatePosition, (), Undirected>;
+pub type PositionGraph = LabeledGraph<PredicatePosition, PositionGraphEdge, Directed>;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum TypeRequirement {
+    Hard(LogicalTypeEnum),
+    Soft(LogicalTypeEnum),
+    None,
+}
+
+impl TypeRequirement {
+    fn stricter_requirement(self, other: Self) -> Option<Self> {
+        match self {
+            Self::Hard(t1) => match other {
+                Self::Hard(t2) => (t1 == t2).then_some(self),
+                Self::Soft(t2) => (t1 >= t2).then_some(self),
+                Self::None => Some(self),
+            },
+            Self::Soft(t1) => match other {
+                Self::Hard(t2) => (t1 <= t2).then_some(other),
+                Self::Soft(t2) => t1.partial_cmp(&t2).map(|ord| match ord {
+                    std::cmp::Ordering::Equal => self,
+                    std::cmp::Ordering::Greater => self,
+                    std::cmp::Ordering::Less => other,
+                }),
+                Self::None => Some(self),
+            },
+            Self::None => Some(other),
+        }
+    }
+
+    fn replacement_type_if_compatible(self, other: Self) -> Option<Self> {
+        match self {
+            Self::Hard(t1) => match other {
+                Self::Hard(t2) => (t1 == t2).then_some(self),
+                Self::Soft(t2) => (t1 >= t2).then_some(self),
+                Self::None => Some(self),
+            },
+            Self::Soft(t1) => match other {
+                Self::Hard(t2) => t1.partial_cmp(&t2).map(|ord| match ord {
+                    std::cmp::Ordering::Equal => self,
+                    std::cmp::Ordering::Greater => self,
+                    std::cmp::Ordering::Less => Self::Soft(t2),
+                }),
+                Self::Soft(t2) => t1.partial_cmp(&t2).map(|ord| match ord {
+                    std::cmp::Ordering::Equal => self,
+                    std::cmp::Ordering::Greater => self,
+                    std::cmp::Ordering::Less => other,
+                }),
+                Self::None => Some(self),
+            },
+            Self::None => match other {
+                Self::Hard(t2) => Some(Self::Soft(t2)),
+                Self::Soft(t2) => Some(Self::Soft(t2)),
+                Self::None => Some(Self::None),
+            },
+        }
+    }
+
+    fn allowed_to_merge_with(self, other: Self) -> bool {
+        match Option::<LogicalTypeEnum>::from(self) {
+            Some(t1) => match Option::from(other) {
+                Some(t2) => t1.partial_cmp(&t2).is_some(),
+                None => true,
+            },
+            None => true,
+        }
+    }
+}
+
+impl From<TypeRequirement> for Option<LogicalTypeEnum> {
+    fn from(source: TypeRequirement) -> Self {
+        match source {
+            TypeRequirement::Hard(t) => Some(t),
+            TypeRequirement::Soft(t) => Some(t),
+            TypeRequirement::None => None,
+        }
+    }
+}
 
 /// Contains useful information about the
 #[derive(Debug)]
@@ -307,7 +391,7 @@ impl ChaseProgram {
         let mut result = HashSet::<(Identifier, usize)>::new();
 
         // Predicates in source statments
-        for ((predicate, arity), _) in self.sources() {
+        for (predicate, arity, _, _) in self.sources() {
             result.insert((predicate.clone(), arity));
         }
 
@@ -346,40 +430,84 @@ impl ChaseProgram {
         let mut graph = PositionGraph::default();
 
         for rule in self.rules() {
-            let mut variable_to_last_node = HashMap::<Variable, PredicatePosition>::new();
+            let mut variables_to_head_positions =
+                HashMap::<Variable, Vec<PredicatePosition>>::new();
 
-            for atom in rule.all_atoms() {
+            for atom in rule.head() {
                 for (term_position, term) in atom.terms().iter().enumerate() {
                     if let Term::Variable(variable) = term {
                         let predicate_position =
                             PredicatePosition::new(atom.predicate(), term_position);
 
-                        match variable_to_last_node.entry(variable.clone()) {
-                            Entry::Occupied(mut entry) => {
-                                let last_position = entry.insert(predicate_position.clone());
-                                graph.add_edge(last_position, predicate_position, ());
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(predicate_position);
+                        variables_to_head_positions
+                            .entry(variable.clone())
+                            .and_modify(|e| e.push(predicate_position.clone()))
+                            .or_insert(vec![predicate_position]);
+                    }
+                }
+            }
+
+            let mut variables_to_last_node = HashMap::<Variable, PredicatePosition>::new();
+
+            for atom in rule.all_body() {
+                for (term_position, term) in atom.terms().iter().enumerate() {
+                    if let Term::Variable(variable) = term {
+                        let predicate_position =
+                            PredicatePosition::new(atom.predicate(), term_position);
+
+                        // NOTE: we connect each body position to each head position of the same variable
+                        if let Some(head_positions) = variables_to_head_positions.get(variable) {
+                            for pos in head_positions {
+                                graph.add_edge(
+                                    predicate_position.clone(),
+                                    pos.clone(),
+                                    PositionGraphEdge::BodyToHead,
+                                );
                             }
                         }
+
+                        // NOTE: we do not fully interconnect body positions as we start DFS from
+                        // each possible position later covering all possible combinations
+                        // nonetheless
+                        variables_to_last_node
+                            .entry(variable.clone())
+                            .and_modify(|entry| {
+                                let last_position =
+                                    std::mem::replace(entry, predicate_position.clone());
+                                graph.add_edge(
+                                    last_position.clone(),
+                                    predicate_position.clone(),
+                                    PositionGraphEdge::WithinBody,
+                                );
+                                graph.add_edge(
+                                    predicate_position.clone(),
+                                    last_position,
+                                    PositionGraphEdge::WithinBody,
+                                );
+                            })
+                            .or_insert(predicate_position);
                     }
                 }
             }
 
             for filter in rule.all_filters() {
-                let position_left = variable_to_last_node
+                let position_left = variables_to_last_node
                     .get(&filter.lhs)
                     .expect("Variables in filters should also appear in the rule body")
                     .clone();
 
                 if let Term::Variable(variable_right) = &filter.rhs {
-                    let position_right = variable_to_last_node
+                    let position_right = variables_to_last_node
                         .get(variable_right)
                         .expect("Variables in filters should also appear in the rule body")
                         .clone();
 
-                    graph.add_edge(position_left, position_right, ());
+                    graph.add_edge(
+                        position_left.clone(),
+                        position_right.clone(),
+                        PositionGraphEdge::WithinBody,
+                    );
+                    graph.add_edge(position_right, position_left, PositionGraphEdge::WithinBody);
                 }
             }
         }
@@ -392,65 +520,173 @@ impl ChaseProgram {
         position_graph: &PositionGraph,
         all_predicates: &HashSet<(Identifier, usize)>,
     ) -> Result<HashMap<Identifier, Vec<LogicalTypeEnum>>, TypeError> {
-        // Initialize predicate types with the user provided values
-        let mut predicate_types: HashMap<Identifier, Vec<Option<LogicalTypeEnum>>> = self
-            .parsed_predicate_declarations()
-            .into_iter()
-            .map(|(predicate, types)| (predicate, types.into_iter().map(Some).collect()))
-            .collect();
+        let mut predicate_types: HashMap<Identifier, Vec<TypeRequirement>> = {
+            let pred_decls = self
+                .parsed_predicate_declarations()
+                .iter()
+                .map(|(pred, types)| {
+                    (
+                        pred.clone(),
+                        types
+                            .iter()
+                            .copied()
+                            .map(TypeRequirement::Hard)
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
 
-        // Set all predicates that did not receive explicit type information to `None` which represents unknown.
-        for (predicate, arity) in all_predicates {
-            predicate_types
-                .entry(predicate.clone())
-                .or_insert(vec![None; *arity]);
-        }
+            let source_decls = self
+                .sources()
+                .map(|(pred, _, input_types, _)| {
+                    (
+                        pred.clone(),
+                        input_types
+                            .iter()
+                            .copied()
+                            .map(TypeRequirement::Soft)
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
 
-        // If there is an existential variable at some potion,
-        // it will be assigned to the type `LogicalTypeEnum::RdfsResource`
-        for rule in self.rules() {
-            for atom in rule.head() {
-                for (term_index, term) in atom.terms().iter().enumerate() {
-                    if let Term::Variable(Variable::Existential(_)) = term {
-                        let types = predicate_types
-                            .get_mut(&atom.predicate())
-                            .expect("All predicates should have been assigned a type");
-                        types[term_index] = Some(LogicalTypeEnum::Any);
-                    }
-                }
+            let existential_decls = self
+                .rules()
+                .iter()
+                .flat_map(|r| r.head())
+                .map(|a| {
+                    (
+                        a.predicate(),
+                        a.terms()
+                            .iter()
+                            .map(|t| {
+                                if matches!(t, Term::Variable(Variable::Existential(_))) {
+                                    TypeRequirement::Hard(LogicalTypeEnum::Any)
+                                } else {
+                                    TypeRequirement::None
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+
+            let mut predicate_types = source_decls;
+            predicate_types.extend(pred_decls);
+            for (pred, exis_types) in existential_decls {
+                // keep track of error that might occur on conflicting type changes
+                let mut types_not_in_conflict: Result<_, _> = Ok(());
+
+                let pred_clone = pred.clone();
+
+                predicate_types
+                    .entry(pred)
+                    .and_modify(|ts| {
+                        ts.iter_mut()
+                            .zip(&exis_types)
+                            .enumerate()
+                            .for_each(|(index, (t, et))| match t.stricter_requirement(*et) {
+                                Some(res) => {
+                                    *t = res;
+                                }
+                                None => {
+                                    types_not_in_conflict = Err(TypeError::InvalidRuleConflictingTypes(
+                                        pred_clone.0.clone(),
+                                        index,
+                                        Option::<LogicalTypeEnum>::from(*t).expect(
+                                            "if the type requirement is none, there is a maximum",
+                                        ),
+                                        Option::<LogicalTypeEnum>::from(*et).expect(
+                                            "if the type requirement is none, there is a maximum",
+                                        ),
+                                    ));
+                                }
+                            })
+                    })
+                    .or_insert(exis_types);
+
+                // abort if there is a type error
+                types_not_in_conflict?
             }
-        }
+            for (predicate, arity) in all_predicates {
+                predicate_types
+                    .entry(predicate.clone())
+                    .or_insert(vec![TypeRequirement::None; *arity]);
+            }
+            predicate_types
+        };
 
-        // Propagate each type from its declaration
-        for (predicate, types) in self.parsed_predicate_declarations() {
-            for (position, logical_type) in types.into_iter().enumerate() {
+        let initial_types = predicate_types.clone();
+
+        for (predicate, types) in initial_types {
+            for (position, logical_type_requirement) in types.into_iter().enumerate() {
                 let predicate_position = PredicatePosition::new(predicate.clone(), position);
 
                 if let Some(start_node) = position_graph.get_node(&predicate_position) {
-                    let mut dfs = Dfs::new(position_graph.graph(), start_node);
+                    // Propagate each type from its declaration
+                    let edge_filtered_graph = EdgeFiltered::from_fn(position_graph.graph(), |e| {
+                        *e.weight() == PositionGraphEdge::BodyToHead
+                    });
 
-                    while let Some(next_node) = dfs.next(position_graph.graph()) {
+                    let mut dfs = Dfs::new(&edge_filtered_graph, start_node);
+
+                    while let Some(next_node) = dfs.next(&edge_filtered_graph) {
                         let next_position = position_graph
                             .graph()
                             .node_weight(next_node)
                             .expect("The DFS iterator guarantees that every node exists.");
 
-                        let current_type_opt = &mut predicate_types
+                        let current_type_requirement = &mut predicate_types
                             .get_mut(&next_position.predicate)
                             .expect("The initialization step inserted every known predicate")
                             [next_position.position];
 
-                        if let Some(current_type) = current_type_opt {
-                            if *current_type != logical_type {
-                                return Err(TypeError::InvalidRuleConflictingTypes(
-                                    next_position.predicate.0.clone(),
-                                    next_position.position + 1,
-                                    *current_type,
-                                    logical_type,
-                                ));
-                            }
+                        if let Some(replacement) = current_type_requirement
+                            .replacement_type_if_compatible(logical_type_requirement)
+                        {
+                            *current_type_requirement = replacement;
                         } else {
-                            *current_type_opt = Some(logical_type);
+                            return Err(TypeError::InvalidRuleConflictingTypes(
+                                next_position.predicate.0.clone(),
+                                next_position.position + 1,
+                                Option::<LogicalTypeEnum>::from(*current_type_requirement)
+                                    .expect("if the type requirement is none, there is a maximum"),
+                                Option::<LogicalTypeEnum>::from(logical_type_requirement)
+                                    .expect("if the type requirement is none, there is a maximum"),
+                            ));
+                        }
+                    }
+
+                    // Check compatibility of body types without overwriting
+                    let edge_filtered_graph = EdgeFiltered::from_fn(position_graph.graph(), |e| {
+                        *e.weight() == PositionGraphEdge::WithinBody
+                    });
+
+                    let mut dfs = Dfs::new(&edge_filtered_graph, start_node);
+
+                    while let Some(next_node) = dfs.next(&edge_filtered_graph) {
+                        let next_position = position_graph
+                            .graph()
+                            .node_weight(next_node)
+                            .expect("The DFS iterator guarantees that every node exists.");
+
+                        let current_type_requirement = &mut predicate_types
+                            .get_mut(&next_position.predicate)
+                            .expect("The initialization step inserted every known predicate")
+                            [next_position.position];
+
+                        if !current_type_requirement.allowed_to_merge_with(logical_type_requirement)
+                        {
+                            // TODO: maybe just throw a warning here? (comparison of incompatible
+                            // types can be done but will trivially result in inequality)
+                            return Err(TypeError::InvalidRuleConflictingTypes(
+                                next_position.predicate.0.clone(),
+                                next_position.position + 1,
+                                Option::<LogicalTypeEnum>::from(*current_type_requirement)
+                                    .expect("if the type requirement is none, merging is allowed"),
+                                Option::<LogicalTypeEnum>::from(logical_type_requirement)
+                                    .expect("if the type requirement is none, merging is allowed"),
+                            ));
                         }
                     }
                 }
@@ -463,7 +699,10 @@ impl ChaseProgram {
             .map(|(predicate, types)| {
                 (
                     predicate,
-                    types.into_iter().map(|t| t.unwrap_or_default()).collect(),
+                    types
+                        .into_iter()
+                        .map(|t| Option::<LogicalTypeEnum>::from(t).unwrap_or_default())
+                        .collect(),
                 )
             })
             .collect();
@@ -475,7 +714,7 @@ impl ChaseProgram {
     pub fn check_for_unsupported_features(&self) -> Result<(), RuleAnalysisError> {
         let mut arities = HashMap::new();
 
-        for ((predicate, arity), _) in self.sources() {
+        for (predicate, arity, _, _) in self.sources() {
             arities.insert(predicate.clone(), arity);
         }
 
@@ -589,5 +828,500 @@ impl ChaseProgram {
             predicate_types,
             position_graph,
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+
+    use crate::{
+        model::{
+            chase_model::{ChaseProgram, ChaseRule},
+            ArityOrTypes, Atom, DataSource, DataSourceDeclaration, Identifier, Literal, Term,
+            Variable,
+        },
+        program_analysis::analysis::get_fresh_rule_predicate,
+        types::LogicalTypeEnum,
+    };
+
+    fn get_test_rules_and_predicates() -> (
+        (ChaseRule, ChaseRule),
+        (Identifier, Identifier, Identifier, Identifier),
+    ) {
+        let a = Identifier("a".to_string());
+        let b = Identifier("b".to_string());
+        let c = Identifier("c".to_string());
+        let r = Identifier("r".to_string());
+
+        let x = Variable::Universal(Identifier("x".to_string()));
+        let z = Variable::Existential(Identifier("z".to_string()));
+
+        let tx = Term::Variable(x);
+        let tz = Term::Variable(z);
+
+        // A(x) :- B(x), C(x).
+        let basic_rule = ChaseRule::new(
+            vec![Atom::new(a.clone(), vec![tx.clone()])],
+            vec![
+                Literal::Positive(Atom::new(b.clone(), vec![tx.clone()])),
+                Literal::Positive(Atom::new(c.clone(), vec![tx.clone()])),
+            ],
+            vec![],
+        );
+
+        // R(x, !z) :- A(x).
+        let exis_rule = ChaseRule::new(
+            vec![Atom::new(r.clone(), vec![tx.clone(), tz])],
+            vec![Literal::Positive(Atom::new(a.clone(), vec![tx]))],
+            vec![],
+        );
+
+        ((basic_rule, exis_rule), (a, b, c, r))
+    }
+
+    #[test]
+    fn infer_types_no_decl() {
+        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+
+        let no_decl = ChaseProgram::new(
+            None,
+            Default::default(),
+            Default::default(),
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
+
+        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
+            (a, vec![LogicalTypeEnum::Any]),
+            (b, vec![LogicalTypeEnum::Any]),
+            (c, vec![LogicalTypeEnum::Any]),
+            (r, vec![LogicalTypeEnum::Any, LogicalTypeEnum::Any]),
+            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        ]
+        .into_iter()
+        .collect();
+
+        let inferred_types = no_decl
+            .infer_predicate_types(
+                &no_decl.build_position_graph(),
+                &no_decl.get_all_predicates(),
+            )
+            .unwrap();
+        assert_eq!(inferred_types, expected_types);
+    }
+
+    #[test]
+    fn infer_types_a_string_decl() {
+        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+
+        let a_string_decl = ChaseProgram::new(
+            None,
+            Default::default(),
+            Default::default(),
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            [(a.clone(), vec![LogicalTypeEnum::String])]
+                .into_iter()
+                .collect(),
+            Default::default(),
+        );
+
+        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
+            (a, vec![LogicalTypeEnum::String]),
+            (b, vec![LogicalTypeEnum::Any]),
+            (c, vec![LogicalTypeEnum::Any]),
+            (r, vec![LogicalTypeEnum::String, LogicalTypeEnum::Any]),
+            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        ]
+        .into_iter()
+        .collect();
+
+        let inferred_types = a_string_decl
+            .infer_predicate_types(
+                &a_string_decl.build_position_graph(),
+                &a_string_decl.get_all_predicates(),
+            )
+            .unwrap();
+        assert_eq!(inferred_types, expected_types);
+    }
+
+    #[test]
+    fn infer_types_a_int_decl() {
+        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+
+        let a_int_decl = ChaseProgram::new(
+            None,
+            Default::default(),
+            Default::default(),
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            [(a.clone(), vec![LogicalTypeEnum::Integer])]
+                .into_iter()
+                .collect(),
+            Default::default(),
+        );
+
+        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
+            (a, vec![LogicalTypeEnum::Integer]),
+            (b, vec![LogicalTypeEnum::Any]),
+            (c, vec![LogicalTypeEnum::Any]),
+            (r, vec![LogicalTypeEnum::Integer, LogicalTypeEnum::Any]),
+            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        ]
+        .into_iter()
+        .collect();
+
+        let inferred_types = a_int_decl
+            .infer_predicate_types(
+                &a_int_decl.build_position_graph(),
+                &a_int_decl.get_all_predicates(),
+            )
+            .unwrap();
+        assert_eq!(inferred_types, expected_types);
+    }
+
+    #[test]
+    fn infer_types_b_string_decl() {
+        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+
+        let b_string_decl = ChaseProgram::new(
+            None,
+            Default::default(),
+            Default::default(),
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            [(b.clone(), vec![LogicalTypeEnum::String])]
+                .into_iter()
+                .collect(),
+            Default::default(),
+        );
+
+        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
+            (a, vec![LogicalTypeEnum::String]),
+            (b, vec![LogicalTypeEnum::String]),
+            (c, vec![LogicalTypeEnum::Any]),
+            (r, vec![LogicalTypeEnum::String, LogicalTypeEnum::Any]),
+            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        ]
+        .into_iter()
+        .collect();
+
+        let inferred_types = b_string_decl
+            .infer_predicate_types(
+                &b_string_decl.build_position_graph(),
+                &b_string_decl.get_all_predicates(),
+            )
+            .unwrap();
+        assert_eq!(inferred_types, expected_types);
+    }
+
+    #[test]
+    fn infer_types_b_int_decl() {
+        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+
+        let b_integer_decl = ChaseProgram::new(
+            None,
+            Default::default(),
+            Default::default(),
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            [(b.clone(), vec![LogicalTypeEnum::Integer])]
+                .into_iter()
+                .collect(),
+            Default::default(),
+        );
+
+        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
+            (a, vec![LogicalTypeEnum::Integer]),
+            (b, vec![LogicalTypeEnum::Integer]),
+            (c, vec![LogicalTypeEnum::Any]),
+            (r, vec![LogicalTypeEnum::Integer, LogicalTypeEnum::Any]),
+            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        ]
+        .into_iter()
+        .collect();
+
+        let inferred_types = b_integer_decl
+            .infer_predicate_types(
+                &b_integer_decl.build_position_graph(),
+                &b_integer_decl.get_all_predicates(),
+            )
+            .unwrap();
+        assert_eq!(inferred_types, expected_types);
+    }
+
+    #[test]
+    fn infer_types_b_source_decl() {
+        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+
+        let b_source_decl = ChaseProgram::new(
+            None,
+            Default::default(),
+            vec![DataSourceDeclaration::new(
+                b.clone(),
+                ArityOrTypes::Arity(1),
+                DataSource::csv_file("").unwrap(),
+            )],
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
+
+        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
+            (a, vec![LogicalTypeEnum::String]),
+            (b, vec![LogicalTypeEnum::String]),
+            (c, vec![LogicalTypeEnum::Any]),
+            (r, vec![LogicalTypeEnum::String, LogicalTypeEnum::Any]),
+            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        ]
+        .into_iter()
+        .collect();
+
+        let inferred_types = b_source_decl
+            .infer_predicate_types(
+                &b_source_decl.build_position_graph(),
+                &b_source_decl.get_all_predicates(),
+            )
+            .unwrap();
+        assert_eq!(inferred_types, expected_types);
+    }
+
+    #[test]
+    fn infer_types_c_explicit_decl_overrides_source_type() {
+        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+
+        let c_explicit_decl_overrides_source_type = ChaseProgram::new(
+            None,
+            Default::default(),
+            vec![DataSourceDeclaration::new(
+                c.clone(),
+                ArityOrTypes::Arity(1),
+                DataSource::csv_file("").unwrap(),
+            )],
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            [(c.clone(), vec![LogicalTypeEnum::Integer])]
+                .into_iter()
+                .collect(),
+            Default::default(),
+        );
+
+        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
+            (a, vec![LogicalTypeEnum::Integer]),
+            (b, vec![LogicalTypeEnum::Any]),
+            (c, vec![LogicalTypeEnum::Integer]),
+            (r, vec![LogicalTypeEnum::Integer, LogicalTypeEnum::Any]),
+            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        ]
+        .into_iter()
+        .collect();
+
+        let inferred_types = c_explicit_decl_overrides_source_type
+            .infer_predicate_types(
+                &c_explicit_decl_overrides_source_type.build_position_graph(),
+                &c_explicit_decl_overrides_source_type.get_all_predicates(),
+            )
+            .unwrap();
+        assert_eq!(inferred_types, expected_types);
+    }
+
+    #[test]
+    fn infer_types_a_and_c_conflict_with_implicit_source_decl() {
+        let ((basic_rule, exis_rule), (a, _b, c, _r)) = get_test_rules_and_predicates();
+
+        let a_and_c_conflict_with_implicit_source_decl = ChaseProgram::new(
+            None,
+            Default::default(),
+            vec![DataSourceDeclaration::new(
+                c,
+                ArityOrTypes::Arity(1),
+                DataSource::csv_file("").unwrap(),
+            )],
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            [(a, vec![LogicalTypeEnum::Integer])].into_iter().collect(),
+            Default::default(),
+        );
+
+        let inferred_types_res = a_and_c_conflict_with_implicit_source_decl.infer_predicate_types(
+            &a_and_c_conflict_with_implicit_source_decl.build_position_graph(),
+            &a_and_c_conflict_with_implicit_source_decl.get_all_predicates(),
+        );
+        assert!(inferred_types_res.is_err());
+    }
+
+    #[test]
+    fn infer_types_a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around(
+    ) {
+        let ((basic_rule, exis_rule), (a, _b, c, _r)) = get_test_rules_and_predicates();
+
+        let a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around =
+            ChaseProgram::new(
+                None,
+                Default::default(),
+                vec![DataSourceDeclaration::new(
+                    c,
+                    ArityOrTypes::Types(vec![LogicalTypeEnum::Any]),
+                    DataSource::csv_file("").unwrap(),
+                )],
+                vec![basic_rule, exis_rule],
+                Default::default(),
+                [(a, vec![LogicalTypeEnum::String])].into_iter().collect(),
+                Default::default(),
+            );
+
+        let inferred_types_res =
+            a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around
+                .infer_predicate_types(
+                &a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around
+                    .build_position_graph(),
+                &a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around
+                    .get_all_predicates(),
+            );
+        assert!(inferred_types_res.is_err());
+    }
+
+    #[test]
+    fn infer_types_a_and_b_source_decl_resolvable_conflict() {
+        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+
+        let a_and_b_source_decl_resolvable_conflict = ChaseProgram::new(
+            None,
+            Default::default(),
+            vec![DataSourceDeclaration::new(
+                b.clone(),
+                ArityOrTypes::Arity(1),
+                DataSource::csv_file("").unwrap(),
+            )],
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            [(a.clone(), vec![LogicalTypeEnum::Any])]
+                .into_iter()
+                .collect(),
+            Default::default(),
+        );
+
+        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
+            (a, vec![LogicalTypeEnum::Any]),
+            (b, vec![LogicalTypeEnum::String]),
+            (c, vec![LogicalTypeEnum::Any]),
+            (r, vec![LogicalTypeEnum::Any, LogicalTypeEnum::Any]),
+            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        ]
+        .into_iter()
+        .collect();
+
+        let inferred_types = a_and_b_source_decl_resolvable_conflict
+            .infer_predicate_types(
+                &a_and_b_source_decl_resolvable_conflict.build_position_graph(),
+                &a_and_b_source_decl_resolvable_conflict.get_all_predicates(),
+            )
+            .unwrap();
+        assert_eq!(inferred_types, expected_types);
+    }
+
+    #[test]
+    fn infer_types_r_source_decl_resolvable_conflict_with_exis() {
+        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+
+        let r_source_decl_resolvable_conflict_with_exis = ChaseProgram::new(
+            None,
+            Default::default(),
+            vec![DataSourceDeclaration::new(
+                r.clone(),
+                ArityOrTypes::Arity(2),
+                DataSource::csv_file("").unwrap(),
+            )],
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
+
+        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
+            (a, vec![LogicalTypeEnum::Any]),
+            (b, vec![LogicalTypeEnum::Any]),
+            (c, vec![LogicalTypeEnum::Any]),
+            (r, vec![LogicalTypeEnum::String, LogicalTypeEnum::Any]),
+            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        ]
+        .into_iter()
+        .collect();
+
+        let inferred_types = r_source_decl_resolvable_conflict_with_exis
+            .infer_predicate_types(
+                &r_source_decl_resolvable_conflict_with_exis.build_position_graph(),
+                &r_source_decl_resolvable_conflict_with_exis.get_all_predicates(),
+            )
+            .unwrap();
+        assert_eq!(inferred_types, expected_types);
+    }
+
+    #[test]
+    fn infer_types_b_and_c_conflict_decl() {
+        let ((basic_rule, exis_rule), (_a, b, c, _r)) = get_test_rules_and_predicates();
+
+        let b_and_c_conflict_decl = ChaseProgram::new(
+            None,
+            Default::default(),
+            Default::default(),
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            [
+                (b, vec![LogicalTypeEnum::Integer]),
+                (c, vec![LogicalTypeEnum::String]),
+            ]
+            .into_iter()
+            .collect(),
+            Default::default(),
+        );
+
+        let inferred_types_res = b_and_c_conflict_decl.infer_predicate_types(
+            &b_and_c_conflict_decl.build_position_graph(),
+            &b_and_c_conflict_decl.get_all_predicates(),
+        );
+        assert!(inferred_types_res.is_err());
+    }
+
+    #[test]
+    fn infer_types_b_anc_c_conflict_decl_resolvable() {
+        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+
+        let b_and_c_conflict_decl_resolvable = ChaseProgram::new(
+            None,
+            Default::default(),
+            Default::default(),
+            vec![basic_rule, exis_rule],
+            Default::default(),
+            [
+                (b.clone(), vec![LogicalTypeEnum::Any]),
+                (c.clone(), vec![LogicalTypeEnum::String]),
+            ]
+            .into_iter()
+            .collect(),
+            Default::default(),
+        );
+
+        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
+            (a, vec![LogicalTypeEnum::Any]),
+            (b, vec![LogicalTypeEnum::Any]),
+            (c, vec![LogicalTypeEnum::String]),
+            (r, vec![LogicalTypeEnum::Any, LogicalTypeEnum::Any]),
+            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        ]
+        .into_iter()
+        .collect();
+
+        let inferred_types = b_and_c_conflict_decl_resolvable
+            .infer_predicate_types(
+                &b_and_c_conflict_decl_resolvable.build_position_graph(),
+                &b_and_c_conflict_decl_resolvable.get_all_predicates(),
+            )
+            .unwrap();
+        assert_eq!(inferred_types, expected_types);
     }
 }
