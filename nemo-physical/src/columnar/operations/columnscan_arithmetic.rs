@@ -235,13 +235,16 @@ mod test {
                     vec![
                         OperationTree::tree(
                             ArithmeticOperation::Subtraction,
-                            vec![OperationTree::tree(
-                                ArithmeticOperation::Division,
-                                vec![
-                                    OperationTree::leaf(ArithmeticOperation::ColumnScan(1)),
-                                    OperationTree::leaf(ArithmeticOperation::Constant(2)),
-                                ],
-                            )],
+                            vec![
+                                OperationTree::tree(
+                                    ArithmeticOperation::Division,
+                                    vec![
+                                        OperationTree::leaf(ArithmeticOperation::ColumnScan(1)),
+                                        OperationTree::leaf(ArithmeticOperation::Constant(2)),
+                                    ],
+                                ),
+                                OperationTree::leaf(ArithmeticOperation::Constant(1)),
+                            ],
                         ),
                         OperationTree::leaf(ArithmeticOperation::Constant(5)),
                     ],

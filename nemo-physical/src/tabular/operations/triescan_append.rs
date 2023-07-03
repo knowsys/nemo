@@ -380,28 +380,33 @@ impl<'a> TrieScanAppend<'a> {
         let src_type = operation_tree.storage_type(src_types, dict);
         let dst_type = self.target_types[self.column_scans.len()];
 
+        // TODO: Cast the types if there are not equal.
+        assert!(src_type == dst_type);
+
         macro_rules! input_for_datatype {
-            ($src_name:ident, $dst_name:ident, $src_type:ty, $dst_type:ty) => {{
+            ($variant:ident, $type:ty) => {{
                 let mut column_map = HashMap::<usize, usize>::new();
                 let mut input_scans = Vec::new();
 
-                for (loop_index, src_index) in
-                    operation_tree.input_indices().into_iter().enumerate()
-                {
+                for src_index in operation_tree.input_indices().into_iter() {
+                    if column_map.contains_key(&src_index) {
+                        continue;
+                    }
+
                     let base_scan = unsafe { &*self.trie_scan.get_scan(*src_index).unwrap().get() };
 
-                    if let ColumnScanT::$src_name(base_scan_cell) = base_scan {
+                    if let ColumnScanT::$variant(base_scan_cell) = base_scan {
                         input_scans.push(base_scan_cell);
                     } else {
                         panic!("Expected a column scan of type {}", stringify!($src_name));
                     }
 
-                    column_map.insert(*src_index, loop_index);
+                    column_map.insert(*src_index, column_map.len());
                 }
 
                 let column_map = Permutation::from_map(column_map);
                 let translate_type = |t: DataValueT| {
-                    if let StorageValueT::$src_name(value) = t
+                    if let StorageValueT::$variant(value) = t
                         .to_storage_value(dict)
                         .expect("We don't have string operations so this cannot fail.")
                     {
@@ -424,18 +429,34 @@ impl<'a> TrieScanAppend<'a> {
                     ColumnScanArithmetic::new(input_scans, operation_tree),
                 ));
 
-                let new_scan_cast = ColumnScanCell::new(ColumnScanEnum::ColumnScanCast(
-                    ColumnScanCastEnum::$src_name(ColumnScanCast::<$src_type, $dst_type>::new(
-                        new_scan,
-                    )),
-                ));
-
                 self.column_scans
-                    .push(UnsafeCell::new(ColumnScanT::$dst_name(new_scan_cast)));
+                    .push(UnsafeCell::new(ColumnScanT::$variant(new_scan)));
             }};
         }
 
-        generate_cast_statements!(input_for_datatype; src_type, dst_type);
+        match src_type {
+            StorageTypeName::U32 => input_for_datatype!(U32, u32),
+            StorageTypeName::U64 => input_for_datatype!(U64, u64),
+            StorageTypeName::I64 => input_for_datatype!(I64, i64),
+            StorageTypeName::Float => input_for_datatype!(Float, f32),
+            StorageTypeName::Double => input_for_datatype!(Double, f64),
+        }
+
+        // macro_rules! input_for_datatype {
+        //     ($src_name:ident, $dst_name:ident, $src_type:ty, $dst_type:ty) => {{
+
+        //         let new_scan_cast = ColumnScanCell::new(ColumnScanEnum::ColumnScanCast(
+        //             ColumnScanCastEnum::$src_name(ColumnScanCast::<$src_type, $dst_type>::new(
+        //                 new_scan,
+        //             )),
+        //         ));
+
+        //         self.column_scans
+        //             .push(UnsafeCell::new(ColumnScanT::$dst_name(new_scan_cast)));
+        //     }};
+        // }
+
+        // generate_cast_statements!(input_for_datatype; src_type, dst_type);
     }
 
     fn add_backed_column(&mut self, src_index: usize) {
@@ -597,7 +618,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanAppend<'a> {
 #[cfg(test)]
 mod test {
     use crate::{
-        columnar::traits::columnscan::ColumnScanT,
+        columnar::{
+            operations::columnscan_arithmetic::ArithmeticOperation, traits::columnscan::ColumnScanT,
+        },
         datatypes::{DataValueT, StorageTypeName},
         management::database::Dict,
         tabular::{
@@ -607,6 +630,8 @@ mod test {
         },
         util::{make_column_with_intervals_t, test_util::make_column_with_intervals_int_t},
     };
+
+    use super::OperationTreeT;
 
     fn scan_next(int_scan: &mut TrieScanAppend) -> Option<u64> {
         if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
@@ -1204,5 +1229,103 @@ mod test {
         assert!(scan_current(&mut trie_iter).is_none());
         assert_eq!(scan_next(&mut trie_iter), Some(11));
         assert_eq!(scan_current(&mut trie_iter), Some(11));
+    }
+
+    #[test]
+    fn arithmetic() {
+        let column_x = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_y = make_column_with_intervals_t(&[3, 4, 5], &[0, 2]);
+
+        let trie = Trie::new(vec![column_x, column_y]);
+        let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+
+        // ((x + 3) * y) / x
+        let operation_tree = OperationTreeT::tree(
+            ArithmeticOperation::Division,
+            vec![
+                OperationTreeT::tree(
+                    ArithmeticOperation::Multiplication,
+                    vec![
+                        OperationTreeT::tree(
+                            ArithmeticOperation::Addition,
+                            vec![
+                                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(0)),
+                                OperationTreeT::leaf(ArithmeticOperation::Constant(
+                                    DataValueT::U64(3),
+                                )),
+                            ],
+                        ),
+                        OperationTreeT::leaf(ArithmeticOperation::ColumnScan(1)),
+                    ],
+                ),
+                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(0)),
+            ],
+        );
+
+        let mut dict = Dict::default();
+        let mut trie_iter = TrieScanAppend::new(
+            &mut dict,
+            trie_iter,
+            &[
+                vec![],
+                vec![],
+                vec![AppendInstruction::Operation(operation_tree)],
+            ],
+            vec![
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+            ],
+        );
+
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(1));
+        assert_eq!(scan_current(&mut trie_iter), Some(1));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(3));
+        assert_eq!(scan_current(&mut trie_iter), Some(3));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(12));
+        assert_eq!(scan_current(&mut trie_iter), Some(12));
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), Some(4));
+        assert_eq!(scan_current(&mut trie_iter), Some(4));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(16));
+        assert_eq!(scan_current(&mut trie_iter), Some(16));
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), Some(2));
+        assert_eq!(scan_current(&mut trie_iter), Some(2));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(5));
+        assert_eq!(scan_current(&mut trie_iter), Some(5));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(12));
+        assert_eq!(scan_current(&mut trie_iter), Some(12));
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
     }
 }
