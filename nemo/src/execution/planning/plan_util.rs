@@ -303,9 +303,9 @@ pub(super) fn head_instruction_from_atom(
 pub(super) fn cut_last_layers(
     variable_order: &VariableOrder,
     used_variables: &HashSet<Variable>,
-) -> usize {
+) -> (usize, usize) {
     if variable_order.is_empty() || used_variables.is_empty() {
-        return 0;
+        return (variable_order.len(), 0);
     }
 
     let mut last_index = 0;
@@ -317,5 +317,5 @@ pub(super) fn cut_last_layers(
         }
     }
 
-    variable_order.len() - last_index - 1
+    (last_index + 1, variable_order.len() - last_index - 1)
 }

@@ -148,7 +148,7 @@ impl TableStorage {
                         .map(|row| {
                             row.iter()
                                 .cloned()
-                                .map(|val| val.to_storage_value(dict.get_mut()))
+                                .map(|val| val.to_storage_value_mut(dict.get_mut()))
                                 .collect()
                         })
                         .collect();

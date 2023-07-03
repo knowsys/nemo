@@ -26,6 +26,17 @@ impl VariableOrder {
         self.0.insert(variable, max_index.map_or(0, |i| i + 1));
     }
 
+    /// Insert a new variable at a certain position.
+    pub fn push_position(&mut self, variable: Variable, position: usize) {
+        if self.0.insert(variable, position).is_none() {
+            for (_, current_position) in &mut self.0 {
+                if *current_position >= position {
+                    *current_position += 1;
+                }
+            }
+        }
+    }
+
     /// Get position of a variable.
     pub fn get(&self, variable: &Variable) -> Option<&usize> {
         self.0.get(variable)

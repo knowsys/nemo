@@ -294,11 +294,12 @@ impl TypeTree {
                                 new_schema.add_entry(value.get_type());
                             }
                             AppendInstruction::Operation(tree) => {
-                                let tree_type = tree.data_type();
-                                let operation_type = tree_type.partial_upper_bound();
+                                if subtype_node.schema.is_empty() {
+                                    continue;
+                                }
 
-                                // TODO: This is a weird requirement
-                                assert_eq!(tree_type, operation_type);
+                                let operation_type =
+                                    subtype_node.schema.get_entry(0).partial_upper_bound();
 
                                 for &column_index in tree.input_indices() {
                                     let current_type = subtype_node

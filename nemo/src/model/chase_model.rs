@@ -131,6 +131,11 @@ impl ChaseRule {
         &mut self.head
     }
 
+    /// Return the constructors of the rule.
+    pub fn constructors(&self) -> &HashMap<Variable, TermTree> {
+        &self.constructors
+    }
+
     /// Return all the atoms occuring in this rule.
     /// This includes the postive body atoms, the negative body atoms as well as the head atoms.
     pub fn all_atoms(&self) -> impl Iterator<Item = &ChaseAtom> {

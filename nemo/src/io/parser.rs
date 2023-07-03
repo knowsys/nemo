@@ -842,112 +842,112 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    pub fn arithmetic_parse_parens(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
-        traced(
-            "arithmetic_parse_parens",
-            map_error(
-                delimited(
-                    multispace0,
-                    delimited(tag("("), self.arithmetic_parse_dash_operation(), tag(")")),
-                    multispace0,
-                ),
-                || todo!(),
-            ),
-        )
-    }
+    // pub fn arithmetic_parse_parens(
+    //     &'a self,
+    // ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    //     traced(
+    //         "arithmetic_parse_parens",
+    //         map_error(
+    //             delimited(
+    //                 multispace0,
+    //                 delimited(tag("("), self.arithmetic_parse_dash_operation(), tag(")")),
+    //                 multispace0,
+    //             ),
+    //             || todo!(),
+    //         ),
+    //     )
+    // }
 
-    pub fn arithmetic_parse_factor(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
-        traced(
-            "arithmetic_parse_factor",
-            map_error(
-                alt((
-                    map(self.parse_term(), TermTree::leaf),
-                    self.arithmetic_parse_parens(),
-                )),
-                || todo!(),
-            ),
-        )
-    }
+    // pub fn arithmetic_parse_factor(
+    //     &'a self,
+    // ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    //     traced(
+    //         "arithmetic_parse_factor",
+    //         map_error(
+    //             alt((
+    //                 map(self.parse_term(), TermTree::leaf),
+    //                 self.arithmetic_parse_parens(),
+    //             )),
+    //             || todo!(),
+    //         ),
+    //     )
+    // }
 
-    fn arithmetic_fold_expression(
-        initial: TermTree,
-        sequence: Vec<(TermOperation, TermTree)>,
-    ) -> TermTree {
-        sequence.into_iter().fold(initial, |acc, pair| {
-            let (operation, expression) = pair;
-            match operation {
-                TermOperation::Addition => {
-                    TermTree::tree(TermOperation::Addition, vec![acc, expression])
-                }
-                TermOperation::Subtraction => {
-                    TermTree::tree(TermOperation::Subtraction, vec![acc, expression])
-                }
-                TermOperation::Multiplication => {
-                    TermTree::tree(TermOperation::Multiplication, vec![acc, expression])
-                }
-                TermOperation::Division => {
-                    TermTree::tree(TermOperation::Division, vec![acc, expression])
-                }
-                TermOperation::Term(term) => TermTree::leaf(term),
-            }
-        })
-    }
+    // fn arithmetic_fold_expression(
+    //     initial: TermTree,
+    //     sequence: Vec<(TermOperation, TermTree)>,
+    // ) -> TermTree {
+    //     sequence.into_iter().fold(initial, |acc, pair| {
+    //         let (operation, expression) = pair;
+    //         match operation {
+    //             TermOperation::Addition => {
+    //                 TermTree::tree(TermOperation::Addition, vec![acc, expression])
+    //             }
+    //             TermOperation::Subtraction => {
+    //                 TermTree::tree(TermOperation::Subtraction, vec![acc, expression])
+    //             }
+    //             TermOperation::Multiplication => {
+    //                 TermTree::tree(TermOperation::Multiplication, vec![acc, expression])
+    //             }
+    //             TermOperation::Division => {
+    //                 TermTree::tree(TermOperation::Division, vec![acc, expression])
+    //             }
+    //             TermOperation::Term(term) => TermTree::leaf(term),
+    //         }
+    //     })
+    // }
 
-    pub fn arithmetic_parse_point_operation(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
-        traced(
-            "arithmetic_parse_point_operation",
-            map_error(
-                map(
-                    pair(
-                        self.arithmetic_parse_factor(),
-                        many0(alt((
-                            map(preceded(tag("*"), self.arithmetic_parse_factor()), |r| {
-                                (TermOperation::Multiplication, r)
-                            }),
-                            map(preceded(tag("/"), self.arithmetic_parse_factor()), |r| {
-                                (TermOperation::Division, r)
-                            }),
-                        ))),
-                    ),
-                    |(initial, sequence)| Self::arithmetic_fold_expression(initial, sequence),
-                ),
-                || todo!(),
-            ),
-        )
-    }
+    // pub fn arithmetic_parse_point_operation(
+    //     &'a self,
+    // ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    //     traced(
+    //         "arithmetic_parse_point_operation",
+    //         map_error(
+    //             map(
+    //                 pair(
+    //                     self.arithmetic_parse_factor(),
+    //                     many0(alt((
+    //                         map(preceded(tag("*"), self.arithmetic_parse_factor()), |r| {
+    //                             (TermOperation::Multiplication, r)
+    //                         }),
+    //                         map(preceded(tag("/"), self.arithmetic_parse_factor()), |r| {
+    //                             (TermOperation::Division, r)
+    //                         }),
+    //                     ))),
+    //                 ),
+    //                 |(initial, sequence)| Self::arithmetic_fold_expression(initial, sequence),
+    //             ),
+    //             || todo!(),
+    //         ),
+    //     )
+    // }
 
-    pub fn arithmetic_parse_dash_operation(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
-        traced(
-            "arithmetic_parse_point_operation",
-            map_error(
-                map(
-                    pair(
-                        self.arithmetic_parse_point_operation(),
-                        many0(alt((
-                            map(
-                                preceded(tag("+"), self.arithmetic_parse_point_operation()),
-                                |r| (TermOperation::Addition, r),
-                            ),
-                            map(
-                                preceded(tag("-"), self.arithmetic_parse_point_operation()),
-                                |r| (TermOperation::Subtraction, r),
-                            ),
-                        ))),
-                    ),
-                    |(initial, sequence)| Self::arithmetic_fold_expression(initial, sequence),
-                ),
-                || todo!(),
-            ),
-        )
-    }
+    // pub fn arithmetic_parse_dash_operation(
+    //     &'a self,
+    // ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    //     traced(
+    //         "arithmetic_parse_dash_operation",
+    //         map_error(
+    //             map(
+    //                 pair(
+    //                     self.arithmetic_parse_point_operation(),
+    //                     many0(alt((
+    //                         map(
+    //                             preceded(tag("+"), self.arithmetic_parse_point_operation()),
+    //                             |r| (TermOperation::Addition, r),
+    //                         ),
+    //                         map(
+    //                             preceded(tag("-"), self.arithmetic_parse_point_operation()),
+    //                             |r| (TermOperation::Subtraction, r),
+    //                         ),
+    //                     ))),
+    //                 ),
+    //                 |(initial, sequence)| Self::arithmetic_fold_expression(initial, sequence),
+    //             ),
+    //             || todo!(),
+    //         ),
+    //     )
+    // }
 
     /// Parse expression of the form `<variable> <operation> <term>`
     /// or `<term> <operation> <variable>`.

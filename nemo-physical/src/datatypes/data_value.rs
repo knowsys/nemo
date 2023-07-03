@@ -38,8 +38,9 @@ impl DataValueT {
         }
     }
 
-    /// Get the appropriate [`StorageValueT`]` for the given [`DataValueT`]
-    pub fn to_storage_value(&self, dict: &mut Dict) -> StorageValueT {
+    /// Get the appropriate [`StorageValueT`]` for the given [`DataValueT`].
+    /// May change the given dictionary.
+    pub fn to_storage_value_mut(&self, dict: &mut Dict) -> StorageValueT {
         match self {
             Self::String(val) => StorageValueT::U64(dict.add(val.clone()).try_into().unwrap()), // dictionary indices
             Self::U32(val) => StorageValueT::U32(*val),
@@ -47,6 +48,18 @@ impl DataValueT {
             Self::I64(val) => StorageValueT::I64(*val),
             Self::Float(val) => StorageValueT::Float(*val),
             Self::Double(val) => StorageValueT::Double(*val),
+        }
+    }
+
+    /// Get the appropriate [`StorageValueT`]` for the given [`DataValueT`]
+    pub fn to_storage_value(&self, dict: &Dict) -> Option<StorageValueT> {
+        match self {
+            Self::String(val) => Some(StorageValueT::U64(dict.index_of(val)?.try_into().unwrap())), // dictionary indices
+            Self::U32(val) => Some(StorageValueT::U32(*val)),
+            Self::U64(val) => Some(StorageValueT::U64(*val)),
+            Self::I64(val) => Some(StorageValueT::I64(*val)),
+            Self::Float(val) => Some(StorageValueT::Float(*val)),
+            Self::Double(val) => Some(StorageValueT::Double(*val)),
         }
     }
 }

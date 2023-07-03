@@ -9,8 +9,9 @@ use crate::{
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         column_types::rle::{ColumnBuilderRle, ColumnRle},
         operations::{
-            columnscan_arithmetic::OperationTree, ColumnScanArithmetic, ColumnScanCast,
-            ColumnScanCastEnum, ColumnScanConstant, ColumnScanCopy, ColumnScanPass,
+            columnscan_arithmetic::{ArithmeticOperation, OperationTree},
+            ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant,
+            ColumnScanCopy, ColumnScanPass,
         },
         traits::{
             column::Column,
@@ -19,8 +20,8 @@ use crate::{
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         },
     },
-    datatypes::{DataTypeName, DataValueT, Double, Float, StorageTypeName, StorageValueT},
-    generate_cast_statements, generate_datatype_forwarder,
+    datatypes::{ColumnDataType, DataValueT, StorageTypeName, StorageValueT},
+    generate_cast_statements,
     management::database::Dict,
     tabular::{
         table_types::trie::Trie,
@@ -32,8 +33,6 @@ use crate::{
     util::mapping::permutation::Permutation,
 };
 use std::num::NonZeroUsize;
-
-use super::TrieScanPrune;
 
 /// Helper function which, given a continuous range, expands it in such a way
 /// that all of the child nodes are covered as well.
@@ -54,37 +53,84 @@ fn expand_range(columns: &[ColumnWithIntervalsT], range: Range<usize>) -> Range<
     current_range
 }
 
-/// Variant of an [`OperationTree`] for each [`crate::datatypes::StorageTypeName`].
-#[derive(Debug, Clone)]
-pub enum OperationTreeT {
-    /// Data type [`u32`].
-    U32(OperationTree<u32>),
-    /// Data type [`u64`].
-    U64(OperationTree<u64>),
-    /// Data type [`i64`]
-    I64(OperationTree<i64>),
-    /// Data type [`Float`]
-    Float(OperationTree<Float>),
-    /// Data type [`Double`]
-    Double(OperationTree<Double>),
-}
-
-generate_datatype_forwarder!(forward_to_type);
+/// [`OperationTree`] with [`DataValueT`] constants.
+pub type OperationTreeT = OperationTree<DataValueT>;
 
 impl OperationTreeT {
-    /// Return all indices that are used in the input of the [`OperationTreeT`].
-    pub fn input_indices(&self) -> Vec<&usize> {
-        forward_to_type!(self, input_indices)
+    fn translate_recursive<F, T>(tree: OperationTreeT, translate_function: F) -> OperationTree<T>
+    where
+        F: Fn(DataValueT) -> T + Copy,
+        T: ColumnDataType,
+    {
+        match tree.tag {
+            ArithmeticOperation::Constant(constant) => OperationTree::<T>::leaf(
+                ArithmeticOperation::Constant(translate_function(constant)),
+            ),
+            ArithmeticOperation::ColumnScan(index) => {
+                OperationTree::<T>::leaf(ArithmeticOperation::ColumnScan(index))
+            }
+            ArithmeticOperation::Addition => {
+                let subtrees = tree
+                    .subtrees
+                    .into_iter()
+                    .map(|t| Self::translate_recursive(t, translate_function))
+                    .collect();
+
+                OperationTree::<T>::tree(ArithmeticOperation::Addition, subtrees)
+            }
+            ArithmeticOperation::Subtraction => {
+                let subtrees = tree
+                    .subtrees
+                    .into_iter()
+                    .map(|t| Self::translate_recursive(t, translate_function))
+                    .collect();
+
+                OperationTree::<T>::tree(ArithmeticOperation::Subtraction, subtrees)
+            }
+            ArithmeticOperation::Multiplication => {
+                let subtrees = tree
+                    .subtrees
+                    .into_iter()
+                    .map(|t| Self::translate_recursive(t, translate_function))
+                    .collect();
+
+                OperationTree::<T>::tree(ArithmeticOperation::Multiplication, subtrees)
+            }
+            ArithmeticOperation::Division => {
+                let subtrees = tree
+                    .subtrees
+                    .into_iter()
+                    .map(|t| Self::translate_recursive(t, translate_function))
+                    .collect();
+
+                OperationTree::<T>::tree(ArithmeticOperation::Division, subtrees)
+            }
+        }
     }
 
-    /// Return the [`DataTypeName`] for this operation.
-    pub fn data_type(&self) -> DataTypeName {
-        match self {
-            OperationTreeT::U32(_) => DataTypeName::U32,
-            OperationTreeT::U64(_) => DataTypeName::U64,
-            OperationTreeT::I64(_) => DataTypeName::I64,
-            OperationTreeT::Float(_) => DataTypeName::Float,
-            OperationTreeT::Double(_) => DataTypeName::Double,
+    /// Translate the [`DataValueT`] constants into constatns of a certain type.
+    /// The conversion is given by a closure.
+    pub fn translate<F, T>(self, translate_function: F) -> OperationTree<T>
+    where
+        F: Fn(DataValueT) -> T + Copy,
+        T: ColumnDataType,
+    {
+        Self::translate_recursive(self, translate_function)
+    }
+
+    /// Return the [`StorageTypeName`] of the evaluation result of this tree.
+    pub fn storage_type(
+        &self,
+        input_types: &[StorageTypeName],
+        dict: &mut Dict,
+    ) -> StorageTypeName {
+        let first_leaf_node = self.leaves()[0];
+        match first_leaf_node {
+            ArithmeticOperation::Constant(constant) => {
+                constant.to_storage_value_mut(dict).get_type()
+            }
+            ArithmeticOperation::ColumnScan(index) => input_types[*index],
+            _ => unreachable!("Not a leave."),
         }
     }
 }
@@ -211,7 +257,7 @@ pub fn trie_append(
                         }};
                     }
 
-                    match value.to_storage_value(dict) {
+                    match value.to_storage_value_mut(dict) {
                         StorageValueT::U32(value) => append_columns_for_datatype!(value, U32, u32),
                         StorageValueT::U64(value) => append_columns_for_datatype!(value, U64, u64),
                         StorageValueT::I64(value) => append_columns_for_datatype!(value, I64, i64),
@@ -241,7 +287,7 @@ pub fn trie_append(
 #[derive(Debug)]
 pub struct TrieScanAppend<'a> {
     /// Trie scans to which new columns will be appended.
-    trie_scan: TrieScanPrune<'a>,
+    trie_scan: Box<TrieScanEnum<'a>>,
 
     /// Layer we are currently at in the resulting trie.
     current_layer: Option<usize>,
@@ -293,8 +339,10 @@ impl<'a> TrieScanAppend<'a> {
             instructions.iter().map(|i| i.len()).sum::<usize>() + src_arity
         );
 
+        let src_types = trie_scan.get_types().clone();
+
         let mut res = Self {
-            trie_scan: TrieScanPrune::new(trie_scan),
+            trie_scan: Box::new(trie_scan),
             current_layer: None,
             target_types,
             base_indices: Vec::new(),
@@ -310,7 +358,7 @@ impl<'a> TrieScanAppend<'a> {
                     }
                     AppendInstruction::Constant(value) => res.add_constant_column(dict, value),
                     AppendInstruction::Operation(operation_tree) => {
-                        res.add_operation_column(operation_tree.clone())
+                        res.add_operation_column(operation_tree.clone(), &src_types, dict)
                     }
                 }
             }
@@ -323,8 +371,13 @@ impl<'a> TrieScanAppend<'a> {
         res
     }
 
-    fn add_operation_column(&mut self, operation_tree: OperationTreeT) {
-        let src_type = operation_tree.data_type().to_storage_type_name();
+    fn add_operation_column(
+        &mut self,
+        operation_tree: OperationTreeT,
+        src_types: &[StorageTypeName],
+        dict: &mut Dict,
+    ) {
+        let src_type = operation_tree.storage_type(src_types, dict);
         let dst_type = self.target_types[self.column_scans.len()];
 
         macro_rules! input_for_datatype {
@@ -340,22 +393,32 @@ impl<'a> TrieScanAppend<'a> {
                     if let ColumnScanT::$src_name(base_scan_cell) = base_scan {
                         input_scans.push(base_scan_cell);
                     } else {
-                        panic!("Expected a column scan of type {}", stringify!($variant));
+                        panic!("Expected a column scan of type {}", stringify!($src_name));
                     }
 
                     column_map.insert(*src_index, loop_index);
                 }
 
                 let column_map = Permutation::from_map(column_map);
-                let operation_tree = if let OperationTreeT::$src_name(mut tree) = operation_tree {
-                    for index in tree.input_indices_mut() {
-                        *index = column_map.get(*index);
+                let translate_type = |t: DataValueT| {
+                    if let StorageValueT::$src_name(value) = t
+                        .to_storage_value(dict)
+                        .expect("We don't have string operations so this cannot fail.")
+                    {
+                        value
+                    } else {
+                        panic!(
+                            "Expected a operation tree value of type {}",
+                            stringify!($src_name)
+                        );
                     }
-
-                    tree
-                } else {
-                    panic!("Expected operation tree of type {}", stringify!($variant));
                 };
+
+                let mut operation_tree = operation_tree.translate(translate_type);
+
+                for index in operation_tree.input_indices_mut() {
+                    *index = column_map.get(*index);
+                }
 
                 let new_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanArithmetic(
                     ColumnScanArithmetic::new(input_scans, operation_tree),
@@ -463,7 +526,7 @@ impl<'a> TrieScanAppend<'a> {
             }};
         }
 
-        match value.to_storage_value(dict) {
+        match value.to_storage_value_mut(dict) {
             StorageValueT::U32(value) => append_constant_for_datatype!(U32, value),
             StorageValueT::U64(value) => append_constant_for_datatype!(U64, value),
             StorageValueT::I64(value) => append_constant_for_datatype!(I64, value),
