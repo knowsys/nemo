@@ -842,112 +842,126 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    // pub fn arithmetic_parse_parens(
-    //     &'a self,
-    // ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
-    //     traced(
-    //         "arithmetic_parse_parens",
-    //         map_error(
-    //             delimited(
-    //                 multispace0,
-    //                 delimited(tag("("), self.arithmetic_parse_dash_operation(), tag(")")),
-    //                 multispace0,
-    //             ),
-    //             || todo!(),
-    //         ),
-    //     )
-    // }
+    /// Parse an arithmetic expression
+    pub fn parse_arithmetic_expression(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+        traced(
+            "parse_arithmetic_expression",
+            map_error(
+                move |input| {
+                    let (remainder, first) = self.parse_arithmetic_product()(input)?;
+                    let (remainder, expressions) = many0(alt((
+                        preceded(
+                            delimited(multispace_or_comment0, token("+"), multispace_or_comment0),
+                            map(self.parse_arithmetic_product(), |term| {
+                                (TermOperation::Addition, term)
+                            }),
+                        ),
+                        preceded(
+                            delimited(multispace_or_comment0, token("-"), multispace_or_comment0),
+                            map(self.parse_arithmetic_product(), |term| {
+                                (TermOperation::Subtraction, term)
+                            }),
+                        ),
+                    )))(remainder)?;
 
-    // pub fn arithmetic_parse_factor(
-    //     &'a self,
-    // ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
-    //     traced(
-    //         "arithmetic_parse_factor",
-    //         map_error(
-    //             alt((
-    //                 map(self.parse_term(), TermTree::leaf),
-    //                 self.arithmetic_parse_parens(),
-    //             )),
-    //             || todo!(),
-    //         ),
-    //     )
-    // }
+                    Ok((
+                        remainder,
+                        Self::fold_arithmetic_expressions(first, expressions),
+                    ))
+                },
+                || todo!(),
+            ),
+        )
+    }
 
-    // fn arithmetic_fold_expression(
-    //     initial: TermTree,
-    //     sequence: Vec<(TermOperation, TermTree)>,
-    // ) -> TermTree {
-    //     sequence.into_iter().fold(initial, |acc, pair| {
-    //         let (operation, expression) = pair;
-    //         match operation {
-    //             TermOperation::Addition => {
-    //                 TermTree::tree(TermOperation::Addition, vec![acc, expression])
-    //             }
-    //             TermOperation::Subtraction => {
-    //                 TermTree::tree(TermOperation::Subtraction, vec![acc, expression])
-    //             }
-    //             TermOperation::Multiplication => {
-    //                 TermTree::tree(TermOperation::Multiplication, vec![acc, expression])
-    //             }
-    //             TermOperation::Division => {
-    //                 TermTree::tree(TermOperation::Division, vec![acc, expression])
-    //             }
-    //             TermOperation::Term(term) => TermTree::leaf(term),
-    //         }
-    //     })
-    // }
+    /// Parse an arithmetic product, i.e., an expression involving
+    /// only `*` and `/` over subexpressions.
+    pub fn parse_arithmetic_product(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+        traced(
+            "parse_arithmetic_product",
+            map_error(
+                move |input| {
+                    let (remainder, first) = self.parse_arithmetic_factor()(input)?;
+                    let (remainder, factors) = many0(alt((
+                        preceded(
+                            delimited(multispace_or_comment0, token("*"), multispace_or_comment0),
+                            map(self.parse_arithmetic_factor(), |term| {
+                                (TermOperation::Multiplication, term)
+                            }),
+                        ),
+                        preceded(
+                            delimited(multispace_or_comment0, token("/"), multispace_or_comment0),
+                            map(self.parse_arithmetic_factor(), |term| {
+                                (TermOperation::Division, term)
+                            }),
+                        ),
+                    )))(remainder)?;
 
-    // pub fn arithmetic_parse_point_operation(
-    //     &'a self,
-    // ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
-    //     traced(
-    //         "arithmetic_parse_point_operation",
-    //         map_error(
-    //             map(
-    //                 pair(
-    //                     self.arithmetic_parse_factor(),
-    //                     many0(alt((
-    //                         map(preceded(tag("*"), self.arithmetic_parse_factor()), |r| {
-    //                             (TermOperation::Multiplication, r)
-    //                         }),
-    //                         map(preceded(tag("/"), self.arithmetic_parse_factor()), |r| {
-    //                             (TermOperation::Division, r)
-    //                         }),
-    //                     ))),
-    //                 ),
-    //                 |(initial, sequence)| Self::arithmetic_fold_expression(initial, sequence),
-    //             ),
-    //             || todo!(),
-    //         ),
-    //     )
-    // }
+                    Ok((remainder, Self::fold_arithmetic_expressions(first, factors)))
+                },
+                || todo!(),
+            ),
+        )
+    }
 
-    // pub fn arithmetic_parse_dash_operation(
-    //     &'a self,
-    // ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
-    //     traced(
-    //         "arithmetic_parse_dash_operation",
-    //         map_error(
-    //             map(
-    //                 pair(
-    //                     self.arithmetic_parse_point_operation(),
-    //                     many0(alt((
-    //                         map(
-    //                             preceded(tag("+"), self.arithmetic_parse_point_operation()),
-    //                             |r| (TermOperation::Addition, r),
-    //                         ),
-    //                         map(
-    //                             preceded(tag("-"), self.arithmetic_parse_point_operation()),
-    //                             |r| (TermOperation::Subtraction, r),
-    //                         ),
-    //                     ))),
-    //                 ),
-    //                 |(initial, sequence)| Self::arithmetic_fold_expression(initial, sequence),
-    //             ),
-    //             || todo!(),
-    //         ),
-    //     )
-    // }
+    /// Parse an arithmetic factor.
+    pub fn parse_arithmetic_factor(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+        traced(
+            "parse_arithmetic_factor",
+            map_error(
+                alt((
+                    map(self.parse_term(), TermTree::leaf),
+                    self.parse_arithmetic_parens(),
+                )),
+                || todo!(),
+            ),
+        )
+    }
+
+    /// Parse an arithmetic parenthesised expression.
+    pub fn parse_arithmetic_parens(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+        traced(
+            "parse_arithmetic_parens",
+            map_error(
+                delimited(
+                    delimited(multispace_or_comment0, token("("), multispace_or_comment0),
+                    self.parse_arithmetic_expression(),
+                    delimited(multispace_or_comment0, token(")"), multispace_or_comment0),
+                ),
+                || todo!(),
+            ),
+        )
+    }
+
+    /// Fold a sequence of [Term trees][TermTree] interleaved with
+    /// [Term operations][TermOperation] into a single [`TermTree`].
+    fn fold_arithmetic_expressions(
+        initial: TermTree,
+        sequence: Vec<(TermOperation, TermTree)>,
+    ) -> TermTree {
+        sequence.into_iter().fold(initial, |acc, pair| {
+            let (operation, expression) = pair;
+            let subtrees = vec![acc, expression];
+
+            use TermOperation::*;
+
+            match operation {
+                Addition => TermTree::tree(Addition, subtrees),
+                Subtraction => TermTree::tree(Subtraction, subtrees),
+                Multiplication => TermTree::tree(Multiplication, subtrees),
+                Division => TermTree::tree(Division, subtrees),
+                Term(term) => TermTree::leaf(term),
+            }
+        })
+    }
 
     /// Parse expression of the form `<variable> <operation> <term>`
     /// or `<term> <operation> <variable>`.
@@ -1472,6 +1486,51 @@ mod test {
             parser.parse_rule(),
             r"a(?X, !V) :- b23__#?\(?X, ?Y) .",
             ParseError::ExpectedRule,
+        );
+    }
+
+    #[test]
+    fn parse_arithmetic_expressions() {
+        let parser = RuleParser::new();
+
+        let twenty_three = TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(23)));
+        let fourty_two = TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)));
+        let twenty_three_times_fourty_two = TermTree::tree(
+            TermOperation::Multiplication,
+            vec![twenty_three.clone(), fourty_two.clone()],
+        );
+
+        assert_parse!(parser.parse_arithmetic_factor(), "23", twenty_three);
+        assert_parse!(parser.parse_arithmetic_expression(), "23", twenty_three);
+        assert_parse!(
+            parser.parse_arithmetic_product(),
+            "23 * 42",
+            twenty_three_times_fourty_two
+        );
+        assert_parse!(
+            parser.parse_arithmetic_expression(),
+            "23 * 42",
+            twenty_three_times_fourty_two
+        );
+        assert_parse!(
+            parser.parse_arithmetic_expression(),
+            "23 + 23 * 42 + 42 - (23 * 42)",
+            TermTree::tree(
+                TermOperation::Subtraction,
+                vec![
+                    TermTree::tree(
+                        TermOperation::Addition,
+                        vec![
+                            TermTree::tree(
+                                TermOperation::Addition,
+                                vec![twenty_three.clone(), twenty_three_times_fourty_two.clone()]
+                            ),
+                            fourty_two.clone()
+                        ]
+                    ),
+                    twenty_three_times_fourty_two.clone()
+                ]
+            )
         );
     }
 }
