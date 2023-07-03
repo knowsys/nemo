@@ -61,7 +61,7 @@ fn print_finished_message(new_facts: usize, saving: bool) {
         0
     };
 
-    let max_string_len = vec![loading_preprocessing, reading_time, writing_time]
+    let max_string_len = [loading_preprocessing, reading_time, writing_time]
         .iter()
         .map(|t| t.to_string().len())
         .max()
