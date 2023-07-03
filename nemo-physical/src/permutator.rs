@@ -62,7 +62,7 @@ impl Permutator {
     where
         T: ColumnDataType + Ord,
     {
-        Permutator::sort_from_column_range(data, &[(0..data.len())])
+        Permutator::sort_from_column_range(data, &[(0..data.len()); 1])
     }
 
     /// Creates a [`Permutator`] based on a slice of [`ColumnT`] elements.

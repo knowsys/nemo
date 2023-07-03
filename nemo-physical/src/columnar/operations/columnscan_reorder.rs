@@ -26,7 +26,7 @@ where
 {
     /// Construct a new [`ColumnScanReorder`].
     pub fn new(column: &'a ColumnEnum<T>) -> Self {
-        ColumnScanReorder::narrowed(column, vec![0..column.len()])
+        ColumnScanReorder::narrowed(column, vec![0..column.len(); 1])
     }
 
     /// Construct a new ReorderedScan for a Column restricted to given range.
@@ -143,7 +143,7 @@ mod test {
         let values: Vec<u64> = vec![0, 2, 1, 7, 4, 9, 12, 8, 4, 7, 4, 14];
         let column = ColumnEnum::ColumnVector(ColumnVector::new(values));
 
-        let mut scan = ColumnScanReorder::narrowed(&column, vec![3..9]);
+        let mut scan = ColumnScanReorder::narrowed(&column, vec![3..9; 1]);
 
         assert_eq!(scan.current(), None);
         assert_eq!(scan.pos_multiple(), None);
