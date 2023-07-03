@@ -9,8 +9,8 @@ use nemo_physical::{
 
 use crate::{
     error::Error,
-    io::{dsv::DSVReader, ntriples::NTriplesReader},
-    model::{chase_model::ChaseProgram, DataSource, Identifier, Program, TermOperation},
+    io::input_manager::{InputManager, ResourceProviders},
+    model::{chase_model::ChaseProgram, Identifier, Program, TermOperation},
     program_analysis::analysis::ProgramAnalysis,
     table_manager::TableManager,
     types::LogicalTypeEnum,
@@ -45,6 +45,8 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
     rule_strategy: RuleSelectionStrategy,
 
+    #[allow(dead_code)]
+    input_manager: InputManager,
     table_manager: TableManager,
 
     predicate_fragmentation: HashMap<Identifier, usize>,
@@ -56,7 +58,10 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [`ExecutionEngine`].
-    pub fn initialize(program: Program) -> Result<Self, Error> {
+    pub fn initialize(
+        program: Program,
+        resource_providers: ResourceProviders,
+    ) -> Result<Self, Error> {
         let mut program: ChaseProgram = program.try_into()?;
 
         program.check_for_unsupported_features()?;
@@ -64,9 +69,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let analysis = program.analyze()?;
 
+        let input_manager = InputManager::new(resource_providers);
+
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
-        Self::add_sources(&mut table_manager, &program, &analysis);
+        Self::add_sources(&mut table_manager, &input_manager, &program, &analysis)?;
 
         let mut rule_infos = Vec::<RuleInfo>::new();
         program
@@ -83,6 +90,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             program,
             analysis,
             rule_strategy,
+            input_manager,
             table_manager,
             predicate_fragmentation: HashMap::new(),
             predicate_last_union: HashMap::new(),
@@ -106,48 +114,38 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     fn add_sources(
         table_manager: &mut TableManager,
+        input_manager: &InputManager,
         program: &ChaseProgram,
         analysis: &ProgramAnalysis,
-    ) {
+    ) -> Result<(), Error> {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the data source declarations
-        for (predicate, _, input_types, source) in program.sources() {
-            let new_source = match source {
-                DataSource::DsvFile { file, delimiter } => {
-                    let logical_types = analysis
-                        .predicate_types
-                        .get(predicate)
-                        .cloned()
-                        .expect("All predicates should have types by now.");
+        for (predicate, _, input_types, data_source) in program.sources() {
+            let logical_types = analysis
+                .predicate_types
+                .get(predicate)
+                .cloned()
+                .expect("All predicates should have types by now.");
 
-                    let reader_types = logical_types
-                        .iter()
-                        .zip(input_types)
-                        .map(|(lt, it)| {
-                            if *lt == LogicalTypeEnum::Any && *it == LogicalTypeEnum::String {
-                                LogicalTypeEnum::String
-                            } else {
-                                *lt
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    let reader = DSVReader::dsv(*file.clone(), *delimiter, reader_types);
+            let reader_types = logical_types
+                .iter()
+                .zip(input_types)
+                .map(|(lt, it)| {
+                    if *lt == LogicalTypeEnum::Any && *it == LogicalTypeEnum::String {
+                        LogicalTypeEnum::String
+                    } else {
+                        *lt
+                    }
+                })
+                .collect::<Vec<_>>();
 
-                    TableSource::FileReader(Box::new(reader))
-                }
-                DataSource::RdfFile(file) => {
-                    TableSource::FileReader(Box::new(NTriplesReader::new(file.to_path_buf())))
-                }
-                DataSource::SparqlQuery(_) => {
-                    todo!("SPARQL query data sources are not yet implemented")
-                }
-            };
+            let table_source = input_manager.load_table_source(data_source, reader_types)?;
 
             predicate_to_sources
                 .entry(predicate.clone())
                 .or_default()
-                .push(new_source)
+                .push(table_source)
         }
 
         // Add all the facts contained in the rule file as a source
@@ -189,6 +187,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         for (predicate, sources) in predicate_to_sources {
             table_manager.add_edb(predicate, sources);
         }
+
+        Ok(())
     }
 
     /// Executes the program.

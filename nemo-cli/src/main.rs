@@ -28,7 +28,7 @@ use colored::Colorize;
 use nemo::{
     error::{Error, ReadingError},
     execution::{DefaultExecutionEngine, ExecutionEngine},
-    io::{parser::parse_program, RecordWriter},
+    io::{input_manager::ResourceProviders, parser::parse_program, RecordWriter},
     meta::{timing::TimedDisplay, TimedCode},
     model::OutputPredicateSelection,
 };
@@ -123,7 +123,8 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         output_manager.prevent_accidental_overwrite(program.output_predicates())?;
     }
 
-    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(program)?;
+    let mut engine: DefaultExecutionEngine =
+        ExecutionEngine::initialize(program, ResourceProviders::default())?;
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
     TimedCode::instance().sub("Reasoning").start();

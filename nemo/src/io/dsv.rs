@@ -17,10 +17,11 @@
 //! ```
 //! # use std::path::PathBuf;
 //! # use nemo_physical::table_reader::TableReader;
-//! # use nemo::{types::LogicalTypeEnum, io::dsv::DSVReader};
-//! # let file = PathBuf::from("../resources/doc/examples/city_population.csv");
+//! # use nemo::{types::LogicalTypeEnum, io::{input_manager::ResourceProviders, dsv::DSVReader}};
+//! # let file_path = String::from("../resources/doc/examples/city_population.csv");
 //! let csv_reader = DSVReader::csv(
-//!     file,
+//!     ResourceProviders::default(),
+//!     file_path,
 //!     vec![
 //!         LogicalTypeEnum::Any,
 //!         LogicalTypeEnum::Integer,
@@ -39,7 +40,7 @@
 //! # use nemo_physical::table_reader::TableReader;
 //! # use std::path::PathBuf;
 //! #
-//! # use nemo::{types::LogicalTypeEnum, io::dsv::DSVReader};
+//! # use nemo::{types::LogicalTypeEnum, io::{input_manager::ResourceProviders, dsv::DSVReader}};
 //! # use std::cell::RefCell;
 //! # use nemo_physical::builder_proxy::{
 //! #    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
@@ -48,10 +49,11 @@
 //! # fn main() {}
 //! # #[cfg(not(miri))]
 //! # fn main() {
-//! # let file = PathBuf::from("resources/doc/examples/city_population.csv");
+//! # let file_path = String::from("resources/doc/examples/city_population.csv");
 //! #
 //! # let csv_reader = DSVReader::csv(
-//! #     file,
+//! #     ResourceProviders::default(),
+//! #     file_path,
 //! #     vec![
 //! #         LogicalTypeEnum::Any,
 //! #         LogicalTypeEnum::Integer,
@@ -70,18 +72,17 @@
 //! ```
 
 use std::io::Read;
-use std::path::PathBuf;
 
 use csv::{Reader, ReaderBuilder};
 
 use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
-use nemo_physical::table_reader::TableReader;
+use nemo_physical::table_reader::{Resource, TableReader};
 
 use crate::builder_proxy::LogicalColumnBuilderProxy;
 use crate::error::{Error, ReadingError};
 use crate::types::LogicalTypeEnum;
 
-use crate::read_from_possibly_compressed_file;
+use super::input_manager::ResourceProviders;
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
 ///
@@ -93,40 +94,54 @@ use crate::read_from_possibly_compressed_file;
 /// Via the implementation of [`TableReader`] it fills the corresponding [`PhysicalBuilderProxys`][nemo_physical::builder_proxy::PhysicalBuilderProxyEnum]
 /// with the data from the file.
 /// It combines the logical and physical BuilderProxies to handle the read data according to both datatype models.
-
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DSVReader {
-    file: PathBuf,
+    resource_providers: ResourceProviders,
+    resource: Resource,
     delimiter: u8,
-    escape: Option<u8>,
+    escape: u8,
     logical_types: Vec<LogicalTypeEnum>,
 }
 
 impl DSVReader {
     /// Instantiate a [DSVReader] for CSV (comma separated values) files
-    pub fn csv(file: PathBuf, logical_types: Vec<LogicalTypeEnum>) -> Self {
-        Self::dsv(file, b',', logical_types)
+    pub fn csv(
+        resource_providers: ResourceProviders,
+        resource: Resource,
+        logical_types: Vec<LogicalTypeEnum>,
+    ) -> Self {
+        Self::dsv(resource_providers, resource, b',', logical_types)
     }
 
     /// Instantiate a [DSVReader] for TSV (tab separated values) files
-    pub fn tsv(file: PathBuf, logical_types: Vec<LogicalTypeEnum>) -> Self {
-        Self::dsv(file, b'\t', logical_types)
+    pub fn tsv(
+        resource_providers: ResourceProviders,
+        resource: Resource,
+        logical_types: Vec<LogicalTypeEnum>,
+    ) -> Self {
+        Self::dsv(resource_providers, resource, b'\t', logical_types)
     }
 
     /// Instantiate a [DSVReader] for a given delimiter
-    pub fn dsv(file: PathBuf, delimiter: u8, logical_types: Vec<LogicalTypeEnum>) -> Self {
+    pub fn dsv(
+        resource_providers: ResourceProviders,
+        resource: Resource,
+        delimiter: u8,
+        logical_types: Vec<LogicalTypeEnum>,
+    ) -> Self {
         Self {
-            file,
+            resource_providers,
+            resource,
             delimiter,
-            escape: Some(b'\\'),
+            escape: b'\\',
             logical_types,
         }
     }
 
-    /// Static function to create a serde reader
+    /// Static function to create a CSV reader
     ///
     /// The function takes an arbitrary [`Reader`][Read] and wraps it into a [`Reader`][csv::Reader] for csv
-    fn reader<R>(rdr: R, delimiter: u8, escape: Option<u8>) -> Reader<R>
+    fn dsv_reader<R>(reader: R, delimiter: u8, escape: Option<u8>) -> Reader<R>
     where
         R: Read,
     {
@@ -135,20 +150,20 @@ impl DSVReader {
             .escape(escape)
             .has_headers(false)
             .double_quote(true)
-            .from_reader(rdr)
+            .from_reader(reader)
     }
 
     /// Actually reads the data from the file and distributes the different fields into the corresponding [ProxyColumnBuilder]
     /// If a field cannot be read or parsed, the line will be ignored
-    fn read_with_reader<'a, 'b, R>(
+    fn read_with_reader<'a, 'b, R2>(
         &self,
         mut builder: Vec<Box<dyn LogicalColumnBuilderProxy<'a, 'b> + 'b>>,
-        reader: &mut Reader<R>,
+        dsv_reader: &mut Reader<R2>,
     ) -> Result<(), ReadingError>
     where
-        R: Read,
+        R2: Read,
     {
-        for row in reader.records().flatten() {
+        for row in dsv_reader.records().flatten() {
             if let Err(Error::Rollback(rollback)) =
                 row.iter().enumerate().try_for_each(|(idx, item)| {
                     if idx < builder.len() {
@@ -175,14 +190,11 @@ impl DSVReader {
         Ok(())
     }
 
-    fn read_into_builder_proxies_with_reader<'a: 'b, 'b, R>(
+    fn read_into_builder_proxies_with_reader<'a: 'b, 'b, R: Read>(
         &self,
         physical_builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
-        reader: &mut Reader<R>,
-    ) -> Result<(), ReadingError>
-    where
-        R: Read,
-    {
+        dsv_reader: &mut Reader<R>,
+    ) -> Result<(), ReadingError> {
         let logical_builder_proxies: Vec<Box<dyn LogicalColumnBuilderProxy + 'b>> = self
             .logical_types
             .iter()
@@ -191,7 +203,7 @@ impl DSVReader {
             .map(|(ty, bp)| ty.wrap_physical_column_builder::<'a, 'b>(bp))
             .collect();
 
-        self.read_with_reader(logical_builder_proxies, reader)
+        self.read_with_reader(logical_builder_proxies, dsv_reader)
     }
 }
 
@@ -200,12 +212,13 @@ impl TableReader for DSVReader {
         &self,
         physical_builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
     ) -> Result<(), ReadingError> {
-        read_from_possibly_compressed_file!(self.file, |reader| {
-            self.read_into_builder_proxies_with_reader(
-                physical_builder_proxies,
-                &mut Self::reader(reader, self.delimiter, self.escape),
-            )
-        })
+        let reader = self
+            .resource_providers
+            .open_resource(&self.resource, true)?;
+
+        let mut dsv_reader = Self::dsv_reader(reader, self.delimiter, Some(self.escape));
+
+        self.read_into_builder_proxies_with_reader(physical_builder_proxies, &mut dsv_reader)
     }
 }
 
@@ -235,6 +248,7 @@ Boston;United States;4628910
 
         let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
         let csvreader = DSVReader::csv(
+            ResourceProviders::empty(),
             "test".into(),
             vec![
                 LogicalTypeEnum::Any,
@@ -332,6 +346,7 @@ The next 2 columns are empty;;;789
 
         let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
         let csvreader = DSVReader::csv(
+            ResourceProviders::empty(),
             "test".into(),
             vec![
                 LogicalTypeEnum::Any,
@@ -409,7 +424,8 @@ node03;123;123;13;55;123;invalid
             .from_reader(data.as_bytes());
 
         let dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
-        let csvreader = DSVReader::csv(
+        let csvreader: DSVReader = DSVReader::csv(
+            ResourceProviders::empty(),
             "test".into(),
             vec![
                 LogicalTypeEnum::Any,
@@ -479,6 +495,7 @@ node03;123;123;13;55;123;invalid
             .has_headers(false)
             .from_reader(csv.as_bytes());
         let csvreader = DSVReader::csv(
+            ResourceProviders::empty(),
             "test".into(),
             vec![
                 LogicalTypeEnum::Integer,

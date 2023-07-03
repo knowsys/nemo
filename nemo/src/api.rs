@@ -30,6 +30,7 @@ use crate::{
     error::{Error, ReadingError},
     execution::{DefaultExecutionEngine, ExecutionEngine},
     io::{
+        input_manager::ResourceProviders,
         parser::{all_input_consumed, RuleParser},
         OutputFileManager, RecordWriter,
     },
@@ -58,7 +59,7 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// Returns an appropriate [`Error`][crate::error::Error] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
     let program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
-    ExecutionEngine::initialize(program)
+    ExecutionEngine::initialize(program, ResourceProviders::default())
 }
 
 /// Executes the reasoning process of the [`Engine`].

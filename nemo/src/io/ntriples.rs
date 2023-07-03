@@ -1,28 +1,30 @@
 //! Reading of RDF 1.1 N-Triples files
-use std::{
-    io::{BufRead, BufReader},
-    path::PathBuf,
-};
+use std::io::{BufRead, BufReader};
 
 use nemo_physical::{
-    builder_proxy::PhysicalBuilderProxyEnum, error::ReadingError, table_reader::TableReader,
+    builder_proxy::PhysicalBuilderProxyEnum,
+    error::ReadingError,
+    table_reader::{Resource, TableReader},
 };
 
-use crate::{
-    io::parser::ntriples::triple_or_comment, read_from_possibly_compressed_file,
-    types::LogicalTypeEnum,
-};
+use crate::{io::parser::ntriples::triple_or_comment, types::LogicalTypeEnum};
+
+use super::input_manager::ResourceProviders;
 
 /// A [`TableReader`] for RDF 1.1 N-Triples files.
 #[derive(Debug, Clone)]
 pub struct NTriplesReader {
-    file: PathBuf,
+    resource_providers: ResourceProviders,
+    resource: Resource,
 }
 
 impl NTriplesReader {
-    /// Create a new [`NTriplesReader`] for the given [`file`][`PathBuf`]
-    pub fn new(file: PathBuf) -> Self {
-        Self { file }
+    /// Create a new [`NTriplesReader`]
+    pub fn new(resource_providers: ResourceProviders, resource: Resource) -> Self {
+        Self {
+            resource_providers,
+            resource,
+        }
     }
 
     fn read_with_buf_reader<'a, 'b>(
@@ -71,9 +73,13 @@ impl TableReader for NTriplesReader {
         &self,
         builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
     ) -> Result<(), ReadingError> {
-        read_from_possibly_compressed_file!(self.file, |reader| {
-            self.read_with_buf_reader(builder_proxies, &mut BufReader::new(reader))
-        })
+        let reader = self
+            .resource_providers
+            .open_resource(&self.resource, true)?;
+
+        let mut reader = BufReader::new(reader);
+
+        self.read_with_buf_reader(builder_proxies, &mut reader)
     }
 }
 
@@ -103,7 +109,7 @@ mod test {
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
         ];
-        let reader = NTriplesReader::new("".into());
+        let reader = NTriplesReader::new(ResourceProviders::empty(), String::from(""));
         let result = reader.read_with_buf_reader(&mut builders, &mut data);
         assert!(result.is_ok());
 

@@ -22,7 +22,11 @@ use nemo_physical::{
     },
 };
 
-use nemo::{io::dsv::DSVReader, model::DataSource, types::LogicalTypeEnum};
+use nemo::{
+    io::{dsv::DSVReader, input_manager::ResourceProviders},
+    model::DataSource,
+    types::LogicalTypeEnum,
+};
 
 // NOTE: See TableStorage::load_from_disk
 fn load_trie(
@@ -31,8 +35,11 @@ fn load_trie(
     dict: &mut RefCell<PrefixedStringDictionary>,
 ) -> Trie {
     match source {
-        DataSource::DsvFile { file, delimiter } => {
-            // Using fallback solution to treat eveything as string for now (storing as u64 internally)
+        DataSource::DsvFile {
+            resource,
+            delimiter,
+        } => {
+            // Using fallback solution to treat everything as string for now (storing as u64 internally)
             let datatypeschema =
                 TableSchema::from_vec((0..arity).map(|_| DataTypeName::String).collect());
             let logical_types = (0..arity).map(|_| LogicalTypeEnum::Any).collect();
@@ -51,7 +58,12 @@ fn load_trie(
                 })
                 .collect();
 
-            let csv_reader = DSVReader::dsv(*file.clone(), *delimiter, logical_types);
+            let csv_reader = DSVReader::dsv(
+                ResourceProviders::default(),
+                resource.clone(),
+                *delimiter,
+                logical_types,
+            );
             csv_reader
                 .read_into_builder_proxies(&mut builder_proxies)
                 .expect("Should work");
