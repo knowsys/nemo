@@ -6,7 +6,7 @@ use crate::{error::Error, model::*, types::LogicalTypeEnum};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
-    character::complete::{alpha1, digit1, multispace0, multispace1, none_of, satisfy},
+    character::complete::{alpha1, digit1, multispace1, none_of, satisfy},
     combinator::{all_consuming, cut, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
