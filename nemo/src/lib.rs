@@ -13,6 +13,7 @@
     unused_extern_crates,
     variant_size_differences
 )]
+#![allow(clippy::single_range_in_vec_init)]
 #![feature(macro_metavar_expr)]
 #![feature(is_sorted)]
 #![feature(assert_matches)]

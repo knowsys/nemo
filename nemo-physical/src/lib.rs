@@ -18,6 +18,7 @@
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap
 )]
+#![allow(clippy::single_range_in_vec_init)]
 #![feature(macro_metavar_expr)]
 #![feature(is_sorted)]
 
