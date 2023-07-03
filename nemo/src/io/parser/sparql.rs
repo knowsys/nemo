@@ -125,7 +125,7 @@ pub fn percent(input: Span) -> IntermediateResult<Span> {
 
 #[traced("parser::sparql")]
 pub fn pn_local_esc(input: Span) -> IntermediateResult<Span> {
-    recognize(preceded(token(r#"\"#), one_of(r#"_~.-!$&'()*+,;=/?#@%"#)))(input)
+    recognize(preceded(token(r"\"), one_of(r#"_~.-!$&'()*+,;=/?#@%"#)))(input)
 }
 
 #[traced("parser::sparql")]

@@ -61,7 +61,7 @@ pub fn materialize_up_to(trie_scan: &mut impl TrieScan, cut: usize) -> Option<Tr
 
     let columns = data_column_builders
         .into_iter()
-        .zip(intervals_column_builder.into_iter())
+        .zip(intervals_column_builder)
         .map(|(d, i)| d.finalize(i));
 
     Some(columns.collect())

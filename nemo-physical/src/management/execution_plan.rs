@@ -846,7 +846,7 @@ impl ExecutionTree {
 
                 let subpermutations = bindings.comply_with_leapfrog();
 
-                for (subnode, subpermutation) in subnodes.iter().zip(subpermutations.into_iter()) {
+                for (subnode, subpermutation) in subnodes.iter().zip(subpermutations) {
                     Self::satisfy_leapfrog_recurisve(subnode.clone(), subpermutation)
                 }
             }

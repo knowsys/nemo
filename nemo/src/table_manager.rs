@@ -660,11 +660,11 @@ mod test {
         let steps = vec![1, 4, 6, 7, 12];
         let ranges = vec![4..8, 6..13, 1..5];
         let target = 0..5;
-        let expected_ranges = vec![1..5];
+        let expected_ranges = vec![1..5; 1];
         compare_covering(&steps, &ranges, &expected_ranges, &target);
 
         let target = 3..5;
-        let expected_ranges = vec![4..5];
+        let expected_ranges = vec![4..5; 1];
         compare_covering(&steps, &ranges, &expected_ranges, &target);
 
         let target = 3..13;

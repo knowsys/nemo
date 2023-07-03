@@ -265,7 +265,7 @@ impl RuleVariableList for Vec<Variable> {
             .copied();
 
         self.into_iter()
-            .zip(ratios.into_iter())
+            .zip(ratios)
             .filter(move |(_, ratio)| {
                 *ratio == min_ratio.expect("the vars and therefore the ratios are non-empty")
             })

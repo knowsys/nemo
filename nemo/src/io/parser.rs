@@ -1348,7 +1348,7 @@ mod test {
 
         assert_parse_error!(
             parser.parse_rule(),
-            r#"a(?X, !V) :- b23__#?\(?X, ?Y) ."#,
+            r"a(?X, !V) :- b23__#?\(?X, ?Y) .",
             ParseError::ExpectedRule,
         );
     }

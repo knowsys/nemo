@@ -72,7 +72,7 @@ pub fn string_literal_long_single_quote(input: Span) -> IntermediateResult<Span>
     delimited(
         token("'''"),
         cut(recognize(many0(alt((
-            recognize(none_of(r#"'\"#)),
+            recognize(none_of(r"'\")),
             echar,
             uchar,
         ))))),
@@ -101,14 +101,14 @@ pub fn hex(input: Span) -> IntermediateResult<Span> {
 #[traced("parser::turtle")]
 pub fn uchar(input: Span) -> IntermediateResult<Span> {
     recognize(alt((
-        preceded(token(r#"\u"#), count(hex, 4)),
-        preceded(token(r#"\U"#), count(hex, 8)),
+        preceded(token(r"\u"), count(hex, 4)),
+        preceded(token(r"\U"), count(hex, 8)),
     )))(input)
 }
 
 #[traced("parser::turtle")]
 pub fn echar(input: Span) -> IntermediateResult<Span> {
-    recognize(preceded(token(r#"\"#), one_of(r#"tbnrf"'\"#)))(input)
+    recognize(preceded(token(r"\"), one_of(r#"tbnrf"'\"#)))(input)
 }
 
 #[traced("parser::turtle")]

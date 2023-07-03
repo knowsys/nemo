@@ -34,7 +34,7 @@ where
         match self.schema[layer] {
             DataTypeName::String => {
                 let StorageValueT::U64(constant) = value else {
-                    unreachable!("strings are always encoded as U64 constants") 
+                    unreachable!("strings are always encoded as U64 constants")
                 };
                 DataValueT::String(
                     usize::try_from(constant)

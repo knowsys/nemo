@@ -61,7 +61,7 @@ fn print_finished_message(new_facts: usize, saving: bool) {
         0
     };
 
-    let max_string_len = vec![loading_preprocessing, reading_time, writing_time]
+    let max_string_len = [loading_preprocessing, reading_time, writing_time]
         .iter()
         .map(|t| t.to_string().len())
         .max()
@@ -145,7 +145,9 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         for predicate in engine.program().output_predicates() {
             let mut writer = output_manager.create_file_writer(&predicate)?;
 
-            let Some(record_iter) = engine.output_serialization(predicate)? else { continue; };
+            let Some(record_iter) = engine.output_serialization(predicate)? else {
+                continue;
+            };
             for record in record_iter {
                 writer.write_record(record)?;
             }

@@ -63,7 +63,9 @@ impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
             .ground_term_to_data_value_t(parsed_term)
             .expect("LogicalTypeEnum::Any should work with every possible term we can get here.");
 
-        let DataValueT::String(parsed_string) = parsed_datavalue else { unreachable!("LogicalTypeEnum::Any should always be treated as String at the moment.") };
+        let DataValueT::String(parsed_string) = parsed_datavalue else {
+            unreachable!("LogicalTypeEnum::Any should always be treated as String at the moment.")
+        };
 
         self.physical.add(parsed_string)
     }

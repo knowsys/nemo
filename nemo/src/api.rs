@@ -81,7 +81,9 @@ pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> 
 
     for predicate in predicates {
         let mut writer = file_manager.create_file_writer(&predicate)?;
-        let Some(record_iter) = engine.output_serialization(predicate)? else { continue; };
+        let Some(record_iter) = engine.output_serialization(predicate)? else {
+            continue;
+        };
         for record in record_iter {
             writer.write_record(record)?;
         }

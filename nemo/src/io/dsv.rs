@@ -351,10 +351,18 @@ The next 2 columns are empty;;;789
 
         let cols: Vec<VecT> = builder.into_iter().map(|bp| bp.finalize()).collect();
 
-        let VecT::U64(ref col0_idx) = cols[0] else { unreachable!() };
-        let VecT::U64(ref col1_idx) = cols[1] else { unreachable!() };
-        let VecT::U64(ref col2_idx) = cols[2] else { unreachable!() };
-        let VecT::I64(ref col3) = cols[3] else { unreachable!() };
+        let VecT::U64(ref col0_idx) = cols[0] else {
+            unreachable!()
+        };
+        let VecT::U64(ref col1_idx) = cols[1] else {
+            unreachable!()
+        };
+        let VecT::U64(ref col2_idx) = cols[2] else {
+            unreachable!()
+        };
+        let VecT::I64(ref col3) = cols[3] else {
+            unreachable!()
+        };
 
         let col0: Vec<String> = col0_idx
             .iter()
