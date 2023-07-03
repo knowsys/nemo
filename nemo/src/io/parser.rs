@@ -871,7 +871,7 @@ impl<'a> RuleParser<'a> {
                         Self::fold_arithmetic_expressions(first, expressions),
                     ))
                 },
-                || todo!(),
+                || ParseError::ExpectedArithmeticExpression,
             ),
         )
     }
@@ -903,7 +903,7 @@ impl<'a> RuleParser<'a> {
 
                     Ok((remainder, Self::fold_arithmetic_expressions(first, factors)))
                 },
-                || todo!(),
+                || ParseError::ExpectedArithmeticProduct,
             ),
         )
     }
@@ -919,7 +919,7 @@ impl<'a> RuleParser<'a> {
                     map(self.parse_term(), TermTree::leaf),
                     self.parse_arithmetic_parens(),
                 )),
-                || todo!(),
+                || ParseError::ExpectedArithmeticFactor,
             ),
         )
     }
@@ -936,7 +936,7 @@ impl<'a> RuleParser<'a> {
                     self.parse_arithmetic_expression(),
                     delimited(multispace_or_comment0, token(")"), multispace_or_comment0),
                 ),
-                || todo!(),
+                || ParseError::ExpectedArithmeticParens,
             ),
         )
     }
@@ -1500,6 +1500,26 @@ mod test {
             vec![twenty_three.clone(), fourty_two.clone()],
         );
 
+        assert_parse_error!(
+            parser.parse_arithmetic_factor(),
+            "",
+            ParseError::ExpectedArithmeticFactor
+        );
+        assert_parse_error!(
+            parser.parse_arithmetic_parens(),
+            "",
+            ParseError::ExpectedArithmeticParens
+        );
+        assert_parse_error!(
+            parser.parse_arithmetic_product(),
+            "",
+            ParseError::ExpectedArithmeticProduct
+        );
+        assert_parse_error!(
+            parser.parse_arithmetic_expression(),
+            "",
+            ParseError::ExpectedArithmeticExpression
+        );
         assert_parse!(parser.parse_arithmetic_factor(), "23", twenty_three);
         assert_parse!(parser.parse_arithmetic_expression(), "23", twenty_three);
         assert_parse!(
