@@ -303,7 +303,7 @@ mod test {
     }
     #[test]
     fn sort_multiple_from_one_interval() {
-        let vec = vec![10, 5, 1, 9, 2, 3, 5, 4, 7, 8, 6, 0];
+        let vec = [10, 5, 1, 9, 2, 3, 5, 4, 7, 8, 6, 0];
         let vec2 = vec![0usize, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 2];
 
         let permutator = Permutator::sort_from_vec_with_offset(&vec[3..5], 3);
