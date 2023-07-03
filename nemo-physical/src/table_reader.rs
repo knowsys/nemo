@@ -3,7 +3,13 @@
 
 use crate::{builder_proxy::PhysicalBuilderProxyEnum, error::ReadingError};
 
-/// A general interface for reading tables from files.
+/// Resource that can be reference in source declarations in Nemo programs
+/// Resources are resolved using `nemo::io::input_manager::ResourceProviders`
+///
+/// Resources currently can be either an IRI or a (possibly relative) file path.
+pub type Resource = String;
+
+/// A general interface for reading tables from resources.
 ///
 /// This is called from the physical layer to ask a reader to fill the
 /// Vector of [builder proxies][PhysicalBuilderProxyEnum].

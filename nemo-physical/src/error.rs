@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::datatypes::FloatIsNaN;
+use crate::{datatypes::FloatIsNaN, table_reader::Resource};
 
 /// Error-Collection for errors related to reading input tables.
 /// Used in the [`TableReader`][crate::table_reader::TableReader] and
@@ -36,6 +36,12 @@ pub enum ReadingError {
     // TODO: there is currently also an IO Error in nmo_logical. Do we want both?
     #[error(transparent)]
     IO(#[from] std::io::Error),
+    /// Error when a resource could not be provided by any resource provider
+    #[error("Resource at \"{resource}\" was not provided by any resource provider")]
+    ResourceNotProvided {
+        /// Resource which was not provided
+        resource: Resource,
+    },
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate

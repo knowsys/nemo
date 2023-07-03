@@ -1,10 +1,22 @@
+use std::collections::HashMap;
+use std::io::Cursor;
+
 use js_sys::Array;
+use js_sys::Reflect;
 use js_sys::Set;
+use js_sys::Uint8Array;
 use nemo::execution::ExecutionEngine;
+
+use nemo::io::input_manager::ResourceProvider;
+use nemo::io::input_manager::ResourceProviders;
 use nemo::io::parser::parse_program;
 use nemo_physical::datatypes::DataValueT;
+use nemo_physical::table_reader::Resource;
 use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
+use web_sys::Blob;
+use web_sys::FileReaderSync;
 
 #[wasm_bindgen]
 #[derive(Clone)]
@@ -29,6 +41,17 @@ impl NemoProgram {
         parse_program(input).map(NemoProgram).map_err(NemoError)
     }
 
+    #[wasm_bindgen(js_name = "getSourceResources")]
+    pub fn source_resources(&self) -> Set {
+        let set = Set::new(&JsValue::undefined());
+
+        for resource in self.0.source_resources().iter() {
+            set.add(&JsValue::from(resource));
+        }
+
+        set
+    }
+
     #[wasm_bindgen(js_name = "getOutputPredicates")]
     pub fn output_predicates(&self) -> Array {
         self.0
@@ -49,16 +72,74 @@ impl NemoProgram {
     }
 }
 
+#[derive(Debug)]
+pub struct BlobResourceProvider {
+    blobs: HashMap<String, Blob>,
+    file_reader_sync: FileReaderSync,
+}
+
+impl BlobResourceProvider {
+    pub fn new(blobs: HashMap<String, Blob>) -> Result<Self, JsValue> {
+        Ok(Self {
+            blobs,
+            file_reader_sync: FileReaderSync::new()?,
+        })
+    }
+}
+
+impl ResourceProvider for BlobResourceProvider {
+    fn open_resource(
+        &self,
+        resource: &Resource,
+    ) -> Result<Option<Box<dyn std::io::Read>>, nemo_physical::error::ReadingError> {
+        if let Some(blob) = self.blobs.get(resource) {
+            // TODO: Improve error handling
+            let array_buffer: js_sys::ArrayBuffer =
+                self.file_reader_sync.read_as_array_buffer(blob).unwrap();
+
+            let data = Uint8Array::new(&array_buffer).to_vec();
+
+            let cursor = Cursor::new(data);
+
+            Ok(Some(Box::new(cursor)))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 #[wasm_bindgen]
 pub struct NemoEngine(nemo::execution::DefaultExecutionEngine);
 
 #[wasm_bindgen]
 impl NemoEngine {
     #[wasm_bindgen(constructor)]
-    pub fn new(program: &NemoProgram) -> Result<NemoEngine, NemoError> {
-        ExecutionEngine::initialize(program.clone().0)
-            .map(NemoEngine)
-            .map_err(NemoError)
+    pub fn new(
+        program: &NemoProgram,
+        resource_blobs_js_value: JsValue,
+    ) -> Result<NemoEngine, NemoError> {
+        // Parse JavaScript object into `HashMap`
+        let mut resource_blobs = HashMap::new();
+        // TODO: Improve error handling
+        for key in Reflect::own_keys(&resource_blobs_js_value).unwrap() {
+            if let Some(resource) = key.as_string() {
+                // TODO: Improve error handling
+                let value = Reflect::get(&resource_blobs_js_value, &key).unwrap();
+                let blob: Blob = JsCast::dyn_into(value).unwrap();
+
+                resource_blobs.insert(resource, blob);
+            }
+        }
+
+        // TODO: Improve error handling
+        let provider = BlobResourceProvider::new(resource_blobs).unwrap();
+
+        ExecutionEngine::initialize(
+            program.clone().0,
+            ResourceProviders::from(vec![Box::new(provider)]),
+        )
+        .map(NemoEngine)
+        .map_err(NemoError)
     }
 
     #[wasm_bindgen]
@@ -123,4 +204,9 @@ impl NemoResults {
             }
         }
     }
+}
+
+#[wasm_bindgen]
+pub fn set_panic_hook() {
+    console_error_panic_hook::set_once();
 }

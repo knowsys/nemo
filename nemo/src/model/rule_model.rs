@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use nemo_physical::{datatypes::Double, util::TaggedTree};
+use nemo_physical::{datatypes::Double, table_reader::Resource, util::TaggedTree};
 use sanitise_file_name::{sanitise_with_options, Options};
 
 use crate::io::parser::ParseError;
@@ -724,6 +724,22 @@ impl Program {
         }
     }
 
+    /// Gets set of all resources used in source declarations of the program
+    pub fn source_resources(&self) -> HashSet<Resource> {
+        self.sources
+            .iter()
+            .filter_map(|source: &DataSourceDeclaration| match &source.source {
+                DataSource::DsvFile {
+                    resource,
+                    delimiter: _,
+                } => Some(resource),
+                DataSource::RdfFile(resource) => Some(resource),
+                DataSource::SparqlQuery(_) => None,
+            })
+            .cloned()
+            .collect()
+    }
+
     /// Get the base IRI, if set.
     #[must_use]
     pub fn base(&self) -> Option<String> {
@@ -900,12 +916,12 @@ pub enum DataSource {
     /// A DSV (delimiter-separated values) file data source with the given path and delimiter.
     DsvFile {
         /// the DSV file
-        file: Box<PathBuf>,
+        resource: Resource,
         /// the delimiter separating the values
         delimiter: u8,
     },
     /// An RDF file data source with the given path.
-    RdfFile(Box<PathBuf>),
+    RdfFile(Resource),
     /// A SPARQL query data source.
     SparqlQuery(Box<SparqlQuery>),
 }
@@ -914,7 +930,7 @@ impl DataSource {
     /// Construct a new CSV file data source from a given path.
     pub fn csv_file(path: &str) -> Result<Self, ParseError> {
         Ok(Self::DsvFile {
-            file: Box::new(PathBuf::from(path)),
+            resource: String::from(path),
             delimiter: b',',
         })
     }
@@ -922,14 +938,14 @@ impl DataSource {
     /// Construct a new TSV file data source from a given path.
     pub fn tsv_file(path: &str) -> Result<Self, ParseError> {
         Ok(Self::DsvFile {
-            file: Box::new(PathBuf::from(path)),
+            resource: String::from(path),
             delimiter: b'\t',
         })
     }
 
     /// Construct a new RDF file data source from a given path.
     pub fn rdf_file(path: &str) -> Result<Self, ParseError> {
-        Ok(Self::RdfFile(Box::new(PathBuf::from(path))))
+        Ok(Self::RdfFile(String::from(path)))
     }
 
     /// Construct a new SPARQL query data source from a given query.
@@ -951,14 +967,17 @@ impl Debug for DataSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::DsvFile {
-                file,
+                resource: file,
                 delimiter: b',',
             } => f.debug_tuple("CSV file").field(file).finish(),
             Self::DsvFile {
-                file,
+                resource: file,
                 delimiter: b'\t',
             } => f.debug_tuple("TSV file").field(file).finish(),
-            Self::DsvFile { file, delimiter } => {
+            Self::DsvFile {
+                resource: file,
+                delimiter,
+            } => {
                 let description = format!("DSV file with delimiter {delimiter:?}");
                 f.debug_tuple(&description).field(file).finish()
             }
@@ -1002,16 +1021,14 @@ impl DataSourceDeclaration {
 
         match source {
             DataSource::DsvFile {
-                file: _,
+                resource: _,
                 delimiter: _,
             } => (), // no validation for CSV files
             DataSource::RdfFile(ref path) => {
                 if arity != 3 {
                     return Err(ParseError::RdfSourceInvalidArity(
                         predicate.name(),
-                        path.to_str()
-                            .unwrap_or("<path is invalid unicode>")
-                            .to_owned(),
+                        path.clone(),
                         arity,
                     ));
                 }

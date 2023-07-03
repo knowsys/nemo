@@ -3,7 +3,7 @@ use std::{collections::HashSet, fs::read_to_string};
 use nemo::{
     datatypes::{DataValueT, Double, Float},
     execution::ExecutionEngine,
-    io::{OutputFileManager, RecordWriter},
+    io::{input_manager::ResourceProviders, OutputFileManager, RecordWriter},
 };
 
 use pyo3::{create_exception, prelude::*};
@@ -104,7 +104,8 @@ struct NemoEngine(nemo::execution::DefaultExecutionEngine);
 impl NemoEngine {
     #[new]
     fn py_new(program: NemoProgram) -> PyResult<Self> {
-        let engine = ExecutionEngine::initialize(program.0).py_res()?;
+        let engine =
+            ExecutionEngine::initialize(program.0, ResourceProviders::from(vec![])).py_res()?;
         Ok(NemoEngine(engine))
     }
 
