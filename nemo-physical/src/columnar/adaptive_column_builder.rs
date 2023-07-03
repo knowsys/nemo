@@ -84,14 +84,18 @@ where
     }
 
     fn expand_sparse_rle_columns(&mut self) {
-        let ColumnBuilderType::ColumnRle(rle_builder) = &self.builder else { return; };
+        let ColumnBuilderType::ColumnRle(rle_builder) = &self.builder else {
+            return;
+        };
         let avg_len = rle_builder.avg_length_of_rle_elements();
 
         if self.target_min_length_for_rle_elements.0 > avg_len {
             let new_builder =
                 ColumnBuilderType::ColumnVector(Vec::with_capacity(rle_builder.count()));
-            let ColumnBuilderType::ColumnRle(rle_builder) = std::mem::replace(&mut self.builder, new_builder) else {
-                unreachable!("ColumnBuilderType checked in let-else expression above"); 
+            let ColumnBuilderType::ColumnRle(rle_builder) =
+                std::mem::replace(&mut self.builder, new_builder)
+            else {
+                unreachable!("ColumnBuilderType checked in let-else expression above");
             };
 
             let rle_column = rle_builder.finalize();

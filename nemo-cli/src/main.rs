@@ -145,7 +145,9 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         for predicate in engine.program().output_predicates() {
             let mut writer = output_manager.create_file_writer(&predicate)?;
 
-            let Some(record_iter) = engine.output_serialization(predicate)? else { continue; };
+            let Some(record_iter) = engine.output_serialization(predicate)? else {
+                continue;
+            };
             for record in record_iter {
                 writer.write_record(record)?;
             }

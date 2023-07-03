@@ -233,7 +233,9 @@ impl<'a> TrieScanAppend<'a> {
 
         fn valid(instr: &[AppendInstruction], pos: usize) -> bool {
             instr.iter().all(|a| {
-                let AppendInstruction::RepeatColumn(e) = a else { return true };
+                let AppendInstruction::RepeatColumn(e) = a else {
+                    return true;
+                };
                 *e <= pos
             })
         }
@@ -480,12 +482,16 @@ mod test {
 
         trie_append_scan.down();
         let column_scan = trie_append_scan.current_scan().unwrap();
-        let ColumnScanT::U64(_) = column_scan else { panic!("wrong column type"); };
+        let ColumnScanT::U64(_) = column_scan else {
+            panic!("wrong column type");
+        };
         column_scan.next().unwrap();
 
         trie_append_scan.down();
         let column_scan = trie_append_scan.current_scan().unwrap();
-        let ColumnScanT::I64(_) = column_scan else { panic!("wrong column type"); };
+        let ColumnScanT::I64(_) = column_scan else {
+            panic!("wrong column type");
+        };
     }
 
     #[test]
