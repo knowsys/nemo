@@ -1695,6 +1695,7 @@ dependencies = [
  "quickcheck",
  "quickcheck_macros",
  "rand",
+ "rio_turtle",
  "test-log",
  "thiserror",
 ]

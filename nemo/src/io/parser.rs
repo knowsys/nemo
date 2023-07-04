@@ -18,7 +18,6 @@ use macros::traced;
 mod types;
 use types::{IntermediateResult, Span};
 pub(crate) mod iri;
-pub(crate) mod ntriples;
 pub(crate) mod rfc5234;
 pub(crate) mod sparql;
 pub(crate) mod turtle;

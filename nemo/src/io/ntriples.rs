@@ -6,8 +6,10 @@ use nemo_physical::{
     error::ReadingError,
     table_reader::{Resource, TableReader},
 };
+use rio_api::parser::TriplesParser;
+use rio_turtle::NTriplesParser;
 
-use crate::{io::parser::ntriples::triple_or_comment, types::LogicalTypeEnum};
+use crate::types::LogicalTypeEnum;
 
 use super::input_manager::ResourceProviders;
 
@@ -42,25 +44,15 @@ impl NTriplesReader {
 
         assert!(builders.len() == 3);
 
-        for (row, line) in reader.lines().enumerate() {
-            let line = line.map_err(ReadingError::from)?;
-            // split line
-            match triple_or_comment(line.as_str()) {
-                Ok(None) => (), // line was a comment, ignore
-                Ok(Some((subject, predicate, object))) => {
-                    builders[0]
-                        .add(subject.to_string())
-                        .expect("we have verified that this is a valid IRI or bnode");
-                    builders[1]
-                        .add(predicate.to_string())
-                        .expect("we have verified that this is a valid IRI");
-                    builders[2]
-                        .add(object.to_string())
-                        .expect("we have verified that this is a valid IRI, bnode, or RDF literal");
-                }
-                Err(e) => {
-                    log::info!("Ignoring line {row:?}, parsing failed with: {e}");
-                }
+        let mut parser = NTriplesParser::new(reader);
+
+        while !parser.is_end() {
+            if let Err(e) = parser.parse_step(&mut |triple| {
+                builders[0].add(triple.subject.to_string())?;
+                builders[1].add(triple.predicate.to_string())?;
+                builders[2].add(triple.object.to_string())
+            }) {
+                log::info!("Ignoring malformed triple: {e}");
             }
         }
 

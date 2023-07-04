@@ -45,6 +45,9 @@ pub enum ReadingError {
     /// A provided resource is not a valid local file:// URI
     #[error(r#"Resource "{0}" is not a valid local file:// URI"#)]
     InvalidFileUri(Resource),
+    /// Error in Rio's Turtle parser
+    #[error(transparent)]
+    RioTurtle(#[from] rio_turtle::TurtleError),
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate
