@@ -84,7 +84,7 @@ pub(super) fn generate_node_arithmetic(
         new_variable_order.push_position(variable.clone(), first_unused_index);
         constructor_instructions.push(AppendInstruction::Operation(termtree_to_operationtree(
             &tree.0,
-            &variable_order,
+            variable_order,
             types
                 .get(variable)
                 .expect("Every variable must be assigned to a type"),

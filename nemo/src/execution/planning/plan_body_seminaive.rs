@@ -94,7 +94,7 @@ impl BodyStrategy for SeminaiveStrategy {
             table_manager,
             rule_info.step_last_applied,
             step_number,
-            &variable_order,
+            variable_order,
         );
 
         if let Some(generator) = &self.negation_generator {
@@ -102,7 +102,7 @@ impl BodyStrategy for SeminaiveStrategy {
                 current_plan,
                 table_manager,
                 node_seminaive,
-                &variable_order,
+                variable_order,
                 step_number,
             )
         }

@@ -315,8 +315,7 @@ impl Atom {
     pub fn variables(&self) -> impl Iterator<Item = &Variable> + '_ {
         self.terms
             .iter()
-            .map(|t| t.terms())
-            .flatten()
+            .flat_map(|t| t.terms())
             .filter_map(|term| match term {
                 Term::Variable(var) => Some(var),
                 _ => None,

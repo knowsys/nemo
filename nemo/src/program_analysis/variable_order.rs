@@ -28,7 +28,7 @@ impl VariableOrder {
 
     /// Insert a new variable at a certain position.
     pub fn push_position(&mut self, variable: Variable, position: usize) {
-        for (_, current_position) in &mut self.0 {
+        for current_position in &mut self.0.values_mut() {
             if *current_position >= position {
                 *current_position += 1;
             }

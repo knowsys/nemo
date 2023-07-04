@@ -1518,7 +1518,7 @@ mod test {
         let fourty_two = TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)));
         let twenty_three_times_fourty_two = TermTree::tree(
             TermOperation::Multiplication,
-            vec![twenty_three.clone(), fourty_two.clone()],
+            vec![twenty_three.clone(), fourty_two],
         );
 
         assert_parse_error!(
@@ -1564,12 +1564,33 @@ mod test {
                         vec![
                             TermTree::tree(
                                 TermOperation::Addition,
-                                vec![twenty_three.clone(), twenty_three_times_fourty_two.clone()]
+                                vec![
+                                    TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(
+                                        23
+                                    ))),
+                                    TermTree::tree(
+                                        TermOperation::Multiplication,
+                                        vec![
+                                            TermTree::leaf(Term::NumericLiteral(
+                                                NumericLiteral::Integer(23)
+                                            )),
+                                            TermTree::leaf(Term::NumericLiteral(
+                                                NumericLiteral::Integer(42)
+                                            ))
+                                        ],
+                                    )
+                                ]
                             ),
-                            fourty_two.clone()
+                            TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)))
                         ]
                     ),
-                    twenty_three_times_fourty_two.clone()
+                    TermTree::tree(
+                        TermOperation::Multiplication,
+                        vec![
+                            TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(23))),
+                            TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)))
+                        ],
+                    )
                 ]
             )
         );

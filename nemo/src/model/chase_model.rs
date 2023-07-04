@@ -38,7 +38,7 @@ impl ChaseAtom {
     pub fn from_flat_atom(atom: Atom) -> Result<Self, RuleTranslationError> {
         let terms: Vec<Term> = atom
             .terms()
-            .into_iter()
+            .iter()
             .map(|t| {
                 if let TermOperation::Term(term) = t.operation() {
                     Ok(term.clone())
