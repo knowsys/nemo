@@ -86,7 +86,7 @@ impl std::fmt::Display for StorageValueT {
 }
 
 /// Enum for vectors of different supported input types
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum VecT {
     /// Case `Vec<u32>`
     U32(Vec<u32>),
@@ -205,4 +205,19 @@ impl VecT {
                 .and_then(|&val_a| vec.get(idx_b).map(|val_b| val_a.cmp(val_b))),
         }
     }
+}
+
+/// Iterator over one kind of possible storage values
+#[allow(missing_debug_implementations)]
+pub enum StorageValueIteratorT<'a> {
+    /// U32 Variant
+    U32(Box<dyn Iterator<Item = u32> + 'a>),
+    /// U64 Variant
+    U64(Box<dyn Iterator<Item = u64> + 'a>),
+    /// I64 Variant
+    I64(Box<dyn Iterator<Item = i64> + 'a>),
+    /// Float Variant
+    Float(Box<dyn Iterator<Item = Float> + 'a>),
+    /// Double Variant
+    Double(Box<dyn Iterator<Item = Double> + 'a>),
 }

@@ -5,15 +5,21 @@ use std::fmt::{Debug, Display};
 use bytesize::ByteSize;
 
 use crate::builder_proxy::{PhysicalBuilderProxyEnum, PhysicalStringColumnBuilderProxy};
-use crate::datatypes::storage_value::VecT;
+use crate::datatypes::data_value::DataValueIteratorT;
+use crate::datatypes::storage_value::{StorageValueIteratorT, VecT};
 use crate::datatypes::{DataTypeName, DataValueT, StorageValueT};
+use crate::dictionary::value_serializer::{
+    serialize_constant_with_dict, TrieSerializer, ValueSerializer,
+};
 use crate::table_reader::TableReader;
 use crate::tabular::operations::materialize::materialize_up_to;
 use crate::tabular::operations::project_reorder::project_and_reorder;
 use crate::tabular::operations::triescan_minus::TrieScanSubtract;
 use crate::tabular::operations::triescan_project::ProjectReordering;
 use crate::tabular::operations::TrieScanPrune;
+use crate::tabular::table_types::trie::TrieRecords;
 use crate::tabular::traits::table::Table;
+use crate::tabular::traits::trie_scan::TrieScan;
 use crate::util::mapping::permutation::Permutation;
 use crate::util::mapping::traits::NatMapping;
 use crate::{
@@ -871,6 +877,102 @@ impl DatabaseInstance {
             .table_storage_mut(id, order)
             .expect("Function assumes that there is a table with the given id and order.")
             .into_memory(&mut self.dict_constants)
+    }
+
+    /// Returns an iterator that provides serialized fields for each row in the specified table.
+    /// Uses the default [`ColumnOrder`]
+    /// Panics if there is no trie associated with the given id.
+    pub fn table_serializer(&mut self, id: TableId) -> Result<impl TrieSerializer + '_, Error> {
+        let _ = self.get_trie_or_load(id, &ColumnOrder::default())?;
+        let schema = self.table_schema(id);
+        let dict = self.get_dict_constants();
+
+        Ok(self
+            .get_trie(id, &ColumnOrder::default())
+            .records(ValueSerializer { schema, dict }))
+    }
+
+    /// Returns an iterator over the specified table.
+    /// Uses the default [`ColumnOrder`]
+    pub fn table_values(
+        &mut self,
+        id: TableId,
+    ) -> Result<impl Iterator<Item = Vec<DataValueT>> + '_, Error> {
+        struct OwnedRecords<'a, S>(
+            TrieRecords<S, ValueSerializer<Ref<'a, Dict>, &'a TableSchema>, DataValueT>,
+        );
+
+        impl<'a, S: TrieScan> Iterator for OwnedRecords<'a, S> {
+            type Item = Vec<DataValueT>;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                let rec = self.0.next_record()?;
+                Some(rec.cloned().collect())
+            }
+        }
+
+        let _ = self.get_trie_or_load(id, &ColumnOrder::default())?;
+        let schema = self.table_schema(id);
+        let dict = self.get_dict_constants();
+
+        Ok(OwnedRecords(
+            self.get_trie(id, &ColumnOrder::default())
+                .records(ValueSerializer { schema, dict }),
+        ))
+    }
+
+    fn get_in_memory_table_column_iterators(&self, id: TableId) -> Vec<DataValueIteratorT> {
+        let trie = self.get_trie(id, &ColumnOrder::default());
+        let schema = self.table_schema(id);
+        let dict = self.get_dict_constants();
+
+        macro_rules! to_data_column_iter_no_string {
+            ($variant:ident, $iter:ident, $idx:ident) => {{
+                debug_assert!(schema[$idx] == DataTypeName::$variant);
+
+                DataValueIteratorT::$variant($iter)
+            }};
+        }
+        macro_rules! to_data_column_iter {
+            ($variant:ident, $iter:ident, $idx:ident) => {
+                if schema[$idx] == DataTypeName::String {
+                    // should only clone the ref and not the dict (hopefully)
+                    let dict_ref_clone = Ref::clone(&dict);
+                    DataValueIteratorT::String(Box::new($iter.map(move |constant| {
+                        serialize_constant_with_dict(constant, Ref::clone(&dict_ref_clone))
+                    })))
+                } else {
+                    to_data_column_iter_no_string!($variant, $iter, $idx)
+                }
+            };
+        }
+
+        trie.get_full_column_iterators()
+            .into_iter()
+            .enumerate()
+            .map(|(idx, fci)| match fci {
+                StorageValueIteratorT::U32(iter) => to_data_column_iter!(U32, iter, idx),
+                StorageValueIteratorT::U64(iter) => to_data_column_iter!(U64, iter, idx),
+                StorageValueIteratorT::I64(iter) => to_data_column_iter!(I64, iter, idx),
+                StorageValueIteratorT::Float(iter) => {
+                    to_data_column_iter_no_string!(Float, iter, idx)
+                }
+                StorageValueIteratorT::Double(iter) => {
+                    to_data_column_iter_no_string!(Double, iter, idx)
+                }
+            })
+            .collect()
+    }
+
+    /// Get a list of column iterators for the full table (i.e. the expanded trie)
+    pub fn get_table_column_iterators(
+        &mut self,
+        id: TableId,
+    ) -> Result<Vec<DataValueIteratorT>, ReadingError> {
+        // make sure trie is loaded
+        self.get_trie_or_load(id, &ColumnOrder::default())?;
+
+        Ok(self.get_in_memory_table_column_iterators(id))
     }
 
     /// Given a node in the execution tree returns the trie iterator
