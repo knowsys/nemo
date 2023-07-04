@@ -305,7 +305,7 @@ pub(super) fn cut_last_layers(
     used_variables: &HashSet<Variable>,
 ) -> (usize, usize) {
     if variable_order.is_empty() || used_variables.is_empty() {
-        return (variable_order.len(), 0);
+        return (0, variable_order.len() - 1);
     }
 
     let mut last_index = 0;

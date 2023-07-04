@@ -28,13 +28,14 @@ impl VariableOrder {
 
     /// Insert a new variable at a certain position.
     pub fn push_position(&mut self, variable: Variable, position: usize) {
-        if self.0.insert(variable, position).is_none() {
-            for (_, current_position) in &mut self.0 {
-                if *current_position >= position {
-                    *current_position += 1;
-                }
+        for (_, current_position) in &mut self.0 {
+            if *current_position >= position {
+                *current_position += 1;
             }
         }
+
+        let insert_result = self.0.insert(variable, position);
+        debug_assert!(insert_result.is_none());
     }
 
     /// Get position of a variable.

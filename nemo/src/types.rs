@@ -253,4 +253,9 @@ pub enum TypeError {
     /// Comparison of a non-numeric type
     #[error("Invalid type declarations. Comparison operator can only be used with numeric types.")]
     InvalidRuleNonNumericComparison,
+    /// Arithmetic operations with of a non-numeric type
+    #[error(
+        "Invalid type declarations. Arithmetic operations can only be used with numeric types."
+    )]
+    InvalidRuleNonNumericArithmetic,
 }

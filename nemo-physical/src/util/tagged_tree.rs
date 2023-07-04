@@ -73,11 +73,15 @@ where
     Tag: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_leaf() {
+            return write!(f, "{:?}", self.tag);
+        }
+
         write!(f, "{:?}(", self.tag)?;
 
         for (index, subtree) in self.subtrees.iter().enumerate() {
             write!(f, "{subtree:?}")?;
-            if index > 0 {
+            if index < self.subtrees.len() - 1 {
                 write!(f, ", ")?;
             }
         }
@@ -92,11 +96,15 @@ where
     Tag: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_leaf() {
+            return write!(f, "{}", self.tag);
+        }
+
         write!(f, "{}(", self.tag)?;
 
         for (index, subtree) in self.subtrees.iter().enumerate() {
             write!(f, "{subtree}")?;
-            if index > 0 {
+            if index < self.subtrees.len() - 1 {
                 write!(f, ", ")?;
             }
         }

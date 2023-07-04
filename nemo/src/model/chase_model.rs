@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::types::LogicalTypeEnum;
+use crate::{error::Error, types::LogicalTypeEnum};
 
 use super::{
     rule_model::{
@@ -12,10 +12,21 @@ use super::{
     ArityOrTypes, Program, Rule, Term, TermOperation, TermTree, Variable,
 };
 
+use thiserror::Error;
+
 #[derive(Debug, Clone)]
 pub struct ChaseAtom {
     predicate: Identifier,
     terms: Vec<Term>,
+}
+
+/// Errors than can occur during rule translation
+#[derive(Error, Debug, Copy, Clone)]
+#[allow(clippy::enum_variant_names)]
+pub enum RuleTranslationError {
+    /// Arithmetic operation in body
+    #[error("Arithmetic operations are currently not allowed in the body of a rule.")]
+    UnsupportedFeatureBodyArithmetic,
 }
 
 impl ChaseAtom {
@@ -24,23 +35,23 @@ impl ChaseAtom {
         Self { predicate, terms }
     }
 
-    pub fn from_flat_atom(atom: Atom) -> Self {
+    pub fn from_flat_atom(atom: Atom) -> Result<Self, RuleTranslationError> {
         let terms: Vec<Term> = atom
             .terms()
             .into_iter()
             .map(|t| {
                 if let TermOperation::Term(term) = t.operation() {
-                    term.clone()
+                    Ok(term.clone())
                 } else {
-                    panic!("Expected term trees that are only leaves");
+                    Err(RuleTranslationError::UnsupportedFeatureBodyArithmetic)
                 }
             })
-            .collect();
+            .collect::<Result<Vec<Term>, RuleTranslationError>>()?;
 
-        Self {
+        Ok(Self {
             predicate: atom.predicate(),
             terms,
-        }
+        })
     }
 
     /// Return the predicate [`Identifier`].
@@ -204,15 +215,17 @@ impl ChaseRule {
     }
 }
 
-impl From<Rule> for ChaseRule {
-    fn from(rule: Rule) -> ChaseRule {
+impl TryFrom<Rule> for ChaseRule {
+    type Error = Error;
+
+    fn try_from(rule: Rule) -> Result<ChaseRule, Error> {
         let mut positive_body = Vec::new();
         let mut negative_body = Vec::new();
 
         for literal in rule.body().iter().cloned() {
             match literal {
-                Literal::Positive(atom) => positive_body.push(ChaseAtom::from_flat_atom(atom)),
-                Literal::Negative(atom) => negative_body.push(ChaseAtom::from_flat_atom(atom)),
+                Literal::Positive(atom) => positive_body.push(ChaseAtom::from_flat_atom(atom)?),
+                Literal::Negative(atom) => negative_body.push(ChaseAtom::from_flat_atom(atom)?),
             }
         }
 
@@ -240,14 +253,14 @@ impl From<Rule> for ChaseRule {
             head_atoms.push(ChaseAtom::new(atom.predicate(), new_terms));
         }
 
-        Self {
+        Ok(Self {
             head: head_atoms,
             constructors,
             positive_body,
             negative_body,
             positive_filters: rule.filters().clone(),
             negative_filters: Vec::new(),
-        }
+        })
     }
 }
 
@@ -421,12 +434,14 @@ impl ChaseProgram {
     }
 }
 
-impl From<Program> for ChaseProgram {
-    fn from(value: Program) -> Self {
-        Self::new(
-            value.base(),
-            value.prefixes().clone(),
-            value
+impl TryFrom<Program> for ChaseProgram {
+    type Error = Error;
+
+    fn try_from(program: Program) -> Result<Self, Error> {
+        Ok(Self::new(
+            program.base(),
+            program.prefixes().clone(),
+            program
                 .sources()
                 .map(|(predicate, _arity, input_types, source)| {
                     DataSourceDeclaration::new(
@@ -436,18 +451,18 @@ impl From<Program> for ChaseProgram {
                     )
                 })
                 .collect(),
-            value
+            program
                 .rules()
                 .iter()
-                .map(|rule| rule.clone().into())
-                .collect(),
-            value.facts().to_vec(),
-            value.parsed_predicate_declarations(),
-            value
+                .map(|rule| rule.clone().try_into())
+                .collect::<Result<Vec<ChaseRule>, Error>>()?,
+            program.facts().to_vec(),
+            program.parsed_predicate_declarations(),
+            program
                 .output_predicates()
                 .map(QualifiedPredicateName::new)
                 .collect::<Vec<_>>()
                 .into(),
-        )
+        ))
     }
 }

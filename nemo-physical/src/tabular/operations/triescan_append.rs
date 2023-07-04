@@ -30,7 +30,6 @@ use crate::{
             table::Table,
         },
     },
-    util::mapping::permutation::Permutation,
 };
 use std::num::NonZeroUsize;
 
@@ -404,7 +403,6 @@ impl<'a> TrieScanAppend<'a> {
                     column_map.insert(*src_index, column_map.len());
                 }
 
-                let column_map = Permutation::from_map(column_map);
                 let translate_type = |t: DataValueT| {
                     if let StorageValueT::$variant(value) = t
                         .to_storage_value(dict)
@@ -422,7 +420,9 @@ impl<'a> TrieScanAppend<'a> {
                 let mut operation_tree = operation_tree.translate(translate_type);
 
                 for index in operation_tree.input_indices_mut() {
-                    *index = column_map.get(*index);
+                    *index = *column_map
+                        .get(index)
+                        .expect("The construction of this map insures that this value is present.");
                 }
 
                 let new_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanArithmetic(

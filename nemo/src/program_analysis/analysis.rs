@@ -69,12 +69,12 @@ pub struct RuleAnalysis {
 #[derive(Error, Debug, Copy, Clone)]
 #[allow(clippy::enum_variant_names)]
 pub enum RuleAnalysisError {
-    /// Unsupported feature: Negation
-    #[error("Negation is currently unsupported.")]
-    UnsupportedFeatureNegation,
     /// Unsupported feature: Overloading of predicate names by arity/type
     #[error("Overloading of predicate names by arity is currently not supported.")]
     UnsupportedFeaturePredicateOverloading,
+    /// Arithmetic operation in body
+    #[error("Arithmetic operations are currently not allowed in the body of a rule.")]
+    UnsupportedFeatureBodyArithmetic,
 }
 
 /// Return true if there is a predicate in the positive part of the rule that also appears in the head of the rule.
@@ -485,6 +485,28 @@ impl ChaseProgram {
                 }
             }
 
+            for (head_variable, tree) in rule.constructors() {
+                // Note that the head variable for constructors is unique so we can get the first entry of this vector
+                let head_position = &variables_to_head_positions
+                    .get(head_variable)
+                    .expect("The loop at the top went through all head atoms")[0];
+
+                for term in tree.terms() {
+                    if let Term::Variable(body_variable) = term {
+                        let body_position = variables_to_last_node
+                            .get(body_variable)
+                            .expect("The iteration above went through all body atoms")
+                            .clone();
+
+                        graph.add_edge(
+                            body_position,
+                            head_position.clone(),
+                            PositionGraphEdge::BodyToHead,
+                        );
+                    }
+                }
+            }
+
             for filter in rule.all_filters() {
                 let position_left = variables_to_last_node
                     .get(&filter.lhs)
@@ -723,6 +745,13 @@ impl ChaseProgram {
             }
         }
 
+        for fact in self.facts() {
+            let arity = fact.0.terms().len();
+            if arity != *arities.entry(fact.0.predicate()).or_insert(arity) {
+                return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
+            }
+        }
+
         Ok(())
     }
 
@@ -779,12 +808,21 @@ impl ChaseProgram {
                 );
 
                 for (term_index, term) in atom.terms().iter().enumerate() {
-                    if let Term::Variable(_) = term {
-                        continue;
-                    }
+                    if let Term::Variable(head_variable) = term {
+                        if rule.constructors().contains_key(head_variable) {
+                            let variable_type = analysis.variable_types.get(head_variable).expect(
+                                "Previous analysis should have assigned a type to each variable.",
+                            );
 
-                    let logical_type = predicate_types[term_index];
-                    logical_type.ground_term_to_data_value_t(term.clone())?;
+                            if !variable_type.allows_numeric_operations() {
+                                return Err(TypeError::InvalidRuleNonNumericArithmetic);
+                            }
+                        }
+                    } else {
+                        let logical_type = predicate_types[term_index];
+
+                        logical_type.ground_term_to_data_value_t(term.clone())?;
+                    }
                 }
             }
         }

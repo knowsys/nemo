@@ -198,6 +198,27 @@ fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
     )(input)
 }
 
+#[traced("parser")]
+fn parse_simple_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
+    map_error(
+        recognize(pair(
+            alpha1,
+            opt(preceded(
+                many0(tag(" ")),
+                separated_list1(
+                    many1(tag(" ")),
+                    many1(satisfy(|c| {
+                        ['0'..='9', 'a'..='z', 'A'..='Z', '_'..='_']
+                            .iter()
+                            .any(|range| range.contains(&c))
+                    })),
+                ),
+            )),
+        )),
+        || ParseError::ExpectedBareName,
+    )(input)
+}
+
 /// Parse an IRI representing a constant.
 fn parse_iri_constant<'a>(
     prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
@@ -692,15 +713,15 @@ impl<'a> RuleParser<'a> {
                     let (remainder, predicate) = self.parse_predicate_name()(input)?;
                     let (remainder, terms) = delimited(
                         self.parse_open_parenthesis(),
-                        cut(separated_list1(self.parse_comma(), self.parse_term())),
+                        cut(separated_list1(
+                            self.parse_comma(),
+                            self.parse_arithmetic_expression(),
+                        )),
                         cut(self.parse_close_parenthesis()),
                     )(remainder)?;
 
                     let predicate_name = predicate.name();
                     log::trace!(target: "parser", "found atom {predicate_name}({terms:?})");
-
-                    // TODO: Change this
-                    let terms = terms.into_iter().map(TermTree::leaf).collect();
 
                     Ok((remainder, Atom::new(predicate, terms)))
                 },
@@ -775,7 +796,7 @@ impl<'a> RuleParser<'a> {
             "parse_variable",
             map_error(
                 move |input| {
-                    let (remainder, name) = parse_bare_name(input)?;
+                    let (remainder, name) = parse_simple_name(input)?;
 
                     Ok((remainder, Identifier(name.to_string())))
                 },

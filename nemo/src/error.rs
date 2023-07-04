@@ -6,7 +6,8 @@ use thiserror::Error;
 
 use crate::{
     execution::selection_strategy::strategy::SelectionStrategyError, io::parser::LocatedParseError,
-    program_analysis::analysis::RuleAnalysisError, types::TypeError,
+    model::chase_model::RuleTranslationError, program_analysis::analysis::RuleAnalysisError,
+    types::TypeError,
 };
 
 pub use nemo_physical::error::ReadingError;
@@ -33,6 +34,9 @@ pub enum Error {
     /// Rule analysis errors
     #[error(transparent)]
     RuleAnalysisError(#[from] RuleAnalysisError),
+    /// Rule translation errors
+    #[error(transparent)]
+    RuleTranslationError(#[from] RuleTranslationError),
     /// Parse errors
     #[error(transparent)]
     ParseError(#[from] LocatedParseError),

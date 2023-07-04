@@ -57,7 +57,7 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [`ExecutionEngine`].
     pub fn initialize(program: Program) -> Result<Self, Error> {
-        let mut program: ChaseProgram = program.into();
+        let mut program: ChaseProgram = program.try_into()?;
 
         program.check_for_unsupported_features()?;
         program.normalize();

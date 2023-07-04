@@ -3,10 +3,13 @@ use crate::{
     columnar::traits::columnscan::ColumnScanCell, datatypes::ColumnDataType,
     util::tagged_tree::TaggedTree,
 };
-use std::{fmt::Debug, ops::Range};
+use std::{
+    fmt::{Debug, Display},
+    ops::Range,
+};
 
 /// Operation that can be exectued by a [`ColumnScanArithmetic`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ArithmeticOperation<T> {
     /// Value is the given constant.
     Constant(T),
@@ -20,6 +23,38 @@ pub enum ArithmeticOperation<T> {
     Multiplication,
     /// Value is the quotient of the value of the first subtree and the second.
     Division,
+}
+
+impl<T> Debug for ArithmeticOperation<T>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Constant(constant) => write!(f, "{:?}", constant),
+            Self::ColumnScan(index) => write!(f, "Column({:?})", index),
+            Self::Addition => write!(f, "Addition"),
+            Self::Subtraction => write!(f, "Subtraction"),
+            Self::Multiplication => write!(f, "Multiplication"),
+            Self::Division => write!(f, "Division"),
+        }
+    }
+}
+
+impl<T> Display for ArithmeticOperation<T>
+where
+    T: Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Constant(constant) => write!(f, "{}", constant),
+            Self::ColumnScan(index) => write!(f, "Column({})", index),
+            Self::Addition => write!(f, "Addition"),
+            Self::Subtraction => write!(f, "Subtraction"),
+            Self::Multiplication => write!(f, "Multiplication"),
+            Self::Division => write!(f, "Division"),
+        }
+    }
 }
 
 /// A [`TaggedTree`] that represents a series of arithmetic operations to be executed by the [`ColumnScanArithmetic`].
