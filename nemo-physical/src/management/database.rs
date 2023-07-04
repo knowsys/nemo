@@ -773,8 +773,6 @@ impl DatabaseInstance {
                 continue;
             }
 
-            println!("{execution_tree:?}");
-
             TimedCode::instance()
                 .sub("Reasoning/Execution/Load Table")
                 .start();
