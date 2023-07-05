@@ -6,6 +6,7 @@ use nemo_physical::{
     error::ReadingError,
     table_reader::{Resource, TableReader},
 };
+use oxiri::Iri;
 use rio_api::{model::Triple, parser::TriplesParser};
 use rio_turtle::{NTriplesParser, TurtleParser};
 use rio_xml::RdfXmlParser;
@@ -19,14 +20,20 @@ use super::input_manager::ResourceProviders;
 pub struct RDFTriplesReader {
     resource_providers: ResourceProviders,
     resource: Resource,
+    base: Option<Iri<String>>,
 }
 
 impl RDFTriplesReader {
     /// Create a new [`RDFTriplesReader`]
-    pub fn new(resource_providers: ResourceProviders, resource: Resource) -> Self {
+    pub fn new(
+        resource_providers: ResourceProviders,
+        resource: Resource,
+        base: Option<String>,
+    ) -> Self {
         Self {
             resource_providers,
             resource,
+            base: base.map(|iri| Iri::parse(iri).expect("should be a valid IRI.")),
         }
     }
 
@@ -81,11 +88,11 @@ impl TableReader for RDFTriplesReader {
 
         if self.resource.ends_with(".ttl.gz") || self.resource.ends_with(".ttl") {
             self.read_with_buf_reader(builder_proxies, &mut reader, |reader| {
-                TurtleParser::new(reader, None)
+                TurtleParser::new(reader, self.base.clone())
             })
         } else if self.resource.ends_with(".rdf.gz") || self.resource.ends_with(".rdf") {
             self.read_with_buf_reader(builder_proxies, &mut reader, |reader| {
-                RdfXmlParser::new(reader, None)
+                RdfXmlParser::new(reader, self.base.clone())
             })
         } else {
             self.read_with_buf_reader(builder_proxies, &mut reader, NTriplesParser::new)
@@ -122,7 +129,7 @@ mod test {
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                 ];
-                let reader = RDFTriplesReader::new(ResourceProviders::empty(), String::from(""));
+                let reader = RDFTriplesReader::new(ResourceProviders::empty(), String::from(""), None);
 
                 let result = reader.read_with_buf_reader(&mut builders, &mut data, $make_parser);
                 assert!(result.is_ok());
