@@ -105,7 +105,7 @@ impl NemoEngine {
     #[new]
     fn py_new(program: NemoProgram) -> PyResult<Self> {
         let engine =
-            ExecutionEngine::initialize(program.0, ResourceProviders::from(vec![])).py_res()?;
+            ExecutionEngine::initialize(program.0, ResourceProviders::default()).py_res()?;
         Ok(NemoEngine(engine))
     }
 
