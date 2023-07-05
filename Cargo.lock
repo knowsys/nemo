@@ -1658,6 +1658,7 @@ dependencies = [
  "reqwest",
  "rio_api",
  "rio_turtle",
+ "rio_xml",
  "sanitise-file-name",
  "test-log",
  "thiserror",
@@ -1696,6 +1697,7 @@ dependencies = [
  "quickcheck_macros",
  "rand",
  "rio_turtle",
+ "rio_xml",
  "test-log",
  "thiserror",
 ]
@@ -2417,6 +2419,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.28.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ce5e73202a820a31f8a0ee32ada5e21029c81fd9e3ebf668a40832e4219d9d1"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quickcheck"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2622,6 +2633,18 @@ checksum = "5cec59971eafd99b9c7e3544bfcabafea81a7072ac51c9f46985ca0bd7ba6016"
 dependencies = [
  "oxilangtag",
  "oxiri",
+ "rio_api",
+]
+
+[[package]]
+name = "rio_xml"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2edda57b877119dc326c612ba822e3ca1ee22bfc86781a4e9dc0884756b58c3"
+dependencies = [
+ "oxilangtag",
+ "oxiri",
+ "quick-xml",
  "rio_api",
 ]
 

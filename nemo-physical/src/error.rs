@@ -48,6 +48,9 @@ pub enum ReadingError {
     /// Error in Rio's Turtle parser
     #[error(transparent)]
     RioTurtle(#[from] rio_turtle::TurtleError),
+    /// Error in Rio's RDF/XML parser
+    #[error(transparent)]
+    RioXML(#[from] rio_xml::RdfXmlError),
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate
