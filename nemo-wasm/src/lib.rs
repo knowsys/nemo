@@ -9,8 +9,8 @@ use nemo::execution::ExecutionEngine;
 
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
+use nemo::model::types::primitive_logical_value::PrimitiveLogicalValueT;
 use nemo::model::DataSourceDeclaration;
-use nemo_physical::datatypes::DataValueT;
 use nemo_physical::table_reader::Resource;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsCast;
@@ -160,7 +160,7 @@ impl NemoEngine {
 }
 
 #[wasm_bindgen]
-pub struct NemoResults(Box<dyn Iterator<Item = Vec<DataValueT>> + Send>);
+pub struct NemoResults(Box<dyn Iterator<Item = Vec<PrimitiveLogicalValueT>> + Send>);
 
 #[wasm_bindgen]
 pub struct NemoResultsIteratorNext {
@@ -180,16 +180,11 @@ impl NemoResults {
             let array: Array = next
                 .into_iter()
                 .map(|v| match v {
-                    DataValueT::String(s) => JsValue::from(s),
-                    DataValueT::U32(n) => JsValue::from(n),
-                    DataValueT::U64(n) => JsValue::from(n),
-                    DataValueT::I64(n) => JsValue::from(n),
-                    DataValueT::Float(n) => {
-                        JsValue::from(<nemo::datatypes::Float as Into<f32>>::into(n))
-                    }
-                    DataValueT::Double(n) => {
-                        JsValue::from(<nemo::datatypes::Double as Into<f64>>::into(n))
-                    }
+                    // TODO: probably this should not just convert the rdf literal to a string...
+                    PrimitiveLogicalValueT::Any(rdf) => JsValue::from(rdf.to_string()),
+                    PrimitiveLogicalValueT::String(s) => JsValue::from(s),
+                    PrimitiveLogicalValueT::Integer(i) => JsValue::from(i),
+                    PrimitiveLogicalValueT::Float64(d) => JsValue::from(f64::from(d)),
                 })
                 .collect();
 

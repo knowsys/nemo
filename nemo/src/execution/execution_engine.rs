@@ -2,18 +2,18 @@
 
 use std::collections::HashMap;
 
-use nemo_physical::{
-    datatypes::{data_value::DataValueIteratorT, DataValueT},
-    management::database::TableSource,
-    meta::TimedCode,
-};
+use nemo_physical::{datatypes::DataValueT, management::database::TableSource, meta::TimedCode};
 
 use crate::{
     error::Error,
     io::{input_manager::InputManager, resource_providers::ResourceProviders},
     model::{
-        chase_model::ChaseProgram, Identifier, PrimitiveType, Program, TermOperation,
-        TypeConstraint,
+        chase_model::ChaseProgram,
+        types::{
+            primitive_logical_value::{PrimitiveLogicalValueIteratorT, PrimitiveLogicalValueT},
+            primitive_types::PrimitiveType,
+        },
+        Identifier, Program, TermOperation, TypeConstraint,
     },
     program_analysis::analysis::ProgramAnalysis,
     table_manager::TableManager,
@@ -279,12 +279,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &self.program
     }
 
-    /// Creates an [`Iterator`] over the resulting facts of a predicate.
-    // TODO: we probably want to return a list of column iterators over logical values
-    pub fn table_scan(
+    /// Get a list of column iterators for the predicate
+    pub fn get_predicate_column_iterators(
         &mut self,
         predicate: Identifier,
-    ) -> Result<Option<impl Iterator<Item = Vec<DataValueT>> + '_>, Error> {
+    ) -> Result<Option<Vec<PrimitiveLogicalValueIteratorT>>, Error> {
         let Some(table_id) = self.table_manager.combine_predicate(predicate.clone())? else {
             return Ok(None);
         };
@@ -297,34 +296,29 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let iterators = self.table_manager.table_column_iters(table_id)?;
 
-        let logically_mapped_iters = iterators.into_iter().zip(predicate_types.iter()).map(|(iter, lt)| {
-            if *lt == PrimitiveType::String {
-                match iter {
-                    DataValueIteratorT::String(string_iter) => Box::new(string_iter.map(|s| {
-                        DataValueT::String(s.get(1..(s.len() - 1))
-                            .expect("The physical string is wrapped in quotes.")
-                            .to_string())
-                    })),
-                _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch."),
-                }
-            } else {
-                let boxed_iter: Box<dyn Iterator<Item = DataValueT>> = match iter {
-                    DataValueIteratorT::String(iter) => Box::new(iter.map(DataValueT::String)),
-                    DataValueIteratorT::U32(iter) => Box::new(iter.map(DataValueT::U32)),
-                    DataValueIteratorT::U64(iter) => Box::new(iter.map(DataValueT::U64)),
-                    DataValueIteratorT::I64(iter) => Box::new(iter.map(DataValueT::I64)),
-                    DataValueIteratorT::Float(iter) => Box::new(iter.map(DataValueT::Float)),
-                    DataValueIteratorT::Double(iter) => Box::new(iter.map(DataValueT::Double)),
-                };
+        let logically_mapped_iters: Vec<PrimitiveLogicalValueIteratorT> = iterators
+            .into_iter()
+            .zip(predicate_types.iter())
+            .map(|(iter, lt)| lt.primitive_logical_value_iterator(iter))
+            .collect();
 
-                boxed_iter
-            }
-        });
+        Ok(Some(logically_mapped_iters))
+    }
 
-        struct CombinedIters<'a>(Vec<Box<dyn Iterator<Item = DataValueT> + 'a>>);
+    /// Creates an [`Iterator`] over the resulting facts of a predicate.
+    // TODO: we probably want to return a list of column iterators over logical values
+    pub fn table_scan(
+        &mut self,
+        predicate: Identifier,
+    ) -> Result<Option<impl Iterator<Item = Vec<PrimitiveLogicalValueT>> + '_>, Error> {
+        let Some(logically_mapped_iters) = self.get_predicate_column_iterators(predicate)? else {
+            return Ok(None);
+        };
+
+        struct CombinedIters<'a>(Vec<PrimitiveLogicalValueIteratorT<'a>>);
 
         impl<'a> Iterator for CombinedIters<'a> {
-            type Item = Vec<DataValueT>;
+            type Item = Vec<PrimitiveLogicalValueT>;
 
             fn next(&mut self) -> Option<Self::Item> {
                 let res: Self::Item = self.0.iter_mut().filter_map(|iter| iter.next()).collect();
@@ -332,7 +326,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
         }
 
-        let combined_iters = CombinedIters(logically_mapped_iters.collect());
+        let combined_iters = CombinedIters(logically_mapped_iters);
 
         Ok(Some(combined_iters))
     }
@@ -354,27 +348,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let iterators = self.table_manager.table_column_iters(table_id)?;
 
-        let logically_mapped_iters = iterators.into_iter().zip(predicate_types.iter()).map(|(iter, lt)| {
-            if *lt == PrimitiveType::String {
-                match iter {
-                    DataValueIteratorT::String(string_iter) => Box::new(string_iter.map(|s| {
-                        s.get(1..(s.len() - 1))
-                            .expect("The physical string is wrapped in quotes.")
-                            .to_string()
-                    })),
-                _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch."),
-                }
-            } else {
-                match iter {
-                    DataValueIteratorT::String(iter) => iter,
-                    DataValueIteratorT::U32(iter) => Box::new(iter.map(|v| v.to_string())),
-                    DataValueIteratorT::U64(iter) => Box::new(iter.map(|v| v.to_string())),
-                    DataValueIteratorT::I64(iter) => Box::new(iter.map(|v| v.to_string())),
-                    DataValueIteratorT::Float(iter) => Box::new(iter.map(|v| v.to_string())),
-                    DataValueIteratorT::Double(iter) => Box::new(iter.map(|v| v.to_string())),
-                }
-            }
-        });
+        let logically_mapped_iters: Vec<Box<dyn Iterator<Item = String>>> = iterators
+            .into_iter()
+            .zip(predicate_types.iter())
+            .map(|(iter, lt)| lt.serialize_output(iter))
+            .collect();
 
         struct CombinedIters<'a>(Vec<Box<dyn Iterator<Item = String> + 'a>>);
 
@@ -387,7 +365,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
         }
 
-        let combined_iters = CombinedIters(logically_mapped_iters.collect());
+        let combined_iters = CombinedIters(logically_mapped_iters);
 
         Ok(Some(combined_iters))
     }

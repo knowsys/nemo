@@ -6,8 +6,8 @@ use crate::{
     error::Error,
     model::chase_model::{ChaseProgram, ChaseRule},
     model::{
-        chase_model::ChaseAtom, types::TypeError, FilterOperation, Identifier, PrimitiveType, Term,
-        TermOperation, TypeConstraint, Variable,
+        chase_model::ChaseAtom, types::error::TypeError, FilterOperation, Identifier,
+        PrimitiveType, Term, TermOperation, TypeConstraint, Variable,
     },
     util::labeled_graph::LabeledGraph,
 };

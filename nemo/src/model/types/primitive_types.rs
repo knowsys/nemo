@@ -1,5 +1,3 @@
-//! This module defines logical types.
-
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -9,18 +7,23 @@ use crate::builder_proxy::{
 };
 use crate::io::parser::ParseError;
 use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
+use nemo_physical::datatypes::data_value::DataValueIteratorT;
 use nemo_physical::datatypes::{DataTypeName, DataValueT, Double};
 
+use super::error::TypeError;
+use super::primitive_logical_value::{
+    AnyOutputMapper, DefaultStringIterator, Float64OutputMapper, IntegerOutputMapper,
+    PrimitiveLogicalValueIteratorT, StringOutputMapper,
+};
+use super::{XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER, XSD_STRING};
 use crate::model::{Identifier, NestedType, NumericLiteral, RdfLiteral, Term};
-
-use super::TypeError;
 
 macro_rules! count {
     () => (0usize);
     ( $x:tt $($xs:tt)* ) => (1usize + count!($($xs)*));
 }
 
-macro_rules! generate_primitive_type_enum {
+macro_rules! generate_logical_type_enum {
     ($(($variant_name:ident, $string_repr: literal)),+) => {
         /// An enum capturing the logical type names and funtionality related to parsing and translating into and from physical types
         #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -63,7 +66,7 @@ macro_rules! generate_primitive_type_enum {
     };
 }
 
-generate_primitive_type_enum!(
+generate_logical_type_enum!(
     (Any, "any"),
     (String, "string"),
     (Integer, "integer"),
@@ -126,12 +129,6 @@ impl TryFrom<NestedType> for PrimitiveType {
         }
     }
 }
-
-// TODO: probably put this closer to the parser and also have a default prefix for xsd:
-const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
-const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
-const XSD_DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
-const XSD_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
 
 impl PrimitiveType {
     /// Convert a given ground term to a DataValueT fitting the current logical type
@@ -248,6 +245,41 @@ impl PrimitiveType {
             Self::String => Box::new(LogicalStringColumnBuilderProxy::new(physical)),
             Self::Integer => Box::new(LogicalIntegerColumnBuilderProxy::new(physical)),
             Self::Float64 => Box::new(LogicalFloat64ColumnBuilderProxy::new(physical)),
+        }
+    }
+
+    /// Convert physical data value iterator into iterator over logical types
+    pub fn primitive_logical_value_iterator<'a>(
+        &self,
+        physical_iter: DataValueIteratorT<'a>,
+    ) -> PrimitiveLogicalValueIteratorT<'a> {
+        match self {
+            Self::Any => {
+                PrimitiveLogicalValueIteratorT::Any(AnyOutputMapper::new(physical_iter).into())
+            }
+            Self::String => PrimitiveLogicalValueIteratorT::String(
+                StringOutputMapper::new(physical_iter).into(),
+            ),
+            Self::Integer => PrimitiveLogicalValueIteratorT::Integer(
+                IntegerOutputMapper::new(physical_iter).into(),
+            ),
+            Self::Float64 => PrimitiveLogicalValueIteratorT::Float64(
+                Float64OutputMapper::new(physical_iter).into(),
+            ),
+        }
+    }
+
+    /// Convert physical data value iterator into iterator over logical types directly transformed
+    /// to their string representation to be able to take some shortcuts when performing this mapping
+    pub fn serialize_output<'a>(
+        &self,
+        physical_iter: DataValueIteratorT<'a>,
+    ) -> DefaultStringIterator<'a> {
+        match self {
+            Self::Any => AnyOutputMapper::new(physical_iter).into(),
+            Self::String => StringOutputMapper::new(physical_iter).into(),
+            Self::Integer => IntegerOutputMapper::new(physical_iter).into(),
+            Self::Float64 => Float64OutputMapper::new(physical_iter).into(),
         }
     }
 }
