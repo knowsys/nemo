@@ -18,3 +18,5 @@ pub use seminaive_join::SeminaiveJoinGenerator;
 pub mod plan_util;
 
 pub mod negation;
+
+mod arithmetic;

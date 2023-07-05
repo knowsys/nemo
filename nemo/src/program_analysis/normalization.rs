@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use crate::model::chase_model::ChaseProgram;
-use crate::model::{Atom, Filter, FilterOperation, Identifier, Term, Variable};
+use crate::model::chase_model::{ChaseAtom, ChaseProgram};
+use crate::model::{Filter, FilterOperation, Identifier, Term, Variable};
 
 /// Represents the result of normalizing a list of atoms.
 /// Normalized atoms do not contain constants or repeat variables in one atom.
@@ -9,7 +9,7 @@ use crate::model::{Atom, Filter, FilterOperation, Identifier, Term, Variable};
 pub struct NormalizationResult {
     /// Normalized atoms.
     /// Don't contain constants or duplicate variables.
-    pub atoms: Vec<Atom>,
+    pub atoms: Vec<ChaseAtom>,
     /// Filters.
     /// Do not contain Equality expressions.
     pub filters: Vec<Filter>,
@@ -19,11 +19,11 @@ pub struct NormalizationResult {
 /// Applies equality filters, e.g., "a(x, y), b(z), y = z" will turn into "a(x, y), b(y)".
 /// Also, turns literals like "a(x, 3, x)" into "a(x, y, z), y = 3, z = x".
 pub fn normalize_atom_vector(
-    atoms: &[Atom],
+    atoms: &[ChaseAtom],
     filters: &[Filter],
     term_counter: &mut usize,
 ) -> NormalizationResult {
-    let mut new_atoms: Vec<Atom> = atoms.to_vec();
+    let mut new_atoms: Vec<ChaseAtom> = atoms.to_vec();
     let mut new_filters = Vec::<Filter>::new();
 
     // Apply all equality filters

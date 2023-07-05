@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, collections::HashMap, fmt::Display};
 
 use crate::{
-    datatypes::DataTypeName,
+    datatypes::{casting::PartialUpperBound, DataTypeName},
     error::Error,
     tabular::{operations::triescan_append::AppendInstruction, traits::table_schema::TableSchema},
 };
@@ -277,6 +277,9 @@ impl TypeTree {
                 Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
             ExecutionOperation::AppendColumns(subtree, instructions) => {
+                // TODO: Revisit type propagation for this case
+                // This is the only case where it seems to be necessary to have additional casting in the trie scan
+
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
                 let mut new_schema = TableSchema::new();
 
@@ -289,6 +292,27 @@ impl TypeTree {
                             }
                             AppendInstruction::Constant(value) => {
                                 new_schema.add_entry(value.get_type());
+                            }
+                            AppendInstruction::Operation(tree) => {
+                                if subtype_node.schema.is_empty() {
+                                    continue;
+                                }
+
+                                let operation_type =
+                                    subtype_node.schema.get_entry(0).partial_upper_bound();
+
+                                for &column_index in tree.input_indices() {
+                                    let current_type = subtype_node
+                                        .schema
+                                        .get_entry(column_index)
+                                        .partial_upper_bound();
+
+                                    if !Self::compatible(&operation_type, &current_type) {
+                                        return Err(Error::InvalidExecutionPlan);
+                                    }
+                                }
+
+                                new_schema.add_entry(operation_type);
                             }
                         }
                     }
@@ -450,6 +474,9 @@ impl TypeTree {
                 );
             }
             ExecutionOperation::AppendColumns(subtree, instructions) => {
+                // TODO: Revisit type propagation for this case
+                // This is the only case where it seems to be necessary to have additional casting in the trie scan
+
                 let mut schema_map = HashMap::<usize, DataTypeName>::new();
                 let mut not_appended_index: usize = 0;
 
@@ -459,6 +486,24 @@ impl TypeTree {
                     not_appended_index += gap_instructions.len();
                     schema_map.insert(gap_index, *type_node.schema.get_entry(not_appended_index));
                     not_appended_index += 1;
+                }
+
+                // Overwrite type of input columns to an operation to maximum type
+                for instructions in instructions {
+                    for instruction in instructions {
+                        if let AppendInstruction::Operation(tree) = instruction {
+                            for &input_index in tree.input_indices() {
+                                let max_type = schema_map
+                                    .get(&input_index)
+                                    .expect(
+                                        "operation tree should only contain valid input indices",
+                                    )
+                                    .partial_upper_bound();
+
+                                schema_map.insert(input_index, max_type);
+                            }
+                        }
+                    }
                 }
 
                 Self::propagate_down(

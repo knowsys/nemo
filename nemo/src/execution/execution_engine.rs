@@ -10,7 +10,7 @@ use nemo_physical::{
 use crate::{
     error::Error,
     io::{dsv::DSVReader, ntriples::NTriplesReader},
-    model::{chase_model::ChaseProgram, DataSource, Identifier, Program},
+    model::{chase_model::ChaseProgram, DataSource, Identifier, Program, TermOperation},
     program_analysis::analysis::ProgramAnalysis,
     table_manager::TableManager,
     types::LogicalTypeEnum,
@@ -57,7 +57,7 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [`ExecutionEngine`].
     pub fn initialize(program: Program) -> Result<Self, Error> {
-        let mut program: ChaseProgram = program.into();
+        let mut program: ChaseProgram = program.try_into()?;
 
         program.check_for_unsupported_features()?;
         program.normalize();
@@ -161,8 +161,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .enumerate()
                 // TODO: get rid of unwrap
                 .map(|(i, t)| {
-                    analysis.predicate_types.get(&fact.0.predicate()).unwrap()[i]
-                        .ground_term_to_data_value_t(t.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.")
+                    if let TermOperation::Term(ground_term) = t.operation() {
+                        analysis.predicate_types.get(&fact.0.predicate()).unwrap()[i]
+                        .ground_term_to_data_value_t(ground_term.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.")
+                    } else {
+                        unreachable!(
+                            "Its assumed that facts do not contain complicated expressions (for now?)"
+                        );
+                    }
                 })
                 .collect();
 

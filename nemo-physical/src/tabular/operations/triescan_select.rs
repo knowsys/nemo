@@ -236,7 +236,7 @@ impl<'a> TrieScanRestrictValues<'a> {
                         }
                         FilterValue::Constant(constant) => {
                             if let StorageValueT::$variant(constant_typed) =
-                                constant.to_storage_value($dict)
+                                constant.to_storage_value_mut($dict)
                             {
                                 FilterBound::Inclusive(FilterValue::Constant(constant_typed))
                             } else {
@@ -250,7 +250,7 @@ impl<'a> TrieScanRestrictValues<'a> {
                         }
                         FilterValue::Constant(constant) => {
                             if let StorageValueT::$variant(constant_typed) =
-                                constant.to_storage_value($dict)
+                                constant.to_storage_value_mut($dict)
                             {
                                 FilterBound::Exclusive(FilterValue::Constant(constant_typed))
                             } else {

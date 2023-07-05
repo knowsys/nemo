@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use nemo_physical::datatypes::Double;
+use nemo_physical::{datatypes::Double, util::TaggedTree};
 use sanitise_file_name::{sanitise_with_options, Options};
 
 use crate::io::parser::ParseError;
@@ -165,10 +165,13 @@ impl std::fmt::Display for Term {
 impl Term {
     /// Check if the term is ground.
     pub fn is_ground(&self) -> bool {
-        matches!(
-            self,
-            Self::Constant(_) | Self::NumericLiteral(_) | Self::RdfLiteral(_)
-        )
+        match self {
+            Term::Constant(_)
+            | Term::NumericLiteral(_)
+            | Term::StringLiteral(_)
+            | Term::RdfLiteral(_) => true,
+            Term::Variable(_) => false,
+        }
     }
 }
 
@@ -221,18 +224,78 @@ impl std::fmt::Display for RdfLiteral {
     }
 }
 
+/// Supported operations between terms.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum TermOperation {
+    /// Leaf node of the tree.
+    Term(Term),
+    /// Add two terms.
+    Addition,
+    /// Subtract one term from another.
+    Subtraction,
+    /// Multiply two terms
+    Multiplication,
+    /// Dividing terms.
+    Division,
+}
+
+/// [`TaggedTree`] with [`TermOperation`] as tags.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct TermTree(pub TaggedTree<TermOperation>);
+
+impl From<TaggedTree<TermOperation>> for TermTree {
+    fn from(tree: TaggedTree<TermOperation>) -> Self {
+        TermTree(tree)
+    }
+}
+
+impl TermTree {
+    /// Create a new leaf node of a [`TermTree`].
+    pub fn leaf(term: Term) -> Self {
+        Self(TaggedTree::<TermOperation>::leaf(TermOperation::Term(term)))
+    }
+
+    /// Create a new [`TermTree`].
+    pub fn tree(operation: TermOperation, subtrees: Vec<TermTree>) -> Self {
+        Self(TaggedTree::<TermOperation>::tree(
+            operation,
+            subtrees.into_iter().map(|t| t.0).collect(),
+        ))
+    }
+
+    /// Return the [`TermOperation`] performed at this node.
+    pub fn operation(&self) -> &TermOperation {
+        &self.0.tag
+    }
+
+    /// Return a list of all the [`Term`]s contained in this tree.
+    pub fn terms(&self) -> Vec<&Term> {
+        self.0
+            .leaves()
+            .into_iter()
+            .map(|l| {
+                if let TermOperation::Term(term) = l {
+                    term
+                } else {
+                    unreachable!("This is the only Leaf type");
+                }
+            })
+            .collect()
+    }
+}
+
 /// An atom.
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Atom {
     /// The predicate.
     predicate: Identifier,
     /// The terms.
-    terms: Vec<Term>,
+    terms: Vec<TermTree>,
 }
 
 impl Atom {
     /// Construct a new Atom.
-    pub fn new(predicate: Identifier, terms: Vec<Term>) -> Self {
+    pub fn new(predicate: Identifier, terms: Vec<TermTree>) -> Self {
         Self { predicate, terms }
     }
 
@@ -244,22 +307,25 @@ impl Atom {
 
     /// Return the terms in the atom - immutable.
     #[must_use]
-    pub fn terms(&self) -> &Vec<Term> {
+    pub fn terms(&self) -> &Vec<TermTree> {
         &self.terms
     }
 
     /// Return the terms in the atom - mutable.
     #[must_use]
-    pub fn terms_mut(&mut self) -> &mut Vec<Term> {
+    pub fn terms_mut(&mut self) -> &mut Vec<TermTree> {
         &mut self.terms
     }
 
     /// Return all variables in the atom.
     pub fn variables(&self) -> impl Iterator<Item = &Variable> + '_ {
-        self.terms().iter().filter_map(|term| match term {
-            Term::Variable(var) => Some(var),
-            _ => None,
-        })
+        self.terms
+            .iter()
+            .flat_map(|t| t.terms())
+            .filter_map(|term| match term {
+                Term::Variable(var) => Some(var),
+                _ => None,
+            })
     }
 
     /// Return all universally quantified variables in the atom.
@@ -276,7 +342,7 @@ impl Atom {
 }
 
 /// A literal.
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Literal {
     /// A non-negated literal.
     Positive(Atom),
@@ -326,7 +392,7 @@ impl Literal {
 
     /// Return the terms in the literal.
     #[must_use]
-    pub fn terms(&self) -> &Vec<Term> {
+    pub fn terms(&self) -> &Vec<TermTree> {
         forward_to_atom!(self, terms)
     }
 
@@ -403,7 +469,7 @@ impl Filter {
 }
 
 /// A rule.
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Rule {
     /// Head atoms of the rule
     head: Vec<Atom>,
@@ -573,11 +639,11 @@ impl Rule {
 }
 
 /// A (ground) fact.
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Fact(pub Atom);
 
 /// A statement that can occur in the program.
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     /// A fact.
     Fact(Fact),

@@ -85,7 +85,7 @@ impl RestrictedChaseStrategy {
             }
         }
 
-        let head_join_cut =
+        let (_, head_join_cut) =
             cut_last_layers(&analysis.existential_aux_order, &used_join_head_variables);
         let aux_predicate = aux_head.predicate();
 

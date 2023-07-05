@@ -20,7 +20,7 @@ pub trait BodyStrategy: Debug {
         table_manager: &TableManager,
         current_pan: &mut SubtableExecutionPlan,
         rule_info: &RuleInfo,
-        variable_order: VariableOrder,
+        variable_order: &mut VariableOrder,
         step_number: usize,
     ) -> ExecutionNodeRef;
 }

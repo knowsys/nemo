@@ -1,11 +1,17 @@
-use std::{cell::UnsafeCell, collections::VecDeque, ops::Range};
+use std::{
+    cell::UnsafeCell,
+    collections::{HashMap, VecDeque},
+    ops::Range,
+};
 
 use crate::{
     columnar::{
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         column_types::rle::{ColumnBuilderRle, ColumnRle},
         operations::{
-            ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant, ColumnScanCopy, ColumnScanPass,
+            columnscan_arithmetic::{ArithmeticOperation, OperationTree},
+            ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant,
+            ColumnScanCopy, ColumnScanPass,
         },
         traits::{
             column::Column,
@@ -14,7 +20,7 @@ use crate::{
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         },
     },
-    datatypes::{DataValueT, StorageTypeName, StorageValueT},
+    datatypes::{ColumnDataType, DataValueT, StorageTypeName, StorageValueT},
     generate_cast_statements,
     management::database::Dict,
     tabular::{
@@ -46,6 +52,88 @@ fn expand_range(columns: &[ColumnWithIntervalsT], range: Range<usize>) -> Range<
     current_range
 }
 
+/// [`OperationTree`] with [`DataValueT`] constants.
+pub type OperationTreeT = OperationTree<DataValueT>;
+
+impl OperationTreeT {
+    fn translate_recursive<F, T>(tree: OperationTreeT, translate_function: F) -> OperationTree<T>
+    where
+        F: Fn(DataValueT) -> T + Copy,
+        T: ColumnDataType,
+    {
+        match tree.tag {
+            ArithmeticOperation::Constant(constant) => OperationTree::<T>::leaf(
+                ArithmeticOperation::Constant(translate_function(constant)),
+            ),
+            ArithmeticOperation::ColumnScan(index) => {
+                OperationTree::<T>::leaf(ArithmeticOperation::ColumnScan(index))
+            }
+            ArithmeticOperation::Addition => {
+                let subtrees = tree
+                    .subtrees
+                    .into_iter()
+                    .map(|t| Self::translate_recursive(t, translate_function))
+                    .collect();
+
+                OperationTree::<T>::tree(ArithmeticOperation::Addition, subtrees)
+            }
+            ArithmeticOperation::Subtraction => {
+                let subtrees = tree
+                    .subtrees
+                    .into_iter()
+                    .map(|t| Self::translate_recursive(t, translate_function))
+                    .collect();
+
+                OperationTree::<T>::tree(ArithmeticOperation::Subtraction, subtrees)
+            }
+            ArithmeticOperation::Multiplication => {
+                let subtrees = tree
+                    .subtrees
+                    .into_iter()
+                    .map(|t| Self::translate_recursive(t, translate_function))
+                    .collect();
+
+                OperationTree::<T>::tree(ArithmeticOperation::Multiplication, subtrees)
+            }
+            ArithmeticOperation::Division => {
+                let subtrees = tree
+                    .subtrees
+                    .into_iter()
+                    .map(|t| Self::translate_recursive(t, translate_function))
+                    .collect();
+
+                OperationTree::<T>::tree(ArithmeticOperation::Division, subtrees)
+            }
+        }
+    }
+
+    /// Translate the [`DataValueT`] constants into constatns of a certain type.
+    /// The conversion is given by a closure.
+    pub fn translate<F, T>(self, translate_function: F) -> OperationTree<T>
+    where
+        F: Fn(DataValueT) -> T + Copy,
+        T: ColumnDataType,
+    {
+        Self::translate_recursive(self, translate_function)
+    }
+
+    /// Return the [`StorageTypeName`] of the evaluation result of this tree.
+    pub fn storage_type(
+        &self,
+        input_types: &[StorageTypeName],
+        dict: &mut Dict,
+    ) -> StorageTypeName {
+        let first_leaf_node = self.leaves()[0];
+        match first_leaf_node {
+            ArithmeticOperation::Constant(constant) => {
+                constant.to_storage_value_mut(dict).get_type()
+            }
+            ArithmeticOperation::ColumnScan(index) => input_types[*index],
+            _ => unreachable!("Not a leave."),
+        }
+    }
+}
+
 /// Enum which represents an instruction to modify a trie by appending certain columns.
 #[derive(Debug, Clone)]
 pub enum AppendInstruction {
@@ -55,6 +143,9 @@ pub enum AppendInstruction {
     /// Must contain schema information.
     /// In this case whether the constant is associated with a dict
     Constant(DataValueT),
+    /// Add a column which results from performing a given mathematical operation
+    /// based on existing columns.
+    Operation(OperationTreeT),
 }
 
 /// Appends columns to an existing trie and returns the modified trie.
@@ -165,7 +256,7 @@ pub fn trie_append(
                         }};
                     }
 
-                    match value.to_storage_value(dict) {
+                    match value.to_storage_value_mut(dict) {
                         StorageValueT::U32(value) => append_columns_for_datatype!(value, U32, u32),
                         StorageValueT::U64(value) => append_columns_for_datatype!(value, U64, u64),
                         StorageValueT::I64(value) => append_columns_for_datatype!(value, I64, i64),
@@ -177,6 +268,7 @@ pub fn trie_append(
                         }
                     };
                 }
+                AppendInstruction::Operation(_) => todo!(),
             }
         }
 
@@ -246,6 +338,8 @@ impl<'a> TrieScanAppend<'a> {
             instructions.iter().map(|i| i.len()).sum::<usize>() + src_arity
         );
 
+        let src_types = trie_scan.get_types().clone();
+
         let mut res = Self {
             trie_scan: Box::new(trie_scan),
             current_layer: None,
@@ -256,12 +350,15 @@ impl<'a> TrieScanAppend<'a> {
         };
 
         for (src_index, insert_instructions) in instructions.iter().enumerate() {
-            for instruction in insert_instructions {
+            for instruction in insert_instructions.iter() {
                 match instruction {
                     AppendInstruction::RepeatColumn(repeat_index) => {
                         res.add_repeat_column(*repeat_index)
                     }
                     AppendInstruction::Constant(value) => res.add_constant_column(dict, value),
+                    AppendInstruction::Operation(operation_tree) => {
+                        res.add_operation_column(operation_tree.clone(), &src_types, dict)
+                    }
                 }
             }
 
@@ -271,6 +368,79 @@ impl<'a> TrieScanAppend<'a> {
         }
 
         res
+    }
+
+    fn add_operation_column(
+        &mut self,
+        operation_tree: OperationTreeT,
+        src_types: &[StorageTypeName],
+        dict: &mut Dict,
+    ) {
+        let src_type = operation_tree.storage_type(src_types, dict);
+        let dst_type = self.target_types[self.column_scans.len()];
+
+        // TODO: Cast the types if there are not equal.
+        assert!(src_type == dst_type);
+
+        macro_rules! input_for_datatype {
+            ($variant:ident, $type:ty) => {{
+                let mut column_map = HashMap::<usize, usize>::new();
+                let mut input_scans = Vec::new();
+
+                for src_index in operation_tree.input_indices().into_iter() {
+                    if column_map.contains_key(&src_index) {
+                        continue;
+                    }
+
+                    let base_scan = unsafe { &*self.trie_scan.get_scan(*src_index).unwrap().get() };
+
+                    if let ColumnScanT::$variant(base_scan_cell) = base_scan {
+                        input_scans.push(base_scan_cell);
+                    } else {
+                        panic!("Expected a column scan of type {}", stringify!($src_name));
+                    }
+
+                    column_map.insert(*src_index, column_map.len());
+                }
+
+                let translate_type = |t: DataValueT| {
+                    if let StorageValueT::$variant(value) = t
+                        .to_storage_value(dict)
+                        .expect("We don't have string operations so this cannot fail.")
+                    {
+                        value
+                    } else {
+                        panic!(
+                            "Expected a operation tree value of type {}",
+                            stringify!($src_name)
+                        );
+                    }
+                };
+
+                let mut operation_tree = operation_tree.translate(translate_type);
+
+                for index in operation_tree.input_indices_mut() {
+                    *index = *column_map
+                        .get(index)
+                        .expect("The construction of this map insures that this value is present.");
+                }
+
+                let new_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanArithmetic(
+                    ColumnScanArithmetic::new(input_scans, operation_tree),
+                ));
+
+                self.column_scans
+                    .push(UnsafeCell::new(ColumnScanT::$variant(new_scan)));
+            }};
+        }
+
+        match src_type {
+            StorageTypeName::U32 => input_for_datatype!(U32, u32),
+            StorageTypeName::U64 => input_for_datatype!(U64, u64),
+            StorageTypeName::I64 => input_for_datatype!(I64, i64),
+            StorageTypeName::Float => input_for_datatype!(Float, f32),
+            StorageTypeName::Double => input_for_datatype!(Double, f64),
+        }
     }
 
     fn add_backed_column(&mut self, src_index: usize) {
@@ -361,7 +531,7 @@ impl<'a> TrieScanAppend<'a> {
             }};
         }
 
-        match value.to_storage_value(dict) {
+        match value.to_storage_value_mut(dict) {
             StorageValueT::U32(value) => append_constant_for_datatype!(U32, value),
             StorageValueT::U64(value) => append_constant_for_datatype!(U64, value),
             StorageValueT::I64(value) => append_constant_for_datatype!(I64, value),
@@ -432,7 +602,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanAppend<'a> {
 #[cfg(test)]
 mod test {
     use crate::{
-        columnar::traits::columnscan::ColumnScanT,
+        columnar::{
+            operations::columnscan_arithmetic::ArithmeticOperation, traits::columnscan::ColumnScanT,
+        },
         datatypes::{DataValueT, StorageTypeName},
         management::database::Dict,
         tabular::{
@@ -442,6 +614,8 @@ mod test {
         },
         util::{make_column_with_intervals_t, test_util::make_column_with_intervals_int_t},
     };
+
+    use super::OperationTreeT;
 
     fn scan_next(int_scan: &mut TrieScanAppend) -> Option<u64> {
         if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
@@ -1039,5 +1213,103 @@ mod test {
         assert!(scan_current(&mut trie_iter).is_none());
         assert_eq!(scan_next(&mut trie_iter), Some(11));
         assert_eq!(scan_current(&mut trie_iter), Some(11));
+    }
+
+    #[test]
+    fn arithmetic() {
+        let column_x = make_column_with_intervals_t(&[1, 2], &[0]);
+        let column_y = make_column_with_intervals_t(&[3, 4, 5], &[0, 2]);
+
+        let trie = Trie::new(vec![column_x, column_y]);
+        let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+
+        // ((x + 3) * y) / x
+        let operation_tree = OperationTreeT::tree(
+            ArithmeticOperation::Division,
+            vec![
+                OperationTreeT::tree(
+                    ArithmeticOperation::Multiplication,
+                    vec![
+                        OperationTreeT::tree(
+                            ArithmeticOperation::Addition,
+                            vec![
+                                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(0)),
+                                OperationTreeT::leaf(ArithmeticOperation::Constant(
+                                    DataValueT::U64(3),
+                                )),
+                            ],
+                        ),
+                        OperationTreeT::leaf(ArithmeticOperation::ColumnScan(1)),
+                    ],
+                ),
+                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(0)),
+            ],
+        );
+
+        let mut dict = Dict::default();
+        let mut trie_iter = TrieScanAppend::new(
+            &mut dict,
+            trie_iter,
+            &[
+                vec![],
+                vec![],
+                vec![AppendInstruction::Operation(operation_tree)],
+            ],
+            vec![
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+                StorageTypeName::U64,
+            ],
+        );
+
+        assert!(scan_current(&mut trie_iter).is_none());
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(1));
+        assert_eq!(scan_current(&mut trie_iter), Some(1));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(3));
+        assert_eq!(scan_current(&mut trie_iter), Some(3));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(12));
+        assert_eq!(scan_current(&mut trie_iter), Some(12));
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), Some(4));
+        assert_eq!(scan_current(&mut trie_iter), Some(4));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(16));
+        assert_eq!(scan_current(&mut trie_iter), Some(16));
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
+
+        trie_iter.up();
+        assert_eq!(scan_next(&mut trie_iter), Some(2));
+        assert_eq!(scan_current(&mut trie_iter), Some(2));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(5));
+        assert_eq!(scan_current(&mut trie_iter), Some(5));
+
+        trie_iter.down();
+        assert!(scan_current(&mut trie_iter).is_none());
+        assert_eq!(scan_next(&mut trie_iter), Some(12));
+        assert_eq!(scan_current(&mut trie_iter), Some(12));
+        assert_eq!(scan_next(&mut trie_iter), None);
+        assert_eq!(scan_current(&mut trie_iter), None);
     }
 }

@@ -202,6 +202,18 @@ pub enum ParseError {
     /// Expected a body expression.
     #[error("Expected a literal or a filter expression")]
     ExpectedBodyExpression,
+    /// Expected an arithmetic expression.
+    #[error("Expected an arithmetic expression")]
+    ExpectedArithmeticExpression,
+    /// Expected an arithmetic product expression.
+    #[error("Expected an arithmetic product expression")]
+    ExpectedArithmeticProduct,
+    /// Expected an arithmetic factor expression.
+    #[error("Expected an arithmetic factor expression")]
+    ExpectedArithmeticFactor,
+    /// Expected an arithmetic parenthesised expression.
+    #[error("Expected an arithmetic parenthesised expression")]
+    ExpectedArithmeticParens,
 }
 
 impl ParseError {

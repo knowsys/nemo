@@ -2,27 +2,113 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::types::LogicalTypeEnum;
+use crate::{error::Error, types::LogicalTypeEnum};
 
 use super::{
     rule_model::{
         Atom, DataSource, DataSourceDeclaration, Fact, Filter, Identifier, Literal,
         OutputPredicateSelection, QualifiedPredicateName,
     },
-    ArityOrTypes, Program, Rule,
+    ArityOrTypes, Program, Rule, Term, TermOperation, TermTree, Variable,
 };
 
-#[allow(dead_code)]
+use thiserror::Error;
+
+/// Representation of an atom used in [`ChaseRule`].
 #[derive(Debug, Clone)]
+pub struct ChaseAtom {
+    predicate: Identifier,
+    terms: Vec<Term>,
+}
+
+/// Errors than can occur during rule translation
+#[derive(Error, Debug, Copy, Clone)]
+#[allow(clippy::enum_variant_names)]
+pub enum RuleTranslationError {
+    /// Arithmetic operation in body
+    #[error("Arithmetic operations are currently not allowed in the body of a rule.")]
+    UnsupportedFeatureBodyArithmetic,
+}
+
+impl ChaseAtom {
+    /// Construct a new Atom.
+    pub fn new(predicate: Identifier, terms: Vec<Term>) -> Self {
+        Self { predicate, terms }
+    }
+
+    /// Construct a [`ChaseAtom`] from an [`Atom`] that does not contain term trees that are not leaves.
+    pub fn from_flat_atom(atom: Atom) -> Result<Self, RuleTranslationError> {
+        let terms: Vec<Term> = atom
+            .terms()
+            .iter()
+            .map(|t| {
+                if let TermOperation::Term(term) = t.operation() {
+                    Ok(term.clone())
+                } else {
+                    Err(RuleTranslationError::UnsupportedFeatureBodyArithmetic)
+                }
+            })
+            .collect::<Result<Vec<Term>, RuleTranslationError>>()?;
+
+        Ok(Self {
+            predicate: atom.predicate(),
+            terms,
+        })
+    }
+
+    /// Return the predicate [`Identifier`].
+    #[must_use]
+    pub fn predicate(&self) -> Identifier {
+        self.predicate.clone()
+    }
+
+    /// Return the terms in the atom - immutable.
+    #[must_use]
+    pub fn terms(&self) -> &Vec<Term> {
+        &self.terms
+    }
+
+    /// Return the terms in the atom - mutable.
+    #[must_use]
+    pub fn terms_mut(&mut self) -> &mut Vec<Term> {
+        &mut self.terms
+    }
+
+    /// Return all variables in the atom.
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.terms().iter().filter_map(|term| match term {
+            Term::Variable(var) => Some(var),
+            _ => None,
+        })
+    }
+
+    /// Return all universally quantified variables in the atom.
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.variables()
+            .filter(|var| matches!(var, Variable::Universal(_)))
+    }
+
+    /// Return all existentially quantified variables in the atom.
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.variables()
+            .filter(|var| matches!(var, Variable::Existential(_)))
+    }
+}
+
+/// Representation of a rule in a [`ChaseProgram`].
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default)]
 pub struct ChaseRule {
     /// Head atoms of the rule
-    head: Vec<Atom>,
+    head: Vec<ChaseAtom>,
+    /// Head constructions
+    constructors: HashMap<Variable, TermTree>,
     /// Positive Body literals of the rule
-    positive_body: Vec<Atom>,
+    positive_body: Vec<ChaseAtom>,
     /// Filters applied to the body
     positive_filters: Vec<Filter>,
     /// Negative Body literals of the rule
-    negative_body: Vec<Atom>,
+    negative_body: Vec<ChaseAtom>,
     /// Filters applied to the body
     negative_filters: Vec<Filter>,
 }
@@ -30,59 +116,61 @@ pub struct ChaseRule {
 #[allow(dead_code)]
 impl ChaseRule {
     /// Construct a new rule.
-    pub fn new(head: Vec<Atom>, body: Vec<Literal>, positive_filters: Vec<Filter>) -> Self {
-        let mut positive_body = Vec::new();
-        let mut negative_body = Vec::new();
-
-        for literal in body {
-            match literal {
-                Literal::Positive(atom) => positive_body.push(atom),
-                Literal::Negative(atom) => negative_body.push(atom),
-            }
-        }
-
+    pub fn new(
+        head: Vec<ChaseAtom>,
+        constructors: HashMap<Variable, TermTree>,
+        positive_body: Vec<ChaseAtom>,
+        positive_filters: Vec<Filter>,
+        negative_body: Vec<ChaseAtom>,
+        negative_filters: Vec<Filter>,
+    ) -> Self {
         Self {
             head,
+            constructors,
             positive_body,
-            negative_body,
             positive_filters,
-            negative_filters: Vec::new(),
+            negative_body,
+            negative_filters,
         }
     }
-
     /// Return the head atoms of the rule - immutable.
     #[must_use]
-    pub fn head(&self) -> &Vec<Atom> {
+    pub fn head(&self) -> &Vec<ChaseAtom> {
         &self.head
     }
 
     /// Return the head atoms of the rule - mutable.
     #[must_use]
-    pub fn head_mut(&mut self) -> &mut Vec<Atom> {
+    pub fn head_mut(&mut self) -> &mut Vec<ChaseAtom> {
         &mut self.head
+    }
+
+    /// Return the constructors of the rule.
+    pub fn constructors(&self) -> &HashMap<Variable, TermTree> {
+        &self.constructors
     }
 
     /// Return all the atoms occuring in this rule.
     /// This includes the postive body atoms, the negative body atoms as well as the head atoms.
-    pub fn all_atoms(&self) -> impl Iterator<Item = &Atom> {
+    pub fn all_atoms(&self) -> impl Iterator<Item = &ChaseAtom> {
         self.all_body().chain(self.head.iter())
     }
 
     /// Return the all the atoms of the rules.
     /// This does not distinguish between positive and negative atoms.
-    pub fn all_body(&self) -> impl Iterator<Item = &Atom> {
+    pub fn all_body(&self) -> impl Iterator<Item = &ChaseAtom> {
         self.positive_body.iter().chain(self.negative_body.iter())
     }
 
     /// Return the positive body atoms of the rule - immutable.
     #[must_use]
-    pub fn positive_body(&self) -> &Vec<Atom> {
+    pub fn positive_body(&self) -> &Vec<ChaseAtom> {
         &self.positive_body
     }
 
     /// Return the positive body atoms of the rule - mutable.
     #[must_use]
-    pub fn positive_body_mut(&mut self) -> &mut Vec<Atom> {
+    pub fn positive_body_mut(&mut self) -> &mut Vec<ChaseAtom> {
         &mut self.positive_body
     }
 
@@ -107,13 +195,13 @@ impl ChaseRule {
 
     /// Return the negative body atons of the rule - immutable.
     #[must_use]
-    pub fn negative_body(&self) -> &Vec<Atom> {
+    pub fn negative_body(&self) -> &Vec<ChaseAtom> {
         &self.negative_body
     }
 
     /// Return the negative body atoms of the rule - mutable.
     #[must_use]
-    pub fn negative_body_mut(&mut self) -> &mut Vec<Atom> {
+    pub fn negative_body_mut(&mut self) -> &mut Vec<ChaseAtom> {
         &mut self.negative_body
     }
 
@@ -130,18 +218,57 @@ impl ChaseRule {
     }
 }
 
-impl From<Rule> for ChaseRule {
-    fn from(rule: Rule) -> ChaseRule {
-        ChaseRule::new(
-            rule.head().to_vec(),
-            rule.body().to_vec(),
-            rule.filters().to_vec(),
-        )
+impl TryFrom<Rule> for ChaseRule {
+    type Error = Error;
+
+    fn try_from(rule: Rule) -> Result<ChaseRule, Error> {
+        let mut positive_body = Vec::new();
+        let mut negative_body = Vec::new();
+
+        for literal in rule.body().iter().cloned() {
+            match literal {
+                Literal::Positive(atom) => positive_body.push(ChaseAtom::from_flat_atom(atom)?),
+                Literal::Negative(atom) => negative_body.push(ChaseAtom::from_flat_atom(atom)?),
+            }
+        }
+
+        let mut constructors = HashMap::<Variable, TermTree>::new();
+        let mut head_atoms = Vec::<ChaseAtom>::new();
+        let mut term_counter: usize = 1;
+        for atom in rule.head() {
+            let mut new_terms = Vec::<Term>::new();
+
+            for term_tree in atom.terms() {
+                if let TermOperation::Term(term) = term_tree.operation() {
+                    new_terms.push(term.clone());
+                } else {
+                    let new_variable =
+                        Variable::Universal(Identifier(format!("HEAD_OPERATION_{term_counter}")));
+                    new_terms.push(Term::Variable(new_variable.clone()));
+                    let exists = constructors.insert(new_variable, term_tree.clone());
+
+                    assert!(exists.is_none())
+                }
+
+                term_counter += 1;
+            }
+
+            head_atoms.push(ChaseAtom::new(atom.predicate(), new_terms));
+        }
+
+        Ok(Self {
+            head: head_atoms,
+            constructors,
+            positive_body,
+            negative_body,
+            positive_filters: rule.filters().clone(),
+            negative_filters: Vec::new(),
+        })
     }
 }
 
 #[allow(dead_code)]
-/// A full program.
+/// Representation of a datalog program that is used for generating execution plans for the physical layer.
 #[derive(Debug, Default, Clone)]
 pub struct ChaseProgram {
     base: Option<String>,
@@ -310,12 +437,14 @@ impl ChaseProgram {
     }
 }
 
-impl From<Program> for ChaseProgram {
-    fn from(value: Program) -> Self {
-        Self::new(
-            value.base(),
-            value.prefixes().clone(),
-            value
+impl TryFrom<Program> for ChaseProgram {
+    type Error = Error;
+
+    fn try_from(program: Program) -> Result<Self, Error> {
+        Ok(Self::new(
+            program.base(),
+            program.prefixes().clone(),
+            program
                 .sources()
                 .map(|(predicate, _arity, input_types, source)| {
                     DataSourceDeclaration::new(
@@ -325,18 +454,18 @@ impl From<Program> for ChaseProgram {
                     )
                 })
                 .collect(),
-            value
+            program
                 .rules()
                 .iter()
-                .map(|rule| rule.clone().into())
-                .collect(),
-            value.facts().to_vec(),
-            value.parsed_predicate_declarations(),
-            value
+                .map(|rule| rule.clone().try_into())
+                .collect::<Result<Vec<ChaseRule>, Error>>()?,
+            program.facts().to_vec(),
+            program.parsed_predicate_declarations(),
+            program
                 .output_predicates()
                 .map(QualifiedPredicateName::new)
                 .collect::<Vec<_>>()
                 .into(),
-        )
+        ))
     }
 }
