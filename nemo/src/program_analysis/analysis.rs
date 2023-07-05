@@ -752,6 +752,39 @@ impl ChaseProgram {
         Ok(())
     }
 
+    fn check_for_nonnumeric_arithmetic(&self, analyses: &[RuleAnalysis]) -> Result<(), TypeError> {
+        for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
+            for (variable, term_tree) in rule.constructors() {
+                if !term_tree.0.is_leaf() {
+                    let variable_type = analysis
+                        .variable_types
+                        .get(variable)
+                        .expect("Previous analysis should have assigned a type to each variable.");
+
+                    if !variable_type.allows_numeric_operations() {
+                        return Err(TypeError::InvalidRuleNonNumericArithmetic);
+                    }
+
+                    for term in term_tree.terms() {
+                        if let Term::Variable(variable) = term {
+                            let variable_type = analysis.variable_types.get(variable).expect(
+                                "Previous analysis should have assigned a type to each variable.",
+                            );
+
+                            if !variable_type.allows_numeric_operations() {
+                                return Err(TypeError::InvalidRuleNonNumericArithmetic);
+                            }
+                        } else {
+                            variable_type.ground_term_to_data_value_t(term.clone())?;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Check if there is a constant that cannot be converted into the type of
     /// the variable/predicate position it is compared to.
     fn check_for_incompatible_constant_types(
@@ -856,6 +889,7 @@ impl ChaseProgram {
             .collect();
 
         self.check_for_incompatible_constant_types(&rule_analysis, &predicate_types)?;
+        self.check_for_nonnumeric_arithmetic(&rule_analysis)?;
 
         Ok(ProgramAnalysis {
             rule_analysis,
