@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{fmt::Display, ops::Deref};
 
 use crate::{
     datatypes::{DataTypeName, DataValueT, StorageValueT},
@@ -8,6 +8,19 @@ use crate::{
 use std::convert::TryFrom;
 
 use super::Dictionary;
+
+/// Load constant from dictionary with fallback if it is not found
+pub fn serialize_constant_with_dict<C, D>(constant: C, dict: D) -> String
+where
+    usize: TryFrom<C>,
+    C: Copy + Display,
+    D: Deref<Target = Dict>,
+{
+    usize::try_from(constant)
+        .ok()
+        .and_then(|constant| dict.entry(constant))
+        .unwrap_or_else(|| format!("<__Null#{constant}>"))
+}
 
 /// Helper trait for mapping [`StorageValueT`] back into some (higher level) value space
 /// by virtue of the schema index that a value appears at (inside a table).
@@ -36,12 +49,7 @@ where
                 let StorageValueT::U64(constant) = value else {
                     unreachable!("strings are always encoded as U64 constants")
                 };
-                DataValueT::String(
-                    usize::try_from(constant)
-                        .ok()
-                        .and_then(|constant| self.dict.entry(constant))
-                        .unwrap_or_else(|| format!("<__Null#{constant}>")),
-                )
+                DataValueT::String(serialize_constant_with_dict(constant, self.dict.deref()))
             }
             DataTypeName::I64 => match value {
                 StorageValueT::I64(val) => DataValueT::I64(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?

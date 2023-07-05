@@ -76,3 +76,20 @@ impl std::fmt::Display for DataValueT {
         }
     }
 }
+
+/// Iterator over one kind of possible data values
+#[allow(missing_debug_implementations)]
+pub enum DataValueIteratorT<'a> {
+    /// String Variant
+    String(Box<dyn Iterator<Item = String> + 'a>),
+    /// U32 Variant
+    U32(Box<dyn Iterator<Item = u32> + 'a>),
+    /// U64 Variant
+    U64(Box<dyn Iterator<Item = u64> + 'a>),
+    /// I64 Variant
+    I64(Box<dyn Iterator<Item = i64> + 'a>),
+    /// Float Variant
+    Float(Box<dyn Iterator<Item = Float> + 'a>),
+    /// Double Variant
+    Double(Box<dyn Iterator<Item = Double> + 'a>),
+}

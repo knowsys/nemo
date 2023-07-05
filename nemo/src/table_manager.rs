@@ -2,17 +2,13 @@
 
 use super::{model::Identifier, types::LogicalTypeEnum};
 use nemo_physical::{
-    datatypes::DataValueT,
-    dictionary::{value_serializer::TrieSerializer, ValueSerializer},
+    datatypes::data_value::DataValueIteratorT,
     management::{
         database::{ColumnOrder, Dict, TableId, TableSource},
         execution_plan::ExecutionNodeRef,
         DatabaseInstance, ExecutionPlan,
     },
-    tabular::{
-        table_types::trie::{Trie, TrieRecords},
-        traits::{table_schema::TableSchema, trie_scan::TrieScan},
-    },
+    tabular::{table_types::trie::Trie, traits::table_schema::TableSchema},
     util::mapping::permutation::Permutation,
 };
 
@@ -320,52 +316,9 @@ impl TableManager {
             .map(|s| s.count_rows(&self.database))
     }
 
-    /// Returns an iterator that provides serialized fields for each row in the specified table.
-    /// Uses the default [`ColumnOrder`]
-    /// Panics if there is no trie associated with the given id.
-    pub fn table_serializer(&mut self, id: TableId) -> Result<impl TrieSerializer + '_, Error> {
-        let _ = self
-            .database
-            .get_trie_or_load(id, &ColumnOrder::default())?;
-        let schema = self.database.table_schema(id);
-        let dict = self.database.get_dict_constants();
-
-        Ok(self
-            .database
-            .get_trie(id, &ColumnOrder::default())
-            .records(ValueSerializer { schema, dict }))
-    }
-
-    /// Returns an iterator over the specified table.
-    /// Uses the default [`ColumnOrder`]
-    pub fn table_values(
-        &mut self,
-        id: TableId,
-    ) -> Result<impl Iterator<Item = Vec<DataValueT>> + '_, Error> {
-        struct OwnedRecords<'a, S>(
-            TrieRecords<S, ValueSerializer<Ref<'a, Dict>, &'a TableSchema>, DataValueT>,
-        );
-
-        impl<'a, S: TrieScan> Iterator for OwnedRecords<'a, S> {
-            type Item = Vec<DataValueT>;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                let rec = self.0.next_record()?;
-                Some(rec.cloned().collect())
-            }
-        }
-
-        let _ = self
-            .database
-            .get_trie_or_load(id, &ColumnOrder::default())?;
-        let schema = self.database.table_schema(id);
-        let dict = self.database.get_dict_constants();
-
-        Ok(OwnedRecords(
-            self.database
-                .get_trie(id, &ColumnOrder::default())
-                .records(ValueSerializer { schema, dict }),
-        ))
+    /// Get a list of column iterators for the full table (i.e. the expanded trie)
+    pub fn table_column_iters(&mut self, id: TableId) -> Result<Vec<DataValueIteratorT>, Error> {
+        Ok(self.database.get_table_column_iterators(id)?)
     }
 
     /// Combine all subtables of a predicate into one table

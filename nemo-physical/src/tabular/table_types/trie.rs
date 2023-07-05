@@ -1,11 +1,12 @@
 use std::cell::UnsafeCell;
-use std::iter;
 use std::mem::size_of;
 use std::ops::Deref;
+use std::{debug_assert, iter};
 
 use bytesize::ByteSize;
 
 use crate::columnar::operations::{ColumnScanCast, ColumnScanCastEnum};
+use crate::datatypes::storage_value::StorageValueIteratorT;
 use crate::generate_cast_statements;
 use crate::permutator::Permutator;
 
@@ -237,6 +238,60 @@ impl Trie {
             last_record: Vec::with_capacity(num_columns),
             mapping: serializer,
         }
+    }
+
+    fn get_number_of_repetitions_at_position(&self, col_idx: usize, data_idx: usize) -> usize {
+        debug_assert!(!self.columns.is_empty());
+        debug_assert!(col_idx < self.columns.len());
+        debug_assert!(data_idx < self.columns[col_idx].len());
+
+        if col_idx == self.columns.len() - 1 {
+            1
+        } else if col_idx == self.columns.len() - 2 {
+            self.columns[col_idx + 1].int_bounds(data_idx).len()
+        } else {
+            self.columns[col_idx + 1]
+                .int_bounds(data_idx)
+                .map(|new_data_idx| {
+                    self.get_number_of_repetitions_at_position(col_idx + 1, new_data_idx)
+                })
+                .sum()
+        }
+    }
+
+    fn get_full_iterator_for_col_idx(&self, col_idx: usize) -> StorageValueIteratorT {
+        debug_assert!(!self.columns.is_empty());
+        debug_assert!(col_idx < self.columns.len());
+
+        let col = &self.columns[col_idx];
+
+        macro_rules! build_iter {
+            ($variant:ident, $c:ident) => {
+                StorageValueIteratorT::$variant(Box::new($c.iter().enumerate().flat_map(
+                    move |(i, v)| {
+                        std::iter::repeat(v)
+                            .take(self.get_number_of_repetitions_at_position(col_idx, i))
+                    },
+                )))
+            };
+        }
+
+        match col {
+            ColumnWithIntervalsT::U32(c) => build_iter!(U32, c),
+            ColumnWithIntervalsT::U64(c) => build_iter!(U64, c),
+            ColumnWithIntervalsT::I64(c) => build_iter!(I64, c),
+            ColumnWithIntervalsT::Float(c) => build_iter!(Float, c),
+            ColumnWithIntervalsT::Double(c) => build_iter!(Double, c),
+        }
+    }
+
+    /// Get Vector or column iterators that augment full table representation
+    pub fn get_full_column_iterators(&self) -> Vec<StorageValueIteratorT> {
+        self.columns
+            .iter()
+            .enumerate()
+            .map(|(i, _)| self.get_full_iterator_for_col_idx(i))
+            .collect()
     }
 }
 
@@ -546,7 +601,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::{Trie, TrieScanGeneric};
+    use std::assert_eq;
+
+    use super::{StorageValueIteratorT, Trie, TrieScanGeneric};
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::{storage_value::VecT, StorageValueT};
     use crate::tabular::traits::{partial_trie_scan::PartialTrieScan, table::Table};
@@ -763,5 +820,56 @@ mod test {
         trie_iter.up();
         assert!(scan_next(&mut trie_iter).is_none());
         assert!(scan_current(&mut trie_iter).is_none());
+    }
+
+    #[test]
+    fn get_number_of_repetitions_at_position() {
+        let column_fst = make_column_with_intervals_t(&[1, 2, 3], &[0]);
+        let column_snd = make_column_with_intervals_t(&[2, 3, 4, 1, 2], &[0, 2, 3]);
+        let column_trd = make_column_with_intervals_t(&[3, 4, 5, 7, 8, 7, 2, 1], &[0, 2, 5, 6, 7]);
+
+        let column_vec = vec![column_fst, column_snd, column_trd];
+
+        let trie = Trie::new(column_vec);
+
+        assert_eq!(trie.get_number_of_repetitions_at_position(2, 0), 1);
+        assert_eq!(trie.get_number_of_repetitions_at_position(2, 5), 1);
+        assert_eq!(trie.get_number_of_repetitions_at_position(1, 0), 2);
+        assert_eq!(trie.get_number_of_repetitions_at_position(1, 1), 3);
+        assert_eq!(trie.get_number_of_repetitions_at_position(0, 0), 5);
+    }
+
+    fn collect_full_col_iterator(iter: StorageValueIteratorT) -> VecT {
+        match iter {
+            StorageValueIteratorT::U32(i) => VecT::U32(i.collect()),
+            StorageValueIteratorT::U64(i) => VecT::U64(i.collect()),
+            StorageValueIteratorT::I64(i) => VecT::I64(i.collect()),
+            StorageValueIteratorT::Float(i) => VecT::Float(i.collect()),
+            StorageValueIteratorT::Double(i) => VecT::Double(i.collect()),
+        }
+    }
+
+    #[test]
+    fn get_full_iterator_for_col_idx() {
+        let column_fst = make_column_with_intervals_t(&[1, 2, 3], &[0]);
+        let column_snd = make_column_with_intervals_t(&[2, 3, 4, 1, 2], &[0, 2, 3]);
+        let column_trd = make_column_with_intervals_t(&[3, 4, 5, 7, 8, 7, 2, 1], &[0, 2, 5, 6, 7]);
+
+        let column_vec = vec![column_fst, column_snd, column_trd];
+
+        let trie = Trie::new(column_vec);
+
+        assert_eq!(
+            collect_full_col_iterator(trie.get_full_iterator_for_col_idx(0)),
+            VecT::U64(vec![1, 1, 1, 1, 1, 2, 3, 3])
+        );
+        assert_eq!(
+            collect_full_col_iterator(trie.get_full_iterator_for_col_idx(1)),
+            VecT::U64(vec![2, 2, 3, 3, 3, 4, 1, 2])
+        );
+        assert_eq!(
+            collect_full_col_iterator(trie.get_full_iterator_for_col_idx(2)),
+            VecT::U64(vec![3, 4, 5, 7, 8, 7, 2, 1])
+        );
     }
 }
