@@ -14,6 +14,7 @@ use super::{
 
 use thiserror::Error;
 
+/// Representation of an atom used in [`ChaseRule`].
 #[derive(Debug, Clone)]
 pub struct ChaseAtom {
     predicate: Identifier,
@@ -35,6 +36,7 @@ impl ChaseAtom {
         Self { predicate, terms }
     }
 
+    /// Construct a [`ChaseAtom`] from an [`Atom`] that does not contain term trees that are not leaves.
     pub fn from_flat_atom(atom: Atom) -> Result<Self, RuleTranslationError> {
         let terms: Vec<Term> = atom
             .terms()
@@ -93,6 +95,7 @@ impl ChaseAtom {
     }
 }
 
+/// Representation of a rule in a [`ChaseProgram`].
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
 pub struct ChaseRule {
@@ -265,7 +268,7 @@ impl TryFrom<Rule> for ChaseRule {
 }
 
 #[allow(dead_code)]
-/// A full program.
+/// Representation of a datalog program that is used for generating execution plans for the physical layer.
 #[derive(Debug, Default, Clone)]
 pub struct ChaseProgram {
     base: Option<String>,
