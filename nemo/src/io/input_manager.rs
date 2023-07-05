@@ -195,9 +195,13 @@ impl InputManager {
                 );
                 Ok(TableSource::FileReader(Box::new(dsv_reader)))
             }
-            DataSource::RdfFile(resource) => Ok(TableSource::FileReader(Box::new(
-                RDFTriplesReader::new(self.resource_providers.clone(), resource.clone()),
-            ))),
+            DataSource::RdfFile { resource, base } => {
+                Ok(TableSource::FileReader(Box::new(RDFTriplesReader::new(
+                    self.resource_providers.clone(),
+                    resource.clone(),
+                    base.clone(),
+                ))))
+            }
             DataSource::SparqlQuery(_) => {
                 todo!("SPARQL query data sources are not yet implemented")
             }

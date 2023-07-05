@@ -40,6 +40,7 @@ path-slash = "0.2.1"
 rio_api = "0.8.4"
 rio_turtle = "0.8.4"
 rio_xml = "0.8.4"
+oxiri = "0.2.2"
 
 [dev-dependencies]
 env_logger = "*"

@@ -733,7 +733,7 @@ impl Program {
                     resource,
                     delimiter: _,
                 } => Some(resource),
-                DataSource::RdfFile(resource) => Some(resource),
+                DataSource::RdfFile { resource, base: _ } => Some(resource),
                 DataSource::SparqlQuery(_) => None,
             })
             .cloned()
@@ -913,15 +913,20 @@ impl SparqlQuery {
 /// An external data source.
 #[derive(Clone, PartialEq, Eq)]
 pub enum DataSource {
-    /// A DSV (delimiter-separated values) file data source with the given path and delimiter.
+    /// A DSV (delimiter-separated values) resource data source with the given path and delimiter.
     DsvFile {
-        /// the DSV file
+        /// the DSV resource
         resource: Resource,
         /// the delimiter separating the values
         delimiter: u8,
     },
-    /// An RDF file data source with the given path.
-    RdfFile(Resource),
+    /// An RDF file data source with the given path and optional base IRI.
+    RdfFile {
+        /// the RDF resource
+        resource: Resource,
+        /// the optional base IRI
+        base: Option<String>,
+    },
     /// A SPARQL query data source.
     SparqlQuery(Box<SparqlQuery>),
 }
@@ -945,7 +950,15 @@ impl DataSource {
 
     /// Construct a new RDF file data source from a given path.
     pub fn rdf_file(path: &str) -> Result<Self, ParseError> {
-        Ok(Self::RdfFile(String::from(path)))
+        Self::rdf_file_with_base(path, None)
+    }
+
+    /// Construct a new RDF file data source from a given path and base IRI.
+    pub fn rdf_file_with_base(path: &str, base: Option<String>) -> Result<Self, ParseError> {
+        Ok(Self::RdfFile {
+            resource: String::from(path),
+            base,
+        })
     }
 
     /// Construct a new SPARQL query data source from a given query.
@@ -953,11 +966,11 @@ impl DataSource {
         Ok(Self::SparqlQuery(Box::new(query)))
     }
 
-    /// Get the logical types that should be used for columns in the datasource if no type declaration is given explicitely
+    /// Get the logical types that should be used for columns in the datasource if no type declaration is given explicitly
     pub fn default_type(&self) -> LogicalTypeEnum {
         match self {
             Self::DsvFile { .. } => LogicalTypeEnum::String,
-            Self::RdfFile(_) => LogicalTypeEnum::Any,
+            Self::RdfFile { .. } => LogicalTypeEnum::Any,
             Self::SparqlQuery(_) => LogicalTypeEnum::Any,
         }
     }
@@ -981,7 +994,17 @@ impl Debug for DataSource {
                 let description = format!("DSV file with delimiter {delimiter:?}");
                 f.debug_tuple(&description).field(file).finish()
             }
-            Self::RdfFile(arg0) => f.debug_tuple("RDF file").field(arg0).finish(),
+            Self::RdfFile {
+                resource,
+                base: None,
+            } => f.debug_tuple("RDF file").field(resource).finish(),
+            Self::RdfFile {
+                resource,
+                base: Some(base),
+            } => f
+                .debug_tuple(&format!("RDF file with base {base:?}"))
+                .field(resource)
+                .finish(),
             Self::SparqlQuery(arg0) => f.debug_tuple("SparqlQuery").field(arg0).finish(),
         }
     }
@@ -1024,11 +1047,14 @@ impl DataSourceDeclaration {
                 resource: _,
                 delimiter: _,
             } => (), // no validation for CSV files
-            DataSource::RdfFile(ref path) => {
+            DataSource::RdfFile {
+                ref resource,
+                base: _,
+            } => {
                 if arity != 3 {
                     return Err(ParseError::RdfSourceInvalidArity(
                         predicate.name(),
-                        path.clone(),
+                        resource.clone(),
                         arity,
                     ));
                 }

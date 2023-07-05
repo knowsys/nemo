@@ -460,7 +460,12 @@ impl<'a> RuleParser<'a> {
                                     turtle::string,
                                     self.parse_close_parenthesis(),
                                 ),
-                                |filename| DataSource::rdf_file(&filename),
+                                |filename| {
+                                    DataSource::rdf_file_with_base(
+                                        &filename,
+                                        self.base().map(String::from),
+                                    )
+                                },
                             ),
                             map(
                                 delimited(
