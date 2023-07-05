@@ -80,8 +80,8 @@ pub(super) fn generate_node_arithmetic(
 
     let mut new_variable_order = variable_order.clone();
 
-    for (variable, tree) in constructors {
-        new_variable_order.push_position(variable.clone(), first_unused_index);
+    for (constructor_index, (variable, tree)) in constructors.iter().enumerate() {
+        new_variable_order.push_position(variable.clone(), first_unused_index + constructor_index);
         constructor_instructions.push(AppendInstruction::Operation(termtree_to_operationtree(
             &tree.0,
             variable_order,
