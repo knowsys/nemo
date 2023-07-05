@@ -1,4 +1,4 @@
-//! Reading of RDF 1.1 triples files (N-Triples, Turtle)
+//! Reading of RDF 1.1 triples files (N-Triples, Turtle, RDF/XML)
 use std::io::{BufRead, BufReader};
 
 use nemo_physical::{
@@ -8,6 +8,7 @@ use nemo_physical::{
 };
 use rio_api::{model::Triple, parser::TriplesParser};
 use rio_turtle::{NTriplesParser, TurtleParser};
+use rio_xml::RdfXmlParser;
 
 use crate::types::LogicalTypeEnum;
 
@@ -81,6 +82,10 @@ impl TableReader for RDFTriplesReader {
         if self.resource.ends_with(".ttl.gz") || self.resource.ends_with(".ttl") {
             self.read_with_buf_reader(builder_proxies, &mut reader, |reader| {
                 TurtleParser::new(reader, None)
+            })
+        } else if self.resource.ends_with(".rdf.gz") || self.resource.ends_with(".rdf") {
+            self.read_with_buf_reader(builder_proxies, &mut reader, |reader| {
+                RdfXmlParser::new(reader, None)
             })
         } else {
             self.read_with_buf_reader(builder_proxies, &mut reader, NTriplesParser::new)
