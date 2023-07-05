@@ -81,9 +81,6 @@ pub enum ParseError {
     /// An existentially quantified variable occurs in the body of a rule.
     #[error(r#"Variable "{0}" occurs existentially quantified in the rule body."#)]
     BodyExistential(String),
-    /// A variable only occurs in negative literals in the rule body.
-    #[error(r#"Variable "{0}" only occurs unsafely in negative literals in the rule body."#)]
-    UnsafeNegatedVariable(String),
     /// The universal variable does not occur in a positive body literal.
     #[error(r#"The universal variable "{0}" does not occur in a positive body literal."#)]
     UnsafeHeadVariable(String),

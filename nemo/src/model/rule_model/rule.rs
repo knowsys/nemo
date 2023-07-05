@@ -63,14 +63,7 @@ impl Rule {
             .difference(&positive_varibales)
             .collect::<Vec<_>>();
 
-        if !negative_variables.is_empty() {
-            return Err(ParseError::UnsafeNegatedVariable(
-                negative_variables
-                    .first()
-                    .expect("is not empty here")
-                    .name(),
-            ));
-        }
+        // TODO: Implement something that checks whether unsafe negated variables occurs in multiple places
 
         // Check if a variable occurs with both existential and universal quantification.
         let universal_variables = body
