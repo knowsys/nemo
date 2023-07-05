@@ -21,11 +21,11 @@ class TestExample(unittest.TestCase):
 
         self.expected_result = [
             [
-                "\"2\"^^<http://www.w3.org/2001/XMLSchema#integer>",
+                '"2"^^<http://www.w3.org/2001/XMLSchema#integer>',
                 "<__Null#9223372036854775809>",
             ],
             [
-                "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>",
+                '"42"^^<http://www.w3.org/2001/XMLSchema#integer>',
                 "<__Null#9223372036854775810>",
             ],
             ["world", "<__Null#9223372036854775811>"],
