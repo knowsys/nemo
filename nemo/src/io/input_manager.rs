@@ -14,8 +14,8 @@ use crate::{error::Error, model::DataSource, types::LogicalTypeEnum};
 
 use super::{
     dsv::DSVReader,
-    ntriples::NTriplesReader,
     parser::{all_input_consumed, iri::iri},
+    rdf_triples::RDFTriplesReader,
 };
 
 /// Manages everything related to resolving the inputs of a Nemo program.
@@ -196,7 +196,7 @@ impl InputManager {
                 Ok(TableSource::FileReader(Box::new(dsv_reader)))
             }
             DataSource::RdfFile(resource) => Ok(TableSource::FileReader(Box::new(
-                NTriplesReader::new(self.resource_providers.clone(), resource.clone()),
+                RDFTriplesReader::new(self.resource_providers.clone(), resource.clone()),
             ))),
             DataSource::SparqlQuery(_) => {
                 todo!("SPARQL query data sources are not yet implemented")

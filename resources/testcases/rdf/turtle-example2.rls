@@ -1,0 +1,12 @@
+@prefix : <http://example.org/stuff/1.0/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+@declare goal(integer) .
+
+@source triples[3]: load-rdf("sources/example2.ttl") .
+
+goal(42) :- triples(?a, ?b, ?c),
+            triples(?c, rdf:first, "apple"),
+            triples(?c, rdf:rest, ?d),
+            triples(?d, rdf:first, "banana"),
+            triples(?d, rdf:rest, rdf:nil) .
