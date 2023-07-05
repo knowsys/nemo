@@ -72,9 +72,6 @@ pub enum RuleAnalysisError {
     /// Unsupported feature: Overloading of predicate names by arity/type
     #[error("Overloading of predicate names by arity is currently not supported.")]
     UnsupportedFeaturePredicateOverloading,
-    /// Arithmetic operation in body
-    #[error("Arithmetic operations are currently not allowed in the body of a rule.")]
-    UnsupportedFeatureBodyArithmetic,
 }
 
 /// Return true if there is a predicate in the positive part of the rule that also appears in the head of the rule.

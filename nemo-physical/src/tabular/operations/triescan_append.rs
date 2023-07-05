@@ -441,22 +441,6 @@ impl<'a> TrieScanAppend<'a> {
             StorageTypeName::Float => input_for_datatype!(Float, f32),
             StorageTypeName::Double => input_for_datatype!(Double, f64),
         }
-
-        // macro_rules! input_for_datatype {
-        //     ($src_name:ident, $dst_name:ident, $src_type:ty, $dst_type:ty) => {{
-
-        //         let new_scan_cast = ColumnScanCell::new(ColumnScanEnum::ColumnScanCast(
-        //             ColumnScanCastEnum::$src_name(ColumnScanCast::<$src_type, $dst_type>::new(
-        //                 new_scan,
-        //             )),
-        //         ));
-
-        //         self.column_scans
-        //             .push(UnsafeCell::new(ColumnScanT::$dst_name(new_scan_cast)));
-        //     }};
-        // }
-
-        // generate_cast_statements!(input_for_datatype; src_type, dst_type);
     }
 
     fn add_backed_column(&mut self, src_index: usize) {
