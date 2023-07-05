@@ -209,13 +209,11 @@ where
             } else {
                 self.current()
             }
+        } else if self.cursor == CursorPosition::Before {
+            self.next();
+            self.seek(seek_value)
         } else {
-            if self.cursor == CursorPosition::Before {
-                self.next();
-                self.seek(seek_value)
-            } else {
-                None
-            }
+            None
         }
     }
 

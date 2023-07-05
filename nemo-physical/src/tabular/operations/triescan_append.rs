@@ -350,7 +350,7 @@ impl<'a> TrieScanAppend<'a> {
         };
 
         for (src_index, insert_instructions) in instructions.iter().enumerate() {
-            for instruction in insert_instructions.into_iter() {
+            for instruction in insert_instructions.iter() {
                 match instruction {
                     AppendInstruction::RepeatColumn(repeat_index) => {
                         res.add_repeat_column(*repeat_index)
