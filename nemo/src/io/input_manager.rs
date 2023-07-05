@@ -8,6 +8,7 @@ use flate2::read::GzDecoder;
 use nemo_physical::{
     error::ReadingError, management::database::TableSource, table_reader::Resource,
 };
+use path_slash::PathBufExt;
 
 use crate::{error::Error, model::DataSource, types::LogicalTypeEnum};
 
@@ -113,9 +114,15 @@ impl ResourceProvider for FileResourceProvider {
     fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn Read>>, ReadingError> {
         // Try to parse as file IRI
         let path = if is_iri(resource) {
-            if resource.starts_with("file:") {
-                // File URI
-                unimplemented!();
+            if resource.starts_with("file://") {
+                // File URI. We only support local files, i.e., URIs
+                // where the host part is either empty or `localhost`.
+
+                let path = resource
+                    .strip_prefix("file://localhost")
+                    .or_else(|| resource.strip_prefix("file://"))
+                    .ok_or_else(|| ReadingError::InvalidFileUri(resource.to_string()))?;
+                PathBuf::from_slash(path)
             } else {
                 // Non-file IRI, file resource provider is not responsible
                 return Ok(None);

@@ -42,6 +42,9 @@ pub enum ReadingError {
         /// Resource which was not provided
         resource: Resource,
     },
+    /// A provided resource is not a valid local file:// URI
+    #[error(r#"Resource "{0}" is not a valid local file:// URI"#)]
+    InvalidFileUri(Resource),
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate
