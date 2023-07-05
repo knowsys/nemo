@@ -15,7 +15,6 @@
 //! This file can be found in the current repository at `resources/doc/examples/city_population.csv`
 //! ## Logical layer
 //! ```
-//! # use std::path::PathBuf;
 //! # use nemo_physical::table_reader::TableReader;
 //! # use nemo::{types::LogicalTypeEnum, io::{input_manager::ResourceProviders, dsv::DSVReader}};
 //! # let file_path = String::from("../resources/doc/examples/city_population.csv");
@@ -38,7 +37,6 @@
 //! The physical layer receives `table_reader`, the [`TableReader`] trait object from the example above.
 //! ```
 //! # use nemo_physical::table_reader::TableReader;
-//! # use std::path::PathBuf;
 //! #
 //! # use nemo::{types::LogicalTypeEnum, io::{input_manager::ResourceProviders, dsv::DSVReader}};
 //! # use std::cell::RefCell;
@@ -90,7 +88,8 @@ use super::input_manager::ResourceProviders;
 /// - no headers are given,
 /// - double quotes are allowed for string escaping
 ///
-/// The reader object relates a given [file][PathBuf] in DSV format to a tuple of [logical types][LogicalTypeEnum].
+/// The reader object relates a given [resource][Resource] in DSV format to a tuple of [logical types][LogicalTypeEnum].
+/// It accesses the resource through the given [resource_providers][ResourceProviders].
 /// Via the implementation of [`TableReader`] it fills the corresponding [`PhysicalBuilderProxys`][nemo_physical::builder_proxy::PhysicalBuilderProxyEnum]
 /// with the data from the file.
 /// It combines the logical and physical BuilderProxies to handle the read data according to both datatype models.
