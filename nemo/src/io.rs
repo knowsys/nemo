@@ -9,7 +9,9 @@ pub mod input_manager;
 pub mod output_file_manager;
 pub mod parser;
 pub mod rdf_triples;
+pub mod resource_providers;
 
+pub use input_manager::InputManager;
 pub use output_file_manager::OutputFileManager;
 
 use nemo_physical::dictionary::value_serializer::TrieSerializer;

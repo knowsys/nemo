@@ -30,8 +30,8 @@ use crate::{
     error::{Error, ReadingError},
     execution::{DefaultExecutionEngine, ExecutionEngine},
     io::{
-        input_manager::ResourceProviders,
         parser::{all_input_consumed, RuleParser},
+        resource_providers::ResourceProviders,
         OutputFileManager, RecordWriter,
     },
     model::Identifier,
