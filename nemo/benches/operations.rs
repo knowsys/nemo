@@ -23,7 +23,7 @@ use nemo_physical::{
 };
 
 use nemo::{
-    io::{dsv::DSVReader, input_manager::ResourceProviders},
+    io::{formats::DSVReader, resource_providers::ResourceProviders},
     model::DataSource,
     types::LogicalTypeEnum,
 };
