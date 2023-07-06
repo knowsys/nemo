@@ -5,3 +5,5 @@ pub mod rdf_triples;
 
 pub use dsv::DSVReader;
 pub use rdf_triples::RDFTriplesReader;
+
+const PROGRESS_NOTIFY_INCREMENT: u64 = 1_000_000;

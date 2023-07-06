@@ -79,7 +79,7 @@ use nemo_physical::table_reader::{Resource, TableReader};
 use crate::{
     builder_proxy::LogicalColumnBuilderProxy,
     error::{Error, ReadingError},
-    io::resource_providers::ResourceProviders,
+    io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
     types::LogicalTypeEnum,
 };
 
@@ -163,7 +163,8 @@ impl DSVReader {
     where
         R2: Read,
     {
-        let mut counter: u64 = 0;
+        let mut lines = 0;
+
         for row in dsv_reader.records().flatten() {
             if let Err(Error::Rollback(rollback)) =
                 row.iter().enumerate().try_for_each(|(idx, item)| {
@@ -186,12 +187,13 @@ impl DSVReader {
                     }
                 });
             }
-            counter += 1;
-            if (counter % 1000000) == 0 {
-                log::info!("{} lines have been processed", counter);
+
+            lines += 1;
+            if (lines % PROGRESS_NOTIFY_INCREMENT) == 0 {
+                log::info!("loading: processed {lines} lines");
             }
         }
-        log::info!("Finished load: {} lines processed", counter);
+        log::info!("Finished loading: processed {lines} lines");
 
         Ok(())
     }
