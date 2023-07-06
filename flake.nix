@@ -44,6 +44,11 @@ rec {
           cargo = toolchain;
           rustc = toolchain;
         };
+        defaultBuildInputs = [pkgs.openssl pkgs.openssl.dev];
+        defaultNativeBuildInputs = [
+          toolchain
+          pkgs.pkg-config
+        ];
       in rec {
         packages = let
           cargoMeta = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package;
@@ -67,14 +72,15 @@ rec {
               cargoDeps =
                 platform.importCargoLock {lockFile = ./Cargo.lock;};
 
-              nativeBuildInputs = with platform; [
-                cargoSetupHook
-                pkgs.wasm-pack
-                pkgs.nodejs
-                toolchain
-                self.packages."${pkgs.system}".wasm-bindgen-cli
-              ];
-              buildInputs = [pkgs.nodejs];
+              nativeBuildInputs =
+                defaultNativeBuildInputs
+                ++ (with platform; [
+                  cargoSetupHook
+                  pkgs.wasm-pack
+                  pkgs.nodejs
+                  self.packages."${pkgs.system}".wasm-bindgen-cli
+                ]);
+              buildInputs = defaultBuildInputs ++ [pkgs.nodejs];
 
               buildPhase = ''
                 runHook preBuild
@@ -101,10 +107,13 @@ rec {
 
             cargoLock.lockFile = ./Cargo.lock;
 
-            nativeBuildInputs = with platform; [
-              cargoBuildHook
-              cargoCheckHook
-            ];
+            buildInputs = defaultBuildInputs;
+            nativeBuildInputs =
+              defaultNativeBuildInputs
+              ++ (with platform; [
+                cargoBuildHook
+                cargoCheckHook
+              ]);
             buildAndTestSubdir = "nemo-cli";
           };
 
@@ -115,10 +124,13 @@ rec {
 
             cargoDeps = platform.importCargoLock {lockFile = ./Cargo.lock;};
 
-            nativeBuildInputs = with platform; [
-              cargoSetupHook
-              maturinBuildHook
-            ];
+            buildInputs = defaultBuildInputs;
+            nativeBuildInputs =
+              defaultNativeBuildInputs
+              ++ (with platform; [
+                cargoSetupHook
+                maturinBuildHook
+              ]);
             buildAndTestSubdir = "nemo-python";
 
             doCheck = false; # no python tests yet
@@ -177,21 +189,19 @@ rec {
             ifNotOn = systems:
               pkgs.lib.optionals (!builtins.elem pkgs.system systems);
           in
-            [
-              toolchain
-              pkgs.rust-analyzer
-              pkgs.cargo-audit
-              pkgs.cargo-license
-              pkgs.cargo-tarpaulin
-              pkgs.gnuplot
-              pkgs.maturin
-              pkgs.python3
-              pkgs.wasm-pack
-              self.packages."${pkgs.system}".wasm-bindgen-cli
-              pkgs.nodejs
-              pkgs.openssl.dev
-              pkgs.pkg-config
-            ]
+            (defaultNativeBuildInputs
+              ++ [
+                pkgs.rust-analyzer
+                pkgs.cargo-audit
+                pkgs.cargo-license
+                pkgs.cargo-tarpaulin
+                pkgs.gnuplot
+                pkgs.maturin
+                pkgs.python3
+                pkgs.wasm-pack
+                self.packages."${pkgs.system}".wasm-bindgen-cli
+                pkgs.nodejs
+              ])
             # valgrind is linux-only
             ++ (ifNotOn ["aarch64-darwin" "x86_64-darwin"] [pkgs.valgrind]);
         };
