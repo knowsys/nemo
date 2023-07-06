@@ -189,6 +189,8 @@ rec {
               pkgs.wasm-pack
               self.packages."${pkgs.system}".wasm-bindgen-cli
               pkgs.nodejs
+              pkgs.openssl.dev
+              pkgs.pkg-config
             ]
             # valgrind is linux-only
             ++ (ifNotOn ["aarch64-darwin" "x86_64-darwin"] [pkgs.valgrind]);
