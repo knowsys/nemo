@@ -1663,6 +1663,7 @@ dependencies = [
  "sanitise-file-name",
  "test-log",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -1697,6 +1698,7 @@ dependencies = [
  "quickcheck",
  "quickcheck_macros",
  "rand",
+ "reqwest",
  "rio_turtle",
  "rio_xml",
  "test-log",
@@ -3104,7 +3106,6 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
- "num_cpus",
  "pin-project-lite",
  "socket2",
  "windows-sys",

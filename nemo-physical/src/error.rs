@@ -51,6 +51,9 @@ pub enum ReadingError {
     /// Error in Rio's RDF/XML parser
     #[error(transparent)]
     RioXML(#[from] rio_xml::RdfXmlError),
+    /// Error in Requwest's HTTP handler
+    #[error(transparent)]
+    HTTPTransfer(#[from] reqwest::Error),
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate

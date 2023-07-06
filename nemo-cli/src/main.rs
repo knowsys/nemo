@@ -28,7 +28,7 @@ use colored::Colorize;
 use nemo::{
     error::{Error, ReadingError},
     execution::{DefaultExecutionEngine, ExecutionEngine},
-    io::{input_manager::ResourceProviders, parser::parse_program, RecordWriter},
+    io::{parser::parse_program, resource_providers::ResourceProviders, RecordWriter},
     meta::{timing::TimedDisplay, TimedCode},
     model::OutputPredicateSelection,
 };

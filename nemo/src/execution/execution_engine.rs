@@ -10,7 +10,7 @@ use nemo_physical::{
 
 use crate::{
     error::Error,
-    io::input_manager::{InputManager, ResourceProviders},
+    io::{input_manager::InputManager, resource_providers::ResourceProviders},
     model::{chase_model::ChaseProgram, Identifier, Program, TermOperation},
     program_analysis::analysis::ProgramAnalysis,
     table_manager::TableManager,

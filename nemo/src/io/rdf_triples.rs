@@ -13,7 +13,7 @@ use rio_xml::RdfXmlParser;
 
 use crate::types::LogicalTypeEnum;
 
-use super::input_manager::ResourceProviders;
+use super::resource_providers::ResourceProviders;
 
 /// A [`TableReader`] for RDF 1.1 files containing triples.
 #[derive(Debug, Clone)]

@@ -7,9 +7,8 @@ use js_sys::Set;
 use js_sys::Uint8Array;
 use nemo::execution::ExecutionEngine;
 
-use nemo::io::input_manager::ResourceProvider;
-use nemo::io::input_manager::ResourceProviders;
 use nemo::io::parser::parse_program;
+use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo_physical::datatypes::DataValueT;
 use nemo_physical::table_reader::Resource;
 use wasm_bindgen::prelude::wasm_bindgen;

@@ -16,7 +16,7 @@
 //! ## Logical layer
 //! ```
 //! # use nemo_physical::table_reader::TableReader;
-//! # use nemo::{types::LogicalTypeEnum, io::{input_manager::ResourceProviders, dsv::DSVReader}};
+//! # use nemo::{types::LogicalTypeEnum, io::{resource_providers::ResourceProviders, dsv::DSVReader}};
 //! # let file_path = String::from("../resources/doc/examples/city_population.csv");
 //! let csv_reader = DSVReader::csv(
 //!     ResourceProviders::default(),
@@ -38,7 +38,7 @@
 //! ```
 //! # use nemo_physical::table_reader::TableReader;
 //! #
-//! # use nemo::{types::LogicalTypeEnum, io::{input_manager::ResourceProviders, dsv::DSVReader}};
+//! # use nemo::{types::LogicalTypeEnum, io::{resource_providers::ResourceProviders, dsv::DSVReader}};
 //! # use std::cell::RefCell;
 //! # use nemo_physical::builder_proxy::{
 //! #    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
@@ -80,7 +80,7 @@ use crate::builder_proxy::LogicalColumnBuilderProxy;
 use crate::error::{Error, ReadingError};
 use crate::types::LogicalTypeEnum;
 
-use super::input_manager::ResourceProviders;
+use super::resource_providers::ResourceProviders;
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
 ///

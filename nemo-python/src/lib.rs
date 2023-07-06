@@ -3,7 +3,7 @@ use std::{collections::HashSet, fs::read_to_string};
 use nemo::{
     datatypes::{DataValueT, Double, Float},
     execution::ExecutionEngine,
-    io::{input_manager::ResourceProviders, OutputFileManager, RecordWriter},
+    io::{resource_providers::ResourceProviders, OutputFileManager, RecordWriter},
 };
 
 use pyo3::{create_exception, prelude::*};
