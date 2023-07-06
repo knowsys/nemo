@@ -14,7 +14,7 @@ use nemo_physical::{
 
 use crate::io::parser::{all_input_consumed, parse_ground_term};
 
-use super::{model::Term, types::LogicalTypeEnum};
+use super::{model::PrimitiveType, model::Term};
 use crate::error::ReadingError;
 
 /// Trait capturing builder proxies that use plain string (used for parsing in logical layer)
@@ -59,12 +59,12 @@ impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
             all_input_consumed(parse_ground_term(&RefCell::new(HashMap::new())))(input.trim())
                 .unwrap_or(Term::StringLiteral(input.clone()));
 
-        let parsed_datavalue = LogicalTypeEnum::Any
+        let parsed_datavalue = PrimitiveType::Any
             .ground_term_to_data_value_t(parsed_term)
-            .expect("LogicalTypeEnum::Any should work with every possible term we can get here.");
+            .expect("PrimitiveType::Any should work with every possible term we can get here.");
 
         let DataValueT::String(parsed_string) = parsed_datavalue else {
-            unreachable!("LogicalTypeEnum::Any should always be treated as String at the moment.")
+            unreachable!("PrimitiveType::Any should always be treated as String at the moment.")
         };
 
         self.physical.add(parsed_string)

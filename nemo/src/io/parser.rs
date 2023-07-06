@@ -2,7 +2,7 @@
 
 use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
-use crate::{error::Error, model::*, types::LogicalTypeEnum};
+use crate::{error::Error, model::*};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
@@ -276,7 +276,7 @@ pub struct RuleParser<'a> {
     /// The external data sources.
     sources: RefCell<Vec<DataSourceDeclaration>>,
     /// Declarations of predicates with their types.
-    predicate_declarations: RefCell<HashMap<Identifier, Vec<LogicalTypeEnum>>>,
+    predicate_declarations: RefCell<HashMap<Identifier, Vec<PrimitiveType>>>,
 }
 
 /// Body may contain literals or filter expressions
@@ -376,7 +376,7 @@ impl<'a> RuleParser<'a> {
 
     fn parse_predicate_declaration(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, Vec<LogicalTypeEnum>)> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, Vec<PrimitiveType>)> {
         traced(
             "parse_predicate_declaration",
             map_error(
@@ -405,7 +405,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    fn parse_type_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<LogicalTypeEnum> {
+    fn parse_type_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveType> {
         traced("parse_type_name", move |input| {
             let (remainder, type_name) = map_error(
                 map_res(
@@ -522,10 +522,10 @@ impl<'a> RuleParser<'a> {
                     cut(alt((
                         map_res::<_, _, _, _, Error, _, _>(
                             self.parse_qualified_predicate_name(),
-                            |(identifier, arity_or_types)| {
-                                Ok(QualifiedPredicateName::with_arity_or_types(
+                            |(identifier, associated_type)| {
+                                Ok(QualifiedPredicateName::with_constraint(
                                     identifier,
-                                    arity_or_types,
+                                    TypeConstraint::Tuple(associated_type),
                                 ))
                             },
                         ),
@@ -630,7 +630,7 @@ impl<'a> RuleParser<'a> {
     /// predicate name together with its arity.
     fn parse_qualified_predicate_name(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, ArityOrTypes)> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, TupleConstraint)> {
         traced(
             "parse_qualified_predicate_name",
             pair(
@@ -641,11 +641,11 @@ impl<'a> RuleParser<'a> {
                         token("["),
                         cut(alt((
                             map_res(digit1, |number: Span<'a>| {
-                                number.parse::<usize>().map(ArityOrTypes::Arity)
+                                number.parse::<usize>().map(TupleConstraint::from_arity)
                             }),
                             map(
                                 separated_list1(self.parse_comma(), self.parse_type_name()),
-                                ArityOrTypes::Types,
+                                |type_names| type_names.into_iter().collect(),
                             ),
                         ))),
                         cut(token("]")),
@@ -1174,14 +1174,23 @@ mod test {
         let predicate = Identifier(predicate_name.to_string());
         let default_source = DataSourceDeclaration::new(
             predicate.clone(),
-            ArityOrTypes::Arity(1),
+            TupleConstraint::from_arity(1),
             DataSource::csv_file(file).unwrap(),
         );
         let any_and_int_source = DataSourceDeclaration::new(
-            predicate,
-            ArityOrTypes::Types(vec![LogicalTypeEnum::Any, LogicalTypeEnum::Integer]),
+            predicate.clone(),
+            [PrimitiveType::Any, PrimitiveType::Integer]
+                .into_iter()
+                .collect(),
             DataSource::csv_file(file).unwrap(),
         );
+
+        let single_string_source = DataSourceDeclaration::new(
+            predicate,
+            [PrimitiveType::String].into_iter().collect(),
+            DataSource::csv_file(file).unwrap(),
+        );
+
         // rulewerk accepts all of these variants
         let input = format!(r#"@source {predicate_name}[1]: load-csv("{file}") ."#);
         assert_parse!(parser.parse_source(), &input, default_source);
@@ -1192,9 +1201,9 @@ mod test {
         let input = format!(r#"@source {predicate_name} [1] : load-csv ( "{file}" ) ."#);
         assert_parse!(parser.parse_source(), &input, default_source);
         let input = format!(r#"@source {predicate_name}[string]: load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, default_source);
+        assert_parse!(parser.parse_source(), &input, single_string_source);
         let input = format!(r#"@source {predicate_name} [string] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, default_source);
+        assert_parse!(parser.parse_source(), &input, single_string_source);
         let input = format!(r#"@source {predicate_name}[any, integer]: load-csv ( "{file}" ) ."#);
         assert_parse!(parser.parse_source(), &input, any_and_int_source);
         let input =
@@ -1461,7 +1470,10 @@ mod test {
         assert_parse!(
             parser.parse_output(),
             "@output J2[3] .",
-            QualifiedPredicateName::with_arity_or_types(j2.clone(), ArityOrTypes::Arity(3))
+            QualifiedPredicateName::with_constraint(
+                j2.clone(),
+                TypeConstraint::Tuple(TupleConstraint::from_arity(3))
+            )
         );
     }
 

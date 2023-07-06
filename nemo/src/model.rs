@@ -7,5 +7,9 @@ pub mod chase_model;
 /// world. Allows faithful serialisation of parsed rule programs.
 pub mod rule_model;
 
+pub mod types;
+
 /// Forward everything to the rule model.
 pub use rule_model::*;
+pub use types::complex_types::*;
+pub use types::primitive_types::PrimitiveType;

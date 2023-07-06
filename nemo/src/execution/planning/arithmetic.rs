@@ -10,15 +10,14 @@ use nemo_physical::{
 };
 
 use crate::{
-    model::{Term, TermOperation, TermTree, Variable},
+    model::{PrimitiveType, Term, TermOperation, TermTree, Variable},
     program_analysis::variable_order::VariableOrder,
-    types::LogicalTypeEnum,
 };
 
 fn termtree_to_operationtree(
     tree: &TaggedTree<TermOperation>,
     order: &VariableOrder,
-    logical_type: &LogicalTypeEnum,
+    logical_type: &PrimitiveType,
 ) -> OperationTreeT {
     match &tree.tag {
         TermOperation::Term(term) => {
@@ -73,7 +72,7 @@ pub(super) fn generate_node_arithmetic(
     node: ExecutionNodeRef,
     first_unused_index: usize,
     constructors: &HashMap<Variable, TermTree>,
-    types: &HashMap<Variable, LogicalTypeEnum>,
+    types: &HashMap<Variable, PrimitiveType>,
 ) -> (ExecutionNodeRef, VariableOrder) {
     let mut instructions = vec![vec![]; variable_order.len() + 1];
     let constructor_instructions = &mut instructions[first_unused_index];

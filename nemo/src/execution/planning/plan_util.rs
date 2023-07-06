@@ -18,10 +18,11 @@ use nemo_physical::{
 };
 
 use crate::{
-    model::{chase_model::ChaseAtom, Filter, FilterOperation, Identifier, Term, Variable},
+    model::{
+        chase_model::ChaseAtom, Filter, FilterOperation, Identifier, PrimitiveType, Term, Variable,
+    },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::TableManager,
-    types::LogicalTypeEnum,
 };
 
 /// This function replaces each variable in the atom with its position in the variable ordering
@@ -41,7 +42,7 @@ pub(super) fn atom_binding(atom: &ChaseAtom, variable_order: &VariableOrder) -> 
 pub(super) fn compute_filters(
     variable_order: &VariableOrder,
     filters: &[Filter],
-    variable_types: &HashMap<Variable, LogicalTypeEnum>,
+    variable_types: &HashMap<Variable, PrimitiveType>,
 ) -> (SelectEqualClasses, HashMap<usize, ValueAssignment>) {
     let mut filter_assignments = HashMap::<usize, ValueAssignment>::new();
     let mut filter_classes = Vec::<HashSet<&Variable>>::new();

@@ -8,8 +8,7 @@ use crate::{
         formats::{DSVReader, RDFTriplesReader},
         resource_providers::ResourceProviders,
     },
-    model::DataSource,
-    types::LogicalTypeEnum,
+    model::{DataSource, PrimitiveType},
 };
 
 /// Manages everything related to resolving the inputs of a Nemo program.
@@ -30,7 +29,7 @@ impl InputManager {
     pub fn load_table_source(
         &self,
         data_source: &DataSource,
-        logical_types: Vec<LogicalTypeEnum>,
+        logical_types: Vec<PrimitiveType>,
     ) -> Result<TableSource, Error> {
         match data_source {
             DataSource::DsvFile {

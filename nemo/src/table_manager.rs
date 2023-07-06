@@ -1,6 +1,6 @@
 //! Managing of tables
 
-use super::{model::Identifier, types::LogicalTypeEnum};
+use super::model::{Identifier, PrimitiveType};
 use nemo_physical::{
     datatypes::data_value::DataValueIteratorT,
     management::{
@@ -375,7 +375,7 @@ impl TableManager {
 
     /// Intitializes helper structures that are needed for handling the table associated with the predicate.
     /// Must be done before calling functions that add tables to that predicate.
-    pub fn register_predicate(&mut self, predicate: Identifier, types: Vec<LogicalTypeEnum>) {
+    pub fn register_predicate(&mut self, predicate: Identifier, types: Vec<PrimitiveType>) {
         let predicate_info = PredicateInfo {
             schema: TableSchema::from_vec(types.iter().copied().map(Into::into).collect()),
         };
