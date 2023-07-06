@@ -6,6 +6,7 @@ members = [
     "nemo-physical",
     "nemo-python",
     "nemo-wasm",
+    "nemo-benches",
 ]
 
 [workspace.package]

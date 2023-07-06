@@ -24,6 +24,7 @@ flycheck_*.el
 # Test data
 /test-files
 /nemo/test-files
+/nemo-benches/test-files
 
 # nix build
 /result
