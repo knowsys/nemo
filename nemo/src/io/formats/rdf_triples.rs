@@ -11,7 +11,10 @@ use rio_api::{model::Triple, parser::TriplesParser};
 use rio_turtle::{NTriplesParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 
-use crate::{io::resource_providers::ResourceProviders, types::LogicalTypeEnum};
+use crate::{
+    io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
+    types::LogicalTypeEnum,
+};
 
 /// A [`TableReader`] for RDF 1.1 files containing triples.
 #[derive(Debug, Clone)]
@@ -55,10 +58,18 @@ impl RDFTriplesReader {
 
         assert!(builders.len() == 3);
 
+        let mut triples = 0;
         let mut on_triple = |triple: Triple| {
             builders[0].add(triple.subject.to_string())?;
             builders[1].add(triple.predicate.to_string())?;
-            builders[2].add(triple.object.to_string())
+            builders[2].add(triple.object.to_string())?;
+
+            triples += 1;
+            if triples % PROGRESS_NOTIFY_INCREMENT == 0 {
+                log::info!("Loading: processed {triples} triples")
+            }
+
+            Ok::<_, ReadingError>(())
         };
 
         let mut parser = make_parser(reader);
@@ -68,6 +79,8 @@ impl RDFTriplesReader {
                 log::info!("Ignoring malformed triple: {e}");
             }
         }
+
+        log::info!("Finished loading: processed {triples} triples");
 
         Ok(())
     }
