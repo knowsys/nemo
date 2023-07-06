@@ -16,7 +16,7 @@
 //! ## Logical layer
 //! ```
 //! # use nemo_physical::table_reader::TableReader;
-//! # use nemo::{types::LogicalTypeEnum, io::{resource_providers::ResourceProviders, dsv::DSVReader}};
+//! # use nemo::{types::LogicalTypeEnum, io::{resource_providers::ResourceProviders, formats::DSVReader}};
 //! # let file_path = String::from("../resources/doc/examples/city_population.csv");
 //! let csv_reader = DSVReader::csv(
 //!     ResourceProviders::default(),
@@ -38,7 +38,7 @@
 //! ```
 //! # use nemo_physical::table_reader::TableReader;
 //! #
-//! # use nemo::{types::LogicalTypeEnum, io::{resource_providers::ResourceProviders, dsv::DSVReader}};
+//! # use nemo::{types::LogicalTypeEnum, io::{resource_providers::ResourceProviders, formats::DSVReader}};
 //! # use std::cell::RefCell;
 //! # use nemo_physical::builder_proxy::{
 //! #    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
@@ -76,11 +76,12 @@ use csv::{Reader, ReaderBuilder};
 use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
 use nemo_physical::table_reader::{Resource, TableReader};
 
-use crate::builder_proxy::LogicalColumnBuilderProxy;
-use crate::error::{Error, ReadingError};
-use crate::types::LogicalTypeEnum;
-
-use super::resource_providers::ResourceProviders;
+use crate::{
+    builder_proxy::LogicalColumnBuilderProxy,
+    error::{Error, ReadingError},
+    io::resource_providers::ResourceProviders,
+    types::LogicalTypeEnum,
+};
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
 ///

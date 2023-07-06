@@ -4,7 +4,10 @@ use nemo_physical::management::database::TableSource;
 
 use crate::{
     error::Error,
-    io::{dsv::DSVReader, rdf_triples::RDFTriplesReader, resource_providers::ResourceProviders},
+    io::{
+        formats::{DSVReader, RDFTriplesReader},
+        resource_providers::ResourceProviders,
+    },
     model::DataSource,
     types::LogicalTypeEnum,
 };
