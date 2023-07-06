@@ -1659,4 +1659,42 @@ mod test {
             )
         );
     }
+
+    #[test]
+    fn program_statement_order() {
+        assert_matches!(
+            parse_program(
+                r#"@output s .
+                   s(?s, ?p, ?o) :- t(?s, ?p, ?o) .
+                   @source t[3]: load-rdf("triples.nt") .
+                  "#
+            ),
+            Ok(_)
+        );
+
+        let parser = RuleParser::new();
+        assert_parse_error!(
+            parser.parse_program(),
+            "@base <foo> . @base <bar> .",
+            ParseError::LateBaseDeclaration
+        );
+
+        assert_parse_error!(
+            parser.parse_program(),
+            "@prefix f: <foo> . @base <bar> .",
+            ParseError::LateBaseDeclaration
+        );
+
+        assert_parse_error!(
+            parser.parse_program(),
+            "@output p . @base <bar> .",
+            ParseError::LateBaseDeclaration
+        );
+
+        assert_parse_error!(
+            parser.parse_program(),
+            "@output p . @prefix g: <foo> .",
+            ParseError::LatePrefixDeclaration
+        );
+    }
 }
