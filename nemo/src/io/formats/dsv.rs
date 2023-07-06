@@ -25,6 +25,10 @@
 //!         PrimitiveType::Any,
 //!         PrimitiveType::Integer,
 //!     ],
+//!     [
+//!         PrimitiveType::Any,
+//!         PrimitiveType::Integer,
+//!     ].into_iter().collect(),
 //! );
 //! // Pack the csv_reader into a [`TableReader`] trait object for the physical layer
 //! let table_reader: Box<dyn TableReader> = Box::new(csv_reader);
@@ -56,6 +60,10 @@
 //! #         PrimitiveType::Any,
 //! #         PrimitiveType::Integer,
 //! #     ],
+//! #     [
+//! #         PrimitiveType::Any,
+//! #         PrimitiveType::Integer,
+//! #     ].into_iter().collect(),
 //! # );
 //! # let table_reader:Box<dyn TableReader> = Box::new(csv_reader);
 //! # let mut dict = RefCell::new(nemo_physical::dictionary::PrefixedStringDictionary::default());
@@ -73,14 +81,16 @@ use std::io::Read;
 
 use csv::{Reader, ReaderBuilder};
 
-use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
+use nemo_physical::builder_proxy::{ColumnBuilderProxy, PhysicalBuilderProxyEnum};
+use nemo_physical::datatypes::Double;
 use nemo_physical::table_reader::{Resource, TableReader};
 
+use crate::model::{TupleConstraint, TypeConstraint};
 use crate::{
-    builder_proxy::LogicalColumnBuilderProxy,
+    builder_proxy::LogicalColumnBuilderProxyT,
     error::{Error, ReadingError},
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    model::PrimitiveType,
+    model::{PrimitiveType, Term},
 };
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
@@ -101,6 +111,7 @@ pub struct DSVReader {
     delimiter: u8,
     escape: u8,
     logical_types: Vec<PrimitiveType>,
+    input_type_constraint: TupleConstraint,
 }
 
 impl DSVReader {
@@ -109,8 +120,15 @@ impl DSVReader {
         resource_providers: ResourceProviders,
         resource: Resource,
         logical_types: Vec<PrimitiveType>,
+        input_type_constraint: TupleConstraint,
     ) -> Self {
-        Self::dsv(resource_providers, resource, b',', logical_types)
+        Self::dsv(
+            resource_providers,
+            resource,
+            b',',
+            logical_types,
+            input_type_constraint,
+        )
     }
 
     /// Instantiate a [DSVReader] for TSV (tab separated values) files
@@ -118,8 +136,15 @@ impl DSVReader {
         resource_providers: ResourceProviders,
         resource: Resource,
         logical_types: Vec<PrimitiveType>,
+        input_type_constraint: TupleConstraint,
     ) -> Self {
-        Self::dsv(resource_providers, resource, b'\t', logical_types)
+        Self::dsv(
+            resource_providers,
+            resource,
+            b'\t',
+            logical_types,
+            input_type_constraint,
+        )
     }
 
     /// Instantiate a [DSVReader] for a given delimiter
@@ -128,6 +153,7 @@ impl DSVReader {
         resource: Resource,
         delimiter: u8,
         logical_types: Vec<PrimitiveType>,
+        input_type_constraint: TupleConstraint,
     ) -> Self {
         Self {
             resource_providers,
@@ -135,6 +161,7 @@ impl DSVReader {
             delimiter,
             escape: b'\\',
             logical_types,
+            input_type_constraint,
         }
     }
 
@@ -155,9 +182,9 @@ impl DSVReader {
 
     /// Actually reads the data from the file and distributes the different fields into the corresponding [ProxyColumnBuilder]
     /// If a field cannot be read or parsed, the line will be ignored
-    fn read_with_reader<'a, 'b, R2>(
+    fn read_with_reader<'a, R2>(
         &self,
-        mut builder: Vec<Box<dyn LogicalColumnBuilderProxy<'a, 'b> + 'b>>,
+        mut builder: Vec<Box<dyn ColumnBuilderProxy<String> + 'a>>,
         dsv_reader: &mut Reader<R2>,
     ) -> Result<(), ReadingError>
     where
@@ -203,12 +230,32 @@ impl DSVReader {
         physical_builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
         dsv_reader: &mut Reader<R>,
     ) -> Result<(), ReadingError> {
-        let logical_builder_proxies: Vec<Box<dyn LogicalColumnBuilderProxy + 'b>> = self
+        macro_rules! into_parser {
+            ($it:ident, $lcbp:ident) => {{
+                let boxed: Box<dyn ColumnBuilderProxy<String>> = match $it {
+                    TypeConstraint::Exact(PrimitiveType::Any) | TypeConstraint::AtLeast(PrimitiveType::Any) => Box::new($lcbp.into_parser::<Term>()),
+                    TypeConstraint::Exact(PrimitiveType::String) | TypeConstraint::AtLeast(PrimitiveType::String) => Box::new($lcbp.into_parser::<String>()),
+                    TypeConstraint::Exact(PrimitiveType::Integer) | TypeConstraint::AtLeast(PrimitiveType::Integer) => Box::new($lcbp.into_parser::<i64>()),
+                    TypeConstraint::Exact(PrimitiveType::Float64) | TypeConstraint::AtLeast(PrimitiveType::Float64) => Box::new($lcbp.into_parser::<Double>()),
+                    TypeConstraint::None => unreachable!("Type constraints for input types are always initialized (with fallbacks)."),
+                    TypeConstraint::Tuple(_) => todo!("We do not support tuples in CSV currently. Should we?"),
+                };
+                boxed
+            }};
+        }
+
+        let logical_builder_proxies: Vec<Box<dyn ColumnBuilderProxy<String> + 'b>> = self
             .logical_types
             .iter()
             .cloned()
+            .zip(self.input_type_constraint.iter().cloned())
             .zip(physical_builder_proxies)
-            .map(|(ty, bp)| ty.wrap_physical_column_builder::<'a, 'b>(bp))
+            .map(|((ty, it), bp)| match ty.wrap_physical_column_builder(bp) {
+                LogicalColumnBuilderProxyT::Any(lcbp) => into_parser!(it, lcbp),
+                LogicalColumnBuilderProxyT::String(lcbp) => into_parser!(it, lcbp),
+                LogicalColumnBuilderProxyT::Integer(lcbp) => into_parser!(it, lcbp),
+                LogicalColumnBuilderProxyT::Float64(lcbp) => into_parser!(it, lcbp),
+            })
             .collect();
 
         self.read_with_reader(logical_builder_proxies, dsv_reader)
@@ -259,6 +306,9 @@ Boston;United States;4628910
             ResourceProviders::empty(),
             "test".into(),
             vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
+            [PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]
+                .into_iter()
+                .collect(),
         );
         let mut builder = vec![
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
@@ -358,6 +408,14 @@ The next 2 columns are empty;;;789
                 PrimitiveType::String,
                 PrimitiveType::Integer,
             ],
+            [
+                PrimitiveType::Any,
+                PrimitiveType::Any,
+                PrimitiveType::String,
+                PrimitiveType::Integer,
+            ]
+            .into_iter()
+            .collect(),
         );
         let mut builder = vec![
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
@@ -439,6 +497,16 @@ node03;123;123;13;55;123;invalid
                 PrimitiveType::Integer,
                 PrimitiveType::Any,
             ],
+            [
+                PrimitiveType::Any,
+                PrimitiveType::Integer,
+                PrimitiveType::Float64,
+                PrimitiveType::Float64,
+                PrimitiveType::Integer,
+                PrimitiveType::Any,
+            ]
+            .into_iter()
+            .collect(),
         );
         let mut builder = vec![
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
@@ -507,6 +575,14 @@ node03;123;123;13;55;123;invalid
                 PrimitiveType::Integer,
                 PrimitiveType::Float64,
             ],
+            [
+                PrimitiveType::Integer,
+                PrimitiveType::Float64,
+                PrimitiveType::Integer,
+                PrimitiveType::Float64,
+            ]
+            .into_iter()
+            .collect(),
         );
         let mut builder = vec![
             PhysicalBuilderProxyEnum::I64(Default::default()),

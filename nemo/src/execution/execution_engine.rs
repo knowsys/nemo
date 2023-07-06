@@ -13,7 +13,7 @@ use crate::{
             primitive_logical_value::{PrimitiveLogicalValueIteratorT, PrimitiveLogicalValueT},
             primitive_types::PrimitiveType,
         },
-        Identifier, Program, TermOperation, TypeConstraint,
+        Identifier, Program, TermOperation,
     },
     program_analysis::analysis::ProgramAnalysis,
     table_manager::TableManager,
@@ -131,23 +131,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .cloned()
                 .expect("All predicates should have types by now.");
 
-            let reader_types = logical_types
-                .iter()
-                .zip(source_declaration.type_constraint.iter())
-                .map(|(lt, it)| {
-                    // TODO: this seems hacky
-                    if *lt == PrimitiveType::Any
-                        && *it == TypeConstraint::Exact(PrimitiveType::String)
-                    {
-                        PrimitiveType::String
-                    } else {
-                        *lt
-                    }
-                })
-                .collect::<Vec<_>>();
-
-            let table_source =
-                input_manager.load_table_source(&source_declaration.source, reader_types)?;
+            let table_source = input_manager.load_table_source(
+                &source_declaration.source,
+                logical_types,
+                source_declaration.type_constraint.clone(),
+            )?;
 
             predicate_to_sources
                 .entry(source_declaration.predicate.clone())

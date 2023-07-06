@@ -8,7 +8,7 @@ use crate::{
         formats::{DSVReader, RDFTriplesReader},
         resource_providers::ResourceProviders,
     },
-    model::{DataSource, PrimitiveType},
+    model::{DataSource, PrimitiveType, TupleConstraint},
 };
 
 /// Manages everything related to resolving the inputs of a Nemo program.
@@ -30,6 +30,7 @@ impl InputManager {
         &self,
         data_source: &DataSource,
         logical_types: Vec<PrimitiveType>,
+        input_type_constraint: TupleConstraint,
     ) -> Result<TableSource, Error> {
         match data_source {
             DataSource::DsvFile {
@@ -41,6 +42,7 @@ impl InputManager {
                     resource.clone(),
                     *delimiter,
                     logical_types,
+                    input_type_constraint,
                 );
                 Ok(TableSource::FileReader(Box::new(dsv_reader)))
             }
@@ -49,6 +51,7 @@ impl InputManager {
                     self.resource_providers.clone(),
                     resource.clone(),
                     base.clone(),
+                    logical_types,
                 ))))
             }
             DataSource::SparqlQuery(_) => {

@@ -2,21 +2,21 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use crate::builder_proxy::{
-    LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxy, LogicalFloat64ColumnBuilderProxy,
+    LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxyT, LogicalFloat64ColumnBuilderProxy,
     LogicalIntegerColumnBuilderProxy, LogicalStringColumnBuilderProxy,
 };
 use crate::io::parser::ParseError;
 use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
 use nemo_physical::datatypes::data_value::DataValueIteratorT;
-use nemo_physical::datatypes::{DataTypeName, DataValueT, Double};
+use nemo_physical::datatypes::{DataTypeName, DataValueT};
 
-use super::error::TypeError;
+use super::error::InvalidRuleTermConversion;
 use super::primitive_logical_value::{
-    AnyOutputMapper, DefaultStringIterator, Float64OutputMapper, IntegerOutputMapper,
-    PrimitiveLogicalValueIteratorT, StringOutputMapper,
+    any_double_to_physical_double, any_integer_to_physical_integer, any_string_to_physical_string,
+    any_term_to_physical_string, AnyOutputMapper, DefaultStringIterator, Float64OutputMapper,
+    IntegerOutputMapper, PrimitiveLogicalValueIteratorT, StringOutputMapper,
 };
-use super::{XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER, XSD_STRING};
-use crate::model::{Identifier, NestedType, NumericLiteral, RdfLiteral, Term};
+use crate::model::{NestedType, Term};
 
 macro_rules! count {
     () => (0usize);
@@ -132,94 +132,15 @@ impl TryFrom<NestedType> for PrimitiveType {
 
 impl PrimitiveType {
     /// Convert a given ground term to a DataValueT fitting the current logical type
-    pub fn ground_term_to_data_value_t(&self, gt: Term) -> Result<DataValueT, TypeError> {
+    pub fn ground_term_to_data_value_t(
+        &self,
+        gt: Term,
+    ) -> Result<DataValueT, InvalidRuleTermConversion> {
         let result = match self {
-            Self::Any => {
-                match gt {
-                    Term::Variable(_) => {
-                        panic!("Expecting ground term for conversion to DataValueT")
-                    }
-                    Term::Constant(Identifier(s)) => {
-                        if s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
-                            DataValueT::String(s)
-                        } else {
-                            DataValueT::String(format!("<{s}>"))
-                        }
-                    }
-                    // TODO: maybe implement display on numeric literal instead?
-                    Term::NumericLiteral(NumericLiteral::Integer(i)) => {
-                        DataValueT::String(format!("\"{i}\"^^<{XSD_INTEGER}>"))
-                    }
-                    Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
-                        DataValueT::String(format!("\"{a}.{b}\"^^<{XSD_DECIMAL}>"))
-                    }
-                    Term::NumericLiteral(NumericLiteral::Double(d)) => {
-                        DataValueT::String(format!("\"{d}\"^^<{XSD_DOUBLE}>"))
-                    }
-                    Term::StringLiteral(s) => DataValueT::String(format!("\"{s}\"")),
-                    Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
-                        DataValueT::String(format!("\"{value}\"@{tag}"))
-                    }
-                    Term::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
-                        match datatype.as_ref() {
-                            XSD_STRING => DataValueT::String(format!("\"{value}\"")),
-                            _ => DataValueT::String(format!("\"{value}\"^^<{datatype}>")),
-                        }
-                    }
-                }
-            }
-            Self::String => match gt {
-                Term::StringLiteral(s) => DataValueT::String(format!("\"{s}\"")),
-                Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
-                    DataValueT::String(format!("\"{value}\"@{tag}"))
-                }
-                Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                    ref value,
-                    ref datatype,
-                }) => match datatype.as_str() {
-                    XSD_STRING => DataValueT::String(format!("\"{value}\"")),
-                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-                },
-                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-            },
-            Self::Integer => match gt {
-                Term::NumericLiteral(NumericLiteral::Integer(i)) => DataValueT::I64(i),
-                Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                    ref value,
-                    ref datatype,
-                }) => match datatype.as_str() {
-                    XSD_INTEGER => DataValueT::I64(
-                        value
-                            .parse()
-                            .map_err(|_err| TypeError::InvalidRuleTermConversion(gt, *self))?,
-                    ),
-                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-                },
-                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-            },
-            Self::Float64 => match gt {
-                Term::NumericLiteral(NumericLiteral::Double(d)) => DataValueT::Double(d),
-                Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
-                    DataValueT::Double(Double::from_number(format!("{a}.{b}").parse().unwrap()))
-                }
-                Term::NumericLiteral(NumericLiteral::Integer(a)) => {
-                    DataValueT::Double(Double::from_number(a as f64))
-                }
-                Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                    ref value,
-                    ref datatype,
-                }) => match datatype.as_str() {
-                    XSD_DOUBLE => DataValueT::Double(
-                        value
-                            .parse()
-                            .ok()
-                            .and_then(|d| Double::new(d).ok())
-                            .ok_or(TypeError::InvalidRuleTermConversion(gt, *self))?,
-                    ),
-                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-                },
-                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-            },
+            Self::Any => DataValueT::String(any_term_to_physical_string(gt)),
+            Self::String => DataValueT::String(any_string_to_physical_string(gt)?),
+            Self::Integer => DataValueT::I64(any_integer_to_physical_integer(gt)?),
+            Self::Float64 => DataValueT::Double(any_double_to_physical_double(gt)?),
         };
 
         Ok(result)
@@ -239,12 +160,20 @@ impl PrimitiveType {
     pub fn wrap_physical_column_builder<'a: 'b, 'b>(
         self,
         physical: &'b mut PhysicalBuilderProxyEnum<'a>,
-    ) -> Box<dyn LogicalColumnBuilderProxy<'a, 'b> + 'b> {
+    ) -> LogicalColumnBuilderProxyT<'a, 'b> {
         match self {
-            Self::Any => Box::new(LogicalAnyColumnBuilderProxy::new(physical)),
-            Self::String => Box::new(LogicalStringColumnBuilderProxy::new(physical)),
-            Self::Integer => Box::new(LogicalIntegerColumnBuilderProxy::new(physical)),
-            Self::Float64 => Box::new(LogicalFloat64ColumnBuilderProxy::new(physical)),
+            Self::Any => {
+                LogicalColumnBuilderProxyT::Any(LogicalAnyColumnBuilderProxy::new(physical))
+            }
+            Self::String => {
+                LogicalColumnBuilderProxyT::String(LogicalStringColumnBuilderProxy::new(physical))
+            }
+            Self::Integer => {
+                LogicalColumnBuilderProxyT::Integer(LogicalIntegerColumnBuilderProxy::new(physical))
+            }
+            Self::Float64 => {
+                LogicalColumnBuilderProxyT::Float64(LogicalFloat64ColumnBuilderProxy::new(physical))
+            }
         }
     }
 

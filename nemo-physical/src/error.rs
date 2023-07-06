@@ -54,6 +54,12 @@ pub enum ReadingError {
     /// Error in Requwest's HTTP handler
     #[error(transparent)]
     HTTPTransfer(#[from] reqwest::Error),
+    /// Error when converting from Rio since we do not support RDF Star
+    #[error("Failed to convert nested RDF triple. We do not support RDF Star.")]
+    RdfStarUnsupported,
+    /// Type conversion error
+    #[error("Failed to convert value {0} to type {1}.")]
+    TypeConversionError(String, String), // Note we cannot access logical types in physical layer
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate

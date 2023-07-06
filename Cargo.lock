@@ -1646,6 +1646,7 @@ dependencies = [
  "nemo-physical",
  "nom 7.1.3",
  "nom_locate",
+ "num",
  "oxiri",
  "path-slash",
  "petgraph",

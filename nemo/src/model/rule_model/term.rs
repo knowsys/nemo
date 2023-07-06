@@ -3,10 +3,7 @@ use std::path::PathBuf;
 use nemo_physical::datatypes::Double;
 use sanitise_file_name::{sanitise_with_options, Options};
 
-use crate::{
-    io::formats::rdf_triples::{XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER},
-    model::TypeConstraint,
-};
+use crate::model::TypeConstraint;
 
 /// An identifier for, e.g., a Term or a Predicate.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
@@ -146,19 +143,6 @@ pub enum NumericLiteral {
     Decimal(i64, u64),
     /// A double literal.
     Double(Double),
-}
-
-impl NumericLiteral {
-    /// Converts to an RDF literal lexical representation suitable for, e.g., N-Triples.
-    pub fn into_rdf_term_literal(self) -> String {
-        match self {
-            NumericLiteral::Integer(value) => format!(r#""{value}"^^{XSD_INTEGER}"#).to_string(),
-            NumericLiteral::Decimal(whole, fraction) => {
-                format!(r#""{whole}.{fraction}"^^{XSD_DECIMAL}"#).to_string()
-            }
-            NumericLiteral::Double(value) => format!(r#""{value}"^^{XSD_DOUBLE}"#).to_string(),
-        }
-    }
 }
 
 impl std::fmt::Display for NumericLiteral {

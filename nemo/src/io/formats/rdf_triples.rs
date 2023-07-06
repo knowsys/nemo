@@ -7,68 +7,59 @@ use nemo_physical::{
     table_reader::{Resource, TableReader},
 };
 use oxiri::Iri;
-use rio_api::{model::Triple, parser::TriplesParser};
+use rio_api::{
+    model::{BlankNode, NamedNode, Subject, Triple},
+    parser::TriplesParser,
+};
 use rio_turtle::{NTriplesParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 
 use crate::{
-    builder_proxy::{LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxy},
-    io::{
-        formats::PROGRESS_NOTIFY_INCREMENT,
-        parser::{span_from_str, turtle::numeric_literal},
-        resource_providers::ResourceProviders,
-    },
+    builder_proxy::LogicalColumnBuilderProxyT,
+    io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
+    model::{types::primitive_types::PrimitiveType, RdfLiteral, Term},
 };
 
-/// The IRI identifying the XSD integer data type.
-pub const XSD_INTEGER: &str = "<http://www.w3.org/2001/XMLSchema#integer>";
-/// The IRI identifying the XSD decimal data type.
-pub const XSD_DECIMAL: &str = "<http://www.w3.org/2001/XMLSchema#decimal>";
-/// The IRI identifying the XSD double data type.
-pub const XSD_DOUBLE: &str = "<http://www.w3.org/2001/XMLSchema#double>";
-/// The IRI identifying the XSD string data type.
-pub const XSD_STRING: &str = "<http://www.w3.org/2001/XMLSchema#string>";
+fn rio_named_node_to_term(input: NamedNode) -> Term {
+    Term::Constant(input.iri.to_string().into())
+}
 
-pub(crate) const INITIAL_FOR_SIMPLE_NUMERIC_LITERAL: &[char] = &[
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '+', '.',
-];
+fn rio_blank_node_to_term(input: BlankNode) -> Term {
+    Term::Constant(input.to_string().into())
+}
 
-/// A wrapper around [`String`] signifying that this contains a valid Turtle-encoded RDF term.
-#[derive(Debug, Clone)]
-pub struct TurtleEncodedRDFTerm(String);
-
-impl TurtleEncodedRDFTerm {
-    /// Wrap a syntactically valid Turtle encoding of an RDF term.
-    pub fn new(inner: String) -> Self {
-        Self(inner)
-    }
-
-    /// Return the underlying string representation of the term.
-    pub fn into_inner(self) -> String {
-        self.0
-    }
-
-    /// Return a normalized form of the term suitable for storage in an `any` Column.
-    pub fn into_normalized_string(self) -> String {
-        if self.0.is_empty() {
-            r#""""#.to_string()
-        } else if self.0.starts_with('<') && self.0.ends_with('>') {
-            // an absolute IRI, strip the angle brackets
-            self.0[1..self.0.len() - 1].to_string()
-        } else if self.0.starts_with('"') && self.0.ends_with(XSD_STRING) {
-            // an XSD string literal, drop the datatype
-            self.0[..(self.0.len() - XSD_STRING.len() - 2)].to_string()
-        } else if self.0.starts_with(INITIAL_FOR_SIMPLE_NUMERIC_LITERAL) {
-            // some simple numeric literal, convert to a typed literal representation
-            let (remainder, literal) =
-                numeric_literal(span_from_str(&self.0)).expect("is a valid numeric literal");
-            debug_assert!(remainder.is_empty());
-
-            literal.into_rdf_term_literal()
-        } else {
-            //
-            self.0
+fn rio_literal_to_term(input: rio_api::model::Literal) -> Term {
+    match input {
+        rio_api::model::Literal::Simple { value } => Term::StringLiteral(value.to_string()),
+        rio_api::model::Literal::LanguageTaggedString { value, language } => {
+            Term::RdfLiteral(RdfLiteral::LanguageString {
+                value: value.to_string(),
+                tag: language.to_string(),
+            })
         }
+        rio_api::model::Literal::Typed { value, datatype } => {
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: value.to_string(),
+                datatype: datatype.iri.to_string(),
+            })
+        }
+    }
+}
+
+fn rio_subject_to_term(input: Subject) -> Result<Term, ReadingError> {
+    match input {
+        Subject::NamedNode(nn) => Ok(rio_named_node_to_term(nn)),
+        Subject::BlankNode(bn) => Ok(rio_blank_node_to_term(bn)),
+        Subject::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
+    }
+}
+
+pub(crate) fn rio_term_to_term(input: rio_api::model::Term) -> Result<Term, ReadingError> {
+    match input {
+        rio_api::model::Term::NamedNode(nn) => Ok(rio_named_node_to_term(nn)),
+        rio_api::model::Term::BlankNode(bn) => Ok(rio_blank_node_to_term(bn)),
+        rio_api::model::Term::Literal(lit) => Ok(rio_literal_to_term(lit)),
+        rio_api::model::Term::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
     }
 }
 
@@ -78,6 +69,7 @@ pub struct RDFTriplesReader {
     resource_providers: ResourceProviders,
     resource: Resource,
     base: Option<Iri<String>>,
+    logical_types: Vec<PrimitiveType>,
 }
 
 impl RDFTriplesReader {
@@ -86,11 +78,13 @@ impl RDFTriplesReader {
         resource_providers: ResourceProviders,
         resource: Resource,
         base: Option<String>,
+        logical_types: Vec<PrimitiveType>,
     ) -> Self {
         Self {
             resource_providers,
             resource,
             base: base.map(|iri| Iri::parse(iri).expect("should be a valid IRI.")),
+            logical_types,
         }
     }
 
@@ -109,16 +103,26 @@ impl RDFTriplesReader {
     {
         let mut builders = physical_builder_proxies
             .iter_mut()
-            .map(LogicalAnyColumnBuilderProxy::new)
+            .zip(self.logical_types.clone())
+            .map(|(bp, lt)| {
+                let boxed: Box<dyn ColumnBuilderProxy<Term>> =
+                    match lt.wrap_physical_column_builder(bp) {
+                        LogicalColumnBuilderProxyT::Any(lcbp) => Box::new(lcbp),
+                        LogicalColumnBuilderProxyT::String(lcbp) => Box::new(lcbp),
+                        LogicalColumnBuilderProxyT::Integer(lcbp) => Box::new(lcbp),
+                        LogicalColumnBuilderProxyT::Float64(lcbp) => Box::new(lcbp),
+                    };
+                boxed
+            })
             .collect::<Vec<_>>();
 
         assert!(builders.len() == 3);
 
         let mut triples = 0;
         let mut on_triple = |triple: Triple| {
-            builders[0].add(TurtleEncodedRDFTerm(triple.subject.to_string()))?;
-            builders[1].add(TurtleEncodedRDFTerm(triple.predicate.to_string()))?;
-            builders[2].add(TurtleEncodedRDFTerm(triple.object.to_string()))?;
+            builders[0].add(rio_subject_to_term(triple.subject)?)?;
+            builders[1].add(rio_named_node_to_term(triple.predicate))?;
+            builders[2].add(rio_term_to_term(triple.object)?)?;
 
             triples += 1;
             if triples % PROGRESS_NOTIFY_INCREMENT == 0 {
@@ -196,7 +200,7 @@ mod test {
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                 ];
-                let reader = RDFTriplesReader::new(ResourceProviders::empty(), String::from(""), None);
+                let reader = RDFTriplesReader::new(ResourceProviders::empty(), String::from(""), None, vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
 
                 let result = reader.read_with_buf_reader(&mut builders, &mut data, $make_parser);
                 assert!(result.is_ok());

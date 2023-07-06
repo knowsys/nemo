@@ -41,7 +41,7 @@ fn load_trie(
             // Using fallback solution to treat everything as string for now (storing as u64 internally)
             let datatypeschema =
                 TableSchema::from_vec((0..arity).map(|_| DataTypeName::String).collect());
-            let logical_types = (0..arity).map(|_| PrimitiveType::Any).collect();
+            let logical_types: Vec<_> = (0..arity).map(|_| PrimitiveType::Any).collect();
 
             let mut builder_proxies: Vec<PhysicalBuilderProxyEnum> = datatypeschema
                 .iter()
@@ -61,7 +61,8 @@ fn load_trie(
                 ResourceProviders::default(),
                 resource.clone(),
                 *delimiter,
-                logical_types,
+                logical_types.clone(),
+                logical_types.into_iter().collect(), // NOTE: for simplicity we also use the logical types as input types
             );
             csv_reader
                 .read_into_builder_proxies(&mut builder_proxies)
