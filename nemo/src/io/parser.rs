@@ -1035,14 +1035,62 @@ impl<'a> RuleParser<'a> {
 
     /// Parses a program in the rules language.
     pub fn parse_program(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Program> {
+        fn check_for_invalid_statement<'a, F>(
+            parser: &mut F,
+            input: Span<'a>,
+        ) -> IntermediateResult<'a, ()>
+        where
+            F: FnMut(Span<'a>) -> IntermediateResult<ParseError>,
+        {
+            if let Ok((_, e)) = parser(input) {
+                return Err(Err::Failure(e.at(input)));
+            }
+
+            Ok((input, ()))
+        }
+
         traced("parse_program", move |input| {
             let (remainder, _) = multispace_or_comment0(input)?;
             let (remainder, _) = opt(self.parse_base())(remainder)?;
+
+            check_for_invalid_statement(
+                &mut map(self.parse_base(), |_| ParseError::LateBaseDeclaration),
+                remainder,
+            )?;
+
             let (remainder, _) = many0(self.parse_prefix())(remainder)?;
-            let (remainder, _) = many0(self.parse_predicate_declaration())(remainder)?;
-            let (remainder, _) = many0(self.parse_source())(remainder)?;
-            let (remainder, statements) = many0(self.parse_statement())(remainder)?;
-            let (remainder, output_predicates) = many0(self.parse_output())(remainder)?;
+
+            check_for_invalid_statement(
+                &mut map(self.parse_base(), |_| ParseError::LateBaseDeclaration),
+                remainder,
+            )?;
+            check_for_invalid_statement(
+                &mut map(self.parse_prefix(), |_| ParseError::LatePrefixDeclaration),
+                remainder,
+            )?;
+
+            let mut statements = Vec::new();
+            let mut output_predicates = Vec::new();
+
+            let (remainder, _) = many0(alt((
+                map(self.parse_predicate_declaration(), |_| ()),
+                map(self.parse_source(), |_| ()),
+                map(self.parse_statement(), |statement| {
+                    statements.push(statement)
+                }),
+                map(self.parse_output(), |output_predicate| {
+                    output_predicates.push(output_predicate)
+                }),
+            )))(remainder)?;
+
+            check_for_invalid_statement(
+                &mut map(self.parse_base(), |_| ParseError::LateBaseDeclaration),
+                remainder,
+            )?;
+            check_for_invalid_statement(
+                &mut map(self.parse_prefix(), |_| ParseError::LatePrefixDeclaration),
+                remainder,
+            )?;
 
             let base = self.base().map(String::from);
             let prefixes = self
