@@ -11,9 +11,7 @@ use rio_api::{model::Triple, parser::TriplesParser};
 use rio_turtle::{NTriplesParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 
-use crate::types::LogicalTypeEnum;
-
-use super::resource_providers::ResourceProviders;
+use crate::{io::resource_providers::ResourceProviders, types::LogicalTypeEnum};
 
 /// A [`TableReader`] for RDF 1.1 files containing triples.
 #[derive(Debug, Clone)]

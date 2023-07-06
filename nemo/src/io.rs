@@ -4,11 +4,10 @@
 
 use std::io::Write;
 
-pub mod dsv;
+pub mod formats;
 pub mod input_manager;
 pub mod output_file_manager;
 pub mod parser;
-pub mod rdf_triples;
 pub mod resource_providers;
 
 pub use input_manager::InputManager;
