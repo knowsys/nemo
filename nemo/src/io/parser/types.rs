@@ -214,6 +214,12 @@ pub enum ParseError {
     /// Expected an arithmetic parenthesised expression.
     #[error("Expected an arithmetic parenthesised expression")]
     ExpectedArithmeticParens,
+    /// Encountered a base declaration after any other directive.
+    #[error("A @base declaration can only be the first statement in the program")]
+    LateBaseDeclaration,
+    /// Encountered a prefix declaration after any non-base non-prefix directive.
+    #[error("A @prefix declaration must occur before any non-@base non-@prefix declarations.")]
+    LatePrefixDeclaration,
 }
 
 impl ParseError {
