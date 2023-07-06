@@ -163,6 +163,7 @@ impl DSVReader {
     where
         R2: Read,
     {
+        let mut counter: u64 = 0;
         for row in dsv_reader.records().flatten() {
             if let Err(Error::Rollback(rollback)) =
                 row.iter().enumerate().try_for_each(|(idx, item)| {
@@ -185,7 +186,12 @@ impl DSVReader {
                     }
                 });
             }
+            counter += 1;
+            if (counter % 1000000) == 0 {
+                log::info!("{} lines have been processed", counter);
+            }
         }
+        log::info!("Finished load: {} lines processed", counter);
 
         Ok(())
     }
