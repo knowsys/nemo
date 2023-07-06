@@ -13,7 +13,7 @@ use rio_xml::RdfXmlParser;
 
 use crate::{
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    types::LogicalTypeEnum,
+    model::PrimitiveType,
 };
 
 /// A [`TableReader`] for RDF 1.1 files containing triples.
@@ -53,7 +53,7 @@ impl RDFTriplesReader {
     {
         let mut builders = physical_builder_proxies
             .iter_mut()
-            .map(|physical| LogicalTypeEnum::Any.wrap_physical_column_builder(physical))
+            .map(|physical| PrimitiveType::Any.wrap_physical_column_builder(physical))
             .collect::<Vec<_>>();
 
         assert!(builders.len() == 3);

@@ -11,10 +11,12 @@ use nemo_physical::{
 use crate::{
     error::Error,
     io::{input_manager::InputManager, resource_providers::ResourceProviders},
-    model::{chase_model::ChaseProgram, Identifier, Program, TermOperation},
+    model::{
+        chase_model::ChaseProgram, Identifier, PrimitiveType, Program, TermOperation,
+        TypeConstraint,
+    },
     program_analysis::analysis::ProgramAnalysis,
     table_manager::TableManager,
-    types::LogicalTypeEnum,
 };
 
 use super::{rule_execution::RuleExecution, selection_strategy::strategy::RuleSelectionStrategy};
@@ -122,29 +124,33 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the data source declarations
-        for (predicate, _, input_types, data_source) in program.sources() {
+        for source_declaration in program.sources() {
             let logical_types = analysis
                 .predicate_types
-                .get(predicate)
+                .get(&source_declaration.predicate)
                 .cloned()
                 .expect("All predicates should have types by now.");
 
             let reader_types = logical_types
                 .iter()
-                .zip(input_types)
+                .zip(source_declaration.type_constraint.iter())
                 .map(|(lt, it)| {
-                    if *lt == LogicalTypeEnum::Any && *it == LogicalTypeEnum::String {
-                        LogicalTypeEnum::String
+                    // TODO: this seems hacky
+                    if *lt == PrimitiveType::Any
+                        && *it == TypeConstraint::Exact(PrimitiveType::String)
+                    {
+                        PrimitiveType::String
                     } else {
                         *lt
                     }
                 })
                 .collect::<Vec<_>>();
 
-            let table_source = input_manager.load_table_source(data_source, reader_types)?;
+            let table_source =
+                input_manager.load_table_source(&source_declaration.source, reader_types)?;
 
             predicate_to_sources
-                .entry(predicate.clone())
+                .entry(source_declaration.predicate.clone())
                 .or_default()
                 .push(table_source)
         }
@@ -283,7 +289,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             return Ok(None);
         };
 
-        let predicate_types: &Vec<LogicalTypeEnum> = self
+        let predicate_types: &Vec<PrimitiveType> = self
             .analysis
             .predicate_types
             .get(&predicate)
@@ -292,7 +298,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let iterators = self.table_manager.table_column_iters(table_id)?;
 
         let logically_mapped_iters = iterators.into_iter().zip(predicate_types.iter()).map(|(iter, lt)| {
-            if *lt == LogicalTypeEnum::String {
+            if *lt == PrimitiveType::String {
                 match iter {
                     DataValueIteratorT::String(string_iter) => Box::new(string_iter.map(|s| {
                         DataValueT::String(s.get(1..(s.len() - 1))
@@ -340,7 +346,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             return Ok(None);
         };
 
-        let predicate_types: &Vec<LogicalTypeEnum> = self
+        let predicate_types: &Vec<PrimitiveType> = self
             .analysis
             .predicate_types
             .get(&predicate)
@@ -349,7 +355,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let iterators = self.table_manager.table_column_iters(table_id)?;
 
         let logically_mapped_iters = iterators.into_iter().zip(predicate_types.iter()).map(|(iter, lt)| {
-            if *lt == LogicalTypeEnum::String {
+            if *lt == PrimitiveType::String {
                 match iter {
                     DataValueIteratorT::String(string_iter) => Box::new(string_iter.map(|s| {
                         s.get(1..(s.len() - 1))

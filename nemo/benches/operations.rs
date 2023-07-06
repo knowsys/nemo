@@ -24,8 +24,7 @@ use nemo_physical::{
 
 use nemo::{
     io::{formats::DSVReader, resource_providers::ResourceProviders},
-    model::DataSource,
-    types::LogicalTypeEnum,
+    model::{DataSource, PrimitiveType},
 };
 
 // NOTE: See TableStorage::load_from_disk
@@ -42,7 +41,7 @@ fn load_trie(
             // Using fallback solution to treat everything as string for now (storing as u64 internally)
             let datatypeschema =
                 TableSchema::from_vec((0..arity).map(|_| DataTypeName::String).collect());
-            let logical_types = (0..arity).map(|_| LogicalTypeEnum::Any).collect();
+            let logical_types = (0..arity).map(|_| PrimitiveType::Any).collect();
 
             let mut builder_proxies: Vec<PhysicalBuilderProxyEnum> = datatypeschema
                 .iter()

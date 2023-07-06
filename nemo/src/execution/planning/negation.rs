@@ -10,10 +10,9 @@ use nemo_physical::{
 
 use crate::{
     execution::planning::plan_util::{compute_filters, subplan_union_reordered},
-    model::{chase_model::ChaseAtom, Filter, Variable},
+    model::{chase_model::ChaseAtom, Filter, PrimitiveType, Variable},
     program_analysis::variable_order::VariableOrder,
     table_manager::{SubtableExecutionPlan, TableManager},
-    types::LogicalTypeEnum,
 };
 
 /// Bundels information relevant to constructing the negation sub plan of an execution plan
@@ -75,7 +74,7 @@ impl AtomNegationInfo {
 #[derive(Debug)]
 pub(super) struct NegationGenerator {
     /// Logical types of all the variables.
-    pub variable_types: HashMap<Variable, LogicalTypeEnum>,
+    pub variable_types: HashMap<Variable, PrimitiveType>,
     /// The negated atoms.
     pub atoms: Vec<ChaseAtom>,
     /// The negated filters.

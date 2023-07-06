@@ -7,7 +7,7 @@ use nom::{
 use nom_locate::LocatedSpan;
 use thiserror::Error;
 
-use crate::types::LogicalTypeEnum;
+use crate::model::PrimitiveType;
 
 /// A [`LocatedSpan`] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
@@ -103,7 +103,7 @@ pub enum ParseError {
     /// Unknown logical type name in program.
     #[error(
         "A predicate declaration used an unknown type ({0}). The known types are: {}",
-        LogicalTypeEnum::type_representations().join(", ")
+        PrimitiveType::type_representations().join(", ")
     )]
     ParseUnknownType(String),
     /// Expected a dot.

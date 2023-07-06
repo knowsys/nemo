@@ -30,7 +30,6 @@ mod builder_proxy;
 
 pub mod execution;
 pub mod model;
-pub mod types;
 
 mod program_analysis;
 mod table_manager;

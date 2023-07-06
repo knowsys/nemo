@@ -6,8 +6,8 @@ use thiserror::Error;
 
 use crate::{
     execution::selection_strategy::strategy::SelectionStrategyError, io::parser::LocatedParseError,
-    model::chase_model::RuleTranslationError, program_analysis::analysis::RuleAnalysisError,
-    types::TypeError,
+    model::chase_model::RuleTranslationError, model::types::TypeError,
+    program_analysis::analysis::RuleAnalysisError,
 };
 
 pub use nemo_physical::error::ReadingError;

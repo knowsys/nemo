@@ -9,6 +9,7 @@ use nemo::execution::ExecutionEngine;
 
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
+use nemo::model::DataSourceDeclaration;
 use nemo_physical::datatypes::DataValueT;
 use nemo_physical::table_reader::Resource;
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -44,7 +45,7 @@ impl NemoProgram {
     pub fn source_resources(&self) -> Set {
         let set = Set::new(&JsValue::undefined());
 
-        for resource in self.0.source_resources().iter() {
+        for resource in self.0.sources().flat_map(DataSourceDeclaration::resources) {
             set.add(&JsValue::from(resource));
         }
 

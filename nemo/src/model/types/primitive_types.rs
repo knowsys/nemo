@@ -11,27 +11,27 @@ use crate::io::parser::ParseError;
 use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
 use nemo_physical::datatypes::{DataTypeName, DataValueT, Double};
 
-use super::model::{Identifier, NumericLiteral, RdfLiteral, Term};
+use crate::model::{Identifier, NestedType, NumericLiteral, RdfLiteral, Term};
 
-use thiserror::Error;
+use super::TypeError;
 
 macro_rules! count {
     () => (0usize);
     ( $x:tt $($xs:tt)* ) => (1usize + count!($($xs)*));
 }
 
-macro_rules! generate_logical_type_enum {
+macro_rules! generate_primitive_type_enum {
     ($(($variant_name:ident, $string_repr: literal)),+) => {
         /// An enum capturing the logical type names and funtionality related to parsing and translating into and from physical types
         #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-        pub enum LogicalTypeEnum {
+        pub enum PrimitiveType {
             $(
                 /// $variant_name
                 $variant_name
             ),+
         }
 
-        impl LogicalTypeEnum {
+        impl PrimitiveType {
             const _VARIANTS: [Self; count!($($variant_name)+)] = [
                 $(Self::$variant_name),+
             ];
@@ -42,7 +42,7 @@ macro_rules! generate_logical_type_enum {
             }
         }
 
-        impl Display for LogicalTypeEnum {
+        impl Display for PrimitiveType {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 match self {
                     $(Self::$variant_name => write!(f, "{}", $string_repr)),+
@@ -50,7 +50,7 @@ macro_rules! generate_logical_type_enum {
             }
         }
 
-        impl FromStr for LogicalTypeEnum {
+        impl FromStr for PrimitiveType {
             type Err = ParseError;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -63,14 +63,14 @@ macro_rules! generate_logical_type_enum {
     };
 }
 
-generate_logical_type_enum!(
+generate_primitive_type_enum!(
     (Any, "any"),
     (String, "string"),
     (Integer, "integer"),
     (Float64, "float64")
 );
 
-impl PartialOrd for LogicalTypeEnum {
+impl PartialOrd for PrimitiveType {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self {
             Self::Any => {
@@ -99,19 +99,30 @@ impl PartialOrd for LogicalTypeEnum {
     }
 }
 
-impl Default for LogicalTypeEnum {
+impl Default for PrimitiveType {
     fn default() -> Self {
         Self::Any
     }
 }
 
-impl From<LogicalTypeEnum> for DataTypeName {
-    fn from(source: LogicalTypeEnum) -> Self {
+impl From<PrimitiveType> for DataTypeName {
+    fn from(source: PrimitiveType) -> Self {
         match source {
-            LogicalTypeEnum::Any => Self::String,
-            LogicalTypeEnum::String => Self::String,
-            LogicalTypeEnum::Integer => Self::I64,
-            LogicalTypeEnum::Float64 => Self::Double,
+            PrimitiveType::Any => Self::String,
+            PrimitiveType::String => Self::String,
+            PrimitiveType::Integer => Self::I64,
+            PrimitiveType::Float64 => Self::Double,
+        }
+    }
+}
+
+impl TryFrom<NestedType> for PrimitiveType {
+    type Error = ();
+
+    fn try_from(value: NestedType) -> Result<Self, Self::Error> {
+        match value {
+            NestedType::Tuple(_) => Err(()),
+            NestedType::Primitive(p) => Ok(p),
         }
     }
 }
@@ -122,7 +133,7 @@ const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
 const XSD_DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
 const XSD_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
 
-impl LogicalTypeEnum {
+impl PrimitiveType {
     /// Convert a given ground term to a DataValueT fitting the current logical type
     pub fn ground_term_to_data_value_t(&self, gt: Term) -> Result<DataValueT, TypeError> {
         let result = match self {
@@ -239,23 +250,4 @@ impl LogicalTypeEnum {
             Self::Float64 => Box::new(LogicalFloat64ColumnBuilderProxy::new(physical)),
         }
     }
-}
-
-/// Errors that can occur during type checking
-#[derive(Error, Debug)]
-pub enum TypeError {
-    /// Conflicting type declarations
-    #[error("Conflicting type declarations. Predicate \"{0}\" at position {1} has been inferred to have the conflicting types {2} and {3}.")]
-    InvalidRuleConflictingTypes(String, usize, LogicalTypeEnum, LogicalTypeEnum),
-    /// Conflicting type conversions
-    #[error("Conflicting type declarations. The term \"{0}\" cannot be converted to a {1}.")]
-    InvalidRuleTermConversion(Term, LogicalTypeEnum),
-    /// Comparison of a non-numeric type
-    #[error("Invalid type declarations. Comparison operator can only be used with numeric types.")]
-    InvalidRuleNonNumericComparison,
-    /// Arithmetic operations with of a non-numeric type
-    #[error(
-        "Invalid type declarations. Arithmetic operations can only be used with numeric types."
-    )]
-    InvalidRuleNonNumericArithmetic,
 }

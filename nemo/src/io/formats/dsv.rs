@@ -16,14 +16,14 @@
 //! ## Logical layer
 //! ```
 //! # use nemo_physical::table_reader::TableReader;
-//! # use nemo::{types::LogicalTypeEnum, io::{resource_providers::ResourceProviders, formats::DSVReader}};
+//! # use nemo::{model::PrimitiveType, io::{resource_providers::ResourceProviders, formats::DSVReader}};
 //! # let file_path = String::from("../resources/doc/examples/city_population.csv");
 //! let csv_reader = DSVReader::csv(
 //!     ResourceProviders::default(),
 //!     file_path,
 //!     vec![
-//!         LogicalTypeEnum::Any,
-//!         LogicalTypeEnum::Integer,
+//!         PrimitiveType::Any,
+//!         PrimitiveType::Integer,
 //!     ],
 //! );
 //! // Pack the csv_reader into a [`TableReader`] trait object for the physical layer
@@ -38,7 +38,7 @@
 //! ```
 //! # use nemo_physical::table_reader::TableReader;
 //! #
-//! # use nemo::{types::LogicalTypeEnum, io::{resource_providers::ResourceProviders, formats::DSVReader}};
+//! # use nemo::{model::PrimitiveType, io::{resource_providers::ResourceProviders, formats::DSVReader}};
 //! # use std::cell::RefCell;
 //! # use nemo_physical::builder_proxy::{
 //! #    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
@@ -53,8 +53,8 @@
 //! #     ResourceProviders::default(),
 //! #     file_path,
 //! #     vec![
-//! #         LogicalTypeEnum::Any,
-//! #         LogicalTypeEnum::Integer,
+//! #         PrimitiveType::Any,
+//! #         PrimitiveType::Integer,
 //! #     ],
 //! # );
 //! # let table_reader:Box<dyn TableReader> = Box::new(csv_reader);
@@ -80,7 +80,7 @@ use crate::{
     builder_proxy::LogicalColumnBuilderProxy,
     error::{Error, ReadingError},
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    types::LogicalTypeEnum,
+    model::PrimitiveType,
 };
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
@@ -89,7 +89,7 @@ use crate::{
 /// - no headers are given,
 /// - double quotes are allowed for string escaping
 ///
-/// The reader object relates a given [resource][Resource] in DSV format to a tuple of [logical types][LogicalTypeEnum].
+/// The reader object relates a given [resource][Resource] in DSV format to a tuple of [logical types][PrimitiveType].
 /// It accesses the resource through the given [resource_providers][ResourceProviders].
 /// Via the implementation of [`TableReader`] it fills the corresponding [`PhysicalBuilderProxys`][nemo_physical::builder_proxy::PhysicalBuilderProxyEnum]
 /// with the data from the file.
@@ -100,7 +100,7 @@ pub struct DSVReader {
     resource: Resource,
     delimiter: u8,
     escape: u8,
-    logical_types: Vec<LogicalTypeEnum>,
+    logical_types: Vec<PrimitiveType>,
 }
 
 impl DSVReader {
@@ -108,7 +108,7 @@ impl DSVReader {
     pub fn csv(
         resource_providers: ResourceProviders,
         resource: Resource,
-        logical_types: Vec<LogicalTypeEnum>,
+        logical_types: Vec<PrimitiveType>,
     ) -> Self {
         Self::dsv(resource_providers, resource, b',', logical_types)
     }
@@ -117,7 +117,7 @@ impl DSVReader {
     pub fn tsv(
         resource_providers: ResourceProviders,
         resource: Resource,
-        logical_types: Vec<LogicalTypeEnum>,
+        logical_types: Vec<PrimitiveType>,
     ) -> Self {
         Self::dsv(resource_providers, resource, b'\t', logical_types)
     }
@@ -127,7 +127,7 @@ impl DSVReader {
         resource_providers: ResourceProviders,
         resource: Resource,
         delimiter: u8,
-        logical_types: Vec<LogicalTypeEnum>,
+        logical_types: Vec<PrimitiveType>,
     ) -> Self {
         Self {
             resource_providers,
@@ -258,11 +258,7 @@ Boston;United States;4628910
         let csvreader = DSVReader::csv(
             ResourceProviders::empty(),
             "test".into(),
-            vec![
-                LogicalTypeEnum::Any,
-                LogicalTypeEnum::Any,
-                LogicalTypeEnum::Any,
-            ],
+            vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
         );
         let mut builder = vec![
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
@@ -357,10 +353,10 @@ The next 2 columns are empty;;;789
             ResourceProviders::empty(),
             "test".into(),
             vec![
-                LogicalTypeEnum::Any,
-                LogicalTypeEnum::Any,
-                LogicalTypeEnum::String,
-                LogicalTypeEnum::Integer,
+                PrimitiveType::Any,
+                PrimitiveType::Any,
+                PrimitiveType::String,
+                PrimitiveType::Integer,
             ],
         );
         let mut builder = vec![
@@ -436,12 +432,12 @@ node03;123;123;13;55;123;invalid
             ResourceProviders::empty(),
             "test".into(),
             vec![
-                LogicalTypeEnum::Any,
-                LogicalTypeEnum::Integer,
-                LogicalTypeEnum::Float64,
-                LogicalTypeEnum::Float64,
-                LogicalTypeEnum::Integer,
-                LogicalTypeEnum::Any,
+                PrimitiveType::Any,
+                PrimitiveType::Integer,
+                PrimitiveType::Float64,
+                PrimitiveType::Float64,
+                PrimitiveType::Integer,
+                PrimitiveType::Any,
             ],
         );
         let mut builder = vec![
@@ -506,10 +502,10 @@ node03;123;123;13;55;123;invalid
             ResourceProviders::empty(),
             "test".into(),
             vec![
-                LogicalTypeEnum::Integer,
-                LogicalTypeEnum::Float64,
-                LogicalTypeEnum::Integer,
-                LogicalTypeEnum::Float64,
+                PrimitiveType::Integer,
+                PrimitiveType::Float64,
+                PrimitiveType::Integer,
+                PrimitiveType::Float64,
             ],
         );
         let mut builder = vec![

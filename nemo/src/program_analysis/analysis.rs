@@ -5,8 +5,10 @@ use nemo_physical::management::database::ColumnOrder;
 use crate::{
     error::Error,
     model::chase_model::{ChaseProgram, ChaseRule},
-    model::{chase_model::ChaseAtom, FilterOperation, Identifier, Term, TermOperation, Variable},
-    types::{LogicalTypeEnum, TypeError},
+    model::{
+        chase_model::ChaseAtom, types::TypeError, FilterOperation, Identifier, PrimitiveType, Term,
+        TermOperation, TypeConstraint, Variable,
+    },
     util::labeled_graph::LabeledGraph,
 };
 
@@ -54,15 +56,15 @@ pub struct RuleAnalysis {
     /// The associated variable order for the join of the head atoms
     pub existential_aux_order: VariableOrder,
     /// The types associated with the auxillary rule
-    pub existential_aux_types: HashMap<Variable, LogicalTypeEnum>,
+    pub existential_aux_types: HashMap<Variable, PrimitiveType>,
 
     /// Variable orders that are worth considering.
     pub promising_variable_orders: Vec<VariableOrder>,
 
     /// Logical Type of each Variable
-    pub variable_types: HashMap<Variable, LogicalTypeEnum>,
+    pub variable_types: HashMap<Variable, PrimitiveType>,
     /// Logical Type of predicates in Rule
-    pub predicate_types: HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    pub predicate_types: HashMap<Identifier, Vec<PrimitiveType>>,
 }
 
 /// Errors than can occur during rule analysis
@@ -122,9 +124,9 @@ fn get_fresh_rule_predicate(rule_index: usize) -> Identifier {
 fn construct_existential_aux_rule(
     rule_index: usize,
     head_atoms: &Vec<ChaseAtom>,
-    predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    predicate_types: &HashMap<Identifier, Vec<PrimitiveType>>,
     column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
-) -> (ChaseRule, VariableOrder, HashMap<Variable, LogicalTypeEnum>) {
+) -> (ChaseRule, VariableOrder, HashMap<Variable, PrimitiveType>) {
     let normalized_head = normalize_atom_vector(head_atoms, &[], &mut 0);
 
     let temp_head_identifier = get_fresh_rule_predicate(rule_index);
@@ -142,7 +144,7 @@ fn construct_existential_aux_rule(
         }
     }
 
-    let mut variable_types = HashMap::<Variable, LogicalTypeEnum>::new();
+    let mut variable_types = HashMap::<Variable, PrimitiveType>::new();
     for atom in &normalized_head.atoms {
         let types = predicate_types
             .get(&atom.predicate())
@@ -181,11 +183,11 @@ fn analyze_rule(
     promising_variable_orders: Vec<VariableOrder>,
     promising_column_orders: &[HashMap<Identifier, HashSet<ColumnOrder>>],
     rule_index: usize,
-    type_declarations: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    type_declarations: &HashMap<Identifier, Vec<PrimitiveType>>,
 ) -> RuleAnalysis {
     let num_existential = count_distinct_existential_variables(rule);
 
-    let mut variable_types: HashMap<Variable, LogicalTypeEnum> = HashMap::new();
+    let mut variable_types: HashMap<Variable, PrimitiveType> = HashMap::new();
     for atom in rule.all_atoms() {
         for (term_position, term) in atom.terms().iter().enumerate() {
             if let Term::Variable(variable) = term {
@@ -274,8 +276,8 @@ pub type PositionGraph = LabeledGraph<PredicatePosition, PositionGraphEdge, Dire
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum TypeRequirement {
-    Hard(LogicalTypeEnum),
-    Soft(LogicalTypeEnum),
+    Hard(PrimitiveType),
+    Soft(PrimitiveType),
     None,
 }
 
@@ -329,7 +331,7 @@ impl TypeRequirement {
     }
 
     fn allowed_to_merge_with(self, other: Self) -> bool {
-        match Option::<LogicalTypeEnum>::from(self) {
+        match Option::<PrimitiveType>::from(self) {
             Some(t1) => match Option::from(other) {
                 Some(t2) => t1.partial_cmp(&t2).is_some(),
                 None => true,
@@ -339,7 +341,20 @@ impl TypeRequirement {
     }
 }
 
-impl From<TypeRequirement> for Option<LogicalTypeEnum> {
+impl From<TypeConstraint> for TypeRequirement {
+    fn from(value: TypeConstraint) -> Self {
+        match value {
+            TypeConstraint::None => TypeRequirement::None,
+            TypeConstraint::Exact(p) => TypeRequirement::Hard(p),
+            TypeConstraint::AtLeast(p) => TypeRequirement::Soft(p),
+            TypeConstraint::Tuple(_) => {
+                unimplemented!("currently nested type checking is not supported")
+            }
+        }
+    }
+}
+
+impl From<TypeRequirement> for Option<PrimitiveType> {
     fn from(source: TypeRequirement) -> Self {
         match source {
             TypeRequirement::Hard(t) => Some(t),
@@ -359,7 +374,7 @@ pub struct ProgramAnalysis {
     /// Set of all predicates and their arity.
     pub all_predicates: HashSet<(Identifier, usize)>,
     /// Logical Type Declarations for Predicates
-    pub predicate_types: HashMap<Identifier, Vec<LogicalTypeEnum>>,
+    pub predicate_types: HashMap<Identifier, Vec<PrimitiveType>>,
     /// Graph representing the information flow between predicates
     pub position_graph: PositionGraph,
 }
@@ -382,9 +397,9 @@ impl ChaseProgram {
     fn get_all_predicates(&self) -> HashSet<(Identifier, usize)> {
         let mut result = HashSet::<(Identifier, usize)>::new();
 
-        // Predicates in source statments
-        for (predicate, arity, _, _) in self.sources() {
-            result.insert((predicate.clone(), arity));
+        // Predicates in source statements
+        for source in self.sources() {
+            result.insert((source.predicate.clone(), source.type_constraint.arity()));
         }
 
         // Predicates in rules
@@ -533,7 +548,7 @@ impl ChaseProgram {
         &self,
         position_graph: &PositionGraph,
         all_predicates: &HashSet<(Identifier, usize)>,
-    ) -> Result<HashMap<Identifier, Vec<LogicalTypeEnum>>, TypeError> {
+    ) -> Result<HashMap<Identifier, Vec<PrimitiveType>>, TypeError> {
         let mut predicate_types: HashMap<Identifier, Vec<TypeRequirement>> = {
             let pred_decls = self
                 .parsed_predicate_declarations()
@@ -550,16 +565,17 @@ impl ChaseProgram {
                 })
                 .collect::<HashMap<_, _>>();
 
-            let source_decls = self
+            let source_decls: HashMap<Identifier, Vec<TypeRequirement>> = self
                 .sources()
-                .map(|(pred, _, input_types, _)| {
+                .map(|source| {
                     (
-                        pred.clone(),
-                        input_types
+                        source.predicate.clone(),
+                        source
+                            .type_constraint
                             .iter()
-                            .copied()
-                            .map(TypeRequirement::Soft)
-                            .collect::<Vec<_>>(),
+                            .cloned()
+                            .map(TypeRequirement::from)
+                            .collect(),
                     )
                 })
                 .collect::<HashMap<_, _>>();
@@ -575,7 +591,7 @@ impl ChaseProgram {
                             .iter()
                             .map(|t| {
                                 if matches!(t, Term::Variable(Variable::Existential(_))) {
-                                    TypeRequirement::Hard(LogicalTypeEnum::Any)
+                                    TypeRequirement::Hard(PrimitiveType::Any)
                                 } else {
                                     TypeRequirement::None
                                 }
@@ -607,10 +623,10 @@ impl ChaseProgram {
                                     types_not_in_conflict = Err(TypeError::InvalidRuleConflictingTypes(
                                         pred_clone.0.clone(),
                                         index,
-                                        Option::<LogicalTypeEnum>::from(*t).expect(
+                                        Option::<PrimitiveType>::from(*t).expect(
                                             "if the type requirement is none, there is a maximum",
                                         ),
-                                        Option::<LogicalTypeEnum>::from(*et).expect(
+                                        Option::<PrimitiveType>::from(*et).expect(
                                             "if the type requirement is none, there is a maximum",
                                         ),
                                     ));
@@ -663,9 +679,9 @@ impl ChaseProgram {
                             return Err(TypeError::InvalidRuleConflictingTypes(
                                 next_position.predicate.0.clone(),
                                 next_position.position + 1,
-                                Option::<LogicalTypeEnum>::from(*current_type_requirement)
+                                Option::<PrimitiveType>::from(*current_type_requirement)
                                     .expect("if the type requirement is none, there is a maximum"),
-                                Option::<LogicalTypeEnum>::from(logical_type_requirement)
+                                Option::<PrimitiveType>::from(logical_type_requirement)
                                     .expect("if the type requirement is none, there is a maximum"),
                             ));
                         }
@@ -696,9 +712,9 @@ impl ChaseProgram {
                             return Err(TypeError::InvalidRuleConflictingTypes(
                                 next_position.predicate.0.clone(),
                                 next_position.position + 1,
-                                Option::<LogicalTypeEnum>::from(*current_type_requirement)
+                                Option::<PrimitiveType>::from(*current_type_requirement)
                                     .expect("if the type requirement is none, merging is allowed"),
-                                Option::<LogicalTypeEnum>::from(logical_type_requirement)
+                                Option::<PrimitiveType>::from(logical_type_requirement)
                                     .expect("if the type requirement is none, merging is allowed"),
                             ));
                         }
@@ -715,7 +731,7 @@ impl ChaseProgram {
                     predicate,
                     types
                         .into_iter()
-                        .map(|t| Option::<LogicalTypeEnum>::from(t).unwrap_or_default())
+                        .map(|t| Option::<PrimitiveType>::from(t).unwrap_or_default())
                         .collect(),
                 )
             })
@@ -728,8 +744,8 @@ impl ChaseProgram {
     pub fn check_for_unsupported_features(&self) -> Result<(), RuleAnalysisError> {
         let mut arities = HashMap::new();
 
-        for (predicate, arity, _, _) in self.sources() {
-            arities.insert(predicate.clone(), arity);
+        for source in self.sources() {
+            arities.insert(source.predicate.clone(), source.type_constraint.arity());
         }
 
         for rule in self.rules() {
@@ -790,7 +806,7 @@ impl ChaseProgram {
     fn check_for_incompatible_constant_types(
         &self,
         analyses: &[RuleAnalysis],
-        predicate_types: &HashMap<Identifier, Vec<LogicalTypeEnum>>,
+        predicate_types: &HashMap<Identifier, Vec<PrimitiveType>>,
     ) -> Result<(), TypeError> {
         for fact in self.facts() {
             let predicate_types = predicate_types
@@ -908,10 +924,10 @@ mod test {
     use crate::{
         model::{
             chase_model::{ChaseAtom, ChaseProgram, ChaseRule},
-            ArityOrTypes, DataSource, DataSourceDeclaration, Identifier, Term, Variable,
+            DataSource, DataSourceDeclaration, Identifier, PrimitiveType, Term, TupleConstraint,
+            Variable,
         },
         program_analysis::analysis::get_fresh_rule_predicate,
-        types::LogicalTypeEnum,
     };
 
     fn get_test_rules_and_predicates() -> (
@@ -969,12 +985,12 @@ mod test {
             Default::default(),
         );
 
-        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
-            (a, vec![LogicalTypeEnum::Any]),
-            (b, vec![LogicalTypeEnum::Any]),
-            (c, vec![LogicalTypeEnum::Any]),
-            (r, vec![LogicalTypeEnum::Any, LogicalTypeEnum::Any]),
-            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
+            (a, vec![PrimitiveType::Any]),
+            (b, vec![PrimitiveType::Any]),
+            (c, vec![PrimitiveType::Any]),
+            (r, vec![PrimitiveType::Any, PrimitiveType::Any]),
+            (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
         .collect();
@@ -998,18 +1014,18 @@ mod test {
             Default::default(),
             vec![basic_rule, exis_rule],
             Default::default(),
-            [(a.clone(), vec![LogicalTypeEnum::String])]
+            [(a.clone(), vec![PrimitiveType::String])]
                 .into_iter()
                 .collect(),
             Default::default(),
         );
 
-        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
-            (a, vec![LogicalTypeEnum::String]),
-            (b, vec![LogicalTypeEnum::Any]),
-            (c, vec![LogicalTypeEnum::Any]),
-            (r, vec![LogicalTypeEnum::String, LogicalTypeEnum::Any]),
-            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
+            (a, vec![PrimitiveType::String]),
+            (b, vec![PrimitiveType::Any]),
+            (c, vec![PrimitiveType::Any]),
+            (r, vec![PrimitiveType::String, PrimitiveType::Any]),
+            (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
         .collect();
@@ -1033,18 +1049,18 @@ mod test {
             Default::default(),
             vec![basic_rule, exis_rule],
             Default::default(),
-            [(a.clone(), vec![LogicalTypeEnum::Integer])]
+            [(a.clone(), vec![PrimitiveType::Integer])]
                 .into_iter()
                 .collect(),
             Default::default(),
         );
 
-        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
-            (a, vec![LogicalTypeEnum::Integer]),
-            (b, vec![LogicalTypeEnum::Any]),
-            (c, vec![LogicalTypeEnum::Any]),
-            (r, vec![LogicalTypeEnum::Integer, LogicalTypeEnum::Any]),
-            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
+            (a, vec![PrimitiveType::Integer]),
+            (b, vec![PrimitiveType::Any]),
+            (c, vec![PrimitiveType::Any]),
+            (r, vec![PrimitiveType::Integer, PrimitiveType::Any]),
+            (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
         .collect();
@@ -1068,18 +1084,18 @@ mod test {
             Default::default(),
             vec![basic_rule, exis_rule],
             Default::default(),
-            [(b.clone(), vec![LogicalTypeEnum::String])]
+            [(b.clone(), vec![PrimitiveType::String])]
                 .into_iter()
                 .collect(),
             Default::default(),
         );
 
-        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
-            (a, vec![LogicalTypeEnum::String]),
-            (b, vec![LogicalTypeEnum::String]),
-            (c, vec![LogicalTypeEnum::Any]),
-            (r, vec![LogicalTypeEnum::String, LogicalTypeEnum::Any]),
-            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
+            (a, vec![PrimitiveType::String]),
+            (b, vec![PrimitiveType::String]),
+            (c, vec![PrimitiveType::Any]),
+            (r, vec![PrimitiveType::String, PrimitiveType::Any]),
+            (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
         .collect();
@@ -1103,18 +1119,18 @@ mod test {
             Default::default(),
             vec![basic_rule, exis_rule],
             Default::default(),
-            [(b.clone(), vec![LogicalTypeEnum::Integer])]
+            [(b.clone(), vec![PrimitiveType::Integer])]
                 .into_iter()
                 .collect(),
             Default::default(),
         );
 
-        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
-            (a, vec![LogicalTypeEnum::Integer]),
-            (b, vec![LogicalTypeEnum::Integer]),
-            (c, vec![LogicalTypeEnum::Any]),
-            (r, vec![LogicalTypeEnum::Integer, LogicalTypeEnum::Any]),
-            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
+            (a, vec![PrimitiveType::Integer]),
+            (b, vec![PrimitiveType::Integer]),
+            (c, vec![PrimitiveType::Any]),
+            (r, vec![PrimitiveType::Integer, PrimitiveType::Any]),
+            (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
         .collect();
@@ -1137,7 +1153,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 b.clone(),
-                ArityOrTypes::Arity(1),
+                TupleConstraint::from_arity(1),
                 DataSource::csv_file("").unwrap(),
             )],
             vec![basic_rule, exis_rule],
@@ -1146,12 +1162,12 @@ mod test {
             Default::default(),
         );
 
-        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
-            (a, vec![LogicalTypeEnum::String]),
-            (b, vec![LogicalTypeEnum::String]),
-            (c, vec![LogicalTypeEnum::Any]),
-            (r, vec![LogicalTypeEnum::String, LogicalTypeEnum::Any]),
-            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
+            (a, vec![PrimitiveType::String]),
+            (b, vec![PrimitiveType::String]),
+            (c, vec![PrimitiveType::Any]),
+            (r, vec![PrimitiveType::String, PrimitiveType::Any]),
+            (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
         .collect();
@@ -1174,23 +1190,23 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 c.clone(),
-                ArityOrTypes::Arity(1),
+                TupleConstraint::from_arity(1),
                 DataSource::csv_file("").unwrap(),
             )],
             vec![basic_rule, exis_rule],
             Default::default(),
-            [(c.clone(), vec![LogicalTypeEnum::Integer])]
+            [(c.clone(), vec![PrimitiveType::Integer])]
                 .into_iter()
                 .collect(),
             Default::default(),
         );
 
-        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
-            (a, vec![LogicalTypeEnum::Integer]),
-            (b, vec![LogicalTypeEnum::Any]),
-            (c, vec![LogicalTypeEnum::Integer]),
-            (r, vec![LogicalTypeEnum::Integer, LogicalTypeEnum::Any]),
-            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
+            (a, vec![PrimitiveType::Integer]),
+            (b, vec![PrimitiveType::Any]),
+            (c, vec![PrimitiveType::Integer]),
+            (r, vec![PrimitiveType::Integer, PrimitiveType::Any]),
+            (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
         .collect();
@@ -1213,12 +1229,12 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 c,
-                ArityOrTypes::Arity(1),
+                TupleConstraint::from_arity(1),
                 DataSource::csv_file("").unwrap(),
             )],
             vec![basic_rule, exis_rule],
             Default::default(),
-            [(a, vec![LogicalTypeEnum::Integer])].into_iter().collect(),
+            [(a, vec![PrimitiveType::Integer])].into_iter().collect(),
             Default::default(),
         );
 
@@ -1240,12 +1256,12 @@ mod test {
                 Default::default(),
                 vec![DataSourceDeclaration::new(
                     c,
-                    ArityOrTypes::Types(vec![LogicalTypeEnum::Any]),
+                    [PrimitiveType::Any].into_iter().collect(),
                     DataSource::csv_file("").unwrap(),
                 )],
                 vec![basic_rule, exis_rule],
                 Default::default(),
-                [(a, vec![LogicalTypeEnum::String])].into_iter().collect(),
+                [(a, vec![PrimitiveType::String])].into_iter().collect(),
                 Default::default(),
             );
 
@@ -1269,23 +1285,23 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 b.clone(),
-                ArityOrTypes::Arity(1),
+                TupleConstraint::from_arity(1),
                 DataSource::csv_file("").unwrap(),
             )],
             vec![basic_rule, exis_rule],
             Default::default(),
-            [(a.clone(), vec![LogicalTypeEnum::Any])]
+            [(a.clone(), vec![PrimitiveType::Any])]
                 .into_iter()
                 .collect(),
             Default::default(),
         );
 
-        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
-            (a, vec![LogicalTypeEnum::Any]),
-            (b, vec![LogicalTypeEnum::String]),
-            (c, vec![LogicalTypeEnum::Any]),
-            (r, vec![LogicalTypeEnum::Any, LogicalTypeEnum::Any]),
-            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
+            (a, vec![PrimitiveType::Any]),
+            (b, vec![PrimitiveType::String]),
+            (c, vec![PrimitiveType::Any]),
+            (r, vec![PrimitiveType::Any, PrimitiveType::Any]),
+            (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
         .collect();
@@ -1308,7 +1324,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 r.clone(),
-                ArityOrTypes::Arity(2),
+                TupleConstraint::from_arity(2),
                 DataSource::csv_file("").unwrap(),
             )],
             vec![basic_rule, exis_rule],
@@ -1317,12 +1333,12 @@ mod test {
             Default::default(),
         );
 
-        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
-            (a, vec![LogicalTypeEnum::Any]),
-            (b, vec![LogicalTypeEnum::Any]),
-            (c, vec![LogicalTypeEnum::Any]),
-            (r, vec![LogicalTypeEnum::String, LogicalTypeEnum::Any]),
-            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
+            (a, vec![PrimitiveType::Any]),
+            (b, vec![PrimitiveType::Any]),
+            (c, vec![PrimitiveType::Any]),
+            (r, vec![PrimitiveType::String, PrimitiveType::Any]),
+            (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
         .collect();
@@ -1347,8 +1363,8 @@ mod test {
             vec![basic_rule, exis_rule],
             Default::default(),
             [
-                (b, vec![LogicalTypeEnum::Integer]),
-                (c, vec![LogicalTypeEnum::String]),
+                (b, vec![PrimitiveType::Integer]),
+                (c, vec![PrimitiveType::String]),
             ]
             .into_iter()
             .collect(),
@@ -1373,20 +1389,20 @@ mod test {
             vec![basic_rule, exis_rule],
             Default::default(),
             [
-                (b.clone(), vec![LogicalTypeEnum::Any]),
-                (c.clone(), vec![LogicalTypeEnum::String]),
+                (b.clone(), vec![PrimitiveType::Any]),
+                (c.clone(), vec![PrimitiveType::String]),
             ]
             .into_iter()
             .collect(),
             Default::default(),
         );
 
-        let expected_types: HashMap<Identifier, Vec<LogicalTypeEnum>> = [
-            (a, vec![LogicalTypeEnum::Any]),
-            (b, vec![LogicalTypeEnum::Any]),
-            (c, vec![LogicalTypeEnum::String]),
-            (r, vec![LogicalTypeEnum::Any, LogicalTypeEnum::Any]),
-            (get_fresh_rule_predicate(1), vec![LogicalTypeEnum::Any]),
+        let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
+            (a, vec![PrimitiveType::Any]),
+            (b, vec![PrimitiveType::Any]),
+            (c, vec![PrimitiveType::String]),
+            (r, vec![PrimitiveType::Any, PrimitiveType::Any]),
+            (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
         .collect();
