@@ -12,7 +12,10 @@ use nemo_physical::{
     datatypes::{DataValueT, Double},
 };
 
-use crate::io::parser::{all_input_consumed, parse_ground_term};
+use crate::io::{
+    formats::rdf_triples::TurtleEncodedRDFTerm,
+    parser::{all_input_consumed, parse_ground_term},
+};
 
 use super::{model::PrimitiveType, model::Term};
 use crate::error::ReadingError;
@@ -53,7 +56,7 @@ impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: String) -> Result<(), ReadingError> {
-        self.commit();
+        <LogicalAnyColumnBuilderProxy<'_, '_> as ColumnBuilderProxy<String>>::commit(self);
 
         let parsed_term =
             all_input_consumed(parse_ground_term(&RefCell::new(HashMap::new())))(input.trim())
@@ -68,6 +71,18 @@ impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
         };
 
         self.physical.add(parsed_string)
+    }
+}
+
+impl ColumnBuilderProxy<TurtleEncodedRDFTerm> for LogicalAnyColumnBuilderProxy<'_, '_> {
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: TurtleEncodedRDFTerm) -> Result<(), ReadingError> {
+        <LogicalAnyColumnBuilderProxy<'_, '_> as ColumnBuilderProxy<TurtleEncodedRDFTerm>>::commit(
+            self,
+        );
+
+        self.physical.add(input.into_normalized_string())
     }
 }
 
