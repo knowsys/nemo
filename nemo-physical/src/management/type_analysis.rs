@@ -299,18 +299,32 @@ impl TypeTree {
                                 }
 
                                 let operation_type =
-                                    subtype_node.schema.get_entry(0).partial_upper_bound();
+                                    if let Some(&first_index) = tree.input_indices().first() {
+                                        let operation_type = subtype_node
+                                            .schema
+                                            .get_entry(*first_index)
+                                            .partial_upper_bound();
 
-                                for &column_index in tree.input_indices() {
-                                    let current_type = subtype_node
-                                        .schema
-                                        .get_entry(column_index)
-                                        .partial_upper_bound();
+                                        for &column_index in tree.input_indices() {
+                                            let current_type = subtype_node
+                                                .schema
+                                                .get_entry(column_index)
+                                                .partial_upper_bound();
 
-                                    if !Self::compatible(&operation_type, &current_type) {
-                                        return Err(Error::InvalidExecutionPlan);
-                                    }
-                                }
+                                            if !Self::compatible(&operation_type, &current_type) {
+                                                return Err(Error::InvalidExecutionPlan);
+                                            }
+                                        }
+
+                                        operation_type
+                                    } else {
+                                        // TODO: Revisit this path.
+
+                                        let operation_type =
+                                            subtype_node.schema.get_entry(0).partial_upper_bound();
+
+                                        operation_type
+                                    };
 
                                 new_schema.add_entry(operation_type);
                             }
