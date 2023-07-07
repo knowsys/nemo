@@ -177,7 +177,7 @@ fn resolve_prefixed_rdf_literal(
 }
 
 #[traced("parser")]
-fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
+pub(crate) fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
     map_error(
         recognize(pair(
             alpha1,

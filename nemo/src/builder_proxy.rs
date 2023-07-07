@@ -1,24 +1,29 @@
 //! The logical builder proxy concept allows to transform a given String, representing some data in a logical datatype
 //! into some value, which can be given to the physical layer to store the data accordingly to its type
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-
 use nemo_physical::{
     builder_proxy::{
         ColumnBuilderProxy, PhysicalBuilderProxyEnum, PhysicalGenericColumnBuilderProxy,
         PhysicalStringColumnBuilderProxy,
     },
-    datatypes::{DataValueT, Double},
+    datatypes::Double,
 };
 
-use crate::io::{
-    formats::rdf_triples::TurtleEncodedRDFTerm,
-    parser::{all_input_consumed, parse_ground_term},
-};
+use oxiri::Iri;
 
-use super::{model::PrimitiveType, model::Term};
-use crate::error::ReadingError;
+use crate::{
+    error::ReadingError,
+    io::{
+        formats::rdf_triples::{
+            TurtleEncodedRDFTerm, INITIAL_FOR_SIMPLE_NUMERIC_LITERAL, XSD_STRING,
+        },
+        parser::{
+            parse_bare_name, span_from_str,
+            sparql::blank_node_label,
+            turtle::{is_valid_rdf_literal, numeric_literal},
+        },
+    },
+};
 
 /// Trait capturing builder proxies that use plain string (used for parsing in logical layer)
 ///
@@ -52,25 +57,80 @@ pub struct LogicalAnyColumnBuilderProxy<'a: 'b, 'b> {
     physical: &'b mut PhysicalStringColumnBuilderProxy<'a>,
 }
 
+impl LogicalAnyColumnBuilderProxy<'_, '_> {
+    fn normalize_string(input: String) -> String {
+        let trimmed = input.trim();
+
+        if trimmed.is_empty() {
+            return r#""""#.to_string();
+        }
+
+        if trimmed.starts_with('<') && trimmed.ends_with('>') {
+            // an absolute IRI, drop angle brackets
+            return trimmed[1..trimmed.len() - 1].to_string();
+        }
+
+        if trimmed.starts_with('"') && trimmed.ends_with('>') {
+            // potentially an RDF literal
+            if trimmed.starts_with('"') && trimmed.ends_with(XSD_STRING) {
+                // an XSD string literal, drop the datatype
+                return trimmed[..(trimmed.len() - XSD_STRING.len() - 2)].to_string();
+            }
+
+            // otherwise it might still be a valid RDF literal, make sure it is.
+            if is_valid_rdf_literal(trimmed) {
+                // it's an RDF literal, return as-is
+                return trimmed.to_string();
+            }
+        }
+
+        if trimmed.starts_with('"') && trimmed.ends_with('"') {
+            // already a quoted string, pass as-is
+            return trimmed.to_string();
+        }
+
+        if trimmed.starts_with(INITIAL_FOR_SIMPLE_NUMERIC_LITERAL) {
+            // possibly a simple numeric literal, might need to normalise
+            if let Ok((remainder, literal)) = numeric_literal(span_from_str(trimmed)) {
+                if remainder.is_empty() {
+                    // convert to typed literal representation
+                    return literal.into_rdf_term_literal();
+                }
+            }
+        }
+
+        if trimmed.starts_with("_:") {
+            // potentially a bnode label
+            if let Ok((remainder, _)) = blank_node_label(span_from_str(trimmed)) {
+                if remainder.is_empty() {
+                    return trimmed.to_string();
+                }
+            }
+        }
+
+        // check if it's a valid bare name
+        if let Ok((remainder, _)) = parse_bare_name(span_from_str(trimmed)) {
+            if remainder.is_empty() {
+                // it is, pass as-is
+                return trimmed.to_string();
+            }
+        } else if Iri::parse(trimmed).is_ok() {
+            // it is, pass as-is
+            return trimmed.to_string();
+        }
+
+        // otherwise it needs to be quoted
+        format!(r#""{trimmed}""#).to_string()
+    }
+}
+
 impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: String) -> Result<(), ReadingError> {
         <LogicalAnyColumnBuilderProxy<'_, '_> as ColumnBuilderProxy<String>>::commit(self);
 
-        let parsed_term =
-            all_input_consumed(parse_ground_term(&RefCell::new(HashMap::new())))(input.trim())
-                .unwrap_or(Term::StringLiteral(input.clone()));
-
-        let parsed_datavalue = PrimitiveType::Any
-            .ground_term_to_data_value_t(parsed_term)
-            .expect("PrimitiveType::Any should work with every possible term we can get here.");
-
-        let DataValueT::String(parsed_string) = parsed_datavalue else {
-            unreachable!("PrimitiveType::Any should always be treated as String at the moment.")
-        };
-
-        self.physical.add(parsed_string)
+        self.physical.add(Self::normalize_string(input))
     }
 }
 

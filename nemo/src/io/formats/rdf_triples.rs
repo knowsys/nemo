@@ -29,6 +29,10 @@ pub const XSD_DOUBLE: &str = "<http://www.w3.org/2001/XMLSchema#double>";
 /// The IRI identifying the XSD string data type.
 pub const XSD_STRING: &str = "<http://www.w3.org/2001/XMLSchema#string>";
 
+pub(crate) const INITIAL_FOR_SIMPLE_NUMERIC_LITERAL: &[char] = &[
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '+', '.',
+];
+
 /// A wrapper around [`String`] signifying that this contains a valid Turtle-encoded RDF term.
 #[derive(Debug, Clone)]
 pub struct TurtleEncodedRDFTerm(String);
@@ -49,9 +53,7 @@ impl TurtleEncodedRDFTerm {
         } else if self.0.starts_with('"') && self.0.ends_with(XSD_STRING) {
             // an XSD string literal, drop the datatype
             self.0[..(self.0.len() - XSD_STRING.len() - 2)].to_string()
-        } else if self.0.starts_with([
-            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '+', '.',
-        ]) {
+        } else if self.0.starts_with(INITIAL_FOR_SIMPLE_NUMERIC_LITERAL) {
             // some simple numeric literal, convert to a typed literal representation
             let (remainder, literal) =
                 numeric_literal(span_from_str(&self.0)).expect("is a valid numeric literal");
