@@ -71,7 +71,7 @@ impl LogicalAnyColumnBuilderProxy<'_, '_> {
             Iri::parse(BASE.to_string()).ok(),
         );
 
-        if let Some(Ok(literal)) = parser
+        let terms = parser
             .into_iter(|triple| {
                 let normalized =
                     TurtleEncodedRDFTerm::new(triple.object.to_string()).into_normalized_string();
@@ -81,9 +81,13 @@ impl LogicalAnyColumnBuilderProxy<'_, '_> {
                     None => normalized,
                 })
             })
-            .next()
-        {
-            return literal.to_string();
+            .collect::<Result<Vec<_>, _>>();
+
+        if let Ok(terms) = terms {
+            // make sure this really parsed as a single triple
+            if terms.len() == 1 {
+                return terms.first().expect("is not empty").to_string();
+            }
         }
 
         // not a valid RDF term.
@@ -277,6 +281,16 @@ mod test {
         assert_eq!(
             LogicalAnyColumnBuilderProxy::normalize_string("with_question_mark?".to_string()),
             r#""with_question_mark?""#
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string("a. a a a".to_string()),
+            r#""a. a a a""#
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string("<a>. <a> <a> <a>".to_string()),
+            r#""<a>. <a> <a> <a>""#
         );
     }
 }
