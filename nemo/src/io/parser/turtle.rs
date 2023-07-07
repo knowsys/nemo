@@ -15,7 +15,7 @@ use crate::model::NumericLiteral;
 use nemo_physical::datatypes::Double;
 
 use super::{
-    map_error, span_from_str,
+    map_error,
     sparql::{iri, Name},
     token,
     types::{IntermediateResult, Span},
@@ -168,14 +168,6 @@ pub fn numeric_literal(input: Span) -> IntermediateResult<NumericLiteral> {
 pub(super) enum RdfLiteral<'a> {
     LanguageString { value: &'a str, tag: &'a str },
     DatatypeValue { value: &'a str, datatype: Name<'a> },
-}
-
-pub(crate) fn is_valid_rdf_literal(input: &str) -> bool {
-    if let Ok((remainder, _)) = rdf_literal(span_from_str(input)) {
-        return remainder.is_empty();
-    }
-
-    false
 }
 
 #[traced("parser::turtle")]

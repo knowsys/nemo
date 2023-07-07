@@ -1,6 +1,8 @@
 //! The logical builder proxy concept allows to transform a given String, representing some data in a logical datatype
 //! into some value, which can be given to the physical layer to store the data accordingly to its type
 
+use std::io::BufReader;
+
 use nemo_physical::{
     builder_proxy::{
         ColumnBuilderProxy, PhysicalBuilderProxyEnum, PhysicalGenericColumnBuilderProxy,
@@ -10,18 +12,14 @@ use nemo_physical::{
 };
 
 use oxiri::Iri;
+use rio_api::parser::TriplesParser;
+use rio_turtle::TurtleParser;
 
 use crate::{
     error::ReadingError,
     io::{
-        formats::rdf_triples::{
-            TurtleEncodedRDFTerm, INITIAL_FOR_SIMPLE_NUMERIC_LITERAL, XSD_STRING,
-        },
-        parser::{
-            parse_bare_name, span_from_str,
-            sparql::blank_node_label,
-            turtle::{is_valid_rdf_literal, numeric_literal},
-        },
+        formats::rdf_triples::TurtleEncodedRDFTerm,
+        parser::{parse_bare_name, span_from_str},
     },
 };
 
@@ -59,55 +57,36 @@ pub struct LogicalAnyColumnBuilderProxy<'a: 'b, 'b> {
 
 impl LogicalAnyColumnBuilderProxy<'_, '_> {
     fn normalize_string(input: String) -> String {
+        const BASE: &str = "a:";
+
         let trimmed = input.trim();
 
         if trimmed.is_empty() {
             return r#""""#.to_string();
         }
 
-        if trimmed.starts_with('<') && trimmed.ends_with('>') {
-            // an absolute IRI, drop angle brackets
-            return trimmed[1..trimmed.len() - 1].to_string();
+        let data = format!("<> <> {trimmed}.");
+        let parser = TurtleParser::new(
+            BufReader::new(data.as_bytes()),
+            Iri::parse(BASE.to_string()).ok(),
+        );
+
+        if let Some(Ok(literal)) = parser
+            .into_iter(|triple| {
+                let normalized =
+                    TurtleEncodedRDFTerm::new(triple.object.to_string()).into_normalized_string();
+
+                Ok::<_, ReadingError>(match normalized.strip_prefix(BASE) {
+                    Some(stripped) => stripped.to_string(),
+                    None => normalized,
+                })
+            })
+            .next()
+        {
+            return literal.to_string();
         }
 
-        if trimmed.starts_with('"') && trimmed.ends_with('>') {
-            // potentially an RDF literal
-            if trimmed.starts_with('"') && trimmed.ends_with(XSD_STRING) {
-                // an XSD string literal, drop the datatype
-                return trimmed[..(trimmed.len() - XSD_STRING.len() - 2)].to_string();
-            }
-
-            // otherwise it might still be a valid RDF literal, make sure it is.
-            if is_valid_rdf_literal(trimmed) {
-                // it's an RDF literal, return as-is
-                return trimmed.to_string();
-            }
-        }
-
-        if trimmed.starts_with('"') && trimmed.ends_with('"') {
-            // already a quoted string, pass as-is
-            return trimmed.to_string();
-        }
-
-        if trimmed.starts_with(INITIAL_FOR_SIMPLE_NUMERIC_LITERAL) {
-            // possibly a simple numeric literal, might need to normalise
-            if let Ok((remainder, literal)) = numeric_literal(span_from_str(trimmed)) {
-                if remainder.is_empty() {
-                    // convert to typed literal representation
-                    return literal.into_rdf_term_literal();
-                }
-            }
-        }
-
-        if trimmed.starts_with("_:") {
-            // potentially a bnode label
-            if let Ok((remainder, _)) = blank_node_label(span_from_str(trimmed)) {
-                if remainder.is_empty() {
-                    return trimmed.to_string();
-                }
-            }
-        }
-
+        // not a valid RDF term.
         // check if it's a valid bare name
         if let Ok((remainder, _)) = parse_bare_name(span_from_str(trimmed)) {
             if remainder.is_empty() {
@@ -116,6 +95,7 @@ impl LogicalAnyColumnBuilderProxy<'_, '_> {
             }
         }
 
+        // might still be a full IRI
         if Iri::parse(trimmed).is_ok() {
             // it is, pass as-is
             return trimmed.to_string();

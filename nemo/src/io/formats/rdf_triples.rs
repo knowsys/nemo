@@ -38,6 +38,11 @@ pub(crate) const INITIAL_FOR_SIMPLE_NUMERIC_LITERAL: &[char] = &[
 pub struct TurtleEncodedRDFTerm(String);
 
 impl TurtleEncodedRDFTerm {
+    /// Wrap a syntactically valid Turtle encoding of an RDF term.
+    pub fn new(inner: String) -> Self {
+        Self(inner)
+    }
+
     /// Return the underlying string representation of the term.
     pub fn into_inner(self) -> String {
         self.0
