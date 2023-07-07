@@ -114,7 +114,9 @@ impl LogicalAnyColumnBuilderProxy<'_, '_> {
                 // it is, pass as-is
                 return trimmed.to_string();
             }
-        } else if Iri::parse(trimmed).is_ok() {
+        }
+
+        if Iri::parse(trimmed).is_ok() {
             // it is, pass as-is
             return trimmed.to_string();
         }
@@ -227,5 +229,74 @@ impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalFloat64ColumnBuilderPr
             PhysicalBuilderProxyEnum::Double(physical) => Self { physical },
             _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch.")
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use test_log::test;
+
+    use super::*;
+
+    #[test]
+    fn any_normalization() {
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string("".to_string()),
+            r#""""#
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string("<http://example.org>".to_string()),
+            "http://example.org"
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string(
+                r#""23"^^<http://www.w3.org/2001/XMLSchema#string>"#.to_string()
+            ),
+            r#""23""#
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string(
+                r#""12345"^^<http://www.w3.org/2001/XMLSchema#integer>"#.to_string()
+            ),
+            r#""12345"^^<http://www.w3.org/2001/XMLSchema#integer>"#
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string(r#""quoted""#.to_string()),
+            r#""quoted""#
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string("12345".to_string()),
+            r#""12345"^^<http://www.w3.org/2001/XMLSchema#integer>"#
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string("_:foo".to_string()),
+            "_:foo"
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string("bare_name".to_string()),
+            "bare_name"
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string("http://example.org".to_string()),
+            "http://example.org"
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string("with space".to_string()),
+            "with space"
+        );
+
+        assert_eq!(
+            LogicalAnyColumnBuilderProxy::normalize_string("with_question_mark?".to_string()),
+            r#""with_question_mark?""#
+        );
     }
 }
