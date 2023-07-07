@@ -298,8 +298,10 @@ impl TypeTree {
                                     continue;
                                 }
 
-                                let operation_type =
-                                    subtype_node.schema.get_entry(0).partial_upper_bound();
+                                let operation_type = subtype_node
+                                    .schema
+                                    .get_entry(*tree.input_indices()[0])
+                                    .partial_upper_bound();
 
                                 for &column_index in tree.input_indices() {
                                     let current_type = subtype_node
