@@ -21,7 +21,7 @@ pub(crate) mod iri;
 pub(crate) mod rfc5234;
 pub(crate) mod sparql;
 pub(crate) mod turtle;
-pub use types::{LocatedParseError, ParseError, ParseResult};
+pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
 /// Parse a program in the given `input`-String and return a [`Program`].
 ///
