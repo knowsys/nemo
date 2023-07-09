@@ -12,6 +12,11 @@ use crate::model::PrimitiveType;
 /// A [`LocatedSpan`] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
 
+/// Create a [`Span`][nom_locate::LocatedSpan] over the input.
+pub fn span_from_str(input: &str) -> Span<'_> {
+    Span::new(input)
+}
+
 /// An intermediate parsing result
 pub(super) type IntermediateResult<'a, T> = IResult<Span<'a>, T, LocatedParseError>;
 

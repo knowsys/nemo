@@ -21,7 +21,7 @@ pub(crate) mod iri;
 pub(crate) mod rfc5234;
 pub(crate) mod sparql;
 pub(crate) mod turtle;
-pub use types::{LocatedParseError, ParseError, ParseResult};
+pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
 /// Parse a program in the given `input`-String and return a [`Program`].
 ///
@@ -177,7 +177,7 @@ fn resolve_prefixed_rdf_literal(
 }
 
 #[traced("parser")]
-fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
+pub(crate) fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
     map_error(
         recognize(pair(
             alpha1,

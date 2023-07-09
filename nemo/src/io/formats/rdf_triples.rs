@@ -2,7 +2,7 @@
 use std::io::{BufRead, BufReader};
 
 use nemo_physical::{
-    builder_proxy::PhysicalBuilderProxyEnum,
+    builder_proxy::{ColumnBuilderProxy, PhysicalBuilderProxyEnum},
     error::ReadingError,
     table_reader::{Resource, TableReader},
 };
@@ -12,9 +12,65 @@ use rio_turtle::{NTriplesParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 
 use crate::{
-    io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    model::PrimitiveType,
+    builder_proxy::{LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxy},
+    io::{
+        formats::PROGRESS_NOTIFY_INCREMENT,
+        parser::{span_from_str, turtle::numeric_literal},
+        resource_providers::ResourceProviders,
+    },
 };
+
+/// The IRI identifying the XSD integer data type.
+pub const XSD_INTEGER: &str = "<http://www.w3.org/2001/XMLSchema#integer>";
+/// The IRI identifying the XSD decimal data type.
+pub const XSD_DECIMAL: &str = "<http://www.w3.org/2001/XMLSchema#decimal>";
+/// The IRI identifying the XSD double data type.
+pub const XSD_DOUBLE: &str = "<http://www.w3.org/2001/XMLSchema#double>";
+/// The IRI identifying the XSD string data type.
+pub const XSD_STRING: &str = "<http://www.w3.org/2001/XMLSchema#string>";
+
+pub(crate) const INITIAL_FOR_SIMPLE_NUMERIC_LITERAL: &[char] = &[
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '+', '.',
+];
+
+/// A wrapper around [`String`] signifying that this contains a valid Turtle-encoded RDF term.
+#[derive(Debug, Clone)]
+pub struct TurtleEncodedRDFTerm(String);
+
+impl TurtleEncodedRDFTerm {
+    /// Wrap a syntactically valid Turtle encoding of an RDF term.
+    pub fn new(inner: String) -> Self {
+        Self(inner)
+    }
+
+    /// Return the underlying string representation of the term.
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+
+    /// Return a normalized form of the term suitable for storage in an `any` Column.
+    pub fn into_normalized_string(self) -> String {
+        if self.0.is_empty() {
+            r#""""#.to_string()
+        } else if self.0.starts_with('<') && self.0.ends_with('>') {
+            // an absolute IRI, strip the angle brackets
+            self.0[1..self.0.len() - 1].to_string()
+        } else if self.0.starts_with('"') && self.0.ends_with(XSD_STRING) {
+            // an XSD string literal, drop the datatype
+            self.0[..(self.0.len() - XSD_STRING.len() - 2)].to_string()
+        } else if self.0.starts_with(INITIAL_FOR_SIMPLE_NUMERIC_LITERAL) {
+            // some simple numeric literal, convert to a typed literal representation
+            let (remainder, literal) =
+                numeric_literal(span_from_str(&self.0)).expect("is a valid numeric literal");
+            debug_assert!(remainder.is_empty());
+
+            literal.into_rdf_term_literal()
+        } else {
+            //
+            self.0
+        }
+    }
+}
 
 /// A [`TableReader`] for RDF 1.1 files containing triples.
 #[derive(Debug, Clone)]
@@ -53,16 +109,16 @@ impl RDFTriplesReader {
     {
         let mut builders = physical_builder_proxies
             .iter_mut()
-            .map(|physical| PrimitiveType::Any.wrap_physical_column_builder(physical))
+            .map(LogicalAnyColumnBuilderProxy::new)
             .collect::<Vec<_>>();
 
         assert!(builders.len() == 3);
 
         let mut triples = 0;
         let mut on_triple = |triple: Triple| {
-            builders[0].add(triple.subject.to_string())?;
-            builders[1].add(triple.predicate.to_string())?;
-            builders[2].add(triple.object.to_string())?;
+            builders[0].add(TurtleEncodedRDFTerm(triple.subject.to_string()))?;
+            builders[1].add(TurtleEncodedRDFTerm(triple.predicate.to_string()))?;
+            builders[2].add(TurtleEncodedRDFTerm(triple.object.to_string()))?;
 
             triples += 1;
             if triples % PROGRESS_NOTIFY_INCREMENT == 0 {
