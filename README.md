@@ -24,10 +24,13 @@ Nemo is in heavy development and the current releases should still be considered
 Archives with pre-compiled binaries for various platforms are available from the
 [Nemo releases page](https://github.com/knowsys/nemo/releases).
 To build your own version from source, you need to have an up-to-date installation of Rust.
+Moreover, Nemo requires the following dependency on Linux/Unix systems:
+- OpenSSL development packages (e.g., `libssl-dev` on Ubuntu or `openssl-devel` on Fedora)
+
 Download the source code (from a release or this repository) and run
 
  `cargo build -r`
- 
+
 This will create the command-line client `nmo` in the directory `./target/release/`.
 
 ## Usage
