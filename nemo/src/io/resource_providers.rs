@@ -2,7 +2,7 @@
 
 use std::{io::Read, rc::Rc};
 
-use flate2::read::GzDecoder;
+use flate2::read::MultiGzDecoder;
 
 use crate::io::parser::{all_input_consumed, iri::iri};
 use nemo_physical::{error::ReadingError, table_reader::Resource};
@@ -63,7 +63,7 @@ impl ResourceProviders {
                 }
 
                 // Try opening with gzip
-                let gz_reader = GzDecoder::new(reader);
+                let gz_reader = MultiGzDecoder::new(reader);
 
                 if gz_reader.header().is_some() {
                     return Ok(Box::new(gz_reader));
