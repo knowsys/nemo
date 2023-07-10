@@ -16,7 +16,7 @@ pub struct HTTPResource {
     /// IRI that this resource was fetched from
     url: Resource,
     /// Content of the resource
-    content: String,
+    content: Vec<u8>,
 }
 
 impl HTTPResource {
@@ -26,14 +26,17 @@ impl HTTPResource {
     }
 
     /// Return the content of this resource.
-    pub fn content(&self) -> &String {
-        &self.content
+    pub fn content(&self) -> String {
+        String::from_utf8(self.content.clone()).expect("is valid UTF-8")
     }
 }
 
 impl Read for HTTPResource {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.content.as_bytes().read(buf)
+        let amount = self.content.as_slice().read(buf)?;
+        self.content.drain(0..amount);
+
+        Ok(amount)
     }
 }
 
@@ -44,7 +47,7 @@ impl HTTPResourceProvider {
 
         Ok(HTTPResource {
             url: url.to_string(),
-            content,
+            content: content.into(),
         })
     }
 }
