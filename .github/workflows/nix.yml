@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: DeterminateSystems/nix-installer-action@v4
-    - uses: DeterminateSystems/magic-nix-cache-action@v1
+    - uses: DeterminateSystems/magic-nix-cache-action@v2
     - run: nix flake check
 
   build-nemo:
@@ -25,7 +25,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: DeterminateSystems/nix-installer-action@v4
-    - uses: DeterminateSystems/magic-nix-cache-action@v1
+    - uses: DeterminateSystems/magic-nix-cache-action@v2
     - run: nix build .#nemo
 
   build-python:
@@ -35,7 +35,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: DeterminateSystems/nix-installer-action@v4
-    - uses: DeterminateSystems/magic-nix-cache-action@v1
+    - uses: DeterminateSystems/magic-nix-cache-action@v2
     - run: nix build .#nemo-python
 
   build-wasm:
@@ -45,7 +45,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: DeterminateSystems/nix-installer-action@v4
-    - uses: DeterminateSystems/magic-nix-cache-action@v1
+    - uses: DeterminateSystems/magic-nix-cache-action@v2
     - run: nix build .#nemo-wasm
 
   test-python:
@@ -55,5 +55,5 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: DeterminateSystems/nix-installer-action@v4
-    - uses: DeterminateSystems/magic-nix-cache-action@v1
+    - uses: DeterminateSystems/magic-nix-cache-action@v2
     - run: nix run .#python3 -- -m unittest discover -s nemo-python/tests -v
