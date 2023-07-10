@@ -11,6 +11,8 @@ use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo::model::types::primitive_logical_value::PrimitiveLogicalValueT;
 use nemo::model::DataSourceDeclaration;
+use nemo::model::NumericLiteral;
+use nemo::model::Term;
 use nemo_physical::table_reader::Resource;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsCast;
@@ -180,8 +182,18 @@ impl NemoResults {
             let array: Array = next
                 .into_iter()
                 .map(|v| match v {
-                    // TODO: probably this should not just convert the rdf literal to a string...
-                    PrimitiveLogicalValueT::Any(rdf) => JsValue::from(rdf.to_string()),
+                    PrimitiveLogicalValueT::Any(rdf) => match rdf {
+                        Term::Variable(_) => panic!("Variables should not occur as results!"),
+                        Term::Constant(c) => JsValue::from(c.to_string()),
+                        Term::NumericLiteral(NumericLiteral::Integer(i)) => JsValue::from(i),
+                        Term::NumericLiteral(NumericLiteral::Double(d)) => {
+                            JsValue::from(f64::from(d))
+                        }
+                        // currently we pack decimals into strings, maybe this should change
+                        Term::NumericLiteral(_) => JsValue::from(rdf.to_string()),
+                        Term::StringLiteral(s) => JsValue::from(s),
+                        Term::RdfLiteral(lit) => JsValue::from(lit.to_string()),
+                    },
                     PrimitiveLogicalValueT::String(s) => JsValue::from(s),
                     PrimitiveLogicalValueT::Integer(i) => JsValue::from(i),
                     PrimitiveLogicalValueT::Float64(d) => JsValue::from(f64::from(d)),
