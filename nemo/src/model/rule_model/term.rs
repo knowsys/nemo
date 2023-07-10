@@ -115,10 +115,24 @@ pub enum Term {
 impl std::fmt::Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Term::Constant(term) => write!(f, "{term}"),
+            Term::Constant(Identifier(s)) => {
+                // Nulls start with __ and shall be wrapped in angle brackets
+                if s.starts_with("__") {
+                    write!(f, "<{s}>")
+                }
+                // blank nodes and anything that starts with an ascii latter (like bare names)
+                // should not be wrapped in angle brackets
+                else if s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
+                    write!(f, "{s}")
+                }
+                // everything else shall be wrapped in angle_brackets
+                else {
+                    write!(f, "<{s}>")
+                }
+            }
             Term::Variable(term) => write!(f, "{term}"),
             Term::NumericLiteral(term) => write!(f, "{term}"),
-            Term::StringLiteral(term) => write!(f, "{term}"),
+            Term::StringLiteral(term) => write!(f, "\"{term}\""),
             Term::RdfLiteral(term) => write!(f, "{term}"),
         }
     }
@@ -150,7 +164,7 @@ impl std::fmt::Display for NumericLiteral {
         match self {
             NumericLiteral::Integer(value) => write!(f, "{value}"),
             NumericLiteral::Decimal(left, right) => write!(f, "{left}.{right}"),
-            NumericLiteral::Double(value) => write!(f, "{value}"),
+            NumericLiteral::Double(value) => write!(f, "{:E}", f64::from(*value)),
         }
     }
 }
@@ -178,7 +192,7 @@ impl std::fmt::Display for RdfLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RdfLiteral::LanguageString { value, tag } => write!(f, "\"{value}\"@{tag}"),
-            RdfLiteral::DatatypeValue { value, datatype } => write!(f, "\"{value}\"^^{datatype}"),
+            RdfLiteral::DatatypeValue { value, datatype } => write!(f, "\"{value}\"^^<{datatype}>"),
         }
     }
 }

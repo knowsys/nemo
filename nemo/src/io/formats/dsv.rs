@@ -286,7 +286,7 @@ mod test {
     use csv::ReaderBuilder;
     use nemo_physical::{
         builder_proxy::{PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy},
-        datatypes::storage_value::VecT,
+        datatypes::{data_value::DataValueIteratorT, storage_value::VecT},
         dictionary::{Dictionary, PrefixedStringDictionary},
     };
 
@@ -333,30 +333,22 @@ Boston;United States;4628910
         assert!(result.is_ok());
         assert_eq!(x.len(), 3);
         assert!(x.iter().all(|vect| vect.len() == 1));
-        assert_eq!(
-            x[0].get(0)
-                .and_then(|dvt| dvt.try_into().ok())
-                .and_then(|u64: u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.get_mut().entry(usize))
-                .unwrap(),
-            "Boston"
-        );
-        assert_eq!(
-            x[1].get(0)
-                .and_then(|dvt| dvt.try_into().ok())
-                .and_then(|u64: u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.get_mut().entry(usize))
-                .unwrap(),
-            "United States"
-        );
-        assert_eq!(
-            x[2].get(0)
-                .and_then(|dvt| dvt.try_into().ok())
-                .and_then(|u64: u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.get_mut().entry(usize))
-                .unwrap(),
-            r#""4628910"^^<http://www.w3.org/2001/XMLSchema#integer>"#
-        );
+
+        let dvit = DataValueIteratorT::String(Box::new(x.into_iter().map(|vt| {
+            dict.get_mut()
+                .entry(usize::try_from(u64::try_from(vt.get(0).unwrap()).unwrap()).unwrap())
+                .unwrap()
+        })));
+
+        let output_iterator = PrimitiveType::Any.serialize_output(dvit);
+
+        for (value, expected) in output_iterator.zip(vec![
+            "Boston",
+            "United States",
+            r#""4628910"^^<http://www.w3.org/2001/XMLSchema#integer>"#,
+        ]) {
+            assert_eq!(value, expected);
+        }
     }
 
     #[test]
@@ -371,27 +363,27 @@ The next 2 columns are empty;;;789
 "#;
 
         let expected_result = [
-            ("Boston", "United States", r#""Some String""#, 4628910),
-            ("Dresden", "Germany", r#""Another String""#, 1234567),
+            ("Boston", "United States", "Some String", 4628910),
+            ("Dresden", "Germany", "Another String", 1234567),
             (
                 "My Home Town",
                 r#""Some<where >Nice""#,
-                r#""<https://string.parsing.should/not/change#that>""#,
+                "<https://string.parsing.should/not/change#that>",
                 2,
             ),
             (
                 "Trailing Spaces do not belong to the name",
                 "What about spaces in the beginning though",
-                r#""  what happens to spaces in string parsing?  ""#,
+                "  what happens to spaces in string parsing?  ",
                 123,
             ),
             (
                 r#""Do String literals work?""#,
                 r#""Even with datatype annotation?""#,
-                r#"""even string literals should just be piped through"^^<http://www.w3.org/2001/XMLSchema#string>""#,
+                r#""even string literals should just be piped through"^^<http://www.w3.org/2001/XMLSchema#string>"#,
                 456,
             ),
-            ("The next 2 columns are empty", r#""""#, r#""""#, 789),
+            ("The next 2 columns are empty", r#""""#, "", 789),
         ];
 
         let mut rdr = ReaderBuilder::new()
@@ -441,32 +433,46 @@ The next 2 columns are empty;;;789
             unreachable!()
         };
 
-        let col0: Vec<String> = col0_idx
-            .iter()
-            .copied()
-            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
-            .collect();
-        let col1: Vec<String> = col1_idx
-            .iter()
-            .copied()
-            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
-            .collect();
-        let col2: Vec<String> = col2_idx
-            .iter()
-            .copied()
-            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
-            .collect();
+        let col0 = DataValueIteratorT::String(Box::new(
+            col0_idx
+                .iter()
+                .copied()
+                .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .collect::<Vec<_>>()
+                .into_iter(),
+        ));
+        let col1 = DataValueIteratorT::String(Box::new(
+            col1_idx
+                .iter()
+                .copied()
+                .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .collect::<Vec<_>>()
+                .into_iter(),
+        ));
+        let col2 = DataValueIteratorT::String(Box::new(
+            col2_idx
+                .iter()
+                .copied()
+                .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .collect::<Vec<_>>()
+                .into_iter(),
+        ));
+        let col3 = DataValueIteratorT::I64(Box::new(col3.iter().copied()));
 
-        col0.into_iter()
-            .zip(col1)
-            .zip(col2)
-            .zip(col3)
-            .map(|(((c0, c1), c2), c3)| (c0, c1, c2, *c3))
-            .zip(
-                expected_result
-                    .into_iter()
-                    .map(|(e0, e1, e2, e3)| (e0.to_string(), e1.to_string(), e2.to_string(), e3)),
-            )
+        PrimitiveType::Any
+            .serialize_output(col0)
+            .zip(PrimitiveType::Any.serialize_output(col1))
+            .zip(PrimitiveType::String.serialize_output(col2))
+            .zip(PrimitiveType::Integer.serialize_output(col3))
+            .map(|(((c0, c1), c2), c3)| (c0, c1, c2, c3))
+            .zip(expected_result.into_iter().map(|(e0, e1, e2, e3)| {
+                (
+                    e0.to_string(),
+                    e1.to_string(),
+                    e2.to_string(),
+                    e3.to_string(),
+                )
+            }))
             .for_each(|(t1, t2)| assert_eq!(t1, t2));
     }
 

@@ -137,7 +137,7 @@ impl PrimitiveType {
         gt: Term,
     ) -> Result<DataValueT, InvalidRuleTermConversion> {
         let result = match self {
-            Self::Any => DataValueT::String(any_term_to_physical_string(gt)),
+            Self::Any => DataValueT::String(any_term_to_physical_string(gt)?),
             Self::String => DataValueT::String(any_string_to_physical_string(gt)?),
             Self::Integer => DataValueT::I64(any_integer_to_physical_integer(gt)?),
             Self::Float64 => DataValueT::Double(any_double_to_physical_double(gt)?),

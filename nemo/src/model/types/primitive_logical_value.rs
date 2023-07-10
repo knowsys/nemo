@@ -1,5 +1,7 @@
-use nemo_physical::datatypes::data_value::DataValueIteratorT;
 use nemo_physical::datatypes::Double;
+use nemo_physical::{
+    datatypes::data_value::DataValueIteratorT, dictionary::value_serializer::NULL_PREFIX,
+};
 
 use crate::model::{Identifier, NumericLiteral, RdfLiteral, Term};
 
@@ -10,11 +12,19 @@ const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
 const XSD_DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
 const XSD_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
 
+const LANGUAGE_STRING_PREFIX: &str = "LANGUAGE_STRING:";
+const STRING_PREFIX: &str = "STRING:";
+const INTEGER_PREFIX: &str = "INTEGER:";
+const DECIMAL_PREFIX: &str = "DECIMAL:";
+const DOUBLE_PREFIX: &str = "DOUBLE:";
+const CONSTANT_PREFIX: &str = "CONSTANT:";
+const DATATYPE_VALUE_PREFIX: &str = "DATATYPE_VALUE:";
+
 /// Enum for values in the logical layer
 #[derive(Debug)]
 pub enum PrimitiveLogicalValueT {
     /// Any variant
-    Any(RdfLiteral),
+    Any(Term),
     /// String variant
     String(String),
     /// Integer variant
@@ -23,8 +33,8 @@ pub enum PrimitiveLogicalValueT {
     Float64(Double),
 }
 
-impl From<RdfLiteral> for PrimitiveLogicalValueT {
-    fn from(value: RdfLiteral) -> Self {
+impl From<Term> for PrimitiveLogicalValueT {
+    fn from(value: Term) -> Self {
         Self::Any(value)
     }
 }
@@ -73,7 +83,7 @@ impl<'a> Iterator for PrimitiveLogicalValueIteratorT<'a> {
     }
 }
 
-pub(super) type DefaultAnyIterator<'a> = Box<dyn Iterator<Item = RdfLiteral> + 'a>;
+pub(super) type DefaultAnyIterator<'a> = Box<dyn Iterator<Item = Term> + 'a>;
 pub(super) type DefaultStringIterator<'a> = Box<dyn Iterator<Item = String> + 'a>;
 pub(super) type DefaultIntegerIterator<'a> = Box<dyn Iterator<Item = i64> + 'a>;
 pub(super) type DefaultFloat64Iterator<'a> = Box<dyn Iterator<Item = Double> + 'a>;
@@ -94,10 +104,54 @@ impl<'a> AnyOutputMapper<'a> {
 impl<'a> From<AnyOutputMapper<'a>> for DefaultAnyIterator<'a> {
     fn from(source: AnyOutputMapper<'a>) -> Self {
         Box::new(source.physical_iter.map(|s| {
-            // TODO: do correct mapping here
-            RdfLiteral::DatatypeValue {
-                value: s,
-                datatype: XSD_STRING.to_string(),
+            match s {
+                s if s.starts_with(LANGUAGE_STRING_PREFIX) => {
+                    let (value, tag) = s[LANGUAGE_STRING_PREFIX.len()..]
+                        .rsplit_once('@')
+                        .expect("Physical Value should be well-formatted.");
+                    Term::RdfLiteral(RdfLiteral::LanguageString {
+                        value: value.to_string(),
+                        tag: tag.to_string(),
+                    })
+                }
+                s if s.starts_with(STRING_PREFIX) => {
+                    Term::StringLiteral(s[STRING_PREFIX.len()..].to_string())
+                }
+                s if s.starts_with(INTEGER_PREFIX) => {
+                    Term::NumericLiteral(NumericLiteral::Integer(
+                        s[INTEGER_PREFIX.len()..]
+                            .parse()
+                            .expect("Physical Value should be well-formatted."),
+                    ))
+                }
+                s if s.starts_with(DECIMAL_PREFIX) => {
+                    let (a, b) = s[DECIMAL_PREFIX.len()..]
+                        .rsplit_once('.')
+                        .and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))
+                        .expect("Physical Value should be well-formatted.");
+                    Term::NumericLiteral(NumericLiteral::Decimal(a, b))
+                }
+                s if s.starts_with(DOUBLE_PREFIX) => Term::NumericLiteral(NumericLiteral::Double(
+                    s[DOUBLE_PREFIX.len()..]
+                        .parse()
+                        .ok()
+                        .and_then(|f64| Double::new(f64).ok())
+                        .expect("Physical Value should be well-formatted."),
+                )),
+                s if s.starts_with(CONSTANT_PREFIX) => {
+                    Term::Constant(s[CONSTANT_PREFIX.len()..].to_string().into())
+                }
+                s if s.starts_with(DATATYPE_VALUE_PREFIX) => {
+                    let (value, datatype) = s[DATATYPE_VALUE_PREFIX.len()..]
+                        .rsplit_once("^^")
+                        .expect("Physical Value should be well-formatted.");
+                    Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                        value: value.to_string(),
+                        datatype: datatype.to_string(),
+                    })
+                }
+                s if s.starts_with(NULL_PREFIX) => Term::Constant(format!("__Null#{}", s[NULL_PREFIX.len()..].to_string()).into()),
+                _ => unreachable!("The physical strings should take one of the previous forms. Apparently we forgot to handle terms like: {s:?}"),
             }
         }))
     }
@@ -105,8 +159,35 @@ impl<'a> From<AnyOutputMapper<'a>> for DefaultAnyIterator<'a> {
 
 impl<'a> From<AnyOutputMapper<'a>> for DefaultStringIterator<'a> {
     fn from(source: AnyOutputMapper<'a>) -> Self {
-        // TODO: do correct mapping here
-        source.physical_iter
+        // NOTE: depending on performance change, maybe implement shortcut here to not construct Term first;
+        // I prefer the current solution at the moment since it is easier to maintain
+        Box::new(DefaultAnyIterator::from(source).map(|term| {
+            let mapped_term = match term {
+                // for numeric literals we do not use the standard display but convert them to a proper
+                // rdf literal first
+                Term::NumericLiteral(NumericLiteral::Integer(i)) => {
+                    Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                        value: i.to_string(),
+                        datatype: XSD_INTEGER.to_string(),
+                    })
+                }
+                Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
+                    Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                        value: format!("{a}.{b}").to_string(),
+                        datatype: XSD_DECIMAL.to_string(),
+                    })
+                }
+                Term::NumericLiteral(NumericLiteral::Double(d)) => {
+                    Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                        value: format!("{:E}", f64::from(d)),
+                        datatype: XSD_DOUBLE.to_string(),
+                    })
+                }
+                _ => term,
+            };
+
+            mapped_term.to_string()
+        }))
     }
 }
 
@@ -126,9 +207,12 @@ impl<'a> StringOutputMapper<'a> {
 impl<'a> From<StringOutputMapper<'a>> for DefaultStringIterator<'a> {
     fn from(source: StringOutputMapper<'a>) -> Self {
         Box::new(source.physical_iter.map(|s| {
-            s.get(1..(s.len() - 1))
-                .expect("The physical string is wrapped in quotes.")
-                .to_string()
+            match s {
+                s if s.starts_with(STRING_PREFIX) => {
+                    s[STRING_PREFIX.len()..].to_string()
+                }
+                _ => unreachable!("The physical strings should take one of the previous forms. Apparently we forgot to handle terms like: {s:?}"),
+            }
         }))
     }
 }
@@ -183,19 +267,39 @@ impl<'a> From<Float64OutputMapper<'a>> for DefaultStringIterator<'a> {
     }
 }
 
-/// Map a logical string into its physical representation, i.e. wrap it in quotes
+/// Map a language string into its physical any representation
+pub fn language_string_to_physical_string(s: String, tag: String) -> String {
+    format!("{LANGUAGE_STRING_PREFIX}{s}@{tag}")
+}
+
+/// Map a logical string into its physical any representation
 pub fn logical_string_to_physical_string(s: String) -> String {
-    format!("\"{s}\"")
+    format!("{STRING_PREFIX}{s}")
 }
 
-/// Map a logical string into its physical representation, i.e. wrap it in quotes
+/// Map a logical integer into its physical any representation
 pub fn logical_integer_to_physical_string(i: i64) -> String {
-    format!("\"{i}\"^^<{XSD_INTEGER}>")
+    format!("{INTEGER_PREFIX}{i}")
 }
 
-/// Map a logical string into its physical representation, i.e. wrap it in quotes
+/// Map a logical decimal into its physical any representation
+pub fn logical_decimal_to_physical_string(before_comma: i64, after_comma: u64) -> String {
+    format!("{DECIMAL_PREFIX}{before_comma}.{after_comma}")
+}
+
+/// Map a logical double into its physical any representation
 pub fn logical_double_to_physical_string(d: Double) -> String {
-    format!("\"{d}\"^^<{XSD_DOUBLE}>")
+    format!("{DOUBLE_PREFIX}{d}")
+}
+
+/// Map a logical constant into its physical any representation
+pub fn logical_constant_to_physical_string(c: Identifier) -> String {
+    format!("{CONSTANT_PREFIX}{c}")
+}
+
+/// Map a logical datatype_value into its physical any representation
+pub fn logical_datatype_value_to_physical_string(value: String, datatype: String) -> String {
+    format!("{DATATYPE_VALUE_PREFIX}{value}^^{datatype}")
 }
 
 /// Map an rdf term expected to be a string into its physical representation
@@ -205,13 +309,13 @@ pub fn any_string_to_physical_string(
     match string_term {
         Term::StringLiteral(s) => Ok(logical_string_to_physical_string(s)),
         Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
-            Ok(format!("\"{value}\"@{tag}"))
+            Ok(language_string_to_physical_string(value, tag))
         }
         Term::RdfLiteral(RdfLiteral::DatatypeValue {
             ref value,
             ref datatype,
         }) => match datatype.as_str() {
-            XSD_STRING => Ok(format!("\"{value}\"")),
+            XSD_STRING => Ok(logical_string_to_physical_string(value.to_string())),
             _ => Err(InvalidRuleTermConversion::new(
                 string_term,
                 PrimitiveType::String,
@@ -279,33 +383,50 @@ pub fn any_double_to_physical_double(
 }
 
 /// Map any rdf term into its physical representation
-pub fn any_term_to_physical_string(term: Term) -> String {
+pub fn any_term_to_physical_string(term: Term) -> Result<String, InvalidRuleTermConversion> {
     match term {
         Term::Variable(_) => {
             panic!("Expecting ground term for conversion to DataValueT")
         }
-        Term::Constant(Identifier(s)) => {
-            if s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
-                s
-            } else {
-                format!("<{s}>")
-            }
+        Term::Constant(c) => Ok(logical_constant_to_physical_string(c)),
+        Term::NumericLiteral(NumericLiteral::Integer(i)) => {
+            Ok(logical_integer_to_physical_string(i))
         }
-        // TODO: maybe implement display on numeric literal instead?
-        Term::NumericLiteral(NumericLiteral::Integer(i)) => logical_integer_to_physical_string(i),
         Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
-            format!("\"{a}.{b}\"^^<{XSD_DECIMAL}>")
+            Ok(logical_decimal_to_physical_string(a, b))
         }
-        Term::NumericLiteral(NumericLiteral::Double(d)) => logical_double_to_physical_string(d),
-        Term::StringLiteral(s) => logical_string_to_physical_string(s),
+        Term::NumericLiteral(NumericLiteral::Double(d)) => Ok(logical_double_to_physical_string(d)),
+        Term::StringLiteral(s) => Ok(logical_string_to_physical_string(s)),
         Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
-            format!("\"{value}\"@{tag}")
+            Ok(language_string_to_physical_string(value, tag))
         }
-        Term::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
-            match datatype.as_ref() {
-                XSD_STRING => format!("\"{value}\""),
-                _ => format!("\"{value}\"^^<{datatype}>"),
+        Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            ref value,
+            ref datatype,
+        }) => match datatype.as_ref() {
+            XSD_STRING => Ok(logical_string_to_physical_string(value.to_string())),
+            XSD_INTEGER => Ok(logical_integer_to_physical_string(value.parse().map_err(
+                |_err| InvalidRuleTermConversion::new(term, PrimitiveType::Any),
+            )?)),
+            XSD_DECIMAL => {
+                let (a, b) = value
+                    .rsplit_once('.')
+                    .and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))
+                    .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Any))?;
+
+                Ok(logical_decimal_to_physical_string(a, b))
             }
-        }
+            XSD_DOUBLE => Ok(logical_double_to_physical_string(
+                value
+                    .parse()
+                    .ok()
+                    .and_then(|f64| Double::new(f64).ok())
+                    .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Any))?,
+            )),
+            _ => Ok(logical_datatype_value_to_physical_string(
+                value.to_string(),
+                datatype.to_string(),
+            )),
+        },
     }
 }

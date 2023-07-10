@@ -81,7 +81,8 @@ impl ColumnBuilderProxy<Term> for LogicalAnyColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: Term) -> Result<(), ReadingError> {
-        let parsed_string = any_term_to_physical_string(input);
+        <Self as ColumnBuilderProxy<Term>>::commit(self);
+        let parsed_string = any_term_to_physical_string(input)?;
         self.inner.add(parsed_string)
     }
 }
