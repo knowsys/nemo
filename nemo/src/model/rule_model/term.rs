@@ -116,16 +116,15 @@ impl std::fmt::Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             Term::Constant(Identifier(s)) => {
-                // Nulls start with __ and shall be wrapped in angle brackets
-                if s.starts_with("__") {
-                    write!(f, "<{s}>")
-                }
-                // blank nodes and anything that starts with an ascii latter (like bare names)
+                // Nulls on logical level start with __Null# and shall be wrapped in angle brackets
+                // blank nodes and anything that starts with an ascii letter (like bare names)
                 // should not be wrapped in angle brackets
-                else if s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
+                if !s.starts_with("__")
+                    && s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                {
                     write!(f, "{s}")
                 }
-                // everything else shall be wrapped in angle_brackets
+                // everything else (including nulls) shall be wrapped in angle_brackets
                 else {
                     write!(f, "<{s}>")
                 }

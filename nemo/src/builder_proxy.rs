@@ -221,7 +221,7 @@ impl ColumnBuilderProxy<Double> for LogicalIntegerColumnBuilderProxy<'_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: Double) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<String>>::commit(self);
+        <Self as ColumnBuilderProxy<Double>>::commit(self);
         self.inner.add(
             i64::from_f64(input.into()).ok_or(ReadingError::TypeConversionError(
                 input.to_string(),
