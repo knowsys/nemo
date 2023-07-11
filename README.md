@@ -19,8 +19,15 @@ The following [publication](https://github.com/knowsys/nemo/wiki/Publications) g
 
 Nemo is in heavy development and the current releases should still be considered unstable.
 
+## Trying Nemo online
+
+We provide a [live online demo](https://tools.iccl.inf.tu-dresden.de/nemo/) that you can try in your browser.
+The application is based on the [Nemo browser integration](https://github.com/knowsys/nemo/wiki/Browser-integration) and runs entirely
+on your browser. Performance will therefore vary depending on your machine and browser (we found Firefox to be fastest).
+
 ## Installation
 
+The fastest way to run Nemo is to use system-speicifc binaries of our [command-line client](https://github.com/knowsys/nemo/wiki/Nemo-client).
 Archives with pre-compiled binaries for various platforms are available from the
 [Nemo releases page](https://github.com/knowsys/nemo/releases).
 To build your own version from source, you need to have an up-to-date installation of Rust.
@@ -39,6 +46,7 @@ Run the following command for an overview of current options:
 
 `nmo --help`
 
+Further details are found in the [Nemo client documentation](https://github.com/knowsys/nemo/wiki/Nemo-client).
 Example Nemo programs and datasets can be found in the [Nemo Examples repository](https://github.com/knowsys/nemo-examples).
 
 ## Help
