@@ -131,11 +131,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .cloned()
                 .expect("All predicates should have types by now.");
 
-            let table_source = input_manager.load_table_source(
-                &source_declaration.source,
-                logical_types,
-                source_declaration.type_constraint.clone(),
-            )?;
+            let table_source =
+                input_manager.load_table_source(&source_declaration.source, logical_types)?;
 
             predicate_to_sources
                 .entry(source_declaration.predicate.clone())

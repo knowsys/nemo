@@ -430,12 +430,12 @@ impl<'a> RuleParser<'a> {
             "parse_source",
             map_error(
                 move |input| {
-                    let (remainder, (predicate, arity_or_types)) = preceded(
+                    let (remainder, (predicate, tuple_constraint)) = preceded(
                         terminated(token("@source"), cut(multispace_or_comment1)),
                         cut(self.parse_qualified_predicate_name()),
                     )(input)?;
 
-                    let (remainder, datasource) = cut(delimited(
+                    let (remainder, datasource): (_, Result<_, ParseError>) = cut(delimited(
                         delimited(multispace_or_comment0, token(":"), multispace_or_comment1),
                         alt((
                             map(
@@ -444,7 +444,12 @@ impl<'a> RuleParser<'a> {
                                     turtle::string,
                                     self.parse_close_parenthesis(),
                                 ),
-                                |filename| DataSource::csv_file(&filename),
+                                |filename| {
+                                    Ok(DataSourceT::DsvFile(DsvFile::csv_file(
+                                        &filename,
+                                        tuple_constraint.clone(),
+                                    )))
+                                },
                             ),
                             map(
                                 delimited(
@@ -452,7 +457,12 @@ impl<'a> RuleParser<'a> {
                                     turtle::string,
                                     self.parse_close_parenthesis(),
                                 ),
-                                |filename| DataSource::tsv_file(&filename),
+                                |filename| {
+                                    Ok(DataSourceT::DsvFile(DsvFile::tsv_file(
+                                        &filename,
+                                        tuple_constraint.clone(),
+                                    )))
+                                },
                             ),
                             map(
                                 delimited(
@@ -461,10 +471,12 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    DataSource::rdf_file_with_base(
+                                    Ok(DataSourceT::RdfFile(RdfFile::new_validated(
                                         &filename,
                                         self.base().map(String::from),
-                                    )
+                                        &predicate,
+                                        tuple_constraint.clone(),
+                                    )?))
                                 },
                             ),
                             map(
@@ -482,23 +494,25 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |(endpoint, projection, query)| {
-                                    DataSource::sparql_query(SparqlQuery::new(
+                                    Ok(DataSourceT::SparqlQuery(SparqlQuery::new_validated(
                                         endpoint.name(),
                                         projection.to_string(),
                                         query.to_string(),
-                                    ))
+                                        &predicate,
+                                        tuple_constraint.clone(),
+                                    )?))
                                 },
                             ),
                         )),
                         cut(self.parse_dot()),
-                    ))(remainder)?;
+                    ))(
+                        remainder
+                    )?;
 
-                    let source = DataSourceDeclaration::new_validated(
+                    let source = DataSourceDeclaration::new(
                         predicate,
-                        arity_or_types,
                         datasource.map_err(|e| Err::Failure(e.at(input)))?,
-                    )
-                    .map_err(|e| Err::Failure(e.at(input)))?;
+                    );
 
                     log::trace!("Found external data source {source:?}");
                     self.sources.borrow_mut().push(source.clone());
@@ -1222,21 +1236,24 @@ mod test {
         let predicate = Identifier(predicate_name.to_string());
         let default_source = DataSourceDeclaration::new(
             predicate.clone(),
-            TupleConstraint::from_arity(1),
-            DataSource::csv_file(file).unwrap(),
+            DataSourceT::DsvFile(DsvFile::csv_file(file, TupleConstraint::from_arity(1))),
         );
         let any_and_int_source = DataSourceDeclaration::new(
             predicate.clone(),
-            [PrimitiveType::Any, PrimitiveType::Integer]
-                .into_iter()
-                .collect(),
-            DataSource::csv_file(file).unwrap(),
+            DataSourceT::DsvFile(DsvFile::csv_file(
+                file,
+                [PrimitiveType::Any, PrimitiveType::Integer]
+                    .into_iter()
+                    .collect(),
+            )),
         );
 
         let single_string_source = DataSourceDeclaration::new(
             predicate,
-            [PrimitiveType::String].into_iter().collect(),
-            DataSource::csv_file(file).unwrap(),
+            DataSourceT::DsvFile(DsvFile::csv_file(
+                file,
+                [PrimitiveType::String].into_iter().collect(),
+            )),
         );
 
         // rulewerk accepts all of these variants

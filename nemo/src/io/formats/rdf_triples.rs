@@ -16,7 +16,7 @@ use rio_xml::RdfXmlParser;
 
 use crate::{
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    model::{types::primitive_types::PrimitiveType, RdfLiteral, Term},
+    model::{types::primitive_types::PrimitiveType, RdfFile, RdfLiteral, Term},
 };
 
 impl From<NamedNode<'_>> for Term {
@@ -89,14 +89,17 @@ impl RDFTriplesReader {
     /// Create a new [`RDFTriplesReader`]
     pub fn new(
         resource_providers: ResourceProviders,
-        resource: Resource,
-        base: Option<String>,
+        rdf_file: &RdfFile,
         logical_types: Vec<PrimitiveType>,
     ) -> Self {
         Self {
             resource_providers,
-            resource,
-            base: base.map(|iri| Iri::parse(iri).expect("should be a valid IRI.")),
+            resource: rdf_file.resource.clone(),
+            base: rdf_file
+                .base
+                .as_ref()
+                .cloned()
+                .map(|iri| Iri::parse(iri).expect("should be a valid IRI.")),
             logical_types,
         }
     }
@@ -209,7 +212,7 @@ mod test {
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                 ];
-                let reader = RDFTriplesReader::new(ResourceProviders::empty(), String::from(""), None, vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
+                let reader = RDFTriplesReader::new(ResourceProviders::empty(), &RdfFile::new("", None), vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
 
                 let result = reader.read_with_buf_reader(&mut builders, &mut data, $make_parser);
                 assert!(result.is_ok());

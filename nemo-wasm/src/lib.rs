@@ -10,6 +10,7 @@ use nemo::execution::ExecutionEngine;
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo::model::types::primitive_logical_value::PrimitiveLogicalValueT;
+use nemo::model::DataSource;
 use nemo::model::DataSourceDeclaration;
 use nemo::model::NumericLiteral;
 use nemo::model::Term;
