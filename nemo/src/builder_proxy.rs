@@ -88,6 +88,7 @@ impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: String) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<String>>::commit(self);
         self.inner.add(logical_string_to_physical_string(input))
     }
 }
@@ -96,6 +97,7 @@ impl ColumnBuilderProxy<i64> for LogicalAnyColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: i64) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<i64>>::commit(self);
         self.inner.add(logical_integer_to_physical_string(input))
     }
 }
@@ -104,6 +106,7 @@ impl ColumnBuilderProxy<Double> for LogicalAnyColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: Double) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<Double>>::commit(self);
         self.inner.add(logical_double_to_physical_string(input))
     }
 }
@@ -143,6 +146,7 @@ impl ColumnBuilderProxy<String> for LogicalStringColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: String) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<String>>::commit(self);
         // NOTE: we just pipe the string through as is, in particular we do not parse potential RDF terms
         // NOTE: we store the string in the same format as it would be stored in an any column;
         // this is important since right now we sometimes use the LogicalStringColumnBuilderProxy to directly write data that is known to only be strings into an any column and not only into string columns
@@ -154,6 +158,7 @@ impl ColumnBuilderProxy<i64> for LogicalStringColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: i64) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<i64>>::commit(self);
         self.add(input.to_string())
     }
 }
@@ -162,6 +167,7 @@ impl ColumnBuilderProxy<Double> for LogicalStringColumnBuilderProxy<'_, '_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: Double) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<Double>>::commit(self);
         self.add(input.to_string())
     }
 }
@@ -201,6 +207,7 @@ impl ColumnBuilderProxy<i64> for LogicalIntegerColumnBuilderProxy<'_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: i64) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<i64>>::commit(self);
         self.inner.add(input)
     }
 }
@@ -263,6 +270,7 @@ impl ColumnBuilderProxy<Double> for LogicalFloat64ColumnBuilderProxy<'_> {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: Double) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<Double>>::commit(self);
         self.inner.add(input)
     }
 }
@@ -375,6 +383,7 @@ where
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: Input) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<Input>>::commit(self);
         self.inner.add(input)
     }
 }
@@ -386,6 +395,7 @@ where
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: String) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<String>>::commit(self);
         self.inner.add(parse_rdf_term_from_string(input))
     }
 }
