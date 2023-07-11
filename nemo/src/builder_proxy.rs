@@ -51,7 +51,58 @@ pub enum LogicalColumnBuilderProxyT<'a, 'b> {
     Integer(LogicalIntegerColumnBuilderProxy<'b>),
     Float64(LogicalFloat64ColumnBuilderProxy<'b>),
 }
-///
+
+impl<'a, 'b, T> ColumnBuilderProxy<T> for LogicalColumnBuilderProxyT<'a, 'b>
+where
+    LogicalAnyColumnBuilderProxy<'a, 'b>: ColumnBuilderProxy<T>,
+    LogicalStringColumnBuilderProxy<'a, 'b>: ColumnBuilderProxy<T>,
+    LogicalIntegerColumnBuilderProxy<'b>: ColumnBuilderProxy<T>,
+    LogicalFloat64ColumnBuilderProxy<'b>: ColumnBuilderProxy<T>,
+{
+    fn commit(&mut self) {
+        match self {
+            Self::Any(lcbp) => {
+                <LogicalAnyColumnBuilderProxy as ColumnBuilderProxy<T>>::commit(lcbp)
+            }
+            Self::String(lcbp) => {
+                <LogicalStringColumnBuilderProxy as ColumnBuilderProxy<T>>::commit(lcbp)
+            }
+            Self::Integer(lcbp) => {
+                <LogicalIntegerColumnBuilderProxy as ColumnBuilderProxy<T>>::commit(lcbp)
+            }
+            Self::Float64(lcbp) => {
+                <LogicalFloat64ColumnBuilderProxy as ColumnBuilderProxy<T>>::commit(lcbp)
+            }
+        }
+    }
+
+    fn forget(&mut self) {
+        match self {
+            Self::Any(lcbp) => {
+                <LogicalAnyColumnBuilderProxy as ColumnBuilderProxy<T>>::forget(lcbp)
+            }
+            Self::String(lcbp) => {
+                <LogicalStringColumnBuilderProxy as ColumnBuilderProxy<T>>::forget(lcbp)
+            }
+            Self::Integer(lcbp) => {
+                <LogicalIntegerColumnBuilderProxy as ColumnBuilderProxy<T>>::forget(lcbp)
+            }
+            Self::Float64(lcbp) => {
+                <LogicalFloat64ColumnBuilderProxy as ColumnBuilderProxy<T>>::forget(lcbp)
+            }
+        }
+    }
+
+    fn add(&mut self, input: T) -> Result<(), ReadingError> {
+        match self {
+            Self::Any(lcbp) => lcbp.add(input),
+            Self::String(lcbp) => lcbp.add(input),
+            Self::Integer(lcbp) => lcbp.add(input),
+            Self::Float64(lcbp) => lcbp.add(input),
+        }
+    }
+}
+
 /// [`LogicalColumnBuilderProxy`] to add Any
 #[derive(Debug)]
 pub struct LogicalAnyColumnBuilderProxy<'a: 'b, 'b> {

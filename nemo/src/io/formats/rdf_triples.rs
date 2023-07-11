@@ -15,7 +15,6 @@ use rio_turtle::{NTriplesParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 
 use crate::{
-    builder_proxy::LogicalColumnBuilderProxyT,
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
     model::{types::primitive_types::PrimitiveType, RdfLiteral, Term},
 };
@@ -118,25 +117,20 @@ impl RDFTriplesReader {
         let mut builders = physical_builder_proxies
             .iter_mut()
             .zip(self.logical_types.clone())
-            .map(|(bp, lt)| {
-                let boxed: Box<dyn ColumnBuilderProxy<Term>> =
-                    match lt.wrap_physical_column_builder(bp) {
-                        LogicalColumnBuilderProxyT::Any(lcbp) => Box::new(lcbp),
-                        LogicalColumnBuilderProxyT::String(lcbp) => Box::new(lcbp),
-                        LogicalColumnBuilderProxyT::Integer(lcbp) => Box::new(lcbp),
-                        LogicalColumnBuilderProxyT::Float64(lcbp) => Box::new(lcbp),
-                    };
-                boxed
-            })
+            .map(|(bp, lt)| lt.wrap_physical_column_builder(bp))
             .collect::<Vec<_>>();
 
         assert!(builders.len() == 3);
 
         let mut triples = 0;
         let mut on_triple = |triple: Triple| {
-            builders[0].add(triple.subject.try_into()?)?;
-            builders[1].add(triple.predicate.into())?;
-            builders[2].add(triple.object.try_into()?)?;
+            let subject: Term = triple.subject.try_into()?;
+            let predicate: Term = triple.predicate.into();
+            let object: Term = triple.object.try_into()?;
+
+            builders[0].add(subject)?;
+            builders[1].add(predicate)?;
+            builders[2].add(object)?;
 
             triples += 1;
             if triples % PROGRESS_NOTIFY_INCREMENT == 0 {
