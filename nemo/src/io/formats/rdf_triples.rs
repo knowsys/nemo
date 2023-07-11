@@ -20,46 +20,60 @@ use crate::{
     model::{types::primitive_types::PrimitiveType, RdfLiteral, Term},
 };
 
-fn rio_named_node_to_term(input: NamedNode) -> Term {
-    Term::Constant(input.iri.to_string().into())
+impl From<NamedNode<'_>> for Term {
+    fn from(value: NamedNode) -> Self {
+        Term::Constant(value.iri.to_string().into())
+    }
 }
 
-fn rio_blank_node_to_term(input: BlankNode) -> Term {
-    Term::Constant(input.to_string().into())
+impl From<BlankNode<'_>> for Term {
+    fn from(value: BlankNode) -> Self {
+        Term::Constant(value.to_string().into())
+    }
 }
 
-fn rio_literal_to_term(input: rio_api::model::Literal) -> Term {
-    match input {
-        rio_api::model::Literal::Simple { value } => Term::StringLiteral(value.to_string()),
-        rio_api::model::Literal::LanguageTaggedString { value, language } => {
-            Term::RdfLiteral(RdfLiteral::LanguageString {
-                value: value.to_string(),
-                tag: language.to_string(),
-            })
-        }
-        rio_api::model::Literal::Typed { value, datatype } => {
-            Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                value: value.to_string(),
-                datatype: datatype.iri.to_string(),
-            })
+impl From<rio_api::model::Literal<'_>> for Term {
+    fn from(value: rio_api::model::Literal<'_>) -> Self {
+        match value {
+            rio_api::model::Literal::Simple { value } => Term::StringLiteral(value.to_string()),
+            rio_api::model::Literal::LanguageTaggedString { value, language } => {
+                Term::RdfLiteral(RdfLiteral::LanguageString {
+                    value: value.to_string(),
+                    tag: language.to_string(),
+                })
+            }
+            rio_api::model::Literal::Typed { value, datatype } => {
+                Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                    value: value.to_string(),
+                    datatype: datatype.iri.to_string(),
+                })
+            }
         }
     }
 }
 
-fn rio_subject_to_term(input: Subject) -> Result<Term, ReadingError> {
-    match input {
-        Subject::NamedNode(nn) => Ok(rio_named_node_to_term(nn)),
-        Subject::BlankNode(bn) => Ok(rio_blank_node_to_term(bn)),
-        Subject::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
+impl TryFrom<Subject<'_>> for Term {
+    type Error = ReadingError;
+
+    fn try_from(value: Subject<'_>) -> Result<Self, Self::Error> {
+        match value {
+            Subject::NamedNode(nn) => Ok(nn.into()),
+            Subject::BlankNode(bn) => Ok(bn.into()),
+            Subject::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
+        }
     }
 }
 
-pub(crate) fn rio_term_to_term(input: rio_api::model::Term) -> Result<Term, ReadingError> {
-    match input {
-        rio_api::model::Term::NamedNode(nn) => Ok(rio_named_node_to_term(nn)),
-        rio_api::model::Term::BlankNode(bn) => Ok(rio_blank_node_to_term(bn)),
-        rio_api::model::Term::Literal(lit) => Ok(rio_literal_to_term(lit)),
-        rio_api::model::Term::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
+impl TryFrom<rio_api::model::Term<'_>> for Term {
+    type Error = ReadingError;
+
+    fn try_from(value: rio_api::model::Term<'_>) -> Result<Self, Self::Error> {
+        match value {
+            rio_api::model::Term::NamedNode(nn) => Ok(nn.into()),
+            rio_api::model::Term::BlankNode(bn) => Ok(bn.into()),
+            rio_api::model::Term::Literal(lit) => Ok(lit.into()),
+            rio_api::model::Term::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
+        }
     }
 }
 
@@ -120,9 +134,9 @@ impl RDFTriplesReader {
 
         let mut triples = 0;
         let mut on_triple = |triple: Triple| {
-            builders[0].add(rio_subject_to_term(triple.subject)?)?;
-            builders[1].add(rio_named_node_to_term(triple.predicate))?;
-            builders[2].add(rio_term_to_term(triple.object)?)?;
+            builders[0].add(triple.subject.try_into()?)?;
+            builders[1].add(triple.predicate.into())?;
+            builders[2].add(triple.object.try_into()?)?;
 
             triples += 1;
             if triples % PROGRESS_NOTIFY_INCREMENT == 0 {

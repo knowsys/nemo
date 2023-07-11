@@ -20,10 +20,7 @@ use nemo_physical::{
 
 use crate::{
     error::ReadingError,
-    io::{
-        formats::rdf_triples::rio_term_to_term,
-        parser::{parse_bare_name, span_from_str},
-    },
+    io::parser::{parse_bare_name, span_from_str},
 };
 
 use super::model::types::primitive_logical_value::{
@@ -310,7 +307,7 @@ fn parse_rdf_term_from_string(input: String) -> Term {
 
     let terms = parser
         .into_iter(|triple| {
-            let term = rio_term_to_term(triple.object)?;
+            let term = triple.object.try_into()?;
             let base_stripped = if let Term::Constant(c) = &term {
                 c.to_string()
                     .strip_prefix(BASE)
