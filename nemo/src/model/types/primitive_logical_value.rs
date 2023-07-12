@@ -20,6 +20,9 @@ const DOUBLE_PREFIX: &str = "DOUBLE:";
 const CONSTANT_PREFIX: &str = "CONSTANT:";
 const DATATYPE_VALUE_PREFIX: &str = "DATATYPE_VALUE:";
 
+/// The prefix used to indicate constants that are Nulls
+pub const LOGICAL_NULL_PREFIX: &str = "__Null#";
+
 /// Enum for values in the logical layer
 #[derive(Debug)]
 pub enum PrimitiveLogicalValueT {
@@ -150,7 +153,7 @@ impl<'a> From<AnyOutputMapper<'a>> for DefaultAnyIterator<'a> {
                         datatype: datatype.to_string(),
                     })
                 }
-                s if s.starts_with(NULL_PREFIX) => Term::Constant(format!("__Null#{}", s[NULL_PREFIX.len()..].to_string()).into()),
+                s if s.starts_with(NULL_PREFIX) => Term::Constant(format!("{LOGICAL_NULL_PREFIX}{}", s[NULL_PREFIX.len()..].to_string()).into()),
                 _ => unreachable!("The physical strings should take one of the previous forms. Apparently we forgot to handle terms like: {s:?}"),
             }
         }))
@@ -208,6 +211,12 @@ impl<'a> From<StringOutputMapper<'a>> for DefaultStringIterator<'a> {
     fn from(source: StringOutputMapper<'a>) -> Self {
         Box::new(source.physical_iter.map(|s| {
             match s {
+                s if s.starts_with(LANGUAGE_STRING_PREFIX) => {
+                    let (value, _tag) = s[LANGUAGE_STRING_PREFIX.len()..]
+                        .rsplit_once('@')
+                        .expect("Physical Value should be well-formatted.");
+                    value.to_string()
+                }
                 s if s.starts_with(STRING_PREFIX) => {
                     s[STRING_PREFIX.len()..].to_string()
                 }
@@ -367,7 +376,7 @@ pub fn any_double_to_physical_double(
             ref value,
             ref datatype,
         }) => match datatype.as_str() {
-            XSD_DOUBLE => value.parse().ok().and_then(|d| Double::new(d).ok()).ok_or(
+            XSD_DOUBLE | XSD_DECIMAL => value.parse().ok().and_then(|d| Double::new(d).ok()).ok_or(
                 InvalidRuleTermConversion::new(double_term, PrimitiveType::Float64),
             ),
             _ => Err(InvalidRuleTermConversion::new(
@@ -433,6 +442,8 @@ pub fn any_term_to_physical_string(term: Term) -> Result<String, InvalidRuleTerm
 
 #[cfg(test)]
 mod test {
+    use std::assert_eq;
+
     use super::*;
 
     #[test]
@@ -564,6 +575,226 @@ mod test {
         assert_eq!(
             any_double_to_physical_double(double_datavalue_literal).unwrap(),
             Double::new(3.33).unwrap()
+        );
+    }
+
+    #[test]
+    fn api_output_mapping() {
+        let phys_any_iter = DataValueIteratorT::String(Box::new([
+            format!("{STRING_PREFIX}my string"),
+            format!("{INTEGER_PREFIX}42"),
+            format!("{DOUBLE_PREFIX}3.41"),
+            format!("{CONSTANT_PREFIX}my constant"),
+            format!("{STRING_PREFIX}string literal"),
+            format!("{INTEGER_PREFIX}45"),
+            format!("{DECIMAL_PREFIX}4.2"),
+            format!("{DOUBLE_PREFIX}2.99"),
+            format!("{LANGUAGE_STRING_PREFIX}language string@en"),
+            format!("{DATATYPE_VALUE_PREFIX}some random datavalue^^a datatype that I totally did not just make up"),
+            format!("{STRING_PREFIX}string datavalue"),
+            format!("{INTEGER_PREFIX}73"),
+            format!("{DECIMAL_PREFIX}1.23"),
+            format!("{DOUBLE_PREFIX}3.33"),
+            format!("{NULL_PREFIX}1000001"),
+        ].into_iter()));
+
+        let phys_string_iter = DataValueIteratorT::String(Box::new(
+            [
+                format!("{STRING_PREFIX}my string"),
+                format!("{STRING_PREFIX}42"),
+                format!("{STRING_PREFIX}3.41"),
+                format!("{STRING_PREFIX}string literal"),
+                format!("{LANGUAGE_STRING_PREFIX}language string@en"),
+                format!("{STRING_PREFIX}string datavalue"),
+            ]
+            .into_iter(),
+        ));
+
+        let phys_int_iter = DataValueIteratorT::I64(Box::new([42, 45, 73].into_iter()));
+
+        let phys_double_iter = DataValueIteratorT::Double(Box::new(
+            [
+                Double::new(3.41).unwrap(),
+                Double::new(2.99).unwrap(),
+                Double::new(3.33).unwrap(),
+            ]
+            .into_iter(),
+        ));
+
+        let any_out: DefaultAnyIterator = AnyOutputMapper::new(phys_any_iter).into();
+        let string_out: DefaultStringIterator = StringOutputMapper::new(phys_string_iter).into();
+        let int_out: DefaultIntegerIterator = IntegerOutputMapper::new(phys_int_iter).into();
+        let double_out: DefaultFloat64Iterator = Float64OutputMapper::new(phys_double_iter).into();
+
+        let any_vec: Vec<Term> = any_out.collect();
+        let string_vec: Vec<String> = string_out.collect();
+        let integer_vec: Vec<i64> = int_out.collect();
+        let double_vec: Vec<Double> = double_out.collect();
+
+        assert_eq!(
+            any_vec,
+            vec![
+                Term::StringLiteral("my string".to_string()),
+                Term::NumericLiteral(NumericLiteral::Integer(42)),
+                Term::NumericLiteral(NumericLiteral::Double(Double::new(3.41).unwrap())),
+                Term::Constant("my constant".to_string().into()),
+                Term::StringLiteral("string literal".to_string()),
+                Term::NumericLiteral(NumericLiteral::Integer(45)),
+                Term::NumericLiteral(NumericLiteral::Decimal(4, 2)),
+                Term::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap())),
+                Term::RdfLiteral(RdfLiteral::LanguageString {
+                    value: "language string".to_string(),
+                    tag: "en".to_string(),
+                }),
+                Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                    value: "some random datavalue".to_string(),
+                    datatype: "a datatype that I totally did not just make up".to_string(),
+                }),
+                Term::StringLiteral("string datavalue".to_string()),
+                Term::NumericLiteral(NumericLiteral::Integer(73)),
+                Term::NumericLiteral(NumericLiteral::Decimal(1, 23)),
+                Term::NumericLiteral(NumericLiteral::Double(Double::new(3.33).unwrap())),
+                Term::Constant(format!("{LOGICAL_NULL_PREFIX}1000001").into()),
+            ]
+        );
+
+        assert_eq!(
+            string_vec,
+            [
+                "my string",
+                "42",
+                "3.41",
+                "string literal",
+                "language string",
+                "string datavalue",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>(),
+        );
+
+        assert_eq!(integer_vec, vec![42, 45, 73]);
+
+        assert_eq!(
+            double_vec,
+            [
+                Double::new(3.41).unwrap(),
+                Double::new(2.99).unwrap(),
+                Double::new(3.33).unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn serialized_output_mapping() {
+        let phys_any_iter = DataValueIteratorT::String(Box::new([
+            format!("{STRING_PREFIX}my string"),
+            format!("{INTEGER_PREFIX}42"),
+            format!("{DOUBLE_PREFIX}3.41"),
+            format!("{CONSTANT_PREFIX}my constant"),
+            format!("{STRING_PREFIX}string literal"),
+            format!("{INTEGER_PREFIX}45"),
+            format!("{DECIMAL_PREFIX}4.2"),
+            format!("{DOUBLE_PREFIX}2.99"),
+            format!("{LANGUAGE_STRING_PREFIX}language string@en"),
+            format!("{DATATYPE_VALUE_PREFIX}some random datavalue^^a datatype that I totally did not just make up"),
+            format!("{STRING_PREFIX}string datavalue"),
+            format!("{INTEGER_PREFIX}73"),
+            format!("{DECIMAL_PREFIX}1.23"),
+            format!("{DOUBLE_PREFIX}3.33"),
+            format!("{NULL_PREFIX}1000001"),
+        ].into_iter()));
+
+        let phys_string_iter = DataValueIteratorT::String(Box::new(
+            [
+                format!("{STRING_PREFIX}my string"),
+                format!("{STRING_PREFIX}42"),
+                format!("{STRING_PREFIX}3.41"),
+                format!("{STRING_PREFIX}string literal"),
+                format!("{LANGUAGE_STRING_PREFIX}language string@en"),
+                format!("{STRING_PREFIX}string datavalue"),
+            ]
+            .into_iter(),
+        ));
+
+        let phys_int_iter = DataValueIteratorT::I64(Box::new([42, 45, 73].into_iter()));
+
+        let phys_double_iter = DataValueIteratorT::Double(Box::new(
+            [
+                Double::new(3.41).unwrap(),
+                Double::new(2.99).unwrap(),
+                Double::new(3.33).unwrap(),
+            ]
+            .into_iter(),
+        ));
+
+        let any_out: DefaultStringIterator = AnyOutputMapper::new(phys_any_iter).into();
+        let string_out: DefaultStringIterator = StringOutputMapper::new(phys_string_iter).into();
+        let int_out: DefaultStringIterator = IntegerOutputMapper::new(phys_int_iter).into();
+        let double_out: DefaultStringIterator = Float64OutputMapper::new(phys_double_iter).into();
+
+        let any_vec: Vec<String> = any_out.collect();
+        let string_vec: Vec<String> = string_out.collect();
+        let integer_vec: Vec<String> = int_out.collect();
+        let double_vec: Vec<String> = double_out.collect();
+
+        assert_eq!(
+            any_vec,
+            [
+                r#""my string""#,
+                r#""42"^^<http://www.w3.org/2001/XMLSchema#integer>"#,
+                r#""3.41E0"^^<http://www.w3.org/2001/XMLSchema#double>"#,
+                r#"my constant"#,
+                r#""string literal""#,
+                r#""45"^^<http://www.w3.org/2001/XMLSchema#integer>"#,
+                r#""4.2"^^<http://www.w3.org/2001/XMLSchema#decimal>"#,
+                r#""2.99E0"^^<http://www.w3.org/2001/XMLSchema#double>"#,
+                r#""language string"@en"#,
+                r#""some random datavalue"^^<a datatype that I totally did not just make up>"#,
+                r#""string datavalue""#,
+                r#""73"^^<http://www.w3.org/2001/XMLSchema#integer>"#,
+                r#""1.23"^^<http://www.w3.org/2001/XMLSchema#decimal>"#,
+                r#""3.33E0"^^<http://www.w3.org/2001/XMLSchema#double>"#,
+                r#"<__Null#1000001>"#,
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>(),
+        );
+
+        assert_eq!(
+            string_vec,
+            [
+                "my string",
+                "42",
+                "3.41",
+                "string literal",
+                "language string",
+                "string datavalue",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>(),
+        );
+
+        assert_eq!(
+            integer_vec,
+            [42, 45, 73]
+                .into_iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>(),
+        );
+
+        assert_eq!(
+            double_vec,
+            [
+                Double::new(3.41).unwrap(),
+                Double::new(2.99).unwrap(),
+                Double::new(3.33).unwrap(),
+            ]
+            .into_iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>(),
         );
     }
 }

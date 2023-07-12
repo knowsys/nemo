@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use nemo_physical::datatypes::Double;
 use sanitise_file_name::{sanitise_with_options, Options};
 
-use crate::model::TypeConstraint;
+use crate::model::{types::primitive_logical_value::LOGICAL_NULL_PREFIX, TypeConstraint};
 
 /// An identifier for, e.g., a Term or a Predicate.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
@@ -119,7 +119,7 @@ impl std::fmt::Display for Term {
                 // Nulls on logical level start with __Null# and shall be wrapped in angle brackets
                 // blank nodes and anything that starts with an ascii letter (like bare names)
                 // should not be wrapped in angle brackets
-                if !s.starts_with("__")
+                if !s.starts_with(LOGICAL_NULL_PREFIX)
                     && s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
                 {
                     write!(f, "{s}")
