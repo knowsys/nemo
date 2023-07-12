@@ -477,9 +477,13 @@ where
 
 #[cfg(test)]
 mod test {
+    use nemo_physical::{
+        datatypes::storage_value::VecT,
+        dictionary::{Dictionary, PrefixedStringDictionary},
+    };
     use test_log::test;
 
-    use crate::model::RdfLiteral;
+    use crate::model::{NumericLiteral, RdfLiteral};
 
     use super::*;
 
@@ -561,6 +565,176 @@ mod test {
         assert_eq!(
             parse_rdf_term_from_string("<a>. <a> <a> <a>".to_string()),
             Term::StringLiteral("<a>. <a> <a> <a>".to_string()),
+        );
+    }
+
+    #[test]
+    fn build_columns_from_logical_values() {
+        let string = "my string".to_string();
+        let integer = 42i64;
+        let double = Double::new(3.41).unwrap();
+        let constant = Term::Constant("my constant".to_string().into());
+        let string_literal = Term::StringLiteral("string literal".to_string());
+        let num_int_literal = Term::NumericLiteral(NumericLiteral::Integer(45));
+        let num_decimal_literal = Term::NumericLiteral(NumericLiteral::Decimal(4, 2));
+        let num_double_literal =
+            Term::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap()));
+        let language_string_literal = Term::RdfLiteral(RdfLiteral::LanguageString {
+            value: "language string".to_string(),
+            tag: "en".to_string(),
+        });
+        let random_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "some random datavalue".to_string(),
+            datatype: "a datatype that I totally did not just make up".to_string(),
+        });
+        let string_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "string datavalue".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#string".to_string(),
+        });
+        let integer_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "73".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#integer".to_string(),
+        });
+        let decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "1.23".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
+        });
+        let double_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "3.33".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#double".to_string(),
+        });
+
+        let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+
+        let physical_builder_for_any_column = PhysicalStringColumnBuilderProxy::new(&dict);
+        let physical_builder_for_string_column = PhysicalStringColumnBuilderProxy::new(&dict);
+        let physical_builder_for_integer_column =
+            PhysicalGenericColumnBuilderProxy::<i64>::default();
+        let physical_builder_for_double_column =
+            PhysicalGenericColumnBuilderProxy::<Double>::default();
+
+        let mut phys_enum_for_any =
+            PhysicalBuilderProxyEnum::String(physical_builder_for_any_column);
+        let mut phys_enum_for_string =
+            PhysicalBuilderProxyEnum::String(physical_builder_for_string_column);
+        let mut phys_enum_for_integer =
+            PhysicalBuilderProxyEnum::I64(physical_builder_for_integer_column);
+        let mut phys_enum_for_double =
+            PhysicalBuilderProxyEnum::Double(physical_builder_for_double_column);
+
+        let mut any_lbp = LogicalAnyColumnBuilderProxy::new(&mut phys_enum_for_any);
+        let mut string_lbp = LogicalStringColumnBuilderProxy::new(&mut phys_enum_for_string);
+        let mut integer_lbp = LogicalIntegerColumnBuilderProxy::new(&mut phys_enum_for_integer);
+        let mut double_lbp = LogicalFloat64ColumnBuilderProxy::new(&mut phys_enum_for_double);
+
+        any_lbp.add(string.clone()).unwrap();
+        string_lbp.add(string).unwrap();
+
+        any_lbp.add(integer).unwrap();
+        string_lbp.add(integer).unwrap();
+        integer_lbp.add(integer).unwrap();
+
+        any_lbp.add(double).unwrap();
+        string_lbp.add(double).unwrap();
+        double_lbp.add(double).unwrap();
+
+        any_lbp.add(constant).unwrap();
+
+        any_lbp.add(string_literal.clone()).unwrap();
+        string_lbp.add(string_literal).unwrap();
+
+        any_lbp.add(num_int_literal.clone()).unwrap();
+        integer_lbp.add(num_int_literal).unwrap();
+
+        any_lbp.add(num_decimal_literal).unwrap();
+
+        any_lbp.add(num_double_literal.clone()).unwrap();
+        double_lbp.add(num_double_literal).unwrap();
+
+        any_lbp.add(language_string_literal.clone()).unwrap();
+        string_lbp.add(language_string_literal).unwrap();
+
+        any_lbp.add(random_datavalue_literal).unwrap();
+
+        any_lbp.add(string_datavalue_literal.clone()).unwrap();
+        string_lbp.add(string_datavalue_literal).unwrap();
+
+        any_lbp.add(integer_datavalue_literal.clone()).unwrap();
+        integer_lbp.add(integer_datavalue_literal).unwrap();
+
+        any_lbp.add(decimal_datavalue_literal).unwrap();
+
+        any_lbp.add(double_datavalue_literal.clone()).unwrap();
+        double_lbp.add(double_datavalue_literal).unwrap();
+
+        let VecT::U64(any_result_indices) = phys_enum_for_any.finalize() else {
+            unreachable!()
+        };
+        let VecT::U64(string_result_indices) = phys_enum_for_string.finalize() else {
+            unreachable!()
+        };
+
+        let any_result: Vec<String> = any_result_indices
+            .into_iter()
+            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+            .collect();
+        let string_result: Vec<String> = string_result_indices
+            .into_iter()
+            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+            .collect();
+        let VecT::I64(integer_result) = phys_enum_for_integer.finalize() else {
+            unreachable!()
+        };
+        let VecT::Double(double_result) = phys_enum_for_double.finalize() else {
+            unreachable!()
+        };
+
+        assert_eq!(any_result, [
+            "STRING:my string",
+            "INTEGER:42",
+            "DOUBLE:3.41",
+            "CONSTANT:my constant",
+            "STRING:string literal",
+            "INTEGER:45",
+            "DECIMAL:4.2",
+            "DOUBLE:2.99",
+            "LANGUAGE_STRING:language string@en",
+            "DATATYPE_VALUE:some random datavalue^^a datatype that I totally did not just make up",
+            "STRING:string datavalue",
+            "INTEGER:73",
+            "DECIMAL:1.23",
+            "DOUBLE:3.33",
+        ].into_iter().map(String::from).collect::<Vec<_>>());
+
+        assert_eq!(
+            string_result,
+            [
+                "STRING:my string",
+                "STRING:42",
+                "STRING:3.41",
+                "STRING:string literal",
+                "LANGUAGE_STRING:language string@en",
+                "STRING:string datavalue",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>()
+        );
+
+        assert_eq!(
+            integer_result,
+            [42, 45, 73,].into_iter().collect::<Vec<i64>>()
+        );
+
+        assert_eq!(
+            double_result,
+            [
+                Double::new(3.41).unwrap(),
+                Double::new(2.99).unwrap(),
+                Double::new(3.33).unwrap(),
+            ]
+            .into_iter()
+            .collect::<Vec<Double>>()
         );
     }
 }

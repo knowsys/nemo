@@ -430,3 +430,140 @@ pub fn any_term_to_physical_string(term: Term) -> Result<String, InvalidRuleTerm
         },
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn input_mapping() {
+        let string = "my string".to_string();
+        let integer = 42i64;
+        let double = Double::new(3.41).unwrap();
+        let constant = Term::Constant("my constant".to_string().into());
+        let string_literal = Term::StringLiteral("string literal".to_string());
+        let num_int_literal = Term::NumericLiteral(NumericLiteral::Integer(45));
+        let num_decimal_literal = Term::NumericLiteral(NumericLiteral::Decimal(4, 2));
+        let num_double_literal =
+            Term::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap()));
+        let language_string_literal = Term::RdfLiteral(RdfLiteral::LanguageString {
+            value: "language string".to_string(),
+            tag: "en".to_string(),
+        });
+        let random_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "some random datavalue".to_string(),
+            datatype: "a datatype that I totally did not just make up".to_string(),
+        });
+        let string_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "string datavalue".to_string(),
+            datatype: XSD_STRING.to_string(),
+        });
+        let integer_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "73".to_string(),
+            datatype: XSD_INTEGER.to_string(),
+        });
+        let decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "1.23".to_string(),
+            datatype: XSD_DECIMAL.to_string(),
+        });
+        let double_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "3.33".to_string(),
+            datatype: XSD_DOUBLE.to_string(),
+        });
+
+        let expected_string = format!("{STRING_PREFIX}my string");
+        let expected_integer = format!("{INTEGER_PREFIX}42");
+        let expected_double = format!("{DOUBLE_PREFIX}3.41");
+        let expected_constant = format!("{CONSTANT_PREFIX}my constant");
+        let expected_string_literal = format!("{STRING_PREFIX}string literal");
+        let expected_num_int_literal = format!("{INTEGER_PREFIX}45");
+        let expected_num_decimal_literal = format!("{DECIMAL_PREFIX}4.2");
+        let expected_num_double_literal = format!("{DOUBLE_PREFIX}2.99");
+        let expected_language_string_literal =
+            format!("{LANGUAGE_STRING_PREFIX}language string@en");
+        let expected_random_datavalue_literal = format!("{DATATYPE_VALUE_PREFIX}some random datavalue^^a datatype that I totally did not just make up");
+        let expected_string_datavalue_literal = format!("{STRING_PREFIX}string datavalue");
+        let expected_integer_datavalue_literal = format!("{INTEGER_PREFIX}73");
+        let expected_decimal_datavalue_literal = format!("{DECIMAL_PREFIX}1.23");
+        let expected_double_datavalue_literal = format!("{DOUBLE_PREFIX}3.33");
+
+        assert_eq!(logical_string_to_physical_string(string), expected_string);
+        assert_eq!(
+            logical_integer_to_physical_string(integer),
+            expected_integer
+        );
+        assert_eq!(logical_double_to_physical_string(double), expected_double);
+        assert_eq!(
+            any_term_to_physical_string(constant).unwrap(),
+            expected_constant
+        );
+        assert_eq!(
+            any_term_to_physical_string(string_literal.clone()).unwrap(),
+            expected_string_literal
+        );
+        assert_eq!(
+            any_string_to_physical_string(string_literal).unwrap(),
+            expected_string_literal
+        );
+        assert_eq!(
+            any_term_to_physical_string(num_int_literal.clone()).unwrap(),
+            expected_num_int_literal
+        );
+        assert_eq!(
+            any_integer_to_physical_integer(num_int_literal).unwrap(),
+            45
+        );
+        assert_eq!(
+            any_term_to_physical_string(num_decimal_literal).unwrap(),
+            expected_num_decimal_literal
+        );
+        assert_eq!(
+            any_term_to_physical_string(num_double_literal.clone()).unwrap(),
+            expected_num_double_literal
+        );
+        assert_eq!(
+            any_double_to_physical_double(num_double_literal).unwrap(),
+            Double::new(2.99).unwrap()
+        );
+        assert_eq!(
+            any_term_to_physical_string(language_string_literal.clone()).unwrap(),
+            expected_language_string_literal
+        );
+        assert_eq!(
+            any_string_to_physical_string(language_string_literal).unwrap(),
+            expected_language_string_literal
+        );
+        assert_eq!(
+            any_term_to_physical_string(random_datavalue_literal).unwrap(),
+            expected_random_datavalue_literal
+        );
+        assert_eq!(
+            any_term_to_physical_string(string_datavalue_literal.clone()).unwrap(),
+            expected_string_datavalue_literal
+        );
+        assert_eq!(
+            any_string_to_physical_string(string_datavalue_literal).unwrap(),
+            expected_string_datavalue_literal
+        );
+        assert_eq!(
+            any_term_to_physical_string(integer_datavalue_literal.clone()).unwrap(),
+            expected_integer_datavalue_literal
+        );
+        assert_eq!(
+            any_integer_to_physical_integer(integer_datavalue_literal).unwrap(),
+            73
+        );
+        assert_eq!(
+            any_term_to_physical_string(decimal_datavalue_literal).unwrap(),
+            expected_decimal_datavalue_literal
+        );
+        assert_eq!(
+            any_term_to_physical_string(double_datavalue_literal.clone()).unwrap(),
+            expected_double_datavalue_literal
+        );
+        assert_eq!(
+            any_double_to_physical_double(double_datavalue_literal).unwrap(),
+            Double::new(3.33).unwrap()
+        );
+    }
+}
