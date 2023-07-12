@@ -1,6 +1,7 @@
 //! The physical builder proxy takes values of some input type `T` and provides functionality to store them in a ['VecT']
 use std::cell::RefCell;
 
+use crate::datatypes::data_value::PhysicalString;
 use crate::error::ReadingError;
 
 use crate::{
@@ -90,16 +91,16 @@ impl<'a> PhysicalStringColumnBuilderProxy<'a> {
     }
 }
 
-impl ColumnBuilderProxy<String> for PhysicalStringColumnBuilderProxy<'_> {
+impl ColumnBuilderProxy<PhysicalString> for PhysicalStringColumnBuilderProxy<'_> {
     generic_trait_impl_without_add!(VecT::U64);
-    fn add(&mut self, input: String) -> Result<(), ReadingError> {
+    fn add(&mut self, input: PhysicalString) -> Result<(), ReadingError> {
         self.commit();
-        self.value = Some(self.dict.borrow_mut().add(input).try_into()?);
+        self.value = Some(self.dict.borrow_mut().add(input.into()).try_into()?);
         Ok(())
     }
 }
 
-impl PhysicalColumnBuilderProxy<String> for PhysicalStringColumnBuilderProxy<'_> {
+impl PhysicalColumnBuilderProxy<PhysicalString> for PhysicalStringColumnBuilderProxy<'_> {
     fn finalize(mut self) -> VecT {
         self.commit();
         VecT::U64(self.vec)

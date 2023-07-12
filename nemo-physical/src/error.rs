@@ -1,6 +1,6 @@
 //! Error-handling module for the crate
 
-use std::path::PathBuf;
+use std::{convert::Infallible, path::PathBuf};
 
 use thiserror::Error;
 
@@ -83,4 +83,10 @@ pub enum Error {
     /// Error that happened while reading a Table
     #[error(transparent)]
     ReadingError(#[from] ReadingError),
+}
+
+impl From<Infallible> for ReadingError {
+    fn from(_value: Infallible) -> Self {
+        unreachable!("Infallible can never occur!")
+    }
 }

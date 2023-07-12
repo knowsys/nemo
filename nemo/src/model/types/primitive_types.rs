@@ -12,9 +12,8 @@ use nemo_physical::datatypes::{DataTypeName, DataValueT};
 
 use super::error::InvalidRuleTermConversion;
 use super::primitive_logical_value::{
-    any_double_to_physical_double, any_integer_to_physical_integer, any_string_to_physical_string,
-    any_term_to_physical_string, AnyOutputMapper, DefaultStringIterator, Float64OutputMapper,
-    IntegerOutputMapper, PrimitiveLogicalValueIteratorT, StringOutputMapper,
+    AnyOutputMapper, DefaultSerializedIterator, Float64OutputMapper, IntegerOutputMapper,
+    PrimitiveLogicalValueIteratorT, StringOutputMapper,
 };
 use crate::model::{NestedType, Term};
 
@@ -137,10 +136,10 @@ impl PrimitiveType {
         gt: Term,
     ) -> Result<DataValueT, InvalidRuleTermConversion> {
         let result = match self {
-            Self::Any => DataValueT::String(any_term_to_physical_string(gt)?),
-            Self::String => DataValueT::String(any_string_to_physical_string(gt)?),
-            Self::Integer => DataValueT::I64(any_integer_to_physical_integer(gt)?),
-            Self::Float64 => DataValueT::Double(any_double_to_physical_double(gt)?),
+            Self::Any => DataValueT::String(gt.try_into()?),
+            Self::String => DataValueT::String(gt.try_into()?),
+            Self::Integer => DataValueT::I64(gt.try_into()?),
+            Self::Float64 => DataValueT::Double(gt.try_into()?),
         };
 
         Ok(result)
@@ -203,7 +202,7 @@ impl PrimitiveType {
     pub fn serialize_output<'a>(
         &self,
         physical_iter: DataValueIteratorT<'a>,
-    ) -> DefaultStringIterator<'a> {
+    ) -> DefaultSerializedIterator<'a> {
         match self {
             Self::Any => AnyOutputMapper::new(physical_iter).into(),
             Self::String => StringOutputMapper::new(physical_iter).into(),

@@ -84,9 +84,9 @@ use std::io::Read;
 use csv::{Reader, ReaderBuilder};
 
 use nemo_physical::builder_proxy::{ColumnBuilderProxy, PhysicalBuilderProxyEnum};
-use nemo_physical::datatypes::Double;
 use nemo_physical::table_reader::{Resource, TableReader};
 
+use crate::model::types::primitive_logical_value::{LogicalFloat64, LogicalInteger, LogicalString};
 use crate::model::{DataSource, DsvFile, TupleConstraint, TypeConstraint};
 use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
@@ -202,9 +202,9 @@ impl DSVReader {
             ($it:ident, $lcbp:ident) => {{
                 let boxed: Box<dyn ColumnBuilderProxy<String>> = match $it {
                     TypeConstraint::Exact(PrimitiveType::Any) | TypeConstraint::AtLeast(PrimitiveType::Any) => Box::new($lcbp.into_parser::<Term>()),
-                    TypeConstraint::Exact(PrimitiveType::String) | TypeConstraint::AtLeast(PrimitiveType::String) => Box::new($lcbp.into_parser::<String>()),
-                    TypeConstraint::Exact(PrimitiveType::Integer) | TypeConstraint::AtLeast(PrimitiveType::Integer) => Box::new($lcbp.into_parser::<i64>()),
-                    TypeConstraint::Exact(PrimitiveType::Float64) | TypeConstraint::AtLeast(PrimitiveType::Float64) => Box::new($lcbp.into_parser::<Double>()),
+                    TypeConstraint::Exact(PrimitiveType::String) | TypeConstraint::AtLeast(PrimitiveType::String) => Box::new($lcbp.into_parser::<LogicalString>()),
+                    TypeConstraint::Exact(PrimitiveType::Integer) | TypeConstraint::AtLeast(PrimitiveType::Integer) => Box::new($lcbp.into_parser::<LogicalInteger>()),
+                    TypeConstraint::Exact(PrimitiveType::Float64) | TypeConstraint::AtLeast(PrimitiveType::Float64) => Box::new($lcbp.into_parser::<LogicalFloat64>()),
                     TypeConstraint::None => unreachable!("Type constraints for input types are always initialized (with fallbacks)."),
                     TypeConstraint::Tuple(_) => todo!("We do not support tuples in CSV currently. Should we?"),
                 };
@@ -254,7 +254,10 @@ mod test {
     use csv::ReaderBuilder;
     use nemo_physical::{
         builder_proxy::{PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy},
-        datatypes::{data_value::DataValueIteratorT, storage_value::VecT},
+        datatypes::{
+            data_value::{DataValueIteratorT, PhysicalString},
+            storage_value::VecT,
+        },
         dictionary::{Dictionary, PrefixedStringDictionary},
     };
 
@@ -307,6 +310,7 @@ Boston;United States;4628910
         let dvit = DataValueIteratorT::String(Box::new(x.into_iter().map(|vt| {
             dict.get_mut()
                 .entry(usize::try_from(u64::try_from(vt.get(0).unwrap()).unwrap()).unwrap())
+                .map(PhysicalString::from)
                 .unwrap()
         })));
 
@@ -410,6 +414,7 @@ The next 2 columns are empty;;;789
                 .iter()
                 .copied()
                 .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .map(PhysicalString::from)
                 .collect::<Vec<_>>()
                 .into_iter(),
         ));
@@ -418,6 +423,7 @@ The next 2 columns are empty;;;789
                 .iter()
                 .copied()
                 .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .map(PhysicalString::from)
                 .collect::<Vec<_>>()
                 .into_iter(),
         ));
@@ -426,6 +432,7 @@ The next 2 columns are empty;;;789
                 .iter()
                 .copied()
                 .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .map(PhysicalString::from)
                 .collect::<Vec<_>>()
                 .into_iter(),
         ));

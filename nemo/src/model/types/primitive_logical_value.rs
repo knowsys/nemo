@@ -1,4 +1,10 @@
+use std::num::ParseIntError;
+
+use num::FromPrimitive;
+
+use nemo_physical::datatypes::data_value::PhysicalString;
 use nemo_physical::datatypes::Double;
+use nemo_physical::error::ReadingError;
 use nemo_physical::{
     datatypes::data_value::DataValueIteratorT, dictionary::value_serializer::NULL_PREFIX,
 };
@@ -23,17 +29,354 @@ const DATATYPE_VALUE_PREFIX: &str = "DATATYPE_VALUE:";
 /// The prefix used to indicate constants that are Nulls
 pub const LOGICAL_NULL_PREFIX: &str = "__Null#";
 
+/// An Api wrapper fot the logical string type
+#[repr(transparent)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LogicalString(String);
+
+impl From<String> for LogicalString {
+    fn from(value: String) -> Self {
+        LogicalString(value)
+    }
+}
+
+impl From<LogicalString> for String {
+    fn from(value: LogicalString) -> Self {
+        value.0
+    }
+}
+
+impl<'a> From<&'a LogicalString> for &'a str {
+    fn from(value: &'a LogicalString) -> Self {
+        &value.0
+    }
+}
+
+impl std::fmt::Display for LogicalString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// An Api wrapper fot the logical integer type
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct LogicalInteger(i64);
+
+impl From<i64> for LogicalInteger {
+    fn from(value: i64) -> Self {
+        LogicalInteger(value)
+    }
+}
+
+impl From<LogicalInteger> for i64 {
+    fn from(value: LogicalInteger) -> Self {
+        value.0
+    }
+}
+
+impl std::fmt::Display for LogicalInteger {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// An Api wrapper fot the logical float64 type
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct LogicalFloat64(Double);
+
+impl From<Double> for LogicalFloat64 {
+    fn from(value: Double) -> Self {
+        LogicalFloat64(value)
+    }
+}
+
+impl From<LogicalFloat64> for Double {
+    fn from(value: LogicalFloat64) -> Self {
+        value.0
+    }
+}
+
+impl std::fmt::Display for LogicalFloat64 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct LanguageString(String, String);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DatatypeValue(String, String);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Decimal(i64, u64);
+
+impl From<LogicalString> for Term {
+    fn from(value: LogicalString) -> Self {
+        Self::StringLiteral(value.into())
+    }
+}
+
+impl From<LogicalInteger> for Term {
+    fn from(value: LogicalInteger) -> Self {
+        Self::NumericLiteral(NumericLiteral::Integer(value.into()))
+    }
+}
+
+impl From<LogicalFloat64> for Term {
+    fn from(value: LogicalFloat64) -> Self {
+        Self::NumericLiteral(NumericLiteral::Double(value.into()))
+    }
+}
+
+impl From<LanguageString> for PhysicalString {
+    fn from(value: LanguageString) -> Self {
+        format!("{LANGUAGE_STRING_PREFIX}{}@{}", value.0, value.1).into()
+    }
+}
+
+impl From<LogicalString> for PhysicalString {
+    fn from(value: LogicalString) -> Self {
+        format!("{STRING_PREFIX}{value}").into()
+    }
+}
+
+impl From<LogicalInteger> for PhysicalString {
+    fn from(value: LogicalInteger) -> Self {
+        format!("{INTEGER_PREFIX}{value}").into()
+    }
+}
+
+impl From<Decimal> for PhysicalString {
+    fn from(value: Decimal) -> Self {
+        format!("{DECIMAL_PREFIX}{}.{}", value.0, value.1).into()
+    }
+}
+
+impl From<LogicalFloat64> for PhysicalString {
+    fn from(value: LogicalFloat64) -> Self {
+        format!("{DOUBLE_PREFIX}{value}").into()
+    }
+}
+
+impl From<Identifier> for PhysicalString {
+    fn from(value: Identifier) -> Self {
+        format!("{CONSTANT_PREFIX}{value}").into()
+    }
+}
+
+impl From<DatatypeValue> for PhysicalString {
+    fn from(value: DatatypeValue) -> Self {
+        format!("{DATATYPE_VALUE_PREFIX}{}^^{}", value.0, value.1).into()
+    }
+}
+
+impl From<LogicalInteger> for LogicalString {
+    fn from(value: LogicalInteger) -> Self {
+        value.0.to_string().into()
+    }
+}
+
+impl From<LogicalFloat64> for LogicalString {
+    fn from(value: LogicalFloat64) -> Self {
+        value.0.to_string().into()
+    }
+}
+
+impl TryFrom<LogicalString> for LogicalInteger {
+    type Error = ParseIntError;
+
+    fn try_from(value: LogicalString) -> Result<Self, Self::Error> {
+        value.0.parse::<i64>().map(|i| i.into())
+    }
+}
+
+impl TryFrom<LogicalString> for LogicalFloat64 {
+    type Error = ReadingError;
+
+    fn try_from(value: LogicalString) -> Result<Self, Self::Error> {
+        let parsed = value.0.parse::<f64>()?;
+        Double::new(parsed).map(|d| d.into())
+    }
+}
+
+impl TryFrom<LogicalFloat64> for LogicalInteger {
+    type Error = ReadingError;
+
+    fn try_from(value: LogicalFloat64) -> Result<Self, Self::Error> {
+        i64::from_f64(value.0.into())
+            .map(|i| i.into())
+            .ok_or(ReadingError::TypeConversionError(
+                value.to_string(),
+                PrimitiveType::Integer.to_string(),
+            ))
+    }
+}
+
+impl TryFrom<LogicalInteger> for LogicalFloat64 {
+    type Error = ReadingError;
+
+    fn try_from(value: LogicalInteger) -> Result<Self, Self::Error> {
+        Double::new(
+            f64::from_i64(value.0).ok_or(ReadingError::TypeConversionError(
+                value.to_string(),
+                PrimitiveType::Integer.to_string(),
+            ))?,
+        )
+        .map(|d| d.into())
+    }
+}
+
+impl TryFrom<Term> for LogicalString {
+    type Error = InvalidRuleTermConversion;
+
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        match term {
+            Term::StringLiteral(s) => Ok(s.into()),
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                ref value,
+                ref datatype,
+            }) => match datatype.as_str() {
+                XSD_STRING => Ok(value.to_string().into()),
+                _ => Err(InvalidRuleTermConversion::new(term, PrimitiveType::String)),
+            },
+            _ => Err(InvalidRuleTermConversion::new(term, PrimitiveType::String)),
+        }
+    }
+}
+
+impl TryFrom<Term> for LogicalInteger {
+    type Error = InvalidRuleTermConversion;
+
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        match term {
+            Term::NumericLiteral(NumericLiteral::Integer(i)) => Ok(i.into()),
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                ref value,
+                ref datatype,
+            }) => match datatype.as_str() {
+                XSD_INTEGER => value
+                    .parse()
+                    .map(|i: i64| i.into())
+                    .map_err(|_err| InvalidRuleTermConversion::new(term, PrimitiveType::Integer)),
+                _ => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Integer)),
+            },
+            _ => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Integer)),
+        }
+    }
+}
+
+impl TryFrom<Term> for i64 {
+    type Error = InvalidRuleTermConversion;
+
+    fn try_from(value: Term) -> Result<Self, Self::Error> {
+        Ok(LogicalInteger::try_from(value)?.into())
+    }
+}
+
+impl TryFrom<Term> for LogicalFloat64 {
+    type Error = InvalidRuleTermConversion;
+
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        match term {
+            Term::NumericLiteral(NumericLiteral::Double(d)) => Ok(d.into()),
+            Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => format!("{a}.{b}")
+                .parse()
+                .ok()
+                .and_then(|d: f64| Double::new(d).map(|d| d.into()).ok())
+                .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Float64)),
+            Term::NumericLiteral(NumericLiteral::Integer(a)) => LogicalInteger(a)
+                .try_into()
+                .map_err(|_err| InvalidRuleTermConversion::new(term, PrimitiveType::Float64)),
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                ref value,
+                ref datatype,
+            }) => match datatype.as_str() {
+                XSD_DOUBLE | XSD_DECIMAL => value
+                    .parse()
+                    .ok()
+                    .and_then(|d| Double::new(d).map(|d| d.into()).ok())
+                    .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Float64)),
+                XSD_INTEGER => value
+                    .parse()
+                    .ok()
+                    .and_then(|i| LogicalInteger(i).try_into().ok())
+                    .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Float64)),
+                _ => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Float64)),
+            },
+            _ => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Float64)),
+        }
+    }
+}
+
+impl TryFrom<Term> for Double {
+    type Error = InvalidRuleTermConversion;
+
+    fn try_from(value: Term) -> Result<Self, Self::Error> {
+        Ok(LogicalFloat64::try_from(value)?.into())
+    }
+}
+
+impl TryFrom<Term> for PhysicalString {
+    type Error = InvalidRuleTermConversion;
+
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        match term {
+            Term::Variable(_) => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any)),
+            Term::Constant(c) => Ok(c.into()),
+            Term::NumericLiteral(NumericLiteral::Integer(i)) => Ok(LogicalInteger(i).into()),
+            Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => Ok(Decimal(a, b).into()),
+            Term::NumericLiteral(NumericLiteral::Double(d)) => Ok(LogicalFloat64(d).into()),
+            Term::StringLiteral(s) => Ok(LogicalString(s).into()),
+            Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
+                Ok(LanguageString(value, tag).into())
+            }
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                ref value,
+                ref datatype,
+            }) => {
+                match datatype.as_ref() {
+                    XSD_STRING => Ok(LogicalString(value.to_string()).into()),
+                    XSD_INTEGER => Ok(LogicalInteger(value.parse().map_err(|_err| {
+                        InvalidRuleTermConversion::new(term, PrimitiveType::Any)
+                    })?)
+                    .into()),
+                    XSD_DECIMAL => {
+                        let (a, b) = value
+                            .rsplit_once('.')
+                            .and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))
+                            .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Any))?;
+
+                        Ok(Decimal(a, b).into())
+                    }
+                    XSD_DOUBLE => Ok(LogicalFloat64(
+                        value
+                            .parse()
+                            .ok()
+                            .and_then(|f64| Double::new(f64).ok())
+                            .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Any))?,
+                    )
+                    .into()),
+                    _ => Ok(DatatypeValue(value.to_string(), datatype.to_string()).into()),
+                }
+            }
+        }
+    }
+}
+
 /// Enum for values in the logical layer
 #[derive(Debug)]
 pub enum PrimitiveLogicalValueT {
     /// Any variant
     Any(Term),
     /// String variant
-    String(String),
+    String(LogicalString),
     /// Integer variant
-    Integer(i64),
+    Integer(LogicalInteger),
     /// Float64 variant
-    Float64(Double),
+    Float64(LogicalFloat64),
 }
 
 impl From<Term> for PrimitiveLogicalValueT {
@@ -42,23 +385,29 @@ impl From<Term> for PrimitiveLogicalValueT {
     }
 }
 
-impl From<String> for PrimitiveLogicalValueT {
-    fn from(value: String) -> Self {
+impl From<LogicalString> for PrimitiveLogicalValueT {
+    fn from(value: LogicalString) -> Self {
         Self::String(value)
     }
 }
 
-impl From<i64> for PrimitiveLogicalValueT {
-    fn from(value: i64) -> Self {
+impl From<LogicalInteger> for PrimitiveLogicalValueT {
+    fn from(value: LogicalInteger) -> Self {
         Self::Integer(value)
     }
 }
 
-impl From<Double> for PrimitiveLogicalValueT {
-    fn from(value: Double) -> Self {
+impl From<LogicalFloat64> for PrimitiveLogicalValueT {
+    fn from(value: LogicalFloat64) -> Self {
         Self::Float64(value)
     }
 }
+
+pub(super) type DefaultAnyIterator<'a> = Box<dyn Iterator<Item = Term> + 'a>;
+pub(super) type DefaultStringIterator<'a> = Box<dyn Iterator<Item = LogicalString> + 'a>;
+pub(super) type DefaultIntegerIterator<'a> = Box<dyn Iterator<Item = LogicalInteger> + 'a>;
+pub(super) type DefaultFloat64Iterator<'a> = Box<dyn Iterator<Item = LogicalFloat64> + 'a>;
+pub(super) type DefaultSerializedIterator<'a> = Box<dyn Iterator<Item = String> + 'a>;
 
 /// Iterator over one kind of possible logical values
 #[allow(missing_debug_implementations)]
@@ -86,13 +435,8 @@ impl<'a> Iterator for PrimitiveLogicalValueIteratorT<'a> {
     }
 }
 
-pub(super) type DefaultAnyIterator<'a> = Box<dyn Iterator<Item = Term> + 'a>;
-pub(super) type DefaultStringIterator<'a> = Box<dyn Iterator<Item = String> + 'a>;
-pub(super) type DefaultIntegerIterator<'a> = Box<dyn Iterator<Item = i64> + 'a>;
-pub(super) type DefaultFloat64Iterator<'a> = Box<dyn Iterator<Item = Double> + 'a>;
-
 pub(super) struct AnyOutputMapper<'a> {
-    physical_iter: Box<dyn Iterator<Item = String> + 'a>,
+    physical_iter: Box<dyn Iterator<Item = PhysicalString> + 'a>,
 }
 
 impl<'a> AnyOutputMapper<'a> {
@@ -104,10 +448,11 @@ impl<'a> AnyOutputMapper<'a> {
     }
 }
 
-impl<'a> From<AnyOutputMapper<'a>> for DefaultAnyIterator<'a> {
-    fn from(source: AnyOutputMapper<'a>) -> Self {
-        Box::new(source.physical_iter.map(|s| {
-            match s {
+impl From<PhysicalString> for Term {
+    fn from(s: PhysicalString) -> Self {
+        // unwrap physical string
+        let s: String = s.into();
+        match s {
                 s if s.starts_with(LANGUAGE_STRING_PREFIX) => {
                     let (value, tag) = s[LANGUAGE_STRING_PREFIX.len()..]
                         .rsplit_once('@')
@@ -153,14 +498,19 @@ impl<'a> From<AnyOutputMapper<'a>> for DefaultAnyIterator<'a> {
                         datatype: datatype.to_string(),
                     })
                 }
-                s if s.starts_with(NULL_PREFIX) => Term::Constant(format!("{LOGICAL_NULL_PREFIX}{}", s[NULL_PREFIX.len()..].to_string()).into()),
+                s if s.starts_with(NULL_PREFIX) => Term::Constant(format!("{LOGICAL_NULL_PREFIX}{}", &s[NULL_PREFIX.len()..]).into()),
                 _ => unreachable!("The physical strings should take one of the previous forms. Apparently we forgot to handle terms like: {s:?}"),
             }
-        }))
     }
 }
 
-impl<'a> From<AnyOutputMapper<'a>> for DefaultStringIterator<'a> {
+impl<'a> From<AnyOutputMapper<'a>> for DefaultAnyIterator<'a> {
+    fn from(source: AnyOutputMapper<'a>) -> Self {
+        Box::new(source.physical_iter.map(|s| s.into()))
+    }
+}
+
+impl<'a> From<AnyOutputMapper<'a>> for DefaultSerializedIterator<'a> {
     fn from(source: AnyOutputMapper<'a>) -> Self {
         // NOTE: depending on performance change, maybe implement shortcut here to not construct Term first;
         // I prefer the current solution at the moment since it is easier to maintain
@@ -195,7 +545,7 @@ impl<'a> From<AnyOutputMapper<'a>> for DefaultStringIterator<'a> {
 }
 
 pub(super) struct StringOutputMapper<'a> {
-    physical_iter: Box<dyn Iterator<Item = String> + 'a>,
+    physical_iter: Box<dyn Iterator<Item = PhysicalString> + 'a>,
 }
 
 impl<'a> StringOutputMapper<'a> {
@@ -207,22 +557,34 @@ impl<'a> StringOutputMapper<'a> {
     }
 }
 
+impl From<PhysicalString> for LogicalString {
+    fn from(s: PhysicalString) -> Self {
+        // unwrap physical string
+        let s: String = s.into();
+        match s {
+            s if s.starts_with(LANGUAGE_STRING_PREFIX) => {
+                let (value, _tag) = s[LANGUAGE_STRING_PREFIX.len()..]
+                    .rsplit_once('@')
+                    .expect("Physical Value should be well-formatted.");
+                value.to_string().into()
+            }
+            s if s.starts_with(STRING_PREFIX) => {
+                s[STRING_PREFIX.len()..].to_string().into()
+            }
+            _ => unreachable!("The physical strings should take one of the previous forms. Apparently we forgot to handle terms like: {s:?}"),
+        }
+    }
+}
+
 impl<'a> From<StringOutputMapper<'a>> for DefaultStringIterator<'a> {
     fn from(source: StringOutputMapper<'a>) -> Self {
-        Box::new(source.physical_iter.map(|s| {
-            match s {
-                s if s.starts_with(LANGUAGE_STRING_PREFIX) => {
-                    let (value, _tag) = s[LANGUAGE_STRING_PREFIX.len()..]
-                        .rsplit_once('@')
-                        .expect("Physical Value should be well-formatted.");
-                    value.to_string()
-                }
-                s if s.starts_with(STRING_PREFIX) => {
-                    s[STRING_PREFIX.len()..].to_string()
-                }
-                _ => unreachable!("The physical strings should take one of the previous forms. Apparently we forgot to handle terms like: {s:?}"),
-            }
-        }))
+        Box::new(source.physical_iter.map(|s| s.into()))
+    }
+}
+
+impl<'a> From<StringOutputMapper<'a>> for DefaultSerializedIterator<'a> {
+    fn from(source: StringOutputMapper<'a>) -> Self {
+        Box::new(source.physical_iter.map(|s| LogicalString::from(s).into()))
     }
 }
 
@@ -241,13 +603,17 @@ impl<'a> IntegerOutputMapper<'a> {
 
 impl<'a> From<IntegerOutputMapper<'a>> for DefaultIntegerIterator<'a> {
     fn from(source: IntegerOutputMapper<'a>) -> Self {
-        source.physical_iter
+        Box::new(source.physical_iter.map(|i| i.into()))
     }
 }
 
-impl<'a> From<IntegerOutputMapper<'a>> for DefaultStringIterator<'a> {
+impl<'a> From<IntegerOutputMapper<'a>> for DefaultSerializedIterator<'a> {
     fn from(source: IntegerOutputMapper<'a>) -> Self {
-        Box::new(source.physical_iter.map(|i| i.to_string()))
+        Box::new(
+            source
+                .physical_iter
+                .map(|i| LogicalInteger::from(i).to_string()),
+        )
     }
 }
 
@@ -266,177 +632,17 @@ impl<'a> Float64OutputMapper<'a> {
 
 impl<'a> From<Float64OutputMapper<'a>> for DefaultFloat64Iterator<'a> {
     fn from(source: Float64OutputMapper<'a>) -> Self {
-        source.physical_iter
+        Box::new(source.physical_iter.map(|d| d.into()))
     }
 }
 
-impl<'a> From<Float64OutputMapper<'a>> for DefaultStringIterator<'a> {
+impl<'a> From<Float64OutputMapper<'a>> for DefaultSerializedIterator<'a> {
     fn from(source: Float64OutputMapper<'a>) -> Self {
-        Box::new(source.physical_iter.map(|d| d.to_string()))
-    }
-}
-
-/// Map a language string into its physical any representation
-pub fn language_string_to_physical_string(s: String, tag: String) -> String {
-    format!("{LANGUAGE_STRING_PREFIX}{s}@{tag}")
-}
-
-/// Map a logical string into its physical any representation
-pub fn logical_string_to_physical_string(s: String) -> String {
-    format!("{STRING_PREFIX}{s}")
-}
-
-/// Map a logical integer into its physical any representation
-pub fn logical_integer_to_physical_string(i: i64) -> String {
-    format!("{INTEGER_PREFIX}{i}")
-}
-
-/// Map a logical decimal into its physical any representation
-pub fn logical_decimal_to_physical_string(before_comma: i64, after_comma: u64) -> String {
-    format!("{DECIMAL_PREFIX}{before_comma}.{after_comma}")
-}
-
-/// Map a logical double into its physical any representation
-pub fn logical_double_to_physical_string(d: Double) -> String {
-    format!("{DOUBLE_PREFIX}{d}")
-}
-
-/// Map a logical constant into its physical any representation
-pub fn logical_constant_to_physical_string(c: Identifier) -> String {
-    format!("{CONSTANT_PREFIX}{c}")
-}
-
-/// Map a logical datatype_value into its physical any representation
-pub fn logical_datatype_value_to_physical_string(value: String, datatype: String) -> String {
-    format!("{DATATYPE_VALUE_PREFIX}{value}^^{datatype}")
-}
-
-/// Map an rdf term expected to be a string into its physical representation
-pub fn any_string_to_physical_string(
-    string_term: Term,
-) -> Result<String, InvalidRuleTermConversion> {
-    match string_term {
-        Term::StringLiteral(s) => Ok(logical_string_to_physical_string(s)),
-        Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
-            Ok(language_string_to_physical_string(value, tag))
-        }
-        Term::RdfLiteral(RdfLiteral::DatatypeValue {
-            ref value,
-            ref datatype,
-        }) => match datatype.as_str() {
-            XSD_STRING => Ok(logical_string_to_physical_string(value.to_string())),
-            _ => Err(InvalidRuleTermConversion::new(
-                string_term,
-                PrimitiveType::String,
-            )),
-        },
-        _ => Err(InvalidRuleTermConversion::new(
-            string_term,
-            PrimitiveType::String,
-        )),
-    }
-}
-
-/// Map an rdf term expected to be an integer into its physical representation
-pub fn any_integer_to_physical_integer(
-    integer_term: Term,
-) -> Result<i64, InvalidRuleTermConversion> {
-    match integer_term {
-        Term::NumericLiteral(NumericLiteral::Integer(i)) => Ok(i),
-        Term::RdfLiteral(RdfLiteral::DatatypeValue {
-            ref value,
-            ref datatype,
-        }) => match datatype.as_str() {
-            XSD_INTEGER => value.parse().map_err(|_err| {
-                InvalidRuleTermConversion::new(integer_term, PrimitiveType::Integer)
-            }),
-            _ => Err(InvalidRuleTermConversion::new(
-                integer_term,
-                PrimitiveType::Integer,
-            )),
-        },
-        _ => Err(InvalidRuleTermConversion::new(
-            integer_term,
-            PrimitiveType::Integer,
-        )),
-    }
-}
-
-/// Map an rdf term expected to be a double into its physical representation
-pub fn any_double_to_physical_double(
-    double_term: Term,
-) -> Result<Double, InvalidRuleTermConversion> {
-    match double_term {
-        Term::NumericLiteral(NumericLiteral::Double(d)) => Ok(d),
-        Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
-            Ok(Double::from_number(format!("{a}.{b}").parse().unwrap()))
-        }
-        Term::NumericLiteral(NumericLiteral::Integer(a)) => Ok(Double::from_number(a as f64)),
-        Term::RdfLiteral(RdfLiteral::DatatypeValue {
-            ref value,
-            ref datatype,
-        }) => match datatype.as_str() {
-            XSD_DOUBLE | XSD_DECIMAL => value.parse().ok().and_then(|d| Double::new(d).ok()).ok_or(
-                InvalidRuleTermConversion::new(double_term, PrimitiveType::Float64),
-            ),
-            _ => Err(InvalidRuleTermConversion::new(
-                double_term,
-                PrimitiveType::Float64,
-            )),
-        },
-        _ => Err(InvalidRuleTermConversion::new(
-            double_term,
-            PrimitiveType::Float64,
-        )),
-    }
-}
-
-/// Map any rdf term into its physical representation
-pub fn any_term_to_physical_string(term: Term) -> Result<String, InvalidRuleTermConversion> {
-    match term {
-        Term::Variable(_) => {
-            panic!("Expecting ground term for conversion to DataValueT")
-        }
-        Term::Constant(c) => Ok(logical_constant_to_physical_string(c)),
-        Term::NumericLiteral(NumericLiteral::Integer(i)) => {
-            Ok(logical_integer_to_physical_string(i))
-        }
-        Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
-            Ok(logical_decimal_to_physical_string(a, b))
-        }
-        Term::NumericLiteral(NumericLiteral::Double(d)) => Ok(logical_double_to_physical_string(d)),
-        Term::StringLiteral(s) => Ok(logical_string_to_physical_string(s)),
-        Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
-            Ok(language_string_to_physical_string(value, tag))
-        }
-        Term::RdfLiteral(RdfLiteral::DatatypeValue {
-            ref value,
-            ref datatype,
-        }) => match datatype.as_ref() {
-            XSD_STRING => Ok(logical_string_to_physical_string(value.to_string())),
-            XSD_INTEGER => Ok(logical_integer_to_physical_string(value.parse().map_err(
-                |_err| InvalidRuleTermConversion::new(term, PrimitiveType::Any),
-            )?)),
-            XSD_DECIMAL => {
-                let (a, b) = value
-                    .rsplit_once('.')
-                    .and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))
-                    .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Any))?;
-
-                Ok(logical_decimal_to_physical_string(a, b))
-            }
-            XSD_DOUBLE => Ok(logical_double_to_physical_string(
-                value
-                    .parse()
-                    .ok()
-                    .and_then(|f64| Double::new(f64).ok())
-                    .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Any))?,
-            )),
-            _ => Ok(logical_datatype_value_to_physical_string(
-                value.to_string(),
-                datatype.to_string(),
-            )),
-        },
+        Box::new(
+            source
+                .physical_iter
+                .map(|d| LogicalFloat64::from(d).to_string()),
+        )
     }
 }
 
@@ -448,9 +654,9 @@ mod test {
 
     #[test]
     fn input_mapping() {
-        let string = "my string".to_string();
-        let integer = 42i64;
-        let double = Double::new(3.41).unwrap();
+        let string = LogicalString::from("my string".to_string());
+        let integer = LogicalInteger::from(42);
+        let double = LogicalFloat64::from(Double::new(3.41).unwrap());
         let constant = Term::Constant("my constant".to_string().into());
         let string_literal = Term::StringLiteral("string literal".to_string());
         let num_int_literal = Term::NumericLiteral(NumericLiteral::Integer(45));
@@ -482,121 +688,119 @@ mod test {
             datatype: XSD_DOUBLE.to_string(),
         });
 
-        let expected_string = format!("{STRING_PREFIX}my string");
-        let expected_integer = format!("{INTEGER_PREFIX}42");
-        let expected_double = format!("{DOUBLE_PREFIX}3.41");
-        let expected_constant = format!("{CONSTANT_PREFIX}my constant");
-        let expected_string_literal = format!("{STRING_PREFIX}string literal");
-        let expected_num_int_literal = format!("{INTEGER_PREFIX}45");
-        let expected_num_decimal_literal = format!("{DECIMAL_PREFIX}4.2");
-        let expected_num_double_literal = format!("{DOUBLE_PREFIX}2.99");
-        let expected_language_string_literal =
-            format!("{LANGUAGE_STRING_PREFIX}language string@en");
-        let expected_random_datavalue_literal = format!("{DATATYPE_VALUE_PREFIX}some random datavalue^^a datatype that I totally did not just make up");
-        let expected_string_datavalue_literal = format!("{STRING_PREFIX}string datavalue");
-        let expected_integer_datavalue_literal = format!("{INTEGER_PREFIX}73");
-        let expected_decimal_datavalue_literal = format!("{DECIMAL_PREFIX}1.23");
-        let expected_double_datavalue_literal = format!("{DOUBLE_PREFIX}3.33");
+        let expected_string: PhysicalString = format!("{STRING_PREFIX}my string").into();
+        let expected_integer: PhysicalString = format!("{INTEGER_PREFIX}42").into();
+        let expected_double: PhysicalString = format!("{DOUBLE_PREFIX}3.41").into();
+        let expected_constant: PhysicalString = format!("{CONSTANT_PREFIX}my constant").into();
+        let expected_string_literal: PhysicalString =
+            format!("{STRING_PREFIX}string literal").into();
+        let expected_num_int_literal: PhysicalString = format!("{INTEGER_PREFIX}45").into();
+        let expected_num_decimal_literal: PhysicalString = format!("{DECIMAL_PREFIX}4.2").into();
+        let expected_num_double_literal: PhysicalString = format!("{DOUBLE_PREFIX}2.99").into();
+        let expected_language_string_literal: PhysicalString =
+            format!("{LANGUAGE_STRING_PREFIX}language string@en").into();
+        let expected_random_datavalue_literal: PhysicalString = format!("{DATATYPE_VALUE_PREFIX}some random datavalue^^a datatype that I totally did not just make up").into();
+        let expected_string_datavalue_literal: PhysicalString =
+            format!("{STRING_PREFIX}string datavalue").into();
+        let expected_integer_datavalue_literal: PhysicalString =
+            format!("{INTEGER_PREFIX}73").into();
+        let expected_decimal_datavalue_literal: PhysicalString =
+            format!("{DECIMAL_PREFIX}1.23").into();
+        let expected_double_datavalue_literal: PhysicalString =
+            format!("{DOUBLE_PREFIX}3.33").into();
 
-        assert_eq!(logical_string_to_physical_string(string), expected_string);
+        assert_eq!(PhysicalString::from(string), expected_string);
+        assert_eq!(PhysicalString::from(integer), expected_integer);
+        assert_eq!(PhysicalString::from(double), expected_double);
         assert_eq!(
-            logical_integer_to_physical_string(integer),
-            expected_integer
-        );
-        assert_eq!(logical_double_to_physical_string(double), expected_double);
-        assert_eq!(
-            any_term_to_physical_string(constant).unwrap(),
+            PhysicalString::try_from(constant).unwrap(),
             expected_constant
         );
         assert_eq!(
-            any_term_to_physical_string(string_literal.clone()).unwrap(),
+            PhysicalString::try_from(string_literal.clone()).unwrap(),
             expected_string_literal
         );
         assert_eq!(
-            any_string_to_physical_string(string_literal).unwrap(),
+            PhysicalString::try_from(string_literal).unwrap(),
             expected_string_literal
         );
         assert_eq!(
-            any_term_to_physical_string(num_int_literal.clone()).unwrap(),
+            PhysicalString::try_from(num_int_literal.clone()).unwrap(),
             expected_num_int_literal
         );
+        assert_eq!(i64::try_from(num_int_literal).unwrap(), 45);
         assert_eq!(
-            any_integer_to_physical_integer(num_int_literal).unwrap(),
-            45
-        );
-        assert_eq!(
-            any_term_to_physical_string(num_decimal_literal).unwrap(),
+            PhysicalString::try_from(num_decimal_literal).unwrap(),
             expected_num_decimal_literal
         );
         assert_eq!(
-            any_term_to_physical_string(num_double_literal.clone()).unwrap(),
+            PhysicalString::try_from(num_double_literal.clone()).unwrap(),
             expected_num_double_literal
         );
         assert_eq!(
-            any_double_to_physical_double(num_double_literal).unwrap(),
+            Double::try_from(num_double_literal).unwrap(),
             Double::new(2.99).unwrap()
         );
         assert_eq!(
-            any_term_to_physical_string(language_string_literal.clone()).unwrap(),
+            PhysicalString::try_from(language_string_literal.clone()).unwrap(),
             expected_language_string_literal
         );
         assert_eq!(
-            any_string_to_physical_string(language_string_literal).unwrap(),
+            PhysicalString::try_from(language_string_literal).unwrap(),
             expected_language_string_literal
         );
         assert_eq!(
-            any_term_to_physical_string(random_datavalue_literal).unwrap(),
+            PhysicalString::try_from(random_datavalue_literal).unwrap(),
             expected_random_datavalue_literal
         );
         assert_eq!(
-            any_term_to_physical_string(string_datavalue_literal.clone()).unwrap(),
+            PhysicalString::try_from(string_datavalue_literal.clone()).unwrap(),
             expected_string_datavalue_literal
         );
         assert_eq!(
-            any_string_to_physical_string(string_datavalue_literal).unwrap(),
+            PhysicalString::try_from(string_datavalue_literal).unwrap(),
             expected_string_datavalue_literal
         );
         assert_eq!(
-            any_term_to_physical_string(integer_datavalue_literal.clone()).unwrap(),
+            PhysicalString::try_from(integer_datavalue_literal.clone()).unwrap(),
             expected_integer_datavalue_literal
         );
+        assert_eq!(i64::try_from(integer_datavalue_literal).unwrap(), 73);
         assert_eq!(
-            any_integer_to_physical_integer(integer_datavalue_literal).unwrap(),
-            73
-        );
-        assert_eq!(
-            any_term_to_physical_string(decimal_datavalue_literal).unwrap(),
+            PhysicalString::try_from(decimal_datavalue_literal).unwrap(),
             expected_decimal_datavalue_literal
         );
         assert_eq!(
-            any_term_to_physical_string(double_datavalue_literal.clone()).unwrap(),
+            PhysicalString::try_from(double_datavalue_literal.clone()).unwrap(),
             expected_double_datavalue_literal
         );
         assert_eq!(
-            any_double_to_physical_double(double_datavalue_literal).unwrap(),
+            Double::try_from(double_datavalue_literal).unwrap(),
             Double::new(3.33).unwrap()
         );
     }
 
     #[test]
     fn api_output_mapping() {
-        let phys_any_iter = DataValueIteratorT::String(Box::new([
-            format!("{STRING_PREFIX}my string"),
-            format!("{INTEGER_PREFIX}42"),
-            format!("{DOUBLE_PREFIX}3.41"),
-            format!("{CONSTANT_PREFIX}my constant"),
-            format!("{STRING_PREFIX}string literal"),
-            format!("{INTEGER_PREFIX}45"),
-            format!("{DECIMAL_PREFIX}4.2"),
-            format!("{DOUBLE_PREFIX}2.99"),
-            format!("{LANGUAGE_STRING_PREFIX}language string@en"),
-            format!("{DATATYPE_VALUE_PREFIX}some random datavalue^^a datatype that I totally did not just make up"),
-            format!("{STRING_PREFIX}string datavalue"),
-            format!("{INTEGER_PREFIX}73"),
-            format!("{DECIMAL_PREFIX}1.23"),
-            format!("{DOUBLE_PREFIX}3.33"),
-            format!("{NULL_PREFIX}1000001"),
-        ].into_iter()));
+        let phys_any_iter = DataValueIteratorT::String(Box::new(
+            [
+                format!("{STRING_PREFIX}my string"),
+                format!("{INTEGER_PREFIX}42"),
+                format!("{DOUBLE_PREFIX}3.41"),
+                format!("{CONSTANT_PREFIX}my constant"),
+                format!("{STRING_PREFIX}string literal"),
+                format!("{INTEGER_PREFIX}45"),
+                format!("{DECIMAL_PREFIX}4.2"),
+                format!("{DOUBLE_PREFIX}2.99"),
+                format!("{LANGUAGE_STRING_PREFIX}language string@en"),
+                format!("{DATATYPE_VALUE_PREFIX}some random datavalue^^a datatype that I totally did not just make up"),
+                format!("{STRING_PREFIX}string datavalue"),
+                format!("{INTEGER_PREFIX}73"),
+                format!("{DECIMAL_PREFIX}1.23"),
+                format!("{DOUBLE_PREFIX}3.33"),
+                format!("{NULL_PREFIX}1000001"),
+            ].into_iter().map(PhysicalString::from)
+        ));
 
         let phys_string_iter = DataValueIteratorT::String(Box::new(
             [
@@ -607,7 +811,8 @@ mod test {
                 format!("{LANGUAGE_STRING_PREFIX}language string@en"),
                 format!("{STRING_PREFIX}string datavalue"),
             ]
-            .into_iter(),
+            .into_iter()
+            .map(PhysicalString::from),
         ));
 
         let phys_int_iter = DataValueIteratorT::I64(Box::new([42, 45, 73].into_iter()));
@@ -627,9 +832,9 @@ mod test {
         let double_out: DefaultFloat64Iterator = Float64OutputMapper::new(phys_double_iter).into();
 
         let any_vec: Vec<Term> = any_out.collect();
-        let string_vec: Vec<String> = string_out.collect();
-        let integer_vec: Vec<i64> = int_out.collect();
-        let double_vec: Vec<Double> = double_out.collect();
+        let string_vec: Vec<LogicalString> = string_out.collect();
+        let integer_vec: Vec<LogicalInteger> = int_out.collect();
+        let double_vec: Vec<LogicalFloat64> = double_out.collect();
 
         assert_eq!(
             any_vec,
@@ -670,10 +875,17 @@ mod test {
             ]
             .into_iter()
             .map(String::from)
+            .map(LogicalString::from)
             .collect::<Vec<_>>(),
         );
 
-        assert_eq!(integer_vec, vec![42, 45, 73]);
+        assert_eq!(
+            integer_vec,
+            [42, 45, 73]
+                .into_iter()
+                .map(LogicalInteger::from)
+                .collect::<Vec<_>>()
+        );
 
         assert_eq!(
             double_vec,
@@ -682,28 +894,33 @@ mod test {
                 Double::new(2.99).unwrap(),
                 Double::new(3.33).unwrap(),
             ]
+            .into_iter()
+            .map(LogicalFloat64::from)
+            .collect::<Vec<_>>()
         );
     }
 
     #[test]
     fn serialized_output_mapping() {
-        let phys_any_iter = DataValueIteratorT::String(Box::new([
-            format!("{STRING_PREFIX}my string"),
-            format!("{INTEGER_PREFIX}42"),
-            format!("{DOUBLE_PREFIX}3.41"),
-            format!("{CONSTANT_PREFIX}my constant"),
-            format!("{STRING_PREFIX}string literal"),
-            format!("{INTEGER_PREFIX}45"),
-            format!("{DECIMAL_PREFIX}4.2"),
-            format!("{DOUBLE_PREFIX}2.99"),
-            format!("{LANGUAGE_STRING_PREFIX}language string@en"),
-            format!("{DATATYPE_VALUE_PREFIX}some random datavalue^^a datatype that I totally did not just make up"),
-            format!("{STRING_PREFIX}string datavalue"),
-            format!("{INTEGER_PREFIX}73"),
-            format!("{DECIMAL_PREFIX}1.23"),
-            format!("{DOUBLE_PREFIX}3.33"),
-            format!("{NULL_PREFIX}1000001"),
-        ].into_iter()));
+        let phys_any_iter = DataValueIteratorT::String(Box::new(
+            [
+                format!("{STRING_PREFIX}my string"),
+                format!("{INTEGER_PREFIX}42"),
+                format!("{DOUBLE_PREFIX}3.41"),
+                format!("{CONSTANT_PREFIX}my constant"),
+                format!("{STRING_PREFIX}string literal"),
+                format!("{INTEGER_PREFIX}45"),
+                format!("{DECIMAL_PREFIX}4.2"),
+                format!("{DOUBLE_PREFIX}2.99"),
+                format!("{LANGUAGE_STRING_PREFIX}language string@en"),
+                format!("{DATATYPE_VALUE_PREFIX}some random datavalue^^a datatype that I totally did not just make up"),
+                format!("{STRING_PREFIX}string datavalue"),
+                format!("{INTEGER_PREFIX}73"),
+                format!("{DECIMAL_PREFIX}1.23"),
+                format!("{DOUBLE_PREFIX}3.33"),
+                format!("{NULL_PREFIX}1000001"),
+            ]
+            .into_iter().map(|s| s.into())));
 
         let phys_string_iter = DataValueIteratorT::String(Box::new(
             [
@@ -714,7 +931,8 @@ mod test {
                 format!("{LANGUAGE_STRING_PREFIX}language string@en"),
                 format!("{STRING_PREFIX}string datavalue"),
             ]
-            .into_iter(),
+            .into_iter()
+            .map(|s| s.into()),
         ));
 
         let phys_int_iter = DataValueIteratorT::I64(Box::new([42, 45, 73].into_iter()));
@@ -728,10 +946,12 @@ mod test {
             .into_iter(),
         ));
 
-        let any_out: DefaultStringIterator = AnyOutputMapper::new(phys_any_iter).into();
-        let string_out: DefaultStringIterator = StringOutputMapper::new(phys_string_iter).into();
-        let int_out: DefaultStringIterator = IntegerOutputMapper::new(phys_int_iter).into();
-        let double_out: DefaultStringIterator = Float64OutputMapper::new(phys_double_iter).into();
+        let any_out: DefaultSerializedIterator = AnyOutputMapper::new(phys_any_iter).into();
+        let string_out: DefaultSerializedIterator =
+            StringOutputMapper::new(phys_string_iter).into();
+        let int_out: DefaultSerializedIterator = IntegerOutputMapper::new(phys_int_iter).into();
+        let double_out: DefaultSerializedIterator =
+            Float64OutputMapper::new(phys_double_iter).into();
 
         let any_vec: Vec<String> = any_out.collect();
         let string_vec: Vec<String> = string_out.collect();

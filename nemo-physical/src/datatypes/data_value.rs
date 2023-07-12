@@ -5,11 +5,40 @@ use super::double::Double;
 use super::float::Float;
 use super::{DataTypeName, StorageValueT};
 
+/// An Api wrapper fot the physical string type
+#[repr(transparent)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PhysicalString(String);
+
+impl From<String> for PhysicalString {
+    fn from(value: String) -> Self {
+        PhysicalString(value)
+    }
+}
+
+impl From<PhysicalString> for String {
+    fn from(value: PhysicalString) -> Self {
+        value.0
+    }
+}
+
+impl<'a> From<&'a PhysicalString> for &'a str {
+    fn from(value: &'a PhysicalString) -> Self {
+        &value.0
+    }
+}
+
+impl std::fmt::Display for PhysicalString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Enum for values that pass the barrier of the physical layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DataValueT {
     /// Case String
-    String(String),
+    String(PhysicalString),
 
     // StorageValueT from here on
     //
@@ -42,7 +71,10 @@ impl DataValueT {
     /// May change the given dictionary.
     pub fn to_storage_value_mut(&self, dict: &mut Dict) -> StorageValueT {
         match self {
-            Self::String(val) => StorageValueT::U64(dict.add(val.clone()).try_into().unwrap()), // dictionary indices
+            Self::String(val) => {
+                // dictionary indices
+                StorageValueT::U64(dict.add(val.clone().into()).try_into().unwrap())
+            }
             Self::U32(val) => StorageValueT::U32(*val),
             Self::U64(val) => StorageValueT::U64(*val),
             Self::I64(val) => StorageValueT::I64(*val),
@@ -54,7 +86,10 @@ impl DataValueT {
     /// Get the appropriate [`StorageValueT`]` for the given [`DataValueT`]
     pub fn to_storage_value(&self, dict: &Dict) -> Option<StorageValueT> {
         match self {
-            Self::String(val) => Some(StorageValueT::U64(dict.index_of(val)?.try_into().unwrap())), // dictionary indices
+            Self::String(val) => Some(StorageValueT::U64(
+                // dictionary indices
+                dict.index_of(val.into())?.try_into().unwrap(),
+            )),
             Self::U32(val) => Some(StorageValueT::U32(*val)),
             Self::U64(val) => Some(StorageValueT::U64(*val)),
             Self::I64(val) => Some(StorageValueT::I64(*val)),
@@ -81,7 +116,7 @@ impl std::fmt::Display for DataValueT {
 #[allow(missing_debug_implementations)]
 pub enum DataValueIteratorT<'a> {
     /// String Variant
-    String(Box<dyn Iterator<Item = String> + 'a>),
+    String(Box<dyn Iterator<Item = PhysicalString> + 'a>),
     /// U32 Variant
     U32(Box<dyn Iterator<Item = u32> + 'a>),
     /// U64 Variant

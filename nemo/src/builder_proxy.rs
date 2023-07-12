@@ -4,8 +4,6 @@
 use std::io::BufReader;
 use std::marker::PhantomData;
 
-use num::FromPrimitive;
-
 use oxiri::Iri;
 use rio_api::parser::TriplesParser;
 use rio_turtle::TurtleParser;
@@ -15,21 +13,16 @@ use nemo_physical::{
         ColumnBuilderProxy, PhysicalBuilderProxyEnum, PhysicalGenericColumnBuilderProxy,
         PhysicalStringColumnBuilderProxy,
     },
-    datatypes::Double,
+    datatypes::{data_value::PhysicalString, Double},
 };
 
 use crate::{
     error::ReadingError,
     io::parser::{parse_bare_name, span_from_str},
+    model::types::primitive_logical_value::{LogicalFloat64, LogicalInteger, LogicalString},
 };
 
-use super::model::types::primitive_logical_value::{
-    any_double_to_physical_double, any_integer_to_physical_integer, any_string_to_physical_string,
-    any_term_to_physical_string, logical_double_to_physical_string,
-    logical_integer_to_physical_string, logical_string_to_physical_string,
-};
-
-use super::model::{PrimitiveType, Term};
+use super::model::Term;
 
 /// Implements the type-independent [`ColumnBuilderProxy`] trait methods.
 macro_rules! logical_generic_trait_impl {
@@ -125,40 +118,17 @@ impl<'a, 'b> LogicalAnyColumnBuilderProxy<'a, 'b> {
     }
 }
 
-impl ColumnBuilderProxy<Term> for LogicalAnyColumnBuilderProxy<'_, '_> {
+impl<T> ColumnBuilderProxy<T> for LogicalAnyColumnBuilderProxy<'_, '_>
+where
+    PhysicalString: TryFrom<T>,
+    Term: TryFrom<T>,
+    ReadingError: From<<PhysicalString as TryFrom<T>>::Error>,
+{
     logical_generic_trait_impl!();
 
-    fn add(&mut self, input: Term) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<Term>>::commit(self);
-        let parsed_string = any_term_to_physical_string(input)?;
-        self.inner.add(parsed_string)
-    }
-}
-
-impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: String) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<String>>::commit(self);
-        self.inner.add(logical_string_to_physical_string(input))
-    }
-}
-
-impl ColumnBuilderProxy<i64> for LogicalAnyColumnBuilderProxy<'_, '_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: i64) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<i64>>::commit(self);
-        self.inner.add(logical_integer_to_physical_string(input))
-    }
-}
-
-impl ColumnBuilderProxy<Double> for LogicalAnyColumnBuilderProxy<'_, '_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: Double) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<Double>>::commit(self);
-        self.inner.add(logical_double_to_physical_string(input))
+    fn add(&mut self, input: T) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<T>>::commit(self);
+        self.inner.add(input.try_into()?)
     }
 }
 
@@ -184,42 +154,16 @@ impl<'a, 'b> LogicalStringColumnBuilderProxy<'a, 'b> {
     }
 }
 
-impl ColumnBuilderProxy<Term> for LogicalStringColumnBuilderProxy<'_, '_> {
+impl<T> ColumnBuilderProxy<T> for LogicalStringColumnBuilderProxy<'_, '_>
+where
+    LogicalString: TryFrom<T>,
+    ReadingError: From<<LogicalString as TryFrom<T>>::Error>,
+{
     logical_generic_trait_impl!();
 
-    fn add(&mut self, input: Term) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<Term>>::commit(self);
-        self.inner.add(any_string_to_physical_string(input)?)
-    }
-}
-
-impl ColumnBuilderProxy<String> for LogicalStringColumnBuilderProxy<'_, '_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: String) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<String>>::commit(self);
-        // NOTE: we just pipe the string through as is, in particular we do not parse potential RDF terms
-        // NOTE: we store the string in the same format as it would be stored in an any column;
-        // this is important since right now we sometimes use the LogicalStringColumnBuilderProxy to directly write data that is known to only be strings into an any column and not only into string columns
-        self.inner.add(logical_string_to_physical_string(input))
-    }
-}
-
-impl ColumnBuilderProxy<i64> for LogicalStringColumnBuilderProxy<'_, '_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: i64) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<i64>>::commit(self);
-        self.add(input.to_string())
-    }
-}
-
-impl ColumnBuilderProxy<Double> for LogicalStringColumnBuilderProxy<'_, '_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: Double) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<Double>>::commit(self);
-        self.add(input.to_string())
+    fn add(&mut self, input: T) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<T>>::commit(self);
+        self.inner.add(LogicalString::try_from(input)?.into())
     }
 }
 
@@ -245,44 +189,16 @@ impl<'a, 'b> LogicalIntegerColumnBuilderProxy<'b> {
     }
 }
 
-impl ColumnBuilderProxy<Term> for LogicalIntegerColumnBuilderProxy<'_> {
+impl<T> ColumnBuilderProxy<T> for LogicalIntegerColumnBuilderProxy<'_>
+where
+    LogicalInteger: TryFrom<T>,
+    ReadingError: From<<LogicalInteger as TryFrom<T>>::Error>,
+{
     logical_generic_trait_impl!();
 
-    fn add(&mut self, input: Term) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<Term>>::commit(self);
-        self.inner.add(any_integer_to_physical_integer(input)?)
-    }
-}
-
-impl ColumnBuilderProxy<i64> for LogicalIntegerColumnBuilderProxy<'_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: i64) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<i64>>::commit(self);
-        self.inner.add(input)
-    }
-}
-
-impl ColumnBuilderProxy<String> for LogicalIntegerColumnBuilderProxy<'_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: String) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<String>>::commit(self);
-        self.inner.add(input.parse()?)
-    }
-}
-
-impl ColumnBuilderProxy<Double> for LogicalIntegerColumnBuilderProxy<'_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: Double) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<Double>>::commit(self);
-        self.inner.add(
-            i64::from_f64(input.into()).ok_or(ReadingError::TypeConversionError(
-                input.to_string(),
-                PrimitiveType::Integer.to_string(),
-            ))?,
-        )
+    fn add(&mut self, input: T) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<T>>::commit(self);
+        self.inner.add(LogicalInteger::try_from(input)?.into())
     }
 }
 
@@ -308,44 +224,16 @@ impl<'a, 'b> LogicalFloat64ColumnBuilderProxy<'b> {
     }
 }
 
-impl ColumnBuilderProxy<Term> for LogicalFloat64ColumnBuilderProxy<'_> {
+impl<T> ColumnBuilderProxy<T> for LogicalFloat64ColumnBuilderProxy<'_>
+where
+    LogicalFloat64: TryFrom<T>,
+    ReadingError: From<<LogicalFloat64 as TryFrom<T>>::Error>,
+{
     logical_generic_trait_impl!();
 
-    fn add(&mut self, input: Term) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<Term>>::commit(self);
-        self.inner.add(any_double_to_physical_double(input)?)
-    }
-}
-
-impl ColumnBuilderProxy<Double> for LogicalFloat64ColumnBuilderProxy<'_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: Double) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<Double>>::commit(self);
-        self.inner.add(input)
-    }
-}
-
-impl ColumnBuilderProxy<String> for LogicalFloat64ColumnBuilderProxy<'_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: String) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<String>>::commit(self);
-        self.inner.add(Double::new(input.parse()?)?)
-    }
-}
-
-impl ColumnBuilderProxy<i64> for LogicalFloat64ColumnBuilderProxy<'_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: i64) -> Result<(), ReadingError> {
-        <Self as ColumnBuilderProxy<String>>::commit(self);
-        self.inner.add(Double::new(f64::from_i64(input).ok_or(
-            ReadingError::TypeConversionError(
-                input.to_string(),
-                PrimitiveType::Integer.to_string(),
-            ),
-        )?)?)
+    fn add(&mut self, input: T) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<T>>::commit(self);
+        self.inner.add(LogicalFloat64::try_from(input)?.into())
     }
 }
 
@@ -451,27 +339,39 @@ where
     }
 }
 
-impl<T> ColumnBuilderProxy<String> for GenericLogicalParser<i64, T>
+impl<T> ColumnBuilderProxy<String> for GenericLogicalParser<LogicalString, T>
 where
-    T: ColumnBuilderProxy<i64>,
+    T: ColumnBuilderProxy<LogicalString>,
 {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: String) -> Result<(), ReadingError> {
         <Self as ColumnBuilderProxy<String>>::commit(self);
-        self.inner.add(input.parse()?)
+        self.inner.add(input.into())
     }
 }
 
-impl<T> ColumnBuilderProxy<String> for GenericLogicalParser<Double, T>
+impl<T> ColumnBuilderProxy<String> for GenericLogicalParser<LogicalInteger, T>
 where
-    T: ColumnBuilderProxy<Double>,
+    T: ColumnBuilderProxy<LogicalInteger>,
 {
     logical_generic_trait_impl!();
 
     fn add(&mut self, input: String) -> Result<(), ReadingError> {
         <Self as ColumnBuilderProxy<String>>::commit(self);
-        self.inner.add(Double::new(input.parse()?)?)
+        self.inner.add(input.parse::<i64>()?.into())
+    }
+}
+
+impl<T> ColumnBuilderProxy<String> for GenericLogicalParser<LogicalFloat64, T>
+where
+    T: ColumnBuilderProxy<LogicalFloat64>,
+{
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: String) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<String>>::commit(self);
+        self.inner.add(Double::new(input.parse()?)?.into())
     }
 }
 
@@ -570,9 +470,9 @@ mod test {
 
     #[test]
     fn build_columns_from_logical_values() {
-        let string = "my string".to_string();
-        let integer = 42i64;
-        let double = Double::new(3.41).unwrap();
+        let string = LogicalString::from("my string".to_string());
+        let integer = LogicalInteger::from(42);
+        let double = LogicalFloat64::from(Double::new(3.41).unwrap());
         let constant = Term::Constant("my constant".to_string().into());
         let string_literal = Term::StringLiteral("string literal".to_string());
         let num_int_literal = Term::NumericLiteral(NumericLiteral::Integer(45));
@@ -652,7 +552,6 @@ mod test {
         double_lbp.add(num_double_literal).unwrap();
 
         any_lbp.add(language_string_literal.clone()).unwrap();
-        string_lbp.add(language_string_literal).unwrap();
 
         any_lbp.add(random_datavalue_literal).unwrap();
 
@@ -713,7 +612,6 @@ mod test {
                 "STRING:42",
                 "STRING:3.41",
                 "STRING:string literal",
-                "LANGUAGE_STRING:language string@en",
                 "STRING:string datavalue",
             ]
             .into_iter()

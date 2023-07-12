@@ -14,6 +14,7 @@ use nemo::model::DataSource;
 use nemo::model::DataSourceDeclaration;
 use nemo::model::NumericLiteral;
 use nemo::model::Term;
+use nemo_physical::datatypes::Double;
 use nemo_physical::table_reader::Resource;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsCast;
@@ -195,9 +196,9 @@ impl NemoResults {
                         Term::StringLiteral(s) => JsValue::from(s),
                         Term::RdfLiteral(lit) => JsValue::from(lit.to_string()),
                     },
-                    PrimitiveLogicalValueT::String(s) => JsValue::from(s),
-                    PrimitiveLogicalValueT::Integer(i) => JsValue::from(i),
-                    PrimitiveLogicalValueT::Float64(d) => JsValue::from(f64::from(d)),
+                    PrimitiveLogicalValueT::String(s) => JsValue::from(String::from(s)),
+                    PrimitiveLogicalValueT::Integer(i) => JsValue::from(i64::from(i)),
+                    PrimitiveLogicalValueT::Float64(d) => JsValue::from(f64::from(Double::from(d))),
                 })
                 .collect();
 

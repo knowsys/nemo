@@ -1,7 +1,7 @@
 use std::{fmt::Display, ops::Deref};
 
 use crate::{
-    datatypes::{DataTypeName, DataValueT, StorageValueT},
+    datatypes::{data_value::PhysicalString, DataTypeName, DataValueT, StorageValueT},
     management::database::Dict,
     tabular::traits::table_schema::TableSchema,
 };
@@ -13,7 +13,7 @@ use super::Dictionary;
 pub const NULL_PREFIX: &str = "NULL:";
 
 /// Load constant from dictionary with fallback if it is not found
-pub fn serialize_constant_with_dict<C, D>(constant: C, dict: D) -> String
+pub fn serialize_constant_with_dict<C, D>(constant: C, dict: D) -> PhysicalString
 where
     usize: TryFrom<C>,
     C: Copy + Display,
@@ -23,6 +23,7 @@ where
         .ok()
         .and_then(|constant| dict.entry(constant))
         .unwrap_or_else(|| format!("{NULL_PREFIX}{constant}"))
+        .into()
 }
 
 /// Helper trait for mapping [`StorageValueT`] back into some (higher level) value space

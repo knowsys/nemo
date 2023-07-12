@@ -15,6 +15,7 @@ use rio_turtle::{NTriplesParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 
 use crate::{
+    builder_proxy::LogicalColumnBuilderProxyT,
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
     model::{types::primitive_types::PrimitiveType, RdfFile, RdfLiteral, Term},
 };
@@ -131,9 +132,18 @@ impl RDFTriplesReader {
             let predicate: Term = triple.predicate.into();
             let object: Term = triple.object.try_into()?;
 
-            builders[0].add(subject)?;
-            builders[1].add(predicate)?;
-            builders[2].add(object)?;
+            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
+                &mut builders[0],
+                subject,
+            )?;
+            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
+                &mut builders[1],
+                predicate,
+            )?;
+            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
+                &mut builders[2],
+                object,
+            )?;
 
             triples += 1;
             if triples % PROGRESS_NOTIFY_INCREMENT == 0 {
@@ -188,7 +198,7 @@ mod test {
 
     use nemo_physical::{
         builder_proxy::{PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy},
-        datatypes::data_value::DataValueIteratorT,
+        datatypes::data_value::{DataValueIteratorT, PhysicalString},
         dictionary::{Dictionary, PrefixedStringDictionary},
     };
     use rio_turtle::TurtleParser;
@@ -238,6 +248,7 @@ mod test {
                                     .and_then(|usize| dict.borrow_mut().entry(usize))
                                     .unwrap()
                             })
+                            .map(PhysicalString::from)
                             .collect::<Vec<_>>()
                     })
                     .collect::<Vec<_>>();

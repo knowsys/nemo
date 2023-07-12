@@ -1,6 +1,7 @@
 use std::{collections::HashSet, fs::read_to_string};
 
 use nemo::{
+    datatypes::Double,
     execution::ExecutionEngine,
     io::{resource_providers::ResourceProviders, OutputFileManager, RecordWriter},
     model::{types::primitive_logical_value::PrimitiveLogicalValueT, NumericLiteral, Term},
@@ -97,9 +98,11 @@ impl NemoResults {
                         Term::StringLiteral(s) => s.into_py(slf.py()),
                         Term::RdfLiteral(lit) => lit.to_string().into_py(slf.py()),
                     },
-                    PrimitiveLogicalValueT::String(s) => s.into_py(slf.py()),
-                    PrimitiveLogicalValueT::Integer(i) => i.into_py(slf.py()),
-                    PrimitiveLogicalValueT::Float64(d) => f64::from(d).into_py(slf.py()),
+                    PrimitiveLogicalValueT::String(s) => String::from(s).into_py(slf.py()),
+                    PrimitiveLogicalValueT::Integer(i) => i64::from(i).into_py(slf.py()),
+                    PrimitiveLogicalValueT::Float64(d) => {
+                        f64::from(Double::from(d)).into_py(slf.py())
+                    }
                 })
                 .collect(),
         )
