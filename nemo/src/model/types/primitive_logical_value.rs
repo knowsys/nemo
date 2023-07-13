@@ -253,11 +253,16 @@ impl TryFrom<Term> for LogicalInteger {
     fn try_from(term: Term) -> Result<Self, Self::Error> {
         match term {
             Term::NumericLiteral(NumericLiteral::Integer(i)) => Ok(i.into()),
+            Term::NumericLiteral(NumericLiteral::Decimal(i, 0)) => Ok(i.into()),
             Term::RdfLiteral(RdfLiteral::DatatypeValue {
                 ref value,
                 ref datatype,
             }) => match datatype.as_str() {
-                XSD_INTEGER => value
+                // XSD 3.4.13 integer
+                // [Definition:] integer is ·derived· from decimal by
+                // fixing the value of ·fractionDigits· to be 0 and
+                // disallowing the trailing decimal point.
+                XSD_INTEGER | XSD_DECIMAL => value
                     .parse()
                     .map(|i: i64| i.into())
                     .map_err(|_err| InvalidRuleTermConversion::new(term, PrimitiveType::Integer)),
@@ -662,6 +667,7 @@ mod test {
         let string_literal = Term::StringLiteral("string literal".to_string());
         let num_int_literal = Term::NumericLiteral(NumericLiteral::Integer(45));
         let num_decimal_literal = Term::NumericLiteral(NumericLiteral::Decimal(4, 2));
+        let num_whole_decimal_literal = Term::NumericLiteral(NumericLiteral::Decimal(42, 0));
         let num_double_literal =
             Term::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap()));
         let language_string_literal = Term::RdfLiteral(RdfLiteral::LanguageString {
@@ -762,6 +768,14 @@ mod test {
             expected_num_int_literal
         );
         assert_eq!(i64::try_from(num_int_literal).unwrap(), 45);
+        assert_eq!(
+            LogicalInteger::try_from(num_whole_decimal_literal).unwrap(),
+            LogicalInteger(42)
+        );
+        assert_eq!(
+            LogicalInteger::try_from(signed_pointless_decimal_datavalue_literal.clone()).unwrap(),
+            LogicalInteger(23)
+        );
         assert_eq!(
             PhysicalString::try_from(num_decimal_literal).unwrap(),
             expected_num_decimal_literal
