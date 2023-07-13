@@ -20,6 +20,9 @@ pub struct ColumnVector<T> {
 impl<T: Debug + Copy + Ord> ColumnVector<T> {
     /// Constructs a new ColumnVector from a vector of the suitable type.
     pub fn new(data: Vec<T>) -> ColumnVector<T> {
+        let mut data = data;
+        data.shrink_to_fit();
+
         ColumnVector { data }
     }
 }
