@@ -164,6 +164,10 @@ where
             increments.push(e.increment);
         });
 
+        values.shrink_to_fit();
+        end_indices.shrink_to_fit();
+        increments.shrink_to_fit();
+
         ColumnRle {
             values,
             end_indices,
