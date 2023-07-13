@@ -347,6 +347,7 @@ impl TryFrom<Term> for PhysicalString {
                         let (a, b) = value
                             .rsplit_once('.')
                             .and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))
+                            .or_else(|| Some((value.parse().ok()?, 0)))
                             .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Any))?;
 
                         Ok(Decimal(a, b).into())
@@ -683,6 +684,28 @@ mod test {
             value: "1.23".to_string(),
             datatype: XSD_DECIMAL.to_string(),
         });
+        let signed_decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "+1.23".to_string(),
+            datatype: XSD_DECIMAL.to_string(),
+        });
+        let negative_decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "-1.23".to_string(),
+            datatype: XSD_DECIMAL.to_string(),
+        });
+        let pointless_decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "23".to_string(),
+            datatype: XSD_DECIMAL.to_string(),
+        });
+        let signed_pointless_decimal_datavalue_literal =
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: "+23".to_string(),
+                datatype: XSD_DECIMAL.to_string(),
+            });
+        let negative_pointless_decimal_datavalue_literal =
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: "-23".to_string(),
+                datatype: XSD_DECIMAL.to_string(),
+            });
         let double_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
             value: "3.33".to_string(),
             datatype: XSD_DOUBLE.to_string(),
@@ -706,6 +729,16 @@ mod test {
             format!("{INTEGER_PREFIX}73").into();
         let expected_decimal_datavalue_literal: PhysicalString =
             format!("{DECIMAL_PREFIX}1.23").into();
+        let expected_signed_decimal_datavalue_literal: PhysicalString =
+            format!("{DECIMAL_PREFIX}1.23").into();
+        let expected_negative_decimal_datavalue_literal: PhysicalString =
+            format!("{DECIMAL_PREFIX}-1.23").into();
+        let expected_pointless_decimal_datavalue_literal: PhysicalString =
+            format!("{DECIMAL_PREFIX}23.0").into();
+        let expected_signed_pointless_decimal_datavalue_literal: PhysicalString =
+            format!("{DECIMAL_PREFIX}23.0").into();
+        let expected_negative_pointless_decimal_datavalue_literal: PhysicalString =
+            format!("{DECIMAL_PREFIX}-23.0").into();
         let expected_double_datavalue_literal: PhysicalString =
             format!("{DOUBLE_PREFIX}3.33").into();
 
@@ -769,6 +802,26 @@ mod test {
         assert_eq!(
             PhysicalString::try_from(decimal_datavalue_literal).unwrap(),
             expected_decimal_datavalue_literal
+        );
+        assert_eq!(
+            PhysicalString::try_from(signed_decimal_datavalue_literal).unwrap(),
+            expected_signed_decimal_datavalue_literal
+        );
+        assert_eq!(
+            PhysicalString::try_from(negative_decimal_datavalue_literal).unwrap(),
+            expected_negative_decimal_datavalue_literal
+        );
+        assert_eq!(
+            PhysicalString::try_from(pointless_decimal_datavalue_literal).unwrap(),
+            expected_pointless_decimal_datavalue_literal
+        );
+        assert_eq!(
+            PhysicalString::try_from(signed_pointless_decimal_datavalue_literal).unwrap(),
+            expected_signed_pointless_decimal_datavalue_literal
+        );
+        assert_eq!(
+            PhysicalString::try_from(negative_pointless_decimal_datavalue_literal).unwrap(),
+            expected_negative_pointless_decimal_datavalue_literal
         );
         assert_eq!(
             PhysicalString::try_from(double_datavalue_literal.clone()).unwrap(),

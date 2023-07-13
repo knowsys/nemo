@@ -499,6 +499,28 @@ mod test {
             value: "1.23".to_string(),
             datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
         });
+        let signed_decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "+1.23".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
+        });
+        let negative_decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "-1.23".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
+        });
+        let pointless_decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "23".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
+        });
+        let signed_pointless_decimal_datavalue_literal =
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: "+23".to_string(),
+                datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
+            });
+        let negative_pointless_decimal_datavalue_literal =
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: "-23".to_string(),
+                datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
+            });
         let double_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
             value: "3.33".to_string(),
             datatype: "http://www.w3.org/2001/XMLSchema#double".to_string(),
@@ -562,6 +584,15 @@ mod test {
         integer_lbp.add(integer_datavalue_literal).unwrap();
 
         any_lbp.add(decimal_datavalue_literal).unwrap();
+        any_lbp.add(signed_decimal_datavalue_literal).unwrap();
+        any_lbp.add(negative_decimal_datavalue_literal).unwrap();
+        any_lbp.add(pointless_decimal_datavalue_literal).unwrap();
+        any_lbp
+            .add(signed_pointless_decimal_datavalue_literal)
+            .unwrap();
+        any_lbp
+            .add(negative_pointless_decimal_datavalue_literal)
+            .unwrap();
 
         any_lbp.add(double_datavalue_literal.clone()).unwrap();
         double_lbp.add(double_datavalue_literal).unwrap();
@@ -602,6 +633,11 @@ mod test {
             "STRING:string datavalue",
             "INTEGER:73",
             "DECIMAL:1.23",
+            "DECIMAL:1.23",
+            "DECIMAL:-1.23",
+            "DECIMAL:23.0",
+            "DECIMAL:23.0",
+            "DECIMAL:-23.0",
             "DOUBLE:3.33",
         ].into_iter().map(String::from).collect::<Vec<_>>());
 
