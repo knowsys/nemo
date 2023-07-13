@@ -136,14 +136,21 @@ impl RDFTriplesReader {
                 &mut builders[0],
                 subject,
             )?;
-            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
+            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
                 &mut builders[1],
                 predicate,
-            )?;
-            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
+            ) {
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::forget(&mut builders[0]);
+                return Err(e);
+            }
+            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
                 &mut builders[2],
                 object,
-            )?;
+            ) {
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::forget(&mut builders[0]);
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::forget(&mut builders[1]);
+                return Err(e);
+            }
 
             triples += 1;
             if triples % PROGRESS_NOTIFY_INCREMENT == 0 {
@@ -267,5 +274,44 @@ mod test {
 
         parse_example_with_rdf_parser!(NTriplesParser::new);
         parse_example_with_rdf_parser!(|reader| TurtleParser::new(reader, None));
+    }
+
+    #[test]
+    fn rollback() {
+        let mut data = r#"<http://example.org/> <http://example.org/> <http://example.org/> .
+                          malformed <http://example.org/> <http://example.org/>
+                          <http://example.org/> malformed <http://example.org/> .
+                          <http://example.org/> <http://example.org/> malformed .
+                          <https://example.org/> <https://example.org/> <https://example.org/> .
+                      "#
+        .as_bytes();
+
+        let dict = RefCell::new(PrefixedStringDictionary::default());
+        let mut builders = vec![
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+            PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
+        ];
+        let reader = RDFTriplesReader::new(
+            ResourceProviders::empty(),
+            &RdfFile::new("", None),
+            vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
+        );
+
+        let result = reader.read_with_buf_reader(&mut builders, &mut data, NTriplesParser::new);
+        assert!(result.is_ok());
+
+        let columns = builders
+            .into_iter()
+            .map(|builder| match builder {
+                PhysicalBuilderProxyEnum::String(b) => b.finalize(),
+                _ => unreachable!("only string columns here"),
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(columns.len(), 3);
+        assert_eq!(columns[0].len(), 2);
+        assert_eq!(columns[1].len(), 2);
+        assert_eq!(columns[2].len(), 2);
     }
 }
