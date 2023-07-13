@@ -19,7 +19,19 @@ class TestExample(unittest.TestCase):
         self.engine = NemoEngine(load_string(self.rules))
         self.engine.reason()
 
-        self.expected_result = [
+        self.expected_api_result = [
+            [
+                2,
+                "__Null#9223372036854775809",
+            ],
+            [
+                42,
+                "__Null#9223372036854775810",
+            ],
+            ["world", "__Null#9223372036854775811"],
+        ]
+
+        self.expected_serialized_result = [
             [
                 '"2"^^<http://www.w3.org/2001/XMLSchema#integer>',
                 "<__Null#9223372036854775809>",
@@ -33,7 +45,7 @@ class TestExample(unittest.TestCase):
 
     def test_result(self):
         result = list(self.engine.result("calculated"))
-        self.assertEqual(result, self.expected_result)
+        self.assertEqual(result, self.expected_api_result)
 
     def test_output(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -45,7 +57,7 @@ class TestExample(unittest.TestCase):
 
             with open(results_file_name) as results_file:
                 results = list(csv.reader(results_file))
-                self.assertEqual(results, self.expected_result)
+                self.assertEqual(results, self.expected_serialized_result)
 
 
 if __name__ == "__main__":

@@ -2,295 +2,637 @@
 //! into some value, which can be given to the physical layer to store the data accordingly to its type
 
 use std::io::BufReader;
+use std::marker::PhantomData;
+
+use oxiri::Iri;
+use rio_api::parser::TriplesParser;
+use rio_turtle::TurtleParser;
 
 use nemo_physical::{
     builder_proxy::{
         ColumnBuilderProxy, PhysicalBuilderProxyEnum, PhysicalGenericColumnBuilderProxy,
         PhysicalStringColumnBuilderProxy,
     },
-    datatypes::Double,
+    datatypes::{data_value::PhysicalString, Double},
 };
-
-use oxiri::Iri;
-use rio_api::parser::TriplesParser;
-use rio_turtle::TurtleParser;
 
 use crate::{
     error::ReadingError,
-    io::{
-        formats::rdf_triples::TurtleEncodedRDFTerm,
-        parser::{parse_bare_name, span_from_str},
-    },
+    io::parser::{parse_bare_name, span_from_str},
+    model::types::primitive_logical_value::{LogicalFloat64, LogicalInteger, LogicalString},
 };
 
-/// Trait capturing builder proxies that use plain string (used for parsing in logical layer)
-///
-/// This parses from a given logical type to the physical type, without exposing details from one layer to the other.
-pub trait LogicalColumnBuilderProxy<'a, 'b>: ColumnBuilderProxy<String> {
-    /// Create a new [`LogicalColumnBuilderProxy`] from a given [`BuilderProxy`][nemo_physical::builder_proxy::PhysicalBuilderProxyEnum].
-    ///
-    /// # Panics
-    /// If the logical and the nested physical type are not compatible, an `unreachable` panic will be thrown.
-    fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self
-    where
-        Self: Sized;
-}
+use super::model::Term;
 
 /// Implements the type-independent [`ColumnBuilderProxy`] trait methods.
 macro_rules! logical_generic_trait_impl {
     () => {
         fn commit(&mut self) {
-            self.physical.commit()
+            self.inner.commit()
         }
 
         fn forget(&mut self) {
-            self.physical.forget()
+            self.inner.forget()
         }
     };
+}
+
+#[derive(Debug)]
+pub enum LogicalColumnBuilderProxyT<'a, 'b> {
+    Any(LogicalAnyColumnBuilderProxy<'a, 'b>),
+    String(LogicalStringColumnBuilderProxy<'a, 'b>),
+    Integer(LogicalIntegerColumnBuilderProxy<'b>),
+    Float64(LogicalFloat64ColumnBuilderProxy<'b>),
+}
+
+impl<'a, 'b, T> ColumnBuilderProxy<T> for LogicalColumnBuilderProxyT<'a, 'b>
+where
+    LogicalAnyColumnBuilderProxy<'a, 'b>: ColumnBuilderProxy<T>,
+    LogicalStringColumnBuilderProxy<'a, 'b>: ColumnBuilderProxy<T>,
+    LogicalIntegerColumnBuilderProxy<'b>: ColumnBuilderProxy<T>,
+    LogicalFloat64ColumnBuilderProxy<'b>: ColumnBuilderProxy<T>,
+{
+    fn commit(&mut self) {
+        match self {
+            Self::Any(lcbp) => {
+                <LogicalAnyColumnBuilderProxy as ColumnBuilderProxy<T>>::commit(lcbp)
+            }
+            Self::String(lcbp) => {
+                <LogicalStringColumnBuilderProxy as ColumnBuilderProxy<T>>::commit(lcbp)
+            }
+            Self::Integer(lcbp) => {
+                <LogicalIntegerColumnBuilderProxy as ColumnBuilderProxy<T>>::commit(lcbp)
+            }
+            Self::Float64(lcbp) => {
+                <LogicalFloat64ColumnBuilderProxy as ColumnBuilderProxy<T>>::commit(lcbp)
+            }
+        }
+    }
+
+    fn forget(&mut self) {
+        match self {
+            Self::Any(lcbp) => {
+                <LogicalAnyColumnBuilderProxy as ColumnBuilderProxy<T>>::forget(lcbp)
+            }
+            Self::String(lcbp) => {
+                <LogicalStringColumnBuilderProxy as ColumnBuilderProxy<T>>::forget(lcbp)
+            }
+            Self::Integer(lcbp) => {
+                <LogicalIntegerColumnBuilderProxy as ColumnBuilderProxy<T>>::forget(lcbp)
+            }
+            Self::Float64(lcbp) => {
+                <LogicalFloat64ColumnBuilderProxy as ColumnBuilderProxy<T>>::forget(lcbp)
+            }
+        }
+    }
+
+    fn add(&mut self, input: T) -> Result<(), ReadingError> {
+        match self {
+            Self::Any(lcbp) => lcbp.add(input),
+            Self::String(lcbp) => lcbp.add(input),
+            Self::Integer(lcbp) => lcbp.add(input),
+            Self::Float64(lcbp) => lcbp.add(input),
+        }
+    }
 }
 
 /// [`LogicalColumnBuilderProxy`] to add Any
 #[derive(Debug)]
 pub struct LogicalAnyColumnBuilderProxy<'a: 'b, 'b> {
-    physical: &'b mut PhysicalStringColumnBuilderProxy<'a>,
+    inner: &'b mut PhysicalStringColumnBuilderProxy<'a>,
 }
 
-impl LogicalAnyColumnBuilderProxy<'_, '_> {
-    fn normalize_string(input: String) -> String {
-        const BASE: &str = "a:";
-
-        let trimmed = input.trim();
-
-        if trimmed.is_empty() {
-            return r#""""#.to_string();
-        }
-
-        let data = format!("<> <> {trimmed}.");
-        let parser = TurtleParser::new(
-            BufReader::new(data.as_bytes()),
-            Iri::parse(BASE.to_string()).ok(),
-        );
-
-        let terms = parser
-            .into_iter(|triple| {
-                let normalized =
-                    TurtleEncodedRDFTerm::new(triple.object.to_string()).into_normalized_string();
-
-                Ok::<_, ReadingError>(match normalized.strip_prefix(BASE) {
-                    Some(stripped) => stripped.to_string(),
-                    None => normalized,
-                })
-            })
-            .collect::<Result<Vec<_>, _>>();
-
-        if let Ok(terms) = terms {
-            // make sure this really parsed as a single triple
-            if terms.len() == 1 {
-                return terms.first().expect("is not empty").to_string();
-            }
-        }
-
-        // not a valid RDF term.
-        // check if it's a valid bare name
-        if let Ok((remainder, _)) = parse_bare_name(span_from_str(trimmed)) {
-            if remainder.is_empty() {
-                // it is, pass as-is
-                return trimmed.to_string();
-            }
-        }
-
-        // might still be a full IRI
-        if Iri::parse(trimmed).is_ok() {
-            // it is, pass as-is
-            return trimmed.to_string();
-        }
-
-        // otherwise it needs to be quoted
-        format!(r#""{trimmed}""#).to_string()
-    }
-}
-
-impl ColumnBuilderProxy<String> for LogicalAnyColumnBuilderProxy<'_, '_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: String) -> Result<(), ReadingError> {
-        <LogicalAnyColumnBuilderProxy<'_, '_> as ColumnBuilderProxy<String>>::commit(self);
-
-        self.physical.add(Self::normalize_string(input))
-    }
-}
-
-impl ColumnBuilderProxy<TurtleEncodedRDFTerm> for LogicalAnyColumnBuilderProxy<'_, '_> {
-    logical_generic_trait_impl!();
-
-    fn add(&mut self, input: TurtleEncodedRDFTerm) -> Result<(), ReadingError> {
-        <LogicalAnyColumnBuilderProxy<'_, '_> as ColumnBuilderProxy<TurtleEncodedRDFTerm>>::commit(
-            self,
-        );
-
-        self.physical.add(input.into_normalized_string())
-    }
-}
-
-impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalAnyColumnBuilderProxy<'a, 'b> {
-    fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
+impl<'a, 'b> LogicalAnyColumnBuilderProxy<'a, 'b> {
+    pub fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
         match physical_builder_proxy {
-            PhysicalBuilderProxyEnum::String(physical) => Self { physical },
+            PhysicalBuilderProxyEnum::String(inner) => Self { inner },
             _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch.")
         }
+    }
+
+    pub fn into_parser<Intermediate>(self) -> GenericLogicalParser<Intermediate, Self>
+    where
+        Self: ColumnBuilderProxy<Intermediate>,
+    {
+        GenericLogicalParser::new(self)
+    }
+}
+
+impl<T> ColumnBuilderProxy<T> for LogicalAnyColumnBuilderProxy<'_, '_>
+where
+    PhysicalString: TryFrom<T>,
+    Term: TryFrom<T>,
+    ReadingError: From<<PhysicalString as TryFrom<T>>::Error>,
+{
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: T) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<T>>::commit(self);
+        self.inner.add(input.try_into()?)
     }
 }
 
 /// [`LogicalColumnBuilderProxy`] to add String
 #[derive(Debug)]
 pub struct LogicalStringColumnBuilderProxy<'a: 'b, 'b> {
-    physical: &'b mut PhysicalStringColumnBuilderProxy<'a>,
+    inner: &'b mut PhysicalStringColumnBuilderProxy<'a>,
 }
 
-impl ColumnBuilderProxy<String> for LogicalStringColumnBuilderProxy<'_, '_> {
-    logical_generic_trait_impl!();
+impl<'a, 'b> LogicalStringColumnBuilderProxy<'a, 'b> {
+    pub fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
+        match physical_builder_proxy {
+            PhysicalBuilderProxyEnum::String(inner) => Self { inner },
+            _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch.")
+        }
+    }
 
-    fn add(&mut self, input: String) -> Result<(), ReadingError> {
-        self.commit();
-        // NOTE: we just pipe the string through as is, in particular we do not parse potential RDF terms
-        // NOTE: we store the string in the same format as it would be stored in an any column;
-        // this is important since right now we sometimes use the LogicalStringColumnBuilderProxy to directly write data that is known to only be strings into an any column and not only into string columns
-        self.physical.add(format!("\"{input}\""))
+    pub fn into_parser<Intermediate>(self) -> GenericLogicalParser<Intermediate, Self>
+    where
+        Self: ColumnBuilderProxy<Intermediate>,
+    {
+        GenericLogicalParser::new(self)
     }
 }
 
-impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalStringColumnBuilderProxy<'a, 'b> {
-    fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
-        match physical_builder_proxy {
-            PhysicalBuilderProxyEnum::String(physical) => Self { physical },
-            _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch.")
-        }
+impl<T> ColumnBuilderProxy<T> for LogicalStringColumnBuilderProxy<'_, '_>
+where
+    LogicalString: TryFrom<T>,
+    ReadingError: From<<LogicalString as TryFrom<T>>::Error>,
+{
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: T) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<T>>::commit(self);
+        self.inner.add(LogicalString::try_from(input)?.into())
     }
 }
 
 /// [`LogicalColumnBuilderProxy`] to add Integer
 #[derive(Debug)]
 pub struct LogicalIntegerColumnBuilderProxy<'b> {
-    physical: &'b mut PhysicalGenericColumnBuilderProxy<i64>,
+    inner: &'b mut PhysicalGenericColumnBuilderProxy<i64>,
 }
 
-impl ColumnBuilderProxy<String> for LogicalIntegerColumnBuilderProxy<'_> {
-    logical_generic_trait_impl!();
+impl<'a, 'b> LogicalIntegerColumnBuilderProxy<'b> {
+    pub fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
+        match physical_builder_proxy {
+            PhysicalBuilderProxyEnum::I64(inner) => Self { inner },
+            _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch.")
+        }
+    }
 
-    fn add(&mut self, input: String) -> Result<(), ReadingError> {
-        self.commit();
-        self.physical.add(input.parse::<i64>()?)
+    pub fn into_parser<Intermediate>(self) -> GenericLogicalParser<Intermediate, Self>
+    where
+        Self: ColumnBuilderProxy<Intermediate>,
+    {
+        GenericLogicalParser::new(self)
     }
 }
 
-impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalIntegerColumnBuilderProxy<'b> {
-    fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
-        match physical_builder_proxy {
-            PhysicalBuilderProxyEnum::I64(physical) => Self { physical },
-            _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch.")
-        }
+impl<T> ColumnBuilderProxy<T> for LogicalIntegerColumnBuilderProxy<'_>
+where
+    LogicalInteger: TryFrom<T>,
+    ReadingError: From<<LogicalInteger as TryFrom<T>>::Error>,
+{
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: T) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<T>>::commit(self);
+        self.inner.add(LogicalInteger::try_from(input)?.into())
     }
 }
 
 /// [`LogicalColumnBuilderProxy`] to add Float64
 #[derive(Debug)]
 pub struct LogicalFloat64ColumnBuilderProxy<'b> {
-    physical: &'b mut PhysicalGenericColumnBuilderProxy<Double>,
+    inner: &'b mut PhysicalGenericColumnBuilderProxy<Double>,
 }
 
-impl ColumnBuilderProxy<String> for LogicalFloat64ColumnBuilderProxy<'_> {
-    logical_generic_trait_impl!();
+impl<'a, 'b> LogicalFloat64ColumnBuilderProxy<'b> {
+    pub fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
+        match physical_builder_proxy {
+            PhysicalBuilderProxyEnum::Double(inner) => Self { inner },
+            _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch.")
+        }
+    }
 
-    fn add(&mut self, input: String) -> Result<(), ReadingError> {
-        self.commit();
-        self.physical.add(Double::new(input.parse::<f64>()?)?)
+    pub fn into_parser<Intermediate>(self) -> GenericLogicalParser<Intermediate, Self>
+    where
+        Self: ColumnBuilderProxy<Intermediate>,
+    {
+        GenericLogicalParser::new(self)
     }
 }
 
-impl<'a, 'b> LogicalColumnBuilderProxy<'a, 'b> for LogicalFloat64ColumnBuilderProxy<'b> {
-    fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
-        match physical_builder_proxy {
-            PhysicalBuilderProxyEnum::Double(physical) => Self { physical },
-            _ => unreachable!("If the database representation of the logical types is correct, we never reach this branch.")
+impl<T> ColumnBuilderProxy<T> for LogicalFloat64ColumnBuilderProxy<'_>
+where
+    LogicalFloat64: TryFrom<T>,
+    ReadingError: From<<LogicalFloat64 as TryFrom<T>>::Error>,
+{
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: T) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<T>>::commit(self);
+        self.inner.add(LogicalFloat64::try_from(input)?.into())
+    }
+}
+
+fn parse_rdf_term_from_string(input: String) -> Term {
+    const BASE: &str = "a:";
+
+    let trimmed = input.trim();
+
+    if trimmed.is_empty() {
+        return Term::StringLiteral(trimmed.to_string());
+    }
+
+    let data = format!("<> <> {trimmed}.");
+    let parser = TurtleParser::new(
+        BufReader::new(data.as_bytes()),
+        Iri::parse(BASE.to_string()).ok(),
+    );
+
+    let terms = parser
+        .into_iter(|triple| {
+            let term = triple.object.try_into()?;
+            let base_stripped = if let Term::Constant(c) = &term {
+                c.to_string()
+                    .strip_prefix(BASE)
+                    .map(|stripped| Term::Constant(stripped.to_string().into()))
+                    .unwrap_or(term)
+            } else {
+                term
+            };
+            Ok(base_stripped)
+        })
+        .collect::<Result<Vec<_>, ReadingError>>();
+
+    if let Ok(terms) = terms {
+        // make sure this really parsed as a single triple
+        if terms.len() == 1 {
+            return terms.first().expect("is not empty").clone();
         }
+    }
+
+    // not a valid RDF term.
+    // check if it's a valid bare name
+    if let Ok((remainder, _)) = parse_bare_name(span_from_str(trimmed)) {
+        if remainder.is_empty() {
+            // it is, pass as-is
+            return Term::Constant(trimmed.to_string().into());
+        }
+    }
+
+    // might still be a full IRI
+    if Iri::parse(trimmed).is_ok() {
+        // it is, pass as-is
+        return Term::Constant(trimmed.to_string().into());
+    }
+
+    // otherwise we treat the input as a string literal
+    Term::StringLiteral(trimmed.to_string())
+}
+
+#[derive(Debug)]
+pub struct GenericLogicalParser<Intermediate, T>
+where
+    T: ColumnBuilderProxy<Intermediate>,
+{
+    inner: T,
+    phantom: PhantomData<Intermediate>,
+}
+
+impl<Intermediate, T> GenericLogicalParser<Intermediate, T>
+where
+    T: ColumnBuilderProxy<Intermediate>,
+{
+    pub fn new(inner: T) -> Self {
+        Self {
+            inner,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<Input, T> ColumnBuilderProxy<Input> for GenericLogicalParser<Input, T>
+where
+    T: ColumnBuilderProxy<Input>,
+    Input: std::fmt::Debug,
+{
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: Input) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<Input>>::commit(self);
+        self.inner.add(input)
+    }
+}
+
+impl<T> ColumnBuilderProxy<String> for GenericLogicalParser<Term, T>
+where
+    T: ColumnBuilderProxy<Term>,
+{
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: String) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<String>>::commit(self);
+        self.inner.add(parse_rdf_term_from_string(input))
+    }
+}
+
+impl<T> ColumnBuilderProxy<String> for GenericLogicalParser<LogicalString, T>
+where
+    T: ColumnBuilderProxy<LogicalString>,
+{
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: String) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<String>>::commit(self);
+        self.inner.add(input.into())
+    }
+}
+
+impl<T> ColumnBuilderProxy<String> for GenericLogicalParser<LogicalInteger, T>
+where
+    T: ColumnBuilderProxy<LogicalInteger>,
+{
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: String) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<String>>::commit(self);
+        self.inner.add(input.parse::<i64>()?.into())
+    }
+}
+
+impl<T> ColumnBuilderProxy<String> for GenericLogicalParser<LogicalFloat64, T>
+where
+    T: ColumnBuilderProxy<LogicalFloat64>,
+{
+    logical_generic_trait_impl!();
+
+    fn add(&mut self, input: String) -> Result<(), ReadingError> {
+        <Self as ColumnBuilderProxy<String>>::commit(self);
+        self.inner.add(Double::new(input.parse()?)?.into())
     }
 }
 
 #[cfg(test)]
 mod test {
+    use nemo_physical::{
+        datatypes::storage_value::VecT,
+        dictionary::{Dictionary, PrefixedStringDictionary},
+    };
     use test_log::test;
+
+    use crate::model::{NumericLiteral, RdfLiteral};
 
     use super::*;
 
     #[test]
-    fn any_normalization() {
+    fn any_parsing() {
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string("".to_string()),
-            r#""""#
+            parse_rdf_term_from_string("".to_string()),
+            Term::StringLiteral("".to_string())
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string("<http://example.org>".to_string()),
-            "http://example.org"
+            parse_rdf_term_from_string("<http://example.org>".to_string()),
+            Term::Constant("http://example.org".to_string().into())
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string(
+            parse_rdf_term_from_string(
                 r#""23"^^<http://www.w3.org/2001/XMLSchema#string>"#.to_string()
             ),
-            r#""23""#
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: "23".to_string(),
+                datatype: "http://www.w3.org/2001/XMLSchema#string".to_string()
+            })
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string(
+            parse_rdf_term_from_string(
                 r#""12345"^^<http://www.w3.org/2001/XMLSchema#integer>"#.to_string()
             ),
-            r#""12345"^^<http://www.w3.org/2001/XMLSchema#integer>"#
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: "12345".to_string(),
+                datatype: "http://www.w3.org/2001/XMLSchema#integer".to_string()
+            }),
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string(r#""quoted""#.to_string()),
-            r#""quoted""#
+            parse_rdf_term_from_string(r#""quoted""#.to_string()),
+            Term::StringLiteral("quoted".to_string()),
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string("12345".to_string()),
-            r#""12345"^^<http://www.w3.org/2001/XMLSchema#integer>"#
+            parse_rdf_term_from_string("12345".to_string()),
+            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: "12345".to_string(),
+                datatype: "http://www.w3.org/2001/XMLSchema#integer".to_string()
+            })
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string("_:foo".to_string()),
-            "_:foo"
+            parse_rdf_term_from_string("_:foo".to_string()),
+            Term::Constant("_:foo".to_string().into()),
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string("bare_name".to_string()),
-            "bare_name"
+            parse_rdf_term_from_string("bare_name".to_string()),
+            Term::Constant("bare_name".to_string().into()),
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string("http://example.org".to_string()),
-            "http://example.org"
+            parse_rdf_term_from_string("http://example.org".to_string()),
+            Term::Constant("http://example.org".to_string().into()),
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string("with space".to_string()),
-            "with space"
+            parse_rdf_term_from_string("with space".to_string()),
+            Term::Constant("with space".to_string().into()),
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string("with_question_mark?".to_string()),
-            r#""with_question_mark?""#
+            parse_rdf_term_from_string("with_question_mark?".to_string()),
+            Term::StringLiteral("with_question_mark?".to_string()),
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string("a. a a a".to_string()),
-            r#""a. a a a""#
+            parse_rdf_term_from_string("a. a a a".to_string()),
+            Term::StringLiteral("a. a a a".to_string()),
         );
 
         assert_eq!(
-            LogicalAnyColumnBuilderProxy::normalize_string("<a>. <a> <a> <a>".to_string()),
-            r#""<a>. <a> <a> <a>""#
+            parse_rdf_term_from_string("<a>. <a> <a> <a>".to_string()),
+            Term::StringLiteral("<a>. <a> <a> <a>".to_string()),
+        );
+    }
+
+    #[test]
+    fn build_columns_from_logical_values() {
+        let string = LogicalString::from("my string".to_string());
+        let integer = LogicalInteger::from(42);
+        let double = LogicalFloat64::from(Double::new(3.41).unwrap());
+        let constant = Term::Constant("my constant".to_string().into());
+        let string_literal = Term::StringLiteral("string literal".to_string());
+        let num_int_literal = Term::NumericLiteral(NumericLiteral::Integer(45));
+        let num_decimal_literal = Term::NumericLiteral(NumericLiteral::Decimal(4, 2));
+        let num_double_literal =
+            Term::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap()));
+        let language_string_literal = Term::RdfLiteral(RdfLiteral::LanguageString {
+            value: "language string".to_string(),
+            tag: "en".to_string(),
+        });
+        let random_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "some random datavalue".to_string(),
+            datatype: "a datatype that I totally did not just make up".to_string(),
+        });
+        let string_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "string datavalue".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#string".to_string(),
+        });
+        let integer_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "73".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#integer".to_string(),
+        });
+        let decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "1.23".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
+        });
+        let double_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "3.33".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#double".to_string(),
+        });
+
+        let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+
+        let physical_builder_for_any_column = PhysicalStringColumnBuilderProxy::new(&dict);
+        let physical_builder_for_string_column = PhysicalStringColumnBuilderProxy::new(&dict);
+        let physical_builder_for_integer_column =
+            PhysicalGenericColumnBuilderProxy::<i64>::default();
+        let physical_builder_for_double_column =
+            PhysicalGenericColumnBuilderProxy::<Double>::default();
+
+        let mut phys_enum_for_any =
+            PhysicalBuilderProxyEnum::String(physical_builder_for_any_column);
+        let mut phys_enum_for_string =
+            PhysicalBuilderProxyEnum::String(physical_builder_for_string_column);
+        let mut phys_enum_for_integer =
+            PhysicalBuilderProxyEnum::I64(physical_builder_for_integer_column);
+        let mut phys_enum_for_double =
+            PhysicalBuilderProxyEnum::Double(physical_builder_for_double_column);
+
+        let mut any_lbp = LogicalAnyColumnBuilderProxy::new(&mut phys_enum_for_any);
+        let mut string_lbp = LogicalStringColumnBuilderProxy::new(&mut phys_enum_for_string);
+        let mut integer_lbp = LogicalIntegerColumnBuilderProxy::new(&mut phys_enum_for_integer);
+        let mut double_lbp = LogicalFloat64ColumnBuilderProxy::new(&mut phys_enum_for_double);
+
+        any_lbp.add(string.clone()).unwrap();
+        string_lbp.add(string).unwrap();
+
+        any_lbp.add(integer).unwrap();
+        string_lbp.add(integer).unwrap();
+        integer_lbp.add(integer).unwrap();
+
+        any_lbp.add(double).unwrap();
+        string_lbp.add(double).unwrap();
+        double_lbp.add(double).unwrap();
+
+        any_lbp.add(constant).unwrap();
+
+        any_lbp.add(string_literal.clone()).unwrap();
+        string_lbp.add(string_literal).unwrap();
+
+        any_lbp.add(num_int_literal.clone()).unwrap();
+        integer_lbp.add(num_int_literal).unwrap();
+
+        any_lbp.add(num_decimal_literal).unwrap();
+
+        any_lbp.add(num_double_literal.clone()).unwrap();
+        double_lbp.add(num_double_literal).unwrap();
+
+        any_lbp.add(language_string_literal.clone()).unwrap();
+
+        any_lbp.add(random_datavalue_literal).unwrap();
+
+        any_lbp.add(string_datavalue_literal.clone()).unwrap();
+        string_lbp.add(string_datavalue_literal).unwrap();
+
+        any_lbp.add(integer_datavalue_literal.clone()).unwrap();
+        integer_lbp.add(integer_datavalue_literal).unwrap();
+
+        any_lbp.add(decimal_datavalue_literal).unwrap();
+
+        any_lbp.add(double_datavalue_literal.clone()).unwrap();
+        double_lbp.add(double_datavalue_literal).unwrap();
+
+        let VecT::U64(any_result_indices) = phys_enum_for_any.finalize() else {
+            unreachable!()
+        };
+        let VecT::U64(string_result_indices) = phys_enum_for_string.finalize() else {
+            unreachable!()
+        };
+
+        let any_result: Vec<String> = any_result_indices
+            .into_iter()
+            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+            .collect();
+        let string_result: Vec<String> = string_result_indices
+            .into_iter()
+            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+            .collect();
+        let VecT::I64(integer_result) = phys_enum_for_integer.finalize() else {
+            unreachable!()
+        };
+        let VecT::Double(double_result) = phys_enum_for_double.finalize() else {
+            unreachable!()
+        };
+
+        assert_eq!(any_result, [
+            "STRING:my string",
+            "INTEGER:42",
+            "DOUBLE:3.41",
+            "CONSTANT:my constant",
+            "STRING:string literal",
+            "INTEGER:45",
+            "DECIMAL:4.2",
+            "DOUBLE:2.99",
+            "LANGUAGE_STRING:language string@en",
+            "DATATYPE_VALUE:some random datavalue^^a datatype that I totally did not just make up",
+            "STRING:string datavalue",
+            "INTEGER:73",
+            "DECIMAL:1.23",
+            "DOUBLE:3.33",
+        ].into_iter().map(String::from).collect::<Vec<_>>());
+
+        assert_eq!(
+            string_result,
+            [
+                "STRING:my string",
+                "STRING:42",
+                "STRING:3.41",
+                "STRING:string literal",
+                "STRING:string datavalue",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>()
+        );
+
+        assert_eq!(
+            integer_result,
+            [42, 45, 73,].into_iter().collect::<Vec<i64>>()
+        );
+
+        assert_eq!(
+            double_result,
+            [
+                Double::new(3.41).unwrap(),
+                Double::new(2.99).unwrap(),
+                Double::new(3.33).unwrap(),
+            ]
+            .into_iter()
+            .collect::<Vec<Double>>()
         );
     }
 }

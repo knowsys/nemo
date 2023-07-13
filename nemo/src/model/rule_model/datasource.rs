@@ -9,6 +9,120 @@ use crate::{
 
 use super::Identifier;
 
+/// Trait capturing capabilities of data sources
+pub trait DataSource {
+    /// Get the logical types that should be used for columns in the datasource if no type declaration is given explicitly
+    fn input_types(&self) -> TupleConstraint;
+
+    /// Get a uri for this resource
+    fn resources(&self) -> Vec<Resource>;
+}
+
+/// A Delimiter-separated values file
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DsvFile {
+    /// the DSV resource
+    pub resource: Resource,
+    /// the delimiter separating the values
+    pub delimiter: u8,
+    /// Input Types
+    input_types: TupleConstraint,
+}
+
+impl DsvFile {
+    const DEFAULT_COLUMN_TYPE: PrimitiveType = PrimitiveType::String;
+
+    /// Construct a new DSV file data source from a given path.
+    pub fn new(path: &str, delimiter: u8, input_types: TupleConstraint) -> Self {
+        Self {
+            resource: path.to_string(),
+            delimiter,
+            input_types: input_types
+                .iter()
+                .map(|tc| match tc {
+                    TypeConstraint::None => TypeConstraint::AtLeast(Self::DEFAULT_COLUMN_TYPE),
+                    _ => tc.clone(),
+                })
+                .collect(),
+        }
+    }
+
+    /// Construct a new CSV file data source from a given path.
+    pub fn csv_file(path: &str, input_types: TupleConstraint) -> Self {
+        Self::new(path, b',', input_types)
+    }
+
+    /// Construct a new TSV file data source from a given path.
+    pub fn tsv_file(path: &str, input_types: TupleConstraint) -> Self {
+        Self::new(path, b'\t', input_types)
+    }
+}
+
+impl DataSource for DsvFile {
+    fn input_types(&self) -> TupleConstraint {
+        self.input_types.clone()
+    }
+
+    fn resources(&self) -> Vec<Resource> {
+        vec![self.resource.clone()]
+    }
+}
+
+/// An RDF file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RdfFile {
+    /// the RDF resource
+    pub resource: Resource,
+    /// the optional base IRI
+    pub base: Option<String>,
+}
+
+impl RdfFile {
+    const ARITY: usize = 3;
+
+    /// Construct a new Rdf Source
+    pub fn new(path: &str, base: Option<String>) -> Self {
+        Self {
+            resource: path.to_string(),
+            base,
+        }
+    }
+
+    // TODO: it should not be possible to specify types or arities for Rdf sources;
+    // this will change in the future
+    pub(crate) fn new_validated(
+        path: &str,
+        base: Option<String>,
+        predicate: &Identifier,
+        tuple_constraint: TupleConstraint,
+    ) -> Result<Self, ParseError> {
+        let arity = tuple_constraint.arity();
+
+        if arity != Self::ARITY {
+            return Err(ParseError::RdfSourceInvalidArity(
+                predicate.name(),
+                path.to_string(),
+                arity,
+            ));
+        }
+
+        Ok(Self::new(path, base))
+    }
+}
+
+impl DataSource for RdfFile {
+    fn input_types(&self) -> TupleConstraint {
+        TupleConstraint::from_arity(Self::ARITY)
+            .iter()
+            .map(|_| TypeConstraint::AtLeast(PrimitiveType::Any))
+            .collect()
+    }
+
+    fn resources(&self) -> Vec<Resource> {
+        vec![self.resource.clone()]
+    }
+}
+
 /// A SPARQL query.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SparqlQuery {
@@ -28,6 +142,31 @@ impl SparqlQuery {
             projection,
             query,
         }
+    }
+
+    // TODO: it should not be possible to specify types or arities for Rdf sources;
+    // this will change in the future
+    pub(crate) fn new_validated(
+        endpoint: String,
+        projection: String,
+        query: String,
+        predicate: &Identifier,
+        tuple_constraint: TupleConstraint,
+    ) -> Result<Self, ParseError> {
+        let new_self = Self::new(endpoint, projection, query);
+
+        let target_arity = new_self.arity();
+        let arity = tuple_constraint.arity();
+
+        if target_arity != arity {
+            return Err(ParseError::SparqlSourceInvalidArity(
+                predicate.name(),
+                target_arity,
+                arity,
+            ));
+        }
+
+        Ok(new_self)
     }
 
     /// Get the endpoint.
@@ -53,141 +192,52 @@ impl SparqlQuery {
     pub fn format_query(&self) -> String {
         format!("SELECT {} WHERE {{ {} }}", self.projection, self.query)
     }
+
+    /// Get Arity of SparqlQuery
+    #[must_use]
+    pub fn arity(&self) -> usize {
+        self.projection().split(',').count()
+    }
+}
+
+impl DataSource for SparqlQuery {
+    fn input_types(&self) -> TupleConstraint {
+        TupleConstraint::from_arity(self.arity())
+            .iter()
+            .map(|_| TypeConstraint::AtLeast(PrimitiveType::Any))
+            .collect()
+    }
+
+    fn resources(&self) -> Vec<Resource> {
+        vec![]
+    }
 }
 
 /// An external data source.
-#[derive(Clone, PartialEq, Eq)]
-pub enum DataSource {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataSourceT {
     /// A DSV (delimiter-separated values) resource data source with the given path and delimiter.
-    DsvFile {
-        /// the DSV resource
-        resource: Resource,
-        /// the delimiter separating the values
-        delimiter: u8,
-    },
+    DsvFile(DsvFile),
     /// An RDF file data source with the given path and optional base IRI.
-    RdfFile {
-        /// the RDF resource
-        resource: Resource,
-        /// the optional base IRI
-        base: Option<String>,
-    },
+    RdfFile(RdfFile),
     /// A SPARQL query data source.
-    SparqlQuery(Box<SparqlQuery>),
+    SparqlQuery(SparqlQuery),
 }
 
-impl DataSource {
-    /// Construct a new CSV file data source from a given path.
-    pub fn csv_file(path: &str) -> Result<Self, ParseError> {
-        Ok(Self::DsvFile {
-            resource: String::from(path),
-            delimiter: b',',
-        })
-    }
-
-    /// Construct a new TSV file data source from a given path.
-    pub fn tsv_file(path: &str) -> Result<Self, ParseError> {
-        Ok(Self::DsvFile {
-            resource: String::from(path),
-            delimiter: b'\t',
-        })
-    }
-
-    /// Construct a new RDF file data source from a given path.
-    pub fn rdf_file(path: &str) -> Result<Self, ParseError> {
-        Self::rdf_file_with_base(path, None)
-    }
-
-    /// Construct a new RDF file data source from a given path and base IRI.
-    pub fn rdf_file_with_base(path: &str, base: Option<String>) -> Result<Self, ParseError> {
-        Ok(Self::RdfFile {
-            resource: String::from(path),
-            base,
-        })
-    }
-
-    /// Construct a new SPARQL query data source from a given query.
-    pub fn sparql_query(query: SparqlQuery) -> Result<Self, ParseError> {
-        Ok(Self::SparqlQuery(Box::new(query)))
-    }
-
-    /// Get the logical types that should be used for columns in the datasource if no type declaration is given explicitly
-    pub fn default_type(&self) -> PrimitiveType {
+impl DataSource for DataSourceT {
+    fn input_types(&self) -> TupleConstraint {
         match self {
-            Self::DsvFile { .. } => PrimitiveType::String,
-            Self::RdfFile { .. } => PrimitiveType::Any,
-            Self::SparqlQuery(_) => PrimitiveType::Any,
+            Self::DsvFile(d) => d.input_types(),
+            Self::RdfFile(r) => r.input_types(),
+            Self::SparqlQuery(s) => s.input_types(),
         }
     }
 
-    /// Check whether this data source supports a given arity
-    pub fn check_arity(&self, predicate: &Identifier, arity: usize) -> Result<(), ParseError> {
+    fn resources(&self) -> Vec<Resource> {
         match self {
-            DataSource::DsvFile { .. } => (), // no validity checks
-            DataSource::RdfFile { resource, .. } => {
-                if arity != 3 {
-                    return Err(ParseError::RdfSourceInvalidArity(
-                        predicate.name(),
-                        resource.clone(),
-                        arity,
-                    ));
-                }
-            }
-            DataSource::SparqlQuery(ref query) => {
-                let variables = query.projection().split(',').count();
-                if variables != arity {
-                    return Err(ParseError::SparqlSourceInvalidArity(
-                        predicate.name(),
-                        variables,
-                        arity,
-                    ));
-                }
-            }
-        };
-
-        Ok(())
-    }
-
-    /// Get a uri for this resource
-    pub fn resources(&self) -> Vec<Resource> {
-        match self {
-            DataSource::DsvFile { resource, .. } => vec![resource.clone()],
-            DataSource::RdfFile { resource, .. } => vec![resource.clone()],
-            DataSource::SparqlQuery(_) => vec![],
-        }
-    }
-}
-
-impl Debug for DataSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::DsvFile {
-                resource: file,
-                delimiter: b',',
-            } => f.debug_tuple("CSV file").field(file).finish(),
-            Self::DsvFile {
-                resource: file,
-                delimiter: b'\t',
-            } => f.debug_tuple("TSV file").field(file).finish(),
-            Self::DsvFile {
-                resource: file,
-                delimiter,
-            } => {
-                let description = format!("DSV file with delimiter {delimiter:?}");
-                f.debug_tuple(&description).field(file).finish()
-            }
-            Self::RdfFile {
-                resource,
-                base: None,
-            } => f.debug_tuple("RDF file").field(resource).finish(),
-            Self::RdfFile {
-                resource,
-                base: Some(base),
-            } => f
-                .debug_tuple(&format!("RDF file with base {base:?}"))
-                .field(resource)
-                .finish(),
-            Self::SparqlQuery(arg0) => f.debug_tuple("SparqlQuery").field(arg0).finish(),
+            Self::DsvFile(d) => d.resources(),
+            Self::RdfFile(r) => r.resources(),
+            Self::SparqlQuery(s) => s.resources(),
         }
     }
 }
@@ -196,45 +246,22 @@ impl Debug for DataSource {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataSourceDeclaration {
     pub(crate) predicate: Identifier,
-    pub(crate) type_constraint: TupleConstraint,
-    pub(crate) source: DataSource,
+    pub(crate) source: DataSourceT,
 }
 
 impl DataSourceDeclaration {
     /// Construct a new data source declaration.
-    pub(crate) fn new(
-        predicate: Identifier,
-        type_constraint: TupleConstraint,
-        source: DataSource,
-    ) -> Self {
-        let type_constraint = type_constraint
-            .iter()
-            .map(|c| match c {
-                TypeConstraint::None => TypeConstraint::AtLeast(source.default_type()),
-                c => c.clone(),
-            })
-            .collect();
+    pub(crate) fn new(predicate: Identifier, source: DataSourceT) -> Self {
+        Self { predicate, source }
+    }
+}
 
-        Self {
-            predicate,
-            type_constraint,
-            source,
-        }
+impl DataSource for DataSourceDeclaration {
+    fn input_types(&self) -> TupleConstraint {
+        self.source.input_types()
     }
 
-    /// Get the resources specified in this source declaration.
-    pub fn resources(&self) -> Vec<Resource> {
+    fn resources(&self) -> Vec<Resource> {
         self.source.resources()
-    }
-
-    /// Construct a new data source declaration, validating constraints on, e.g., arity.
-    pub(crate) fn new_validated(
-        predicate: Identifier,
-        type_constraint: TupleConstraint,
-        source: DataSource,
-    ) -> Result<Self, ParseError> {
-        source.check_arity(&predicate, type_constraint.arity())?;
-
-        Ok(Self::new(predicate, type_constraint, source))
     }
 }

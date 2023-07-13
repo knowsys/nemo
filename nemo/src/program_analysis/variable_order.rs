@@ -3,7 +3,7 @@
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
 use crate::model::chase_model::{ChaseAtom, ChaseProgram, ChaseRule};
-use crate::model::{Identifier, Variable};
+use crate::model::{DataSource, Identifier, Variable};
 use nemo_physical::management::database::ColumnOrder;
 use nemo_physical::permutator::Permutator;
 
@@ -489,7 +489,7 @@ pub(super) fn build_preferable_variable_orders(
             .collect();
         let source_preds: HashSet<(Identifier, usize)> = program
             .sources()
-            .map(|source| (source.predicate.clone(), source.type_constraint.arity()))
+            .map(|source| (source.predicate.clone(), source.input_types().arity()))
             .collect();
 
         let preds = fact_preds.union(&source_preds);
@@ -537,7 +537,7 @@ mod test {
 
     use crate::model::chase_model::{ChaseAtom, ChaseProgram, ChaseRule};
     use crate::model::{
-        DataSource, DataSourceDeclaration, Identifier, Term, TupleConstraint, Variable,
+        DataSourceDeclaration, DataSourceT, DsvFile, Identifier, Term, TupleConstraint, Variable,
     };
     use nemo_physical::management::database::ColumnOrder;
 
@@ -964,28 +964,38 @@ mod test {
             vec![
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),
-                    TupleConstraint::from_arity(predicates[1].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[1].1),
+                    )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[2].0.clone(),
-                    TupleConstraint::from_arity(predicates[2].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[2].1),
+                    )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[3].0.clone(),
-                    TupleConstraint::from_arity(predicates[3].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[3].1),
+                    )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[4].0.clone(),
-                    TupleConstraint::from_arity(predicates[4].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[4].1),
+                    )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[6].0.clone(),
-                    TupleConstraint::from_arity(predicates[6].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[6].1),
+                    )),
                 ),
             ],
             rules,
@@ -1312,38 +1322,52 @@ mod test {
             vec![
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),
-                    TupleConstraint::from_arity(predicates[1].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[1].1),
+                    )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[2].0.clone(),
-                    TupleConstraint::from_arity(predicates[2].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[2].1),
+                    )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[3].0.clone(),
-                    TupleConstraint::from_arity(predicates[3].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[3].1),
+                    )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[4].0.clone(),
-                    TupleConstraint::from_arity(predicates[4].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[4].1),
+                    )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[6].0.clone(),
-                    TupleConstraint::from_arity(predicates[6].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[6].1),
+                    )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[8].0.clone(),
-                    TupleConstraint::from_arity(predicates[8].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[8].1),
+                    )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[10].0.clone(),
-                    TupleConstraint::from_arity(predicates[10].1),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        TupleConstraint::from_arity(predicates[10].1),
+                    )),
                 ),
             ],
             rules,

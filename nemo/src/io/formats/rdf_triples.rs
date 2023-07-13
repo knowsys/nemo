@@ -7,67 +7,72 @@ use nemo_physical::{
     table_reader::{Resource, TableReader},
 };
 use oxiri::Iri;
-use rio_api::{model::Triple, parser::TriplesParser};
+use rio_api::{
+    model::{BlankNode, NamedNode, Subject, Triple},
+    parser::TriplesParser,
+};
 use rio_turtle::{NTriplesParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 
 use crate::{
-    builder_proxy::{LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxy},
-    io::{
-        formats::PROGRESS_NOTIFY_INCREMENT,
-        parser::{span_from_str, turtle::numeric_literal},
-        resource_providers::ResourceProviders,
-    },
+    builder_proxy::LogicalColumnBuilderProxyT,
+    io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
+    model::{types::primitive_types::PrimitiveType, RdfFile, RdfLiteral, Term},
 };
 
-/// The IRI identifying the XSD integer data type.
-pub const XSD_INTEGER: &str = "<http://www.w3.org/2001/XMLSchema#integer>";
-/// The IRI identifying the XSD decimal data type.
-pub const XSD_DECIMAL: &str = "<http://www.w3.org/2001/XMLSchema#decimal>";
-/// The IRI identifying the XSD double data type.
-pub const XSD_DOUBLE: &str = "<http://www.w3.org/2001/XMLSchema#double>";
-/// The IRI identifying the XSD string data type.
-pub const XSD_STRING: &str = "<http://www.w3.org/2001/XMLSchema#string>";
-
-pub(crate) const INITIAL_FOR_SIMPLE_NUMERIC_LITERAL: &[char] = &[
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '+', '.',
-];
-
-/// A wrapper around [`String`] signifying that this contains a valid Turtle-encoded RDF term.
-#[derive(Debug, Clone)]
-pub struct TurtleEncodedRDFTerm(String);
-
-impl TurtleEncodedRDFTerm {
-    /// Wrap a syntactically valid Turtle encoding of an RDF term.
-    pub fn new(inner: String) -> Self {
-        Self(inner)
+impl From<NamedNode<'_>> for Term {
+    fn from(value: NamedNode) -> Self {
+        Term::Constant(value.iri.to_string().into())
     }
+}
 
-    /// Return the underlying string representation of the term.
-    pub fn into_inner(self) -> String {
-        self.0
+impl From<BlankNode<'_>> for Term {
+    fn from(value: BlankNode) -> Self {
+        Term::Constant(value.to_string().into())
     }
+}
 
-    /// Return a normalized form of the term suitable for storage in an `any` Column.
-    pub fn into_normalized_string(self) -> String {
-        if self.0.is_empty() {
-            r#""""#.to_string()
-        } else if self.0.starts_with('<') && self.0.ends_with('>') {
-            // an absolute IRI, strip the angle brackets
-            self.0[1..self.0.len() - 1].to_string()
-        } else if self.0.starts_with('"') && self.0.ends_with(XSD_STRING) {
-            // an XSD string literal, drop the datatype
-            self.0[..(self.0.len() - XSD_STRING.len() - 2)].to_string()
-        } else if self.0.starts_with(INITIAL_FOR_SIMPLE_NUMERIC_LITERAL) {
-            // some simple numeric literal, convert to a typed literal representation
-            let (remainder, literal) =
-                numeric_literal(span_from_str(&self.0)).expect("is a valid numeric literal");
-            debug_assert!(remainder.is_empty());
+impl From<rio_api::model::Literal<'_>> for Term {
+    fn from(value: rio_api::model::Literal<'_>) -> Self {
+        match value {
+            rio_api::model::Literal::Simple { value } => Term::StringLiteral(value.to_string()),
+            rio_api::model::Literal::LanguageTaggedString { value, language } => {
+                Term::RdfLiteral(RdfLiteral::LanguageString {
+                    value: value.to_string(),
+                    tag: language.to_string(),
+                })
+            }
+            rio_api::model::Literal::Typed { value, datatype } => {
+                Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                    value: value.to_string(),
+                    datatype: datatype.iri.to_string(),
+                })
+            }
+        }
+    }
+}
 
-            literal.into_rdf_term_literal()
-        } else {
-            //
-            self.0
+impl TryFrom<Subject<'_>> for Term {
+    type Error = ReadingError;
+
+    fn try_from(value: Subject<'_>) -> Result<Self, Self::Error> {
+        match value {
+            Subject::NamedNode(nn) => Ok(nn.into()),
+            Subject::BlankNode(bn) => Ok(bn.into()),
+            Subject::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
+        }
+    }
+}
+
+impl TryFrom<rio_api::model::Term<'_>> for Term {
+    type Error = ReadingError;
+
+    fn try_from(value: rio_api::model::Term<'_>) -> Result<Self, Self::Error> {
+        match value {
+            rio_api::model::Term::NamedNode(nn) => Ok(nn.into()),
+            rio_api::model::Term::BlankNode(bn) => Ok(bn.into()),
+            rio_api::model::Term::Literal(lit) => Ok(lit.into()),
+            rio_api::model::Term::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
         }
     }
 }
@@ -78,19 +83,25 @@ pub struct RDFTriplesReader {
     resource_providers: ResourceProviders,
     resource: Resource,
     base: Option<Iri<String>>,
+    logical_types: Vec<PrimitiveType>,
 }
 
 impl RDFTriplesReader {
     /// Create a new [`RDFTriplesReader`]
     pub fn new(
         resource_providers: ResourceProviders,
-        resource: Resource,
-        base: Option<String>,
+        rdf_file: &RdfFile,
+        logical_types: Vec<PrimitiveType>,
     ) -> Self {
         Self {
             resource_providers,
-            resource,
-            base: base.map(|iri| Iri::parse(iri).expect("should be a valid IRI.")),
+            resource: rdf_file.resource.clone(),
+            base: rdf_file
+                .base
+                .as_ref()
+                .cloned()
+                .map(|iri| Iri::parse(iri).expect("should be a valid IRI.")),
+            logical_types,
         }
     }
 
@@ -109,16 +120,30 @@ impl RDFTriplesReader {
     {
         let mut builders = physical_builder_proxies
             .iter_mut()
-            .map(LogicalAnyColumnBuilderProxy::new)
+            .zip(self.logical_types.clone())
+            .map(|(bp, lt)| lt.wrap_physical_column_builder(bp))
             .collect::<Vec<_>>();
 
         assert!(builders.len() == 3);
 
         let mut triples = 0;
         let mut on_triple = |triple: Triple| {
-            builders[0].add(TurtleEncodedRDFTerm(triple.subject.to_string()))?;
-            builders[1].add(TurtleEncodedRDFTerm(triple.predicate.to_string()))?;
-            builders[2].add(TurtleEncodedRDFTerm(triple.object.to_string()))?;
+            let subject: Term = triple.subject.try_into()?;
+            let predicate: Term = triple.predicate.into();
+            let object: Term = triple.object.try_into()?;
+
+            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
+                &mut builders[0],
+                subject,
+            )?;
+            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
+                &mut builders[1],
+                predicate,
+            )?;
+            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
+                &mut builders[2],
+                object,
+            )?;
 
             triples += 1;
             if triples % PROGRESS_NOTIFY_INCREMENT == 0 {
@@ -173,6 +198,7 @@ mod test {
 
     use nemo_physical::{
         builder_proxy::{PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy},
+        datatypes::data_value::{DataValueIteratorT, PhysicalString},
         dictionary::{Dictionary, PrefixedStringDictionary},
     };
     use rio_turtle::TurtleParser;
@@ -196,7 +222,7 @@ mod test {
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                 ];
-                let reader = RDFTriplesReader::new(ResourceProviders::empty(), String::from(""), None);
+                let reader = RDFTriplesReader::new(ResourceProviders::empty(), &RdfFile::new("", None), vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
 
                 let result = reader.read_with_buf_reader(&mut builders, &mut data, $make_parser);
                 assert!(result.is_ok());
@@ -222,26 +248,20 @@ mod test {
                                     .and_then(|usize| dict.borrow_mut().entry(usize))
                                     .unwrap()
                             })
+                            .map(PhysicalString::from)
                             .collect::<Vec<_>>()
                     })
                     .collect::<Vec<_>>();
                 log::debug!("triple: {triples:?}");
-                assert_eq!(
-                    triples[0],
-                    vec![
-                        "http://one.example/subject1",
-                        "http://one.example/predicate1",
-                        "http://one.example/object1"
-                    ]
-                );
-                assert_eq!(
-                    triples[1],
-                    vec!["_:subject1", "http://an.example/predicate1", r#""object1""#]
-                );
-                assert_eq!(
-                    triples[2],
-                    vec!["_:subject2", "http://an.example/predicate2", r#""object2""#]
-                );
+                for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[0].iter().cloned()))).zip(vec!["http://one.example/subject1", "http://one.example/predicate1", "http://one.example/object1"]) {
+                    assert_eq!(value, expected);
+                }
+                for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[1].iter().cloned()))).zip(vec!["_:subject1", "http://an.example/predicate1", r#""object1""#]) {
+                    assert_eq!(value, expected);
+                }
+                for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[2].iter().cloned()))).zip(vec!["_:subject2", "http://an.example/predicate2", r#""object2""#]) {
+                    assert_eq!(value, expected);
+                }
             };
         }
 

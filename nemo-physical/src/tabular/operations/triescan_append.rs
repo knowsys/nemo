@@ -647,7 +647,7 @@ mod test {
             trie_generic_scan,
             &[
                 vec![AppendInstruction::Constant(DataValueT::String(
-                    "Hello".into(),
+                    "Hello".to_string().into(),
                 ))],
                 vec![],
             ],

@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     execution::selection_strategy::strategy::SelectionStrategyError, io::parser::LocatedParseError,
-    model::chase_model::RuleTranslationError, model::types::TypeError,
+    model::chase_model::RuleTranslationError, model::types::error::TypeError,
     program_analysis::analysis::RuleAnalysisError,
 };
 

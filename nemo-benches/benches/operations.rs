@@ -24,24 +24,21 @@ use nemo_physical::{
 
 use nemo::{
     io::{formats::DSVReader, resource_providers::ResourceProviders},
-    model::{DataSource, PrimitiveType},
+    model::{DataSourceT, DsvFile, PrimitiveType},
 };
 
 // NOTE: See TableStorage::load_from_disk
 fn load_trie(
-    source: &DataSource,
+    source: &DataSourceT,
     arity: usize,
     dict: &mut RefCell<PrefixedStringDictionary>,
 ) -> Trie {
     match source {
-        DataSource::DsvFile {
-            resource,
-            delimiter,
-        } => {
+        DataSourceT::DsvFile(dsv_file) => {
             // Using fallback solution to treat everything as string for now (storing as u64 internally)
             let datatypeschema =
                 TableSchema::from_vec((0..arity).map(|_| DataTypeName::String).collect());
-            let logical_types = (0..arity).map(|_| PrimitiveType::Any).collect();
+            let logical_types: Vec<_> = (0..arity).map(|_| PrimitiveType::Any).collect();
 
             let mut builder_proxies: Vec<PhysicalBuilderProxyEnum> = datatypeschema
                 .iter()
@@ -57,12 +54,7 @@ fn load_trie(
                 })
                 .collect();
 
-            let csv_reader = DSVReader::dsv(
-                ResourceProviders::default(),
-                resource.clone(),
-                *delimiter,
-                logical_types,
-            );
+            let csv_reader = DSVReader::dsv(ResourceProviders::default(), dsv_file, logical_types);
             csv_reader
                 .read_into_builder_proxies(&mut builder_proxies)
                 .expect("Should work");
@@ -95,10 +87,16 @@ fn load_trie(
 pub fn benchmark_join(c: &mut Criterion) {
     let mut dict = RefCell::new(PrefixedStringDictionary::default());
 
-    let table_a = DataSource::csv_file("test-files/bench-data/xe.csv").unwrap();
     let table_a_arity = 3;
-    let table_b = DataSource::csv_file("test-files/bench-data/aux.csv").unwrap();
+    let table_a = DataSourceT::DsvFile(DsvFile::csv_file(
+        "test-files/bench-data/xe.csv",
+        (0..table_a_arity).map(|_| PrimitiveType::Any).collect(),
+    ));
     let table_b_arity = 3;
+    let table_b = DataSourceT::DsvFile(DsvFile::csv_file(
+        "test-files/bench-data/aux.csv",
+        (0..table_b_arity).map(|_| PrimitiveType::Any).collect(),
+    ));
 
     let trie_a = load_trie(&table_a, table_a_arity, &mut dict);
     let trie_b = load_trie(&table_b, table_b_arity, &mut dict);
@@ -190,10 +188,16 @@ pub fn benchmark_join(c: &mut Criterion) {
 fn benchmark_project(c: &mut Criterion) {
     let mut dict = RefCell::new(PrefixedStringDictionary::default());
 
-    let table_a = DataSource::csv_file("test-files/bench-data/xe.csv").unwrap();
     let table_a_arity = 3;
-    let table_b = DataSource::csv_file("test-files/bench-data/aux.csv").unwrap();
+    let table_a = DataSourceT::DsvFile(DsvFile::csv_file(
+        "test-files/bench-data/xe.csv",
+        (0..table_a_arity).map(|_| PrimitiveType::Any).collect(),
+    ));
     let table_b_arity = 3;
+    let table_b = DataSourceT::DsvFile(DsvFile::csv_file(
+        "test-files/bench-data/aux.csv",
+        (0..table_b_arity).map(|_| PrimitiveType::Any).collect(),
+    ));
 
     let trie_a = load_trie(&table_a, table_a_arity, &mut dict);
     let trie_b = load_trie(&table_b, table_b_arity, &mut dict);
@@ -291,8 +295,11 @@ fn benchmark_union(c: &mut Criterion) {
         filename += &trie_index.to_string();
         filename += ".csv";
 
-        let table_source = DataSource::csv_file(&filename).unwrap();
         let table_arity = 3;
+        let table_source = DataSourceT::DsvFile(DsvFile::csv_file(
+            &filename,
+            (0..table_arity).map(|_| PrimitiveType::Any).collect(),
+        ));
 
         tries.push(load_trie(&table_source, table_arity, &mut dict));
 

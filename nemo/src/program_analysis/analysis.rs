@@ -6,8 +6,8 @@ use crate::{
     error::Error,
     model::chase_model::{ChaseProgram, ChaseRule},
     model::{
-        chase_model::ChaseAtom, types::TypeError, FilterOperation, Identifier, PrimitiveType, Term,
-        TermOperation, TypeConstraint, Variable,
+        chase_model::ChaseAtom, types::error::TypeError, DataSource, FilterOperation, Identifier,
+        PrimitiveType, Term, TermOperation, TypeConstraint, Variable,
     },
     util::labeled_graph::LabeledGraph,
 };
@@ -399,7 +399,7 @@ impl ChaseProgram {
 
         // Predicates in source statements
         for source in self.sources() {
-            result.insert((source.predicate.clone(), source.type_constraint.arity()));
+            result.insert((source.predicate.clone(), source.input_types().arity()));
         }
 
         // Predicates in rules
@@ -571,7 +571,7 @@ impl ChaseProgram {
                     (
                         source.predicate.clone(),
                         source
-                            .type_constraint
+                            .input_types()
                             .iter()
                             .cloned()
                             .map(TypeRequirement::from)
@@ -745,7 +745,7 @@ impl ChaseProgram {
         let mut arities = HashMap::new();
 
         for source in self.sources() {
-            arities.insert(source.predicate.clone(), source.type_constraint.arity());
+            arities.insert(source.predicate.clone(), source.input_types().arity());
         }
 
         for rule in self.rules() {
@@ -924,8 +924,8 @@ mod test {
     use crate::{
         model::{
             chase_model::{ChaseAtom, ChaseProgram, ChaseRule},
-            DataSource, DataSourceDeclaration, Identifier, PrimitiveType, Term, TupleConstraint,
-            Variable,
+            DataSourceDeclaration, DataSourceT, DsvFile, Identifier, PrimitiveType, Term,
+            TupleConstraint, Variable,
         },
         program_analysis::analysis::get_fresh_rule_predicate,
     };
@@ -1153,8 +1153,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 b.clone(),
-                TupleConstraint::from_arity(1),
-                DataSource::csv_file("").unwrap(),
+                DataSourceT::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
             )],
             vec![basic_rule, exis_rule],
             Default::default(),
@@ -1190,8 +1189,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 c.clone(),
-                TupleConstraint::from_arity(1),
-                DataSource::csv_file("").unwrap(),
+                DataSourceT::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
             )],
             vec![basic_rule, exis_rule],
             Default::default(),
@@ -1229,8 +1227,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 c,
-                TupleConstraint::from_arity(1),
-                DataSource::csv_file("").unwrap(),
+                DataSourceT::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
             )],
             vec![basic_rule, exis_rule],
             Default::default(),
@@ -1256,8 +1253,10 @@ mod test {
                 Default::default(),
                 vec![DataSourceDeclaration::new(
                     c,
-                    [PrimitiveType::Any].into_iter().collect(),
-                    DataSource::csv_file("").unwrap(),
+                    DataSourceT::DsvFile(DsvFile::csv_file(
+                        "",
+                        [PrimitiveType::Any].into_iter().collect(),
+                    )),
                 )],
                 vec![basic_rule, exis_rule],
                 Default::default(),
@@ -1285,8 +1284,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 b.clone(),
-                TupleConstraint::from_arity(1),
-                DataSource::csv_file("").unwrap(),
+                DataSourceT::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
             )],
             vec![basic_rule, exis_rule],
             Default::default(),
@@ -1324,8 +1322,7 @@ mod test {
             Default::default(),
             vec![DataSourceDeclaration::new(
                 r.clone(),
-                TupleConstraint::from_arity(2),
-                DataSource::csv_file("").unwrap(),
+                DataSourceT::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(2))),
             )],
             vec![basic_rule, exis_rule],
             Default::default(),

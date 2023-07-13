@@ -1,10 +1,11 @@
 import unittest
+import tempfile
 import csv
 import os
 import math
 from os.path import dirname, exists, abspath, isfile
 
-from nmo_python import load_file, NemoEngine
+from nmo_python import load_file, NemoEngine, NemoOutputManager
 
 
 def stringify(value):
@@ -29,27 +30,36 @@ def generate_test(file):
         engine.reason()
 
         for relation in program.output_predicates():
-            results_file_name = os.path.join(program_name, f"{relation}.csv")
-            if not exists(results_file_name):
+            expected_results_file_name = \
+                    os.path.join(program_name, f"{relation}.csv")
+
+            if not exists(expected_results_file_name):
                 continue
 
-            with open(results_file_name) as results_file:
-                expected = list(csv.reader(results_file))
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                output_manager = NemoOutputManager(tmp_dir)
+                engine.write_result(f"{relation}", output_manager)
 
-                for result in engine.result(relation):
-                    result = [stringify(v) for v in result]
+                with open(os.path.join(tmp_dir, f"{relation}.csv")) \
+                        as results_file:
+                    results = list(csv.reader(results_file))
 
-                    self.assertTrue(
-                        result in expected,
-                        f"unexpected {result} in {relation}",
-                    )
+                    with open(expected_results_file_name) \
+                            as expected_results_file:
+                        expected = list(csv.reader(expected_results_file))
 
-                    expected.remove(result)
+                        for result in results:
+                            self.assertTrue(
+                                result in expected,
+                                f"unexpected {result} in {relation}",
+                            )
 
-                self.assertTrue(
-                    len(expected) == 0,
-                    f"missing results in {relation}: {expected}",
-                )
+                            expected.remove(result)
+
+                        self.assertTrue(
+                            len(expected) == 0,
+                            f"missing results in {relation}: {expected}",
+                        )
 
     return test_name, classmethod(run_test)
 

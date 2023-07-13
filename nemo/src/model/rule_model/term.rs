@@ -3,10 +3,7 @@ use std::path::PathBuf;
 use nemo_physical::datatypes::Double;
 use sanitise_file_name::{sanitise_with_options, Options};
 
-use crate::{
-    io::formats::rdf_triples::{XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER},
-    model::TypeConstraint,
-};
+use crate::model::{types::primitive_logical_value::LOGICAL_NULL_PREFIX, TypeConstraint};
 
 /// An identifier for, e.g., a Term or a Predicate.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
@@ -118,10 +115,23 @@ pub enum Term {
 impl std::fmt::Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Term::Constant(term) => write!(f, "{term}"),
+            Term::Constant(Identifier(s)) => {
+                // Nulls on logical level start with __Null# and shall be wrapped in angle brackets
+                // blank nodes and anything that starts with an ascii letter (like bare names)
+                // should not be wrapped in angle brackets
+                if !s.starts_with(LOGICAL_NULL_PREFIX)
+                    && s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                {
+                    write!(f, "{s}")
+                }
+                // everything else (including nulls) shall be wrapped in angle_brackets
+                else {
+                    write!(f, "<{s}>")
+                }
+            }
             Term::Variable(term) => write!(f, "{term}"),
             Term::NumericLiteral(term) => write!(f, "{term}"),
-            Term::StringLiteral(term) => write!(f, "{term}"),
+            Term::StringLiteral(term) => write!(f, "\"{term}\""),
             Term::RdfLiteral(term) => write!(f, "{term}"),
         }
     }
@@ -148,25 +158,12 @@ pub enum NumericLiteral {
     Double(Double),
 }
 
-impl NumericLiteral {
-    /// Converts to an RDF literal lexical representation suitable for, e.g., N-Triples.
-    pub fn into_rdf_term_literal(self) -> String {
-        match self {
-            NumericLiteral::Integer(value) => format!(r#""{value}"^^{XSD_INTEGER}"#).to_string(),
-            NumericLiteral::Decimal(whole, fraction) => {
-                format!(r#""{whole}.{fraction}"^^{XSD_DECIMAL}"#).to_string()
-            }
-            NumericLiteral::Double(value) => format!(r#""{value}"^^{XSD_DOUBLE}"#).to_string(),
-        }
-    }
-}
-
 impl std::fmt::Display for NumericLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             NumericLiteral::Integer(value) => write!(f, "{value}"),
             NumericLiteral::Decimal(left, right) => write!(f, "{left}.{right}"),
-            NumericLiteral::Double(value) => write!(f, "{value}"),
+            NumericLiteral::Double(value) => write!(f, "{:E}", f64::from(*value)),
         }
     }
 }
@@ -194,7 +191,7 @@ impl std::fmt::Display for RdfLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RdfLiteral::LanguageString { value, tag } => write!(f, "\"{value}\"@{tag}"),
-            RdfLiteral::DatatypeValue { value, datatype } => write!(f, "\"{value}\"^^{datatype}"),
+            RdfLiteral::DatatypeValue { value, datatype } => write!(f, "\"{value}\"^^<{datatype}>"),
         }
     }
 }

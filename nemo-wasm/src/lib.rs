@@ -9,8 +9,12 @@ use nemo::execution::ExecutionEngine;
 
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
+use nemo::model::types::primitive_logical_value::PrimitiveLogicalValueT;
+use nemo::model::DataSource;
 use nemo::model::DataSourceDeclaration;
-use nemo_physical::datatypes::DataValueT;
+use nemo::model::NumericLiteral;
+use nemo::model::Term;
+use nemo_physical::datatypes::Double;
 use nemo_physical::table_reader::Resource;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsCast;
@@ -160,7 +164,7 @@ impl NemoEngine {
 }
 
 #[wasm_bindgen]
-pub struct NemoResults(Box<dyn Iterator<Item = Vec<DataValueT>> + Send>);
+pub struct NemoResults(Box<dyn Iterator<Item = Vec<PrimitiveLogicalValueT>> + Send>);
 
 #[wasm_bindgen]
 pub struct NemoResultsIteratorNext {
@@ -180,16 +184,21 @@ impl NemoResults {
             let array: Array = next
                 .into_iter()
                 .map(|v| match v {
-                    DataValueT::String(s) => JsValue::from(s),
-                    DataValueT::U32(n) => JsValue::from(n),
-                    DataValueT::U64(n) => JsValue::from(n),
-                    DataValueT::I64(n) => JsValue::from(n),
-                    DataValueT::Float(n) => {
-                        JsValue::from(<nemo::datatypes::Float as Into<f32>>::into(n))
-                    }
-                    DataValueT::Double(n) => {
-                        JsValue::from(<nemo::datatypes::Double as Into<f64>>::into(n))
-                    }
+                    PrimitiveLogicalValueT::Any(rdf) => match rdf {
+                        Term::Variable(_) => panic!("Variables should not occur as results!"),
+                        Term::Constant(c) => JsValue::from(c.to_string()),
+                        Term::NumericLiteral(NumericLiteral::Integer(i)) => JsValue::from(i),
+                        Term::NumericLiteral(NumericLiteral::Double(d)) => {
+                            JsValue::from(f64::from(d))
+                        }
+                        // currently we pack decimals into strings, maybe this should change
+                        Term::NumericLiteral(_) => JsValue::from(rdf.to_string()),
+                        Term::StringLiteral(s) => JsValue::from(s),
+                        Term::RdfLiteral(lit) => JsValue::from(lit.to_string()),
+                    },
+                    PrimitiveLogicalValueT::String(s) => JsValue::from(String::from(s)),
+                    PrimitiveLogicalValueT::Integer(i) => JsValue::from(i64::from(i)),
+                    PrimitiveLogicalValueT::Float64(d) => JsValue::from(f64::from(Double::from(d))),
                 })
                 .collect();
 

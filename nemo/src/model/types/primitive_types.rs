@@ -1,26 +1,28 @@
-//! This module defines logical types.
-
 use std::fmt::Display;
 use std::str::FromStr;
 
 use crate::builder_proxy::{
-    LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxy, LogicalFloat64ColumnBuilderProxy,
+    LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxyT, LogicalFloat64ColumnBuilderProxy,
     LogicalIntegerColumnBuilderProxy, LogicalStringColumnBuilderProxy,
 };
 use crate::io::parser::ParseError;
 use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
-use nemo_physical::datatypes::{DataTypeName, DataValueT, Double};
+use nemo_physical::datatypes::data_value::DataValueIteratorT;
+use nemo_physical::datatypes::{DataTypeName, DataValueT};
 
-use crate::model::{Identifier, NestedType, NumericLiteral, RdfLiteral, Term};
-
-use super::TypeError;
+use super::error::InvalidRuleTermConversion;
+use super::primitive_logical_value::{
+    AnyOutputMapper, DefaultSerializedIterator, Float64OutputMapper, IntegerOutputMapper,
+    PrimitiveLogicalValueIteratorT, StringOutputMapper,
+};
+use crate::model::{NestedType, Term};
 
 macro_rules! count {
     () => (0usize);
     ( $x:tt $($xs:tt)* ) => (1usize + count!($($xs)*));
 }
 
-macro_rules! generate_primitive_type_enum {
+macro_rules! generate_logical_type_enum {
     ($(($variant_name:ident, $string_repr: literal)),+) => {
         /// An enum capturing the logical type names and funtionality related to parsing and translating into and from physical types
         #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -63,7 +65,7 @@ macro_rules! generate_primitive_type_enum {
     };
 }
 
-generate_primitive_type_enum!(
+generate_logical_type_enum!(
     (Any, "any"),
     (String, "string"),
     (Integer, "integer"),
@@ -127,102 +129,17 @@ impl TryFrom<NestedType> for PrimitiveType {
     }
 }
 
-// TODO: probably put this closer to the parser and also have a default prefix for xsd:
-const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
-const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
-const XSD_DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
-const XSD_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
-
 impl PrimitiveType {
     /// Convert a given ground term to a DataValueT fitting the current logical type
-    pub fn ground_term_to_data_value_t(&self, gt: Term) -> Result<DataValueT, TypeError> {
+    pub fn ground_term_to_data_value_t(
+        &self,
+        gt: Term,
+    ) -> Result<DataValueT, InvalidRuleTermConversion> {
         let result = match self {
-            Self::Any => {
-                match gt {
-                    Term::Variable(_) => {
-                        panic!("Expecting ground term for conversion to DataValueT")
-                    }
-                    Term::Constant(Identifier(s)) => {
-                        if s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
-                            DataValueT::String(s)
-                        } else {
-                            DataValueT::String(format!("<{s}>"))
-                        }
-                    }
-                    // TODO: maybe implement display on numeric literal instead?
-                    Term::NumericLiteral(NumericLiteral::Integer(i)) => {
-                        DataValueT::String(format!("\"{i}\"^^<{XSD_INTEGER}>"))
-                    }
-                    Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
-                        DataValueT::String(format!("\"{a}.{b}\"^^<{XSD_DECIMAL}>"))
-                    }
-                    Term::NumericLiteral(NumericLiteral::Double(d)) => {
-                        DataValueT::String(format!("\"{d}\"^^<{XSD_DOUBLE}>"))
-                    }
-                    Term::StringLiteral(s) => DataValueT::String(format!("\"{s}\"")),
-                    Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
-                        DataValueT::String(format!("\"{value}\"@{tag}"))
-                    }
-                    Term::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
-                        match datatype.as_ref() {
-                            XSD_STRING => DataValueT::String(format!("\"{value}\"")),
-                            _ => DataValueT::String(format!("\"{value}\"^^<{datatype}>")),
-                        }
-                    }
-                }
-            }
-            Self::String => match gt {
-                Term::StringLiteral(s) => DataValueT::String(format!("\"{s}\"")),
-                Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
-                    DataValueT::String(format!("\"{value}\"@{tag}"))
-                }
-                Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                    ref value,
-                    ref datatype,
-                }) => match datatype.as_str() {
-                    XSD_STRING => DataValueT::String(format!("\"{value}\"")),
-                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-                },
-                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-            },
-            Self::Integer => match gt {
-                Term::NumericLiteral(NumericLiteral::Integer(i)) => DataValueT::I64(i),
-                Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                    ref value,
-                    ref datatype,
-                }) => match datatype.as_str() {
-                    XSD_INTEGER => DataValueT::I64(
-                        value
-                            .parse()
-                            .map_err(|_err| TypeError::InvalidRuleTermConversion(gt, *self))?,
-                    ),
-                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-                },
-                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-            },
-            Self::Float64 => match gt {
-                Term::NumericLiteral(NumericLiteral::Double(d)) => DataValueT::Double(d),
-                Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
-                    DataValueT::Double(Double::from_number(format!("{a}.{b}").parse().unwrap()))
-                }
-                Term::NumericLiteral(NumericLiteral::Integer(a)) => {
-                    DataValueT::Double(Double::from_number(a as f64))
-                }
-                Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                    ref value,
-                    ref datatype,
-                }) => match datatype.as_str() {
-                    XSD_DOUBLE => DataValueT::Double(
-                        value
-                            .parse()
-                            .ok()
-                            .and_then(|d| Double::new(d).ok())
-                            .ok_or(TypeError::InvalidRuleTermConversion(gt, *self))?,
-                    ),
-                    _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-                },
-                _ => return Err(TypeError::InvalidRuleTermConversion(gt, *self)),
-            },
+            Self::Any => DataValueT::String(gt.try_into()?),
+            Self::String => DataValueT::String(gt.try_into()?),
+            Self::Integer => DataValueT::I64(gt.try_into()?),
+            Self::Float64 => DataValueT::Double(gt.try_into()?),
         };
 
         Ok(result)
@@ -242,12 +159,55 @@ impl PrimitiveType {
     pub fn wrap_physical_column_builder<'a: 'b, 'b>(
         self,
         physical: &'b mut PhysicalBuilderProxyEnum<'a>,
-    ) -> Box<dyn LogicalColumnBuilderProxy<'a, 'b> + 'b> {
+    ) -> LogicalColumnBuilderProxyT<'a, 'b> {
         match self {
-            Self::Any => Box::new(LogicalAnyColumnBuilderProxy::new(physical)),
-            Self::String => Box::new(LogicalStringColumnBuilderProxy::new(physical)),
-            Self::Integer => Box::new(LogicalIntegerColumnBuilderProxy::new(physical)),
-            Self::Float64 => Box::new(LogicalFloat64ColumnBuilderProxy::new(physical)),
+            Self::Any => {
+                LogicalColumnBuilderProxyT::Any(LogicalAnyColumnBuilderProxy::new(physical))
+            }
+            Self::String => {
+                LogicalColumnBuilderProxyT::String(LogicalStringColumnBuilderProxy::new(physical))
+            }
+            Self::Integer => {
+                LogicalColumnBuilderProxyT::Integer(LogicalIntegerColumnBuilderProxy::new(physical))
+            }
+            Self::Float64 => {
+                LogicalColumnBuilderProxyT::Float64(LogicalFloat64ColumnBuilderProxy::new(physical))
+            }
+        }
+    }
+
+    /// Convert physical data value iterator into iterator over logical types
+    pub fn primitive_logical_value_iterator<'a>(
+        &self,
+        physical_iter: DataValueIteratorT<'a>,
+    ) -> PrimitiveLogicalValueIteratorT<'a> {
+        match self {
+            Self::Any => {
+                PrimitiveLogicalValueIteratorT::Any(AnyOutputMapper::new(physical_iter).into())
+            }
+            Self::String => PrimitiveLogicalValueIteratorT::String(
+                StringOutputMapper::new(physical_iter).into(),
+            ),
+            Self::Integer => PrimitiveLogicalValueIteratorT::Integer(
+                IntegerOutputMapper::new(physical_iter).into(),
+            ),
+            Self::Float64 => PrimitiveLogicalValueIteratorT::Float64(
+                Float64OutputMapper::new(physical_iter).into(),
+            ),
+        }
+    }
+
+    /// Convert physical data value iterator into iterator over logical types directly transformed
+    /// to their string representation to be able to take some shortcuts when performing this mapping
+    pub fn serialize_output<'a>(
+        &self,
+        physical_iter: DataValueIteratorT<'a>,
+    ) -> DefaultSerializedIterator<'a> {
+        match self {
+            Self::Any => AnyOutputMapper::new(physical_iter).into(),
+            Self::String => StringOutputMapper::new(physical_iter).into(),
+            Self::Integer => IntegerOutputMapper::new(physical_iter).into(),
+            Self::Float64 => Float64OutputMapper::new(physical_iter).into(),
         }
     }
 }

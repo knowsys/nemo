@@ -1,9 +1,10 @@
 use std::{collections::HashSet, fs::read_to_string};
 
 use nemo::{
-    datatypes::{DataValueT, Double, Float},
+    datatypes::Double,
     execution::ExecutionEngine,
     io::{resource_providers::ResourceProviders, OutputFileManager, RecordWriter},
+    model::{types::primitive_logical_value::PrimitiveLogicalValueT, NumericLiteral, Term},
 };
 
 use pyo3::{create_exception, prelude::*};
@@ -71,7 +72,7 @@ impl NemoOutputManager {
 }
 
 #[pyclass]
-struct NemoResults(Box<dyn Iterator<Item = Vec<DataValueT>> + Send>);
+struct NemoResults(Box<dyn Iterator<Item = Vec<PrimitiveLogicalValueT>> + Send>);
 
 #[pymethods]
 impl NemoResults {
@@ -85,12 +86,23 @@ impl NemoResults {
         Some(
             next.into_iter()
                 .map(|v| match v {
-                    DataValueT::String(s) => s.into_py(slf.py()),
-                    DataValueT::U32(n) => n.into_py(slf.py()),
-                    DataValueT::U64(n) => n.into_py(slf.py()),
-                    DataValueT::I64(n) => n.into_py(slf.py()),
-                    DataValueT::Float(n) => (<Float as Into<f32>>::into(n)).into_py(slf.py()),
-                    DataValueT::Double(n) => (<Double as Into<f64>>::into(n)).into_py(slf.py()),
+                    PrimitiveLogicalValueT::Any(rdf) => match rdf {
+                        Term::Variable(_) => panic!("Variables should not occur as results!"),
+                        Term::Constant(c) => c.to_string().into_py(slf.py()),
+                        Term::NumericLiteral(NumericLiteral::Integer(i)) => i.into_py(slf.py()),
+                        Term::NumericLiteral(NumericLiteral::Double(d)) => {
+                            f64::from(d).into_py(slf.py())
+                        }
+                        // currently we pack decimals into strings, maybe this should change
+                        Term::NumericLiteral(_) => rdf.to_string().into_py(slf.py()),
+                        Term::StringLiteral(s) => s.into_py(slf.py()),
+                        Term::RdfLiteral(lit) => lit.to_string().into_py(slf.py()),
+                    },
+                    PrimitiveLogicalValueT::String(s) => String::from(s).into_py(slf.py()),
+                    PrimitiveLogicalValueT::Integer(i) => i64::from(i).into_py(slf.py()),
+                    PrimitiveLogicalValueT::Float64(d) => {
+                        f64::from(Double::from(d)).into_py(slf.py())
+                    }
                 })
                 .collect(),
         )

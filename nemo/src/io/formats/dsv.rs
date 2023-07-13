@@ -16,11 +16,16 @@
 //! ## Logical layer
 //! ```
 //! # use nemo_physical::table_reader::TableReader;
-//! # use nemo::{model::PrimitiveType, io::{resource_providers::ResourceProviders, formats::DSVReader}};
+//! # use nemo::{model::{DsvFile, PrimitiveType}, io::{resource_providers::ResourceProviders, formats::DSVReader}};
 //! # let file_path = String::from("../resources/doc/examples/city_population.csv");
-//! let csv_reader = DSVReader::csv(
+//! let csv_reader = DSVReader::dsv(
 //!     ResourceProviders::default(),
-//!     file_path,
+//!     &DsvFile::csv_file(
+//!         &file_path,
+//!         [PrimitiveType::Any, PrimitiveType::Integer]
+//!             .into_iter()
+//!             .collect(),
+//!     ),
 //!     vec![
 //!         PrimitiveType::Any,
 //!         PrimitiveType::Integer,
@@ -38,7 +43,7 @@
 //! ```
 //! # use nemo_physical::table_reader::TableReader;
 //! #
-//! # use nemo::{model::PrimitiveType, io::{resource_providers::ResourceProviders, formats::DSVReader}};
+//! # use nemo::{model::{DsvFile, PrimitiveType}, io::{resource_providers::ResourceProviders, formats::DSVReader}};
 //! # use std::cell::RefCell;
 //! # use nemo_physical::builder_proxy::{
 //! #    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
@@ -49,9 +54,14 @@
 //! # fn main() {
 //! # let file_path = String::from("resources/doc/examples/city_population.csv");
 //! #
-//! # let csv_reader = DSVReader::csv(
+//! # let csv_reader = DSVReader::dsv(
 //! #     ResourceProviders::default(),
-//! #     file_path,
+//! #     &DsvFile::csv_file(
+//! #         &file_path,
+//! #         [PrimitiveType::Any, PrimitiveType::Integer]
+//! #             .into_iter()
+//! #             .collect(),
+//! #     ),
 //! #     vec![
 //! #         PrimitiveType::Any,
 //! #         PrimitiveType::Integer,
@@ -73,14 +83,16 @@ use std::io::Read;
 
 use csv::{Reader, ReaderBuilder};
 
-use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
+use nemo_physical::builder_proxy::{ColumnBuilderProxy, PhysicalBuilderProxyEnum};
 use nemo_physical::table_reader::{Resource, TableReader};
 
+use crate::model::types::primitive_logical_value::{LogicalFloat64, LogicalInteger, LogicalString};
+use crate::model::{DataSource, DsvFile, TupleConstraint, TypeConstraint};
 use crate::{
-    builder_proxy::LogicalColumnBuilderProxy,
+    builder_proxy::LogicalColumnBuilderProxyT,
     error::{Error, ReadingError},
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    model::PrimitiveType,
+    model::{PrimitiveType, Term},
 };
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
@@ -101,40 +113,23 @@ pub struct DSVReader {
     delimiter: u8,
     escape: u8,
     logical_types: Vec<PrimitiveType>,
+    input_type_constraint: TupleConstraint,
 }
 
 impl DSVReader {
-    /// Instantiate a [DSVReader] for CSV (comma separated values) files
-    pub fn csv(
-        resource_providers: ResourceProviders,
-        resource: Resource,
-        logical_types: Vec<PrimitiveType>,
-    ) -> Self {
-        Self::dsv(resource_providers, resource, b',', logical_types)
-    }
-
-    /// Instantiate a [DSVReader] for TSV (tab separated values) files
-    pub fn tsv(
-        resource_providers: ResourceProviders,
-        resource: Resource,
-        logical_types: Vec<PrimitiveType>,
-    ) -> Self {
-        Self::dsv(resource_providers, resource, b'\t', logical_types)
-    }
-
     /// Instantiate a [DSVReader] for a given delimiter
     pub fn dsv(
         resource_providers: ResourceProviders,
-        resource: Resource,
-        delimiter: u8,
+        dsv_file: &DsvFile,
         logical_types: Vec<PrimitiveType>,
     ) -> Self {
         Self {
             resource_providers,
-            resource,
-            delimiter,
+            resource: dsv_file.resource.clone(),
+            delimiter: dsv_file.delimiter,
             escape: b'\\',
             logical_types,
+            input_type_constraint: dsv_file.input_types(),
         }
     }
 
@@ -155,9 +150,9 @@ impl DSVReader {
 
     /// Actually reads the data from the file and distributes the different fields into the corresponding [ProxyColumnBuilder]
     /// If a field cannot be read or parsed, the line will be ignored
-    fn read_with_reader<'a, 'b, R2>(
+    fn read_with_reader<'a, R2>(
         &self,
-        mut builder: Vec<Box<dyn LogicalColumnBuilderProxy<'a, 'b> + 'b>>,
+        mut builder: Vec<Box<dyn ColumnBuilderProxy<String> + 'a>>,
         dsv_reader: &mut Reader<R2>,
     ) -> Result<(), ReadingError>
     where
@@ -203,12 +198,32 @@ impl DSVReader {
         physical_builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
         dsv_reader: &mut Reader<R>,
     ) -> Result<(), ReadingError> {
-        let logical_builder_proxies: Vec<Box<dyn LogicalColumnBuilderProxy + 'b>> = self
+        macro_rules! into_parser {
+            ($it:ident, $lcbp:ident) => {{
+                let boxed: Box<dyn ColumnBuilderProxy<String>> = match $it {
+                    TypeConstraint::Exact(PrimitiveType::Any) | TypeConstraint::AtLeast(PrimitiveType::Any) => Box::new($lcbp.into_parser::<Term>()),
+                    TypeConstraint::Exact(PrimitiveType::String) | TypeConstraint::AtLeast(PrimitiveType::String) => Box::new($lcbp.into_parser::<LogicalString>()),
+                    TypeConstraint::Exact(PrimitiveType::Integer) | TypeConstraint::AtLeast(PrimitiveType::Integer) => Box::new($lcbp.into_parser::<LogicalInteger>()),
+                    TypeConstraint::Exact(PrimitiveType::Float64) | TypeConstraint::AtLeast(PrimitiveType::Float64) => Box::new($lcbp.into_parser::<LogicalFloat64>()),
+                    TypeConstraint::None => unreachable!("Type constraints for input types are always initialized (with fallbacks)."),
+                    TypeConstraint::Tuple(_) => todo!("We do not support tuples in CSV currently. Should we?"),
+                };
+                boxed
+            }};
+        }
+
+        let logical_builder_proxies: Vec<Box<dyn ColumnBuilderProxy<String> + 'b>> = self
             .logical_types
             .iter()
             .cloned()
+            .zip(self.input_type_constraint.iter().cloned())
             .zip(physical_builder_proxies)
-            .map(|(ty, bp)| ty.wrap_physical_column_builder::<'a, 'b>(bp))
+            .map(|((ty, it), bp)| match ty.wrap_physical_column_builder(bp) {
+                LogicalColumnBuilderProxyT::Any(lcbp) => into_parser!(it, lcbp),
+                LogicalColumnBuilderProxyT::String(lcbp) => into_parser!(it, lcbp),
+                LogicalColumnBuilderProxyT::Integer(lcbp) => into_parser!(it, lcbp),
+                LogicalColumnBuilderProxyT::Float64(lcbp) => into_parser!(it, lcbp),
+            })
             .collect();
 
         self.read_with_reader(logical_builder_proxies, dsv_reader)
@@ -239,7 +254,10 @@ mod test {
     use csv::ReaderBuilder;
     use nemo_physical::{
         builder_proxy::{PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy},
-        datatypes::storage_value::VecT,
+        datatypes::{
+            data_value::{DataValueIteratorT, PhysicalString},
+            storage_value::VecT,
+        },
         dictionary::{Dictionary, PrefixedStringDictionary},
     };
 
@@ -255,9 +273,14 @@ Boston;United States;4628910
             .from_reader(data.as_bytes());
 
         let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
-        let csvreader = DSVReader::csv(
+        let csvreader = DSVReader::dsv(
             ResourceProviders::empty(),
-            "test".into(),
+            &DsvFile::csv_file(
+                "test",
+                [PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]
+                    .into_iter()
+                    .collect(),
+            ),
             vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
         );
         let mut builder = vec![
@@ -283,30 +306,23 @@ Boston;United States;4628910
         assert!(result.is_ok());
         assert_eq!(x.len(), 3);
         assert!(x.iter().all(|vect| vect.len() == 1));
-        assert_eq!(
-            x[0].get(0)
-                .and_then(|dvt| dvt.try_into().ok())
-                .and_then(|u64: u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.get_mut().entry(usize))
-                .unwrap(),
-            "Boston"
-        );
-        assert_eq!(
-            x[1].get(0)
-                .and_then(|dvt| dvt.try_into().ok())
-                .and_then(|u64: u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.get_mut().entry(usize))
-                .unwrap(),
-            "United States"
-        );
-        assert_eq!(
-            x[2].get(0)
-                .and_then(|dvt| dvt.try_into().ok())
-                .and_then(|u64: u64| usize::try_from(u64).ok())
-                .and_then(|usize| dict.get_mut().entry(usize))
-                .unwrap(),
-            r#""4628910"^^<http://www.w3.org/2001/XMLSchema#integer>"#
-        );
+
+        let dvit = DataValueIteratorT::String(Box::new(x.into_iter().map(|vt| {
+            dict.get_mut()
+                .entry(usize::try_from(u64::try_from(vt.get(0).unwrap()).unwrap()).unwrap())
+                .map(PhysicalString::from)
+                .unwrap()
+        })));
+
+        let output_iterator = PrimitiveType::Any.serialize_output(dvit);
+
+        for (value, expected) in output_iterator.zip(vec![
+            "Boston",
+            "United States",
+            r#""4628910"^^<http://www.w3.org/2001/XMLSchema#integer>"#,
+        ]) {
+            assert_eq!(value, expected);
+        }
     }
 
     #[test]
@@ -321,27 +337,27 @@ The next 2 columns are empty;;;789
 "#;
 
         let expected_result = [
-            ("Boston", "United States", r#""Some String""#, 4628910),
-            ("Dresden", "Germany", r#""Another String""#, 1234567),
+            ("Boston", "United States", "Some String", 4628910),
+            ("Dresden", "Germany", "Another String", 1234567),
             (
                 "My Home Town",
                 r#""Some<where >Nice""#,
-                r#""<https://string.parsing.should/not/change#that>""#,
+                "<https://string.parsing.should/not/change#that>",
                 2,
             ),
             (
                 "Trailing Spaces do not belong to the name",
                 "What about spaces in the beginning though",
-                r#""  what happens to spaces in string parsing?  ""#,
+                "  what happens to spaces in string parsing?  ",
                 123,
             ),
             (
                 r#""Do String literals work?""#,
                 r#""Even with datatype annotation?""#,
-                r#"""even string literals should just be piped through"^^<http://www.w3.org/2001/XMLSchema#string>""#,
+                r#""even string literals should just be piped through"^^<http://www.w3.org/2001/XMLSchema#string>"#,
                 456,
             ),
-            ("The next 2 columns are empty", r#""""#, r#""""#, 789),
+            ("The next 2 columns are empty", r#""""#, "", 789),
         ];
 
         let mut rdr = ReaderBuilder::new()
@@ -349,9 +365,19 @@ The next 2 columns are empty;;;789
             .from_reader(data.as_bytes());
 
         let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
-        let csvreader = DSVReader::csv(
+        let csvreader = DSVReader::dsv(
             ResourceProviders::empty(),
-            "test".into(),
+            &DsvFile::csv_file(
+                "test",
+                [
+                    PrimitiveType::Any,
+                    PrimitiveType::Any,
+                    PrimitiveType::String,
+                    PrimitiveType::Integer,
+                ]
+                .into_iter()
+                .collect(),
+            ),
             vec![
                 PrimitiveType::Any,
                 PrimitiveType::Any,
@@ -383,32 +409,49 @@ The next 2 columns are empty;;;789
             unreachable!()
         };
 
-        let col0: Vec<String> = col0_idx
-            .iter()
-            .copied()
-            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
-            .collect();
-        let col1: Vec<String> = col1_idx
-            .iter()
-            .copied()
-            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
-            .collect();
-        let col2: Vec<String> = col2_idx
-            .iter()
-            .copied()
-            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
-            .collect();
+        let col0 = DataValueIteratorT::String(Box::new(
+            col0_idx
+                .iter()
+                .copied()
+                .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .map(PhysicalString::from)
+                .collect::<Vec<_>>()
+                .into_iter(),
+        ));
+        let col1 = DataValueIteratorT::String(Box::new(
+            col1_idx
+                .iter()
+                .copied()
+                .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .map(PhysicalString::from)
+                .collect::<Vec<_>>()
+                .into_iter(),
+        ));
+        let col2 = DataValueIteratorT::String(Box::new(
+            col2_idx
+                .iter()
+                .copied()
+                .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .map(PhysicalString::from)
+                .collect::<Vec<_>>()
+                .into_iter(),
+        ));
+        let col3 = DataValueIteratorT::I64(Box::new(col3.iter().copied()));
 
-        col0.into_iter()
-            .zip(col1)
-            .zip(col2)
-            .zip(col3)
-            .map(|(((c0, c1), c2), c3)| (c0, c1, c2, *c3))
-            .zip(
-                expected_result
-                    .into_iter()
-                    .map(|(e0, e1, e2, e3)| (e0.to_string(), e1.to_string(), e2.to_string(), e3)),
-            )
+        PrimitiveType::Any
+            .serialize_output(col0)
+            .zip(PrimitiveType::Any.serialize_output(col1))
+            .zip(PrimitiveType::String.serialize_output(col2))
+            .zip(PrimitiveType::Integer.serialize_output(col3))
+            .map(|(((c0, c1), c2), c3)| (c0, c1, c2, c3))
+            .zip(expected_result.into_iter().map(|(e0, e1, e2, e3)| {
+                (
+                    e0.to_string(),
+                    e1.to_string(),
+                    e2.to_string(),
+                    e3.to_string(),
+                )
+            }))
             .for_each(|(t1, t2)| assert_eq!(t1, t2));
     }
 
@@ -428,9 +471,21 @@ node03;123;123;13;55;123;invalid
             .from_reader(data.as_bytes());
 
         let dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
-        let csvreader: DSVReader = DSVReader::csv(
+        let csvreader: DSVReader = DSVReader::dsv(
             ResourceProviders::empty(),
-            "test".into(),
+            &DsvFile::csv_file(
+                "test",
+                [
+                    PrimitiveType::Any,
+                    PrimitiveType::Integer,
+                    PrimitiveType::Float64,
+                    PrimitiveType::Float64,
+                    PrimitiveType::Integer,
+                    PrimitiveType::Any,
+                ]
+                .into_iter()
+                .collect(),
+            ),
             vec![
                 PrimitiveType::Any,
                 PrimitiveType::Integer,
@@ -498,9 +553,19 @@ node03;123;123;13;55;123;invalid
             .delimiter(b',')
             .has_headers(false)
             .from_reader(csv.as_bytes());
-        let csvreader = DSVReader::csv(
+        let csvreader = DSVReader::dsv(
             ResourceProviders::empty(),
-            "test".into(),
+            &DsvFile::csv_file(
+                "test",
+                [
+                    PrimitiveType::Integer,
+                    PrimitiveType::Float64,
+                    PrimitiveType::Integer,
+                    PrimitiveType::Float64,
+                ]
+                .into_iter()
+                .collect(),
+            ),
             vec![
                 PrimitiveType::Integer,
                 PrimitiveType::Float64,

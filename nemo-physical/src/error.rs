@@ -1,6 +1,6 @@
 //! Error-handling module for the crate
 
-use std::path::PathBuf;
+use std::{convert::Infallible, path::PathBuf};
 
 use thiserror::Error;
 
@@ -54,6 +54,12 @@ pub enum ReadingError {
     /// Error in Requwest's HTTP handler
     #[error(transparent)]
     HTTPTransfer(#[from] reqwest::Error),
+    /// Error when converting from Rio since we do not support RDF Star
+    #[error("Failed to convert nested RDF triple. We do not support RDF Star.")]
+    RdfStarUnsupported,
+    /// Type conversion error
+    #[error("Failed to convert value {0} to type {1}.")]
+    TypeConversionError(String, String), // Note we cannot access logical types in physical layer
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate
@@ -77,4 +83,10 @@ pub enum Error {
     /// Error that happened while reading a Table
     #[error(transparent)]
     ReadingError(#[from] ReadingError),
+}
+
+impl From<Infallible> for ReadingError {
+    fn from(_value: Infallible) -> Self {
+        unreachable!("Infallible can never occur!")
+    }
 }

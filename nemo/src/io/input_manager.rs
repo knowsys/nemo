@@ -8,7 +8,7 @@ use crate::{
         formats::{DSVReader, RDFTriplesReader},
         resource_providers::ResourceProviders,
     },
-    model::{DataSource, PrimitiveType},
+    model::{DataSourceT, PrimitiveType},
 };
 
 /// Manages everything related to resolving the inputs of a Nemo program.
@@ -25,33 +25,22 @@ impl InputManager {
         Self { resource_providers }
     }
 
-    /// Constructs a [`TableSource`] using the correct readers for a given [`DataSource`]
+    /// Constructs a [`TableSource`] using the correct readers for a given [`DataSourceT`]
     pub fn load_table_source(
         &self,
-        data_source: &DataSource,
+        data_source: &DataSourceT,
         logical_types: Vec<PrimitiveType>,
     ) -> Result<TableSource, Error> {
         match data_source {
-            DataSource::DsvFile {
-                resource,
-                delimiter,
-            } => {
-                let dsv_reader = DSVReader::dsv(
-                    self.resource_providers.clone(),
-                    resource.clone(),
-                    *delimiter,
-                    logical_types,
-                );
+            DataSourceT::DsvFile(dsv_file) => {
+                let dsv_reader =
+                    DSVReader::dsv(self.resource_providers.clone(), dsv_file, logical_types);
                 Ok(TableSource::FileReader(Box::new(dsv_reader)))
             }
-            DataSource::RdfFile { resource, base } => {
-                Ok(TableSource::FileReader(Box::new(RDFTriplesReader::new(
-                    self.resource_providers.clone(),
-                    resource.clone(),
-                    base.clone(),
-                ))))
-            }
-            DataSource::SparqlQuery(_) => {
+            DataSourceT::RdfFile(rdf_file) => Ok(TableSource::FileReader(Box::new(
+                RDFTriplesReader::new(self.resource_providers.clone(), rdf_file, logical_types),
+            ))),
+            DataSourceT::SparqlQuery(_) => {
                 todo!("SPARQL query data sources are not yet implemented")
             }
         }
