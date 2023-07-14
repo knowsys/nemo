@@ -244,6 +244,14 @@ rec {
           test = runCargo "nemo-check-tests" ''
             cargo test
           '';
+
+          python-codestyle =
+            pkgs.runCommandLocal "nemo-check-python-codestyle" {
+              nativeBuildInputs = [pkgs.python3Packages.pycodestyle];
+            } ''
+              mkdir $out
+              pycodestyle ${./nemo-python}
+            '';
         };
 
         devShells.default = pkgs.mkShell {
