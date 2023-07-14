@@ -208,6 +208,10 @@ rec {
             cargo clippy --all-targets
           '';
 
+          doc = runCargo "nemo-check-docs" ''
+            cargo doc --workspace
+          '';
+
           test = runCargo "nemo-check-tests" ''
             cargo test
           '';
