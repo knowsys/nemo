@@ -212,6 +212,10 @@ rec {
             cargo doc --workspace
           '';
 
+          fmt = runCargo "nemo-check-formatting" ''
+            cargo fmt --all -- --check
+          '';
+
           test = runCargo "nemo-check-tests" ''
             cargo test
           '';
