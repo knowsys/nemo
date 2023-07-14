@@ -129,7 +129,9 @@ rec {
               ]);
             buildAndTestSubdir = "nemo-python";
 
-            doCheck = false; # no python tests yet
+            checkPhase = ''
+              PYTHONPATH=''${PYTHONPATH:+''${PYTHONPATH}:}out python3 -m unittest discover -s nemo-python/tests -v
+            '';
           };
 
           nemo-wasm-node = buildWasm "nodejs" {
