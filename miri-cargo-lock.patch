@@ -1,0 +1,361 @@
+From 20f13754d3869efa94fe46be80f28eb2b19dd20c Mon Sep 17 00:00:00 2001
+From: Maximilian Marx <mmarx@wh2.tu-dresden.de>
+Date: Fri, 14 Jul 2023 20:23:02 +0200
+Subject: [PATCH] Add dependencies for miri sysroot
+
+---
+ Cargo.lock      | 127 ++++++++++++++++++++++++++++++++----------------
+ nemo/Cargo.toml |   8 +++
+ 2 files changed, 94 insertions(+), 41 deletions(-)
+
+diff --git a/Cargo.lock b/Cargo.lock
+index 74d6380..05993ff 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -31,21 +31,18 @@ dependencies = [
+ 
+ [[package]]
+ name = "aho-corasick"
+-version = "0.7.20"
++version = "1.0.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "cc936419f96fa211c1b9166887b38e5e40b19958e5b895be7c1f93adec7071ac"
++checksum = "43f6cb1bf222025340178f382c426f13757b2960e89779dfcb319c32542a5a41"
+ dependencies = [
+  "memchr",
+ ]
+ 
+ [[package]]
+-name = "aho-corasick"
+-version = "1.0.2"
++name = "allocator-api2"
++version = "0.2.15"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "43f6cb1bf222025340178f382c426f13757b2960e89779dfcb319c32542a5a41"
+-dependencies = [
+- "memchr",
+-]
++checksum = "56fc6cf8dc8c4158eed8649f9b8b0ea1518eb62b544fe9490d66fa0b349eafe9"
+ 
+ [[package]]
+ name = "android-tzdata"
+@@ -470,9 +467,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "clap"
+-version = "4.3.11"
++version = "4.3.12"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "1640e5cc7fb47dbb8338fd471b105e7ed6c3cb2aeb00c2e067127ffd3764a05d"
++checksum = "3eab9e8ceb9afdade1ab3f0fd8dbce5b1b2f468ad653baf10e771781b2b67b73"
+ dependencies = [
+  "clap_builder",
+  "clap_derive",
+@@ -481,9 +478,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "clap_builder"
+-version = "4.3.11"
++version = "4.3.12"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "98c59138d527eeaf9b53f35a77fcc1fad9d883116070c63d5de1c7dc7b00c72b"
++checksum = "9f2763db829349bf00cfc06251268865ed4363b93a943174f638daf3ecdba2cd"
+ dependencies = [
+  "anstream",
+  "anstyle",
+@@ -494,9 +491,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "clap_derive"
+-version = "4.3.2"
++version = "4.3.12"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "b8cd2b2a819ad6eec39e8f1d6b53001af1e5469f8c177579cdaeb313115b825f"
++checksum = "54a9bb5758fc5dfe728d1019941681eccaf0cf8a4189b692a0ee2f2ecf90a050"
+ dependencies = [
+  "heck",
+  "proc-macro2",
+@@ -539,6 +536,12 @@ dependencies = [
+  "unicode-width",
+ ]
+ 
++[[package]]
++name = "compiler_builtins"
++version = "0.1.95"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "6866e0f3638013234db3c89ead7a14d278354338e7237257407500009012b23f"
++
+ [[package]]
+ name = "console_error_panic_hook"
+ version = "0.1.7"
+@@ -583,7 +586,7 @@ dependencies = [
+  "anes",
+  "cast",
+  "ciborium",
+- "clap 4.3.11",
++ "clap 4.3.12",
+  "criterion-plot",
+  "is-terminal",
+  "itertools",
+@@ -737,6 +740,15 @@ dependencies = [
+  "syn 1.0.109",
+ ]
+ 
++[[package]]
++name = "dlmalloc"
++version = "0.2.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "203540e710bfadb90e5e29930baf5d10270cec1f43ab34f46f78b147b2de715a"
++dependencies = [
++ "libc",
++]
++
+ [[package]]
+ name = "doc-comment"
+ version = "0.3.3"
+@@ -916,6 +928,12 @@ dependencies = [
+  "percent-encoding",
+ ]
+ 
++[[package]]
++name = "fortanix-sgx-abi"
++version = "0.5.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "57cafc2274c10fab234f176b25903ce17e690fca7597090d50880e047a0389c5"
++
+ [[package]]
+ name = "futures"
+ version = "0.3.28"
+@@ -1005,6 +1023,15 @@ dependencies = [
+  "slab",
+ ]
+ 
++[[package]]
++name = "getopts"
++version = "0.2.21"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "14dbbfd5c71d70241ecf9e6f13737f7b5ce823821063188d7e46c41d371eebd5"
++dependencies = [
++ "unicode-width",
++]
++
+ [[package]]
+ name = "getrandom"
+ version = "0.2.10"
+@@ -1032,11 +1059,11 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
+ 
+ [[package]]
+ name = "globset"
+-version = "0.4.10"
++version = "0.4.11"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "029d74589adefde59de1a0c4f4732695c32805624aec7b68d91503d4dba79afc"
++checksum = "1391ab1f92ffcc08911957149833e682aa3fe252b9f45f966d2ef972274c97df"
+ dependencies = [
+- "aho-corasick 0.7.20",
++ "aho-corasick",
+  "bstr",
+  "fnv",
+  "log",
+@@ -1101,6 +1128,16 @@ dependencies = [
+  "rayon",
+ ]
+ 
++[[package]]
++name = "hashbrown"
++version = "0.14.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2c6201b9ff9fd90a5a3bac2e56a830d0caa509576f0e503818ee82c181b3437a"
++dependencies = [
++ "ahash",
++ "allocator-api2",
++]
++
+ [[package]]
+ name = "heck"
+ version = "0.4.1"
+@@ -1118,9 +1155,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "hermit-abi"
+-version = "0.3.2"
++version = "0.3.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "443144c8cdadd93ebf52ddb4056d257f5b52c04d3c804e657d19eb73fc33668b"
++checksum = "fed44880c466736ef9a5c5b5facefb5ed0785676d0c02d612db14e54f0d84286"
+ 
+ [[package]]
+ name = "home"
+@@ -1310,7 +1347,7 @@ version = "1.0.11"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "eae7b9aee968036d54dce06cebaefd919e4472e753296daccd6d344e3e2df0c2"
+ dependencies = [
+- "hermit-abi 0.3.2",
++ "hermit-abi 0.3.1",
+  "libc",
+  "windows-sys",
+ ]
+@@ -1327,8 +1364,8 @@ version = "0.4.9"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "cb0889898416213fab133e1d33a0e5858a48177452750691bde3666d0fdbaf8b"
+ dependencies = [
+- "hermit-abi 0.3.2",
+- "rustix 0.38.3",
++ "hermit-abi 0.3.1",
++ "rustix 0.38.4",
+  "windows-sys",
+ ]
+ 
+@@ -1636,11 +1673,18 @@ dependencies = [
+ name = "nemo"
+ version = "0.3.1-dev"
+ dependencies = [
++ "allocator-api2",
+  "assert_fs",
++ "compiler_builtins",
+  "csv",
++ "dlmalloc",
+  "env_logger 0.10.0",
+  "flate2",
++ "fortanix-sgx-abi",
++ "getopts",
+  "getrandom",
++ "hashbrown 0.14.0",
++ "hermit-abi 0.3.1",
+  "log",
+  "macros",
+  "nemo-physical",
+@@ -1657,6 +1701,7 @@ dependencies = [
+  "rio_api",
+  "rio_turtle",
+  "rio_xml",
++ "rustc-demangle",
+  "sanitise-file-name",
+  "test-log",
+  "thiserror",
+@@ -1683,7 +1728,7 @@ version = "0.3.1-dev"
+ dependencies = [
+  "assert_cmd",
+  "assert_fs",
+- "clap 4.3.11",
++ "clap 4.3.12",
+  "colored",
+  "dir-test",
+  "env_logger 0.10.0",
+@@ -1794,9 +1839,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "num"
+-version = "0.4.0"
++version = "0.4.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "43db66d1170d347f9a065114077f7dccb00c1b9478c89384490a3425279a4606"
++checksum = "b05180d69e3da0e530ba2a1dae5110317e49e3b7f3d41be227dc5f92e49ee7af"
+ dependencies = [
+  "num-bigint",
+  "num-complex",
+@@ -1875,7 +1920,7 @@ version = "1.16.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "4161fcb6d602d4d2081af7c3a45852d875a03dd337a6bfdd6e06407b61342a43"
+ dependencies = [
+- "hermit-abi 0.3.2",
++ "hermit-abi 0.3.1",
+  "libc",
+ ]
+ 
+@@ -2567,21 +2612,21 @@ version = "1.9.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "b2eae68fc220f7cf2532e4494aded17545fce192d59cd996e0fe7887f4ceb575"
+ dependencies = [
+- "aho-corasick 1.0.2",
++ "aho-corasick",
+  "memchr",
+  "regex-automata",
+- "regex-syntax 0.7.3",
++ "regex-syntax 0.7.4",
+ ]
+ 
+ [[package]]
+ name = "regex-automata"
+-version = "0.3.2"
++version = "0.3.3"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "83d3daa6976cffb758ec878f108ba0e062a45b2d6ca3a2cca965338855476caf"
++checksum = "39354c10dd07468c2e73926b23bb9c2caca74c5501e38a35da70406f1d923310"
+ dependencies = [
+- "aho-corasick 1.0.2",
++ "aho-corasick",
+  "memchr",
+- "regex-syntax 0.7.3",
++ "regex-syntax 0.7.4",
+ ]
+ 
+ [[package]]
+@@ -2592,9 +2637,9 @@ checksum = "f162c6dd7b008981e4d40210aca20b4bd0f9b60ca9271061b07f78537722f2e1"
+ 
+ [[package]]
+ name = "regex-syntax"
+-version = "0.7.3"
++version = "0.7.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "2ab07dc67230e4a4718e70fd5c20055a4334b121f1f9db8fe63ef39ce9b8c846"
++checksum = "e5ea92a5b6195c6ef2a0295ea818b312502c6fc94dde986c5553242e18fd4ce2"
+ 
+ [[package]]
+ name = "reqwest"
+@@ -2699,9 +2744,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "rustix"
+-version = "0.38.3"
++version = "0.38.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "ac5ffa1efe7548069688cd7028f32591853cd7b5b756d41bcffd2353e4fc75b4"
++checksum = "0a962918ea88d644592894bc6dc55acc6c0956488adcebbfb6e273506b7fd6e5"
+ dependencies = [
+  "bitflags 2.3.3",
+  "errno 0.3.1",
+@@ -2803,9 +2848,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "serde_json"
+-version = "1.0.100"
++version = "1.0.102"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "0f1e14e89be7aa4c4b78bdbdc9eb5bf8517829a600ae8eaa39a6e1d960b5185c"
++checksum = "b5062a995d481b2308b6064e9af76011f2921c35f97b0468811ed9f6cd91dfed"
+ dependencies = [
+  "itoa",
+  "ryu",
+@@ -2998,9 +3043,9 @@ checksum = "06f6b473c37f9add4cf1df5b4d66a8ef58ab6c895f1a3b3f949cf3e21230140e"
+ 
+ [[package]]
+ name = "target-lexicon"
+-version = "0.12.8"
++version = "0.12.9"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "1b1c7f239eb94671427157bd93b3694320f3668d4e1eff08c7285366fd777fac"
++checksum = "df8e77cb757a61f51b947ec4a7e3646efd825b73561db1c232a8ccb639e611a0"
+ 
+ [[package]]
+ name = "tempfile"
+diff --git a/nemo/Cargo.toml b/nemo/Cargo.toml
+index 2c80b2d..de51bdf 100644
+--- a/nemo/Cargo.toml
++++ b/nemo/Cargo.toml
+@@ -47,3 +47,11 @@ test-log = "0.2"
+ quickcheck = "1"
+ quickcheck_macros = "1"
+ 
++allocator-api2 = "=0.2.15"
++compiler_builtins = "0.1.95"
++dlmalloc = "0.2.4"
++fortanix-sgx-abi = "0.5.0"
++hashbrown = "0.14"
++hermit-abi = "=0.3.1"
++rustc-demangle = "0.1.23"
++getopts = "0.2.21"
+\ No newline at end of file
+-- 
+2.40.1
+
