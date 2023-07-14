@@ -174,9 +174,39 @@ rec {
           default = nemo;
         };
 
-        checks = {
+        checks = let
+          runCargo' = name: env: buildCommand:
+            pkgs.stdenv.mkDerivation ({
+                preferLocalBuild = true;
+                allowSubstitutes = false;
+
+                RUSTFLAGS = "-Dwarnings";
+                RUSTDOCFLAGS = "-Dwarnings";
+
+                src = ./.;
+                cargoDeps = platform.importCargoLock {lockFile = ./Cargo.lock;};
+
+                buildInputs = defaultBuildInputs;
+                nativeBuildInputs = defaultNativeBuildInputs ++ (with platform; [cargoSetupHook pkgs.python3]);
+
+                inherit name;
+
+                buildPhase = ''
+                  runHook preBuild
+                  mkdir $out
+                  ${buildCommand}
+                  runHook postBuild
+                '';
+              }
+              // env);
+          runCargo = name: runCargo' name {};
+        in rec {
           inherit (packages) nemo nemo-python nemo-wasm nemo-wasm-node;
           devShell = devShells.default;
+
+          test = runCargo "nemo-check-tests" ''
+            cargo test
+          '';
         };
 
         devShells.default = pkgs.mkShell {
