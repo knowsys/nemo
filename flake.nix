@@ -35,11 +35,7 @@ rec {
 
       outputsBuilder = channels: let
         pkgs = channels.nixpkgs;
-        toolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
-          toolchain.default.override {
-            extensions = ["rust-src" "miri"];
-            targets = ["wasm32-unknown-unknown"];
-          });
+        toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
         platform = pkgs.makeRustPlatform {
           cargo = toolchain;
           rustc = toolchain;
@@ -193,7 +189,6 @@ rec {
               defaultBuildInputs
               defaultNativeBuildInputs
               [
-                pkgs.rust-analyzer
                 pkgs.cargo-audit
                 pkgs.cargo-license
                 pkgs.cargo-tarpaulin
