@@ -204,6 +204,10 @@ rec {
           inherit (packages) nemo nemo-python nemo-wasm nemo-wasm-node;
           devShell = devShells.default;
 
+          clippy = runCargo "nemo-check-clippy" ''
+            cargo clippy --all-targets
+          '';
+
           test = runCargo "nemo-check-tests" ''
             cargo test
           '';
