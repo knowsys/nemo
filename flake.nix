@@ -174,10 +174,15 @@ rec {
           default = nemo;
         };
 
+        checks = {
+          inherit (packages) nemo nemo-python nemo-wasm nemo-wasm-node;
+        };
+
         devShells.default = pkgs.mkShell {
           NMO_LOG = "debug";
           RUST_LOG = "debug";
           RUST_BACKTRACE = 1;
+          RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
 
           shellHook = ''
             export PATH=''${HOME}/.cargo/bin''${PATH+:''${PATH}}
