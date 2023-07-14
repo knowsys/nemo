@@ -176,6 +176,7 @@ rec {
 
         checks = {
           inherit (packages) nemo nemo-python nemo-wasm nemo-wasm-node;
+          devShell = devShells.default;
         };
 
         devShells.default = pkgs.mkShell {
