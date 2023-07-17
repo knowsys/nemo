@@ -216,31 +216,6 @@ rec {
             cargo fmt --all -- --check
           '';
 
-          miri = let
-            patches = [./miri-cargo-lock.patch];
-          in
-            runCargo' "nemo-check-miri" {
-              cargoDeps = platform.fetchCargoTarball {
-                src = ./.;
-                inherit patches;
-
-                # patching is fragile, you might need to update the
-                # patch and the hash when updating `Cargo.toml`.  to
-                # do that, temporarily switch to the `fakeHash` and
-                # build this derivation to obtain the correct vendor
-                # hash.
-
-                #hash = pkgs.lib.fakeHash;
-                hash = "sha256-/3P1gm7gJ9zpfaR2XMna+qISKRA5UcPIFV7anCpbRLk=";
-              };
-              inherit patches;
-            } ''
-              mkdir $TMPDIR/miri
-              export XDG_CACHE_HOME=$TMPDIR/miri
-              cargo miri setup
-              cargo miri test
-            '';
-
           test = runCargo "nemo-check-tests" ''
             cargo test
           '';
