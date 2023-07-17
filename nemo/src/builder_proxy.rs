@@ -37,11 +37,16 @@ macro_rules! logical_generic_trait_impl {
     };
 }
 
+/// LogicalColumnBuilderProxy Variants for diffent (primitive) logical types
 #[derive(Debug)]
 pub enum LogicalColumnBuilderProxyT<'a, 'b> {
+    /// Any variant
     Any(LogicalAnyColumnBuilderProxy<'a, 'b>),
+    /// String variant
     String(LogicalStringColumnBuilderProxy<'a, 'b>),
+    /// Integer variant
     Integer(LogicalIntegerColumnBuilderProxy<'b>),
+    /// Float64 variant
     Float64(LogicalFloat64ColumnBuilderProxy<'b>),
 }
 
@@ -96,13 +101,14 @@ where
     }
 }
 
-/// [`LogicalColumnBuilderProxy`] to add Any
+/// Logical [`ColumnBuilderProxy`] to add Any
 #[derive(Debug)]
 pub struct LogicalAnyColumnBuilderProxy<'a: 'b, 'b> {
     inner: &'b mut PhysicalStringColumnBuilderProxy<'a>,
 }
 
 impl<'a, 'b> LogicalAnyColumnBuilderProxy<'a, 'b> {
+    /// Create new LogicalAnyColumnBuilderProxy from PhysicalStringColumnBuilderProxy (wrapped in enum)
     pub fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
         match physical_builder_proxy {
             PhysicalBuilderProxyEnum::String(inner) => Self { inner },
@@ -110,6 +116,7 @@ impl<'a, 'b> LogicalAnyColumnBuilderProxy<'a, 'b> {
         }
     }
 
+    /// wrap LogicalAnyColumnBuilderProxy into GenericLogicalParser
     pub fn into_parser<Intermediate>(self) -> GenericLogicalParser<Intermediate, Self>
     where
         Self: ColumnBuilderProxy<Intermediate>,
@@ -132,13 +139,14 @@ where
     }
 }
 
-/// [`LogicalColumnBuilderProxy`] to add String
+/// Logical [`ColumnBuilderProxy`] to add String
 #[derive(Debug)]
 pub struct LogicalStringColumnBuilderProxy<'a: 'b, 'b> {
     inner: &'b mut PhysicalStringColumnBuilderProxy<'a>,
 }
 
 impl<'a, 'b> LogicalStringColumnBuilderProxy<'a, 'b> {
+    /// Create new LogicalStringColumnBuilderProxy from PhysicalStringColumnBuilderProxy (wrapped in enum)
     pub fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
         match physical_builder_proxy {
             PhysicalBuilderProxyEnum::String(inner) => Self { inner },
@@ -146,6 +154,7 @@ impl<'a, 'b> LogicalStringColumnBuilderProxy<'a, 'b> {
         }
     }
 
+    /// wrap LogicalStringColumnBuilderProxy into GenericLogicalParser
     pub fn into_parser<Intermediate>(self) -> GenericLogicalParser<Intermediate, Self>
     where
         Self: ColumnBuilderProxy<Intermediate>,
@@ -167,13 +176,14 @@ where
     }
 }
 
-/// [`LogicalColumnBuilderProxy`] to add Integer
+/// Logical [`ColumnBuilderProxy`] to add Integer
 #[derive(Debug)]
 pub struct LogicalIntegerColumnBuilderProxy<'b> {
     inner: &'b mut PhysicalGenericColumnBuilderProxy<i64>,
 }
 
 impl<'a, 'b> LogicalIntegerColumnBuilderProxy<'b> {
+    /// Create new LogicalIntegerColumnBuilderProxy from PhysicalI64ColumnBuilderProxy (wrapped in enum)
     pub fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
         match physical_builder_proxy {
             PhysicalBuilderProxyEnum::I64(inner) => Self { inner },
@@ -181,6 +191,7 @@ impl<'a, 'b> LogicalIntegerColumnBuilderProxy<'b> {
         }
     }
 
+    /// wrap LogicalIntegerColumnBuilderProxy into GenericLogicalParser
     pub fn into_parser<Intermediate>(self) -> GenericLogicalParser<Intermediate, Self>
     where
         Self: ColumnBuilderProxy<Intermediate>,
@@ -202,13 +213,14 @@ where
     }
 }
 
-/// [`LogicalColumnBuilderProxy`] to add Float64
+/// Logical [`ColumnBuilderProxy`] to add Float64
 #[derive(Debug)]
 pub struct LogicalFloat64ColumnBuilderProxy<'b> {
     inner: &'b mut PhysicalGenericColumnBuilderProxy<Double>,
 }
 
 impl<'a, 'b> LogicalFloat64ColumnBuilderProxy<'b> {
+    /// Create new LogicalFloat64ColumnBuilderProxy from PhysicalDoubleColumnBuilderProxy (wrapped in enum)
     pub fn new(physical_builder_proxy: &'b mut PhysicalBuilderProxyEnum<'a>) -> Self {
         match physical_builder_proxy {
             PhysicalBuilderProxyEnum::Double(inner) => Self { inner },
@@ -216,6 +228,7 @@ impl<'a, 'b> LogicalFloat64ColumnBuilderProxy<'b> {
         }
     }
 
+    /// wrap LogicalFloat64ColumnBuilderProxy into GenericLogicalParser
     pub fn into_parser<Intermediate>(self) -> GenericLogicalParser<Intermediate, Self>
     where
         Self: ColumnBuilderProxy<Intermediate>,
@@ -293,6 +306,7 @@ fn parse_rdf_term_from_string(input: String) -> Term {
     Term::StringLiteral(trimmed.to_string())
 }
 
+/// Generic Struct to extend LogicalColumnBuilderProxies with Parsing functionality
 #[derive(Debug)]
 pub struct GenericLogicalParser<Intermediate, T>
 where
@@ -306,6 +320,7 @@ impl<Intermediate, T> GenericLogicalParser<Intermediate, T>
 where
     T: ColumnBuilderProxy<Intermediate>,
 {
+    /// Create a GenericLogicalParser from its inner (generic) value
     pub fn new(inner: T) -> Self {
         Self {
             inner,
