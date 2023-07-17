@@ -113,7 +113,7 @@ pub enum TableStorage {
 impl TableStorage {
     /// Load table from a given on-disk source
     fn load_from_disk(
-        source: &TableSource,
+        source: TableSource,
         schema: &TableSchema,
         dict: &mut RefCell<Dict>,
     ) -> Result<Trie, ReadingError> {
@@ -175,13 +175,13 @@ impl TableStorage {
             TableStorage::InMemory(_) => {}
             TableStorage::OnDisk(schema, sources) => {
                 let new_trie = if sources.len() == 1 {
-                    Self::load_from_disk(&sources[0], schema, dict)?
+                    Self::load_from_disk(sources.pop().unwrap(), schema, dict)?
                 } else {
                     // If the trie results form multiple sources
                     // we load each source indivdually and then compute the union over all tries
 
                     let mut loaded_tries = Vec::<Trie>::with_capacity(sources.len());
-                    for source in sources {
+                    for source in sources.drain(0..) {
                         loaded_tries.push(Self::load_from_disk(source, schema, dict)?);
                     }
 

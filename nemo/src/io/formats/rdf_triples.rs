@@ -176,7 +176,7 @@ impl RDFTriplesReader {
 
 impl TableReader for RDFTriplesReader {
     fn read_into_builder_proxies<'a: 'b, 'b>(
-        &self,
+        self: Box<Self>,
         builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
     ) -> Result<(), ReadingError> {
         let reader = self

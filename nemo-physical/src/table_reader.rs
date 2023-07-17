@@ -4,7 +4,7 @@
 use crate::{builder_proxy::PhysicalBuilderProxyEnum, error::ReadingError};
 
 /// Resource that can be reference in source declarations in Nemo programs
-/// Resources are resolved using `nemo::io::input_manager::ResourceProviders`
+/// Resources are resolved using `nemo::io::resource_providers::ResourceProviders`
 ///
 /// Resources currently can be either an IRI or a (possibly relative) file path.
 pub type Resource = String;
@@ -20,7 +20,7 @@ pub type Resource = String;
 pub trait TableReader: std::fmt::Debug {
     /// Read the table into multiple [`ColumnBuilderProxy`][crate::builder_proxy::PhysicalColumnBuilderProxy]
     fn read_into_builder_proxies<'a: 'b, 'b>(
-        &self,
+        self: Box<Self>,
         builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
     ) -> Result<(), ReadingError>;
 }

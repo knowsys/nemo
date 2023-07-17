@@ -55,7 +55,7 @@ fn load_trie(
                 .collect();
 
             let csv_reader = DSVReader::dsv(ResourceProviders::default(), dsv_file, logical_types);
-            csv_reader
+            Box::new(csv_reader)
                 .read_into_builder_proxies(&mut builder_proxies)
                 .expect("Should work");
 
