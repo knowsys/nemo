@@ -537,7 +537,8 @@ mod test {
 
     use crate::model::chase_model::{ChaseAtom, ChaseProgram, ChaseRule};
     use crate::model::{
-        DataSourceDeclaration, DataSourceT, DsvFile, Identifier, Term, TupleConstraint, Variable,
+        DataSourceDeclaration, DsvFile, Identifier, NativeDataSource, Term, TupleConstraint,
+        Variable,
     };
     use nemo_physical::management::database::ColumnOrder;
 
@@ -964,35 +965,35 @@ mod test {
             vec![
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[1].1),
                     )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[2].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[2].1),
                     )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[3].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[3].1),
                     )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[4].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[4].1),
                     )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[6].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[6].1),
                     )),
@@ -1322,49 +1323,49 @@ mod test {
             vec![
                 DataSourceDeclaration::new(
                     predicates[1].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[1].1),
                     )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[2].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[2].1),
                     )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[3].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[3].1),
                     )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[4].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[4].1),
                     )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[6].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[6].1),
                     )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[8].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[8].1),
                     )),
                 ),
                 DataSourceDeclaration::new(
                     predicates[10].0.clone(),
-                    DataSourceT::DsvFile(DsvFile::csv_file(
+                    NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
                         TupleConstraint::from_arity(predicates[10].1),
                     )),

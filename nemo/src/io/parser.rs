@@ -445,7 +445,7 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(DataSourceT::DsvFile(DsvFile::csv_file(
+                                    Ok(NativeDataSource::DsvFile(DsvFile::csv_file(
                                         &filename,
                                         tuple_constraint.clone(),
                                     )))
@@ -458,7 +458,7 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(DataSourceT::DsvFile(DsvFile::tsv_file(
+                                    Ok(NativeDataSource::DsvFile(DsvFile::tsv_file(
                                         &filename,
                                         tuple_constraint.clone(),
                                     )))
@@ -471,7 +471,7 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(DataSourceT::RdfFile(RdfFile::new_validated(
+                                    Ok(NativeDataSource::RdfFile(RdfFile::new_validated(
                                         &filename,
                                         self.base().map(String::from),
                                         &predicate,
@@ -494,7 +494,7 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |(endpoint, projection, query)| {
-                                    Ok(DataSourceT::SparqlQuery(SparqlQuery::new_validated(
+                                    Ok(NativeDataSource::SparqlQuery(SparqlQuery::new_validated(
                                         endpoint.name(),
                                         projection.to_string(),
                                         query.to_string(),
@@ -1236,11 +1236,11 @@ mod test {
         let predicate = Identifier(predicate_name.to_string());
         let default_source = DataSourceDeclaration::new(
             predicate.clone(),
-            DataSourceT::DsvFile(DsvFile::csv_file(file, TupleConstraint::from_arity(1))),
+            NativeDataSource::DsvFile(DsvFile::csv_file(file, TupleConstraint::from_arity(1))),
         );
         let any_and_int_source = DataSourceDeclaration::new(
             predicate.clone(),
-            DataSourceT::DsvFile(DsvFile::csv_file(
+            NativeDataSource::DsvFile(DsvFile::csv_file(
                 file,
                 [PrimitiveType::Any, PrimitiveType::Integer]
                     .into_iter()
@@ -1250,7 +1250,7 @@ mod test {
 
         let single_string_source = DataSourceDeclaration::new(
             predicate,
-            DataSourceT::DsvFile(DsvFile::csv_file(
+            NativeDataSource::DsvFile(DsvFile::csv_file(
                 file,
                 [PrimitiveType::String].into_iter().collect(),
             )),

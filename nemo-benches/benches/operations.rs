@@ -24,17 +24,17 @@ use nemo_physical::{
 
 use nemo::{
     io::{formats::DSVReader, resource_providers::ResourceProviders},
-    model::{DataSourceT, DsvFile, PrimitiveType},
+    model::{DsvFile, NativeDataSource, PrimitiveType},
 };
 
 // NOTE: See TableStorage::load_from_disk
 fn load_trie(
-    source: &DataSourceT,
+    source: &NativeDataSource,
     arity: usize,
     dict: &mut RefCell<PrefixedStringDictionary>,
 ) -> Trie {
     match source {
-        DataSourceT::DsvFile(dsv_file) => {
+        NativeDataSource::DsvFile(dsv_file) => {
             // Using fallback solution to treat everything as string for now (storing as u64 internally)
             let datatypeschema =
                 TableSchema::from_vec((0..arity).map(|_| DataTypeName::String).collect());
@@ -88,12 +88,12 @@ pub fn benchmark_join(c: &mut Criterion) {
     let mut dict = RefCell::new(PrefixedStringDictionary::default());
 
     let table_a_arity = 3;
-    let table_a = DataSourceT::DsvFile(DsvFile::csv_file(
+    let table_a = NativeDataSource::DsvFile(DsvFile::csv_file(
         "test-files/bench-data/xe.csv",
         (0..table_a_arity).map(|_| PrimitiveType::Any).collect(),
     ));
     let table_b_arity = 3;
-    let table_b = DataSourceT::DsvFile(DsvFile::csv_file(
+    let table_b = NativeDataSource::DsvFile(DsvFile::csv_file(
         "test-files/bench-data/aux.csv",
         (0..table_b_arity).map(|_| PrimitiveType::Any).collect(),
     ));
@@ -189,12 +189,12 @@ fn benchmark_project(c: &mut Criterion) {
     let mut dict = RefCell::new(PrefixedStringDictionary::default());
 
     let table_a_arity = 3;
-    let table_a = DataSourceT::DsvFile(DsvFile::csv_file(
+    let table_a = NativeDataSource::DsvFile(DsvFile::csv_file(
         "test-files/bench-data/xe.csv",
         (0..table_a_arity).map(|_| PrimitiveType::Any).collect(),
     ));
     let table_b_arity = 3;
-    let table_b = DataSourceT::DsvFile(DsvFile::csv_file(
+    let table_b = NativeDataSource::DsvFile(DsvFile::csv_file(
         "test-files/bench-data/aux.csv",
         (0..table_b_arity).map(|_| PrimitiveType::Any).collect(),
     ));
@@ -296,7 +296,7 @@ fn benchmark_union(c: &mut Criterion) {
         filename += ".csv";
 
         let table_arity = 3;
-        let table_source = DataSourceT::DsvFile(DsvFile::csv_file(
+        let table_source = NativeDataSource::DsvFile(DsvFile::csv_file(
             &filename,
             (0..table_arity).map(|_| PrimitiveType::Any).collect(),
         ));
