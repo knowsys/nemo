@@ -174,6 +174,55 @@ rec {
           default = nemo;
         };
 
+        apps.ci-checks = utils.lib.mkApp {
+          drv = pkgs.writeShellApplication {
+            name = "nemo-run-ci-checks";
+
+            runtimeInputs = pkgs.lib.concatLists [
+              defaultBuildInputs
+              defaultNativeBuildInputs
+              [
+                pkgs.python3
+                pkgs.python3Packages.pycodestyle
+                pkgs.maturin
+                pkgs.wasm-pack
+                self.packages."${pkgs.system}".wasm-bindgen-cli
+              ]
+            ];
+
+            text = ''
+              export RUSTFLAGS"=-Dwarnings";
+              export RUSTDOCFLAGS="-Dwarnings";
+
+              if [[ ! -f "flake.nix" || ! -f "Cargo.toml" || ! -f "rust-toolchain.toml" ]]; then
+                echo "This should be run from the top-level of the nemo source tree."
+                exit 1
+              fi
+
+              cargo test
+              cargo clippy --all-targets
+              cargo fmt --all -- --check
+              cargo doc --workspace
+
+              pushd nemo-python
+                pycodestyle .
+                VENV="$(mktemp -d)"
+                python3 -m venv "''${VENV}"
+                # shellcheck disable=SC1091
+                . "''${VENV}"/bin/activate
+                maturin develop
+                python3 -m unittest discover tests -v
+                deactivate
+                rm -rf "''${VENV}"
+              popd
+
+              wasm-pack build --weak-refs --mode=no-install nemo-wasm
+
+              cargo miri test
+            '';
+          };
+        };
+
         checks = let
           runCargo' = name: env: buildCommand:
             pkgs.stdenv.mkDerivation ({
