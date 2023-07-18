@@ -35,3 +35,11 @@ harness = false
 [[bench]]
 name = "operations"
 harness = false
+
+[[bench]]
+name = "input"
+harness = false
+
+[[bench]]
+name = "output"
+harness = false

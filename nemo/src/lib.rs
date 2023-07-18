@@ -26,7 +26,7 @@ pub mod api;
 pub mod error;
 pub mod io;
 
-mod builder_proxy;
+pub mod builder_proxy;
 
 pub mod execution;
 pub mod model;
