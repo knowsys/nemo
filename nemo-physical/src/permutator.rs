@@ -1,5 +1,7 @@
 //! Holds the [Permutator] struct, which allows one to define a logical permutation of the content of index-based data structures
 
+use bit_set::BitSet;
+
 use crate::{
     columnar::traits::{
         column::{Column, ColumnEnum, ColumnT},
@@ -163,7 +165,7 @@ impl Permutator {
         self.value_at(idx).unwrap_or(idx)
     }
 
-    /// Permutates a given slice of data with the computed sort-order
+    /// Permutes a given slice of data with the computed sort-order
     pub fn permute<T>(&self, data: &[T]) -> Result<Vec<T>, Error>
     where
         T: Clone,
@@ -180,6 +182,50 @@ impl Permutator {
                 .chain((self.offset + self.sort_vec.len())..data.len());
             Ok(x.map(|idx| data[idx].clone()).collect::<Vec<_>>())
         }
+    }
+
+    /// Permutes a given slice of data with the computed sort-order, in-place.
+    pub fn permute_mut<T>(&self, data: &mut [T]) -> Result<(), Error>
+    where
+        T: Copy + Debug,
+    {
+        if data.len() < (self.sort_vec.len() + self.offset) {
+            return Err(Error::PermutationApplyWrongLen(
+                data.len(),
+                self.sort_vec.len(),
+                self.offset,
+            ));
+        }
+
+        let mut visited = BitSet::with_capacity(self.sort_vec.len());
+        for (from, &to) in self
+            .sort_vec
+            .iter()
+            .enumerate()
+            .filter(|(from, to)| from != *to)
+        {
+            if visited.contains(to) {
+                // this is part of a cycle we have already handled.
+                continue;
+            }
+
+            let mut next = Some((from, to));
+
+            // process the whole cycle of the permutation that the
+            // current element is part of.
+            while let Some((from, to)) = next {
+                if visited.contains(to) {
+                    visited.insert(from);
+                    break;
+                }
+
+                next = Some((to, self.sort_vec[to]));
+                data.swap(self.offset + from, self.offset + to);
+                visited.insert(from);
+            }
+        }
+
+        Ok(())
     }
 
     /// Applies the permutator to a given column by using a provided [`ColumnBuilder`].
@@ -468,5 +514,22 @@ mod test {
             .expect("application of sorting should work");
         let column_sort_vec: Vec<u64> = column_sort.iter().collect();
         assert_eq!(column_sort_vec, vec![1, 0, 5, 4, 2, 3, 8, 9, 7, 6]);
+    }
+
+    #[test]
+    fn in_place() {
+        //   0  1   2   3   4   5
+        let order = vec![0, 1, 42, 23, 13, 37];
+        let permutator = Permutator::sort_from_vec(&order);
+        let mut data = (10..20).collect::<Vec<_>>();
+
+        assert!(permutator.permute_mut(&mut data).is_ok());
+        assert_eq!(data, vec![10, 11, 14, 13, 15, 12, 16, 17, 18, 19]);
+
+        let permutator = Permutator::sort_from_vec_with_offset(&order, 4);
+        let mut data = (10..20).collect::<Vec<_>>();
+
+        assert!(permutator.permute_mut(&mut data).is_ok());
+        assert_eq!(data, vec![10, 11, 12, 13, 14, 15, 18, 17, 19, 16]);
     }
 }
