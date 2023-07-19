@@ -215,7 +215,7 @@ impl DataSource for SparqlQuery {
 
 /// An external data source.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DataSourceT {
+pub enum NativeDataSource {
     /// A DSV (delimiter-separated values) resource data source with the given path and delimiter.
     DsvFile(DsvFile),
     /// An RDF file data source with the given path and optional base IRI.
@@ -224,7 +224,7 @@ pub enum DataSourceT {
     SparqlQuery(SparqlQuery),
 }
 
-impl DataSource for DataSourceT {
+impl DataSource for NativeDataSource {
     fn input_types(&self) -> TupleConstraint {
         match self {
             Self::DsvFile(d) => d.input_types(),
@@ -246,12 +246,12 @@ impl DataSource for DataSourceT {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataSourceDeclaration {
     pub(crate) predicate: Identifier,
-    pub(crate) source: DataSourceT,
+    pub(crate) source: NativeDataSource,
 }
 
 impl DataSourceDeclaration {
     /// Construct a new data source declaration.
-    pub(crate) fn new(predicate: Identifier, source: DataSourceT) -> Self {
+    pub(crate) fn new(predicate: Identifier, source: NativeDataSource) -> Self {
         Self { predicate, source }
     }
 }

@@ -232,7 +232,7 @@ impl DSVReader {
 
 impl TableReader for DSVReader {
     fn read_into_builder_proxies<'a: 'b, 'b>(
-        &self,
+        self: Box<Self>,
         physical_builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
     ) -> Result<(), ReadingError> {
         let reader = self
