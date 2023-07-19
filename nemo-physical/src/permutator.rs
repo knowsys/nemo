@@ -518,7 +518,6 @@ mod test {
 
     #[test]
     fn in_place() {
-        //   0  1   2   3   4   5
         let order = vec![0, 1, 42, 23, 13, 37];
         let permutator = Permutator::sort_from_vec(&order);
         let mut data = (10..20).collect::<Vec<_>>();
