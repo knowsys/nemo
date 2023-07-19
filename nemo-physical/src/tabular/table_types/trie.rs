@@ -367,7 +367,7 @@ impl Table for Trie {
                     )),
                 })
                 .collect();
-            drop(cols);
+        drop(cols);
 
         // NOTE: we talk about "condensed" and "uncondensed" in the following
         // "uncondensed" refers to the input version of the column vectors (and their indices), i.e. they have the same length and no duplicates have been removed
