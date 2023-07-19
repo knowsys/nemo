@@ -396,7 +396,7 @@ impl VariableOrderBuilder<'_> {
 
             self.iteration_order_within_rule
                 .get_permutator(remaining_vars_unpermutated.len())
-                .permutate(&remaining_vars_unpermutated)
+                .permute(&remaining_vars_unpermutated)
                 .expect("we are checking the length so everything should work out")
         };
 
@@ -579,7 +579,7 @@ mod test {
             .iter()
             .map(|ord| {
                 ord.get_permutator(5)
-                    .permutate(&test_vec_5)
+                    .permute(&test_vec_5)
                     .expect("the length is correct")
             })
             .collect();
@@ -587,7 +587,7 @@ mod test {
             .iter()
             .map(|ord| {
                 ord.get_permutator(6)
-                    .permutate(&test_vec_6)
+                    .permute(&test_vec_6)
                     .expect("the length is correct")
             })
             .collect();

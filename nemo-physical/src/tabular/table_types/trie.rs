@@ -350,19 +350,19 @@ impl Table for Trie {
         let sorted_cols: Vec<VecT> =
             cols.iter()
                 .map(|col| match col {
-                    VecT::U32(vec) => VecT::U32(permutator.permutate(vec).expect(
+                    VecT::U32(vec) => VecT::U32(permutator.permute(vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
-                    VecT::U64(vec) => VecT::U64(permutator.permutate(vec).expect(
+                    VecT::U64(vec) => VecT::U64(permutator.permute(vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
-                    VecT::I64(vec) => VecT::I64(permutator.permutate(vec).expect(
+                    VecT::I64(vec) => VecT::I64(permutator.permute(vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
-                    VecT::Float(vec) => VecT::Float(permutator.permutate(vec).expect(
+                    VecT::Float(vec) => VecT::Float(permutator.permute(vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
-                    VecT::Double(vec) => VecT::Double(permutator.permutate(vec).expect(
+                    VecT::Double(vec) => VecT::Double(permutator.permute(vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
                 })

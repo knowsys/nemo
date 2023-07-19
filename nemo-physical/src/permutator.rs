@@ -164,7 +164,7 @@ impl Permutator {
     }
 
     /// Permutates a given slice of data with the computed sort-order
-    pub fn permutate<T>(&self, data: &[T]) -> Result<Vec<T>, Error>
+    pub fn permute<T>(&self, data: &[T]) -> Result<Vec<T>, Error>
     where
         T: Clone,
     {
@@ -235,7 +235,7 @@ mod test {
         assert_eq!(
             vector,
             permutator
-                .permutate(data)
+                .permute(data)
                 .expect("Expect that sorting works in this test-case")
         );
     }
@@ -271,7 +271,7 @@ mod test {
         assert_eq!(
             vec_usize,
             permutator
-                .permutate(&vec_u64)
+                .permute(&vec_u64)
                 .expect("Expect that sorting works")
         );
 
@@ -291,13 +291,13 @@ mod test {
         assert_eq!(
             vec![0, 1, 2, 3, 4, 5, 5, 6, 7, 8, 9, 10],
             permutator
-                .permutate(&vec)
+                .permute(&vec)
                 .expect("Expect that sorting works in this test-case")
         );
         assert_eq!(
             vec![11, 2, 4, 5, 7, 1, 6, 10, 8, 9, 3, 0],
             permutator
-                .permutate(&vec2)
+                .permute(&vec2)
                 .expect("Expect that sorting works in this test-case")
         );
     }
@@ -310,7 +310,7 @@ mod test {
         assert_eq!(
             vec![0, 1, 2, 4, 3, 5, 6, 7, 8, 9, 10, 11, 2],
             permutator
-                .permutate(&vec2)
+                .permute(&vec2)
                 .expect("Expect that sorting works in this test-case")
         );
 
@@ -318,7 +318,7 @@ mod test {
         assert_eq!(
             vec![0, 1, 2, 4, 5, 7, 6, 3, 8, 9, 10, 11, 2],
             permutator
-                .permutate(&vec2)
+                .permute(&vec2)
                 .expect("Expect that sorting works in this test-case")
         );
 
@@ -326,7 +326,7 @@ mod test {
         assert_eq!(
             vec![0, 1, 2, 3, 4, 6, 5, 9, 7, 8, 10, 11, 2],
             permutator
-                .permutate(&vec2)
+                .permute(&vec2)
                 .expect("Expect that sorting works in this test-case")
         );
     }
@@ -336,7 +336,7 @@ mod test {
         let vec = vec![10, 5, 1, 9, 2, 3, 5, 4, 7, 8, 6, 0];
         let vec2 = vec![0usize, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 2];
         let permutator = Permutator::sort_from_vec(&vec2);
-        let result = permutator.permutate(&vec);
+        let result = permutator.permute(&vec);
         assert!(result.is_err());
         let err = result.expect_err("Just checked that this is an error");
         match err {
@@ -373,7 +373,7 @@ mod test {
         assert_eq!(
             vec![10, 5, 1, 3, 2, 9, 5, 4, 7, 6, 0, 8],
             permutator
-                .permutate(&checker)
+                .permute(&checker)
                 .expect("Applying permutation should work in this test-case")
         );
     }
@@ -391,7 +391,7 @@ mod test {
 
         let permutator = Permutator::sort_from_column(&column);
         let sort_vec = permutator
-            .permutate(&vec)
+            .permute(&vec)
             .expect("Applying permutation should work in this test-case");
         assert_eq!(sort_vec, vec_cpy);
         true
@@ -427,7 +427,7 @@ mod test {
         assert_eq!(
             vec1_cpy,
             permutator
-                .permutate(&vec1_to_sort)
+                .permute(&vec1_to_sort)
                 .expect("Test case should be sortable")
         );
 
