@@ -54,6 +54,7 @@ macro_rules! physical_generic_trait_impl {
         impl PhysicalColumnBuilderProxy<$type> for PhysicalGenericColumnBuilderProxy<$type> {
             fn finalize(mut self) -> VecT {
                 self.commit();
+                self.vec.shrink_to_fit();
                 $storage(self.vec)
             }
         }
@@ -103,6 +104,7 @@ impl ColumnBuilderProxy<PhysicalString> for PhysicalStringColumnBuilderProxy<'_>
 impl PhysicalColumnBuilderProxy<PhysicalString> for PhysicalStringColumnBuilderProxy<'_> {
     fn finalize(mut self) -> VecT {
         self.commit();
+        self.vec.shrink_to_fit();
         VecT::U64(self.vec)
     }
 }
