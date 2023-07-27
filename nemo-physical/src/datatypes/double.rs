@@ -45,13 +45,15 @@ impl Eq for Double {}
 
 impl PartialOrd for Double {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.0.partial_cmp(&other.0)
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for Double {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
+        self.0
+            .partial_cmp(&other.0)
+            .expect("Comparison can only fail on NaN values which have been forbidden in this type")
     }
 }
 

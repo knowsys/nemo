@@ -3,8 +3,10 @@ use super::{Term, Variable};
 /// Operation for a filter
 #[derive(Debug, Eq, PartialEq, Clone, Copy, PartialOrd, Ord)]
 pub enum FilterOperation {
-    /// Variable es equal than term
+    /// Variable is equal to the term
     Equals,
+    /// Variable is not equal to the term
+    Unequals,
     /// Value of variable is less than the value of the term
     LessThan,
     /// Value of variable is greater than the value of the term
@@ -21,6 +23,7 @@ impl FilterOperation {
     pub fn flip(&self) -> Self {
         match self {
             Self::Equals => Self::Equals,
+            Self::Unequals => Self::Unequals,
             Self::LessThan => Self::GreaterThan,
             Self::GreaterThan => Self::LessThan,
             Self::LessThanEq => Self::GreaterThanEq,

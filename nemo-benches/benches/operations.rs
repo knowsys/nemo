@@ -31,7 +31,7 @@ use nemo::{
 fn load_trie(
     source: &NativeDataSource,
     arity: usize,
-    dict: &mut RefCell<PrefixedStringDictionary>,
+    dict: &RefCell<PrefixedStringDictionary>,
 ) -> Trie {
     match source {
         NativeDataSource::DsvFile(dsv_file) => {
@@ -85,7 +85,7 @@ fn load_trie(
 }
 
 pub fn benchmark_join(c: &mut Criterion) {
-    let mut dict = RefCell::new(PrefixedStringDictionary::default());
+    let dict = RefCell::new(PrefixedStringDictionary::default());
 
     let table_a_arity = 3;
     let table_a = NativeDataSource::DsvFile(DsvFile::csv_file(
@@ -98,8 +98,8 @@ pub fn benchmark_join(c: &mut Criterion) {
         (0..table_b_arity).map(|_| PrimitiveType::Any).collect(),
     ));
 
-    let trie_a = load_trie(&table_a, table_a_arity, &mut dict);
-    let trie_b = load_trie(&table_b, table_b_arity, &mut dict);
+    let trie_a = load_trie(&table_a, table_a_arity, &dict);
+    let trie_b = load_trie(&table_b, table_b_arity, &dict);
 
     let mut group_ours = c.benchmark_group("trie_join");
     group_ours.sample_size(10);
@@ -186,7 +186,7 @@ pub fn benchmark_join(c: &mut Criterion) {
 }
 
 fn benchmark_project(c: &mut Criterion) {
-    let mut dict = RefCell::new(PrefixedStringDictionary::default());
+    let dict = RefCell::new(PrefixedStringDictionary::default());
 
     let table_a_arity = 3;
     let table_a = NativeDataSource::DsvFile(DsvFile::csv_file(
@@ -199,8 +199,8 @@ fn benchmark_project(c: &mut Criterion) {
         (0..table_b_arity).map(|_| PrimitiveType::Any).collect(),
     ));
 
-    let trie_a = load_trie(&table_a, table_a_arity, &mut dict);
-    let trie_b = load_trie(&table_b, table_b_arity, &mut dict);
+    let trie_a = load_trie(&table_a, table_a_arity, &dict);
+    let trie_b = load_trie(&table_b, table_b_arity, &dict);
 
     let join_iter = TrieScanJoin::new(
         vec![
@@ -285,7 +285,7 @@ fn benchmark_union(c: &mut Criterion) {
     const FILE_NAME: &str = "test-files/bench-data/aux-split/aux";
     const NUM_PARTS: usize = 10;
 
-    let mut dict = RefCell::new(PrefixedStringDictionary::default());
+    let dict = RefCell::new(PrefixedStringDictionary::default());
 
     let mut tries = Vec::<Trie>::new();
     let mut frames = Vec::<DataFrame>::new();
@@ -301,7 +301,7 @@ fn benchmark_union(c: &mut Criterion) {
             (0..table_arity).map(|_| PrimitiveType::Any).collect(),
         ));
 
-        tries.push(load_trie(&table_source, table_arity, &mut dict));
+        tries.push(load_trie(&table_source, table_arity, &dict));
 
         let file = File::open(filename).expect("could not open file");
         let mut table_schema = Schema::new();

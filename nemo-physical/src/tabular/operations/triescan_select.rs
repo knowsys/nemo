@@ -185,6 +185,8 @@ pub struct ValueAssignment {
     pub lower_bounds: Vec<FilterBound<DataValueT>>,
     /// List of upper bounds that the column must satisfy.
     pub upper_bounds: Vec<FilterBound<DataValueT>>,
+    /// List of values that the column must avoid.
+    pub avoid_values: Vec<FilterValue<DataValueT>>,
 }
 
 impl<'a> TrieScanRestrictValues<'a> {
@@ -227,37 +229,32 @@ impl<'a> TrieScanRestrictValues<'a> {
             }
         }
 
+        macro_rules! translate_filter_value {
+            ($variant:ident, $filter_value:expr, $dict:expr) => {
+                match $filter_value {
+                    FilterValue::Column(index) => FilterValue::Column(*index),
+                    FilterValue::Constant(constant) => {
+                        if let StorageValueT::$variant(constant_typed) =
+                            constant.to_storage_value_mut($dict)
+                        {
+                            FilterValue::Constant(constant_typed)
+                        } else {
+                            panic!("Expected a column scan of type {}", stringify!($variant));
+                        }
+                    }
+                }
+            };
+        }
+
         macro_rules! translate_filter_bound {
             ($variant:ident, $filter_bound:expr, $dict:expr) => {
                 match $filter_bound {
-                    FilterBound::Inclusive(value) => match value {
-                        FilterValue::Column(index) => {
-                            FilterBound::Inclusive(FilterValue::Column(*index))
-                        }
-                        FilterValue::Constant(constant) => {
-                            if let StorageValueT::$variant(constant_typed) =
-                                constant.to_storage_value_mut($dict)
-                            {
-                                FilterBound::Inclusive(FilterValue::Constant(constant_typed))
-                            } else {
-                                panic!("Expected a column scan of type {}", stringify!($variant));
-                            }
-                        }
-                    },
-                    FilterBound::Exclusive(value) => match value {
-                        FilterValue::Column(index) => {
-                            FilterBound::Exclusive(FilterValue::Column(*index))
-                        }
-                        FilterValue::Constant(constant) => {
-                            if let StorageValueT::$variant(constant_typed) =
-                                constant.to_storage_value_mut($dict)
-                            {
-                                FilterBound::Exclusive(FilterValue::Constant(constant_typed))
-                            } else {
-                                panic!("Expected a column scan of type {}", stringify!($variant));
-                            }
-                        }
-                    },
+                    FilterBound::Inclusive(value) => {
+                        FilterBound::Inclusive(translate_filter_value!($variant, value, $dict))
+                    }
+                    FilterBound::Exclusive(value) => {
+                        FilterBound::Exclusive(translate_filter_value!($variant, value, $dict))
+                    }
                 }
             };
         }
@@ -285,14 +282,24 @@ impl<'a> TrieScanRestrictValues<'a> {
                         .iter()
                         .map(|b| translate_filter_bound!($variant, b, dict))
                         .collect();
+                    let mut avoid_values: Vec<FilterValue<$type>> = assignment
+                        .avoid_values
+                        .iter()
+                        .map(|v| translate_filter_value!($variant, v, dict))
+                        .collect();
 
-                    for bound in lower_bounds.iter_mut().chain(upper_bounds.iter_mut()) {
-                        if let Some(bound_index) = bound.column_index_mut() {
+                    for value in lower_bounds
+                        .iter_mut()
+                        .map(|b| b.value_mut())
+                        .chain(upper_bounds.iter_mut().map(|b| b.value_mut()))
+                        .chain(avoid_values.iter_mut())
+                    {
+                        if let Some(column_index) = value.column_index_mut() {
                             let map_len = column_map.len();
                             let mapped_index =
-                                *column_map.entry(*bound_index).or_insert_with(|| {
+                                *column_map.entry(*column_index).or_insert_with(|| {
                                     let referenced_scan = if let ColumnScanT::$variant(scan) =
-                                        unsafe { &*base_trie.get_scan(*bound_index).unwrap().get() }
+                                        unsafe { &*base_trie.get_scan(*column_index).unwrap().get() }
                                     {
                                         scan
                                     } else {
@@ -307,7 +314,7 @@ impl<'a> TrieScanRestrictValues<'a> {
                                     map_len
                                 });
 
-                            *bound_index = mapped_index;
+                            *column_index = mapped_index;
                         }
                     }
 
@@ -317,6 +324,7 @@ impl<'a> TrieScanRestrictValues<'a> {
                             scans_restriction,
                             lower_bounds,
                             upper_bounds,
+                            avoid_values,
                         ),
                     ));
 
@@ -500,6 +508,7 @@ mod test {
                         upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
                             DataValueT::U64(4),
                         ))],
+                        avoid_values: vec![],
                     },
                 ),
                 (
@@ -511,6 +520,7 @@ mod test {
                         upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
                             DataValueT::U64(7),
                         ))],
+                        avoid_values: vec![],
                     },
                 ),
             ]),
@@ -579,6 +589,7 @@ mod test {
                 ValueAssignment {
                     lower_bounds: vec![],
                     upper_bounds: vec![FilterBound::Exclusive(FilterValue::Column(0))],
+                    avoid_values: vec![],
                 },
             )]),
         );
@@ -601,6 +612,61 @@ mod test {
         assert_eq!(restrict_val_current(&mut restrict_iter), Some(2));
         assert_eq!(restrict_val_next(&mut restrict_iter), Some(4));
         assert_eq!(restrict_val_current(&mut restrict_iter), Some(4));
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.up();
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(8));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(8));
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(5));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(5));
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+    }
+
+    #[test]
+    fn trie_restrict_unequals() {
+        let column_fst = make_column_with_intervals_t(&[1, 5, 8], &[0]);
+        let column_snd = make_column_with_intervals_t(&[5, 2, 5, 7, 5, 8], &[0, 1, 4]);
+
+        let trie = Trie::new(vec![column_fst, column_snd]);
+        let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+
+        let mut dict = Dict::default();
+        let mut restrict_iter = TrieScanRestrictValues::new(
+            &mut dict,
+            trie_iter,
+            &HashMap::from([(
+                1,
+                ValueAssignment {
+                    lower_bounds: vec![],
+                    upper_bounds: vec![],
+                    avoid_values: vec![FilterValue::Column(0)],
+                },
+            )]),
+        );
+
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(1));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(1));
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(5));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(5));
+        assert_eq!(restrict_val_next(&mut restrict_iter), None);
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        restrict_iter.up();
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(5));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(5));
+        restrict_iter.down();
+        assert_eq!(restrict_val_current(&mut restrict_iter), None);
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(2));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(2));
+        assert_eq!(restrict_val_next(&mut restrict_iter), Some(7));
+        assert_eq!(restrict_val_current(&mut restrict_iter), Some(7));
         assert_eq!(restrict_val_next(&mut restrict_iter), None);
         assert_eq!(restrict_val_current(&mut restrict_iter), None);
         restrict_iter.up();

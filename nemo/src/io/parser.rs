@@ -871,6 +871,7 @@ impl<'a> RuleParser<'a> {
                         value(FilterOperation::LessThanEq, token("<=")),
                         value(FilterOperation::LessThan, token("<")),
                         value(FilterOperation::Equals, token("=")),
+                        value(FilterOperation::Unequals, token("!=")),
                         value(FilterOperation::GreaterThanEq, token(">=")),
                         value(FilterOperation::GreaterThan, token(">")),
                     )),
