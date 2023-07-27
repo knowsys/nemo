@@ -6,3 +6,5 @@ y_less_than_eq_five(?X, ?Y) :- data(?X, ?Y), ?Y <= 5 .
 y_equals_nine(?X, ?Y) :- data(?X, ?Y), ?Y = 9 .
 x_greater_than_five(?X, ?Y) :- data(?X, ?Y), ?X > 5 .
 y_greater_than_eq_seven(?X, ?Y) :- data(?X, ?Y), ?Y >= 7 .
+x_unequals_three(?X, ?Y) :- data(?X, ?Y), ?X != 3 .
+y_unequals_five(?X, ?Y) :- data(?X, ?Y), ?Y != 5 .
