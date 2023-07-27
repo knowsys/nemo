@@ -603,6 +603,7 @@ mod test {
                         upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
                             DataValueT::U64(layer_1_equality),
                         ))],
+                        avoid_values: vec![],
                     },
                 ),
                 (
@@ -614,6 +615,7 @@ mod test {
                         upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
                             DataValueT::U64(layer_3_equality),
                         ))],
+                        avoid_values: vec![],
                     },
                 ),
             ]),

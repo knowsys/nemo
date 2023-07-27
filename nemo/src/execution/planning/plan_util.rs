@@ -133,11 +133,12 @@ pub(super) fn compute_filters(
                     .entry(column_idx_value)
                     .or_insert(ValueAssignment::default());
 
-                add_bound(
+                add_restriction(
                     &operation,
                     FilterValue::Column(column_idx_bound),
                     &mut current_assignment.lower_bounds,
                     &mut current_assignment.upper_bounds,
+                    &mut current_assignment.avoid_values,
                 );
             }
             _ => {
@@ -153,11 +154,12 @@ pub(super) fn compute_filters(
                     .entry(column_idx_value)
                     .or_insert(ValueAssignment::default());
 
-                add_bound(
+                add_restriction(
                     &filter.operation,
                     FilterValue::Constant(right_value),
                     &mut current_assignment.lower_bounds,
                     &mut current_assignment.upper_bounds,
+                    &mut current_assignment.avoid_values,
                 );
             }
         }
@@ -178,11 +180,12 @@ pub(super) fn compute_filters(
     (filter_classes, filter_assignments)
 }
 
-fn add_bound(
+fn add_restriction(
     operation: &FilterOperation,
     value: FilterValue<DataValueT>,
     lower_bounds: &mut Vec<FilterBound<DataValueT>>,
     upper_bounds: &mut Vec<FilterBound<DataValueT>>,
+    avoid_values: &mut Vec<FilterValue<DataValueT>>,
 ) {
     match operation {
         FilterOperation::Equals => {
@@ -193,6 +196,7 @@ fn add_bound(
         FilterOperation::GreaterThan => lower_bounds.push(FilterBound::Exclusive(value)),
         FilterOperation::LessThanEq => upper_bounds.push(FilterBound::Inclusive(value)),
         FilterOperation::GreaterThanEq => lower_bounds.push(FilterBound::Inclusive(value)),
+        FilterOperation::Unequals => avoid_values.push(value),
     }
 }
 
