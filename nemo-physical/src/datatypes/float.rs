@@ -51,7 +51,9 @@ impl PartialOrd for Float {
 
 impl Ord for Float {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
+        self.0
+            .partial_cmp(&other.0)
+            .expect("Comparison can only fail on NaN values which have been forbidden in this type")
     }
 }
 
