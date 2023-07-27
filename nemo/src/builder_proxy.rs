@@ -540,6 +540,14 @@ mod test {
             value: "3.33".to_string(),
             datatype: "http://www.w3.org/2001/XMLSchema#double".to_string(),
         });
+        let large_integer_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "9950000000000000000".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#integer".to_string(),
+        });
+        let large_decimal_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "9950000000000000001".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
+        });
 
         let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
 
@@ -612,6 +620,9 @@ mod test {
         any_lbp.add(double_datavalue_literal.clone()).unwrap();
         double_lbp.add(double_datavalue_literal).unwrap();
 
+        any_lbp.add(large_integer_literal).unwrap();
+        any_lbp.add(large_decimal_literal).unwrap();
+
         let VecT::U64(any_result_indices) = phys_enum_for_any.finalize() else {
             unreachable!()
         };
@@ -654,6 +665,8 @@ mod test {
             "DECIMAL:23.0",
             "DECIMAL:-23.0",
             "DOUBLE:3.33",
+            "DATATYPE_VALUE:9950000000000000000^^http://www.w3.org/2001/XMLSchema#integer",
+            "DATATYPE_VALUE:9950000000000000001^^http://www.w3.org/2001/XMLSchema#decimal",
         ].into_iter().map(String::from).collect::<Vec<_>>());
 
         assert_eq!(

@@ -329,6 +329,7 @@ impl TryFrom<Term> for PhysicalString {
 
     fn try_from(term: Term) -> Result<Self, Self::Error> {
         match term {
+            // the first branch is the only one that results in an error
             Term::Variable(_) => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any)),
             Term::Constant(c) => Ok(c.into()),
             Term::NumericLiteral(NumericLiteral::Integer(i)) => Ok(LogicalInteger(i).into()),
@@ -341,33 +342,26 @@ impl TryFrom<Term> for PhysicalString {
             Term::RdfLiteral(RdfLiteral::DatatypeValue {
                 ref value,
                 ref datatype,
-            }) => {
-                match datatype.as_ref() {
-                    XSD_STRING => Ok(LogicalString(value.to_string()).into()),
-                    XSD_INTEGER => Ok(LogicalInteger(value.parse().map_err(|_err| {
-                        InvalidRuleTermConversion::new(term, PrimitiveType::Any)
-                    })?)
-                    .into()),
-                    XSD_DECIMAL => {
-                        let (a, b) = value
-                            .rsplit_once('.')
-                            .and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))
-                            .or_else(|| Some((value.parse().ok()?, 0)))
-                            .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Any))?;
-
-                        Ok(Decimal(a, b).into())
-                    }
-                    XSD_DOUBLE => Ok(LogicalFloat64(
-                        value
-                            .parse()
-                            .ok()
-                            .and_then(|f64| Double::new(f64).ok())
-                            .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Any))?,
-                    )
-                    .into()),
-                    _ => Ok(DatatypeValue(value.to_string(), datatype.to_string()).into()),
-                }
-            }
+            }) => match datatype.as_ref() {
+                XSD_STRING => Ok(LogicalString(value.to_string()).into()),
+                XSD_INTEGER => Ok(value
+                    .parse()
+                    .map(|v| LogicalInteger(v).into())
+                    .unwrap_or(DatatypeValue(value.to_string(), datatype.to_string()).into())),
+                XSD_DECIMAL => Ok(value
+                    .rsplit_once('.')
+                    .and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))
+                    .or_else(|| Some((value.parse().ok()?, 0)))
+                    .map(|(a, b)| Decimal(a, b).into())
+                    .unwrap_or(DatatypeValue(value.to_string(), datatype.to_string()).into())),
+                XSD_DOUBLE => Ok(value
+                    .parse()
+                    .ok()
+                    .and_then(|f64| Double::new(f64).ok())
+                    .map(|d| LogicalFloat64(d).into())
+                    .unwrap_or(DatatypeValue(value.to_string(), datatype.to_string()).into())),
+                _ => Ok(DatatypeValue(value.to_string(), datatype.to_string()).into()),
+            },
         }
     }
 }
@@ -716,6 +710,14 @@ mod test {
             value: "3.33".to_string(),
             datatype: XSD_DOUBLE.to_string(),
         });
+        let large_integer_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "9950000000000000000".to_string(),
+            datatype: XSD_INTEGER.to_string(),
+        });
+        let large_decimal_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "9950000000000000001".to_string(),
+            datatype: XSD_DECIMAL.to_string(),
+        });
 
         let expected_string: PhysicalString = format!("{STRING_PREFIX}my string").into();
         let expected_integer: PhysicalString = format!("{INTEGER_PREFIX}42").into();
@@ -747,6 +749,10 @@ mod test {
             format!("{DECIMAL_PREFIX}-23.0").into();
         let expected_double_datavalue_literal: PhysicalString =
             format!("{DOUBLE_PREFIX}3.33").into();
+        let expected_large_integer_literal: PhysicalString =
+            format!("{DATATYPE_VALUE_PREFIX}9950000000000000000^^{XSD_INTEGER}").into();
+        let expected_large_decimal_literal: PhysicalString =
+            format!("{DATATYPE_VALUE_PREFIX}9950000000000000001^^{XSD_DECIMAL}").into();
 
         assert_eq!(PhysicalString::from(string), expected_string);
         assert_eq!(PhysicalString::from(integer), expected_integer);
@@ -844,6 +850,14 @@ mod test {
         assert_eq!(
             Double::try_from(double_datavalue_literal).unwrap(),
             Double::new(3.33).unwrap()
+        );
+        assert_eq!(
+            PhysicalString::try_from(large_integer_literal).unwrap(),
+            expected_large_integer_literal
+        );
+        assert_eq!(
+            PhysicalString::try_from(large_decimal_literal).unwrap(),
+            expected_large_decimal_literal
         );
     }
 
