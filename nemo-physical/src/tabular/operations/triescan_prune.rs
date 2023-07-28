@@ -89,6 +89,11 @@ impl<'a> TrieScanPruneState<'a> {
         self.input_trie_scan_current_layer += 1;
     }
 
+    /// Returns the current layer of this trie scan
+    pub fn current_layer(&self) -> Option<usize> {
+        self.initialized.then_some(self.external_current_layer)
+    }
+
     /// Moves the input trie to the target layer through `up` and `down`, without advancing this trie scan at all.
     ///
     /// Going upwards will always work (until layer 0).
@@ -497,6 +502,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanPrune<'a> {
 
     fn get_types(&self) -> &Vec<StorageTypeName> {
         &self.target_types
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        unsafe { (*self.state.get()).current_layer() }
     }
 }
 

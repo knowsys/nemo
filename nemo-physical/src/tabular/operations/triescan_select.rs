@@ -161,6 +161,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanSelectEqual<'a> {
     fn get_types(&self) -> &Vec<StorageTypeName> {
         self.base_trie.get_types()
     }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.current_layer
+    }
 }
 
 /// Trie iterator enforcing conditions on the input trie expressed as lower and upper bounds
@@ -380,6 +384,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanRestrictValues<'a> {
 
     fn get_types(&self) -> &Vec<StorageTypeName> {
         self.base_trie.get_types()
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.current_layer
     }
 }
 

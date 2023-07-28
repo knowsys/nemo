@@ -15,9 +15,6 @@ pub struct TrieScanUnion<'a> {
     /// Trie scans for which the join is computed
     trie_scans: Vec<TrieScanEnum<'a>>,
 
-    /// For each trie scan contains its current layer
-    layers: Vec<Option<usize>>,
-
     /// For each layer in the resulting trie, contains a [`ColumnScanUnion`] for the union
     /// of the relevant scans in the sub tries.
     /// Note: Reason for using [`UnsafeCell`] is explained for [`TrieScanJoin`]
@@ -74,11 +71,8 @@ impl<'a> TrieScanUnion<'a> {
             };
         }
 
-        let layers = vec![None; trie_scans.len()];
-
         TrieScanUnion {
             trie_scans,
-            layers,
             union_scans,
             current_layer: None,
         }
@@ -92,10 +86,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
             .expect("calling up only allowed after calling down")
             .checked_sub(1);
 
-        for scan_index in 0..self.layers.len() {
-            if self.layers[scan_index] == self.current_layer {
-                self.trie_scans[scan_index].up();
-                self.layers[scan_index] = up_layer;
+        for trie_scan in &mut self.trie_scans {
+            if trie_scan.current_layer() == self.current_layer {
+                trie_scan.up();
             }
         }
         self.current_layer = up_layer;
@@ -110,8 +103,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
 
         let mut active_scans = Vec::<usize>::new();
 
-        for scan_index in 0..self.layers.len() {
-            if self.layers[scan_index] != previous_layer {
+        for (scan_index, trie_scan) in self.trie_scans.iter_mut().enumerate() {
+            if trie_scan.current_layer() != previous_layer {
                 continue;
             }
 
@@ -122,8 +115,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
             {
                 active_scans.push(scan_index);
 
-                self.trie_scans[scan_index].down();
-                self.layers[scan_index] = self.current_layer;
+                trie_scan.down();
             }
         }
 
@@ -143,6 +135,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
 
     fn get_types(&self) -> &Vec<StorageTypeName> {
         self.trie_scans[0].get_types()
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.current_layer
     }
 }
 

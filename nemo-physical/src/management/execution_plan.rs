@@ -574,7 +574,7 @@ impl ExecutionTree {
 
                 Tree::Node(format!("Append Nulls {num_nulls}"), vec![subtree])
             }
-            ExecutionOperation::Subtract(subnode_main, subnodes_subtract, _) => {
+            ExecutionOperation::Subtract(subnode_main, subnodes_subtract, info) => {
                 let subtree_main = Self::ascii_tree_recursive(subnode_main.clone());
                 let subtrees_subtract: Vec<Tree> = subnodes_subtract
                     .iter()
@@ -582,7 +582,7 @@ impl ExecutionTree {
                     .collect();
 
                 Tree::Node(
-                    String::from("Subtract"),
+                    format!("Subtract {info:?}"),
                     vec![subtree_main, Tree::Node(String::new(), subtrees_subtract)],
                 )
             }
