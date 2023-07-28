@@ -22,11 +22,6 @@ pub struct TrieScanSubtract<'a> {
 
     /// For each [`PartialTrieScan`] in `trie_subtract`, additional information relevant for this scan.
     infos: Vec<SubtractInfo>,
-    /// For each [`PartialTrieScan`] in `trie_subtract`, which layer this trie scan is currently on.
-    subtract_current_layers: Vec<usize>,
-
-    /// Current layer of this scan.
-    current_layer: Option<usize>,
 
     /// List of `ColumnScanSubtract` where every entry represents one level of the resulting trie.
     column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
@@ -167,9 +162,7 @@ impl<'a> TrieScanSubtract<'a> {
         Self {
             trie_main: Box::new(trie_main),
             tries_subtract,
-            current_layer: None,
             infos,
-            subtract_current_layers: vec![0; last_used_layers.len()],
             column_scans,
         }
     }
@@ -177,77 +170,46 @@ impl<'a> TrieScanSubtract<'a> {
 
 impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
     fn up(&mut self) {
-        debug_assert!(self.current_layer.is_some());
-        let current_layer = self.current_layer.unwrap();
-        let previous_layer = current_layer.checked_sub(1);
+        let current_layer = self.current_layer().unwrap();
 
-        if let Some(previous_layer) = previous_layer {
-            let equal_values = self.column_scans[previous_layer].get_mut().equal_values();
+        for (subtract_index, trie_subtract) in self.tries_subtract.iter_mut().enumerate() {
+            if let Some(current_layer_subtract) = trie_subtract.current_layer() {
+                let used_layer = self.infos[subtract_index].used_layers[current_layer_subtract];
 
-            for (subtract_index, trie_subtract) in self.tries_subtract.iter_mut().enumerate() {
-                let subtract_layer = &mut self.subtract_current_layers[subtract_index];
-                if *subtract_layer > 0 {
-                    let equal = equal_values[subtract_index];
-                    let used_layer = self.infos[subtract_index].used_layers[*subtract_layer - 1]
-                        == previous_layer;
-
-                    if equal && used_layer {
-                        trie_subtract.up();
-                        *subtract_layer -= 1;
-                    }
-                }
-
-                if self.infos[subtract_index].used_layers[0] > 0
-                    && previous_layer == self.infos[subtract_index].used_layers[0] - 1
-                {
-                    trie_subtract.up();
-                }
-            }
-        } else {
-            for (subtract_index, trie_subtract) in self.tries_subtract.iter_mut().enumerate() {
-                if self.infos[subtract_index].used_layers[0] == 0 {
+                if current_layer == used_layer {
                     trie_subtract.up();
                 }
             }
         }
 
         self.trie_main.up();
-
-        self.current_layer = previous_layer;
     }
 
     fn down(&mut self) {
-        let next_layer = self.current_layer.map_or(0, |v| v + 1);
+        let next_layer = self.current_layer().map_or(0, |v| v + 1);
         debug_assert!(next_layer < self.get_types().len());
 
         for (subtract_index, trie_subtract) in self.tries_subtract.iter_mut().enumerate() {
-            if next_layer == self.infos[subtract_index].used_layers[0] {
-                trie_subtract.down();
-            }
-        }
+            let next_layer_subtract = trie_subtract.current_layer().map_or(0, |v| v + 1);
 
-        if next_layer > 0 {
-            let current_layer = next_layer - 1;
-            let equal_values = self.column_scans[current_layer]
-                .get_mut()
-                .equal_values()
-                .clone();
+            if let Some(&next_used_layer) = self.infos[subtract_index]
+                .used_layers
+                .get(next_layer_subtract)
+            {
+                if next_layer == next_used_layer {
+                    if next_layer > 0 {
+                        let current_layer = next_layer - 1;
+                        let equal_values =
+                            self.column_scans[current_layer].get_mut().equal_values();
 
-            for (subtract_index, trie_subtract) in self.tries_subtract.iter_mut().enumerate() {
-                let equal = equal_values[subtract_index];
-                let subtract_layer = &mut self.subtract_current_layers[subtract_index];
-                let used_layer =
-                    self.infos[subtract_index].used_layers[*subtract_layer] == current_layer;
+                        if !equal_values[subtract_index] {
+                            continue;
+                        }
+                    }
 
-                if equal && used_layer {
                     trie_subtract.down();
-                    *subtract_layer += 1;
                 }
             }
-
-            self.column_scans[next_layer]
-                .get_mut()
-                .subtract_enable(&equal_values);
         }
 
         self.trie_main.down();
@@ -255,12 +217,12 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
         // The above down call has changed the sub scans of the current layer
         // Hence, we need to reset its state
         self.column_scans[next_layer].get_mut().reset();
-
-        self.current_layer = Some(next_layer);
     }
 
     fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
-        Some(self.column_scans[self.current_layer?].get_mut())
+        let current_layer = self.current_layer()?;
+
+        Some(self.column_scans[current_layer].get_mut())
     }
 
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
@@ -272,7 +234,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
     }
 
     fn current_layer(&self) -> Option<usize> {
-        self.current_layer
+        self.trie_main.current_layer()
     }
 }
 
