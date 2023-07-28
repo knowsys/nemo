@@ -18,7 +18,7 @@ pub struct TrieScanNulls<'a> {
     /// Layer we are currently at in the resulting trie.
     current_layer: Option<usize>,
 
-    /// Types of the resulting trie.
+    /// Types of the resultingtodo!() trie.
     target_types: Vec<StorageTypeName>,
 
     /// [`ColumnScanT`]s which represent each new layer in the resulting trie.
@@ -124,6 +124,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanNulls<'a> {
 
     fn get_types(&self) -> &Vec<StorageTypeName> {
         &self.target_types
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.current_layer
     }
 }
 

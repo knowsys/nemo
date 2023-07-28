@@ -26,6 +26,9 @@ pub trait PartialTrieScan<'a>: Debug {
     /// Return the current position of the scan as a [`ColumnScanT`].
     fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>>;
 
+    /// Return the current layer of this scan.
+    fn current_layer(&self) -> Option<usize>;
+
     /// Return the underlying [`ColumnScanT`] object given an index.
     fn get_scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
 
@@ -93,5 +96,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
 
     fn get_types(&self) -> &Vec<StorageTypeName> {
         forward_to_scan!(self, get_types)
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        forward_to_scan!(self, current_layer)
     }
 }

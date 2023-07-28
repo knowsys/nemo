@@ -270,6 +270,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
     fn get_types(&self) -> &Vec<StorageTypeName> {
         self.trie_main.get_types()
     }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.current_layer
+    }
 }
 
 /// [`PartialTrieScan`] containg all elements from a "left" [`PartialTrieScan`] that are not in the "right" [`PartialTrieScan`]  
@@ -429,6 +433,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanMinus<'a> {
 
     fn get_types(&self) -> &Vec<StorageTypeName> {
         self.trie_left.get_types()
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.layer_left
     }
 }
 

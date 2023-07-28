@@ -319,6 +319,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
     fn get_types(&self) -> &Vec<StorageTypeName> {
         &self.target_types
     }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.current_layer
+    }
 }
 
 #[cfg(test)]
