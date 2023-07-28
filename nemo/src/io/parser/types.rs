@@ -40,13 +40,6 @@ impl LocatedParseError {
     pub fn append(&mut self, other: LocatedParseError) {
         self.context.push(other)
     }
-
-    pub(crate) fn get_last_inner(&self) -> &LocatedParseError {
-        self.context
-            .last()
-            .map(|inner| inner.get_last_inner())
-            .unwrap_or(self)
-    }
 }
 
 fn format_parse_error_context(context: &[LocatedParseError]) -> String {
@@ -232,18 +225,6 @@ pub enum ParseError {
     /// Encountered a prefix declaration after any non-base non-prefix directive.
     #[error("A @prefix declaration must occur before any non-@base non-@prefix declarations.")]
     LatePrefixDeclaration,
-}
-
-impl From<LocatedParseError> for ParseError {
-    fn from(value: LocatedParseError) -> Self {
-        value.source
-    }
-}
-
-impl<'a> From<&'a LocatedParseError> for &'a ParseError {
-    fn from(value: &'a LocatedParseError) -> Self {
-        &value.source
-    }
 }
 
 impl ParseError {

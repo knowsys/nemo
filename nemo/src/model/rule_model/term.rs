@@ -5,18 +5,9 @@ use nemo_physical::error::ReadingError;
 use sanitise_file_name::{sanitise_with_options, Options};
 use thiserror::Error;
 
-use crate::{
-    io::parser::{
-        span_from_str,
-        turtle::{decimal, integer},
-        ParseError,
-    },
-    model::{
-        types::primitive_logical_value::{
-            LogicalString, LOGICAL_NULL_PREFIX,
-        },
-        TypeConstraint,
-    },
+use crate::model::{
+    types::primitive_logical_value::{LogicalString, LOGICAL_NULL_PREFIX},
+    TypeConstraint,
 };
 
 /// XSD type for string
@@ -250,47 +241,48 @@ impl TryFrom<RdfLiteral> for Term {
                 ref datatype,
             } => match datatype.as_ref() {
                 XSD_STRING => Ok(LogicalString::from(value.to_string()).into()),
-                XSD_INTEGER => match integer(span_from_str(value)) {
-                    Ok((remainder, number)) => {
-                        if !remainder.is_empty() {
-                            Err(InvalidRdfLiteral::new(literal))
-                        } else {
-                            Ok(Self::NumericLiteral(number))
-                        }
-                    }
-                    Err(nom::Err::Error(located_parse_error)) => {
-                        let parse_error: &ParseError = located_parse_error.get_last_inner().into();
+                XSD_INTEGER => {
+                    let trimmed = value.strip_prefix(['-', '+']).unwrap_or(value);
 
-                        match parse_error {
-                            ParseError::SyntaxError(_) => Err(InvalidRdfLiteral::new(literal)),
-                            _ => Ok(Self::RdfLiteral(literal)),
-                        }
+                    if !trimmed.chars().all(|c| c.is_ascii_digit()) {
+                        Err(InvalidRdfLiteral::new(literal.clone()))
+                    } else {
+                        Ok(value
+                            .parse()
+                            .map(|v| Self::NumericLiteral(NumericLiteral::Integer(v)))
+                            .unwrap_or(Self::RdfLiteral(literal)))
                     }
-                    _ => Err(InvalidRdfLiteral::new(literal)),
-                },
-                XSD_DECIMAL => match nom::branch::alt((decimal, integer))(span_from_str(value)) {
-                    Ok((remainder, number)) => {
-                        if !remainder.is_empty() {
+                }
+                XSD_DECIMAL => match value.rsplit_once('.') {
+                    Some((a, b)) => {
+                        let trimmed_a = a.strip_prefix(['-', '+']).unwrap_or(a);
+                        let is_valid = trimmed_a.chars().all(|c| c.is_ascii_digit())
+                            && b.chars().all(|c| c.is_ascii_digit());
+
+                        if !is_valid {
                             Err(InvalidRdfLiteral::new(literal.clone()))
                         } else {
-                            match number {
-                                NumericLiteral::Integer(i) => Ok(Self::NumericLiteral(NumericLiteral::Decimal(i, 0))),
-                                NumericLiteral::Decimal(..) => Ok(Self::NumericLiteral(number)),
-                                _ => unreachable!("We only parse as decimal or integer so only the above cases can occur.")
-                            }
+                            Ok(a.parse()
+                                .ok()
+                                .and_then(|a| Some((a, b.parse().ok()?)))
+                                .map(|(a, b)| Self::NumericLiteral(NumericLiteral::Decimal(a, b)))
+                                .unwrap_or(Self::RdfLiteral(literal)))
                         }
                     }
-                    Err(nom::Err::Error(located_parse_error)) => {
-                        let parse_error: &ParseError = located_parse_error.get_last_inner().into();
+                    None => {
+                        let trimmed = value.strip_prefix(['-', '+']).unwrap_or(value);
+                        let is_valid = trimmed.chars().all(|c| c.is_ascii_digit());
 
-                        match parse_error {
-                            ParseError::SyntaxError(_) => {
-                                Err(InvalidRdfLiteral::new(literal.clone()))
-                            }
-                            _ => Ok(Self::RdfLiteral(literal.clone())),
+                        if !is_valid {
+                            Err(InvalidRdfLiteral::new(literal.clone()))
+                        } else {
+                            Ok(value
+                                .parse()
+                                .ok()
+                                .map(|v| Self::NumericLiteral(NumericLiteral::Decimal(v, 0)))
+                                .unwrap_or(Self::RdfLiteral(literal)))
                         }
                     }
-                    _ => Err(InvalidRdfLiteral::new(literal.clone())),
                 },
                 XSD_DOUBLE => Ok(value
                     .parse()
