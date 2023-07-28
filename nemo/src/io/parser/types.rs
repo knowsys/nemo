@@ -84,6 +84,9 @@ pub enum ParseError {
     /// The universal variable does not occur in a positive body literal.
     #[error(r#"The universal variable "{0}" does not occur in a positive body literal."#)]
     UnsafeHeadVariable(String),
+    /// The unsafe variable appears in multiple negative body literals.
+    #[error(r#"The unsafe variable "{0}" appears in multuple negative body literals."#)]
+    UnsafeVariableInMulltipleNegativeLiterals(String),
     /// A variable used in a comparison does not occur in a positive body literal.
     #[error(
         r#"The variable "{0}" used in a comparison does not occur in a positive body literal."#

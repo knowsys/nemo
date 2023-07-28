@@ -51,17 +51,31 @@ impl Rule {
             .iter()
             .cloned()
             .partition(|literal| literal.is_positive());
-        let negative_variables = negative
-            .iter()
-            .flat_map(|literal| literal.universal_variables())
-            .collect::<HashSet<_>>();
         let positive_varibales = positive
             .iter()
             .flat_map(|literal| literal.universal_variables())
-            .collect();
-        let negative_variables = negative_variables
-            .difference(&positive_varibales)
-            .collect::<Vec<_>>();
+            .collect::<HashSet<&Variable>>();
+
+        let mut unsafe_negative_variables = HashSet::<Variable>::new();
+        for negative_literal in negative {
+            let mut current_unsafe = HashSet::<Variable>::new();
+
+            for variable in negative_literal.variables() {
+                if positive_varibales.contains(variable) {
+                    continue;
+                }
+
+                if unsafe_negative_variables.contains(variable) {
+                    return Err(ParseError::UnsafeVariableInMulltipleNegativeLiterals(
+                        variable.name(),
+                    ));
+                }
+
+                current_unsafe.insert(variable.clone());
+            }
+
+            unsafe_negative_variables.extend(current_unsafe)
+        }
 
         // TODO: Implement something that checks whether unsafe negated variables occurs in multiple places
 
@@ -93,8 +107,8 @@ impl Rule {
             .flat_map(|atom| atom.universal_variables())
             .collect::<HashSet<_>>();
 
-        for head_variable in head_universal_variables {
-            if !universal_variables.contains(head_variable) {
+        for head_variable in &head_universal_variables {
+            if !positive_varibales.contains(head_variable) {
                 return Err(ParseError::UnsafeHeadVariable(head_variable.name()));
             }
         }
