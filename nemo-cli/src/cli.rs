@@ -125,4 +125,7 @@ pub struct CliApp {
     /// Display detailed timing information
     #[arg(long = "detailed-timing", default_value = "false")]
     pub detailed_timing: bool,
+    /// Specify directory for input files.
+    #[arg(short = 'I', long = "input-dir")]
+    pub input_directory: Option<PathBuf>,
 }
