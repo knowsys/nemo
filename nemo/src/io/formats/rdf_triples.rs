@@ -282,6 +282,10 @@ mod test {
                           malformed <http://example.org/> <http://example.org/>
                           <http://example.org/> malformed <http://example.org/> .
                           <http://example.org/> <http://example.org/> malformed .
+                          <http://example.org/> <http://example.org/> "123"^^<http://www.w3.org/2001/XMLSchema#integer> .
+                          <http://example.org/> <http://example.org/> "123.45"^^<http://www.w3.org/2001/XMLSchema#integer> .
+                          <http://example.org/> <http://example.org/> "123.45"^^<http://www.w3.org/2001/XMLSchema#decimal> .
+                          <http://example.org/> <http://example.org/> "123.45a"^^<http://www.w3.org/2001/XMLSchema#decimal> .
                           <https://example.org/> <https://example.org/> <https://example.org/> .
                       "#
         .as_bytes();
@@ -310,8 +314,8 @@ mod test {
             .collect::<Vec<_>>();
 
         assert_eq!(columns.len(), 3);
-        assert_eq!(columns[0].len(), 2);
-        assert_eq!(columns[1].len(), 2);
-        assert_eq!(columns[2].len(), 2);
+        assert_eq!(columns[0].len(), 4);
+        assert_eq!(columns[1].len(), 4);
+        assert_eq!(columns[2].len(), 4);
     }
 }

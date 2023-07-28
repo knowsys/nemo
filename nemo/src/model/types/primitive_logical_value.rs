@@ -9,6 +9,8 @@ use nemo_physical::{
     datatypes::data_value::DataValueIteratorT, dictionary::value_serializer::NULL_PREFIX,
 };
 
+use crate::io::parser::turtle::{decimal, double, integer};
+use crate::io::parser::{span_from_str, ParseError};
 use crate::model::{Identifier, NumericLiteral, RdfLiteral, Term};
 
 use super::{error::InvalidRuleTermConversion, primitive_types::PrimitiveType};
@@ -329,7 +331,6 @@ impl TryFrom<Term> for PhysicalString {
 
     fn try_from(term: Term) -> Result<Self, Self::Error> {
         match term {
-            // the first branch is the only one that results in an error
             Term::Variable(_) => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any)),
             Term::Constant(c) => Ok(c.into()),
             Term::NumericLiteral(NumericLiteral::Integer(i)) => Ok(LogicalInteger(i).into()),
@@ -344,22 +345,122 @@ impl TryFrom<Term> for PhysicalString {
                 ref datatype,
             }) => match datatype.as_ref() {
                 XSD_STRING => Ok(LogicalString(value.to_string()).into()),
-                XSD_INTEGER => Ok(value
-                    .parse()
-                    .map(|v| LogicalInteger(v).into())
-                    .unwrap_or(DatatypeValue(value.to_string(), datatype.to_string()).into())),
-                XSD_DECIMAL => Ok(value
-                    .rsplit_once('.')
-                    .and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))
-                    .or_else(|| Some((value.parse().ok()?, 0)))
-                    .map(|(a, b)| Decimal(a, b).into())
-                    .unwrap_or(DatatypeValue(value.to_string(), datatype.to_string()).into())),
-                XSD_DOUBLE => Ok(value
-                    .parse()
-                    .ok()
-                    .and_then(|f64| Double::new(f64).ok())
-                    .map(|d| LogicalFloat64(d).into())
-                    .unwrap_or(DatatypeValue(value.to_string(), datatype.to_string()).into())),
+                XSD_INTEGER => match integer(span_from_str(value)) {
+                    Ok((remainder, number)) => {
+                        if !remainder.is_empty() {
+                            Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any))
+                        } else {
+                            match number {
+                                NumericLiteral::Integer(i) => Ok(LogicalInteger::from(i).into()),
+                                _ => unreachable!(
+                                    "We only parse as integer so only the above case can occur."
+                                ),
+                            }
+                        }
+                    }
+                    Err(nom::Err::Error(located_parse_error)) => {
+                        let parse_error: &ParseError = located_parse_error.get_last_inner().into();
+
+                        match parse_error {
+                            ParseError::SyntaxError(_) => {
+                                Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any))
+                            }
+                            _ => Ok(DatatypeValue(value.to_string(), datatype.to_string()).into()),
+                        }
+                    }
+                    _ => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any)),
+                },
+                XSD_DECIMAL => match nom::branch::alt((decimal, integer))(span_from_str(value)) {
+                    Ok((remainder, number)) => {
+                        eprintln!("{remainder:?};{number:?}");
+                        if !remainder.is_empty() {
+                            Err(InvalidRuleTermConversion::new(
+                                term.clone(),
+                                PrimitiveType::Any,
+                            ))
+                        } else {
+                            match number {
+                                NumericLiteral::Integer(i) => Ok(Decimal(i, 0).into()),
+                                NumericLiteral::Decimal(a, b) => Ok(Decimal(a, b).into()),
+                                _ => unreachable!("We only parse as decimal or integer so only the above cases can occur.")
+                            }
+                        }
+                    }
+                    Err(nom::Err::Error(located_parse_error)) => {
+                        eprintln!("{located_parse_error:?}");
+                        let parse_error: &ParseError = located_parse_error.get_last_inner().into();
+
+                        match parse_error {
+                            ParseError::SyntaxError(_) => Err(InvalidRuleTermConversion::new(
+                                term.clone(),
+                                PrimitiveType::Any,
+                            )),
+                            _ => Ok(DatatypeValue(value.to_string(), datatype.to_string()).into()),
+                        }
+                    }
+                    _ => Err(InvalidRuleTermConversion::new(
+                        term.clone(),
+                        PrimitiveType::Any,
+                    )),
+                },
+                XSD_DOUBLE => {
+                    match nom::branch::alt((double, decimal, integer))(span_from_str(value)) {
+                        Ok((remainder, number)) => {
+                            if !remainder.is_empty() {
+                                Err(InvalidRuleTermConversion::new(
+                                    term.clone(),
+                                    PrimitiveType::Any,
+                                ))
+                            } else {
+                                match number {
+                                    NumericLiteral::Integer(i) => {
+                                        Ok(LogicalFloat64::try_from(LogicalInteger::from(i))
+                                            .map(|d| d.into())
+                                            .unwrap_or(
+                                                DatatypeValue(
+                                                    value.to_string(),
+                                                    datatype.to_string(),
+                                                )
+                                                .into(),
+                                            ))
+                                    }
+                                    NumericLiteral::Decimal(a, b) => Ok(format!("{a}.{b}")
+                                        .parse()
+                                        .ok()
+                                        .and_then(|d| {
+                                            Double::new(d)
+                                                .map(|d| LogicalFloat64::from(d).into())
+                                                .ok()
+                                        })
+                                        .unwrap_or(
+                                            DatatypeValue(value.to_string(), datatype.to_string())
+                                                .into(),
+                                        )),
+                                    NumericLiteral::Double(d) => Ok(LogicalFloat64::from(d).into()),
+                                }
+                            }
+                        }
+                        Err(nom::Err::Error(located_parse_error)) => {
+                            let parse_error: &ParseError =
+                                located_parse_error.get_last_inner().into();
+
+                            match parse_error {
+                                ParseError::SyntaxError(_) => Err(InvalidRuleTermConversion::new(
+                                    term.clone(),
+                                    PrimitiveType::Any,
+                                )),
+                                _ => {
+                                    Ok(DatatypeValue(value.to_string(), datatype.to_string())
+                                        .into())
+                                }
+                            }
+                        }
+                        _ => Err(InvalidRuleTermConversion::new(
+                            term.clone(),
+                            PrimitiveType::Any,
+                        )),
+                    }
+                }
                 _ => Ok(DatatypeValue(value.to_string(), datatype.to_string()).into()),
             },
         }
@@ -718,6 +819,14 @@ mod test {
             value: "9950000000000000001".to_string(),
             datatype: XSD_DECIMAL.to_string(),
         });
+        let invalid_integer_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "123.45".to_string(),
+            datatype: XSD_INTEGER.to_string(),
+        });
+        let invalid_decimal_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "123.45a".to_string(),
+            datatype: XSD_DECIMAL.to_string(),
+        });
 
         let expected_string: PhysicalString = format!("{STRING_PREFIX}my string").into();
         let expected_integer: PhysicalString = format!("{INTEGER_PREFIX}42").into();
@@ -753,6 +862,10 @@ mod test {
             format!("{DATATYPE_VALUE_PREFIX}9950000000000000000^^{XSD_INTEGER}").into();
         let expected_large_decimal_literal: PhysicalString =
             format!("{DATATYPE_VALUE_PREFIX}9950000000000000001^^{XSD_DECIMAL}").into();
+        let expected_invalid_integer_literal =
+            InvalidRuleTermConversion::new(invalid_integer_literal.clone(), PrimitiveType::Any);
+        let expected_invalid_decimal_literal =
+            InvalidRuleTermConversion::new(invalid_decimal_literal.clone(), PrimitiveType::Any);
 
         assert_eq!(PhysicalString::from(string), expected_string);
         assert_eq!(PhysicalString::from(integer), expected_integer);
@@ -858,6 +971,14 @@ mod test {
         assert_eq!(
             PhysicalString::try_from(large_decimal_literal).unwrap(),
             expected_large_decimal_literal
+        );
+        assert_eq!(
+            PhysicalString::try_from(invalid_integer_literal).unwrap_err(),
+            expected_invalid_integer_literal
+        );
+        assert_eq!(
+            PhysicalString::try_from(invalid_decimal_literal).unwrap_err(),
+            expected_invalid_decimal_literal
         );
     }
 

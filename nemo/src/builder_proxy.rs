@@ -398,7 +398,9 @@ mod test {
     };
     use test_log::test;
 
-    use crate::model::{NumericLiteral, RdfLiteral};
+    use crate::model::{
+        types::error::InvalidRuleTermConversion, NumericLiteral, PrimitiveType, RdfLiteral,
+    };
 
     use super::*;
 
@@ -548,6 +550,19 @@ mod test {
             value: "9950000000000000001".to_string(),
             datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
         });
+        let invalid_integer_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "123.45".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#integer".to_string(),
+        });
+        let invalid_decimal_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            value: "123.45a".to_string(),
+            datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
+        });
+
+        let expected_invalid_integer_err =
+            InvalidRuleTermConversion::new(invalid_integer_literal.clone(), PrimitiveType::Any);
+        let expected_invalid_decimal_err =
+            InvalidRuleTermConversion::new(invalid_decimal_literal.clone(), PrimitiveType::Any);
 
         let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
 
@@ -622,6 +637,17 @@ mod test {
 
         any_lbp.add(large_integer_literal).unwrap();
         any_lbp.add(large_decimal_literal).unwrap();
+        let invalid_integer_err = any_lbp.add(invalid_integer_literal).unwrap_err();
+        let invalid_decimal_err = any_lbp.add(invalid_decimal_literal).unwrap_err();
+
+        assert_eq!(
+            invalid_integer_err.to_string(),
+            ReadingError::from(expected_invalid_integer_err).to_string()
+        );
+        assert_eq!(
+            invalid_decimal_err.to_string(),
+            ReadingError::from(expected_invalid_decimal_err).to_string()
+        );
 
         let VecT::U64(any_result_indices) = phys_enum_for_any.finalize() else {
             unreachable!()

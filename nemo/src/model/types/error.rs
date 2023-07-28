@@ -5,7 +5,7 @@ use nemo_physical::error::ReadingError;
 use thiserror::Error;
 
 /// An [`InvalidRuleTermConversion`]
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 #[error("The term \"{}\" cannot be converted to a {}.", .term, .target_type)]
 pub struct InvalidRuleTermConversion {
     term: Term,
