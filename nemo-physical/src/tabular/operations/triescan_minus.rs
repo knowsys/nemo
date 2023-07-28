@@ -187,6 +187,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
 
     fn down(&mut self) {
         let next_layer = self.current_layer().map_or(0, |v| v + 1);
+
         debug_assert!(next_layer < self.get_types().len());
 
         for (subtract_index, trie_subtract) in self.tries_subtract.iter_mut().enumerate() {
@@ -210,6 +211,18 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
                     trie_subtract.down();
                 }
             }
+        }
+
+        if next_layer > 0 {
+            let current_layer = next_layer - 1;
+            let equal_values = self.column_scans[current_layer]
+                .get_mut()
+                .equal_values()
+                .clone();
+
+            self.column_scans[next_layer]
+                .get_mut()
+                .subtract_enable(&equal_values);
         }
 
         self.trie_main.down();
