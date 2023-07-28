@@ -17,7 +17,7 @@ use rio_xml::RdfXmlParser;
 use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    model::{types::primitive_types::PrimitiveType, RdfFile, RdfLiteral, Term},
+    model::{types::primitive_types::PrimitiveType, InvalidRdfLiteral, RdfFile, RdfLiteral, Term},
 };
 
 impl From<NamedNode<'_>> for Term {
@@ -32,18 +32,20 @@ impl From<BlankNode<'_>> for Term {
     }
 }
 
-impl From<rio_api::model::Literal<'_>> for Term {
-    fn from(value: rio_api::model::Literal<'_>) -> Self {
+impl TryFrom<rio_api::model::Literal<'_>> for Term {
+    type Error = InvalidRdfLiteral;
+
+    fn try_from(value: rio_api::model::Literal<'_>) -> Result<Self, Self::Error> {
         match value {
-            rio_api::model::Literal::Simple { value } => Term::StringLiteral(value.to_string()),
+            rio_api::model::Literal::Simple { value } => Ok(Term::StringLiteral(value.to_string())),
             rio_api::model::Literal::LanguageTaggedString { value, language } => {
-                Term::RdfLiteral(RdfLiteral::LanguageString {
+                Term::try_from(RdfLiteral::LanguageString {
                     value: value.to_string(),
                     tag: language.to_string(),
                 })
             }
             rio_api::model::Literal::Typed { value, datatype } => {
-                Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                Term::try_from(RdfLiteral::DatatypeValue {
                     value: value.to_string(),
                     datatype: datatype.iri.to_string(),
                 })
@@ -71,7 +73,7 @@ impl TryFrom<rio_api::model::Term<'_>> for Term {
         match value {
             rio_api::model::Term::NamedNode(nn) => Ok(nn.into()),
             rio_api::model::Term::BlankNode(bn) => Ok(bn.into()),
-            rio_api::model::Term::Literal(lit) => Ok(lit.into()),
+            rio_api::model::Term::Literal(lit) => lit.try_into().map_err(Into::into),
             rio_api::model::Term::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
         }
     }

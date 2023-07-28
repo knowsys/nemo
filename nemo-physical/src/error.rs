@@ -60,6 +60,9 @@ pub enum ReadingError {
     /// Type conversion error
     #[error("Failed to convert value {0} to type {1}.")]
     TypeConversionError(String, String), // Note we cannot access logical types in physical layer
+    /// Invalid RdfLiteral
+    #[error("Invalid Rdf Literal: {0}")]
+    InvalidRdfLiteral(String), // Note we cannot access rdf literals in physical layer
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate
