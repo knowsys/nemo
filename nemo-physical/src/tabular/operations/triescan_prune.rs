@@ -91,11 +91,7 @@ impl<'a> TrieScanPruneState<'a> {
 
     /// Returns the current layer of this trie scan
     pub fn current_layer(&self) -> Option<usize> {
-        if self.initialized {
-            Some(self.external_current_layer)
-        } else {
-            None
-        }
+        self.initialized.then_some(self.external_current_layer)
     }
 
     /// Moves the input trie to the target layer through `up` and `down`, without advancing this trie scan at all.

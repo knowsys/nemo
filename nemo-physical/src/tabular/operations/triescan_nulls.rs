@@ -18,7 +18,7 @@ pub struct TrieScanNulls<'a> {
     /// Layer we are currently at in the resulting trie.
     current_layer: Option<usize>,
 
-    /// Types of the resultingtodo!() trie.
+    /// Types of the resulting trie.
     target_types: Vec<StorageTypeName>,
 
     /// [`ColumnScanT`]s which represent each new layer in the resulting trie.

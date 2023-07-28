@@ -77,8 +77,6 @@ impl Rule {
             unsafe_negative_variables.extend(current_unsafe)
         }
 
-        // TODO: Implement something that checks whether unsafe negated variables occurs in multiple places
-
         // Check if a variable occurs with both existential and universal quantification.
         let universal_variables = body
             .iter()
