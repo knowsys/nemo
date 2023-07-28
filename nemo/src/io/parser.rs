@@ -3,6 +3,7 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
 use crate::{error::Error, model::*};
+use nemo_physical::error::ReadingError;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
@@ -253,8 +254,9 @@ pub fn parse_ground_term<'a>(
             alt((
                 map(parse_iri_constant(prefixes), Term::Constant),
                 map(turtle::numeric_literal, Term::NumericLiteral),
-                map(turtle::rdf_literal, move |literal| {
-                    Term::RdfLiteral(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
+                map_res(turtle::rdf_literal, move |literal| {
+                    Term::try_from(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
+                        .map_err(ReadingError::from)
                 }),
                 map(turtle::string, move |literal| {
                     Term::StringLiteral(literal.to_string())
@@ -1376,15 +1378,7 @@ mod test {
         let v = value.to_string();
         let fact = format!(r#"{predicate}("{value}"^^{datatype}) ."#);
 
-        let expected_fact = Fact(Atom::new(
-            p,
-            vec![TermTree::leaf(Term::RdfLiteral(
-                RdfLiteral::DatatypeValue {
-                    value: v,
-                    datatype: format!("{iri}string"),
-                },
-            ))],
-        ));
+        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::StringLiteral(v))]));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }

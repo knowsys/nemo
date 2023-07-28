@@ -398,7 +398,10 @@ mod test {
     };
     use test_log::test;
 
-    use crate::model::{NumericLiteral, RdfLiteral};
+    use crate::model::{
+        rule_model::{XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER, XSD_STRING},
+        NumericLiteral, RdfLiteral,
+    };
 
     use super::*;
 
@@ -418,20 +421,14 @@ mod test {
             parse_rdf_term_from_string(
                 r#""23"^^<http://www.w3.org/2001/XMLSchema#string>"#.to_string()
             ),
-            Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                value: "23".to_string(),
-                datatype: "http://www.w3.org/2001/XMLSchema#string".to_string()
-            })
+            Term::StringLiteral("23".to_string()),
         );
 
         assert_eq!(
             parse_rdf_term_from_string(
                 r#""12345"^^<http://www.w3.org/2001/XMLSchema#integer>"#.to_string()
             ),
-            Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                value: "12345".to_string(),
-                datatype: "http://www.w3.org/2001/XMLSchema#integer".to_string()
-            }),
+            Term::NumericLiteral(NumericLiteral::Integer(12345)),
         );
 
         assert_eq!(
@@ -441,10 +438,7 @@ mod test {
 
         assert_eq!(
             parse_rdf_term_from_string("12345".to_string()),
-            Term::RdfLiteral(RdfLiteral::DatatypeValue {
-                value: "12345".to_string(),
-                datatype: "http://www.w3.org/2001/XMLSchema#integer".to_string()
-            })
+            Term::NumericLiteral(NumericLiteral::Integer(12345)),
         );
 
         assert_eq!(
@@ -494,52 +488,73 @@ mod test {
         let num_decimal_literal = Term::NumericLiteral(NumericLiteral::Decimal(4, 2));
         let num_double_literal =
             Term::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap()));
-        let language_string_literal = Term::RdfLiteral(RdfLiteral::LanguageString {
+        let language_string_literal = Term::try_from(RdfLiteral::LanguageString {
             value: "language string".to_string(),
             tag: "en".to_string(),
-        });
-        let random_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+        })
+        .unwrap();
+        let random_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
             value: "some random datavalue".to_string(),
             datatype: "a datatype that I totally did not just make up".to_string(),
-        });
-        let string_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+        })
+        .unwrap();
+        let string_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
             value: "string datavalue".to_string(),
-            datatype: "http://www.w3.org/2001/XMLSchema#string".to_string(),
-        });
-        let integer_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            datatype: XSD_STRING.to_string(),
+        })
+        .unwrap();
+        let integer_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
             value: "73".to_string(),
-            datatype: "http://www.w3.org/2001/XMLSchema#integer".to_string(),
-        });
-        let decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            datatype: XSD_INTEGER.to_string(),
+        })
+        .unwrap();
+        let decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
             value: "1.23".to_string(),
-            datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
-        });
-        let signed_decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            datatype: XSD_DECIMAL.to_string(),
+        })
+        .unwrap();
+        let signed_decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
             value: "+1.23".to_string(),
-            datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
-        });
-        let negative_decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            datatype: XSD_DECIMAL.to_string(),
+        })
+        .unwrap();
+        let negative_decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
             value: "-1.23".to_string(),
-            datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
-        });
-        let pointless_decimal_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            datatype: XSD_DECIMAL.to_string(),
+        })
+        .unwrap();
+        let pointless_decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
             value: "23".to_string(),
-            datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
-        });
+            datatype: XSD_DECIMAL.to_string(),
+        })
+        .unwrap();
         let signed_pointless_decimal_datavalue_literal =
-            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            Term::try_from(RdfLiteral::DatatypeValue {
                 value: "+23".to_string(),
-                datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
-            });
+                datatype: XSD_DECIMAL.to_string(),
+            })
+            .unwrap();
         let negative_pointless_decimal_datavalue_literal =
-            Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            Term::try_from(RdfLiteral::DatatypeValue {
                 value: "-23".to_string(),
-                datatype: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
-            });
-        let double_datavalue_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                datatype: XSD_DECIMAL.to_string(),
+            })
+            .unwrap();
+        let double_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
             value: "3.33".to_string(),
-            datatype: "http://www.w3.org/2001/XMLSchema#double".to_string(),
-        });
+            datatype: XSD_DOUBLE.to_string(),
+        })
+        .unwrap();
+        let large_integer_literal = Term::try_from(RdfLiteral::DatatypeValue {
+            value: "9950000000000000000".to_string(),
+            datatype: XSD_INTEGER.to_string(),
+        })
+        .unwrap();
+        let large_decimal_literal = Term::try_from(RdfLiteral::DatatypeValue {
+            value: "9950000000000000001".to_string(),
+            datatype: XSD_DECIMAL.to_string(),
+        })
+        .unwrap();
 
         let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
 
@@ -612,6 +627,9 @@ mod test {
         any_lbp.add(double_datavalue_literal.clone()).unwrap();
         double_lbp.add(double_datavalue_literal).unwrap();
 
+        any_lbp.add(large_integer_literal).unwrap();
+        any_lbp.add(large_decimal_literal).unwrap();
+
         let VecT::U64(any_result_indices) = phys_enum_for_any.finalize() else {
             unreachable!()
         };
@@ -654,6 +672,8 @@ mod test {
             "DECIMAL:23.0",
             "DECIMAL:-23.0",
             "DOUBLE:3.33",
+            "DATATYPE_VALUE:9950000000000000000^^http://www.w3.org/2001/XMLSchema#integer",
+            "DATATYPE_VALUE:9950000000000000001^^http://www.w3.org/2001/XMLSchema#decimal",
         ].into_iter().map(String::from).collect::<Vec<_>>());
 
         assert_eq!(
