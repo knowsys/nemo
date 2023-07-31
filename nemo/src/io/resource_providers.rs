@@ -1,6 +1,6 @@
 //! Resource providers for external resources that can be used in reasoning.
 
-use std::{io::Read, rc::Rc};
+use std::{io::Read, path::PathBuf, rc::Rc};
 
 use flate2::read::MultiGzDecoder;
 
@@ -41,6 +41,14 @@ impl ResourceProviders {
     /// Construct using a list of [`ResourceProvider`]s
     pub fn from(r: Vec<Box<dyn ResourceProvider>>) -> Self {
         Self(Rc::new(r))
+    }
+
+    /// Construct default with a base path for the `FileResourceProvider`
+    pub fn with_base_path(base_path: Option<PathBuf>) -> Self {
+        Self(Rc::new(vec![
+            Box::<http::HTTPResourceProvider>::default(),
+            Box::new(file::FileResourceProvider::new(base_path)),
+        ]))
     }
 
     /// Returns instance which is unable to resolve any resources.
@@ -84,9 +92,6 @@ impl ResourceProviders {
 
 impl Default for ResourceProviders {
     fn default() -> Self {
-        Self(Rc::new(vec![
-            Box::<http::HTTPResourceProvider>::default(),
-            Box::<file::FileResourceProvider>::default(),
-        ]))
+        Self::with_base_path(Default::default())
     }
 }
