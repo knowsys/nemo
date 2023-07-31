@@ -125,7 +125,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(
         program,
-        ResourceProviders::default_with_base_path(cli.input_directory),
+        ResourceProviders::with_base_path(cli.input_directory),
     )?;
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
