@@ -40,7 +40,8 @@ impl FileFormat {
         file.with_extension(append_extension(&file, ext))
     }
 
-    fn create_writer<W: Write>(&self, writer: W) -> impl RecordWriter {
+    /// Create [`RecordWriter`] for this file format writing to given [`Write`]
+    pub fn create_writer<W: Write>(&self, writer: W) -> impl RecordWriter {
         match self {
             FileFormat::DSV(delimiter) => csv::WriterBuilder::new()
                 .delimiter(*delimiter)

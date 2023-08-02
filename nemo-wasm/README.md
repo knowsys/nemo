@@ -14,6 +14,10 @@ This crate provides a Web Assembly build and JavaScript/TypeScript bindings for 
 wasm-pack build --target bundler --weak-refs
 ```
 
+-   In order to use the `FileSystemSyncAccessHandle` APIs, the `web_sys_unstable_apis` `cfg` flag needs to be set
+    -   See https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html
+    -   See https://rustwasm.github.io/wasm-bindgen/api/web_sys/struct.FileSystemSyncAccessHandle.html
+
 ## Example usage
 
 ### TypeScript
