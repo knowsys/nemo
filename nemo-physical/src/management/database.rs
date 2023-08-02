@@ -384,10 +384,10 @@ impl OrderedReferenceManager {
 
     /// Return the number of rows contained in this table.
     ///
-    /// TODO: Currently only counting of in-memory facts is supported, see https://github.com/knowsys/nemo/issues/335
+    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
     pub fn count_rows(&self, id: &TableId) -> usize {
         if let Some(resolved) = self.resolve_reference(*id, &ColumnOrder::default()) {
-            // TODO: Technically we should be able to somehow count non-inmemory tables, see https://github.com/knowsys/nemo/issues/335
+            // TODO: Technically we should be able to somehow count non-inmemory tables, see <https://github.com/knowsys/nemo/issues/335>
             // But this is not relevant for now
             if let Some((_, TableStorage::InMemory(trie))) = resolved.map.iter().next() {
                 return trie.row_num();
@@ -480,7 +480,7 @@ impl DatabaseInstance {
 
     /// Return the number of rows for a given table.
     ///
-    /// TODO: Currently only counting of in-memory facts is supported, see https://github.com/knowsys/nemo/issues/335
+    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
     pub fn count_rows(&self, table_id: &TableId) -> usize {
         self.storage_handler.count_rows(table_id)
     }

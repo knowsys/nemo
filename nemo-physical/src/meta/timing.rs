@@ -50,15 +50,7 @@ pub struct TimedCodeInfo {
 impl TimedCodeInfo {
     /// Create new [`TimedCodeInfo`] object
     pub fn new() -> Self {
-        Self {
-            total_system_time: Duration::from_secs(0),
-            total_process_time: Duration::from_secs(0),
-            total_thread_time: Duration::from_secs(0),
-            start_system: None,
-            start_process: None,
-            start_thread: None,
-            runs: 0,
-        }
+        Self::default()
     }
 }
 
@@ -147,10 +139,7 @@ impl TimedCode {
         let mut current_block = self;
         for part in name_parts {
             let part_string = String::from_str(part).expect("We expect well formed strings");
-            current_block = current_block
-                .subblocks
-                .entry(part_string)
-                .or_insert_with(TimedCode::new)
+            current_block = current_block.subblocks.entry(part_string).or_default()
         }
 
         current_block

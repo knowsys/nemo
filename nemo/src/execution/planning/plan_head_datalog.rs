@@ -33,9 +33,7 @@ impl DatalogStrategy {
         let mut predicate_to_atoms = HashMap::<Identifier, Vec<HeadInstruction>>::new();
 
         for head_atom in rule.head() {
-            let atoms = predicate_to_atoms
-                .entry(head_atom.predicate())
-                .or_insert(Vec::new());
+            let atoms = predicate_to_atoms.entry(head_atom.predicate()).or_default();
 
             atoms.push(head_instruction_from_atom(head_atom, analysis));
         }

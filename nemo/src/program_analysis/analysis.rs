@@ -239,11 +239,8 @@ fn analyze_rule(
         variable_types,
         predicate_types: type_declarations
             .iter()
-            .filter_map(|(k, v)| {
-                rule_all_predicates
-                    .contains(k)
-                    .then(|| (k.clone(), v.clone()))
-            })
+            .filter(|(k, _v)| rule_all_predicates.contains(k))
+            .map(|(k, v)| (k.clone(), v.clone()))
             .collect(),
     }
 }

@@ -162,9 +162,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 })
                 .collect();
 
-            let rows = predicate_to_rows
-                .entry(fact.0.predicate())
-                .or_insert(Vec::new());
+            let rows = predicate_to_rows.entry(fact.0.predicate()).or_default();
             rows.push(new_row);
         }
 
@@ -357,14 +355,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Counts the facts of a single predicate.
     ///
-    /// TODO: Currently only counting of in-memory facts is supported, see https://github.com/knowsys/nemo/issues/335
+    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
     pub fn count_facts_of_predicate(&self, predicate: &Identifier) -> Option<usize> {
         self.table_manager.predicate_count_rows(predicate)
     }
 
     /// Count the number of facts of derived predicates.
     ///
-    /// TODO: Currently only counting of in-memory facts is supported, see https://github.com/knowsys/nemo/issues/335
+    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
     pub fn count_facts_of_derived_predicates(&self) -> usize {
         let mut result = 0;
 
