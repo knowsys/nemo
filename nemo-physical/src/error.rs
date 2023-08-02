@@ -1,10 +1,13 @@
 //! Error-handling module for the crate
 
-use std::{convert::Infallible, path::PathBuf};
+use std::{convert::Infallible, fmt::Display, path::PathBuf};
 
 use thiserror::Error;
 
 use crate::{datatypes::FloatIsNaN, table_reader::Resource};
+
+/// Trait that can be used by external libraries extending Nemo to communicate a error during reading
+pub trait ExternalReadingError: Display + std::fmt::Debug {}
 
 /// Error-Collection for errors related to reading input tables.
 /// Used in the [`TableReader`][crate::table_reader::TableReader] and
@@ -63,6 +66,9 @@ pub enum ReadingError {
     /// Invalid RdfLiteral
     #[error("Invalid Rdf Literal: {0}")]
     InvalidRdfLiteral(String), // Note we cannot access rdf literals in physical layer
+    /// Reading error caused by a library which extends nemo
+    #[error("Reading error caused by a external library extending Nemo: {0}")]
+    ExternalReadingError(Box<dyn ExternalReadingError>),
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate

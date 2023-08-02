@@ -355,12 +355,21 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(Some(combined_iters))
     }
 
-    /// Count the number of derived facts during the computation.
-    pub fn count_derived_facts(&self) -> usize {
+    /// Counts the facts of a single predicate.
+    ///
+    /// TODO: Currently only counting of in-memory facts is supported, see https://github.com/knowsys/nemo/issues/335
+    pub fn count_facts_of_predicate(&self, predicate: &Identifier) -> Option<usize> {
+        self.table_manager.predicate_count_rows(predicate)
+    }
+
+    /// Count the number of facts of derived predicates.
+    ///
+    /// TODO: Currently only counting of in-memory facts is supported, see https://github.com/knowsys/nemo/issues/335
+    pub fn count_facts_of_derived_predicates(&self) -> usize {
         let mut result = 0;
 
         for predicate in &self.analysis.derived_predicates {
-            if let Some(count) = self.table_manager.predicate_count_rows(predicate) {
+            if let Some(count) = self.count_facts_of_predicate(predicate) {
                 result += count;
             }
         }

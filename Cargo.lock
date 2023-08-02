@@ -1732,6 +1732,7 @@ dependencies = [
  "js-sys",
  "nemo",
  "nemo-physical",
+ "thiserror",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

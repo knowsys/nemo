@@ -103,6 +103,7 @@ impl SubtableHandler {
         Some(self.single[postion].1)
     }
 
+    /// TODO: Currently only counting of in-memory facts is supported, see https://github.com/knowsys/nemo/issues/335
     pub fn count_rows(&self, database: &DatabaseInstance) -> usize {
         let mut result = 0;
 
@@ -309,7 +310,9 @@ impl TableManager {
         self.predicate_subtables.get(&predicate)?.last_step()
     }
 
-    /// Count all the rows that belong to a predicate.
+    /// Count all the rows in the table manager that belong to a predicate.
+    ///
+    /// TODO: Currently only counting of in-memory facts is supported, see https://github.com/knowsys/nemo/issues/335
     pub fn predicate_count_rows(&self, predicate: &Identifier) -> Option<usize> {
         self.predicate_subtables
             .get(predicate)

@@ -163,7 +163,10 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     TimedCode::instance().stop();
 
-    print_finished_message(engine.count_derived_facts(), output_manager.is_some());
+    print_finished_message(
+        engine.count_facts_of_derived_predicates(),
+        output_manager.is_some(),
+    );
 
     if cli.detailed_timing {
         println!(

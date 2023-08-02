@@ -20,10 +20,9 @@ impl FileResourceProvider {
     }
 }
 
-impl ResourceProvider for FileResourceProvider {
-    fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn Read>>, ReadingError> {
-        // Try to parse as file IRI
-        let path = if is_iri(resource) {
+impl FileResourceProvider {
+    fn parse_resource(&self, resource: &Resource) -> Result<Option<PathBuf>, ReadingError> {
+        if is_iri(resource) {
             if resource.starts_with("file://") {
                 // File URI. We only support local files, i.e., URIs
                 // where the host part is either empty or `localhost`.
@@ -32,20 +31,31 @@ impl ResourceProvider for FileResourceProvider {
                     .strip_prefix("file://localhost")
                     .or_else(|| resource.strip_prefix("file://"))
                     .ok_or_else(|| ReadingError::InvalidFileUri(resource.to_string()))?;
-                PathBuf::from_slash(path)
+                Ok(Some(PathBuf::from_slash(path)))
             } else {
                 // Non-file IRI, file resource provider is not responsible
-                return Ok(None);
+                Ok(None)
             }
         } else {
             // Not a valid URI, interpret as path directly
-            self.base_path
-                .as_ref()
-                .map(|bp| bp.join(resource))
-                .unwrap_or(resource.into())
-        };
+            Ok(Some(
+                self.base_path
+                    .as_ref()
+                    .map(|bp| bp.join(resource))
+                    .unwrap_or(resource.into()),
+            ))
+        }
+    }
+}
 
-        let file = File::open(path)?;
-        Ok(Some(Box::new(file)))
+impl ResourceProvider for FileResourceProvider {
+    fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn Read>>, ReadingError> {
+        // Try to parse as file IRI
+        if let Some(path) = self.parse_resource(resource)? {
+            let file = File::open(path)?;
+            Ok(Some(Box::new(file)))
+        } else {
+            Ok(None)
+        }
     }
 }
