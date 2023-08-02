@@ -55,7 +55,7 @@ impl RestrictedChaseStrategy {
 
             let instructions = predicate_to_instructions
                 .entry(head_atom.predicate())
-                .or_insert(Vec::new());
+                .or_default();
             instructions.push(head_instruction_from_atom(head_atom, analysis));
 
             let is_full_existential = predicate_to_full_existential

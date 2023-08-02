@@ -42,7 +42,7 @@ impl<SubStrategy: RuleSelectionStrategy> StrategyStratifiedNegation<SubStrategy>
             for body_predicate in &rule_analysis.positive_body_predicates {
                 let indices = predicate_to_rules_body_positive
                     .entry(body_predicate.clone())
-                    .or_insert(Vec::new());
+                    .or_default();
 
                 indices.push(rule_index);
             }
@@ -50,7 +50,7 @@ impl<SubStrategy: RuleSelectionStrategy> StrategyStratifiedNegation<SubStrategy>
             for body_predicate in &rule_analysis.negative_body_predicates {
                 let indices = predicate_to_rules_body_negative
                     .entry(body_predicate.clone())
-                    .or_insert(Vec::new());
+                    .or_default();
 
                 indices.push(rule_index);
             }
@@ -58,7 +58,7 @@ impl<SubStrategy: RuleSelectionStrategy> StrategyStratifiedNegation<SubStrategy>
             for head_predicate in &rule_analysis.head_predicates {
                 let indices = predicate_to_rules_head
                     .entry(head_predicate.clone())
-                    .or_insert(Vec::new());
+                    .or_default();
 
                 indices.push(rule_index);
             }

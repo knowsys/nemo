@@ -129,9 +129,7 @@ pub(super) fn compute_filters(
                         (column_idx_right, column_idx_left, filter.operation.flip())
                     };
 
-                let current_assignment = filter_assignments
-                    .entry(column_idx_value)
-                    .or_insert(ValueAssignment::default());
+                let current_assignment = filter_assignments.entry(column_idx_value).or_default();
 
                 add_restriction(
                     &operation,
@@ -150,9 +148,7 @@ pub(super) fn compute_filters(
                     .expect("Each variable should have been assigned a type.")
                     .ground_term_to_data_value_t(filter.rhs.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.");
 
-                let current_assignment = filter_assignments
-                    .entry(column_idx_value)
-                    .or_insert(ValueAssignment::default());
+                let current_assignment = filter_assignments.entry(column_idx_value).or_default();
 
                 add_restriction(
                     &filter.operation,

@@ -96,7 +96,7 @@ where
         let mut result = HashMap::<usize, Vec<NodeIndex>>::new();
 
         for (key, value) in map {
-            let vec = result.entry(value).or_insert(Vec::new());
+            let vec = result.entry(value).or_default();
             vec.push(key);
         }
 

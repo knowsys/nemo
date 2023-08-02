@@ -451,7 +451,7 @@ impl VariableOrderBuilder<'_> {
             let set = self
                 .required_trie_column_orders
                 .entry(atom.predicate())
-                .or_insert_with(HashSet::new);
+                .or_default();
 
             set.insert(column_ord);
         }
