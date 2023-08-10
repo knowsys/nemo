@@ -1636,7 +1636,9 @@ dependencies = [
 name = "nemo"
 version = "0.3.1-dev"
 dependencies = [
+ "ascii_tree",
  "assert_fs",
+ "bytesize",
  "csv",
  "env_logger 0.10.0",
  "flate2",

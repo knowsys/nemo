@@ -1,6 +1,8 @@
 //! Managing of tables
 
 use super::model::{Identifier, PrimitiveType};
+
+use bytesize::ByteSize;
 use nemo_physical::{
     datatypes::data_value::DataValueIteratorT,
     management::{
@@ -263,6 +265,69 @@ impl SubtableExecutionPlan {
     /// Return a mutable reference to the underlying [`ExecutionPlan`].
     pub fn plan_mut(&mut self) -> &mut ExecutionPlan {
         &mut self.execution_plan
+    }
+}
+
+/// Stores information about memory usage of predicates
+#[derive(Debug)]
+pub struct MemoryUsage {
+    name: String,
+    memory: ByteSize,
+
+    sub_blocks: Vec<MemoryUsage>,
+}
+
+impl MemoryUsage {
+    /// Create a new [`MemoryUsage`].
+    pub fn new(name: &str, memory: ByteSize) -> Self {
+        Self {
+            name: name.to_string(),
+            memory,
+            sub_blocks: Vec::new(),
+        }
+    }
+
+    /// Create a new [`MemoryUsage`] block.
+    pub fn new_block(name: &str) -> Self {
+        Self::new(name, ByteSize(0))
+    }
+
+    /// Add a sub-block.
+    pub fn add_sub_block(&mut self, sub_block: MemoryUsage) {
+        self.memory += sub_block.memory;
+        self.sub_blocks.push(sub_block)
+    }
+
+    fn format_node(&self) -> String {
+        format!("{} ({})", self.name, self.memory)
+    }
+
+    fn ascii_tree_recursive(usage: &Self) -> ascii_tree::Tree {
+        if usage.sub_blocks.is_empty() {
+            ascii_tree::Tree::Leaf(vec![usage.format_node()])
+        } else {
+            let mut sorted_sub_blocks: Vec<&MemoryUsage> = usage.sub_blocks.iter().collect();
+            sorted_sub_blocks.sort_by(|a, b| b.memory.partial_cmp(&a.memory).unwrap());
+
+            ascii_tree::Tree::Node(
+                usage.format_node(),
+                sorted_sub_blocks
+                    .into_iter()
+                    .map(Self::ascii_tree_recursive)
+                    .collect(),
+            )
+        }
+    }
+
+    /// Return an [`ascii_tree::Tree`] representation.
+    pub fn ascii_tree(&self) -> ascii_tree::Tree {
+        Self::ascii_tree_recursive(self)
+    }
+}
+
+impl std::fmt::Display for MemoryUsage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        ascii_tree::write_tree(f, &self.ascii_tree())
     }
 }
 
@@ -537,6 +602,31 @@ impl TableManager {
     /// Returns a reference to the constants dictionary
     pub fn get_dict(&self) -> Ref<'_, Dict> {
         self.database.get_dict_constants()
+    }
+
+    /// Return the current [`MemoryUsage`].
+    pub fn memory_usage(&self) -> MemoryUsage {
+        let mut result = MemoryUsage::new_block("Chase");
+
+        for (identifier, subtable_handler) in &self.predicate_subtables {
+            let mut predicate_usage = MemoryUsage::new_block(&identifier.to_string());
+
+            for (step, id) in &subtable_handler.single {
+                let memory = self.database.memory_consumption(*id);
+                predicate_usage.add_sub_block(MemoryUsage::new(&format!("Step {}", step), memory));
+            }
+            for (steps, id) in &subtable_handler.combined {
+                let memory = self.database.memory_consumption(*id);
+                predicate_usage.add_sub_block(MemoryUsage::new(
+                    &format!("Steps {}-{}", steps.start, steps.start + steps.len),
+                    memory,
+                ));
+            }
+
+            result.add_sub_block(predicate_usage)
+        }
+
+        result
     }
 }
 
