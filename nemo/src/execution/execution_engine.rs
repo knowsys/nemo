@@ -375,7 +375,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         result
     }
 
-    /// Return the [`MemoryUsage`] of the tables used by the chase.
+    /// Return the amount of consumed memory for the tables used by the chase.
     pub fn memory_usage(&self) -> MemoryUsage {
         self.table_manager.memory_usage()
     }
