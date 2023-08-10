@@ -39,6 +39,8 @@ oxiri = "0.2.2"
 tokio = { version = "1.29.1", features = [ "rt" ] }
 reqwest = { version = "0.11.18" }
 num = "0.4.0"
+bytesize = "1.2"
+ascii_tree = "0.1.1"
 
 [dev-dependencies]
 env_logger = "*"
