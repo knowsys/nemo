@@ -182,6 +182,10 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         );
     }
 
+    if cli.detailed_memory {
+        println!("\n{}", engine.memory_usage());
+    }
+
     Ok(())
 }
 

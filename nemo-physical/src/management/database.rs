@@ -243,6 +243,18 @@ enum TableStatus {
     Reference(TableId, Permutation),
 }
 
+impl ByteSized for TableStatus {
+    fn size_bytes(&self) -> ByteSize {
+        match self {
+            TableStatus::Present(map) => map
+                .iter()
+                .map(|(_, s)| s.size_bytes())
+                .fold(ByteSize(0), |acc, x| acc + x),
+            TableStatus::Reference(_, _) => ByteSize(0),
+        }
+    }
+}
+
 /// Manages tables under different orders.
 /// Also has the capability of representing a table as a reordered version of another.
 #[derive(Debug, Default)]
@@ -1235,6 +1247,21 @@ impl DatabaseInstance {
                 }
             }
         };
+    }
+
+    /// Return the amount of memory cosumed by the table under the given [`TableId`].
+    /// This also includes additional index structures but excludes tables that are currently stored on disk.
+    ///
+    /// # Panics
+    /// Panics if the given id does not exist.
+    pub fn memory_consumption(&self, id: TableId) -> ByteSize {
+        let status = self
+            .storage_handler
+            .map
+            .get(&id)
+            .expect("Function assumes that there is a table with the given id.");
+
+        status.size_bytes()
     }
 }
 

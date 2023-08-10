@@ -16,7 +16,7 @@ use crate::{
         Identifier, Program, TermOperation,
     },
     program_analysis::analysis::ProgramAnalysis,
-    table_manager::TableManager,
+    table_manager::{MemoryUsage, TableManager},
 };
 
 use super::{rule_execution::RuleExecution, selection_strategy::strategy::RuleSelectionStrategy};
@@ -373,5 +373,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
 
         result
+    }
+
+    /// Return the [`MemoryUsage`] of the tables used by the chase.
+    pub fn memory_usage(&self) -> MemoryUsage {
+        self.table_manager.memory_usage()
     }
 }
