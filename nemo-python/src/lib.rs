@@ -80,33 +80,44 @@ impl NemoResults {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<Vec<PyObject>> {
-        let next = slf.0.next()?;
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Vec<&PyAny>>> {
+        let Some(next) = slf.0.next() else {
+            return Ok(None);
+        };
+        let decimal = slf.py().import("decimal")?.getattr("Decimal")?;
 
-        Some(
+        Ok(Some(
             next.into_iter()
                 .map(|v| match v {
                     PrimitiveLogicalValueT::Any(rdf) => match rdf {
                         Term::Variable(_) => panic!("Variables should not occur as results!"),
-                        Term::Constant(c) => c.to_string().into_py(slf.py()),
-                        Term::NumericLiteral(NumericLiteral::Integer(i)) => i.into_py(slf.py()),
+                        Term::Constant(c) => Ok(c.to_string().into_py(slf.py()).into_ref(slf.py())),
+                        Term::NumericLiteral(NumericLiteral::Integer(i)) => {
+                            Ok(i.into_py(slf.py()).into_ref(slf.py()))
+                        }
                         Term::NumericLiteral(NumericLiteral::Double(d)) => {
-                            f64::from(d).into_py(slf.py())
+                            Ok(f64::from(d).into_py(slf.py()).into_ref(slf.py()))
                         }
                         // currently we pack decimals into strings, maybe this should change
-                        Term::NumericLiteral(_) => rdf.to_string().into_py(slf.py()),
-                        Term::StringLiteral(s) => s.into_py(slf.py()),
-                        Term::RdfLiteral(lit) => lit.to_string().into_py(slf.py()),
+                        Term::NumericLiteral(_) => decimal.call1((rdf.to_string(),)),
+                        Term::StringLiteral(s) => Ok(s.into_py(slf.py()).into_ref(slf.py())),
+                        Term::RdfLiteral(lit) => {
+                            Ok(lit.to_string().into_py(slf.py()).into_ref(slf.py()))
+                        }
                         Term::Aggregate(_) => panic!("Aggregates should not occur as results!"),
                     },
-                    PrimitiveLogicalValueT::String(s) => String::from(s).into_py(slf.py()),
-                    PrimitiveLogicalValueT::Integer(i) => i64::from(i).into_py(slf.py()),
-                    PrimitiveLogicalValueT::Float64(d) => {
-                        f64::from(Double::from(d)).into_py(slf.py())
+                    PrimitiveLogicalValueT::String(s) => {
+                        Ok(String::from(s).into_py(slf.py()).into_ref(slf.py()))
                     }
+                    PrimitiveLogicalValueT::Integer(i) => {
+                        Ok(i64::from(i).into_py(slf.py()).into_ref(slf.py()))
+                    }
+                    PrimitiveLogicalValueT::Float64(d) => Ok(f64::from(Double::from(d))
+                        .into_py(slf.py())
+                        .into_ref(slf.py())),
                 })
-                .collect(),
-        )
+                .collect::<Result<_, _>>()?,
+        ))
     }
 }
 
