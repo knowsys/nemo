@@ -75,8 +75,6 @@ where
 
     /// Constructs a new [`ColumnScanVector`] for a Column.
     pub fn new(column: &'a ColumnVector<T>) -> Self {
-        debug_assert!(column.len() > 0);
-
         Self {
             column,
             pos: None,
@@ -107,8 +105,6 @@ where
 
     /// Lifts any restriction of the interval to some interval.
     pub fn widen(&mut self) -> &mut Self {
-        debug_assert!(self.column.len() > 0);
-
         self.interval = 0..self.column.len();
         self.pos = None;
         self
@@ -144,6 +140,10 @@ where
     T: 'a + Debug + Copy + Ord,
 {
     fn seek(&mut self, value: T) -> Option<T> {
+        if self.interval.end == 0 {
+            return None;
+        }
+
         let pos = self.pos.get_or_insert(self.interval.start);
         let mut lower = *pos;
         let mut upper = self.interval.end - 1;
