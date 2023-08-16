@@ -2,6 +2,7 @@ import unittest
 import tempfile
 import os
 import csv
+from decimal import Decimal
 
 from nmo_python import load_string, NemoEngine, NemoOutputManager
 
@@ -12,6 +13,7 @@ class TestExample(unittest.TestCase):
         data(1,2) .
         data(hi,42) .
         data(hello,world) .
+        data(py, 3.14) .
 
         calculated(?x, !v) :- data(?y, ?x) .
         """
@@ -29,6 +31,7 @@ class TestExample(unittest.TestCase):
                 "__Null#9223372036854775810",
             ],
             ["world", "__Null#9223372036854775811"],
+            [Decimal("3.14"), "__Null#9223372036854775812"],
         ]
 
         self.expected_serialized_result = [
@@ -41,6 +44,10 @@ class TestExample(unittest.TestCase):
                 "<__Null#9223372036854775810>",
             ],
             ["world", "<__Null#9223372036854775811>"],
+            [
+                '"3.14"^^<http://www.w3.org/2001/XMLSchema#decimal>',
+                "<__Null#9223372036854775812>",
+            ],
         ]
 
     def test_result(self):
