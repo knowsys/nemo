@@ -1,6 +1,7 @@
 use std::{cmp::Ordering, collections::HashMap, fmt::Display};
 
 use crate::{
+    columnar::operations::columnscan_arithmetic::ArithmeticOperation,
     datatypes::{casting::PartialUpperBound, DataTypeName},
     error::Error,
     tabular::{operations::triescan_append::AppendInstruction, traits::table_schema::TableSchema},
@@ -298,35 +299,38 @@ impl TypeTree {
                                     continue;
                                 }
 
-                                let operation_type =
-                                    if let Some(&first_index) = tree.input_indices().first() {
-                                        let operation_type = subtype_node
-                                            .schema
-                                            .get_entry(*first_index)
-                                            .partial_upper_bound();
+                                let mut operation_type: Option<DataTypeName> = None;
 
-                                        for &column_index in tree.input_indices() {
-                                            let current_type = subtype_node
-                                                .schema
-                                                .get_entry(column_index)
-                                                .partial_upper_bound();
-
-                                            if !Self::compatible(&operation_type, &current_type) {
-                                                return Err(Error::InvalidExecutionPlan);
-                                            }
+                                // We check whether the type of each leaf node has the same upper bound
+                                for leaf in tree.leaves() {
+                                    let current_type = match leaf {
+                                        ArithmeticOperation::Constant(constant) => {
+                                            constant.get_type().partial_upper_bound()
                                         }
-
-                                        operation_type
-                                    } else {
-                                        // TODO: Revisit this path.
-
-                                        let operation_type =
-                                            subtype_node.schema.get_entry(0).partial_upper_bound();
-
-                                        operation_type
+                                        ArithmeticOperation::ColumnScan(column_index) => {
+                                            subtype_node
+                                                .schema
+                                                .get_entry(*column_index)
+                                                .partial_upper_bound()
+                                        }
+                                        ArithmeticOperation::Addition
+                                        | ArithmeticOperation::Subtraction
+                                        | ArithmeticOperation::Multiplication
+                                        | ArithmeticOperation::Division => {
+                                            unreachable!("Not a leaf node")
+                                        }
                                     };
 
-                                new_schema.add_entry(operation_type);
+                                    if let Some(operation_type) = operation_type {
+                                        if !Self::compatible(&operation_type, &current_type) {
+                                            return Err(Error::InvalidExecutionPlan);
+                                        }
+                                    } else {
+                                        operation_type = Some(current_type);
+                                    }
+                                }
+
+                                new_schema.add_entry(operation_type.expect("operation_type will be assigned because the the operation tree must contain at least one leaf node."));
                             }
                         }
                     }
