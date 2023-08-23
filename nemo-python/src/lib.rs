@@ -4,7 +4,10 @@ use nemo::{
     datatypes::Double,
     execution::ExecutionEngine,
     io::{resource_providers::ResourceProviders, OutputFileManager, RecordWriter},
-    model::{types::primitive_logical_value::PrimitiveLogicalValueT, NumericLiteral, Term},
+    model::{
+        types::primitive_logical_value::PrimitiveLogicalValueT, NumericLiteral, RdfLiteral, Term,
+        XSD_STRING,
+    },
 };
 
 use pyo3::{create_exception, prelude::*};
@@ -63,7 +66,7 @@ struct NemoOutputManager(nemo::io::OutputFileManager);
 #[pymethods]
 impl NemoOutputManager {
     #[new]
-    #[pyo3(signature =(path,overwrite=false, gzip=false))]
+    #[pyo3(signature=(path, overwrite=false, gzip=false))]
     fn py_new(path: String, overwrite: bool, gzip: bool) -> PyResult<Self> {
         let output_manager = OutputFileManager::try_new(path.into(), overwrite, gzip).py_res()?;
 
@@ -72,7 +75,77 @@ impl NemoOutputManager {
 }
 
 #[pyclass]
+struct LanguageString {
+    value: String,
+    tag: String,
+}
+
+#[pymethods]
+impl LanguageString {
+    fn value(&self) -> &String {
+        &self.value
+    }
+
+    fn tag(&self) -> &String {
+        &self.tag
+    }
+}
+
+#[pyclass]
+struct NemoLiteral {
+    value: PyObject,
+    datatype: String,
+}
+
+#[pymethods]
+impl NemoLiteral {
+    fn value(&self) -> &PyObject {
+        &self.value
+    }
+
+    fn datatype(&self) -> &String {
+        &self.datatype
+    }
+}
+
+#[pyclass]
 struct NemoResults(Box<dyn Iterator<Item = Vec<PrimitiveLogicalValueT>> + Send>);
+
+fn logical_value_to_python(py: Python<'_>, v: PrimitiveLogicalValueT) -> PyResult<&PyAny> {
+    let decimal = py.import("decimal")?.getattr("Decimal")?;
+    match v {
+        PrimitiveLogicalValueT::Any(rdf) => match rdf {
+            Term::Variable(_) => panic!("Variables should not occur as results!"),
+            Term::Constant(c) => Ok(c.to_string().into_py(py).into_ref(py)),
+            Term::NumericLiteral(NumericLiteral::Integer(i)) => Ok(i.into_py(py).into_ref(py)),
+            Term::NumericLiteral(NumericLiteral::Double(d)) => {
+                Ok(f64::from(d).into_py(py).into_ref(py))
+            }
+            // currently we pack decimals into strings, maybe this should change
+            Term::NumericLiteral(_) => decimal.call1((rdf.to_string(),)),
+            Term::StringLiteral(s) => Ok(s.into_py(py).into_ref(py)),
+            Term::RdfLiteral(lit) => (|| {
+                let lit = match lit {
+                    RdfLiteral::DatatypeValue { value, datatype } => NemoLiteral {
+                        value: value.into_py(py),
+                        datatype,
+                    },
+                    RdfLiteral::LanguageString { value, tag } => NemoLiteral {
+                        value: Py::new(py, LanguageString { value, tag })?.to_object(py),
+                        datatype: XSD_STRING.to_owned(),
+                    },
+                };
+                Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
+            })(),
+            Term::Aggregate(_) => panic!("aggregates should not appear in the output"),
+        },
+        PrimitiveLogicalValueT::String(s) => Ok(String::from(s).into_py(py).into_ref(py)),
+        PrimitiveLogicalValueT::Integer(i) => Ok(i64::from(i).into_py(py).into_ref(py)),
+        PrimitiveLogicalValueT::Float64(d) => {
+            Ok(f64::from(Double::from(d)).into_py(py).into_ref(py))
+        }
+    }
+}
 
 #[pymethods]
 impl NemoResults {
@@ -84,38 +157,10 @@ impl NemoResults {
         let Some(next) = slf.0.next() else {
             return Ok(None);
         };
-        let decimal = slf.py().import("decimal")?.getattr("Decimal")?;
 
         Ok(Some(
             next.into_iter()
-                .map(|v| match v {
-                    PrimitiveLogicalValueT::Any(rdf) => match rdf {
-                        Term::Variable(_) => panic!("Variables should not occur as results!"),
-                        Term::Constant(c) => Ok(c.to_string().into_py(slf.py()).into_ref(slf.py())),
-                        Term::NumericLiteral(NumericLiteral::Integer(i)) => {
-                            Ok(i.into_py(slf.py()).into_ref(slf.py()))
-                        }
-                        Term::NumericLiteral(NumericLiteral::Double(d)) => {
-                            Ok(f64::from(d).into_py(slf.py()).into_ref(slf.py()))
-                        }
-                        // currently we pack decimals into strings, maybe this should change
-                        Term::NumericLiteral(_) => decimal.call1((rdf.to_string(),)),
-                        Term::StringLiteral(s) => Ok(s.into_py(slf.py()).into_ref(slf.py())),
-                        Term::RdfLiteral(lit) => {
-                            Ok(lit.to_string().into_py(slf.py()).into_ref(slf.py()))
-                        }
-                        Term::Aggregate(_) => panic!("Aggregates should not occur as results!"),
-                    },
-                    PrimitiveLogicalValueT::String(s) => {
-                        Ok(String::from(s).into_py(slf.py()).into_ref(slf.py()))
-                    }
-                    PrimitiveLogicalValueT::Integer(i) => {
-                        Ok(i64::from(i).into_py(slf.py()).into_ref(slf.py()))
-                    }
-                    PrimitiveLogicalValueT::Float64(d) => Ok(f64::from(Double::from(d))
-                        .into_py(slf.py())
-                        .into_ref(slf.py())),
-                })
+                .map(|v| logical_value_to_python(slf.py(), v))
                 .collect::<Result<_, _>>()?,
         ))
     }
@@ -176,6 +221,8 @@ fn nmo_python(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<NemoEngine>()?;
     m.add_class::<NemoResults>()?;
     m.add_class::<NemoOutputManager>()?;
+    m.add_class::<NemoLiteral>()?;
+    m.add_class::<LanguageString>()?;
     m.add_function(wrap_pyfunction!(load_file, m)?)?;
     m.add_function(wrap_pyfunction!(load_string, m)?)?;
     Ok(())
