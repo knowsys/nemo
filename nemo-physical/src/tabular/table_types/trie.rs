@@ -348,21 +348,21 @@ impl Table for Trie {
         let permutator = Permutator::sort_from_multiple_vec(&cols)
             .expect("debug assert above ensures that cols have the same length");
         let sorted_cols: Vec<VecT> =
-            cols.iter()
+            cols.into_iter()
                 .map(|col| match col {
-                    VecT::U32(vec) => VecT::U32(permutator.permutate(vec).expect(
+                    VecT::U32(vec) => VecT::U32(permutator.permutate(&vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
-                    VecT::U64(vec) => VecT::U64(permutator.permutate(vec).expect(
+                    VecT::U64(vec) => VecT::U64(permutator.permutate(&vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
-                    VecT::I64(vec) => VecT::I64(permutator.permutate(vec).expect(
+                    VecT::I64(vec) => VecT::I64(permutator.permutate(&vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
-                    VecT::Float(vec) => VecT::Float(permutator.permutate(vec).expect(
+                    VecT::Float(vec) => VecT::Float(permutator.permutate(&vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
-                    VecT::Double(vec) => VecT::Double(permutator.permutate(vec).expect(
+                    VecT::Double(vec) => VecT::Double(permutator.permutate(&vec).expect(
                         "length matches since permutator is constructed from these vectores",
                     )),
                 })
