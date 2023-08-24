@@ -5,7 +5,7 @@ use crate::{
         column::{Column, ColumnEnum, ColumnT},
         columnbuilder::ColumnBuilder,
     },
-    datatypes::ColumnDataType,
+    datatypes::{ColumnDataType, StorageTypeName, StorageValueT},
 };
 use std::cmp::Ordering;
 use std::fmt::Debug;
@@ -163,8 +163,8 @@ impl Permutator {
         self.value_at(idx).unwrap_or(idx)
     }
 
-    /// Permutates a given slice of data with the computed sort-order
-    pub fn permutate<T>(&self, data: &[T]) -> Result<Vec<T>, Error>
+    /// Permutes a given slice of data with the computed sort-order
+    pub fn permute<'a, T>(&'a self, data: &'a [T]) -> Result<impl Iterator<Item = T> + 'a, Error>
     where
         T: Clone,
     {
@@ -178,7 +178,24 @@ impl Permutator {
             let x = (0..self.offset)
                 .chain(self.sort_vec.iter().map(|&idx| idx + self.offset))
                 .chain((self.offset + self.sort_vec.len())..data.len());
-            Ok(x.map(|idx| data[idx].clone()).collect::<Vec<_>>())
+            Ok(x.map(|idx| data[idx].clone()))
+        }
+    }
+
+    /// Streams the supplied vec in with the computed sort-order
+    pub fn permute_streaming(&self, data: VecT) -> Result<PermutatorStream<'_>, Error> {
+        if data.len() < (self.sort_vec.len() + self.offset) {
+            Err(Error::PermutationApplyWrongLen(
+                data.len(),
+                self.sort_vec.len(),
+                self.offset,
+            ))
+        } else {
+            Ok(PermutatorStream {
+                index: 0,
+                permtation: self,
+                data,
+            })
         }
     }
 
@@ -212,6 +229,53 @@ impl Permutator {
     }
 }
 
+/// Iterates over data applying a permutation
+#[derive(Debug)]
+pub struct PermutatorStream<'a> {
+    index: usize,
+    permtation: &'a Permutator,
+    data: VecT,
+}
+
+impl PermutatorStream<'_> {
+    /// Returns the type of the iterated elements as [`StorageTypeName`]
+    pub fn get_type(&self) -> StorageTypeName {
+        self.data.get_type()
+    }
+}
+
+impl Iterator for PermutatorStream<'_> {
+    type Item = StorageValueT;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.data.len() {
+            return None;
+        }
+
+        let mut index = self.index;
+        self.index += 1;
+
+        if index >= self.permtation.offset {
+            index = self
+                .permtation
+                .sort_vec
+                .get(index - self.permtation.offset)
+                .map(|i| *i + self.permtation.offset)
+                .unwrap_or(index)
+        }
+
+        debug_assert!(index < self.data.len());
+        Some(self.data.get(index).unwrap())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.data.len() - self.index;
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for PermutatorStream<'_> {}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -235,8 +299,9 @@ mod test {
         assert_eq!(
             vector,
             permutator
-                .permutate(data)
+                .permute(data)
                 .expect("Expect that sorting works in this test-case")
+                .collect::<Vec<_>>()
         );
     }
     #[quickcheck]
@@ -271,8 +336,9 @@ mod test {
         assert_eq!(
             vec_usize,
             permutator
-                .permutate(&vec_u64)
+                .permute(&vec_u64)
                 .expect("Expect that sorting works")
+                .collect::<Vec<_>>()
         );
 
         apply_sort_permutator(&vec_u64);
@@ -291,14 +357,16 @@ mod test {
         assert_eq!(
             vec![0, 1, 2, 3, 4, 5, 5, 6, 7, 8, 9, 10],
             permutator
-                .permutate(&vec)
+                .permute(&vec)
                 .expect("Expect that sorting works in this test-case")
+                .collect::<Vec<_>>()
         );
         assert_eq!(
             vec![11, 2, 4, 5, 7, 1, 6, 10, 8, 9, 3, 0],
             permutator
-                .permutate(&vec2)
+                .permute(&vec2)
                 .expect("Expect that sorting works in this test-case")
+                .collect::<Vec<_>>()
         );
     }
     #[test]
@@ -310,24 +378,27 @@ mod test {
         assert_eq!(
             vec![0, 1, 2, 4, 3, 5, 6, 7, 8, 9, 10, 11, 2],
             permutator
-                .permutate(&vec2)
+                .permute(&vec2)
                 .expect("Expect that sorting works in this test-case")
+                .collect::<Vec<_>>()
         );
 
         let permutator = Permutator::sort_from_vec_with_offset(&vec[3..8], 3);
         assert_eq!(
             vec![0, 1, 2, 4, 5, 7, 6, 3, 8, 9, 10, 11, 2],
             permutator
-                .permutate(&vec2)
+                .permute(&vec2)
                 .expect("Expect that sorting works in this test-case")
+                .collect::<Vec<_>>()
         );
 
         let permutator = Permutator::sort_from_vec_with_offset(&vec[4..11], 3);
         assert_eq!(
             vec![0, 1, 2, 3, 4, 6, 5, 9, 7, 8, 10, 11, 2],
             permutator
-                .permutate(&vec2)
+                .permute(&vec2)
                 .expect("Expect that sorting works in this test-case")
+                .collect::<Vec<_>>()
         );
     }
 
@@ -336,9 +407,11 @@ mod test {
         let vec = vec![10, 5, 1, 9, 2, 3, 5, 4, 7, 8, 6, 0];
         let vec2 = vec![0usize, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 2];
         let permutator = Permutator::sort_from_vec(&vec2);
-        let result = permutator.permutate(&vec);
+        let result = permutator.permute(&vec);
         assert!(result.is_err());
-        let err = result.expect_err("Just checked that this is an error");
+        let Err(err) = result else {
+            unreachable!("checked above")
+        };
         match err {
             Error::PermutationApplyWrongLen(_, _, _) => (),
             _ => panic!("wrong error returned"),
@@ -373,8 +446,9 @@ mod test {
         assert_eq!(
             vec![10, 5, 1, 3, 2, 9, 5, 4, 7, 6, 0, 8],
             permutator
-                .permutate(&checker)
+                .permute(&checker)
                 .expect("Applying permutation should work in this test-case")
+                .collect::<Vec<_>>()
         );
     }
 
@@ -391,8 +465,9 @@ mod test {
 
         let permutator = Permutator::sort_from_column(&column);
         let sort_vec = permutator
-            .permutate(&vec)
-            .expect("Applying permutation should work in this test-case");
+            .permute(&vec)
+            .expect("Applying permutation should work in this test-case")
+            .collect::<Vec<_>>();
         assert_eq!(sort_vec, vec_cpy);
         true
     }
@@ -427,8 +502,9 @@ mod test {
         assert_eq!(
             vec1_cpy,
             permutator
-                .permutate(&vec1_to_sort)
+                .permute(&vec1_to_sort)
                 .expect("Test case should be sortable")
+                .collect::<Vec<_>>()
         );
 
         let column2: ColumnVector<Double> = ColumnVector::new(vec2);

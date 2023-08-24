@@ -331,8 +331,13 @@ impl Table for Trie {
             }
         }
 
+        // return empty trie, if no columns are supplied
+        if cols.is_empty() {
+            return Self::new(Vec::new());
+        }
+
         // if the first col is empty, then all of them are; we return early in this case
-        if cols.get(0).map(|col| col.is_empty()).unwrap_or(true) {
+        if cols[0].is_empty() {
             return Self::new(
                 cols
                     .into_iter()
@@ -345,28 +350,18 @@ impl Table for Trie {
             );
         }
 
+        let column_len = cols[0].len();
+
         let permutator = Permutator::sort_from_multiple_vec(&cols)
             .expect("debug assert above ensures that cols have the same length");
-        let sorted_cols: Vec<VecT> =
-            cols.into_iter()
-                .map(|col| match col {
-                    VecT::U32(vec) => VecT::U32(permutator.permutate(&vec).expect(
-                        "length matches since permutator is constructed from these vectores",
-                    )),
-                    VecT::U64(vec) => VecT::U64(permutator.permutate(&vec).expect(
-                        "length matches since permutator is constructed from these vectores",
-                    )),
-                    VecT::I64(vec) => VecT::I64(permutator.permutate(&vec).expect(
-                        "length matches since permutator is constructed from these vectores",
-                    )),
-                    VecT::Float(vec) => VecT::Float(permutator.permutate(&vec).expect(
-                        "length matches since permutator is constructed from these vectores",
-                    )),
-                    VecT::Double(vec) => VecT::Double(permutator.permutate(&vec).expect(
-                        "length matches since permutator is constructed from these vectores",
-                    )),
-                })
-                .collect();
+        let sorted_cols: Vec<_> = cols
+            .into_iter()
+            .map(|col| {
+                permutator
+                    .permute_streaming(col)
+                    .expect("length matches since permutator is constructed from these vectores")
+            })
+            .collect();
 
         // NOTE: we talk about "condensed" and "uncondensed" in the following
         // "uncondensed" refers to the input version of the column vectors (and their indices), i.e. they have the same length and no duplicates have been removed
@@ -376,7 +371,8 @@ impl Table for Trie {
         let mut condensed_data_builders: Vec<ColumnBuilderAdaptiveT> = vec![];
         let mut condensed_interval_starts_builders: Vec<ColumnBuilderAdaptive<usize>> = vec![];
 
-        for sorted_col in sorted_cols.iter() {
+        for mut sorted_col in sorted_cols.into_iter() {
+            debug_assert_eq!(sorted_col.len(), column_len);
             let mut current_uncondensed_interval_starts = vec![0];
             let mut current_condensed_data: ColumnBuilderAdaptiveT = ColumnBuilderAdaptiveT::new(
                 sorted_col.get_type(),
@@ -388,26 +384,19 @@ impl Table for Trie {
 
             let mut uncondensed_interval_ends =
                 last_uncondensed_interval_starts.iter().skip(1).copied();
-            let mut uncondensed_interval_end = uncondensed_interval_ends
-                .next()
-                .unwrap_or_else(|| sorted_col.len());
+            let mut uncondensed_interval_end =
+                uncondensed_interval_ends.next().unwrap_or(column_len);
 
             let mut current_val = sorted_col
-                .get(0)
+                .next()
                 .expect("we return early if the first column (and thus all) are empty");
             current_condensed_data.add(current_val);
             current_condensed_interval_starts_builder.add(0);
 
-            for uncondensed_col_index in 1..sorted_col.len() {
-                let possible_next_val = sorted_col
-                    .get(uncondensed_col_index)
-                    .expect("index is gauranteed to be in range");
-
-                if possible_next_val != current_val
-                    || uncondensed_col_index >= uncondensed_interval_end
-                {
+            for (next_val, uncondensed_col_index) in sorted_col.zip(1..) {
+                if next_val != current_val || uncondensed_col_index >= uncondensed_interval_end {
                     current_uncondensed_interval_starts.push(uncondensed_col_index);
-                    current_val = possible_next_val;
+                    current_val = next_val;
                     current_condensed_data.add(current_val);
                 }
 
@@ -415,9 +404,8 @@ impl Table for Trie {
                 if uncondensed_col_index >= uncondensed_interval_end {
                     current_condensed_interval_starts_builder
                         .add(current_condensed_data.count() - 1);
-                    uncondensed_interval_end = uncondensed_interval_ends
-                        .next()
-                        .unwrap_or_else(|| sorted_col.len());
+                    uncondensed_interval_end =
+                        uncondensed_interval_ends.next().unwrap_or(column_len);
                 }
             }
 
