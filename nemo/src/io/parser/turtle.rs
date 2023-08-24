@@ -174,7 +174,7 @@ pub(super) enum RdfLiteral<'a> {
 pub(super) fn rdf_literal<'a>(input: Span<'a>) -> IntermediateResult<RdfLiteral<'a>> {
     let (remainder, value) = string(input)?;
     let (remainder, literal) = alt((
-        map(token("@"), |tag| RdfLiteral::LanguageString {
+        map(langtoken, |tag| RdfLiteral::LanguageString {
             value: &value,
             tag: &tag,
         }),
@@ -191,11 +191,10 @@ pub(super) fn rdf_literal<'a>(input: Span<'a>) -> IntermediateResult<RdfLiteral<
 
 #[traced("parser::turtle")]
 pub fn langtoken(input: Span) -> IntermediateResult<Span> {
-    recognize(tuple((
+    preceded(
         token("@"),
-        alpha1,
-        many0(preceded(token("-"), alphanumeric1)),
-    )))(input)
+        recognize(tuple((alpha1, many0(preceded(token("-"), alphanumeric1))))),
+    )(input)
 }
 
 #[allow(dead_code)]
