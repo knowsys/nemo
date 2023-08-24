@@ -99,6 +99,31 @@ struct NemoLiteral {
 
 #[pymethods]
 impl NemoLiteral {
+    #[new]
+    #[pyo3(signature=(value, lang=None))]
+    fn new(value: PyObject, lang: Option<String>) -> PyResult<NemoLiteral> {
+        Python::with_gil(|py| {
+            let inner: String = value.extract(py).map_err(|_| {
+                NemoError::new_err(format!("Only string arguments are currently supported"))
+            })?;
+
+            let value = if let Some(lang) = lang {
+                LanguageString {
+                    value: inner,
+                    tag: lang,
+                }
+                .into_py(py)
+            } else {
+                inner.into_py(py)
+            };
+
+            Ok(NemoLiteral {
+                value,
+                datatype: XSD_STRING.to_string(),
+            })
+        })
+    }
+
     fn value(&self) -> &PyObject {
         &self.value
     }

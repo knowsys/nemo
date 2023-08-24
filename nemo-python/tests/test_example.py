@@ -4,16 +4,17 @@ import os
 import csv
 from decimal import Decimal
 
-from nmo_python import load_string, NemoEngine, NemoOutputManager
+from nmo_python import load_string, NemoEngine, NemoOutputManager, NemoLiteral
 
 
 class TestExample(unittest.TestCase):
     def setUp(self):
         self.rules = """
-        data(1,2) .
-        data(hi,42) .
-        data(hello,world) .
+        data(1, 2) .
+        data(hi, 42) .
+        data(hello, world) .
         data(py, 3.14) .
+        data(msg, "hello world"@en) .
 
         calculated(?x, !v) :- data(?y, ?x) .
         """
@@ -22,16 +23,11 @@ class TestExample(unittest.TestCase):
         self.engine.reason()
 
         self.expected_api_result = [
-            [
-                2,
-                "__Null#9223372036854775809",
-            ],
-            [
-                42,
-                "__Null#9223372036854775810",
-            ],
+            [2, "__Null#9223372036854775809"],
+            [42, "__Null#9223372036854775810"],
             ["world", "__Null#9223372036854775811"],
             [Decimal("3.14"), "__Null#9223372036854775812"],
+            [NemoLiteral("hello world", lang="en"), "__Null#9223372036854775813"]
         ]
 
         self.expected_serialized_result = [
@@ -47,6 +43,10 @@ class TestExample(unittest.TestCase):
             [
                 '"3.14"^^<http://www.w3.org/2001/XMLSchema#decimal>',
                 "<__Null#9223372036854775812>",
+            ],
+            [
+                '"hello world"@en'
+                "__Null#9223372036854775813",
             ],
         ]
 
