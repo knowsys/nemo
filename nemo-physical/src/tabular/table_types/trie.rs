@@ -400,7 +400,7 @@ impl Table for Trie {
                     current_condensed_data.add(current_val);
                 }
 
-                // if the second condition above is true, we need to adjust additional intercal information
+                // if the second condition above is true, we need to adjust additional interval information
                 if uncondensed_col_index >= uncondensed_interval_end {
                     current_condensed_interval_starts_builder
                         .add(current_condensed_data.count() - 1);
