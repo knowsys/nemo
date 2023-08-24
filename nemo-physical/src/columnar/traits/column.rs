@@ -102,7 +102,7 @@ impl ColumnT {
         forward_to_column_enum!(self, len)
     }
 
-    /// Returns the value, wrapped in a [`StorageValueT`][crate::datatypes::StorageValueT], at a given index.
+    /// Returns the value, wrapped in a [`StorageValueT`], at a given index.
     ///
     /// # Panics
     /// Panics if `index` is out of bounds.
