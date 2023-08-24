@@ -29,7 +29,7 @@ pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 /// The program will be parsed and checked for unsupported features.
 ///
 /// # Error
-/// Returns an appropriate [`Error`][crate::error::Error] variant on parsing and feature check issues.
+/// Returns an appropriate [`Error`] variant on parsing and feature check issues.
 pub fn parse_program(input: impl AsRef<str>) -> Result<Program, Error> {
     let program = all_input_consumed(RuleParser::new().parse_program())(input.as_ref())?;
     Ok(program)

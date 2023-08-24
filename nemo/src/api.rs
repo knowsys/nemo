@@ -56,7 +56,7 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// The program will be parsed and checked for unsupported features.
 ///
 /// # Error
-/// Returns an appropriate [`Error`][crate::error::Error] variant on parsing and feature check issues.
+/// Returns an appropriate [`Error`] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
     let program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
     ExecutionEngine::initialize(program, ResourceProviders::default())
