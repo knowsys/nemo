@@ -1398,6 +1398,27 @@ mod test {
     }
 
     #[test]
+    fn fact_language_string() {
+        let parser = RuleParser::new();
+        let predicate = "p";
+        let v = "Qapla";
+        let langtag = "tlh";
+        let p = Identifier(predicate.to_string());
+        let value = v.to_string();
+        let fact = format!(r#"{predicate}("{v}"@{langtag}) ."#);
+        let tag = langtag.to_string();
+
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![TermTree::leaf(Term::RdfLiteral(
+                RdfLiteral::LanguageString { value, tag },
+            ))],
+        ));
+
+        assert_parse!(parser.parse_fact(), &fact, expected_fact);
+    }
+
+    #[test]
     fn fact_abstract() {
         let parser = RuleParser::new();
         let predicate = "p";
