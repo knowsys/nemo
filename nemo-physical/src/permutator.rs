@@ -193,7 +193,7 @@ impl Permutator {
         } else {
             Ok(PermutatorStream {
                 index: 0,
-                permtation: self,
+                permutation: self,
                 data,
             })
         }
@@ -233,7 +233,7 @@ impl Permutator {
 #[derive(Debug)]
 pub struct PermutatorStream<'a> {
     index: usize,
-    permtation: &'a Permutator,
+    permutation: &'a Permutator,
     data: VecT,
 }
 
@@ -255,12 +255,12 @@ impl Iterator for PermutatorStream<'_> {
         let mut index = self.index;
         self.index += 1;
 
-        if index >= self.permtation.offset {
+        if index >= self.permutation.offset {
             index = self
-                .permtation
+                .permutation
                 .sort_vec
-                .get(index - self.permtation.offset)
-                .map(|i| *i + self.permtation.offset)
+                .get(index - self.permutation.offset)
+                .map(|i| *i + self.permutation.offset)
                 .unwrap_or(index)
         }
 
