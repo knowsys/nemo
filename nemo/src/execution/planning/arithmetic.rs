@@ -31,7 +31,7 @@ fn termtree_to_operationtree(
                 OperationTreeT::leaf(ArithmeticOperation::Constant(
                     logical_type
                         .ground_term_to_data_value_t(term.clone())
-                        .expect("Type checker should have caugth any errors at this point."),
+                        .expect("Type checker should have caught any errors at this point."),
                 ))
             }
         }
@@ -63,6 +63,7 @@ fn termtree_to_operationtree(
                 .map(|t| termtree_to_operationtree(t, order, logical_type))
                 .collect(),
         ),
+        TermOperation::Function(_) => panic!("function terms are not implemented yet."),
     }
 }
 

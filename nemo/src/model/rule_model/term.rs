@@ -10,6 +10,8 @@ use crate::model::{
     TypeConstraint,
 };
 
+use super::Aggregate;
+
 /// XSD type for string
 pub const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
 /// XSD type for double
@@ -124,6 +126,8 @@ pub enum Term {
     StringLiteral(String),
     /// An RDF literal.
     RdfLiteral(RdfLiteral),
+    /// An aggregate consisting of the aggregate function identifier and the variable identifiers.
+    Aggregate(Aggregate),
 }
 
 impl std::fmt::Display for Term {
@@ -147,6 +151,7 @@ impl std::fmt::Display for Term {
             Term::NumericLiteral(term) => write!(f, "{term}"),
             Term::StringLiteral(term) => write!(f, "\"{term}\""),
             Term::RdfLiteral(term) => write!(f, "{term}"),
+            Term::Aggregate(aggregate) => write!(f, "{aggregate}"),
         }
     }
 }

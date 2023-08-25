@@ -156,15 +156,17 @@ pub enum ParseError {
     /// Expected a blank node label.
     #[error("Expected a blank node label")]
     ExpectedBlankNodeLabel,
-    /// Expected an IRI as a predicate name.
-    #[error("Expected an IRI as a predicate name")]
-    ExpectedIriPred,
+    /// Expected an IRI identifier.
+    #[error("Expected an IRI identifier (for e.g. predicate names or functions in term trees)")]
+    ExpectedIriIdentifier,
     /// Expected an IRI as a constant.
     #[error("Expected an IRI as a constant name")]
     ExpectedIriConstant,
-    /// Expected a predicate name.
-    #[error("Expected a predicate name")]
-    ExpectedPredicateName,
+    /// Expected an IRI-like identifier.
+    #[error(
+        "Expected an IRI-like identifier (for e.g. predicate names or functions in term trees)."
+    )]
+    ExpectedIriLikeIdentifier,
     /// Expected a bare predicate name.
     #[error("Expected a bare name")]
     ExpectedBareName,
@@ -218,13 +220,28 @@ pub enum ParseError {
     ExpectedArithmeticFactor,
     /// Expected an arithmetic parenthesised expression.
     #[error("Expected an arithmetic parenthesised expression")]
-    ExpectedArithmeticParens,
+    ExpectedArithmeticParenthesis,
     /// Encountered a base declaration after any other directive.
     #[error("A @base declaration can only be the first statement in the program")]
     LateBaseDeclaration,
     /// Encountered a prefix declaration after any non-base non-prefix directive.
     #[error("A @prefix declaration must occur before any non-@base non-@prefix declarations.")]
     LatePrefixDeclaration,
+    /// Expected a function term
+    #[error("Expected a function term")]
+    ExpectedFunctionTerm,
+    /// Expected a term tree (i.e. a term that can additionally involve e.g. arithmetic operations)
+    #[error("Expected a term tree (i.e. a term that can additionally involve e.g. arithmetic operations)")]
+    ExpectedTermTree,
+    /// Expected an aggregate
+    #[error("Expected an aggregate term")]
+    ExpectedAggregate,
+    /// Expected an parenthesised expression.
+    #[error("Expected an parenthesised expression")]
+    ExpectedParenthesisedExpression,
+    /// Expected an parenthesised term tree.
+    #[error("Expected an parenthesised term tree")]
+    ExpectedTermTreeInParenthesis,
 }
 
 impl ParseError {

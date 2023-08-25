@@ -1,5 +1,8 @@
 //! The data model.
 
+mod aggregate;
+pub use aggregate::*;
+
 mod atom;
 pub use atom::*;
 

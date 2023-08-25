@@ -301,6 +301,7 @@ impl TryFrom<Term> for PhysicalString {
             Term::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
                 Ok(DatatypeValue(value, datatype).into())
             }
+            Term::Aggregate(_) => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any)),
         }
     }
 }

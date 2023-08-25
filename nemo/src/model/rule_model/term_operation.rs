@@ -1,6 +1,6 @@
 use nemo_physical::util::TaggedTree;
 
-use super::Term;
+use super::{Identifier, Term};
 
 /// Supported operations between terms.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -15,6 +15,8 @@ pub enum TermOperation {
     Multiplication,
     /// Dividing terms.
     Division,
+    /// Function term (e.g. operation or constructor).
+    Function(Identifier),
 }
 
 /// [`TaggedTree`] with [`TermOperation`] as tags.

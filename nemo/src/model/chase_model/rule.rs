@@ -152,7 +152,7 @@ impl TryFrom<Rule> for ChaseRule {
         for atom in rule.head() {
             let mut new_terms = Vec::<Term>::new();
 
-            for term_tree in atom.terms() {
+            for term_tree in atom.term_trees() {
                 if let TermOperation::Term(term) = term_tree.operation() {
                     new_terms.push(term.clone());
                 } else {
