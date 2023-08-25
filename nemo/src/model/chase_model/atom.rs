@@ -27,7 +27,7 @@ impl ChaseAtom {
     /// Construct a [`ChaseAtom`] from an [`Atom`] that does not contain term trees that are not leaves.
     pub fn from_flat_atom(atom: Atom) -> Result<Self, RuleTranslationError> {
         let terms: Vec<Term> = atom
-            .terms()
+            .term_trees()
             .iter()
             .map(|t| {
                 if let TermOperation::Term(term) = t.operation() {

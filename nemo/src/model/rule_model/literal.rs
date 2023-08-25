@@ -54,7 +54,7 @@ impl Literal {
     /// Return the terms in the literal.
     #[must_use]
     pub fn terms(&self) -> &Vec<TermTree> {
-        forward_to_atom!(self, terms)
+        forward_to_atom!(self, term_trees)
     }
 
     /// Return the variables in the literal.

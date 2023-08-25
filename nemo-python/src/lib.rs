@@ -97,6 +97,7 @@ impl NemoResults {
                         Term::NumericLiteral(_) => rdf.to_string().into_py(slf.py()),
                         Term::StringLiteral(s) => s.into_py(slf.py()),
                         Term::RdfLiteral(lit) => lit.to_string().into_py(slf.py()),
+                        Term::Aggregate(_) => panic!("Aggregates should not occur as results!"),
                     },
                     PrimitiveLogicalValueT::String(s) => String::from(s).into_py(slf.py()),
                     PrimitiveLogicalValueT::Integer(i) => i64::from(i).into_py(slf.py()),

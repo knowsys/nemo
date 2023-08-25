@@ -408,7 +408,7 @@ impl ChaseProgram {
 
         // Predicates in facts
         for fact in self.facts() {
-            result.insert((fact.0.predicate(), fact.0.terms().len()));
+            result.insert((fact.0.predicate(), fact.0.term_trees().len()));
         }
 
         // Additional predicates for existential rules
@@ -756,7 +756,7 @@ impl ChaseProgram {
         }
 
         for fact in self.facts() {
-            let arity = fact.0.terms().len();
+            let arity = fact.0.term_trees().len();
             if arity != *arities.entry(fact.0.predicate()).or_insert(arity) {
                 return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
             }
@@ -810,7 +810,7 @@ impl ChaseProgram {
                 .get(&fact.0.predicate())
                 .expect("Previous analysis should have assigned a type vector to each predicate.");
 
-            for (term_index, ground_term_tree) in fact.0.terms().iter().enumerate() {
+            for (term_index, ground_term_tree) in fact.0.term_trees().iter().enumerate() {
                 if let TermOperation::Term(ground_term) = ground_term_tree.operation() {
                     let logical_type = predicate_types[term_index];
                     logical_type.ground_term_to_data_value_t(ground_term.clone())?;

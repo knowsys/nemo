@@ -486,7 +486,7 @@ pub(super) fn build_preferable_variable_orders(
         let fact_preds: HashSet<(Identifier, usize)> = program
             .facts()
             .iter()
-            .map(|f| (f.0.predicate(), f.0.terms().len()))
+            .map(|f| (f.0.predicate(), f.0.term_trees().len()))
             .collect();
         let source_preds: HashSet<(Identifier, usize)> = program
             .sources()

@@ -146,7 +146,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         for fact in program.facts() {
             let new_row: Vec<DataValueT> = fact
                 .0
-                .terms()
+                .term_trees()
                 .iter()
                 .enumerate()
                 // TODO: get rid of unwrap
