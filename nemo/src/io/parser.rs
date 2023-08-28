@@ -17,7 +17,6 @@ use nom::{
 use macros::traced;
 
 mod types;
-use nom_locate::LocatedSpan;
 use types::{IntermediateResult, Span};
 pub(crate) mod iri;
 pub(crate) mod rfc5234;
@@ -330,21 +329,21 @@ impl<'a> RuleParser<'a> {
     /// Matches an opening parenthesis,
     /// then gets an object from the parser,
     /// and finally matches an closing parenthesis.
-    pub fn in_parenthesis<'b, O, F>(
+    pub fn parenthesised<'b, O, F>(
         &'a self,
         parser: F,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<O>
     where
         O: Debug + 'a,
-        F: FnMut(LocatedSpan<&'a str>) -> IntermediateResult<O> + 'a,
+        F: FnMut(Span<'a>) -> IntermediateResult<O> + 'a,
     {
         traced(
-            "in_parenthesis",
+            "parenthesised",
             map_error(
                 delimited(
-                    delimited(multispace_or_comment0, token("("), multispace_or_comment0),
+                    self.parse_open_parenthesis(),
                     parser,
-                    delimited(multispace_or_comment0, token(")"), multispace_or_comment0),
+                    self.parse_close_parenthesis(),
                 ),
                 || ParseError::ExpectedParenthesisedExpression,
             ),
@@ -605,7 +604,7 @@ impl<'a> RuleParser<'a> {
                     let (remainder, (predicate, terms)) = terminated(
                         pair(
                             self.parse_iri_like_identifier(),
-                            self.in_parenthesis(separated_list1(
+                            self.parenthesised(separated_list1(
                                 self.parse_comma(),
                                 parse_ground_term(&self.prefixes),
                             )),
@@ -804,17 +803,13 @@ impl<'a> RuleParser<'a> {
                     let (remainder, _) = nom::character::complete::char('#')(input)?;
                     let (remainder, aggregate_identifier) =
                         self.parse_bare_iri_like_identifier()(remainder)?;
-                    let (remainder, variable_identifiers) = delimited(
-                        self.parse_open_parenthesis(),
-                        cut(separated_list1(
-                            self.parse_comma(),
-                            map(self.parse_universal_variable(), |variable| match variable {
-                                Variable::Universal(identifier) => identifier,
-                                Variable::Existential(_) => panic!(),
-                            }),
-                        )),
-                        cut(self.parse_close_parenthesis()),
-                    )(remainder)?;
+                    let (remainder, variable_identifiers) = self.parenthesised(separated_list1(
+                        self.parse_comma(),
+                        map(self.parse_universal_variable(), |variable| match variable {
+                            Variable::Universal(identifier) => identifier,
+                            Variable::Existential(_) => panic!(),
+                        }),
+                    ))(remainder)?;
 
                     let aggregate = Aggregate {
                         aggregate_identifier,
@@ -951,7 +946,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parse an term tree.
+    /// Parse a term tree.
     ///
     /// This may consist of:
     /// * A function term
@@ -966,7 +961,7 @@ impl<'a> RuleParser<'a> {
                         alt((
                             self.parse_function_term(),
                             self.parse_arithmetic_expression(),
-                            self.parse_term_tree_in_parenthesis(),
+                            self.parse_parenthesised_term_tree(),
                         )),
                         multispace_or_comment0,
                     )(input)
@@ -977,13 +972,13 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a parenthesised term tree.
-    pub fn parse_term_tree_in_parenthesis(
+    pub fn parse_parenthesised_term_tree(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
         traced(
-            "parse_term_tree_in_parenthesis",
-            map_error(self.in_parenthesis(self.parse_term_tree()), || {
-                ParseError::ExpectedTermTreeInParenthesis
+            "parse_parenthesised_term_tree",
+            map_error(self.parenthesised(self.parse_term_tree()), || {
+                ParseError::ExpectedParenthesisedTermTree
             }),
         )
     }
@@ -996,7 +991,7 @@ impl<'a> RuleParser<'a> {
                 move |input| {
                     let (remainder, identifier) = self.parse_iri_like_identifier()(input)?;
 
-                    let (remainder, subtrees) = (self.in_parenthesis(separated_list0(
+                    let (remainder, subtrees) = (self.parenthesised(separated_list0(
                         self.parse_comma(),
                         self.parse_term_tree(),
                     )))(remainder)?;
@@ -1086,7 +1081,7 @@ impl<'a> RuleParser<'a> {
             map_error(
                 alt((
                     map(self.parse_term(), TermTree::leaf),
-                    self.parse_term_tree_in_parenthesis(),
+                    self.parse_parenthesised_term_tree(),
                 )),
                 || ParseError::ExpectedArithmeticFactor,
             ),
@@ -1735,9 +1730,9 @@ mod test {
             ParseError::ExpectedArithmeticFactor
         );
         assert_parse_error!(
-            parser.parse_term_tree_in_parenthesis(),
+            parser.parse_parenthesised_term_tree(),
             "",
-            ParseError::ExpectedArithmeticParenthesis
+            ParseError::ExpectedParenthesisedTermTree
         );
         assert_parse_error!(
             parser.parse_arithmetic_product(),

@@ -218,9 +218,6 @@ pub enum ParseError {
     /// Expected an arithmetic factor expression.
     #[error("Expected an arithmetic factor expression")]
     ExpectedArithmeticFactor,
-    /// Expected an arithmetic parenthesised expression.
-    #[error("Expected an arithmetic parenthesised expression")]
-    ExpectedArithmeticParenthesis,
     /// Encountered a base declaration after any other directive.
     #[error("A @base declaration can only be the first statement in the program")]
     LateBaseDeclaration,
@@ -241,7 +238,7 @@ pub enum ParseError {
     ExpectedParenthesisedExpression,
     /// Expected an parenthesised term tree.
     #[error("Expected an parenthesised term tree")]
-    ExpectedTermTreeInParenthesis,
+    ExpectedParenthesisedTermTree,
 }
 
 impl ParseError {
