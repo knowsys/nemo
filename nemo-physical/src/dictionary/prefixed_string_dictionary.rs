@@ -335,6 +335,10 @@ impl Default for PrefixedStringDictionary {
 }
 
 impl Dictionary for PrefixedStringDictionary {
+    fn new() -> Self {
+        Default::default()
+    }
+
     fn add(&mut self, entry: String) -> usize {
         log::trace!("add {entry:?} to {self:?}");
         *self.mapping.entry(entry.clone()).or_insert_with(|| {

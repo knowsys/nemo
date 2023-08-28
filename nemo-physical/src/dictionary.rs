@@ -16,14 +16,11 @@ pub mod value_serializer;
 pub use value_serializer::ValueSerializer;
 
 /// This Dictionary Trait defines dictionaries, which keep ownership of the inserted elements.
-pub trait Dictionary: Debug + Default + Clone {
+pub trait Dictionary: Debug {
     /// Construct a new and empty [`Dictionary`]
     fn new() -> Self
     where
-        Self: Sized + Default,
-    {
-        Self::default()
-    }
+        Self: Sized + Default;
     /// Add a new string to the dictionary
     /// and returns the associated [usize] value to the added string
     /// Note that duplicates will not be added and the existing [usize] will be returned
