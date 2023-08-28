@@ -190,7 +190,10 @@ pub(super) fn requirements_from_facts(facts: &Vec<ChaseFact>) -> PredicateTypeRe
             .terms()
             .iter()
             .map(|c| c.primitive_type())
-            .map(TypeRequirement::Soft)
+            .map(|maybe_type| match maybe_type {
+                Some(primitive_type) => TypeRequirement::Soft(primitive_type),
+                None => TypeRequirement::None,
+            })
             .collect();
 
         add_type_requirements(&mut fact_decls, fact.predicate(), reqs_for_fact)

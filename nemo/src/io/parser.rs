@@ -14,7 +14,7 @@ use nom::{
     character::complete::{alpha1, digit1, multispace1, none_of, satisfy},
     combinator::{all_consuming, cut, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list0, separated_list1},
-    sequence::{delimited, pair, preceded, terminated, tuple},
+    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
     Err,
 };
 
@@ -262,6 +262,25 @@ fn parse_iri_constant<'a>(
     )
 }
 
+fn parse_constant_term<'a>(
+    prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Constant> {
+    traced(
+        "parse_constant_term",
+        alt((
+            map(parse_iri_constant(prefixes), |c| Constant::Abstract(c)),
+            map(turtle::numeric_literal, |n| Constant::NumericLiteral(n)),
+            map_res(turtle::rdf_literal, move |literal| {
+                Constant::try_from(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
+                    .map_err(ReadingError::from)
+            }),
+            map(turtle::string, move |literal| {
+                Constant::StringLiteral(literal.to_string())
+            }),
+        )),
+    )
+}
+
 /// Parse a ground term.
 pub fn parse_ground_term<'a>(
     prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
@@ -269,22 +288,7 @@ pub fn parse_ground_term<'a>(
     traced(
         "parse_ground_term",
         map_error(
-            alt((
-                map(parse_iri_constant(prefixes), |c| {
-                    PrimitiveTerm::Constant(Constant::Abstract(c))
-                }),
-                map(turtle::numeric_literal, |n| {
-                    PrimitiveTerm::Constant(Constant::NumericLiteral(n))
-                }),
-                map_res(turtle::rdf_literal, move |literal| {
-                    Constant::try_from(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
-                        .map_err(ReadingError::from)
-                        .map(PrimitiveTerm::Constant)
-                }),
-                map(turtle::string, move |literal| {
-                    PrimitiveTerm::Constant(Constant::StringLiteral(literal.to_string()))
-                }),
-            )),
+            map(parse_constant_term(prefixes), PrimitiveTerm::Constant),
             || ParseError::ExpectedGroundTerm,
         ),
     )
@@ -320,6 +324,11 @@ impl<'a> RuleParser<'a> {
     /// Parse a comma, optionally surrounded by spaces.
     fn parse_comma(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
         traced("parse_comma", space_delimited_token(","))
+    }
+
+    /// Parse a colon, optionally surrounded by spaces.
+    fn parse_equals(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_equals", space_delimited_token("="))
     }
 
     /// Parse a negation sign (`~`), optionally surrounded by spaces.
@@ -364,6 +373,16 @@ impl<'a> RuleParser<'a> {
                 || ParseError::ExpectedParenthesisedExpression,
             ),
         )
+    }
+
+    /// Parse an opening brace, optionally surrounded by spaces.
+    fn parse_open_brace(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_open_brace", space_delimited_token("{"))
+    }
+
+    /// Parse a closing brace, optionally surrounded by spaces.
+    fn parse_close_brace(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_close_brace", space_delimited_token("}"))
     }
 
     /// Parse a base declaration.
@@ -464,7 +483,7 @@ impl<'a> RuleParser<'a> {
         })
     }
 
-    /// Parses a data source declaration.
+    /// Parse a data source declaration.
     pub fn parse_source(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<DataSourceDeclaration> {
@@ -566,7 +585,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parses an output directive.
+    /// Parse an output directive.
     pub fn parse_output(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<QualifiedPredicateName> {
@@ -574,7 +593,7 @@ impl<'a> RuleParser<'a> {
             "parse_output",
             map_error(
                 delimited(
-                    terminated(token("@output"), cut(multispace_or_comment0)),
+                    terminated(token("@output"), cut(multispace_or_comment1)),
                     cut(alt((
                         map_res::<_, _, _, _, Error, _, _>(
                             self.parse_qualified_predicate_name(false),
@@ -597,7 +616,71 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parses a statement.
+    /// Parse the [Key] of a [Map], i.e., a predicate name or a string.
+    pub fn parse_map_key(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Key> {
+        traced(
+            "parse_map_key",
+            alt((
+                map(self.parse_iri_like_identifier(), Key::Identifier),
+                map(turtle::string, |s| Key::String(s.to_string())),
+            )),
+        )
+    }
+
+    /// Parse an entry in a [Map], i.e., a [Key]--[Term] pair.
+    pub fn parse_map_entry(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Key, Constant)> {
+        traced(
+            "parse_map_entry",
+            separated_pair(
+                self.parse_map_key(),
+                self.parse_equals(),
+                map(parse_constant_term(&self.prefixes), |term| term),
+            ),
+        )
+    }
+
+    /// Parse an object literal.
+    pub fn parse_map_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Map> {
+        traced(
+            "parse_map_literal",
+            delimited(
+                self.parse_open_brace(),
+                map(
+                    separated_list0(self.parse_comma(), self.parse_map_entry()),
+                    Map::from,
+                ),
+                self.parse_close_brace(),
+            ),
+        )
+    }
+
+    /// Parse an import directive.
+    pub fn parse_import(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced(
+            "parse_import",
+            delimited(
+                terminated(token("@import"), cut(multispace_or_comment1)),
+                cut(token("dummy")),
+                cut(self.parse_dot()),
+            ),
+        )
+    }
+
+    /// Parse an export directive.
+    pub fn parse_export(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced(
+            "parse_export",
+            delimited(
+                terminated(token("@import"), cut(multispace_or_comment1)),
+                cut(token("dummy")),
+                cut(self.parse_dot()),
+            ),
+        )
+    }
+
+    /// Parse a statement.
     pub fn parse_statement(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Statement> {
         traced(
             "parse_statement",
@@ -1192,7 +1275,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parses a program in the rules language.
+    /// Parse a program in the rules language.
     pub fn parse_program(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Program> {
         fn check_for_invalid_statement<'a, F>(
             parser: &mut F,
@@ -1917,7 +2000,6 @@ mod test {
             ParseError::LatePrefixDeclaration
         );
     }
-
     #[test]
     #[cfg_attr(miri, ignore)]
     fn parse_function_terms() {
@@ -2186,5 +2268,47 @@ mod test {
         let expected = Constraint::LessThanEq(left_term, right_term);
 
         assert_parse!(parser.parse_constraint(), expression, expected);
+    }
+
+    #[test]
+    fn map_literal() {
+        let parser = RuleParser::new();
+        assert_parse!(
+            parser.parse_map_literal(),
+            r#"{}"#,
+            <Map as Default>::default()
+        );
+
+        let ident = "foo";
+        let key = Key::identifier(Identifier(ident.to_string()));
+
+        assert_parse!(parser.parse_map_key(), ident, key.clone());
+
+        let entry = format!("{ident}=23");
+        assert_parse!(
+            parser.parse_map_entry(),
+            &entry,
+            (
+                key.clone(),
+                Constant::NumericLiteral(NumericLiteral::Integer(23))
+            )
+        );
+
+        let pairs = vec![
+            (
+                Key::string("23".to_string()),
+                Constant::NumericLiteral(NumericLiteral::Integer(42)),
+            ),
+            (
+                Key::identifier(Identifier("foo".to_string())),
+                Constant::NumericLiteral(NumericLiteral::Integer(23)),
+            ),
+        ];
+
+        assert_parse!(
+            parser.parse_map_literal(),
+            r#"{foo = 23, "23" = 42}"#,
+            pairs.clone().into_iter().collect::<Map>()
+        );
     }
 }
