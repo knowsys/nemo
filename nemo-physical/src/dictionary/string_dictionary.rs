@@ -51,6 +51,7 @@ mod test {
     use std::borrow::Borrow;
 
     use crate::dictionary::Dictionary;
+    use crate::dictionary::EntryStatus;
 
     use super::StringDictionary;
 
@@ -101,5 +102,12 @@ mod test {
         assert_eq!(dict.index_of("Pos".to_string().borrow()), None);
         assert_eq!(dict.index_of("Pos"), None);
         assert_eq!(dict.index_of("b"), Some(1));
+    }
+
+    #[test]
+    fn add() {
+        let mut dict = create_dict();
+        assert_eq!(dict.add("a".to_string()), EntryStatus::Old(0));
+        assert_eq!(dict.add("new value".to_string()), EntryStatus::New(6));
     }
 }

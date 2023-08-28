@@ -445,6 +445,7 @@ mod test {
     use std::borrow::Borrow;
 
     use crate::dictionary::Dictionary;
+    use crate::dictionary::EntryStatus;
 
     use super::PrefixedStringDictionary;
 
@@ -509,6 +510,13 @@ mod test {
         assert_eq!(dict.index_of("Pos".to_string().borrow()), None);
         assert_eq!(dict.index_of("Pos"), None);
         assert_eq!(dict.index_of("b"), Some(2));
+    }
+
+    #[test]
+    fn add() {
+        let mut dict = create_dict();
+        assert_eq!(dict.add("a".to_string()), EntryStatus::Old(1));
+        assert_eq!(dict.add("new value".to_string()), EntryStatus::New(7));
     }
 
     #[test]

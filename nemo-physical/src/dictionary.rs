@@ -17,7 +17,7 @@ pub use value_serializer::ValueSerializer;
 
 /// Status of a dictionary entry when adding new values.
 /// It indicates if the value was previously present or not.
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug,Clone,Copy,PartialEq,Eq)]
 pub enum EntryStatus {
     /// Entry was new and has been freshly assinged the given index.
     New(usize),
