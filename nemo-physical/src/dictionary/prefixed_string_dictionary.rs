@@ -377,6 +377,7 @@ impl Dictionary for PrefixedStringDictionary {
                     Rc::clone(&entry_string),
                 ));
                 log::trace!("ordering: {:?}, value: {value:?}", self.ordering);
+                self.mapping.insert(entry.clone(), value);
                 EntryStatus::New(value)
             }
         }
