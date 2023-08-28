@@ -1,4 +1,5 @@
 use super::Dictionary;
+use super::EntryStatus;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -14,14 +15,14 @@ impl Dictionary for StringDictionary {
         Default::default()
     }
 
-    fn add(&mut self, entry: String) -> usize {
+    fn add(&mut self, entry: String) -> EntryStatus {
         match self.mapping.get(&entry) {
-            Some(idx) => *idx,
+            Some(idx) => EntryStatus::Old(*idx),
             None => {
                 let len = self.store.len();
                 self.store.push(Rc::new(entry));
                 self.mapping.insert(self.store[len].clone(), len);
-                len
+                EntryStatus::New(len)
             }
         }
     }

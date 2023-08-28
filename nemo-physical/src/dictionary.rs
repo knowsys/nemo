@@ -15,6 +15,26 @@ pub use string_dictionary::StringDictionary;
 pub mod value_serializer;
 pub use value_serializer::ValueSerializer;
 
+/// Status of a dictionary entry when adding new values.
+/// It indicates if the value was previously present or not.
+#[derive(Debug,Clone,Copy)]
+pub enum EntryStatus {
+    /// Entry was new and has been freshly assinged the given index.
+    New(usize),
+    /// Entry was already known and has the given index.
+    Old(usize),
+}
+impl EntryStatus {
+    /// Returns the actual index.
+    pub fn value(&self) -> usize {
+        match self {
+            EntryStatus::New(value) => *value,
+            EntryStatus::Old(value) => *value
+        }
+    }
+}
+
+
 /// This Dictionary Trait defines dictionaries, which keep ownership of the inserted elements.
 pub trait Dictionary: Debug {
     /// Construct a new and empty [`Dictionary`]
@@ -24,7 +44,7 @@ pub trait Dictionary: Debug {
     /// Add a new string to the dictionary
     /// and returns the associated [usize] value to the added string
     /// Note that duplicates will not be added and the existing [usize] will be returned
-    fn add(&mut self, entry: String) -> usize;
+    fn add(&mut self, entry: String) -> EntryStatus;
     /// Looks for a given [&str] slice and returns `Some(position)` if there is a match or `None` if there is no match.
     fn index_of(&self, entry: &str) -> Option<usize>;
     /// Returns an equivalent [String] to the one associated with the `index` or None if the `index` is out of bounds

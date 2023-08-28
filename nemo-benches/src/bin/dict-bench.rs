@@ -5,10 +5,8 @@ use std::io::prelude::*;
 use std::io::stdin;
 use flate2::read::MultiGzDecoder;
 
-// use text_io::read;
-
 use nemo::meta::{timing::TimedDisplay, TimedCode};
-use nemo_physical::dictionary::{Dictionary,string_dictionary::StringDictionary,prefixed_string_dictionary::PrefixedStringDictionary};
+use nemo_physical::dictionary::{Dictionary,EntryStatus,string_dictionary::StringDictionary,prefixed_string_dictionary::PrefixedStringDictionary};
 
 fn create_dictionary(dict_type: &str) -> Box<dyn Dictionary> {
     match dict_type {
@@ -42,22 +40,35 @@ fn main() {
 
     let mut dict = create_dictionary(dicttype);
     let mut count = 0;
+    let mut bytes = 0;
 
-    TimedCode::instance().sub("Dictionary loading").start();
+    TimedCode::instance().sub("Dictionary filling").start();
 
-    println!("Starting experiments ...");
+    println!("Starting to fill dictionary ...");
 
     for l in reader.lines()  {
-        dict.add(l.unwrap());
+        let s = l.unwrap();
+        let b = s.len();
+        // if dict.index_of(s.as_str()).is_none() {
+        //     bytes = bytes + s.len();
+        // }
+        // TimedCode::instance().sub("Dictionary filling/add").start();
+        let entry_status = dict.add(s);
+        match entry_status {
+            EntryStatus::New(_value) => {bytes = bytes + b; }
+            _ => {}
+        }
+        // TimedCode::instance().sub("Dictionary filling/add").stop();
         count = count + 1;
     }
 
-    TimedCode::instance().sub("Dictionary loading").stop();
+    TimedCode::instance().sub("Dictionary filling").stop();
 
     println!(
-        "Processed {} strings (dictionary containts {} unique strings).",
+        "Processed {} strings (dictionary containts {} unique strings with {} bytes overall).",
         count,
-        dict.len()
+        dict.len(),
+        bytes
     );
 
     TimedCode::instance().stop();

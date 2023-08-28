@@ -73,7 +73,7 @@ impl DataValueT {
         match self {
             Self::String(val) => {
                 // dictionary indices
-                StorageValueT::U64(dict.add(val.clone().into()).try_into().unwrap())
+                StorageValueT::U64(dict.add(val.clone().into()).value().try_into().unwrap())
             }
             Self::U32(val) => StorageValueT::U32(*val),
             Self::U64(val) => StorageValueT::U64(*val),

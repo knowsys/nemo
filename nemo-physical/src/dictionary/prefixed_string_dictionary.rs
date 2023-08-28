@@ -7,6 +7,7 @@ use std::{
 };
 
 use super::Dictionary;
+use super::EntryStatus;
 
 /// Represents a node, which is either a [TrieNode::Root], or some non-special [TrieNode::Node]
 enum TrieNode {
@@ -339,43 +340,46 @@ impl Dictionary for PrefixedStringDictionary {
         Default::default()
     }
 
-    fn add(&mut self, entry: String) -> usize {
+    fn add(&mut self, entry: String) -> EntryStatus {
         log::trace!("add {entry:?} to {self:?}");
-        *self.mapping.entry(entry.clone()).or_insert_with(|| {
-            let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).collect();
-            log::trace!("prefixes: {prefixes:?}");
-            let (real_prefixes, real_entry) = prefixes.split_at(prefixes.len() - 1);
-            log::trace!("reals: {real_prefixes:?}, {real_entry:?}");
-            let (mut cur_node, remaining_prefixes) =
-                TrieNode::find_last_match(self.store.to_owned(), real_prefixes);
-            log::trace!("cur_node: {cur_node:?}, remaining: {remaining_prefixes:?}");
-            for element in remaining_prefixes {
-                let new_node = Rc::new(RefCell::new(TrieNode::create_node(
+        match self.mapping.get(&entry) {
+            Some(idx) => EntryStatus::Old(*idx),
+            None => {
+                let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).collect();
+                log::trace!("prefixes: {prefixes:?}");
+                let (real_prefixes, real_entry) = prefixes.split_at(prefixes.len() - 1);
+                log::trace!("reals: {real_prefixes:?}, {real_entry:?}");
+                let (mut cur_node, remaining_prefixes) =
+                    TrieNode::find_last_match(self.store.to_owned(), real_prefixes);
+                log::trace!("cur_node: {cur_node:?}, remaining: {remaining_prefixes:?}");
+                for element in remaining_prefixes {
+                    let new_node = Rc::new(RefCell::new(TrieNode::create_node(
+                        Rc::clone(&cur_node),
+                        element.to_string(),
+                    )));
+                    log::trace!("{element:?} ({remaining_prefixes:?}): new_node: {new_node:?}");
+                    cur_node
+                        .as_ref()
+                        .borrow_mut()
+                        .add_node(Rc::clone(&new_node));
+                    cur_node = Rc::clone(&new_node);
+                    log::trace!("{element:?} ({remaining_prefixes:?}): cur_node: {cur_node:?}");
+                }
+                let entry_string = Rc::new(real_entry[0].to_string());
+                log::trace!("entry_string: {entry_string:?}");
+                log::trace!(
+                    "pair: {:?}",
+                    TrieNodeStringPair(Rc::clone(&cur_node), Rc::clone(&entry_string))
+                );
+                let value = self.ordering.len();
+                self.ordering.push(TrieNodeStringPair(
                     Rc::clone(&cur_node),
-                    element.to_string(),
-                )));
-                log::trace!("{element:?} ({remaining_prefixes:?}): new_node: {new_node:?}");
-                cur_node
-                    .as_ref()
-                    .borrow_mut()
-                    .add_node(Rc::clone(&new_node));
-                cur_node = Rc::clone(&new_node);
-                log::trace!("{element:?} ({remaining_prefixes:?}): cur_node: {cur_node:?}");
+                    Rc::clone(&entry_string),
+                ));
+                log::trace!("ordering: {:?}, value: {value:?}", self.ordering);
+                EntryStatus::New(value)
             }
-            let entry_string = Rc::new(real_entry[0].to_string());
-            log::trace!("entry_string: {entry_string:?}");
-            log::trace!(
-                "pair: {:?}",
-                TrieNodeStringPair(Rc::clone(&cur_node), Rc::clone(&entry_string))
-            );
-            let value = self.ordering.len();
-            self.ordering.push(TrieNodeStringPair(
-                Rc::clone(&cur_node),
-                Rc::clone(&entry_string),
-            ));
-            log::trace!("ordering: {:?}, value: {value:?}", self.ordering);
-            value
-        })
+        }
     }
 
     fn index_of(&self, entry: &str) -> Option<usize> {
@@ -545,11 +549,11 @@ mod test {
         ];
 
         for (i, str) in vec.iter().enumerate() {
-            assert_eq!(dict.add(str.to_string()), i + 1);
+            assert_eq!(dict.add(str.to_string()).value(), i + 1);
         }
         // duplicates
         for (i, str) in vec.iter().enumerate() {
-            assert_eq!(dict.add(str.to_string()), i + 1);
+            assert_eq!(dict.add(str.to_string()).value(), i + 1);
         }
 
         for (id, result) in vec.iter().enumerate() {
