@@ -343,7 +343,7 @@ impl Dictionary for PrefixedStringDictionary {
     fn add(&mut self, entry: String) -> EntryStatus {
         log::trace!("add {entry:?} to {self:?}");
         match self.mapping.get(&entry) {
-            Some(idx) => EntryStatus::Old(*idx),
+            Some(idx) => EntryStatus::Known(*idx),
             None => {
                 let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).collect();
                 log::trace!("prefixes: {prefixes:?}");
@@ -378,7 +378,7 @@ impl Dictionary for PrefixedStringDictionary {
                 ));
                 log::trace!("ordering: {:?}, value: {value:?}", self.ordering);
                 self.mapping.insert(entry.clone(), value);
-                EntryStatus::New(value)
+                EntryStatus::Fresh(value)
             }
         }
     }
@@ -516,8 +516,8 @@ mod test {
     #[test]
     fn add() {
         let mut dict = create_dict();
-        assert_eq!(dict.add("a".to_string()), EntryStatus::Old(1));
-        assert_eq!(dict.add("new value".to_string()), EntryStatus::New(7));
+        assert_eq!(dict.add("a".to_string()), EntryStatus::Known(1));
+        assert_eq!(dict.add("new value".to_string()), EntryStatus::Fresh(7));
     }
 
     #[test]

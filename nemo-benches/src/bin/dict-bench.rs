@@ -55,7 +55,7 @@ fn main() {
         // TimedCode::instance().sub("Dictionary filling/add").start();
         let entry_status = dict.add(s);
         match entry_status {
-            EntryStatus::New(_value) => {bytes = bytes + b; }
+            EntryStatus::Fresh(_value) => {bytes = bytes + b; }
             _ => {}
         }
         // TimedCode::instance().sub("Dictionary filling/add").stop();

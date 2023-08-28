@@ -20,16 +20,16 @@ pub use value_serializer::ValueSerializer;
 #[derive(Debug,Clone,Copy,PartialEq,Eq)]
 pub enum EntryStatus {
     /// Entry was new and has been freshly assinged the given index.
-    New(usize),
+    Fresh(usize),
     /// Entry was already known and has the given index.
-    Old(usize),
+    Known(usize),
 }
 impl EntryStatus {
     /// Returns the actual index.
     pub fn value(&self) -> usize {
         match self {
-            EntryStatus::New(value) => *value,
-            EntryStatus::Old(value) => *value
+            EntryStatus::Fresh(value) => *value,
+            EntryStatus::Known(value) => *value
         }
     }
 }

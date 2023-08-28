@@ -17,12 +17,12 @@ impl Dictionary for StringDictionary {
 
     fn add(&mut self, entry: String) -> EntryStatus {
         match self.mapping.get(&entry) {
-            Some(idx) => EntryStatus::Old(*idx),
+            Some(idx) => EntryStatus::Known(*idx),
             None => {
                 let len = self.store.len();
                 self.store.push(Rc::new(entry));
                 self.mapping.insert(self.store[len].clone(), len);
-                EntryStatus::New(len)
+                EntryStatus::Fresh(len)
             }
         }
     }
@@ -107,7 +107,7 @@ mod test {
     #[test]
     fn add() {
         let mut dict = create_dict();
-        assert_eq!(dict.add("a".to_string()), EntryStatus::Old(0));
-        assert_eq!(dict.add("new value".to_string()), EntryStatus::New(6));
+        assert_eq!(dict.add("a".to_string()), EntryStatus::Known(0));
+        assert_eq!(dict.add("new value".to_string()), EntryStatus::Fresh(6));
     }
 }
