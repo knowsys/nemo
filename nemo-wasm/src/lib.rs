@@ -325,6 +325,7 @@ impl NemoResults {
                         Term::NumericLiteral(_) => JsValue::from(rdf.to_string()),
                         Term::StringLiteral(s) => JsValue::from(s),
                         Term::RdfLiteral(lit) => JsValue::from(lit.to_string()),
+                        Term::Aggregate(_) => panic!("Aggregates should not occur as results!"),
                     },
                     PrimitiveLogicalValueT::String(s) => JsValue::from(String::from(s)),
                     PrimitiveLogicalValueT::Integer(i) => JsValue::from(i64::from(i)),

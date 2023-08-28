@@ -63,7 +63,7 @@ fn termtree_to_operationtree(
                 .map(|t| termtree_to_operationtree(t, order, logical_type))
                 .collect(),
         ),
-        TermOperation::Function(_) => panic!("function terms are not implemented yet."),
+        TermOperation::Function(_) => todo!("function terms are not implemented yet."),
     }
 }
 
