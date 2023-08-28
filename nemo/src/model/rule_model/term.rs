@@ -15,7 +15,7 @@ use crate::{
     program_analysis::variable_order::VariableOrder,
 };
 
-use super::{Aggregate, Identifier, NumericLiteral, RdfLiteral};
+use super::{Aggregate, Identifier, Map, NumericLiteral, RdfLiteral};
 
 /// Variable that can be bound to a specific value
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
@@ -82,16 +82,19 @@ pub enum Constant {
     StringLiteral(String),
     /// An RDF-literal.
     RdfLiteral(RdfLiteral),
+    /// A map literal.
+    MapLiteral(Map),
 }
 
 impl Constant {
     /// Get primitive type that fits the constant
-    pub fn primitive_type(&self) -> PrimitiveType {
+    pub fn primitive_type(&self) -> Option<PrimitiveType> {
         match self {
-            Self::Abstract(_) => PrimitiveType::Any,
-            Self::RdfLiteral(_) => PrimitiveType::Any,
-            Self::StringLiteral(_) => PrimitiveType::String,
-            Self::NumericLiteral(nl) => nl.primitive_type(),
+            Self::Abstract(_) => Some(PrimitiveType::Any),
+            Self::RdfLiteral(_) => Some(PrimitiveType::Any),
+            Self::StringLiteral(_) => Some(PrimitiveType::String),
+            Self::NumericLiteral(nl) => Some(nl.primitive_type()),
+            Self::MapLiteral(_) => None,
         }
     }
 }
@@ -116,6 +119,7 @@ impl Display for Constant {
             Constant::NumericLiteral(literal) => write!(f, "{}", literal),
             Constant::StringLiteral(literal) => write!(f, "\"{}\"", literal),
             Constant::RdfLiteral(literal) => write!(f, "{}", literal),
+            Constant::MapLiteral(term) => write!(f, "{term}"),
         }
     }
 }
@@ -139,7 +143,7 @@ impl PrimitiveTerm {
     /// Get primitive type that fits the primitive term; return None for variables
     pub fn primitive_type(&self) -> Option<PrimitiveType> {
         match self {
-            Self::Constant(c) => Some(c.primitive_type()),
+            Self::Constant(c) => c.primitive_type(),
             Self::Variable(_) => None,
         }
     }

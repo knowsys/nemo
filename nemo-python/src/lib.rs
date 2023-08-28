@@ -164,6 +164,7 @@ fn constant_to_python<'a>(py: Python<'a>, v: &Constant) -> PyResult<&'a PyAny> {
             };
             Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
         })(),
+        Constant::MapLiteral(_map) => todo!("maps are not yet supported"),
     }
 }
 
