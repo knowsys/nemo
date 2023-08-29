@@ -5,8 +5,13 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::{
-    execution::selection_strategy::strategy::SelectionStrategyError, io::parser::LocatedParseError,
-    model::types::error::TypeError, program_analysis::analysis::RuleAnalysisError,
+    execution::selection_strategy::strategy::SelectionStrategyError,
+    io::{
+        formats::{FileAction, FileFormats},
+        parser::LocatedParseError,
+    },
+    model::types::error::TypeError,
+    program_analysis::analysis::RuleAnalysisError,
 };
 
 pub use nemo_physical::error::ReadingError;
@@ -75,6 +80,14 @@ pub enum Error {
     SerializationError {
         /// Name of the file where data could not have been serialized into
         filename: String,
+    },
+    ///
+    #[error("{action} is not support for {format} format")]
+    UnsupportedFileFormat {
+        /// Unsupported action on the file
+        action: FileAction,
+        /// File format
+        format: FileFormats,
     },
 }
 
