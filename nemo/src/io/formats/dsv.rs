@@ -81,6 +81,7 @@
 //! # }
 //! ```
 
+use std::collections::HashSet;
 use std::io::Read;
 
 use csv::{Reader, ReaderBuilder};
@@ -96,6 +97,8 @@ use crate::{
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
     model::{Constant, PrimitiveType},
 };
+
+use super::types::{FileFormat, FileFormatError, FileFormatMeta, TableWriter};
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
 ///
@@ -244,6 +247,36 @@ impl TableReader for DSVReader {
         let mut dsv_reader = Self::dsv_reader(reader, self.delimiter, Some(self.escape));
 
         self.read_into_builder_proxies_with_reader(physical_builder_proxies, &mut dsv_reader)
+    }
+}
+
+#[derive(Debug)]
+struct DSVFormat {}
+
+impl FileFormatMeta for DSVFormat {
+    fn reader(
+        &self,
+        resource_providers: ResourceProviders,
+        resource: Resource,
+        logical_types: Vec<PrimitiveType>,
+    ) -> Result<Box<dyn TableReader>, Error> {
+        Ok(Box::new(DSVReader::dsv(
+            resource_providers,
+            todo!(),
+            logical_types,
+        )))
+    }
+
+    fn writer(&self) -> Result<Box<dyn TableWriter>, Error> {
+        Err(FileFormatError::UnsupportedWrite(FileFormat::DSV).into())
+    }
+
+    fn optional_attributes() -> HashSet<String> {
+        [].into()
+    }
+
+    fn required_attributes() -> HashSet<String> {
+        ["delimiter".into()].into()
     }
 }
 
