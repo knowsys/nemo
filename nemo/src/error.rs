@@ -6,10 +6,8 @@ use thiserror::Error;
 
 use crate::{
     execution::selection_strategy::strategy::SelectionStrategyError,
-    io::{
-        formats::{FileAction, FileFormats},
-        parser::LocatedParseError,
-    },
+    io::{formats::types::FileFormatError, parser::LocatedParseError},
+    model::chase_model::RuleTranslationError,
     model::types::error::TypeError,
     program_analysis::analysis::RuleAnalysisError,
 };
@@ -81,14 +79,9 @@ pub enum Error {
         /// Name of the file where data could not have been serialized into
         filename: String,
     },
-    ///
-    #[error("{action} is not support for {format} format")]
-    UnsupportedFileFormat {
-        /// Unsupported action on the file
-        action: FileAction,
-        /// File format
-        format: FileFormats,
-    },
+    /// Error related to handling of file formats
+    #[error(transparent)]
+    FileFormatError(#[from] FileFormatError),
 }
 
 impl From<ReadingError> for Error {
