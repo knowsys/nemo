@@ -9,10 +9,15 @@ license.workspace = true
 readme = "README.md"
 repository.workspace = true
 
+[[bin]]
+name = "dict-bench"
+path = "src/bin/dict-bench.rs"
+
 [dependencies]
 nemo-physical = { path = "../nemo-physical", default-features = false }
 nemo = { path = "../nemo", default-features = false }
 rand = "0.8.5"
+flate2 = "1"
 
 [dev-dependencies]
 env_logger = "*"

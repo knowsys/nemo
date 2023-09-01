@@ -1,4 +1,5 @@
 use super::Dictionary;
+use super::EntryStatus;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -10,14 +11,18 @@ pub struct StringDictionary {
 }
 
 impl Dictionary for StringDictionary {
-    fn add(&mut self, entry: String) -> usize {
+    fn new() -> Self {
+        Default::default()
+    }
+
+    fn add(&mut self, entry: String) -> EntryStatus {
         match self.mapping.get(&entry) {
-            Some(idx) => *idx,
+            Some(idx) => EntryStatus::Known(*idx),
             None => {
                 let len = self.store.len();
                 self.store.push(Rc::new(entry));
                 self.mapping.insert(self.store[len].clone(), len);
-                len
+                EntryStatus::Fresh(len)
             }
         }
     }
@@ -46,6 +51,7 @@ mod test {
     use std::borrow::Borrow;
 
     use crate::dictionary::Dictionary;
+    use crate::dictionary::EntryStatus;
 
     use super::StringDictionary;
 
@@ -96,5 +102,12 @@ mod test {
         assert_eq!(dict.index_of("Pos".to_string().borrow()), None);
         assert_eq!(dict.index_of("Pos"), None);
         assert_eq!(dict.index_of("b"), Some(1));
+    }
+
+    #[test]
+    fn add() {
+        let mut dict = create_dict();
+        assert_eq!(dict.add("a".to_string()), EntryStatus::Known(0));
+        assert_eq!(dict.add("new value".to_string()), EntryStatus::Fresh(6));
     }
 }
