@@ -16,13 +16,15 @@ const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
 
 /// A buffer for string data using compact memory regions that are managed in pages.
 struct StringBuffer {
+    /// Vector of string buffers that are filled during operation
     pages: Vec<String>,
+    /// Single temporary string that [StringRef] refers to for representing strings that are not in the buffer.
     tmp: String,
 }
 impl StringBuffer {
     /// Constructor.
     fn new() -> Self {
-        // We initialise a first page for data. If this ever changed (e.g., wen adding support for
+        // We initialise a first page for data. If this ever changed (e.g., when adding support for
         // organizing pages by caller, where we cannot have a page for all possible cases upfront),
         // then the constructor might become const and Lazy/once_cell above can be dropped.
         StringBuffer{ pages: vec!(String::with_capacity(PAGE_SIZE)), tmp: String::new()}
