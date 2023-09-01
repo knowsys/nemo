@@ -88,8 +88,8 @@ impl StringRef {
     /// Creates a reference to the specific string slice in the buffer.
     /// It is not checked if that slice is allocated.
     fn new(address: usize, len: usize) -> Self {
-        assert!(len < 1<<25);
-        assert!(address < 1<<41);
+        assert!(len < 1<<24);
+        assert!(address < 1<<40);
         let u64add: u64 = address.try_into().unwrap();
         let u64len: u64 = len.try_into().unwrap();
         StringRef{reference: (u64add << 24) + u64len}
