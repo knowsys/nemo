@@ -3,14 +3,15 @@
 
 use std::fmt::Debug;
 
-/// Module to define a [PrefixedStringDictionary]
-/// This will provide a more memory-efficient storage of [String] values if they share equivalent prefixes (such as IRIs)
-/// The prefixes of the [String] will be stored as a Triestructure.
+/// Module to define the [PrefixedStringDictionary]
 pub mod prefixed_string_dictionary;
 pub use prefixed_string_dictionary::PrefixedStringDictionary;
 /// Module to define a simple [StringDictionary]
 pub mod string_dictionary;
 pub use string_dictionary::StringDictionary;
+/// Module to define [HashMap]
+pub mod hash_map_dictionary;
+pub use hash_map_dictionary::HashMapDictionary;
 /// Module mapping physical types into logical types into Strings
 pub mod value_serializer;
 pub use value_serializer::ValueSerializer;

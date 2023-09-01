@@ -6,13 +6,20 @@ use std::io::stdin;
 use flate2::read::MultiGzDecoder;
 
 use nemo::meta::{timing::TimedDisplay, TimedCode};
-use nemo_physical::dictionary::{Dictionary,EntryStatus,string_dictionary::StringDictionary,prefixed_string_dictionary::PrefixedStringDictionary};
+use nemo_physical::dictionary::{Dictionary,EntryStatus,
+    string_dictionary::StringDictionary,
+    prefixed_string_dictionary::PrefixedStringDictionary,
+    hash_map_dictionary::HashMapDictionary};
 
 fn create_dictionary(dict_type: &str) -> Box<dyn Dictionary> {
     match dict_type {
         "hash" => {
             println!("Using StringDictionary.");
             Box::new(StringDictionary::new())
+        },
+        "hashmap" => {
+            println!("Using HashMapDictionary.");
+            Box::new(HashMapDictionary::new())
         },
         "prefix" => {
             println!("Using PrefixedStringDictionary.");
@@ -39,7 +46,8 @@ fn main() {
     let reader = BufReader::new(MultiGzDecoder::new(File::open(filename).expect("Cannot open file.")));
 
     let mut dict = create_dictionary(dicttype);
-    let mut count = 0;
+    let mut count_lines = 0;
+    let mut count_unique = 0;
     let mut bytes = 0;
 
     TimedCode::instance().sub("Dictionary filling").start();
@@ -49,25 +57,22 @@ fn main() {
     for l in reader.lines()  {
         let s = l.unwrap();
         let b = s.len();
-        // if dict.index_of(s.as_str()).is_none() {
-        //     bytes = bytes + s.len();
-        // }
-        // TimedCode::instance().sub("Dictionary filling/add").start();
+
         let entry_status = dict.add(s);
         match entry_status {
-            EntryStatus::Fresh(_value) => {bytes = bytes + b; }
+            EntryStatus::Fresh(_value) => {bytes = bytes + b; count_unique += 1; }
             _ => {}
         }
-        // TimedCode::instance().sub("Dictionary filling/add").stop();
-        count = count + 1;
+
+        count_lines += 1;
     }
 
     TimedCode::instance().sub("Dictionary filling").stop();
 
     println!(
         "Processed {} strings (dictionary containts {} unique strings with {} bytes overall).",
-        count,
-        dict.len(),
+        count_lines,
+        count_unique,
         bytes
     );
 
