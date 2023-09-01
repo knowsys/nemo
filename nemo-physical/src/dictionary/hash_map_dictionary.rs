@@ -1,5 +1,4 @@
-use super::Dictionary;
-use super::EntryStatus;
+use super::{Dictionary,EntryStatus};
 
 use once_cell::sync::Lazy;
 
@@ -8,10 +7,15 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+/// Global string buffer for dictionary data.
+/// This is global here to allow keys in the hashmap to access it for computing equality and hashes,
+/// without the need to re-implement the whole hashmap to inject such an object.
 static mut BUFFER: Lazy<StringBuffer> = Lazy::new(||StringBuffer::new());
 
 const LOW_24_BITS_MASK: u64 = 0b00000000_00000000_00000000_00000000_00000000_11111111_11111111_11111111;
+/// Address size of pages in the string buffer
 const PAGE_ADDR_BITS: usize = 25; // 32MB
+/// Size of pages in the string buffer
 const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
 
 /// A buffer for string data using compact memory regions that are managed in pages.
