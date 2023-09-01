@@ -1,15 +1,69 @@
 use super::Dictionary;
 use super::EntryStatus;
 
+use once_cell::sync::Lazy;
+
 use std::{
     collections::HashMap,
     hash::{Hash, Hasher},
 };
 
-static mut BUFFER: String = String::new();
-static mut TMP_STRING: String = String::new();
+static mut BUFFER: Lazy<StringBuffer> = Lazy::new(||StringBuffer::new());
 
 const LOW_24_BITS_MASK: u64 = 0b00000000_00000000_00000000_00000000_00000000_11111111_11111111_11111111;
+const PAGE_ADDR_BITS: usize = 25; // 32MB
+const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
+
+/// A buffer for string data using compact memory regions that are managed in pages.
+struct StringBuffer {
+    pages: Vec<String>,
+    tmp: String,
+}
+impl StringBuffer {
+    /// Constructor.
+    fn new() -> Self {
+        // We initialise a first page for data. If this ever changed (e.g., wen adding support for
+        // organizing pages by caller, where we cannot have a page for all possible cases upfront),
+        // then the constructor might become const and Lazy/once_cell above can be dropped.
+        StringBuffer{ pages: vec!(String::with_capacity(PAGE_SIZE)), tmp: String::new()}
+    }
+
+    /// Inserts a string into the buffer and returns a [StringRef] that points to it.
+    fn push_str(&mut self,s: &str) -> StringRef {
+        let len = s.len();
+        assert!(len < 1<<25);
+        let mut page_num = self.pages.len()-1;
+        if self.pages[page_num].len() + len > PAGE_SIZE {
+            self.pages.push(String::with_capacity(PAGE_SIZE));
+            page_num += 1;
+        }
+        let page_addr = self.pages[page_num].len();
+        self.pages[page_num].push_str(s);
+
+        StringRef::new(page_num*PAGE_SIZE + page_addr, s.len())
+    }
+
+    /// Returns a direct string slice reference for this data.
+    /// This is a pointer to global mutable data, and cannot be used safely.
+    fn get_str(&self, address: usize, length: usize) -> &str {
+        let page_num = address >> PAGE_ADDR_BITS;
+        let page_addr = address % PAGE_SIZE;
+        &self.pages[page_num][page_addr..page_addr+length]
+    }
+
+    /// Creates a temporary mock object that stores its contents outside of 
+    /// the global buffer.
+    fn get_tmp_string_ref(&mut self, s: &str) -> StringRef {
+        self.tmp.clear();
+        self.tmp.push_str(s);
+        StringRef{reference: std::u64::MAX}
+    }
+
+    /// Returns the current contents of the temporary string.
+    fn get_tmp_string(&self) -> &str {
+        self.tmp.as_str()
+    }
+}
 
 /// Memory-optimized reference to a string in the dictionary.
 #[derive(Clone, Copy, Debug, Default)]
@@ -25,10 +79,8 @@ impl StringRef {
     /// the global buffer.
     fn tmp(s: &str) -> Self {
         unsafe {
-            TMP_STRING.clear();
-            TMP_STRING.push_str(s);
+            BUFFER.get_tmp_string_ref(s)
         }
-        StringRef{reference: std::u64::MAX}
     }
 
     /// Creates a reference to the specific string slice in the buffer.
@@ -58,11 +110,11 @@ impl StringRef {
     fn as_str(&self) -> &str {
         if self.reference != std::u64::MAX {
             unsafe {
-                &BUFFER[self.address()..self.address()+self.len()]
+                BUFFER.get_str(self.address(), self.len())
             }
         } else {
             unsafe {
-                &TMP_STRING.as_str()
+                BUFFER.get_tmp_string()
             } 
         }
     }
@@ -108,8 +160,7 @@ impl Dictionary for HashMapDictionary {
             Some(idx) => EntryStatus::Known(*idx),
             None => {
                 unsafe {
-                    let sref = StringRef::new(BUFFER.len(),entry.len());
-                    BUFFER.push_str(entry.as_str());
+                    let sref = BUFFER.push_str(entry.as_str());
                     let nxt_id = self.store.len();
                     self.store.push(sref);
                     self.mapping.insert(sref, nxt_id);
