@@ -91,12 +91,10 @@ fn main() {
     );
 
     println!("All done. Press return to end benchmark (and free all memory).");
-
     let mut s=String::new();
     stdin().read_line(&mut s).expect("No string entered?");
     
     if dict.len() == 123456789 { // FWIW, prevent dict from going out of scope before really finishing
         println!("Today is your lucky day.");
     }
-
 }
