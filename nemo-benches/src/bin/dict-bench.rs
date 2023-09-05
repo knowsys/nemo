@@ -9,7 +9,8 @@ use nemo::meta::{timing::TimedDisplay, TimedCode};
 use nemo_physical::dictionary::{Dictionary,EntryStatus,
     string_dictionary::StringDictionary,
     prefixed_string_dictionary::PrefixedStringDictionary,
-    hash_map_dictionary::HashMapDictionary};
+    hash_map_dictionary::HashMapDictionary,
+    meta_dictionary::MetaDictionary};
 
 fn create_dictionary(dict_type: &str) -> Box<dyn Dictionary> {
     match dict_type {
@@ -24,6 +25,10 @@ fn create_dictionary(dict_type: &str) -> Box<dyn Dictionary> {
         "prefix" => {
             println!("Using PrefixedStringDictionary.");
             Box::new(PrefixedStringDictionary::new())
+        },
+        "meta" => {
+            println!("Using MetaDictionary.");
+            Box::new(MetaDictionary::new())
         },
         _ => panic!("Unexpected dictionary type '{}'.", dict_type),
     }
@@ -60,8 +65,8 @@ fn main() {
 
         let entry_status = dict.add(s);
         match entry_status {
-            EntryStatus::Fresh(_value) => {bytes = bytes + b; count_unique += 1; }
-            _ => {}
+            EntryStatus::Fresh(_value) => {bytes = bytes + b; count_unique += 1; },
+            EntryStatus::Known(_value) => {}
         }
 
         count_lines += 1;
@@ -91,12 +96,10 @@ fn main() {
     );
 
     println!("All done. Press return to end benchmark (and free all memory).");
-
     let mut s=String::new();
     stdin().read_line(&mut s).expect("No string entered?");
     
     if dict.len() == 123456789 { // FWIW, prevent dict from going out of scope before really finishing
         println!("Today is your lucky day.");
     }
-
 }
