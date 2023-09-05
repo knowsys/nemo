@@ -1,5 +1,6 @@
 use super::Dictionary;
 use super::AddResult;
+use super::DictionaryString;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -15,7 +16,7 @@ impl Dictionary for StringDictionary {
         Default::default()
     }
 
-    fn add(&mut self, entry: String) -> AddResult {
+    fn add_string(&mut self, entry: String) -> AddResult {
         match self.mapping.get(&entry) {
             Some(idx) => AddResult::Known(*idx),
             None => {
@@ -25,6 +26,14 @@ impl Dictionary for StringDictionary {
                 AddResult::Fresh(len)
             }
         }
+    }
+
+    fn add_str(&mut self, string: &str) -> AddResult {
+        self.add_string(string.to_string())
+    }
+
+    fn add_dictionary_string(&mut self, ds: &mut DictionaryString) -> AddResult {
+        self.add_str(ds.as_str())
     }
 
     fn fetch_id(&self, entry: &str) -> Option<usize> {
@@ -67,7 +76,7 @@ mod test {
         ];
 
         for i in vec {
-            dict.add(i.to_string());
+            dict.add_string(i.to_string());
         }
         dict
     }
@@ -103,7 +112,7 @@ mod test {
     #[test]
     fn add() {
         let mut dict = create_dict();
-        assert_eq!(dict.add("a".to_string()), AddResult::Known(0));
-        assert_eq!(dict.add("new value".to_string()), AddResult::Fresh(6));
+        assert_eq!(dict.add_string("a".to_string()), AddResult::Known(0));
+        assert_eq!(dict.add_string("new value".to_string()), AddResult::Fresh(6));
     }
 }

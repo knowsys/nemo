@@ -63,7 +63,7 @@ fn main() {
         let s = l.unwrap();
         let b = s.len();
 
-        let entry_status = dict.add(s);
+        let entry_status = dict.add_string(s);
         match entry_status {
             AddResult::Fresh(_value) => {bytes = bytes + b; count_unique += 1; },
             AddResult::Known(_value) => {},

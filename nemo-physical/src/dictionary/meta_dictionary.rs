@@ -137,14 +137,21 @@ impl Dictionary for MetaDictionary {
         Default::default()
     }
 
-    fn add(&mut self, entry: String) -> AddResult {
-        let mut ds = DictionaryString::new(entry.as_str());
+    fn add_string(&mut self, string: String) -> AddResult {
+        self.add_dictionary_string(&mut DictionaryString::from_string(string))
+    }
+
+    fn add_str(&mut self, string: &str) -> AddResult {
+        self.add_dictionary_string(&mut DictionaryString::new(string))
+    }
+
+    fn add_dictionary_string(&mut self, ds: &mut DictionaryString) -> AddResult {
         // for all (relevant) dictionaries
         //   check if string has a (local) id
         //   and, if so, map it to a global id        
         for (index,dr) in self.dicts.iter().enumerate() {
-            if dr.dict_type.supports(&mut ds) {
-                match dr.dict.fetch_id(entry.as_str()) {
+            if dr.dict_type.supports(ds) {
+                match dr.dict.fetch_id(ds.as_str()) {
                     Some(idx) => {return AddResult::Known(self.local_to_global_unchecked(index, idx)); },
                     _ => {}
                 }
@@ -155,13 +162,13 @@ impl Dictionary for MetaDictionary {
         let dict_idx: usize;
         if ds.is_long() {
             dict_idx = 1;
-            local_id = self.dicts[1].dict.add(entry).value();
+            local_id = self.dicts[1].dict.add_dictionary_string(ds).value();
         } else {
             dict_idx = 0;
-            local_id = self.dicts[0].dict.add(entry).value();
+            local_id = self.dicts[0].dict.add_dictionary_string(ds).value();
         }
         // compute global id based on block and local id, possibly allocating new block in the process
-        AddResult::Fresh(self.local_to_global(dict_idx,local_id))
+        AddResult::Fresh(self.local_to_global(dict_idx,local_id))       
     }
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
@@ -218,13 +225,13 @@ mod test {
     fn add_and_get() {
         let mut dict = MetaDictionary::default();
 
-        let res1 = dict.add("entry0".to_string());
-        let res2 = dict.add("entry1".to_string());
-        let res3 = dict.add("entry0".to_string());
-        let res4 = dict.add(long_string("long1"));
-        let res5 = dict.add("entry2".to_string());
-        let res6 = dict.add(long_string("long2"));
-        let res7 = dict.add(long_string("long1"));
+        let res1 = dict.add_string("entry0".to_string());
+        let res2 = dict.add_string("entry1".to_string());
+        let res3 = dict.add_string("entry0".to_string());
+        let res4 = dict.add_string(long_string("long1"));
+        let res5 = dict.add_string("entry2".to_string());
+        let res6 = dict.add_string(long_string("long2"));
+        let res7 = dict.add_string(long_string("long1"));
 
         let get1 = dict.get(res1.value());
         let get2 = dict.get(res2.value());

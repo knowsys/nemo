@@ -95,7 +95,7 @@ impl ColumnBuilderProxy<PhysicalString> for PhysicalStringColumnBuilderProxy<'_>
     generic_trait_impl_without_add!(VecT::U64);
     fn add(&mut self, input: PhysicalString) -> Result<(), ReadingError> {
         self.commit();
-        self.value = Some(self.dict.borrow_mut().add(input.into()).value().try_into()?);
+        self.value = Some(self.dict.borrow_mut().add_string(input.into()).value().try_into()?);
         Ok(())
     }
 }

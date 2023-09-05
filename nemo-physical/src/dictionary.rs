@@ -63,7 +63,23 @@ pub trait Dictionary: Debug {
     /// The result is an [EntryStatus] that indicates if the string was newly added,
     /// previoulsy present, or rejected. In the first two cases, the result yields
     /// the strings id.
-    fn add(&mut self, string: String) -> AddResult;
+    fn add_string(&mut self, string: String) -> AddResult;
+
+    /// Adds a new string to the dictionary. If the string is not known yet, it will
+    /// be assigned a new id. Unsupported strings can also be rejected, which specialized
+    /// dictionary implementations might do.
+    /// 
+    /// The result is an [EntryStatus] that indicates if the string was newly added,
+    /// previoulsy present, or rejected. In the first two cases, the result yields
+    /// the strings id.
+    fn add_str(&mut self, string: &str) -> AddResult;
+
+    /// Adds a new string to the dictionary. This method is similar to `add_string()` but uses a
+    /// pre-processed string. Some dictionary implementations may extract only parts of
+    /// the string to fit internal assumptions (e.g., a dictionary that requires a fixed
+    /// prefix may ignore the prefix and only store the rest, as if the prefix would
+    /// match). To perform checks and possibly reject data, `add_string()` or `add_str()` should be used.
+    fn add_dictionary_string(&mut self, ds: &mut DictionaryString) -> AddResult;
 
     /// Looks for a given [&str] slice and returns `Some(id)` if it is in the dictionary, and `None` otherwise.
     fn fetch_id(&self, string: &str) -> Option<usize>;

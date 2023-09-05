@@ -1,4 +1,4 @@
-use super::{Dictionary,AddResult};
+use super::{Dictionary,AddResult,DictionaryString};
 
 use std::{
     collections::HashMap,
@@ -229,19 +229,27 @@ impl Dictionary for HashMapDictionary {
         Self::default()
     }
 
-    fn add(&mut self, string: String) -> AddResult {
-        match self.mapping.get( unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string.as_str()) } ) {
+    fn add_string(&mut self, string: String) -> AddResult {
+        self.add_str(string.as_str())
+    }
+
+    fn add_str(&mut self, string: &str) -> AddResult {
+        match self.mapping.get( unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string) } ) {
             Some(idx) => AddResult::Known(*idx),
             None => {
                 unsafe {
-                    let sref = BUFFER.push_str(self.buffer, string.as_str());
+                    let sref = BUFFER.push_str(self.buffer, string);
                     let nxt_id = self.store.len();
                     self.store.push(sref);
                     self.mapping.insert(sref, nxt_id);
                     AddResult::Fresh(nxt_id)
                 }
             }
-        }
+        }  
+    }
+
+    fn add_dictionary_string(&mut self, ds: &mut DictionaryString) -> AddResult {
+        self.add_str(ds.as_str())
     }
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
@@ -285,7 +293,7 @@ mod test {
         ];
 
         for i in vec {
-            dict.add(i.to_string());
+            dict.add_string(i.to_string());
         }
         dict
     }
@@ -295,9 +303,9 @@ mod test {
         let mut dict = create_dict();
 
         let mut dict2 = HashMapDictionary::default();
-        dict2.add("entry0".to_string());
-        dict.add("another entry".to_string());
-        dict2.add("entry1".to_string());
+        dict2.add_string("entry0".to_string());
+        dict.add_string("another entry".to_string());
+        dict2.add_string("entry1".to_string());
         
         assert_eq!(dict.get(0), Some("a".to_string()));
         assert_eq!(dict.get(1), Some("b".to_string()));
@@ -332,14 +340,14 @@ mod test {
     #[test]
     fn add() {
         let mut dict = create_dict();
-        assert_eq!(dict.add("a".to_string()), AddResult::Known(0));
-        assert_eq!(dict.add("new value".to_string()), AddResult::Fresh(6));
+        assert_eq!(dict.add_string("a".to_string()), AddResult::Known(0));
+        assert_eq!(dict.add_string("new value".to_string()), AddResult::Fresh(6));
     }
 
     #[test]
     fn empty_str() {
         let mut dict = HashMapDictionary::default();
-        assert_eq!(dict.add("".to_string()), AddResult::Fresh(0));
+        assert_eq!(dict.add_string("".to_string()), AddResult::Fresh(0));
         assert_eq!(dict.get(0), Some("".to_string()));
         assert_eq!(dict.fetch_id(""), Some(0));
     }
