@@ -62,12 +62,11 @@ fn main() {
     for l in reader.lines()  {
         let s = l.unwrap();
         let b = s.len();
-        let s2 = s.clone();
 
         let entry_status = dict.add(s);
         match entry_status {
-            EntryStatus::Fresh(value) => {bytes = bytes + b; count_unique += 1; },
-            EntryStatus::Known(value) => {}
+            EntryStatus::Fresh(_value) => {bytes = bytes + b; count_unique += 1; },
+            EntryStatus::Known(_value) => {}
         }
 
         count_lines += 1;

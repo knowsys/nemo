@@ -3,6 +3,9 @@
 
 use std::fmt::Debug;
 
+/// Module to define the [DictionaryString]
+pub mod dictionary_string;
+pub use dictionary_string::DictionaryString;
 /// Module to define the [PrefixedStringDictionary]
 pub mod prefixed_string_dictionary;
 pub use prefixed_string_dictionary::PrefixedStringDictionary;

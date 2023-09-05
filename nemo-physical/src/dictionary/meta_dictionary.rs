@@ -1,30 +1,10 @@
 use super::Dictionary;
 use super::EntryStatus;
 use super::hash_map_dictionary::HashMapDictionary;
-
-use std::collections::HashMap;
-use std::rc::Rc;
+use super::dictionary_string::DictionaryString;
 
 /// Bits in the size of address blocks allocated to sub-dictionaries
 const BLOCKSIZE: u32 = 24;
-
-const LONG_STRING_THRESHOLD: usize = 1000;
-
-/// String that computes and caches checks relevant for dicitonary selection.
-#[derive(Clone, Debug)]
-struct DictionaryString {
-    string: String,
-}
-impl DictionaryString {
-    fn new(s: &str) -> Self {
-        DictionaryString{string: s.to_string()}
-    }
-
-    fn is_long(&self) -> bool {
-        self.string.len() > LONG_STRING_THRESHOLD
-    }
-
-}
 
 /// Enum to specify what kind of data a dictionary supports.
 #[derive(Clone, Debug)]
@@ -150,14 +130,6 @@ impl MetaDictionary {
         }
     }
 
-    /// Convert a global ID to a pair of a dictionary and local ID.
-    fn global_to_local(&self, global_id: usize) -> (usize,usize) {
-        let gblock = global_id >> BLOCKSIZE;
-        let offset = global_id % (1<<BLOCKSIZE);
-        let (dict,lblock) = self.dictblocks[gblock]; // Could fail if address is in unallocated block
-
-        (dict,(lblock >> BLOCKSIZE) + offset)
-    }
 }
 
 impl Dictionary for MetaDictionary {
@@ -240,12 +212,10 @@ impl Dictionary for MetaDictionary {
 
 #[cfg(test)]
 mod test {
-    use std::borrow::Borrow;
-
     use crate::dictionary::Dictionary;
     use crate::dictionary::EntryStatus;
 
-    use super::LONG_STRING_THRESHOLD;
+    use crate::dictionary::dictionary_string::LONG_STRING_THRESHOLD;
     use super::MetaDictionary;
 
     /// Pads a string to make it longer than the threshold applied to distinguish blobs.
