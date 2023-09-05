@@ -1,5 +1,5 @@
 use super::Dictionary;
-use super::EntryStatus;
+use super::AddResult;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -15,23 +15,23 @@ impl Dictionary for StringDictionary {
         Default::default()
     }
 
-    fn add(&mut self, entry: String) -> EntryStatus {
+    fn add(&mut self, entry: String) -> AddResult {
         match self.mapping.get(&entry) {
-            Some(idx) => EntryStatus::Known(*idx),
+            Some(idx) => AddResult::Known(*idx),
             None => {
                 let len = self.store.len();
                 self.store.push(Rc::new(entry));
                 self.mapping.insert(self.store[len].clone(), len);
-                EntryStatus::Fresh(len)
+                AddResult::Fresh(len)
             }
         }
     }
 
-    fn index_of(&self, entry: &str) -> Option<usize> {
+    fn fetch_id(&self, entry: &str) -> Option<usize> {
         self.mapping.get(&entry.to_string()).copied()
     }
 
-    fn entry(&self, index: usize) -> Option<String> {
+    fn get(&self, index: usize) -> Option<String> {
         self.store
             .get(index)
             .map(|entry| -> String { Rc::clone(entry).to_string() })
@@ -47,7 +47,7 @@ mod test {
     use std::borrow::Borrow;
 
     use crate::dictionary::Dictionary;
-    use crate::dictionary::EntryStatus;
+    use crate::dictionary::AddResult;
 
     use super::StringDictionary;
 
@@ -75,35 +75,35 @@ mod test {
     #[test]
     fn entry() {
         let dict = create_dict();
-        assert_eq!(dict.entry(0), Some("a".to_string()));
-        assert_eq!(dict.entry(1), Some("b".to_string()));
-        assert_eq!(dict.entry(2), Some("c".to_string()));
-        assert_eq!(dict.entry(3), Some("Position 3".to_string()));
-        assert_eq!(dict.entry(4), Some("Position 4".to_string()));
-        assert_eq!(dict.entry(5), Some("Position 5".to_string()));
-        assert_eq!(dict.entry(6), None);
-        assert_eq!(dict.entry(3), Some("Position 3".to_string()));
+        assert_eq!(dict.get(0), Some("a".to_string()));
+        assert_eq!(dict.get(1), Some("b".to_string()));
+        assert_eq!(dict.get(2), Some("c".to_string()));
+        assert_eq!(dict.get(3), Some("Position 3".to_string()));
+        assert_eq!(dict.get(4), Some("Position 4".to_string()));
+        assert_eq!(dict.get(5), Some("Position 5".to_string()));
+        assert_eq!(dict.get(6), None);
+        assert_eq!(dict.get(3), Some("Position 3".to_string()));
     }
 
     #[test]
     fn index_of() {
         let dict = create_dict();
-        assert_eq!(dict.index_of("a".to_string().borrow()), Some(0));
-        assert_eq!(dict.index_of("b".to_string().borrow()), Some(1));
-        assert_eq!(dict.index_of("c".to_string().borrow()), Some(2));
-        assert_eq!(dict.index_of("Position 3".to_string().borrow()), Some(3));
-        assert_eq!(dict.index_of("Position 4".to_string().borrow()), Some(4));
-        assert_eq!(dict.index_of("Position 5".to_string().borrow()), Some(5));
-        assert_eq!(dict.index_of("d".to_string().borrow()), None);
-        assert_eq!(dict.index_of("Pos".to_string().borrow()), None);
-        assert_eq!(dict.index_of("Pos"), None);
-        assert_eq!(dict.index_of("b"), Some(1));
+        assert_eq!(dict.fetch_id("a".to_string().borrow()), Some(0));
+        assert_eq!(dict.fetch_id("b".to_string().borrow()), Some(1));
+        assert_eq!(dict.fetch_id("c".to_string().borrow()), Some(2));
+        assert_eq!(dict.fetch_id("Position 3".to_string().borrow()), Some(3));
+        assert_eq!(dict.fetch_id("Position 4".to_string().borrow()), Some(4));
+        assert_eq!(dict.fetch_id("Position 5".to_string().borrow()), Some(5));
+        assert_eq!(dict.fetch_id("d".to_string().borrow()), None);
+        assert_eq!(dict.fetch_id("Pos".to_string().borrow()), None);
+        assert_eq!(dict.fetch_id("Pos"), None);
+        assert_eq!(dict.fetch_id("b"), Some(1));
     }
 
     #[test]
     fn add() {
         let mut dict = create_dict();
-        assert_eq!(dict.add("a".to_string()), EntryStatus::Known(0));
-        assert_eq!(dict.add("new value".to_string()), EntryStatus::Fresh(6));
+        assert_eq!(dict.add("a".to_string()), AddResult::Known(0));
+        assert_eq!(dict.add("new value".to_string()), AddResult::Fresh(6));
     }
 }

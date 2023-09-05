@@ -309,7 +309,7 @@ Boston;United States;4628910
 
         let dvit = DataValueIteratorT::String(Box::new(x.into_iter().map(|vt| {
             dict.get_mut()
-                .entry(usize::try_from(u64::try_from(vt.get(0).unwrap()).unwrap()).unwrap())
+                .get(usize::try_from(u64::try_from(vt.get(0).unwrap()).unwrap()).unwrap())
                 .map(PhysicalString::from)
                 .unwrap()
         })));
@@ -413,7 +413,7 @@ The next 2 columns are empty;;;789
             col0_idx
                 .iter()
                 .copied()
-                .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .map(|idx| dict.get_mut().get(idx.try_into().unwrap()).unwrap())
                 .map(PhysicalString::from)
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -422,7 +422,7 @@ The next 2 columns are empty;;;789
             col1_idx
                 .iter()
                 .copied()
-                .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .map(|idx| dict.get_mut().get(idx.try_into().unwrap()).unwrap())
                 .map(PhysicalString::from)
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -431,7 +431,7 @@ The next 2 columns are empty;;;789
             col2_idx
                 .iter()
                 .copied()
-                .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+                .map(|idx| dict.get_mut().get(idx.try_into().unwrap()).unwrap())
                 .map(PhysicalString::from)
                 .collect::<Vec<_>>()
                 .into_iter(),

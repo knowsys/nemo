@@ -1,5 +1,5 @@
 use super::Dictionary;
-use super::EntryStatus;
+use super::AddResult;
 use super::hash_map_dictionary::HashMapDictionary;
 use super::dictionary_string::DictionaryString;
 
@@ -137,15 +137,15 @@ impl Dictionary for MetaDictionary {
         Default::default()
     }
 
-    fn add(&mut self, entry: String) -> EntryStatus {
+    fn add(&mut self, entry: String) -> AddResult {
         let mut ds = DictionaryString::new(entry.as_str());
         // for all (relevant) dictionaries
         //   check if string has a (local) id
         //   and, if so, map it to a global id        
         for (index,dr) in self.dicts.iter().enumerate() {
             if dr.dict_type.supports(&mut ds) {
-                match dr.dict.index_of(entry.as_str()) {
-                    Some(idx) => {return EntryStatus::Known(self.local_to_global_unchecked(index, idx)); },
+                match dr.dict.fetch_id(entry.as_str()) {
+                    Some(idx) => {return AddResult::Known(self.local_to_global_unchecked(index, idx)); },
                     _ => {}
                 }
             }
@@ -161,17 +161,17 @@ impl Dictionary for MetaDictionary {
             local_id = self.dicts[0].dict.add(entry).value();
         }
         // compute global id based on block and local id, possibly allocating new block in the process
-        EntryStatus::Fresh(self.local_to_global(dict_idx,local_id))
+        AddResult::Fresh(self.local_to_global(dict_idx,local_id))
     }
 
-    fn index_of(&self, entry: &str) -> Option<usize> {
-        let mut ds = DictionaryString::new(entry);
+    fn fetch_id(&self, string: &str) -> Option<usize> {
+        let mut ds = DictionaryString::new(string);
         // for all (relevant) dictionaries
         //   check if string has a (local) id
         //   and, if so, map it to a global id        
         for (dict_index,dr) in self.dicts.iter().enumerate() {
             if dr.dict_type.supports(&mut ds) {
-                let result = dr.dict.index_of(entry);
+                let result = dr.dict.fetch_id(string);
                 if result.is_some() {
                     return Some(self.local_to_global_unchecked(dict_index, result.unwrap()));
                 }
@@ -180,15 +180,15 @@ impl Dictionary for MetaDictionary {
         None
     }
 
-    fn entry(&self, index: usize) -> Option<String> {
-        let gblock = index >> BLOCKSIZE;
-        let offset = index % (1<<BLOCKSIZE);
+    fn get(&self, id: usize) -> Option<String> {
+        let gblock = id >> BLOCKSIZE;
+        let offset = id % (1<<BLOCKSIZE);
         if self.dictblocks.len() <= gblock || self.dictblocks[gblock] == (usize::MAX,usize::MAX) {
             return None;
         }
         let (dict_id,lblock) = self.dictblocks[gblock];
 
-        self.dicts[dict_id].dict.entry((lblock >> BLOCKSIZE) + offset)
+        self.dicts[dict_id].dict.get((lblock >> BLOCKSIZE) + offset)
     }
 
     fn len(&self) -> usize {
@@ -204,7 +204,7 @@ impl Dictionary for MetaDictionary {
 #[cfg(test)]
 mod test {
     use crate::dictionary::Dictionary;
-    use crate::dictionary::EntryStatus;
+    use crate::dictionary::AddResult;
 
     use crate::dictionary::dictionary_string::LONG_STRING_THRESHOLD;
     use super::MetaDictionary;
@@ -226,23 +226,23 @@ mod test {
         let res6 = dict.add(long_string("long2"));
         let res7 = dict.add(long_string("long1"));
 
-        let get1 = dict.entry(res1.value());
-        let get2 = dict.entry(res2.value());
-        let get4 = dict.entry(res4.value());
-        let getnone1 = dict.entry(res6.value()+1); // unused but in an allocated block
-        let getnone2 = dict.entry(1<< 30); // out of any allocated block
+        let get1 = dict.get(res1.value());
+        let get2 = dict.get(res2.value());
+        let get4 = dict.get(res4.value());
+        let getnone1 = dict.get(res6.value()+1); // unused but in an allocated block
+        let getnone2 = dict.get(1<< 30); // out of any allocated block
 
-        assert_eq!(res1, EntryStatus::Fresh(res1.value()));
-        assert_eq!(res2, EntryStatus::Fresh(res2.value()));
-        assert_eq!(res3, EntryStatus::Known(res1.value()));
-        assert_eq!(res4, EntryStatus::Fresh(res4.value()));
-        assert_eq!(res5, EntryStatus::Fresh(res5.value()));
-        assert_eq!(res6, EntryStatus::Fresh(res6.value()));
-        assert_eq!(res7, EntryStatus::Known(res4.value()));
+        assert_eq!(res1, AddResult::Fresh(res1.value()));
+        assert_eq!(res2, AddResult::Fresh(res2.value()));
+        assert_eq!(res3, AddResult::Known(res1.value()));
+        assert_eq!(res4, AddResult::Fresh(res4.value()));
+        assert_eq!(res5, AddResult::Fresh(res5.value()));
+        assert_eq!(res6, AddResult::Fresh(res6.value()));
+        assert_eq!(res7, AddResult::Known(res4.value()));
 
-        assert_eq!(dict.index_of("entry0"), Some(res1.value()));
-        assert_eq!(dict.index_of("entry1"), Some(res2.value()));
-        assert_eq!(dict.index_of(long_string("long1").as_str()), Some(res4.value()));
+        assert_eq!(dict.fetch_id("entry0"), Some(res1.value()));
+        assert_eq!(dict.fetch_id("entry1"), Some(res2.value()));
+        assert_eq!(dict.fetch_id(long_string("long1").as_str()), Some(res4.value()));
 
         assert_eq!(get1.unwrap(), "entry0".to_string());
         assert_eq!(get2.unwrap(), "entry1".to_string());

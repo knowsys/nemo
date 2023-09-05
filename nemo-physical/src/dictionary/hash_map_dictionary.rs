@@ -1,4 +1,4 @@
-use super::{Dictionary,EntryStatus};
+use super::{Dictionary,AddResult};
 
 use std::{
     collections::HashMap,
@@ -229,28 +229,28 @@ impl Dictionary for HashMapDictionary {
         Self::default()
     }
 
-    fn add(&mut self, entry: String) -> EntryStatus {
-        match self.mapping.get( unsafe { &BUFFER.get_tmp_string_ref(self.buffer, entry.as_str()) } ) {
-            Some(idx) => EntryStatus::Known(*idx),
+    fn add(&mut self, string: String) -> AddResult {
+        match self.mapping.get( unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string.as_str()) } ) {
+            Some(idx) => AddResult::Known(*idx),
             None => {
                 unsafe {
-                    let sref = BUFFER.push_str(self.buffer, entry.as_str());
+                    let sref = BUFFER.push_str(self.buffer, string.as_str());
                     let nxt_id = self.store.len();
                     self.store.push(sref);
                     self.mapping.insert(sref, nxt_id);
-                    EntryStatus::Fresh(nxt_id)
+                    AddResult::Fresh(nxt_id)
                 }
             }
         }
     }
 
-    fn index_of(&self, entry: &str) -> Option<usize> {
-        self.mapping.get(unsafe { &BUFFER.get_tmp_string_ref(self.buffer, entry) } ).copied()
+    fn fetch_id(&self, string: &str) -> Option<usize> {
+        self.mapping.get(unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string) } ).copied()
     }
 
-    fn entry(&self, index: usize) -> Option<String> {
+    fn get(&self, id: usize) -> Option<String> {
         self.store
-            .get(index)
+            .get(id)
             .map(|entry| -> String { entry.to_string() })
     }
 
@@ -265,7 +265,7 @@ mod test {
     use std::borrow::Borrow;
 
     use crate::dictionary::Dictionary;
-    use crate::dictionary::EntryStatus;
+    use crate::dictionary::AddResult;
 
     use super::HashMapDictionary;
 
@@ -291,7 +291,7 @@ mod test {
     }
 
     #[test]
-    fn entry() {
+    fn get() {
         let mut dict = create_dict();
 
         let mut dict2 = HashMapDictionary::default();
@@ -299,40 +299,48 @@ mod test {
         dict.add("another entry".to_string());
         dict2.add("entry1".to_string());
         
-        assert_eq!(dict.entry(0), Some("a".to_string()));
-        assert_eq!(dict.entry(1), Some("b".to_string()));
-        assert_eq!(dict.entry(2), Some("c".to_string()));
-        assert_eq!(dict.entry(3), Some("Position 3".to_string()));
-        assert_eq!(dict.entry(4), Some("Position 4".to_string()));
-        assert_eq!(dict.entry(5), Some("Position 5".to_string()));
-        assert_eq!(dict.entry(6), Some("another entry".to_string()));
-        assert_eq!(dict.entry(7), None);
-        assert_eq!(dict.entry(3), Some("Position 3".to_string()));
+        assert_eq!(dict.get(0), Some("a".to_string()));
+        assert_eq!(dict.get(1), Some("b".to_string()));
+        assert_eq!(dict.get(2), Some("c".to_string()));
+        assert_eq!(dict.get(3), Some("Position 3".to_string()));
+        assert_eq!(dict.get(4), Some("Position 4".to_string()));
+        assert_eq!(dict.get(5), Some("Position 5".to_string()));
+        assert_eq!(dict.get(6), Some("another entry".to_string()));
+        assert_eq!(dict.get(7), None);
+        assert_eq!(dict.get(3), Some("Position 3".to_string()));
 
-        assert_eq!(dict2.entry(0), Some("entry0".to_string()));
-        assert_eq!(dict2.entry(1), Some("entry1".to_string()));
-        assert_eq!(dict2.entry(2), None);
+        assert_eq!(dict2.get(0), Some("entry0".to_string()));
+        assert_eq!(dict2.get(1), Some("entry1".to_string()));
+        assert_eq!(dict2.get(2), None);
     }
 
     #[test]
-    fn index_of() {
+    fn fetch_id() {
         let dict = create_dict();
-        assert_eq!(dict.index_of("a".to_string().borrow()), Some(0));
-        assert_eq!(dict.index_of("b".to_string().borrow()), Some(1));
-        assert_eq!(dict.index_of("c".to_string().borrow()), Some(2));
-        assert_eq!(dict.index_of("Position 3".to_string().borrow()), Some(3));
-        assert_eq!(dict.index_of("Position 4".to_string().borrow()), Some(4));
-        assert_eq!(dict.index_of("Position 5".to_string().borrow()), Some(5));
-        assert_eq!(dict.index_of("d".to_string().borrow()), None);
-        assert_eq!(dict.index_of("Pos".to_string().borrow()), None);
-        assert_eq!(dict.index_of("Pos"), None);
-        assert_eq!(dict.index_of("b"), Some(1));
+        assert_eq!(dict.fetch_id("a".to_string().borrow()), Some(0));
+        assert_eq!(dict.fetch_id("b".to_string().borrow()), Some(1));
+        assert_eq!(dict.fetch_id("c".to_string().borrow()), Some(2));
+        assert_eq!(dict.fetch_id("Position 3".to_string().borrow()), Some(3));
+        assert_eq!(dict.fetch_id("Position 4".to_string().borrow()), Some(4));
+        assert_eq!(dict.fetch_id("Position 5".to_string().borrow()), Some(5));
+        assert_eq!(dict.fetch_id("d".to_string().borrow()), None);
+        assert_eq!(dict.fetch_id("Pos".to_string().borrow()), None);
+        assert_eq!(dict.fetch_id("Pos"), None);
+        assert_eq!(dict.fetch_id("b"), Some(1));
     }
 
     #[test]
     fn add() {
         let mut dict = create_dict();
-        assert_eq!(dict.add("a".to_string()), EntryStatus::Known(0));
-        assert_eq!(dict.add("new value".to_string()), EntryStatus::Fresh(6));
+        assert_eq!(dict.add("a".to_string()), AddResult::Known(0));
+        assert_eq!(dict.add("new value".to_string()), AddResult::Fresh(6));
+    }
+
+    #[test]
+    fn empty_str() {
+        let mut dict = HashMapDictionary::default();
+        assert_eq!(dict.add("".to_string()), AddResult::Fresh(0));
+        assert_eq!(dict.get(0), Some("".to_string()));
+        assert_eq!(dict.fetch_id(""), Some(0));
     }
 }

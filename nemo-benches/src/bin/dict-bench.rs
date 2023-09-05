@@ -6,7 +6,7 @@ use std::io::stdin;
 use flate2::read::MultiGzDecoder;
 
 use nemo::meta::{timing::TimedDisplay, TimedCode};
-use nemo_physical::dictionary::{Dictionary,EntryStatus,
+use nemo_physical::dictionary::{Dictionary,AddResult,
     string_dictionary::StringDictionary,
     prefixed_string_dictionary::PrefixedStringDictionary,
     hash_map_dictionary::HashMapDictionary,
@@ -65,8 +65,9 @@ fn main() {
 
         let entry_status = dict.add(s);
         match entry_status {
-            EntryStatus::Fresh(_value) => {bytes = bytes + b; count_unique += 1; },
-            EntryStatus::Known(_value) => {}
+            AddResult::Fresh(_value) => {bytes = bytes + b; count_unique += 1; },
+            AddResult::Known(_value) => {},
+            AddResult::Rejected => {}
         }
 
         count_lines += 1;
