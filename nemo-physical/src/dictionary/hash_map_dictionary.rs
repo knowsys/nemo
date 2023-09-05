@@ -15,11 +15,12 @@ static mut BUFFER: StringBuffer = StringBuffer::new();
 //use once_cell::sync::Lazy;
 //static mut BUFFER: Lazy<StringBuffer> = Lazy::new(||StringBuffer::new());
 
-const LOW_24_BITS_MASK: u64 = 0b00000000_00000000_00000000_00000000_00000000_11111111_11111111_11111111;
 /// Address size of pages in the string buffer
 const PAGE_ADDR_BITS: usize = 25; // 32MB
 /// Size of pages in the string buffer
 const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
+/// Bit mask that keeps only the (lower) PAGE_ADDR_BITS-1 bits, for extracting a string's length
+const LENGTH_BITS_MASK: u64 = (1 << (PAGE_ADDR_BITS-1))-1;
 
 /// A buffer for string data using compact memory regions that are managed in pages.
 /// New buffers need to be initialized, upn which they will receive an identifying buffer id
@@ -149,16 +150,16 @@ impl StringRef {
         StringRef{reference: (u64add << 24) + u64len}
     }
 
-    /// Returns the start address for the string that this refers to.
+    /// Returns the stored start address for the string that this refers to.
     /// For temporary references that do not point to the buffer, the result is meaningless.
     fn address(&self) -> usize {
         (self.reference >> 24).try_into().unwrap()
     }
 
-    /// Returns the length of the string that this refers to.
+    /// Returns the stored length of the string that this refers to.
     /// For temporary references that do not point to the buffer, the result is meaningless.
     fn len(&self) -> usize {
-        (self.reference & LOW_24_BITS_MASK).try_into().unwrap()
+        (self.reference & LENGTH_BITS_MASK).try_into().unwrap()
     }
 
     /// Returns a direct string slice reference for this data.
