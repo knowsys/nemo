@@ -402,10 +402,6 @@ impl Dictionary for PrefixedStringDictionary {
     fn len(&self) -> usize {
         self.ordering.len()
     }
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
 }
 
 /// The [Prefixer] allows to split a given [&str] into its prefixes.

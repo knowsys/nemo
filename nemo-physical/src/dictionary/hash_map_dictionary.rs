@@ -257,10 +257,6 @@ impl Dictionary for HashMapDictionary {
     fn len(&self) -> usize {
         self.mapping.len()
     }
-
-    fn is_empty(&self) -> bool {
-        self.mapping.is_empty()
-    }
 }
 
 

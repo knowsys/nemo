@@ -198,15 +198,6 @@ impl Dictionary for MetaDictionary {
         }
         len
     }
-
-    fn is_empty(&self) -> bool {
-        for dr in self.dicts.iter() {
-            if !dr.dict.is_empty() {
-                return false;
-            }
-        }
-        true
-    }
 }
 
 

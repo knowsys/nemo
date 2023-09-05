@@ -58,6 +58,4 @@ pub trait Dictionary: Debug {
     fn entry(&self, index: usize) -> Option<String>;
     /// Returns the number of elements in the dictionary.
     fn len(&self) -> usize;
-    /// Returns whether the dictionary is empty.
-    fn is_empty(&self) -> bool;
 }
