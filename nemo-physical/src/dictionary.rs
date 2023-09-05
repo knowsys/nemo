@@ -9,9 +9,12 @@ pub use prefixed_string_dictionary::PrefixedStringDictionary;
 /// Module to define a simple [StringDictionary]
 pub mod string_dictionary;
 pub use string_dictionary::StringDictionary;
-/// Module to define [HashMap]
+/// Module to define [HashMapDictionary]
 pub mod hash_map_dictionary;
 pub use hash_map_dictionary::HashMapDictionary;
+/// Module to define [MetaDictionary]
+pub mod meta_dictionary;
+pub use meta_dictionary::MetaDictionary;
 /// Module mapping physical types into logical types into Strings
 pub mod value_serializer;
 pub use value_serializer::ValueSerializer;

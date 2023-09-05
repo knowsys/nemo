@@ -9,7 +9,8 @@ use nemo::meta::{timing::TimedDisplay, TimedCode};
 use nemo_physical::dictionary::{Dictionary,EntryStatus,
     string_dictionary::StringDictionary,
     prefixed_string_dictionary::PrefixedStringDictionary,
-    hash_map_dictionary::HashMapDictionary};
+    hash_map_dictionary::HashMapDictionary,
+    meta_dictionary::MetaDictionary};
 
 fn create_dictionary(dict_type: &str) -> Box<dyn Dictionary> {
     match dict_type {
@@ -24,6 +25,10 @@ fn create_dictionary(dict_type: &str) -> Box<dyn Dictionary> {
         "prefix" => {
             println!("Using PrefixedStringDictionary.");
             Box::new(PrefixedStringDictionary::new())
+        },
+        "meta" => {
+            println!("Using MetaDictionary.");
+            Box::new(MetaDictionary::new())
         },
         _ => panic!("Unexpected dictionary type '{}'.", dict_type),
     }
@@ -57,11 +62,12 @@ fn main() {
     for l in reader.lines()  {
         let s = l.unwrap();
         let b = s.len();
+        let s2 = s.clone();
 
         let entry_status = dict.add(s);
         match entry_status {
-            EntryStatus::Fresh(_value) => {bytes = bytes + b; count_unique += 1; }
-            _ => {}
+            EntryStatus::Fresh(value) => {bytes = bytes + b; count_unique += 1; },
+            EntryStatus::Known(value) => {}
         }
 
         count_lines += 1;
