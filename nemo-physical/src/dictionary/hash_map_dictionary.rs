@@ -248,7 +248,7 @@ impl Dictionary for HashMapDictionary {
         }  
     }
 
-    fn add_dictionary_string(&mut self, ds: &mut DictionaryString) -> AddResult {
+    fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
         self.add_str(ds.as_str())
     }
 

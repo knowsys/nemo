@@ -388,7 +388,7 @@ impl Dictionary for PrefixedStringDictionary {
         self.add_string(string.to_string())
     }
 
-    fn add_dictionary_string(&mut self, ds: &mut DictionaryString) -> AddResult {
+    fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
         self.add_str(ds.as_str())
     }
 

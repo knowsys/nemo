@@ -79,7 +79,7 @@ pub trait Dictionary: Debug {
     /// the string to fit internal assumptions (e.g., a dictionary that requires a fixed
     /// prefix may ignore the prefix and only store the rest, as if the prefix would
     /// match). To perform checks and possibly reject data, `add_string()` or `add_str()` should be used.
-    fn add_dictionary_string(&mut self, ds: &mut DictionaryString) -> AddResult;
+    fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult;
 
     /// Looks for a given [&str] slice and returns `Some(id)` if it is in the dictionary, and `None` otherwise.
     fn fetch_id(&self, string: &str) -> Option<usize>;

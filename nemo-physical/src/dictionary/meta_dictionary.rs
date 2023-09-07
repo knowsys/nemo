@@ -23,7 +23,8 @@ enum DictionaryType {
 
 impl DictionaryType {
     /// Returns true if the given string is supported by a dictinoary of this type.
-    fn supports(&self, ds: &mut DictionaryString) -> bool {
+    fn supports(&self, ds: & DictionaryString) -> bool {
+        ds.as_str(); // FIXME test, fails when using ds.prefix()
         match self {
             DictionaryType::String => !ds.is_long(),
             DictionaryType::Blob => ds.is_long(),
@@ -138,19 +139,19 @@ impl Dictionary for MetaDictionary {
     }
 
     fn add_string(&mut self, string: String) -> AddResult {
-        self.add_dictionary_string(&mut DictionaryString::from_string(string))
+        self.add_dictionary_string(DictionaryString::from_string(string))
     }
 
     fn add_str(&mut self, string: &str) -> AddResult {
-        self.add_dictionary_string(&mut DictionaryString::new(string))
+        self.add_dictionary_string(DictionaryString::new(string))
     }
 
-    fn add_dictionary_string(&mut self, ds: &mut DictionaryString) -> AddResult {
+    fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
         // for all (relevant) dictionaries
         //   check if string has a (local) id
         //   and, if so, map it to a global id        
         for (index,dr) in self.dicts.iter().enumerate() {
-            if dr.dict_type.supports(ds) {
+            if dr.dict_type.supports(&ds) {
                 match dr.dict.fetch_id(ds.as_str()) {
                     Some(idx) => {return AddResult::Known(self.local_to_global_unchecked(index, idx)); },
                     _ => {}
@@ -177,7 +178,7 @@ impl Dictionary for MetaDictionary {
         //   check if string has a (local) id
         //   and, if so, map it to a global id        
         for (dict_index,dr) in self.dicts.iter().enumerate() {
-            if dr.dict_type.supports(&mut ds) {
+            if dr.dict_type.supports(&ds) {
                 let result = dr.dict.fetch_id(string);
                 if result.is_some() {
                     return Some(self.local_to_global_unchecked(dict_index, result.unwrap()));
