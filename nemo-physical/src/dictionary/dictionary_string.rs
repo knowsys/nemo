@@ -4,7 +4,7 @@ use std::cell::UnsafeCell;
 
 pub(crate) const LONG_STRING_THRESHOLD: usize = 1000;
 
-/// String that computes and caches checks relevant for dicitonary selection.
+/// String that computes and caches checks relevant for dictionary selection.
 #[derive(Debug)]
 pub struct DictionaryString {
     string: String,
