@@ -1,5 +1,5 @@
-use super::Dictionary;
 use super::AddResult;
+use super::Dictionary;
 use super::DictionaryString;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -55,8 +55,8 @@ impl Dictionary for StringDictionary {
 mod test {
     use std::borrow::Borrow;
 
-    use crate::dictionary::Dictionary;
     use crate::dictionary::AddResult;
+    use crate::dictionary::Dictionary;
 
     use super::StringDictionary;
 
@@ -113,6 +113,9 @@ mod test {
     fn add() {
         let mut dict = create_dict();
         assert_eq!(dict.add_string("a".to_string()), AddResult::Known(0));
-        assert_eq!(dict.add_string("new value".to_string()), AddResult::Fresh(6));
+        assert_eq!(
+            dict.add_string("new value".to_string()),
+            AddResult::Fresh(6)
+        );
     }
 }

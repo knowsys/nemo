@@ -1,4 +1,4 @@
-use super::{Dictionary,AddResult,DictionaryString};
+use super::{AddResult, Dictionary, DictionaryString};
 
 use std::{
     collections::HashMap,
@@ -20,18 +20,18 @@ const PAGE_ADDR_BITS: usize = 25; // 32MB
 /// Size of pages in the string buffer
 const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
 /// Bit mask that keeps only the (lower) PAGE_ADDR_BITS-1 bits, for extracting a string's length
-const LENGTH_BITS_MASK: u64 = (1 << (PAGE_ADDR_BITS-1))-1;
+const LENGTH_BITS_MASK: u64 = (1 << (PAGE_ADDR_BITS - 1)) - 1;
 
 /// A buffer for string data using compact memory regions that are managed in pages.
 /// New buffers need to be initialized, upn which they will receive an identifying buffer id
 /// that is used whenever the data accessed.
-/// 
+///
 /// The implementaion is not fully thread-safe, but it is thread-safe as long as each buffer
 /// is used in only one thread. That is, parallel threads can safely create buffers (which will
 /// have different ids), as long as all their operations use the buffer id that they were given.
 struct StringBuffer {
     /// Vector of buffer ids and string buffers
-    pages: Vec<(usize,String)>,
+    pages: Vec<(usize, String)>,
     /// Single temporary string per buffer. [StringRef] uses this for representing strings that are not in the buffer.
     tmp_strings: Vec<String>,
     /// Currently active page for each buffer
@@ -42,15 +42,20 @@ struct StringBuffer {
 impl StringBuffer {
     /// Constructor.
     const fn new() -> Self {
-        StringBuffer{ pages: Vec::new(), tmp_strings: Vec::new(), cur_pages: Vec::new(), lock: AtomicBool::new(false)}
+        StringBuffer {
+            pages: Vec::new(),
+            tmp_strings: Vec::new(),
+            cur_pages: Vec::new(),
+            lock: AtomicBool::new(false),
+        }
     }
 
     /// Initializes a new buffer and returns a handle that can henceforth be used to access it.
     fn init_buffer(&mut self) -> usize {
         self.acquire_page_lock();
         let buf_id = self.cur_pages.len();
-        self.pages.push( (buf_id, String::with_capacity(PAGE_SIZE)) );
-        self.cur_pages.push(self.pages.len()-1);
+        self.pages.push((buf_id, String::with_capacity(PAGE_SIZE)));
+        self.cur_pages.push(self.pages.len() - 1);
         self.tmp_strings.push(String::new());
         self.release_page_lock();
         buf_id
@@ -60,7 +65,7 @@ impl StringBuffer {
     /// No other pages are affected or moved.
     fn drop_buffer(&mut self, buffer: usize) {
         self.acquire_page_lock();
-        for (b,s) in self.pages.iter_mut() {
+        for (b, s) in self.pages.iter_mut() {
             if buffer == *b {
                 s.clear();
                 s.shrink_to_fit();
@@ -71,23 +76,23 @@ impl StringBuffer {
     }
 
     /// Inserts a string into the buffer and returns a [StringRef] that points to it.
-    /// 
+    ///
     /// TODO: Allocation of new pages could re-use freed pages instead of always appending.
     fn push_str(&mut self, buffer: usize, s: &str) -> StringRef {
         let len = s.len();
-        assert!(len < 1<<25);
+        assert!(len < 1 << 25);
         let mut page_num = self.cur_pages[buffer];
         if self.pages[page_num].1.len() + len > PAGE_SIZE {
             self.acquire_page_lock();
-            self.pages.push((buffer,String::with_capacity(PAGE_SIZE)));
-            page_num = self.pages.len()-1;
+            self.pages.push((buffer, String::with_capacity(PAGE_SIZE)));
+            page_num = self.pages.len() - 1;
             self.cur_pages[buffer] = page_num;
             self.release_page_lock();
         }
         let page_addr = self.pages[page_num].1.len();
         self.pages[page_num].1.push_str(s);
 
-        StringRef::new(page_num*PAGE_SIZE + page_addr, s.len())
+        StringRef::new(page_num * PAGE_SIZE + page_addr, s.len())
     }
 
     /// Returns a direct string slice reference for this data.
@@ -95,7 +100,7 @@ impl StringBuffer {
     fn get_str(&self, address: usize, length: usize) -> &str {
         let page_num = address >> PAGE_ADDR_BITS;
         let page_addr = address % PAGE_SIZE;
-        &self.pages[page_num].1[page_addr..page_addr+length]
+        &self.pages[page_num].1[page_addr..page_addr + length]
     }
 
     /// Creates a reference to the given string without adding the string to the buffer.
@@ -113,7 +118,11 @@ impl StringBuffer {
     /// Acquire the lock that we use for operations that add new pages or change
     /// the assignment of pages to buffers in any way.
     fn acquire_page_lock(&mut self) {
-        while self.lock.compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Acquire).is_err() { }
+        while self
+            .lock
+            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Acquire)
+            .is_err()
+        {}
     }
 
     /// Release the lock.
@@ -135,19 +144,23 @@ impl StringRef {
     /// Creates an object that refers to the current contents of the
     /// buffer's temporary String.
     fn new_tmp(buffer: usize) -> Self {
-        assert!(buffer < 1<<24);
+        assert!(buffer < 1 << 24);
         let u64buffer: u64 = buffer.try_into().unwrap();
-        StringRef{reference: (u64::MAX << 24) + u64buffer}
+        StringRef {
+            reference: (u64::MAX << 24) + u64buffer,
+        }
     }
 
     /// Creates a reference to the specific string slice in the buffer.
     /// It is not checked if that slice is allocated.
     fn new(address: usize, len: usize) -> Self {
-        assert!(len < 1<<24);
-        assert!(address < 1<<40);
+        assert!(len < 1 << 24);
+        assert!(address < 1 << 40);
         let u64add: u64 = address.try_into().unwrap();
         let u64len: u64 = len.try_into().unwrap();
-        StringRef{reference: (u64add << 24) + u64len}
+        StringRef {
+            reference: (u64add << 24) + u64len,
+        }
     }
 
     /// Returns the stored start address for the string that this refers to.
@@ -166,13 +179,9 @@ impl StringRef {
     /// This is a pointer to global mutable data, and cannot be used safely.
     fn as_str(&self) -> &str {
         if self.reference < (std::u64::MAX << 24) {
-            unsafe {
-                BUFFER.get_str(self.address(), self.len())
-            }
+            unsafe { BUFFER.get_str(self.address(), self.len()) }
         } else {
-            unsafe {
-                BUFFER.get_tmp_string(self.len())
-            } 
+            unsafe { BUFFER.get_tmp_string(self.len()) }
         }
     }
 
@@ -197,8 +206,6 @@ impl PartialEq for StringRef {
 }
 impl Eq for StringRef {}
 
-
-
 /// A read-only, hashmap-based [Dictionary] to implement a bijection between strings and integers.  
 /// Strings are stored in a compact buffer to reduce memory overhead and fragmentation.
 #[derive(Clone, Debug)]
@@ -211,7 +218,11 @@ pub struct HashMapDictionary {
 impl Default for HashMapDictionary {
     fn default() -> Self {
         unsafe {
-            HashMapDictionary{store: Vec::new(), mapping: HashMap::new(), buffer: BUFFER.init_buffer()}
+            HashMapDictionary {
+                store: Vec::new(),
+                mapping: HashMap::new(),
+                buffer: BUFFER.init_buffer(),
+            }
         }
     }
 }
@@ -234,18 +245,19 @@ impl Dictionary for HashMapDictionary {
     }
 
     fn add_str(&mut self, string: &str) -> AddResult {
-        match self.mapping.get( unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string) } ) {
+        match self
+            .mapping
+            .get(unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string) })
+        {
             Some(idx) => AddResult::Known(*idx),
-            None => {
-                unsafe {
-                    let sref = BUFFER.push_str(self.buffer, string);
-                    let nxt_id = self.store.len();
-                    self.store.push(sref);
-                    self.mapping.insert(sref, nxt_id);
-                    AddResult::Fresh(nxt_id)
-                }
-            }
-        }  
+            None => unsafe {
+                let sref = BUFFER.push_str(self.buffer, string);
+                let nxt_id = self.store.len();
+                self.store.push(sref);
+                self.mapping.insert(sref, nxt_id);
+                AddResult::Fresh(nxt_id)
+            },
+        }
     }
 
     fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
@@ -253,7 +265,9 @@ impl Dictionary for HashMapDictionary {
     }
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
-        self.mapping.get(unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string) } ).copied()
+        self.mapping
+            .get(unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string) })
+            .copied()
     }
 
     fn get(&self, id: usize) -> Option<String> {
@@ -267,13 +281,12 @@ impl Dictionary for HashMapDictionary {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use std::borrow::Borrow;
 
-    use crate::dictionary::Dictionary;
     use crate::dictionary::AddResult;
+    use crate::dictionary::Dictionary;
 
     use super::HashMapDictionary;
 
@@ -306,7 +319,7 @@ mod test {
         dict2.add_string("entry0".to_string());
         dict.add_string("another entry".to_string());
         dict2.add_string("entry1".to_string());
-        
+
         assert_eq!(dict.get(0), Some("a".to_string()));
         assert_eq!(dict.get(1), Some("b".to_string()));
         assert_eq!(dict.get(2), Some("c".to_string()));
@@ -341,7 +354,10 @@ mod test {
     fn add() {
         let mut dict = create_dict();
         assert_eq!(dict.add_string("a".to_string()), AddResult::Known(0));
-        assert_eq!(dict.add_string("new value".to_string()), AddResult::Fresh(6));
+        assert_eq!(
+            dict.add_string("new value".to_string()),
+            AddResult::Fresh(6)
+        );
     }
 
     #[test]

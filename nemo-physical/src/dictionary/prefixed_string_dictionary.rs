@@ -6,8 +6,8 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use super::Dictionary;
 use super::AddResult;
+use super::Dictionary;
 use super::DictionaryString;
 
 /// Represents a node, which is either a [TrieNode::Root], or some non-special [TrieNode::Node]
@@ -450,8 +450,8 @@ impl<'a> Iterator for Prefixer<'a> {
 mod test {
     use std::borrow::Borrow;
 
-    use crate::dictionary::Dictionary;
     use crate::dictionary::AddResult;
+    use crate::dictionary::Dictionary;
 
     use super::PrefixedStringDictionary;
 
@@ -522,7 +522,10 @@ mod test {
     fn add() {
         let mut dict = create_dict();
         assert_eq!(dict.add_string("a".to_string()), AddResult::Known(1));
-        assert_eq!(dict.add_string("new value".to_string()), AddResult::Fresh(7));
+        assert_eq!(
+            dict.add_string("new value".to_string()),
+            AddResult::Fresh(7)
+        );
     }
 
     #[test]

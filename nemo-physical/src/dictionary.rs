@@ -25,7 +25,7 @@ pub use value_serializer::ValueSerializer;
 
 /// Result of adding new values to a dictionary.
 /// It indicates if the operation was successful, and whether the value was previously present or not.
-#[derive(Debug,Clone,Copy,PartialEq,Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AddResult {
     /// Element was new and has been freshly assinged the given id.
     Fresh(usize),
@@ -46,7 +46,6 @@ impl AddResult {
     }
 }
 
-
 /// A Dictionary represents a bijective (invertible) mapping from objects to numeric ids.
 /// The "objects" are provided when the dictionary is used, whereas the ids are newly
 /// assigned by the dictionary itself.
@@ -59,7 +58,7 @@ pub trait Dictionary: Debug {
     /// Adds a new string to the dictionary. If the string is not known yet, it will
     /// be assigned a new id. Unsupported strings can also be rejected, which specialized
     /// dictionary implementations might do.
-    /// 
+    ///
     /// The result is an [EntryStatus] that indicates if the string was newly added,
     /// previoulsy present, or rejected. In the first two cases, the result yields
     /// the strings id.
@@ -68,7 +67,7 @@ pub trait Dictionary: Debug {
     /// Adds a new string to the dictionary. If the string is not known yet, it will
     /// be assigned a new id. Unsupported strings can also be rejected, which specialized
     /// dictionary implementations might do.
-    /// 
+    ///
     /// The result is an [EntryStatus] that indicates if the string was newly added,
     /// previoulsy present, or rejected. In the first two cases, the result yields
     /// the strings id.
