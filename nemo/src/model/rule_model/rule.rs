@@ -178,3 +178,39 @@ impl Rule {
         &mut self.filters
     }
 }
+
+impl std::fmt::Display for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, atom) in self.head.iter().enumerate() {
+            atom.fmt(f)?;
+
+            if index < self.head.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        f.write_str(" :- ")?;
+
+        for (index, literal) in self.body.iter().enumerate() {
+            literal.fmt(f)?;
+
+            if index < self.body.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        if !self.filters.is_empty() {
+            f.write_str(", ")?;
+        }
+
+        for (index, filter) in self.filters.iter().enumerate() {
+            filter.fmt(f)?;
+
+            if index < self.filters.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        f.write_str(" .")
+    }
+}

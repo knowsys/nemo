@@ -19,6 +19,19 @@ pub enum TermOperation {
     Function(Identifier),
 }
 
+impl std::fmt::Display for TermOperation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TermOperation::Term(term) => term.fmt(f),
+            TermOperation::Addition => f.write_str("+"),
+            TermOperation::Subtraction => f.write_str("-"),
+            TermOperation::Multiplication => f.write_str("*"),
+            TermOperation::Division => f.write_str("/"),
+            TermOperation::Function(name) => f.write_fmt(format_args!("<Function {}>", name)),
+        }
+    }
+}
+
 /// [`TaggedTree`] with [`TermOperation`] as tags.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct TermTree(pub TaggedTree<TermOperation>);
@@ -69,6 +82,52 @@ impl TermTree {
             match leaf {
                 TermOperation::Term(t) => t.substitute_variable(variable, subst),
                 _ => continue,
+            }
+        }
+    }
+
+    /// Replace one [`Term`] with another.
+    pub fn replace_term(&mut self, old: &Term, new: &Term) {
+        for leaf_node in self.0.leaves_mut() {
+            if let TermOperation::Term(term) = leaf_node {
+                if term == old {
+                    *term = new.clone();
+                }
+            } else {
+                unreachable!("Leaf nodes must be terms");
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for TermTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0.tag {
+            TermOperation::Term(term) => term.fmt(f),
+            TermOperation::Addition
+            | TermOperation::Subtraction
+            | TermOperation::Multiplication
+            | TermOperation::Division => {
+                f.write_str("(")?;
+                for (index, subtree) in self.0.subtrees.iter().enumerate() {
+                    TermTree(subtree.clone()).fmt(f)?;
+                    if index < self.0.subtrees.len() - 1 {
+                        self.0.tag.fmt(f)?;
+                    }
+                }
+
+                f.write_str(")")
+            }
+            TermOperation::Function(name) => {
+                name.fmt(f)?;
+                f.write_str("(")?;
+                for (index, subtree) in self.0.subtrees.iter().enumerate() {
+                    TermTree(subtree.clone()).fmt(f)?;
+                    if index < self.0.subtrees.len() - 1 {
+                        f.write_str(", ")?;
+                    }
+                }
+                f.write_str(")")
             }
         }
     }

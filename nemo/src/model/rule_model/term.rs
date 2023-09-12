@@ -109,7 +109,12 @@ impl Variable {
 
 impl std::fmt::Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.name())
+        let prefix = match self {
+            Variable::Universal(_) => "?",
+            Variable::Existential(_) => "!",
+        };
+
+        write!(f, "{}{}", prefix, &self.name())
     }
 }
 

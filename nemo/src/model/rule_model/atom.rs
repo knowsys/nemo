@@ -68,4 +68,25 @@ impl Atom {
             _ => None,
         })
     }
+
+    /// Replace one [`Term`] with another.
+    pub fn replace_term(&mut self, old: &Term, new: &Term) {
+        for tree in &mut self.term_trees {
+            tree.replace_term(old, new);
+        }
+    }
+}
+
+impl std::fmt::Display for Atom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.predicate.fmt(f)?;
+        f.write_str("(")?;
+        for (index, tree) in self.terms().enumerate() {
+            tree.fmt(f)?;
+            if index < self.term_trees.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+        f.write_str(")")
+    }
 }
