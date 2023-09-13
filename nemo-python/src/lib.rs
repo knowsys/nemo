@@ -138,7 +138,7 @@ fn logical_value_to_python(py: Python<'_>, v: PrimitiveLogicalValueT) -> PyResul
             Term::RdfLiteral(lit) => (|| {
                 let lit = match lit {
                     RdfLiteral::DatatypeValue { value, datatype } => NemoLiteral {
-                        value: value,
+                        value,
                         language: None,
                         datatype,
                     },
