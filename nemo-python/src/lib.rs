@@ -14,6 +14,8 @@ use pyo3::{create_exception, exceptions::PyNotImplementedError, prelude::*};
 
 create_exception!(module, NemoError, pyo3::exceptions::PyException);
 
+pub const RDF_LANG_STRING: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
+
 trait PythonResult {
     type Value;
 
@@ -92,10 +94,16 @@ impl NemoLiteral {
                 NemoError::new_err(format!("Only string arguments are currently supported"))
             })?;
 
+            let datatype = if lang.is_some() {
+                RDF_LANG_STRING.to_string()
+            } else {
+                XSD_STRING.to_string()
+            };
+
             Ok(NemoLiteral {
                 value: inner,
                 language: lang,
-                datatype: XSD_STRING.to_string(),
+                datatype,
             })
         })
     }
@@ -108,12 +116,16 @@ impl NemoLiteral {
         &self.datatype
     }
 
+    fn language(&self) -> Option<&String> {
+        self.language.as_ref()
+    }
+
     fn __richcmp__(&self, other: &Self, op: pyo3::basic::CompareOp) -> PyResult<bool> {
         match op {
             pyo3::pyclass::CompareOp::Eq => Ok(self == other),
             pyo3::pyclass::CompareOp::Ne => Ok(self != other),
             _ => Err(PyNotImplementedError::new_err(
-                "rdf comparison is not implemented",
+                "RDF comparison is not implemented",
             )),
         }
     }
@@ -145,7 +157,7 @@ fn logical_value_to_python(py: Python<'_>, v: PrimitiveLogicalValueT) -> PyResul
                     RdfLiteral::LanguageString { value, tag } => NemoLiteral {
                         value,
                         language: Some(tag),
-                        datatype: XSD_STRING.to_owned(),
+                        datatype: RDF_LANG_STRING.to_string(),
                     },
                 };
                 Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
