@@ -65,7 +65,11 @@ impl ResourceProvider for HTTPResourceProvider {
 
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
-            .build()?;
+            .build()
+            .map_err(|e| ReadingError::IOReading {
+                error: e,
+                filename: resource.clone(),
+            })?;
         let response = rt.block_on(Self::get(resource))?;
         Ok(Some(Box::new(response)))
     }
