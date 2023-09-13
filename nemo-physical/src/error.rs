@@ -1,6 +1,6 @@
 //! Error-handling module for the crate
 
-use std::{convert::Infallible, fmt::Display, path::PathBuf};
+use std::{convert::Infallible, fmt::Display};
 
 use thiserror::Error;
 
@@ -33,12 +33,8 @@ pub enum ReadingError {
         /// Contains the wrapped error
         error: std::io::Error,
         /// Filename which caused the error
-        filename: PathBuf,
+        filename: String,
     },
-    /// IO Error
-    // TODO: there is currently also an IO Error in nmo_logical. Do we want both?
-    #[error(transparent)]
-    IO(#[from] std::io::Error),
     /// Error when a resource could not be provided by any resource provider
     #[error("Resource at \"{resource}\" was not provided by any resource provider")]
     ResourceNotProvided {
