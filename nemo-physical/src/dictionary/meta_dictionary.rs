@@ -1,7 +1,7 @@
-use super::Dictionary;
-use super::EntryStatus;
-use super::hash_map_dictionary::HashMapDictionary;
 use super::dictionary_string::DictionaryString;
+use super::hash_map_dictionary::HashMapDictionary;
+use super::AddResult;
+use super::Dictionary;
 
 /// Bits in the size of address blocks allocated to sub-dictionaries
 const BLOCKSIZE: u32 = 24;
@@ -23,12 +23,13 @@ enum DictionaryType {
 
 impl DictionaryType {
     /// Returns true if the given string is supported by a dictinoary of this type.
-    fn supports(&self, ds: &mut DictionaryString) -> bool {
+    fn supports(&self, ds: &DictionaryString) -> bool {
+        ds.as_str(); // FIXME test, fails when using ds.prefix()
         match self {
             DictionaryType::String => !ds.is_long(),
             DictionaryType::Blob => ds.is_long(),
-            DictionaryType::Infix{prefix,postfix} => false, // TODO
-            DictionaryType::NumInfix{prefix,postfix} => false, // TODO
+            DictionaryType::Infix { prefix, postfix } => false, // TODO
+            DictionaryType::NumInfix { prefix, postfix } => false, // TODO
         }
     }
 }
@@ -40,7 +41,7 @@ pub struct DictRecord {
     dict: Box<dyn Dictionary>,
     /// Type of the dictionary
     dict_type: DictionaryType,
-    /// Vector to associate local address block numbers to global block numbers 
+    /// Vector to associate local address block numbers to global block numbers
     gblocks: Vec<usize>,
 }
 
@@ -48,7 +49,7 @@ pub struct DictRecord {
 #[derive(Debug)]
 pub struct MetaDictionary {
     /// Vector to map global block numbers to pairs (sub-dictionary, local block number)
-    dictblocks: Vec<(usize,usize)>,
+    dictblocks: Vec<(usize, usize)>,
     /// Vector of all sub-dictionaries, indexed by their sub-dictionary number
     dicts: Vec<DictRecord>,
 }
@@ -59,26 +60,33 @@ impl Default for MetaDictionary {
     fn default() -> Self {
         // Initialize default dictionary and give it one block:
         let default_dict = Box::new(HashMapDictionary::new());
-        let default_dict_record = DictRecord{dict: default_dict, dict_type: DictionaryType::String, gblocks: vec![0]};
+        let default_dict_record = DictRecord {
+            dict: default_dict,
+            dict_type: DictionaryType::String,
+            gblocks: vec![0],
+        };
         // Initialize blob dictionary and give it no blocks:
         let blob_dict = Box::new(HashMapDictionary::new());
-        let blob_dict_record = DictRecord{dict: blob_dict, dict_type: DictionaryType::Blob, gblocks: Vec::new()};
+        let blob_dict_record = DictRecord {
+            dict: blob_dict,
+            dict_type: DictionaryType::Blob,
+            gblocks: Vec::new(),
+        };
 
         Self {
-            dictblocks: vec![(0,0)],
+            dictblocks: vec![(0, 0)],
             dicts: vec![default_dict_record, blob_dict_record],
         }
     }
 }
 
 impl MetaDictionary {
-
     /// Convert the local ID of a given dictionary to a global ID.
     /// The function assumes that the given local id exists, and will crash
     /// otherwise. It can safely be used for conversion of previously stored data.
     fn local_to_global_unchecked(&self, dict: usize, local_id: usize) -> usize {
         let lblock = local_id >> BLOCKSIZE;
-        let offset = local_id % (1<<BLOCKSIZE);
+        let offset = local_id % (1 << BLOCKSIZE);
         let gblock = self.dicts[dict].gblocks[lblock]; // Could fail if: (1) dictionary does not exist, or (2) block not used by dict
 
         (gblock << BLOCKSIZE) + offset
@@ -90,7 +98,7 @@ impl MetaDictionary {
     /// dictionary otherwise. This is used when converting newly created ids.
     fn local_to_global(&mut self, dict: usize, local_id: usize) -> usize {
         let lblock = local_id >> BLOCKSIZE;
-        let offset = local_id % (1<<BLOCKSIZE);
+        let offset = local_id % (1 << BLOCKSIZE);
         let gblock = self.allocate_block(dict, lblock);
 
         (gblock << BLOCKSIZE) + offset
@@ -100,19 +108,23 @@ impl MetaDictionary {
     /// allocated yet, a new block is reserved for this purpose. Allocation tries to preserve relative
     /// order and distance, and to keep some distance from other dictionary's blocks.
     fn allocate_block(&mut self, dict: usize, local_block: usize) -> usize {
-        if self.dicts[dict].gblocks.len() <= local_block { // make space for block records up to required length
-            self.dicts[dict].gblocks.resize(local_block+1, usize::MAX);
-        } 
-        if self.dicts[dict].gblocks[local_block] == usize::MAX { // allocate necessary new block
-            let mut btl_index = local_block+1; // index of first allocated block to the left, +1 (so 0 means "no block to left")
-            while btl_index > 0 && self.dicts[dict].gblocks[btl_index-1] == usize::MAX {
+        if self.dicts[dict].gblocks.len() <= local_block {
+            // make space for block records up to required length
+            self.dicts[dict].gblocks.resize(local_block + 1, usize::MAX);
+        }
+        if self.dicts[dict].gblocks[local_block] == usize::MAX {
+            // allocate necessary new block
+            let mut btl_index = local_block + 1; // index of first allocated block to the left, +1 (so 0 means "no block to left")
+            while btl_index > 0 && self.dicts[dict].gblocks[btl_index - 1] == usize::MAX {
                 btl_index -= 1;
             }
 
             let mut new_block: usize;
-            if btl_index > 0 { // extrapolate where global block should be relative to last allocated local block
-                new_block = self.dicts[dict].gblocks[btl_index-1] + btl_index - 1;
-            } else { // determine "good" initial block for this dictionary (TODO)
+            if btl_index > 0 {
+                // extrapolate where global block should be relative to last allocated local block
+                new_block = self.dicts[dict].gblocks[btl_index - 1] + btl_index - 1;
+            } else {
+                // determine "good" initial block for this dictionary (TODO)
                 new_block = 0;
             }
             // Find first empty block right of the chosen new block
@@ -120,16 +132,16 @@ impl MetaDictionary {
                 new_block += 1;
             }
             if new_block >= self.dictblocks.len() {
-                self.dictblocks.resize(new_block+1, (usize::MAX,usize::MAX));
+                self.dictblocks
+                    .resize(new_block + 1, (usize::MAX, usize::MAX));
             }
             self.dicts[dict].gblocks[local_block] = new_block;
-            self.dictblocks[new_block] = (dict,local_block);
+            self.dictblocks[new_block] = (dict, local_block);
             new_block
         } else {
             self.dicts[dict].gblocks[local_block]
         }
     }
-
 }
 
 impl Dictionary for MetaDictionary {
@@ -137,15 +149,24 @@ impl Dictionary for MetaDictionary {
         Default::default()
     }
 
-    fn add(&mut self, entry: String) -> EntryStatus {
-        let mut ds = DictionaryString::new(entry.as_str());
+    fn add_string(&mut self, string: String) -> AddResult {
+        self.add_dictionary_string(DictionaryString::from_string(string))
+    }
+
+    fn add_str(&mut self, string: &str) -> AddResult {
+        self.add_dictionary_string(DictionaryString::new(string))
+    }
+
+    fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
         // for all (relevant) dictionaries
         //   check if string has a (local) id
-        //   and, if so, map it to a global id        
-        for (index,dr) in self.dicts.iter().enumerate() {
-            if dr.dict_type.supports(&mut ds) {
-                match dr.dict.index_of(entry.as_str()) {
-                    Some(idx) => {return EntryStatus::Known(self.local_to_global_unchecked(index, idx)); },
+        //   and, if so, map it to a global id
+        for (index, dr) in self.dicts.iter().enumerate() {
+            if dr.dict_type.supports(&ds) {
+                match dr.dict.fetch_id(ds.as_str()) {
+                    Some(idx) => {
+                        return AddResult::Known(self.local_to_global_unchecked(index, idx));
+                    }
                     _ => {}
                 }
             }
@@ -155,23 +176,23 @@ impl Dictionary for MetaDictionary {
         let dict_idx: usize;
         if ds.is_long() {
             dict_idx = 1;
-            local_id = self.dicts[1].dict.add(entry).value();
+            local_id = self.dicts[1].dict.add_dictionary_string(ds).value();
         } else {
             dict_idx = 0;
-            local_id = self.dicts[0].dict.add(entry).value();
+            local_id = self.dicts[0].dict.add_dictionary_string(ds).value();
         }
         // compute global id based on block and local id, possibly allocating new block in the process
-        EntryStatus::Fresh(self.local_to_global(dict_idx,local_id))
+        AddResult::Fresh(self.local_to_global(dict_idx, local_id))
     }
 
-    fn index_of(&self, entry: &str) -> Option<usize> {
-        let mut ds = DictionaryString::new(entry);
+    fn fetch_id(&self, string: &str) -> Option<usize> {
+        let mut ds = DictionaryString::new(string);
         // for all (relevant) dictionaries
         //   check if string has a (local) id
-        //   and, if so, map it to a global id        
-        for (dict_index,dr) in self.dicts.iter().enumerate() {
-            if dr.dict_type.supports(&mut ds) {
-                let result = dr.dict.index_of(entry);
+        //   and, if so, map it to a global id
+        for (dict_index, dr) in self.dicts.iter().enumerate() {
+            if dr.dict_type.supports(&ds) {
+                let result = dr.dict.fetch_id(string);
                 if result.is_some() {
                     return Some(self.local_to_global_unchecked(dict_index, result.unwrap()));
                 }
@@ -180,15 +201,15 @@ impl Dictionary for MetaDictionary {
         None
     }
 
-    fn entry(&self, index: usize) -> Option<String> {
-        let gblock = index >> BLOCKSIZE;
-        let offset = index % (1<<BLOCKSIZE);
-        if self.dictblocks.len() <= gblock || self.dictblocks[gblock] == (usize::MAX,usize::MAX) {
+    fn get(&self, id: usize) -> Option<String> {
+        let gblock = id >> BLOCKSIZE;
+        let offset = id % (1 << BLOCKSIZE);
+        if self.dictblocks.len() <= gblock || self.dictblocks[gblock] == (usize::MAX, usize::MAX) {
             return None;
         }
-        let (dict_id,lblock) = self.dictblocks[gblock];
+        let (dict_id, lblock) = self.dictblocks[gblock];
 
-        self.dicts[dict_id].dict.entry((lblock >> BLOCKSIZE) + offset)
+        self.dicts[dict_id].dict.get((lblock >> BLOCKSIZE) + offset)
     }
 
     fn len(&self) -> usize {
@@ -198,60 +219,53 @@ impl Dictionary for MetaDictionary {
         }
         len
     }
-
-    fn is_empty(&self) -> bool {
-        for dr in self.dicts.iter() {
-            if !dr.dict.is_empty() {
-                return false;
-            }
-        }
-        true
-    }
 }
-
 
 #[cfg(test)]
 mod test {
+    use crate::dictionary::AddResult;
     use crate::dictionary::Dictionary;
-    use crate::dictionary::EntryStatus;
 
-    use crate::dictionary::dictionary_string::LONG_STRING_THRESHOLD;
     use super::MetaDictionary;
+    use crate::dictionary::dictionary_string::LONG_STRING_THRESHOLD;
 
     /// Pads a string to make it longer than the threshold applied to distinguish blobs.
     fn long_string(s: &str) -> String {
-        "#".to_string().repeat(LONG_STRING_THRESHOLD+1) + s
+        "#".to_string().repeat(LONG_STRING_THRESHOLD + 1) + s
     }
 
     #[test]
     fn add_and_get() {
         let mut dict = MetaDictionary::default();
 
-        let res1 = dict.add("entry0".to_string());
-        let res2 = dict.add("entry1".to_string());
-        let res3 = dict.add("entry0".to_string());
-        let res4 = dict.add(long_string("long1"));
-        let res5 = dict.add("entry2".to_string());
-        let res6 = dict.add(long_string("long2"));
-        let res7 = dict.add(long_string("long1"));
+        let res1 = dict.add_string("entry0".to_string());
+        let res2 = dict.add_string("entry1".to_string());
+        let res3 = dict.add_string("entry0".to_string());
+        let res4 = dict.add_string(long_string("long1"));
+        let res5 = dict.add_string("entry2".to_string());
+        let res6 = dict.add_string(long_string("long2"));
+        let res7 = dict.add_string(long_string("long1"));
 
-        let get1 = dict.entry(res1.value());
-        let get2 = dict.entry(res2.value());
-        let get4 = dict.entry(res4.value());
-        let getnone1 = dict.entry(res6.value()+1); // unused but in an allocated block
-        let getnone2 = dict.entry(1<< 30); // out of any allocated block
+        let get1 = dict.get(res1.value());
+        let get2 = dict.get(res2.value());
+        let get4 = dict.get(res4.value());
+        let getnone1 = dict.get(res6.value() + 1); // unused but in an allocated block
+        let getnone2 = dict.get(1 << 30); // out of any allocated block
 
-        assert_eq!(res1, EntryStatus::Fresh(res1.value()));
-        assert_eq!(res2, EntryStatus::Fresh(res2.value()));
-        assert_eq!(res3, EntryStatus::Known(res1.value()));
-        assert_eq!(res4, EntryStatus::Fresh(res4.value()));
-        assert_eq!(res5, EntryStatus::Fresh(res5.value()));
-        assert_eq!(res6, EntryStatus::Fresh(res6.value()));
-        assert_eq!(res7, EntryStatus::Known(res4.value()));
+        assert_eq!(res1, AddResult::Fresh(res1.value()));
+        assert_eq!(res2, AddResult::Fresh(res2.value()));
+        assert_eq!(res3, AddResult::Known(res1.value()));
+        assert_eq!(res4, AddResult::Fresh(res4.value()));
+        assert_eq!(res5, AddResult::Fresh(res5.value()));
+        assert_eq!(res6, AddResult::Fresh(res6.value()));
+        assert_eq!(res7, AddResult::Known(res4.value()));
 
-        assert_eq!(dict.index_of("entry0"), Some(res1.value()));
-        assert_eq!(dict.index_of("entry1"), Some(res2.value()));
-        assert_eq!(dict.index_of(long_string("long1").as_str()), Some(res4.value()));
+        assert_eq!(dict.fetch_id("entry0"), Some(res1.value()));
+        assert_eq!(dict.fetch_id("entry1"), Some(res2.value()));
+        assert_eq!(
+            dict.fetch_id(long_string("long1").as_str()),
+            Some(res4.value())
+        );
 
         assert_eq!(get1.unwrap(), "entry0".to_string());
         assert_eq!(get2.unwrap(), "entry1".to_string());

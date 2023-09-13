@@ -6,8 +6,9 @@ use std::{
     rc::{Rc, Weak},
 };
 
+use super::AddResult;
 use super::Dictionary;
-use super::EntryStatus;
+use super::DictionaryString;
 
 /// Represents a node, which is either a [TrieNode::Root], or some non-special [TrieNode::Node]
 enum TrieNode {
@@ -340,10 +341,10 @@ impl Dictionary for PrefixedStringDictionary {
         Default::default()
     }
 
-    fn add(&mut self, entry: String) -> EntryStatus {
+    fn add_string(&mut self, entry: String) -> AddResult {
         log::trace!("add {entry:?} to {self:?}");
         match self.mapping.get(&entry) {
-            Some(idx) => EntryStatus::Known(*idx),
+            Some(idx) => AddResult::Known(*idx),
             None => {
                 let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).collect();
                 log::trace!("prefixes: {prefixes:?}");
@@ -378,16 +379,24 @@ impl Dictionary for PrefixedStringDictionary {
                 ));
                 log::trace!("ordering: {:?}, value: {value:?}", self.ordering);
                 self.mapping.insert(entry.clone(), value);
-                EntryStatus::Fresh(value)
+                AddResult::Fresh(value)
             }
         }
     }
 
-    fn index_of(&self, entry: &str) -> Option<usize> {
+    fn add_str(&mut self, string: &str) -> AddResult {
+        self.add_string(string.to_string())
+    }
+
+    fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
+        self.add_str(ds.as_str())
+    }
+
+    fn fetch_id(&self, entry: &str) -> Option<usize> {
         self.mapping.get(&entry.to_string()).cloned()
     }
 
-    fn entry(&self, index: usize) -> Option<String> {
+    fn get(&self, index: usize) -> Option<String> {
         if index < self.ordering.len() {
             Some(format!(
                 "{}{}",
@@ -401,10 +410,6 @@ impl Dictionary for PrefixedStringDictionary {
 
     fn len(&self) -> usize {
         self.ordering.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 }
 
@@ -445,8 +450,8 @@ impl<'a> Iterator for Prefixer<'a> {
 mod test {
     use std::borrow::Borrow;
 
+    use crate::dictionary::AddResult;
     use crate::dictionary::Dictionary;
-    use crate::dictionary::EntryStatus;
 
     use super::PrefixedStringDictionary;
 
@@ -468,7 +473,7 @@ mod test {
         ];
 
         for i in vec {
-            dict.add(i.to_string());
+            dict.add_string(i.to_string());
         }
         dict
     }
@@ -476,48 +481,51 @@ mod test {
     #[test]
     fn empty_str() {
         let mut dict = PrefixedStringDictionary::default();
-        dict.add("".to_string());
-        assert_eq!(dict.entry(0), Some("".to_string()));
+        dict.add_string("".to_string());
+        assert_eq!(dict.get(0), Some("".to_string()));
 
         let mut dict = create_dict();
-        dict.add("".to_string());
-        assert_eq!(dict.entry(0), Some("".to_string()));
-        assert_eq!(dict.entry(8), None);
+        dict.add_string("".to_string());
+        assert_eq!(dict.get(0), Some("".to_string()));
+        assert_eq!(dict.get(8), None);
     }
 
     #[test]
     fn entry() {
         let dict = create_dict();
-        assert_eq!(dict.entry(1), Some("a".to_string()));
-        assert_eq!(dict.entry(2), Some("b".to_string()));
-        assert_eq!(dict.entry(3), Some("c".to_string()));
-        assert_eq!(dict.entry(4), Some("Position 3".to_string()));
-        assert_eq!(dict.entry(5), Some("Position 4".to_string()));
-        assert_eq!(dict.entry(6), Some("Position 5".to_string()));
-        assert_eq!(dict.entry(7), None);
-        assert_eq!(dict.entry(4), Some("Position 3".to_string()));
+        assert_eq!(dict.get(1), Some("a".to_string()));
+        assert_eq!(dict.get(2), Some("b".to_string()));
+        assert_eq!(dict.get(3), Some("c".to_string()));
+        assert_eq!(dict.get(4), Some("Position 3".to_string()));
+        assert_eq!(dict.get(5), Some("Position 4".to_string()));
+        assert_eq!(dict.get(6), Some("Position 5".to_string()));
+        assert_eq!(dict.get(7), None);
+        assert_eq!(dict.get(4), Some("Position 3".to_string()));
     }
 
     #[test]
     fn index_of() {
         let dict = create_dict();
-        assert_eq!(dict.index_of("a".to_string().borrow()), Some(1));
-        assert_eq!(dict.index_of("b".to_string().borrow()), Some(2));
-        assert_eq!(dict.index_of("c".to_string().borrow()), Some(3));
-        assert_eq!(dict.index_of("Position 3".to_string().borrow()), Some(4));
-        assert_eq!(dict.index_of("Position 4".to_string().borrow()), Some(5));
-        assert_eq!(dict.index_of("Position 5".to_string().borrow()), Some(6));
-        assert_eq!(dict.index_of("d".to_string().borrow()), None);
-        assert_eq!(dict.index_of("Pos".to_string().borrow()), None);
-        assert_eq!(dict.index_of("Pos"), None);
-        assert_eq!(dict.index_of("b"), Some(2));
+        assert_eq!(dict.fetch_id("a".to_string().borrow()), Some(1));
+        assert_eq!(dict.fetch_id("b".to_string().borrow()), Some(2));
+        assert_eq!(dict.fetch_id("c".to_string().borrow()), Some(3));
+        assert_eq!(dict.fetch_id("Position 3".to_string().borrow()), Some(4));
+        assert_eq!(dict.fetch_id("Position 4".to_string().borrow()), Some(5));
+        assert_eq!(dict.fetch_id("Position 5".to_string().borrow()), Some(6));
+        assert_eq!(dict.fetch_id("d".to_string().borrow()), None);
+        assert_eq!(dict.fetch_id("Pos".to_string().borrow()), None);
+        assert_eq!(dict.fetch_id("Pos"), None);
+        assert_eq!(dict.fetch_id("b"), Some(2));
     }
 
     #[test]
     fn add() {
         let mut dict = create_dict();
-        assert_eq!(dict.add("a".to_string()), EntryStatus::Known(1));
-        assert_eq!(dict.add("new value".to_string()), EntryStatus::Fresh(7));
+        assert_eq!(dict.add_string("a".to_string()), AddResult::Known(1));
+        assert_eq!(
+            dict.add_string("new value".to_string()),
+            AddResult::Fresh(7)
+        );
     }
 
     #[test]
@@ -525,11 +533,11 @@ mod test {
         let mut dict = create_dict();
         // no prefixes, so no children
         assert!(dict.store.as_ref().borrow().children().is_empty());
-        dict.add("https://wikidata.org/entity/Q42".to_string());
+        dict.add_string("https://wikidata.org/entity/Q42".to_string());
         // now we need some children
         assert!(!dict.store.as_ref().borrow().children().is_empty());
         assert_eq!(
-            dict.entry(7),
+            dict.get(7),
             Some("https://wikidata.org/entity/Q42".to_string())
         );
     }
@@ -539,11 +547,11 @@ mod test {
         let mut dict = create_dict();
         // no prefixes, so no children
         assert!(dict.store.as_ref().borrow().children().is_empty());
-        dict.add("https://wikidata.org/entity/Q42".to_string());
+        dict.add_string("https://wikidata.org/entity/Q42".to_string());
         // now we need some children
         assert!(!dict.store.as_ref().borrow().children().is_empty());
         assert_eq!(
-            dict.entry(7),
+            dict.get(7),
             Some("https://wikidata.org/entity/Q42".to_string())
         );
         drop(dict);
@@ -558,16 +566,16 @@ mod test {
         ];
 
         for (i, str) in vec.iter().enumerate() {
-            assert_eq!(dict.add(str.to_string()).value(), i + 1);
+            assert_eq!(dict.add_string(str.to_string()).value(), i + 1);
         }
         // duplicates
         for (i, str) in vec.iter().enumerate() {
-            assert_eq!(dict.add(str.to_string()).value(), i + 1);
+            assert_eq!(dict.add_string(str.to_string()).value(), i + 1);
         }
 
         for (id, result) in vec.iter().enumerate() {
-            assert_eq!(dict.entry(id + 1).unwrap(), result.to_string());
-            assert_eq!(dict.index_of(result), Some(id + 1));
+            assert_eq!(dict.get(id + 1).unwrap(), result.to_string());
+            assert_eq!(dict.fetch_id(result), Some(id + 1));
         }
     }
 }

@@ -254,7 +254,7 @@ mod test {
                                     .get(idx)
                                     .and_then(|value| value.try_into().ok())
                                     .and_then(|u64: u64| usize::try_from(u64).ok())
-                                    .and_then(|usize| dict.borrow_mut().entry(usize))
+                                    .and_then(|usize| dict.borrow_mut().get(usize))
                                     .unwrap()
                             })
                             .map(PhysicalString::from)

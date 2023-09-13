@@ -639,11 +639,11 @@ mod test {
 
         let any_result: Vec<String> = any_result_indices
             .into_iter()
-            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+            .map(|idx| dict.get_mut().get(idx.try_into().unwrap()).unwrap())
             .collect();
         let string_result: Vec<String> = string_result_indices
             .into_iter()
-            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+            .map(|idx| dict.get_mut().get(idx.try_into().unwrap()).unwrap())
             .collect();
         let VecT::I64(integer_result) = phys_enum_for_integer.finalize() else {
             unreachable!()

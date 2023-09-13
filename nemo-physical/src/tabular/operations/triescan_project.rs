@@ -799,11 +799,27 @@ mod test {
     #[test]
     fn spurious_tuples_in_reorder_bug() {
         let mut dict = Dict::default();
-        let x = dict.add("72".to_owned()).value().try_into().unwrap();
-        let a = dict.add("139".to_owned()).value().try_into().unwrap();
-        let b = dict.add("141".to_owned()).value().try_into().unwrap();
-        let u = dict.add("140".to_owned()).value().try_into().unwrap();
-        let v = dict.add("134".to_owned()).value().try_into().unwrap();
+        let x = dict.add_string("72".to_owned()).value().try_into().unwrap();
+        let a = dict
+            .add_string("139".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
+        let b = dict
+            .add_string("141".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
+        let u = dict
+            .add_string("140".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
+        let v = dict
+            .add_string("134".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
 
         let fst = vec![x];
         let snd = vec![a, b];
@@ -831,8 +847,9 @@ mod test {
     #[test]
     fn spurious_tuples_in_reorder_mk2_bug() {
         let mut dict = Dict::default();
-        let mut intern =
-            |term: &str| StorageValueT::U64(dict.add(term.to_owned()).value().try_into().unwrap());
+        let mut intern = |term: &str| {
+            StorageValueT::U64(dict.add_string(term.to_owned()).value().try_into().unwrap())
+        };
 
         let a = intern("genid:cc18ce3a-be8a-3445-8b68-2027a2e1b1be");
         let b = intern("genid:0f18d187-7a4f-35c6-b645-c57ee51d277d");
@@ -876,8 +893,9 @@ mod test {
     #[test]
     fn spurious_tuples_in_reorder_mk2_minimised_bug() {
         let mut dict = Dict::default();
-        let mut intern =
-            |term: &str| StorageValueT::U64(dict.add(term.to_owned()).value().try_into().unwrap());
+        let mut intern = |term: &str| {
+            StorageValueT::U64(dict.add_string(term.to_owned()).value().try_into().unwrap())
+        };
 
         let a = intern("genid:cc18ce3a-be8a-3445-8b68-2027a2e1b1be");
         let b = intern("genid:0f18d187-7a4f-35c6-b645-c57ee51d277d");
@@ -902,17 +920,57 @@ mod test {
     fn spurious_tuples_in_reorder_bug2() {
         let mut dict = Dict::default();
 
-        let rg = dict.add("RoleGroup".to_owned()).value().try_into().unwrap();
-        let a = dict.add("4_1_6".to_owned()).value().try_into().unwrap();
-        let b = dict.add("4_1_21".to_owned()).value().try_into().unwrap();
-        let c = dict.add("4_1_22".to_owned()).value().try_into().unwrap();
+        let rg = dict
+            .add_string("RoleGroup".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
+        let a = dict
+            .add_string("4_1_6".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
+        let b = dict
+            .add_string("4_1_21".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
+        let c = dict
+            .add_string("4_1_22".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
 
-        let u = dict.add("32_1_58".to_owned()).value().try_into().unwrap();
-        let v = dict.add("32_1_72".to_owned()).value().try_into().unwrap();
-        let w = dict.add("32_1_81".to_owned()).value().try_into().unwrap();
-        let x = dict.add("32_1_74".to_owned()).value().try_into().unwrap();
-        let y = dict.add("32_1_83".to_owned()).value().try_into().unwrap();
-        let z = dict.add("32_1_60".to_owned()).value().try_into().unwrap();
+        let u = dict
+            .add_string("32_1_58".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
+        let v = dict
+            .add_string("32_1_72".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
+        let w = dict
+            .add_string("32_1_81".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
+        let x = dict
+            .add_string("32_1_74".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
+        let y = dict
+            .add_string("32_1_83".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
+        let z = dict
+            .add_string("32_1_60".to_owned())
+            .value()
+            .try_into()
+            .unwrap();
 
         let fst = vec![a, b, c];
         let snd = vec![rg, rg, rg];
