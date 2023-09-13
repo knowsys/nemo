@@ -10,7 +10,7 @@ use nemo::{
     },
 };
 
-use pyo3::{create_exception, prelude::*};
+use pyo3::{create_exception, exceptions::PyNotImplementedError, prelude::*};
 
 create_exception!(module, NemoError, pyo3::exceptions::PyException);
 
@@ -75,25 +75,10 @@ impl NemoOutputManager {
 }
 
 #[pyclass]
-struct LanguageString {
-    value: String,
-    tag: String,
-}
-
-#[pymethods]
-impl LanguageString {
-    fn value(&self) -> &String {
-        &self.value
-    }
-
-    fn tag(&self) -> &String {
-        &self.tag
-    }
-}
-
-#[pyclass]
+#[derive(Debug, PartialEq, Eq)]
 struct NemoLiteral {
-    value: PyObject,
+    value: String,
+    language: Option<String>,
     datatype: String,
 }
 
@@ -107,29 +92,30 @@ impl NemoLiteral {
                 NemoError::new_err(format!("Only string arguments are currently supported"))
             })?;
 
-            let value = if let Some(lang) = lang {
-                LanguageString {
-                    value: inner,
-                    tag: lang,
-                }
-                .into_py(py)
-            } else {
-                inner.into_py(py)
-            };
-
             Ok(NemoLiteral {
-                value,
+                value: inner,
+                language: lang,
                 datatype: XSD_STRING.to_string(),
             })
         })
     }
 
-    fn value(&self) -> &PyObject {
+    fn value(&self) -> &str {
         &self.value
     }
 
-    fn datatype(&self) -> &String {
+    fn datatype(&self) -> &str {
         &self.datatype
+    }
+
+    fn __richcmp__(&self, other: &Self, op: pyo3::basic::CompareOp) -> PyResult<bool> {
+        match op {
+            pyo3::pyclass::CompareOp::Eq => Ok(self == other),
+            pyo3::pyclass::CompareOp::Ne => Ok(self != other),
+            _ => Err(PyNotImplementedError::new_err(
+                "rdf comparison is not implemented",
+            )),
+        }
     }
 }
 
@@ -152,11 +138,13 @@ fn logical_value_to_python(py: Python<'_>, v: PrimitiveLogicalValueT) -> PyResul
             Term::RdfLiteral(lit) => (|| {
                 let lit = match lit {
                     RdfLiteral::DatatypeValue { value, datatype } => NemoLiteral {
-                        value: value.into_py(py),
+                        value: value,
+                        language: None,
                         datatype,
                     },
                     RdfLiteral::LanguageString { value, tag } => NemoLiteral {
-                        value: Py::new(py, LanguageString { value, tag })?.to_object(py),
+                        value,
+                        language: Some(tag),
                         datatype: XSD_STRING.to_owned(),
                     },
                 };
@@ -247,7 +235,6 @@ fn nmo_python(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<NemoResults>()?;
     m.add_class::<NemoOutputManager>()?;
     m.add_class::<NemoLiteral>()?;
-    m.add_class::<LanguageString>()?;
     m.add_function(wrap_pyfunction!(load_file, m)?)?;
     m.add_function(wrap_pyfunction!(load_string, m)?)?;
     Ok(())

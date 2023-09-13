@@ -45,8 +45,8 @@ class TestExample(unittest.TestCase):
                 "<__Null#9223372036854775812>",
             ],
             [
-                '"hello world"@en'
-                "__Null#9223372036854775813",
+                '"hello world"@en',
+                "<__Null#9223372036854775813>",
             ],
         ]
 
