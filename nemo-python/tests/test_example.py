@@ -27,7 +27,10 @@ class TestExample(unittest.TestCase):
             [42, "__Null#9223372036854775810"],
             ["world", "__Null#9223372036854775811"],
             [Decimal("3.14"), "__Null#9223372036854775812"],
-            [NemoLiteral("hello world", lang="en"), "__Null#9223372036854775813"]
+            [
+                NemoLiteral("hello world", lang="en"),
+                "__Null#9223372036854775813",
+            ],
         ]
 
         self.expected_serialized_result = [
