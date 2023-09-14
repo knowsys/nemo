@@ -1,0 +1,10 @@
+foo1("this is just in foo1").
+foo1("this is in both").
+
+foo2("this is just in foo2"). 
+foo2("this is in both").
+
+literalInBody(?a):-
+    foo1(?a),
+    foo2(?b),
+    ?a = ?b.
