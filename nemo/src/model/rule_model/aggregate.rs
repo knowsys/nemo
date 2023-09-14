@@ -15,7 +15,7 @@ impl Aggregate {
         };
 
         let Variable::Universal(subst) = subst else {
-            panic!("cannot substitute existential variable")
+            panic!("cannot substitute with existential variable")
         };
 
         for id in &mut self.variable_identifiers {
