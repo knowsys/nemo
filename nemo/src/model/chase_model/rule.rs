@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use crate::{
     error::Error,
-    model::{Filter, Identifier, Literal, Rule, Term, TermOperation, TermTree, Variable},
+    model::{
+        Filter, FilterOperation, Identifier, Literal, Rule, Term, TermOperation, TermTree, Variable,
+    },
 };
 
 use super::ChaseAtom;
@@ -31,13 +33,55 @@ pub struct ChaseRule {
 impl ChaseRule {
     /// Construct a new rule.
     pub fn new(
-        head: Vec<ChaseAtom>,
-        constructors: HashMap<Variable, TermTree>,
-        positive_body: Vec<ChaseAtom>,
-        positive_filters: Vec<Filter>,
-        negative_body: Vec<ChaseAtom>,
-        negative_filters: Vec<Filter>,
+        mut head: Vec<ChaseAtom>,
+        mut constructors: HashMap<Variable, TermTree>,
+        mut positive_body: Vec<ChaseAtom>,
+        mut positive_filters: Vec<Filter>,
+        mut negative_body: Vec<ChaseAtom>,
     ) -> Self {
+        // apply equality constraints
+        positive_filters.retain(|filter| {
+            if filter.operation == FilterOperation::Equals {
+                if let Term::Variable(variable) = &filter.rhs {
+                    positive_body
+                        .iter_mut()
+                        .for_each(|atom| atom.substitute_variable(&filter.lhs, variable));
+
+                    negative_body
+                        .iter_mut()
+                        .for_each(|atom| atom.substitute_variable(&filter.lhs, variable));
+
+                    head.iter_mut()
+                        .for_each(|atom| atom.substitute_variable(&filter.lhs, variable));
+
+                    for term_tree in constructors.values_mut() {
+                        term_tree.substitute_variable(&filter.lhs, variable)
+                    }
+
+                    return false;
+                }
+            }
+            true
+        });
+
+        let mut generated_variable_index = 0;
+        let mut generate_variable = move || {
+            generated_variable_index += 1;
+            let name = format!("__GENERATED_VARIABLE_{}", generated_variable_index);
+            Variable::Universal(Identifier::from(name))
+        };
+
+        // introduce equality constraints for positive atoms
+        for positive_atom in &mut positive_body {
+            positive_atom.normalize(&mut generate_variable, &mut positive_filters);
+        }
+
+        // introduce equality constraints for negative atoms
+        let mut negative_filters = Vec::new();
+        for negative_atom in &mut negative_body {
+            negative_atom.normalize(&mut generate_variable, &mut negative_filters);
+        }
+
         Self {
             head,
             constructors,
@@ -170,13 +214,12 @@ impl TryFrom<Rule> for ChaseRule {
             head_atoms.push(ChaseAtom::new(atom.predicate(), new_terms));
         }
 
-        Ok(Self {
-            head: head_atoms,
+        Ok(Self::new(
+            head_atoms,
             constructors,
             positive_body,
+            rule.filters().clone(),
             negative_body,
-            positive_filters: rule.filters().clone(),
-            negative_filters: Vec::new(),
-        })
+        ))
     }
 }

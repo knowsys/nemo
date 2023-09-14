@@ -133,7 +133,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
         //   * We append to "Unsatisfied Matches Frontier" a number of columns with null values
         //     [We refer to this subtable as "Unsatisfied Matches Nulls"]
         //   * For each atom in the head:
-        //     If it contains an existential varianormalize_atom_veble: Project from "Unsatisfied Matches Nulls" and append constants when needed
+        //     If it contains an existential variable: Project from "Unsatisfied Matches Nulls" and append constants when needed
         //     If it does not contain an existential: Project from "Unsatisfied Matches Nulls", append constants and perform duplicate elimation
 
         log::info!(

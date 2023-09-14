@@ -12,9 +12,8 @@ use crate::{
     util::labeled_graph::LabeledGraph,
 };
 
-use super::{
-    normalization::normalize_atom_vector,
-    variable_order::{build_preferable_variable_orders, BuilderResultVariants, VariableOrder},
+use super::variable_order::{
+    build_preferable_variable_orders, BuilderResultVariants, VariableOrder,
 };
 
 use petgraph::{
@@ -32,8 +31,6 @@ pub struct RuleAnalysis {
     pub is_recursive: bool,
     /// Whether the rule has positive filters that need to be applied.
     pub has_positive_filters: bool,
-    /// Whether the rule has negative filters that need to be applied.
-    pub has_negative_filters: bool,
 
     /// Predicates appearing in the positive part of the body.
     pub positive_body_predicates: HashSet<Identifier>,
@@ -123,29 +120,34 @@ fn get_fresh_rule_predicate(rule_index: usize) -> Identifier {
 
 fn construct_existential_aux_rule(
     rule_index: usize,
-    head_atoms: &Vec<ChaseAtom>,
+    mut head_atoms: Vec<ChaseAtom>,
     predicate_types: &HashMap<Identifier, Vec<PrimitiveType>>,
     column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
 ) -> (ChaseRule, VariableOrder, HashMap<Variable, PrimitiveType>) {
-    let normalized_head = normalize_atom_vector(head_atoms, &[], &mut 0);
+    let mut constraints = Vec::new();
+    let mut variable_index = 0;
+    let mut generate_variable = move || {
+        variable_index += 1;
+        let name = format!("__GENERATED_HEAD_AUX_VARIABLE_{}", variable_index);
+        Variable::Universal(Identifier(name))
+    };
 
-    let temp_head_identifier = get_fresh_rule_predicate(rule_index);
-
-    let mut term_vec = Vec::<Term>::new();
-    let mut occured_variables = HashSet::<Variable>::new();
-
-    for atom in head_atoms {
+    let mut used_variables = HashSet::new();
+    let mut aux_predicate_terms = Vec::new();
+    for atom in &mut head_atoms {
         for term in atom.terms() {
-            if let Term::Variable(Variable::Universal(variable)) = term {
-                if occured_variables.insert(Variable::Universal(variable.clone())) {
-                    term_vec.push(Term::Variable(Variable::Universal(variable.clone())));
-                }
+            let Term::Variable(Variable::Universal(variable)) = term else {
+                continue;
+            };
+            if used_variables.insert(variable.clone()) {
+                aux_predicate_terms.push(Term::Variable(Variable::Universal(variable.clone())));
             }
         }
+        atom.normalize(&mut generate_variable, &mut constraints);
     }
 
     let mut variable_types = HashMap::<Variable, PrimitiveType>::new();
-    for atom in &normalized_head.atoms {
+    for atom in &head_atoms {
         let types = predicate_types
             .get(&atom.predicate())
             .expect("Every predicate should have type information at this point");
@@ -157,23 +159,27 @@ fn construct_existential_aux_rule(
         }
     }
 
-    let temp_head_atom = ChaseAtom::new(temp_head_identifier, term_vec);
-    let temp_rule = ChaseRule::new(
-        vec![temp_head_atom],
-        HashMap::default(),
-        normalized_head.atoms,
-        normalized_head.filters,
-        vec![],
-        vec![],
-    );
+    let temp_rule = {
+        let temp_head_identifier = get_fresh_rule_predicate(rule_index);
 
-    let temp_program = vec![temp_rule.clone()].into();
-    let variable_order =
-        build_preferable_variable_orders(&temp_program, Some(column_orders.clone()))
-            .all_variable_orders
-            .pop()
-            .and_then(|mut v| v.pop())
-            .expect("This functions provides at least one variable order");
+        let temp_head_atom = ChaseAtom::new(temp_head_identifier, aux_predicate_terms);
+        ChaseRule::new(
+            vec![temp_head_atom],
+            HashMap::default(),
+            head_atoms,
+            constraints,
+            vec![],
+        )
+    };
+
+    let variable_order = build_preferable_variable_orders(
+        &vec![temp_rule.clone()].into(),
+        Some(column_orders.clone()),
+    )
+    .all_variable_orders
+    .pop()
+    .and_then(|mut v| v.pop())
+    .expect("This functions provides at least one variable order");
 
     (temp_rule, variable_order, variable_types)
 }
@@ -212,7 +218,7 @@ fn analyze_rule(
             // TODO: We only consider the first variable order
             construct_existential_aux_rule(
                 rule_index,
-                rule.head(),
+                rule.head().clone(),
                 type_declarations,
                 &promising_column_orders[0],
             )
@@ -224,7 +230,6 @@ fn analyze_rule(
         is_existential: num_existential > 0,
         is_recursive: is_recursive(rule),
         has_positive_filters: !rule.positive_filters().is_empty(),
-        has_negative_filters: !rule.negative_filters().is_empty(),
         positive_body_predicates: get_predicates(rule.positive_body()),
         negative_body_predicates: get_predicates(rule.negative_body()),
         head_predicates: get_predicates(rule.head()),
@@ -952,7 +957,6 @@ mod test {
             ],
             vec![],
             vec![],
-            vec![],
         );
 
         // R(x, !z) :- A(x).
@@ -960,7 +964,6 @@ mod test {
             vec![ChaseAtom::new(r.clone(), vec![tx.clone(), tz])],
             HashMap::new(),
             vec![ChaseAtom::new(a.clone(), vec![tx])],
-            vec![],
             vec![],
             vec![],
         );

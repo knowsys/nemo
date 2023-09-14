@@ -1,6 +1,6 @@
 use nemo_physical::util::TaggedTree;
 
-use super::{Identifier, Term};
+use super::{Identifier, Term, Variable};
 
 /// Supported operations between terms.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -61,5 +61,15 @@ impl TermTree {
                 }
             })
             .collect()
+    }
+
+    /// Substitutes all occurrences of `variable` for `subst`.
+    pub fn substitute_variable(&mut self, variable: &Variable, subst: &Variable) {
+        for leave in self.0.leaves_mut() {
+            match leave {
+                TermOperation::Term(t) => t.substitute_variable(variable, subst),
+                _ => continue,
+            }
+        }
     }
 }

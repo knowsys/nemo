@@ -164,6 +164,20 @@ impl Term {
             Self::Constant(_) | Self::NumericLiteral(_) | Self::RdfLiteral(_)
         )
     }
+
+    /// Substitutes all occurrences of `var` for `subst`.
+    pub fn substitute_variable(&mut self, var: &Variable, subst: &Variable) {
+        debug_assert!(matches!(var, Variable::Universal(_)));
+        match self {
+            Term::Variable(v) => {
+                if v == var {
+                    *v = subst.clone()
+                }
+            }
+            Term::Aggregate(agg) => agg.substitute_variable(var, subst),
+            _ => {}
+        }
+    }
 }
 
 /// A numerical literal.
