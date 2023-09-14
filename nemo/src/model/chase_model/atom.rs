@@ -1,6 +1,8 @@
+use std::collections::HashSet;
+
 use thiserror::Error;
 
-use crate::model::{Atom, Identifier, Term, TermOperation, Variable};
+use crate::model::{Atom, Filter, FilterOperation, Identifier, Term, TermOperation, Variable};
 
 /// Representation of an atom used in [`super::ChaseRule`].
 #[derive(Debug, Clone)]
@@ -44,6 +46,38 @@ impl ChaseAtom {
         })
     }
 
+    /// Converts atom into normalized form, i.e. a(x1, x2, ...) with all x
+    /// being *distinct* variables.
+    /// This means replacing duplicate variables and constants with newly
+    /// generated variables and introducing corresponding constraints.
+    pub fn normalize(
+        &mut self,
+        generate_variable: &mut impl FnMut() -> Variable,
+        constraints: &mut impl Extend<Filter>,
+    ) {
+        let mut seen_variables = HashSet::new();
+
+        for term in self.terms_mut() {
+            if let Term::Variable(variable) = term {
+                if !seen_variables.insert(variable.clone()) {
+                    let fresh_variable = generate_variable();
+                    constraints.extend(Some(Filter {
+                        operation: FilterOperation::Equals,
+                        lhs: fresh_variable.clone(),
+                        rhs: std::mem::replace(term, Term::Variable(fresh_variable)),
+                    }));
+                }
+            } else {
+                let fresh_variable = generate_variable();
+                constraints.extend(Some(Filter {
+                    operation: FilterOperation::Equals,
+                    lhs: fresh_variable.clone(),
+                    rhs: std::mem::replace(term, Term::Variable(fresh_variable)),
+                }))
+            }
+        }
+    }
+
     /// Return the predicate [`Identifier`].
     #[must_use]
     pub fn predicate(&self) -> Identifier {
@@ -80,5 +114,12 @@ impl ChaseAtom {
     pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
         self.variables()
             .filter(|var| matches!(var, Variable::Existential(_)))
+    }
+
+    /// Substitutes all occurrences of `variable` with `subst`.
+    pub fn substitute_variable(&mut self, variable: &Variable, subst: &Variable) {
+        for term in &mut self.terms {
+            term.substitute_variable(variable, subst)
+        }
     }
 }

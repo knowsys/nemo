@@ -65,10 +65,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         program: Program,
         resource_providers: ResourceProviders,
     ) -> Result<Self, Error> {
-        let mut program: ChaseProgram = program.try_into()?;
+        let program: ChaseProgram = program.try_into()?;
 
         program.check_for_unsupported_features()?;
-        program.normalize();
 
         let analysis = program.analyze()?;
 
