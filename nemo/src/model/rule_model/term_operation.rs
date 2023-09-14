@@ -65,8 +65,8 @@ impl TermTree {
 
     /// Substitutes all occurrences of `variable` for `subst`.
     pub fn substitute_variable(&mut self, variable: &Variable, subst: &Variable) {
-        for leave in self.0.leaves_mut() {
-            match leave {
+        for leaf in self.0.leaves_mut() {
+            match leaf {
                 TermOperation::Term(t) => t.substitute_variable(variable, subst),
                 _ => continue,
             }
