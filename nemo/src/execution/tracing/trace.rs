@@ -2,27 +2,35 @@
 
 use ascii_tree::write_tree;
 
-use crate::model::{Atom, Rule};
+use crate::model::{Atom, Rule, VariableAssignment};
 
 /// Identifies an atom within the head of a rule
 #[derive(Debug)]
-pub struct RulePosition {
+pub struct RuleApplication {
     rule: Rule,
+    assignment: VariableAssignment,
     _position: usize,
 }
 
-impl RulePosition {
-    /// Create new [`RulePosition`].
-    pub fn new(rule: Rule, _position: usize) -> Self {
+impl RuleApplication {
+    /// Create new [`RuleApplication`].
+    pub fn new(rule: Rule, assignment: VariableAssignment, _position: usize) -> Self {
         debug_assert!(_position < rule.head().len());
 
-        Self { rule, _position }
+        Self {
+            rule,
+            assignment,
+            _position,
+        }
     }
 }
 
-impl std::fmt::Display for RulePosition {
+impl std::fmt::Display for RuleApplication {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.rule.fmt(f)
+        let mut rule_applied = self.rule.clone();
+        rule_applied.apply_assignment(&self.assignment);
+
+        rule_applied.fmt(f)
     }
 }
 
@@ -32,7 +40,7 @@ pub enum ExecutionTrace {
     /// Fact was given as input
     Fact(Atom),
     /// Fact was derived from the given rule
-    Rule(RulePosition, Vec<ExecutionTrace>),
+    Rule(RuleApplication, Vec<ExecutionTrace>),
 }
 
 impl ExecutionTrace {
@@ -42,7 +50,7 @@ impl ExecutionTrace {
     }
 
     /// Create a new node in an [`ExecutionTree`].
-    pub fn node(rule_position: RulePosition, subtraces: Vec<ExecutionTrace>) -> Self {
+    pub fn node(rule_position: RuleApplication, subtraces: Vec<ExecutionTrace>) -> Self {
         ExecutionTrace::Rule(rule_position, subtraces)
     }
 
@@ -66,65 +74,114 @@ impl std::fmt::Display for ExecutionTrace {
 
 #[cfg(test)]
 mod test {
-    use crate::model::{Atom, Identifier, Literal, Rule, Term, TermTree};
+    use std::collections::HashMap;
 
-    use super::{ExecutionTrace, RulePosition};
+    use crate::model::{Atom, Identifier, Literal, Rule, Term, TermTree, Variable};
+
+    use super::{ExecutionTrace, RuleApplication};
 
     #[test]
     fn print_trace() {
-        // P(b, a) :- Q(a, b) .
+        // P(?x, ?y) :- Q(?y, ?x) .
         let rule_1 = Rule::new(
             vec![Atom::new(
                 Identifier("P".to_string()),
                 vec![
-                    TermTree::leaf(Term::Constant(Identifier("b".to_string()))),
-                    TermTree::leaf(Term::Constant(Identifier("a".to_string()))),
+                    TermTree::leaf(Term::Variable(Variable::Universal(Identifier(
+                        "x".to_string(),
+                    )))),
+                    TermTree::leaf(Term::Variable(Variable::Universal(Identifier(
+                        "y".to_string(),
+                    )))),
                 ],
             )],
             vec![Literal::Positive(Atom::new(
                 Identifier("Q".to_string()),
                 vec![
-                    TermTree::leaf(Term::Constant(Identifier("a".to_string()))),
-                    TermTree::leaf(Term::Constant(Identifier("b".to_string()))),
+                    TermTree::leaf(Term::Variable(Variable::Universal(Identifier(
+                        "y".to_string(),
+                    )))),
+                    TermTree::leaf(Term::Variable(Variable::Universal(Identifier(
+                        "x".to_string(),
+                    )))),
                 ],
             ))],
             vec![],
         );
-        // S(a) :- T(a) .
+        let mut rule_1_assignment = HashMap::default();
+        rule_1_assignment.insert(
+            Variable::Universal(Identifier("x".to_string())),
+            Term::Constant(Identifier("b".to_string())),
+        );
+        rule_1_assignment.insert(
+            Variable::Universal(Identifier("y".to_string())),
+            Term::Constant(Identifier("a".to_string())),
+        );
+
+        // S(?x) :- T(?x) .
         let rule_2 = Rule::new(
             vec![Atom::new(
                 Identifier("S".to_string()),
-                vec![TermTree::leaf(Term::Constant(Identifier("a".to_string())))],
+                vec![TermTree::leaf(Term::Variable(Variable::Universal(
+                    Identifier("x".to_string()),
+                )))],
             )],
             vec![Literal::Positive(Atom::new(
                 Identifier("T".to_string()),
-                vec![TermTree::leaf(Term::Constant(Identifier("a".to_string())))],
+                vec![TermTree::leaf(Term::Variable(Variable::Universal(
+                    Identifier("x".to_string()),
+                )))],
             ))],
             vec![],
         );
-        // R(b, a) :- P(b, a), S(a) .
+        let mut rule_2_assignment = HashMap::default();
+        rule_2_assignment.insert(
+            Variable::Universal(Identifier("x".to_string())),
+            Term::Constant(Identifier("a".to_string())),
+        );
+
+        // R(?x, ?y) :- P(?x, ?y), S(?y) .
         let rule_3 = Rule::new(
             vec![Atom::new(
                 Identifier("R".to_string()),
                 vec![
-                    TermTree::leaf(Term::Constant(Identifier("b".to_string()))),
-                    TermTree::leaf(Term::Constant(Identifier("a".to_string()))),
+                    TermTree::leaf(Term::Variable(Variable::Universal(Identifier(
+                        "x".to_string(),
+                    )))),
+                    TermTree::leaf(Term::Variable(Variable::Universal(Identifier(
+                        "y".to_string(),
+                    )))),
                 ],
             )],
             vec![
                 Literal::Positive(Atom::new(
                     Identifier("P".to_string()),
                     vec![
-                        TermTree::leaf(Term::Constant(Identifier("b".to_string()))),
-                        TermTree::leaf(Term::Constant(Identifier("a".to_string()))),
+                        TermTree::leaf(Term::Variable(Variable::Universal(Identifier(
+                            "x".to_string(),
+                        )))),
+                        TermTree::leaf(Term::Variable(Variable::Universal(Identifier(
+                            "y".to_string(),
+                        )))),
                     ],
                 )),
                 Literal::Positive(Atom::new(
                     Identifier("S".to_string()),
-                    vec![TermTree::leaf(Term::Constant(Identifier("a".to_string())))],
+                    vec![TermTree::leaf(Term::Variable(Variable::Universal(
+                        Identifier("y".to_string()),
+                    )))],
                 )),
             ],
             vec![],
+        );
+        let mut rule_3_assignment = HashMap::default();
+        rule_3_assignment.insert(
+            Variable::Universal(Identifier("x".to_string())),
+            Term::Constant(Identifier("b".to_string())),
+        );
+        rule_3_assignment.insert(
+            Variable::Universal(Identifier("y".to_string())),
+            Term::Constant(Identifier("a".to_string())),
         );
 
         let q_ab = Atom::new(
@@ -141,14 +198,14 @@ mod test {
         );
 
         let trace = ExecutionTrace::node(
-            RulePosition::new(rule_3, 0),
+            RuleApplication::new(rule_3, rule_3_assignment, 0),
             vec![
                 ExecutionTrace::node(
-                    RulePosition::new(rule_1, 0),
+                    RuleApplication::new(rule_1, rule_1_assignment, 0),
                     vec![ExecutionTrace::leaf(q_ab)],
                 ),
                 ExecutionTrace::node(
-                    RulePosition::new(rule_2, 0),
+                    RuleApplication::new(rule_2, rule_2_assignment, 0),
                     vec![ExecutionTrace::leaf(s_a)],
                 ),
             ],
