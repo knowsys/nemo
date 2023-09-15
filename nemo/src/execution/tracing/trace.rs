@@ -1,10 +1,8 @@
 //! This module contains basic data structures for tracing the origins of derived facts.
 
-use std::collections::HashMap;
-
 use ascii_tree::write_tree;
 
-use crate::model::{Atom, Rule, Term, Variable};
+use crate::model::{Atom, Rule};
 
 /// Identifies an atom within the head of a rule
 #[derive(Debug)]
@@ -66,22 +64,9 @@ impl std::fmt::Display for ExecutionTrace {
     }
 }
 
-#[derive(Debug)]
-struct VariableAssignment(HashMap<Variable, Term>);
-
-impl VariableAssignment {
-    pub fn apply(&self, mut rule: Rule) -> Rule {
-        for (variable, term) in &self.0 {
-            rule.replace_term(&Term::Variable(variable.clone()), term);
-        }
-
-        rule
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use crate::model::{Atom, Identifier, Literal, Rule, Term, TermTree, Variable};
+    use crate::model::{Atom, Identifier, Literal, Rule, Term, TermTree};
 
     use super::{ExecutionTrace, RulePosition};
 
@@ -109,15 +94,11 @@ mod test {
         let rule_2 = Rule::new(
             vec![Atom::new(
                 Identifier("S".to_string()),
-                vec![TermTree::leaf(Term::Variable(Variable::Universal(
-                    Identifier("a".to_string()),
-                )))],
+                vec![TermTree::leaf(Term::Constant(Identifier("a".to_string())))],
             )],
-            vec![Literal::Positive(Atoxm::new(
+            vec![Literal::Positive(Atom::new(
                 Identifier("T".to_string()),
-                vec![TermTree::leaf(Term::Variable(Variable::Universal(
-                    Identifier("a".to_string()),
-                )))],
+                vec![TermTree::leaf(Term::Constant(Identifier("a".to_string())))],
             ))],
             vec![],
         );
@@ -126,12 +107,8 @@ mod test {
             vec![Atom::new(
                 Identifier("R".to_string()),
                 vec![
-                    TermTree::leaf(Term::Variable(Variable::Universal(Identifier(
-                        "b".to_string(),
-                    )))),
-                    TermTree::leaf(Term::Variable(Variable::Universal(Identifier(
-                        "a".to_string(),
-                    )))),
+                    TermTree::leaf(Term::Constant(Identifier("b".to_string()))),
+                    TermTree::leaf(Term::Constant(Identifier("a".to_string()))),
                 ],
             )],
             vec![
@@ -163,9 +140,27 @@ mod test {
             vec![TermTree::leaf(Term::Constant(Identifier("a".to_string())))],
         );
 
-        let trace = ExecutionTrace::node(RulePosition::new(rule_3, 0), vec![ExecutionTrace::node(Rule)]) 
-        
-        // ExecutionTrace::leaf(q_ab);
+        let trace = ExecutionTrace::node(
+            RulePosition::new(rule_3, 0),
+            vec![
+                ExecutionTrace::node(
+                    RulePosition::new(rule_1, 0),
+                    vec![ExecutionTrace::leaf(q_ab)],
+                ),
+                ExecutionTrace::node(
+                    RulePosition::new(rule_2, 0),
+                    vec![ExecutionTrace::leaf(s_a)],
+                ),
+            ],
+        );
 
+        let trace_string = r#" R(b, a) :- P(b, a), S(a) .
+ ├─ P(b, a) :- Q(a, b) .
+ │  └─ Q(a, b)
+ └─ S(a) :- T(a) .
+    └─ S(a)
+"#;
+
+        assert_eq!(trace.to_string(), trace_string.to_string())
     }
 }

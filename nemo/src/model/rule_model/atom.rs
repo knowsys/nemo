@@ -1,3 +1,5 @@
+use crate::model::VariableAssignment;
+
 use super::{Aggregate, Identifier, Term, TermTree, Variable};
 
 /// An atom.
@@ -70,9 +72,9 @@ impl Atom {
     }
 
     /// Replace one [`Term`] with another.
-    pub fn replace_term(&mut self, old: &Term, new: &Term) {
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         for tree in &mut self.term_trees {
-            tree.replace_term(old, new);
+            tree.apply_assignment(assignment);
         }
     }
 }

@@ -1,3 +1,5 @@
+use crate::model::VariableAssignment;
+
 use super::{Term, Variable};
 
 /// Operation for a filter
@@ -72,9 +74,11 @@ impl Filter {
     }
 
     /// Replace one [`Term`] with another.
-    pub fn replace_term(&mut self, old: &Term, new: &Term) {
-        if &self.rhs == old {
-            self.rhs = new.clone();
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
+        if let Term::Variable(variable) = &self.rhs {
+            if let Some(replacing_term) = assignment.get(variable) {
+                self.rhs = replacing_term.clone();
+            }
         }
 
         // TODO: What about self.lhs?

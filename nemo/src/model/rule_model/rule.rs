@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::io::parser::ParseError;
+use crate::{io::parser::ParseError, model::VariableAssignment};
 
 use super::{Atom, Filter, Literal, Term, Variable};
 
@@ -179,12 +179,12 @@ impl Rule {
     }
 
     /// Replace one [`Term`] with another.
-    pub fn replace_term(&mut self, old: &Term, new: &Term) {
-        self.body.iter_mut().for_each(|l| l.replace_term(old, new));
-        self.head.iter_mut().for_each(|a| a.replace_term(old, new));
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
+        self.body.iter_mut().for_each(|l| l.apply_assignment(assignment));
+        self.head.iter_mut().for_each(|a| a.apply_assignment(assignment));
         self.filters
             .iter_mut()
-            .for_each(|f| f.replace_term(old, new));
+            .for_each(|f| f.apply_assignment(assignment));
     }
 }
 

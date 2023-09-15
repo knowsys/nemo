@@ -13,3 +13,7 @@ pub mod types;
 pub use rule_model::*;
 pub use types::complex_types::*;
 pub use types::primitive_types::PrimitiveType;
+
+use std::collections::HashMap;
+/// Map from variables to terms
+pub type VariableAssignment = HashMap<Variable, Term>;

@@ -1,6 +1,8 @@
 use std::ops::Neg;
 
-use super::{Atom, Identifier, Term, TermTree, Variable};
+use crate::model::VariableAssignment;
+
+use super::{Atom, Identifier, TermTree, Variable};
 
 /// A literal.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -73,10 +75,10 @@ impl Literal {
     }
 
     /// Replace one [`Term`] with another.
-    pub fn replace_term(&mut self, old: &Term, new: &Term) {
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         match self {
-            Literal::Positive(atom) => atom.replace_term(old, new),
-            Literal::Negative(atom) => atom.replace_term(old, new),
+            Literal::Positive(atom) => atom.apply_assignment(assignment),
+            Literal::Negative(atom) => atom.apply_assignment(assignment),
         }
     }
 }

@@ -1,5 +1,7 @@
 use nemo_physical::util::TaggedTree;
 
+use crate::model::VariableAssignment;
+
 use super::{Identifier, Term, Variable};
 
 /// Supported operations between terms.
@@ -87,11 +89,13 @@ impl TermTree {
     }
 
     /// Replace one [`Term`] with another.
-    pub fn replace_term(&mut self, old: &Term, new: &Term) {
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         for leaf_node in self.0.leaves_mut() {
             if let TermOperation::Term(term) = leaf_node {
-                if term == old {
-                    *term = new.clone();
+                if let Term::Variable(variable) = term {
+                    if let Some(replacing_term) = assignment.get(variable) {
+                        *term = replacing_term.clone();
+                    }
                 }
             } else {
                 unreachable!("Leaf nodes must be terms");
