@@ -177,6 +177,15 @@ impl Rule {
     pub fn filters_mut(&mut self) -> &mut Vec<Filter> {
         &mut self.filters
     }
+
+    /// Replace one [`Term`] with another.
+    pub fn replace_term(&mut self, old: &Term, new: &Term) {
+        self.body.iter_mut().for_each(|l| l.replace_term(old, new));
+        self.head.iter_mut().for_each(|a| a.replace_term(old, new));
+        self.filters
+            .iter_mut()
+            .for_each(|f| f.replace_term(old, new));
+    }
 }
 
 impl std::fmt::Display for Rule {
