@@ -1,8 +1,12 @@
 //! Functionality which handles the execution of a program
 
-use std::collections::HashMap;
+use std::{borrow::BorrowMut, collections::HashMap};
 
-use nemo_physical::{datatypes::DataValueT, management::database::TableSource, meta::TimedCode};
+use nemo_physical::{
+    datatypes::{DataValueT, StorageValueT},
+    management::database::TableSource,
+    meta::TimedCode,
+};
 
 use crate::{
     error::Error,
@@ -13,13 +17,16 @@ use crate::{
             primitive_logical_value::{PrimitiveLogicalValueIteratorT, PrimitiveLogicalValueT},
             primitive_types::PrimitiveType,
         },
-        Identifier, Program, TermOperation,
+        Fact, Identifier, Program, TermOperation,
     },
     program_analysis::analysis::ProgramAnalysis,
     table_manager::{MemoryUsage, TableManager},
 };
 
-use super::{rule_execution::RuleExecution, selection_strategy::strategy::RuleSelectionStrategy};
+use super::{
+    rule_execution::RuleExecution, selection_strategy::strategy::RuleSelectionStrategy,
+    tracing::trace::ExecutionTrace,
+};
 
 // Number of tables that are periodically combined into one.
 const MAX_FRAGMENTATION: usize = 8;
@@ -56,6 +63,7 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     predicate_last_union: HashMap<Identifier, usize>,
 
     rule_infos: Vec<RuleInfo>,
+    rule_history: Vec<usize>,
     current_step: usize,
 }
 
@@ -97,6 +105,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             predicate_fragmentation: HashMap::new(),
             predicate_last_union: HashMap::new(),
             rule_infos,
+            rule_history: Vec::new(),
             current_step: 1,
         })
     }
@@ -112,6 +121,26 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .expect("All predicates should have types by now."),
             );
         }
+    }
+
+    fn fact_to_vec(fact: &Fact, analysis: &ProgramAnalysis) -> Vec<DataValueT> {
+        fact
+        .0
+        .term_trees()
+        .iter()
+        .enumerate()
+        // TODO: get rid of unwrap
+        .map(|(i, t)| {
+            if let TermOperation::Term(ground_term) = t.operation() {
+                analysis.predicate_types.get(&fact.0.predicate()).unwrap()[i]
+                .ground_term_to_data_value_t(ground_term.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.")
+            } else {
+                unreachable!(
+                    "Its assumed that facts do not contain complicated expressions (for now?)"
+                );
+            }
+        })
+        .collect()
     }
 
     fn add_sources(
@@ -143,26 +172,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<DataValueT>>>::new();
 
         for fact in program.facts() {
-            let new_row: Vec<DataValueT> = fact
-                .0
-                .term_trees()
-                .iter()
-                .enumerate()
-                // TODO: get rid of unwrap
-                .map(|(i, t)| {
-                    if let TermOperation::Term(ground_term) = t.operation() {
-                        analysis.predicate_types.get(&fact.0.predicate()).unwrap()[i]
-                        .ground_term_to_data_value_t(ground_term.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.")
-                    } else {
-                        unreachable!(
-                            "Its assumed that facts do not contain complicated expressions (for now?)"
-                        );
-                    }
-                })
-                .collect();
-
             let rows = predicate_to_rows.entry(fact.0.predicate()).or_default();
-            rows.push(new_row);
+            rows.push(Self::fact_to_vec(fact, analysis));
         }
 
         for (predicate, rows) in predicate_to_rows.into_iter() {
@@ -203,6 +214,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 "<<< {0}: APPLYING RULE {current_rule_index} >>>",
                 self.current_step
             );
+
+            self.rule_history.push(current_rule_index);
 
             let current_info = &mut self.rule_infos[current_rule_index];
             let current_execution = &rule_execution[current_rule_index];
@@ -377,5 +390,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Return the amount of consumed memory for the tables used by the chase.
     pub fn memory_usage(&self) -> MemoryUsage {
         self.table_manager.memory_usage()
+    }
+
+    /// Return a [`ExecutionTrace`] for a given fact
+    pub fn trace(&self, fact: Fact) -> Option<ExecutionTrace> {
+        let mut table_row = Vec::<StorageValueT>::new();
+        for entry in Self::fact_to_vec(&fact, &self.analysis) {
+            table_row.push(entry.to_storage_value(self.table_manager.get_dict().borrow_mut())?);
+        }
+
+        todo!()
     }
 }

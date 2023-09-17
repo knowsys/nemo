@@ -27,7 +27,7 @@ use crate::management::database::Dict;
 use crate::management::ByteSized;
 use crate::tabular::operations::TrieScanPrune;
 use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
-use crate::tabular::traits::table::Table;
+use crate::tabular::traits::table::{Table, TableRow};
 use crate::tabular::traits::table_schema::TableSchema;
 use crate::tabular::traits::trie_scan::TrieScan;
 
@@ -218,7 +218,7 @@ impl Trie {
     }
 
     /// Returns a [`TrieScan`] over this table.
-    pub fn scan(&self) -> impl TrieScan + '_ {
+    pub fn scan(&self) -> impl TrieScan + PartialTrieScan + '_ {
         TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(self)))
     }
 
@@ -436,7 +436,7 @@ impl Table for Trie {
         )
     }
 
-    fn from_rows(rows: &[Vec<StorageValueT>]) -> Self {
+    fn from_rows(rows: &[TableRow]) -> Self {
         debug_assert!(!rows.is_empty());
 
         let arity = rows[0].len();
@@ -460,6 +460,39 @@ impl Table for Trie {
 
     fn get_types(&self) -> &Vec<StorageTypeName> {
         &self.types
+    }
+
+    fn contains_row(&self, row: TableRow) -> bool {
+        debug_assert!(self.columns.len() == row.len());
+
+        let mut trie_scan = self.scan();
+        trie_scan.down();
+
+        for entry in row {
+            macro_rules! seek_for_datatype {
+                ($variant:ident, $entry:ident) => {
+                    if let ColumnScanT::$variant(column_scan) =
+                        trie_scan.current_scan().expect("We called down")
+                    {
+                        if column_scan.seek($entry).is_none() {
+                            return false;
+                        }
+
+                        trie_scan.down();
+                    }
+                };
+            }
+
+            match entry {
+                StorageValueT::U32(entry) => seek_for_datatype!(U32, entry),
+                StorageValueT::U64(entry) => seek_for_datatype!(U64, entry),
+                StorageValueT::I64(entry) => seek_for_datatype!(I64, entry),
+                StorageValueT::Float(entry) => seek_for_datatype!(Float, entry),
+                StorageValueT::Double(entry) => seek_for_datatype!(Double, entry),
+            }
+        }
+
+        true
     }
 }
 
@@ -598,6 +631,7 @@ mod test {
     use super::{StorageValueIteratorT, Trie, TrieScanGeneric};
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::{storage_value::VecT, StorageValueT};
+    use crate::tabular::traits::table::TableRow;
     use crate::tabular::traits::{partial_trie_scan::PartialTrieScan, table::Table};
     use crate::util::make_column_with_intervals_t;
     use test_log::test;
@@ -637,7 +671,7 @@ mod test {
     /// 2 3 9
     /// 1 2 8
     /// 2 6 9
-    fn get_test_table_as_rows() -> Vec<Vec<StorageValueT>> {
+    fn get_test_table_as_rows() -> Vec<TableRow> {
         vec![
             vec![
                 StorageValueT::U64(1),

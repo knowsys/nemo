@@ -10,7 +10,13 @@ use nemo_physical::{
         execution_plan::ExecutionNodeRef,
         DatabaseInstance, ExecutionPlan,
     },
-    tabular::{table_types::trie::Trie, traits::table_schema::TableSchema},
+    tabular::{
+        table_types::trie::Trie,
+        traits::{
+            table::{Table, TableRow},
+            table_schema::TableSchema,
+        },
+    },
     util::mapping::permutation::Permutation,
 };
 
@@ -627,6 +633,23 @@ impl TableManager {
         }
 
         result
+    }
+
+    /// Return the chase step of the sub table that contains the given row within the given predicate.
+    /// Returns `None` if the row does not exist.
+    pub fn find_table_row(&self, predicate: Identifier, row: TableRow) -> Option<usize> {
+        let handler = self.predicate_subtables.get(&predicate)?;
+
+        for (step, id) in &handler.single {
+            let (trie, order) = self.database.get_trie(*id);
+            let row_reorderd = order.permute(&row);
+
+            if trie.contains_row(row_reorderd) {
+                return Some(*step);
+            }
+        }
+
+        None
     }
 }
 

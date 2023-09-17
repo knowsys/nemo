@@ -723,7 +723,7 @@ impl DatabaseInstance {
 
             match subnode_operation {
                 ExecutionOperation::FetchExisting(id, order) => {
-                    let trie_ref = self.get_trie(*id, order);
+                    let trie_ref = self.get_trie_order(*id, order);
                     if trie_ref.row_num() == 0 {
                         return Ok(None);
                     }
@@ -744,7 +744,7 @@ impl DatabaseInstance {
                                 return Ok(None);
                             }
                         }
-                        ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
+                        ComputationResult::Permanent(id, order) => self.get_trie_order(*id, order),
                         ComputationResult::Empty => return Ok(None),
                     };
 
@@ -868,9 +868,11 @@ impl DatabaseInstance {
     }
 
     /// Return a reference to a trie with the given id and order.
+    ///
+    /// # Panics
     /// Panics if no table under the given id and order exists.
     /// Panics if trie is not available in memory.
-    pub fn get_trie<'a>(&'a self, id: TableId, order: &ColumnOrder) -> &'a Trie {
+    pub fn get_trie_order<'a>(&'a self, id: TableId, order: &ColumnOrder) -> &'a Trie {
         let storage = self
             .storage_handler
             .table_storage(id, order)
@@ -879,6 +881,33 @@ impl DatabaseInstance {
         storage
             .get_trie()
             .expect("Function assumes that trie is in memory.")
+    }
+
+    /// Return a reference to a trie corresponding to the given id in arbitrary order.
+    ///
+    /// # Panics
+    /// Panics if no table under the given id exists.
+    /// Panics if trie is not available in memory.
+    pub fn get_trie<'a>(&'a self, id: TableId) -> (&'a Trie, ColumnOrder) {
+        let order = self
+            .storage_handler
+            .available_orders(id)
+            .expect("Function assumes that there is a table with the given id.")
+            .first()
+            .expect("There should be at least one order")
+            .clone();
+
+        let storage = self
+            .storage_handler
+            .table_storage(id, &order)
+            .expect("Order must be available");
+
+        (
+            storage
+                .get_trie()
+                .expect("Function assumes that trie is in memory."),
+            order,
+        )
     }
 
     /// Return a reference to a trie identified by its id and order.
@@ -904,7 +933,7 @@ impl DatabaseInstance {
         let dict = self.get_dict_constants();
 
         Ok(self
-            .get_trie(id, &ColumnOrder::default())
+            .get_trie_order(id, &ColumnOrder::default())
             .records(ValueSerializer { schema, dict }))
     }
 
@@ -932,13 +961,13 @@ impl DatabaseInstance {
         let dict = self.get_dict_constants();
 
         Ok(OwnedRecords(
-            self.get_trie(id, &ColumnOrder::default())
+            self.get_trie_order(id, &ColumnOrder::default())
                 .records(ValueSerializer { schema, dict }),
         ))
     }
 
     fn get_in_memory_table_column_iterators(&self, id: TableId) -> Vec<DataValueIteratorT> {
-        let trie = self.get_trie(id, &ColumnOrder::default());
+        let trie = self.get_trie_order(id, &ColumnOrder::default());
         let schema = self.table_schema(id);
         let dict = self.get_dict_constants();
 
@@ -1009,7 +1038,7 @@ impl DatabaseInstance {
 
         return match node_operation {
             ExecutionOperation::FetchExisting(id, order) => {
-                let trie_ref = self.get_trie(*id, order);
+                let trie_ref = self.get_trie_order(*id, order);
                 if trie_ref.row_num() == 0 {
                     return Ok(None);
                 }
@@ -1029,7 +1058,7 @@ impl DatabaseInstance {
                             return Ok(None);
                         }
                     }
-                    ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
+                    ComputationResult::Permanent(id, order) => self.get_trie_order(*id, order),
                     ComputationResult::Empty => return Ok(None),
                 };
 
@@ -1119,7 +1148,7 @@ impl DatabaseInstance {
                 let subnode_operation = &subnode_rc.borrow().operation;
 
                 let trie = match subnode_operation {
-                    ExecutionOperation::FetchExisting(id, order) => self.get_trie(*id, order),
+                    ExecutionOperation::FetchExisting(id, order) => self.get_trie_order(*id, order),
                     ExecutionOperation::FetchNew(index) => {
                         let comp_result = computation_results.get(index).unwrap();
                         let trie_ref = match comp_result {
@@ -1130,7 +1159,9 @@ impl DatabaseInstance {
                                     return Ok(None);
                                 }
                             }
-                            ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
+                            ComputationResult::Permanent(id, order) => {
+                                self.get_trie_order(*id, order)
+                            }
                             ComputationResult::Empty => return Ok(None),
                         };
 
@@ -1311,7 +1342,7 @@ mod test {
         assert_eq!(instance.table_name(trie_a_id), "A");
         assert_eq!(
             instance
-                .get_trie(trie_a_id, &ColumnOrder::default())
+                .get_trie_order(trie_a_id, &ColumnOrder::default())
                 .row_num(),
             3
         );
@@ -1328,7 +1359,7 @@ mod test {
         assert!(instance.size_bytes() > last_size);
         assert_eq!(
             instance
-                .get_trie(trie_b_id, &ColumnOrder::default())
+                .get_trie_order(trie_b_id, &ColumnOrder::default())
                 .row_num(),
             6
         );
@@ -1449,7 +1480,7 @@ mod test {
         assert!(result.is_ok());
 
         let result_id = *result.unwrap().get(&node_id).unwrap();
-        let result_trie = instance.get_trie(result_id, &ColumnOrder::default());
+        let result_trie = instance.get_trie_order(result_id, &ColumnOrder::default());
 
         let result_col_first = result_trie.get_column(0).as_u64().unwrap();
         let result_col_second = result_trie.get_column(1).as_u32().unwrap();
