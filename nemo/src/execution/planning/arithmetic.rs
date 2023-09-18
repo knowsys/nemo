@@ -10,7 +10,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    model::{PrimitiveType, Term, TermOperation, TermTree, Variable},
+    model::{PrimitiveType, PrimitiveValue, TermOperation, TermTree, Variable},
     program_analysis::variable_order::VariableOrder,
 };
 
@@ -21,7 +21,7 @@ fn termtree_to_operationtree(
 ) -> OperationTreeT {
     match &tree.tag {
         TermOperation::Term(term) => {
-            if let Term::Variable(variable) = term {
+            if let PrimitiveValue::Variable(variable) = term {
                 OperationTreeT::leaf(ArithmeticOperation::ColumnScan(
                     *order
                         .get(variable)

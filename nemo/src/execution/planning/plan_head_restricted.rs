@@ -13,7 +13,7 @@ use nemo_physical::{
 
 use crate::{
     execution::execution_engine::RuleInfo,
-    model::{chase_model::ChaseRule, Identifier, Term, Variable},
+    model::{chase_model::ChaseRule, Identifier, PrimitiveValue, Variable},
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
@@ -51,7 +51,7 @@ impl RestrictedChaseStrategy {
             let is_existential = head_atom
                 .terms()
                 .iter()
-                .any(|t| matches!(t, Term::Variable(Variable::Existential(_))));
+                .any(|t| matches!(t, PrimitiveValue::Variable(Variable::Existential(_))));
 
             let instructions = predicate_to_instructions
                 .entry(head_atom.predicate())
@@ -77,7 +77,7 @@ impl RestrictedChaseStrategy {
         let mut aux_head_order = VariableOrder::new();
         let mut used_join_head_variables = HashSet::<Variable>::new();
         for term in aux_head.terms() {
-            if let Term::Variable(variable) = term {
+            if let PrimitiveValue::Variable(variable) = term {
                 aux_head_order.push(variable.clone());
                 used_join_head_variables.insert(variable.clone());
             } else {

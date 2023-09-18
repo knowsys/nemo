@@ -2,13 +2,15 @@ use std::collections::HashSet;
 
 use thiserror::Error;
 
-use crate::model::{Atom, Filter, FilterOperation, Identifier, Term, TermOperation, Variable};
+use crate::model::{
+    Atom, Filter, FilterOperation, Identifier, PrimitiveValue, TermOperation, Variable,
+};
 
 /// Representation of an atom used in [`super::ChaseRule`].
 #[derive(Debug, Clone)]
 pub struct ChaseAtom {
     predicate: Identifier,
-    terms: Vec<Term>,
+    terms: Vec<PrimitiveValue>,
 }
 
 /// Errors than can occur during rule translation
@@ -22,13 +24,13 @@ pub enum RuleTranslationError {
 
 impl ChaseAtom {
     /// Construct a new Atom.
-    pub fn new(predicate: Identifier, terms: Vec<Term>) -> Self {
+    pub fn new(predicate: Identifier, terms: Vec<PrimitiveValue>) -> Self {
         Self { predicate, terms }
     }
 
     /// Construct a [`ChaseAtom`] from an [`Atom`] that does not contain term trees that are not leaves.
     pub fn from_flat_atom(atom: Atom) -> Result<Self, RuleTranslationError> {
-        let terms: Vec<Term> = atom
+        let terms: Vec<PrimitiveValue> = atom
             .term_trees()
             .iter()
             .map(|t| {
@@ -38,7 +40,7 @@ impl ChaseAtom {
                     Err(RuleTranslationError::UnsupportedFeatureBodyArithmetic)
                 }
             })
-            .collect::<Result<Vec<Term>, RuleTranslationError>>()?;
+            .collect::<Result<Vec<PrimitiveValue>, RuleTranslationError>>()?;
 
         Ok(Self {
             predicate: atom.predicate(),
@@ -58,13 +60,13 @@ impl ChaseAtom {
         let mut seen_variables = HashSet::new();
 
         for term in self.terms_mut() {
-            if let Term::Variable(variable) = term {
+            if let PrimitiveValue::Variable(variable) = term {
                 if !seen_variables.insert(variable.clone()) {
                     let fresh_variable = generate_variable();
                     constraints.extend(Some(Filter {
                         operation: FilterOperation::Equals,
                         lhs: fresh_variable.clone(),
-                        rhs: std::mem::replace(term, Term::Variable(fresh_variable)),
+                        rhs: std::mem::replace(term, PrimitiveValue::Variable(fresh_variable)),
                     }));
                 }
             } else {
@@ -72,7 +74,7 @@ impl ChaseAtom {
                 constraints.extend(Some(Filter {
                     operation: FilterOperation::Equals,
                     lhs: fresh_variable.clone(),
-                    rhs: std::mem::replace(term, Term::Variable(fresh_variable)),
+                    rhs: std::mem::replace(term, PrimitiveValue::Variable(fresh_variable)),
                 }))
             }
         }
@@ -86,20 +88,20 @@ impl ChaseAtom {
 
     /// Return the terms in the atom - immutable.
     #[must_use]
-    pub fn terms(&self) -> &Vec<Term> {
+    pub fn terms(&self) -> &Vec<PrimitiveValue> {
         &self.terms
     }
 
     /// Return the terms in the atom - mutable.
     #[must_use]
-    pub fn terms_mut(&mut self) -> &mut Vec<Term> {
+    pub fn terms_mut(&mut self) -> &mut Vec<PrimitiveValue> {
         &mut self.terms
     }
 
     /// Return all variables in the atom.
     pub fn variables(&self) -> impl Iterator<Item = &Variable> + '_ {
         self.terms().iter().filter_map(|term| match term {
-            Term::Variable(var) => Some(var),
+            PrimitiveValue::Variable(var) => Some(var),
             _ => None,
         })
     }

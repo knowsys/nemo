@@ -6,7 +6,7 @@ use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
     execution::execution_engine::RuleInfo,
-    model::{chase_model::ChaseRule, Term, TermTree, Variable},
+    model::{chase_model::ChaseRule, PrimitiveValue, TermTree, Variable},
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, TableManager},
 };
@@ -65,7 +65,7 @@ impl SeminaiveStrategy {
         for variable in head_variables {
             if let Some(tree) = constructors.get(variable) {
                 result.extend(tree.terms().into_iter().filter_map(|t| {
-                    if let Term::Variable(variable) = t {
+                    if let PrimitiveValue::Variable(variable) = t {
                         Some(variable.clone())
                     } else {
                         None

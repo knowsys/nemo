@@ -115,7 +115,7 @@ impl std::fmt::Display for Variable {
 
 /// Terms occurring in programs.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
-pub enum Term {
+pub enum PrimitiveValue {
     /// An (abstract) constant.
     Constant(Identifier),
     /// A variable.
@@ -130,10 +130,10 @@ pub enum Term {
     Aggregate(Aggregate),
 }
 
-impl std::fmt::Display for Term {
+impl std::fmt::Display for PrimitiveValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Term::Constant(Identifier(s)) => {
+            PrimitiveValue::Constant(Identifier(s)) => {
                 // Nulls on logical level start with __Null# and shall be wrapped in angle brackets
                 // blank nodes and anything that starts with an ascii letter (like bare names)
                 // should not be wrapped in angle brackets
@@ -147,16 +147,16 @@ impl std::fmt::Display for Term {
                     write!(f, "<{s}>")
                 }
             }
-            Term::Variable(term) => write!(f, "{term}"),
-            Term::NumericLiteral(term) => write!(f, "{term}"),
-            Term::StringLiteral(term) => write!(f, "\"{term}\""),
-            Term::RdfLiteral(term) => write!(f, "{term}"),
-            Term::Aggregate(aggregate) => write!(f, "{aggregate}"),
+            PrimitiveValue::Variable(term) => write!(f, "{term}"),
+            PrimitiveValue::NumericLiteral(term) => write!(f, "{term}"),
+            PrimitiveValue::StringLiteral(term) => write!(f, "\"{term}\""),
+            PrimitiveValue::RdfLiteral(term) => write!(f, "{term}"),
+            PrimitiveValue::Aggregate(aggregate) => write!(f, "{aggregate}"),
         }
     }
 }
 
-impl Term {
+impl PrimitiveValue {
     /// Check if the term is ground.
     pub fn is_ground(&self) -> bool {
         matches!(
@@ -169,12 +169,12 @@ impl Term {
     pub fn substitute_variable(&mut self, var: &Variable, subst: &Variable) {
         debug_assert!(matches!(var, Variable::Universal(_)));
         match self {
-            Term::Variable(v) => {
+            PrimitiveValue::Variable(v) => {
                 if v == var {
                     *v = subst.clone()
                 }
             }
-            Term::Aggregate(agg) => agg.substitute_variable(var, subst),
+            PrimitiveValue::Aggregate(agg) => agg.substitute_variable(var, subst),
             _ => {}
         }
     }
@@ -249,7 +249,7 @@ impl From<InvalidRdfLiteral> for ReadingError {
     }
 }
 
-impl TryFrom<RdfLiteral> for Term {
+impl TryFrom<RdfLiteral> for PrimitiveValue {
     type Error = InvalidRdfLiteral;
 
     fn try_from(literal: RdfLiteral) -> Result<Self, Self::Error> {
@@ -384,32 +384,38 @@ mod test {
             datatype: XSD_DECIMAL.to_string(),
         };
 
-        let expected_language_string_literal = Term::RdfLiteral(language_string_literal.clone());
-        let expected_random_datavalue_literal = Term::RdfLiteral(random_datavalue_literal.clone());
-        let expected_string_datavalue_literal = Term::StringLiteral("string datavalue".to_string());
-        let expected_integer_datavalue_literal = Term::NumericLiteral(NumericLiteral::Integer(73));
+        let expected_language_string_literal =
+            PrimitiveValue::RdfLiteral(language_string_literal.clone());
+        let expected_random_datavalue_literal =
+            PrimitiveValue::RdfLiteral(random_datavalue_literal.clone());
+        let expected_string_datavalue_literal =
+            PrimitiveValue::StringLiteral("string datavalue".to_string());
+        let expected_integer_datavalue_literal =
+            PrimitiveValue::NumericLiteral(NumericLiteral::Integer(73));
         let expected_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(1, 23));
+            PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(1, 23));
         let expected_signed_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(1, 23));
+            PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(1, 23));
         let expected_negative_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(-1, 23));
+            PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(-1, 23));
         let expected_pointless_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(23, 0));
+            PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(23, 0));
         let expected_signed_pointless_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(23, 0));
+            PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(23, 0));
         let expected_negative_pointless_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(-23, 0));
+            PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(-23, 0));
         let expected_double_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Double(Double::new(3.33).unwrap()));
-        let expected_large_integer_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
-            value: "9950000000000000000".to_string(),
-            datatype: XSD_INTEGER.to_string(),
-        });
-        let expected_large_decimal_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
-            value: "9950000000000000001".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        });
+            PrimitiveValue::NumericLiteral(NumericLiteral::Double(Double::new(3.33).unwrap()));
+        let expected_large_integer_literal =
+            PrimitiveValue::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: "9950000000000000000".to_string(),
+                datatype: XSD_INTEGER.to_string(),
+            });
+        let expected_large_decimal_literal =
+            PrimitiveValue::RdfLiteral(RdfLiteral::DatatypeValue {
+                value: "9950000000000000001".to_string(),
+                datatype: XSD_DECIMAL.to_string(),
+            });
         let expected_invalid_integer_literal = InvalidRdfLiteral::new(RdfLiteral::DatatypeValue {
             value: "123.45".to_string(),
             datatype: XSD_INTEGER.to_string(),
@@ -420,63 +426,63 @@ mod test {
         });
 
         assert_eq!(
-            Term::try_from(language_string_literal).unwrap(),
+            PrimitiveValue::try_from(language_string_literal).unwrap(),
             expected_language_string_literal
         );
         assert_eq!(
-            Term::try_from(random_datavalue_literal).unwrap(),
+            PrimitiveValue::try_from(random_datavalue_literal).unwrap(),
             expected_random_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(string_datavalue_literal).unwrap(),
+            PrimitiveValue::try_from(string_datavalue_literal).unwrap(),
             expected_string_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(integer_datavalue_literal).unwrap(),
+            PrimitiveValue::try_from(integer_datavalue_literal).unwrap(),
             expected_integer_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(decimal_datavalue_literal).unwrap(),
+            PrimitiveValue::try_from(decimal_datavalue_literal).unwrap(),
             expected_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(signed_decimal_datavalue_literal).unwrap(),
+            PrimitiveValue::try_from(signed_decimal_datavalue_literal).unwrap(),
             expected_signed_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(negative_decimal_datavalue_literal).unwrap(),
+            PrimitiveValue::try_from(negative_decimal_datavalue_literal).unwrap(),
             expected_negative_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(pointless_decimal_datavalue_literal).unwrap(),
+            PrimitiveValue::try_from(pointless_decimal_datavalue_literal).unwrap(),
             expected_pointless_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(signed_pointless_decimal_datavalue_literal).unwrap(),
+            PrimitiveValue::try_from(signed_pointless_decimal_datavalue_literal).unwrap(),
             expected_signed_pointless_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(negative_pointless_decimal_datavalue_literal).unwrap(),
+            PrimitiveValue::try_from(negative_pointless_decimal_datavalue_literal).unwrap(),
             expected_negative_pointless_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(double_datavalue_literal).unwrap(),
+            PrimitiveValue::try_from(double_datavalue_literal).unwrap(),
             expected_double_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(large_integer_literal).unwrap(),
+            PrimitiveValue::try_from(large_integer_literal).unwrap(),
             expected_large_integer_literal
         );
         assert_eq!(
-            Term::try_from(large_decimal_literal).unwrap(),
+            PrimitiveValue::try_from(large_decimal_literal).unwrap(),
             expected_large_decimal_literal
         );
         assert_eq!(
-            Term::try_from(invalid_integer_literal).unwrap_err(),
+            PrimitiveValue::try_from(invalid_integer_literal).unwrap_err(),
             expected_invalid_integer_literal
         );
         assert_eq!(
-            Term::try_from(invalid_decimal_literal).unwrap_err(),
+            PrimitiveValue::try_from(invalid_decimal_literal).unwrap_err(),
             expected_invalid_decimal_literal
         );
     }

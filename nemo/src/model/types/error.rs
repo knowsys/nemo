@@ -1,5 +1,5 @@
 use super::primitive_types::PrimitiveType;
-use crate::model::Term;
+use crate::model::PrimitiveValue;
 
 use nemo_physical::error::ReadingError;
 use thiserror::Error;
@@ -8,13 +8,13 @@ use thiserror::Error;
 #[derive(Debug, Error, PartialEq)]
 #[error("The term \"{}\" cannot be converted to a {}.", .term, .target_type)]
 pub struct InvalidRuleTermConversion {
-    term: Term,
+    term: PrimitiveValue,
     target_type: PrimitiveType,
 }
 
 impl InvalidRuleTermConversion {
     /// Create new `InvalidRuleTermConversion` error
-    pub fn new(term: Term, target_type: PrimitiveType) -> Self {
+    pub fn new(term: PrimitiveValue, target_type: PrimitiveType) -> Self {
         Self { term, target_type }
     }
 }

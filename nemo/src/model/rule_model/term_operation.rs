@@ -1,12 +1,12 @@
 use nemo_physical::util::TaggedTree;
 
-use super::{Identifier, Term, Variable};
+use super::{Identifier, PrimitiveValue, Variable};
 
 /// Supported operations between terms.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TermOperation {
     /// Leaf node of the tree.
-    Term(Term),
+    Term(PrimitiveValue),
     /// Add two terms.
     Addition,
     /// Subtract one term from another.
@@ -31,7 +31,7 @@ impl From<TaggedTree<TermOperation>> for TermTree {
 
 impl TermTree {
     /// Create a new leaf node of a [`TermTree`].
-    pub fn leaf(term: Term) -> Self {
+    pub fn leaf(term: PrimitiveValue) -> Self {
         Self(TaggedTree::<TermOperation>::leaf(TermOperation::Term(term)))
     }
 
@@ -48,8 +48,8 @@ impl TermTree {
         &self.0.tag
     }
 
-    /// Return a list of all the [`Term`]s contained in this tree.
-    pub fn terms(&self) -> Vec<&Term> {
+    /// Return a list of all the [`PrimitiveValue`]s contained in this tree.
+    pub fn terms(&self) -> Vec<&PrimitiveValue> {
         self.0
             .leaves()
             .into_iter()

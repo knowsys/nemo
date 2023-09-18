@@ -14,7 +14,7 @@ use nemo::model::types::primitive_logical_value::PrimitiveLogicalValueT;
 use nemo::model::DataSource;
 use nemo::model::DataSourceDeclaration;
 use nemo::model::NumericLiteral;
-use nemo::model::Term;
+use nemo::model::PrimitiveValue;
 use nemo_physical::datatypes::Double;
 use nemo_physical::error::ExternalReadingError;
 use nemo_physical::error::ReadingError;
@@ -315,17 +315,23 @@ impl NemoResults {
                 .into_iter()
                 .map(|v| match v {
                     PrimitiveLogicalValueT::Any(rdf) => match rdf {
-                        Term::Variable(_) => panic!("Variables should not occur as results!"),
-                        Term::Constant(c) => JsValue::from(c.to_string()),
-                        Term::NumericLiteral(NumericLiteral::Integer(i)) => JsValue::from(i),
-                        Term::NumericLiteral(NumericLiteral::Double(d)) => {
+                        PrimitiveValue::Variable(_) => {
+                            panic!("Variables should not occur as results!")
+                        }
+                        PrimitiveValue::Constant(c) => JsValue::from(c.to_string()),
+                        PrimitiveValue::NumericLiteral(NumericLiteral::Integer(i)) => {
+                            JsValue::from(i)
+                        }
+                        PrimitiveValue::NumericLiteral(NumericLiteral::Double(d)) => {
                             JsValue::from(f64::from(d))
                         }
                         // currently we pack decimals into strings, maybe this should change
-                        Term::NumericLiteral(_) => JsValue::from(rdf.to_string()),
-                        Term::StringLiteral(s) => JsValue::from(s),
-                        Term::RdfLiteral(lit) => JsValue::from(lit.to_string()),
-                        Term::Aggregate(_) => panic!("Aggregates should not occur as results!"),
+                        PrimitiveValue::NumericLiteral(_) => JsValue::from(rdf.to_string()),
+                        PrimitiveValue::StringLiteral(s) => JsValue::from(s),
+                        PrimitiveValue::RdfLiteral(lit) => JsValue::from(lit.to_string()),
+                        PrimitiveValue::Aggregate(_) => {
+                            panic!("Aggregates should not occur as results!")
+                        }
                     },
                     PrimitiveLogicalValueT::String(s) => JsValue::from(String::from(s)),
                     PrimitiveLogicalValueT::Integer(i) => JsValue::from(i64::from(i)),

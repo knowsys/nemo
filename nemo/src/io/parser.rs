@@ -247,19 +247,22 @@ fn parse_iri_constant<'a>(
 /// Parse a ground term.
 pub fn parse_ground_term<'a>(
     prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
-) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, PrimitiveValue> {
     traced(
         "parse_ground_term",
         map_error(
             alt((
-                map(parse_iri_constant(prefixes), Term::Constant),
-                map(turtle::numeric_literal, Term::NumericLiteral),
+                map(parse_iri_constant(prefixes), PrimitiveValue::Constant),
+                map(turtle::numeric_literal, PrimitiveValue::NumericLiteral),
                 map_res(turtle::rdf_literal, move |literal| {
-                    Term::try_from(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
-                        .map_err(ReadingError::from)
+                    PrimitiveValue::try_from(resolve_prefixed_rdf_literal(
+                        &prefixes.borrow(),
+                        literal,
+                    ))
+                    .map_err(ReadingError::from)
                 }),
                 map(turtle::string, move |literal| {
-                    Term::StringLiteral(literal.to_string())
+                    PrimitiveValue::StringLiteral(literal.to_string())
                 }),
             )),
             || ParseError::ExpectedGroundTerm,
@@ -780,7 +783,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a term.
-    pub fn parse_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    pub fn parse_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveValue> {
         traced(
             "parse_term",
             map_error(
@@ -795,7 +798,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an aggregate term.
-    pub fn parse_aggregate(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    pub fn parse_aggregate(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveValue> {
         traced(
             "parse_aggregate",
             map_error(
@@ -816,7 +819,7 @@ impl<'a> RuleParser<'a> {
                         variable_identifiers,
                     };
 
-                    Ok((remainder, Term::Aggregate(aggregate)))
+                    Ok((remainder, PrimitiveValue::Aggregate(aggregate)))
                 },
                 || ParseError::ExpectedAggregate,
             ),
@@ -824,7 +827,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a variable.
-    pub fn parse_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    pub fn parse_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveValue> {
         traced(
             "parse_variable",
             map_error(
@@ -833,7 +836,7 @@ impl<'a> RuleParser<'a> {
                         self.parse_universal_variable(),
                         self.parse_existential_variable(),
                     )),
-                    Term::Variable,
+                    PrimitiveValue::Variable,
                 ),
                 || ParseError::ExpectedVariable,
             ),
@@ -1398,7 +1401,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![TermTree::leaf(Term::RdfLiteral(
+            vec![TermTree::leaf(PrimitiveValue::RdfLiteral(
                 RdfLiteral::DatatypeValue {
                     value: v,
                     datatype: t,
@@ -1424,7 +1427,10 @@ mod test {
 
         assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
 
-        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::Constant(v))]));
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![TermTree::leaf(PrimitiveValue::Constant(v))],
+        ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1439,7 +1445,10 @@ mod test {
         let fact = format!(r#"{predicate}({pn}) ."#);
         let v = Identifier(pn);
 
-        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::Constant(v))]));
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![TermTree::leaf(PrimitiveValue::Constant(v))],
+        ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1457,9 +1466,11 @@ mod test {
         let expected_fact = Fact(Atom::new(
             p,
             vec![
-                TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(int))),
-                TermTree::leaf(Term::NumericLiteral(NumericLiteral::Double(dbl))),
-                TermTree::leaf(Term::NumericLiteral(NumericLiteral::Decimal(13, 37))),
+                TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(int))),
+                TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Double(dbl))),
+                TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(
+                    13, 37,
+                ))),
             ],
         ));
 
@@ -1484,7 +1495,10 @@ mod test {
         let v = value.to_string();
         let fact = format!(r#"{predicate}("{value}"^^{datatype}) ."#);
 
-        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::StringLiteral(v))]));
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![TermTree::leaf(PrimitiveValue::StringLiteral(v))],
+        ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1498,7 +1512,10 @@ mod test {
         let v = value.to_string();
         let fact = format!(r#"{predicate}("{value}") ."#);
 
-        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::StringLiteral(v))]));
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![TermTree::leaf(PrimitiveValue::StringLiteral(v))],
+        ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1516,7 +1533,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![TermTree::leaf(Term::RdfLiteral(
+            vec![TermTree::leaf(PrimitiveValue::RdfLiteral(
                 RdfLiteral::LanguageString { value, tag },
             ))],
         ));
@@ -1533,7 +1550,10 @@ mod test {
         let a = Identifier(name.to_string());
         let fact = format!(r#"{predicate}({name}) ."#);
 
-        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::Constant(a))]));
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![TermTree::leaf(PrimitiveValue::Constant(a))],
+        ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1557,7 +1577,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![TermTree::leaf(Term::RdfLiteral(
+            vec![TermTree::leaf(PrimitiveValue::RdfLiteral(
                 RdfLiteral::DatatypeValue {
                     value: v,
                     datatype: t,
@@ -1591,50 +1611,50 @@ mod test {
         let expected_rule = Rule::new(
             vec![Atom::new(
                 p,
-                vec![TermTree::leaf(Term::Variable(Variable::Universal(
-                    x.clone(),
-                )))],
+                vec![TermTree::leaf(PrimitiveValue::Variable(
+                    Variable::Universal(x.clone()),
+                ))],
             )],
             vec![
                 Literal::Positive(Atom::new(
                     a,
                     vec![
-                        TermTree::leaf(Term::Variable(Variable::Universal(x.clone()))),
-                        TermTree::leaf(Term::Variable(Variable::Universal(y.clone()))),
+                        TermTree::leaf(PrimitiveValue::Variable(Variable::Universal(x.clone()))),
+                        TermTree::leaf(PrimitiveValue::Variable(Variable::Universal(y.clone()))),
                     ],
                 )),
                 Literal::Positive(Atom::new(
                     b,
-                    vec![TermTree::leaf(Term::Variable(Variable::Universal(
-                        z.clone(),
-                    )))],
+                    vec![TermTree::leaf(PrimitiveValue::Variable(
+                        Variable::Universal(z.clone()),
+                    ))],
                 )),
             ],
             vec![
                 Filter::new(
                     FilterOperation::GreaterThan,
                     Variable::Universal(y.clone()),
-                    Term::Variable(Variable::Universal(x.clone())),
+                    PrimitiveValue::Variable(Variable::Universal(x.clone())),
                 ),
                 Filter::new(
                     FilterOperation::Equals,
                     Variable::Universal(x.clone()),
-                    Term::NumericLiteral(NumericLiteral::Integer(3)),
+                    PrimitiveValue::NumericLiteral(NumericLiteral::Integer(3)),
                 ),
                 Filter::new(
                     FilterOperation::LessThan,
                     Variable::Universal(z.clone()),
-                    Term::NumericLiteral(NumericLiteral::Integer(7)),
+                    PrimitiveValue::NumericLiteral(NumericLiteral::Integer(7)),
                 ),
                 Filter::new(
                     FilterOperation::LessThanEq,
                     Variable::Universal(x),
-                    Term::Variable(Variable::Universal(z.clone())),
+                    PrimitiveValue::Variable(Variable::Universal(z.clone())),
                 ),
                 Filter::new(
                     FilterOperation::GreaterThanEq,
                     Variable::Universal(z),
-                    Term::Variable(Variable::Universal(y)),
+                    PrimitiveValue::Variable(Variable::Universal(y)),
                 ),
             ],
         );
@@ -1717,8 +1737,10 @@ mod test {
     fn parse_arithmetic_expressions() {
         let parser = RuleParser::new();
 
-        let twenty_three = TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(23)));
-        let fourty_two = TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)));
+        let twenty_three =
+            TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(23)));
+        let fourty_two =
+            TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(42)));
         let twenty_three_times_fourty_two = TermTree::tree(
             TermOperation::Multiplication,
             vec![twenty_three.clone(), fourty_two],
@@ -1768,30 +1790,36 @@ mod test {
                             TermTree::tree(
                                 TermOperation::Addition,
                                 vec![
-                                    TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(
-                                        23
-                                    ))),
+                                    TermTree::leaf(PrimitiveValue::NumericLiteral(
+                                        NumericLiteral::Integer(23)
+                                    )),
                                     TermTree::tree(
                                         TermOperation::Multiplication,
                                         vec![
-                                            TermTree::leaf(Term::NumericLiteral(
+                                            TermTree::leaf(PrimitiveValue::NumericLiteral(
                                                 NumericLiteral::Integer(23)
                                             )),
-                                            TermTree::leaf(Term::NumericLiteral(
+                                            TermTree::leaf(PrimitiveValue::NumericLiteral(
                                                 NumericLiteral::Integer(42)
                                             ))
                                         ],
                                     )
                                 ]
                             ),
-                            TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)))
+                            TermTree::leaf(PrimitiveValue::NumericLiteral(
+                                NumericLiteral::Integer(42)
+                            ))
                         ]
                     ),
                     TermTree::tree(
                         TermOperation::Multiplication,
                         vec![
-                            TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(23))),
-                            TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)))
+                            TermTree::leaf(PrimitiveValue::NumericLiteral(
+                                NumericLiteral::Integer(23)
+                            )),
+                            TermTree::leaf(PrimitiveValue::NumericLiteral(
+                                NumericLiteral::Integer(42)
+                            ))
                         ],
                     )
                 ]
@@ -1841,8 +1869,10 @@ mod test {
     fn parse_function_terms() {
         let parser = RuleParser::new();
 
-        let twenty_three = TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(23)));
-        let fourty_two = TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)));
+        let twenty_three =
+            TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(23)));
+        let fourty_two =
+            TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(42)));
         let twenty_three_times_fourty_two = TermTree::tree(
             TermOperation::Multiplication,
             vec![twenty_three.clone(), fourty_two.clone()],
@@ -1950,7 +1980,9 @@ mod test {
         assert_parse!(
             parser.parse_term_tree(),
             "constant",
-            TermTree::leaf(Term::Constant(Identifier(String::from("constant"))))
+            TermTree::leaf(PrimitiveValue::Constant(Identifier(String::from(
+                "constant"
+            ))))
         );
     }
 
@@ -1963,7 +1995,7 @@ mod test {
         assert_parse!(
             parser.parse_aggregate(),
             "#min(?VARIABLE)",
-            Term::Aggregate(Aggregate {
+            PrimitiveValue::Aggregate(Aggregate {
                 aggregate_identifier: Identifier(String::from("min")),
                 variable_identifiers: vec![Identifier(String::from("VARIABLE"))]
             })
@@ -1972,7 +2004,7 @@ mod test {
         assert_parse!(
             parser.parse_aggregate(),
             "#test(?VAR1, ?VAR2)",
-            Term::Aggregate(Aggregate {
+            PrimitiveValue::Aggregate(Aggregate {
                 aggregate_identifier: Identifier(String::from("test")),
                 variable_identifiers: vec![
                     Identifier(String::from("VAR1")),

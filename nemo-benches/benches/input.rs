@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use nemo::{
     builder_proxy::{LogicalAnyColumnBuilderProxy, LogicalStringColumnBuilderProxy},
-    model::Term,
+    model::PrimitiveValue,
 };
 use nemo_physical::{
     builder_proxy::{
@@ -26,7 +26,7 @@ pub fn benchmark_input(c: &mut Criterion) {
         .collect::<Vec<_>>();
     let terms = strings
         .iter()
-        .map(|s| Term::Constant(format!("http://example.org/{s}").into()))
+        .map(|s| PrimitiveValue::Constant(format!("http://example.org/{s}").into()))
         .collect::<Vec<_>>();
     let iris = terms.iter().map(|t| t.to_string()).collect::<Vec<_>>();
 
@@ -77,7 +77,8 @@ pub fn benchmark_input(c: &mut Criterion) {
             |(input, dict)| {
                 let mut pcbp =
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict));
-                let mut lcbp = LogicalAnyColumnBuilderProxy::new(&mut pcbp).into_parser::<Term>();
+                let mut lcbp =
+                    LogicalAnyColumnBuilderProxy::new(&mut pcbp).into_parser::<PrimitiveValue>();
                 for iri in input {
                     lcbp.add(iri).unwrap();
                 }

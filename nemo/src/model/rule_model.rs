@@ -21,8 +21,8 @@ pub use program::*;
 mod rule;
 pub use rule::*;
 
-mod term;
-pub use term::*;
+mod primitive_value;
+pub use primitive_value::*;
 
 mod term_operation;
 pub use term_operation::*;

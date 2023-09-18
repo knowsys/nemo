@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use crate::{
     error::Error,
     model::{
-        Filter, FilterOperation, Identifier, Literal, Rule, Term, TermOperation, TermTree, Variable,
+        Filter, FilterOperation, Identifier, Literal, PrimitiveValue, Rule, TermOperation,
+        TermTree, Variable,
     },
 };
 
@@ -42,7 +43,7 @@ impl ChaseRule {
         // apply equality constraints
         positive_filters.retain(|filter| {
             if filter.operation == FilterOperation::Equals {
-                if let Term::Variable(variable) = &filter.rhs {
+                if let PrimitiveValue::Variable(variable) = &filter.rhs {
                     positive_body
                         .iter_mut()
                         .for_each(|atom| atom.substitute_variable(&filter.lhs, variable));
@@ -194,7 +195,7 @@ impl TryFrom<Rule> for ChaseRule {
         let mut head_atoms = Vec::<ChaseAtom>::new();
         let mut term_counter: usize = 1;
         for atom in rule.head() {
-            let mut new_terms = Vec::<Term>::new();
+            let mut new_terms = Vec::<PrimitiveValue>::new();
 
             for term_tree in atom.term_trees() {
                 if let TermOperation::Term(term) = term_tree.operation() {
@@ -202,7 +203,7 @@ impl TryFrom<Rule> for ChaseRule {
                 } else {
                     let new_variable =
                         Variable::Universal(Identifier(format!("HEAD_OPERATION_{term_counter}")));
-                    new_terms.push(Term::Variable(new_variable.clone()));
+                    new_terms.push(PrimitiveValue::Variable(new_variable.clone()));
                     let exists = constructors.insert(new_variable, term_tree.clone());
 
                     assert!(exists.is_none())

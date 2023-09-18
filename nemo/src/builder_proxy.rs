@@ -22,7 +22,7 @@ use crate::{
     model::types::primitive_logical_value::{LogicalFloat64, LogicalInteger, LogicalString},
 };
 
-use super::model::Term;
+use super::model::PrimitiveValue;
 
 /// Implements the type-independent [`ColumnBuilderProxy`] trait methods.
 macro_rules! logical_generic_trait_impl {
@@ -128,7 +128,7 @@ impl<'a, 'b> LogicalAnyColumnBuilderProxy<'a, 'b> {
 impl<T> ColumnBuilderProxy<T> for LogicalAnyColumnBuilderProxy<'_, '_>
 where
     PhysicalString: TryFrom<T>,
-    Term: TryFrom<T>,
+    PrimitiveValue: TryFrom<T>,
     ReadingError: From<<PhysicalString as TryFrom<T>>::Error>,
 {
     logical_generic_trait_impl!();
@@ -250,13 +250,13 @@ where
     }
 }
 
-fn parse_rdf_term_from_string(input: String) -> Term {
+fn parse_rdf_term_from_string(input: String) -> PrimitiveValue {
     const BASE: &str = "a:";
 
     let trimmed = input.trim();
 
     if trimmed.is_empty() {
-        return Term::StringLiteral(trimmed.to_string());
+        return PrimitiveValue::StringLiteral(trimmed.to_string());
     }
 
     let data = format!("<> <> {trimmed}.");
@@ -268,10 +268,10 @@ fn parse_rdf_term_from_string(input: String) -> Term {
     let terms = parser
         .into_iter(|triple| {
             let term = triple.object.try_into()?;
-            let base_stripped = if let Term::Constant(c) = &term {
+            let base_stripped = if let PrimitiveValue::Constant(c) = &term {
                 c.to_string()
                     .strip_prefix(BASE)
-                    .map(|stripped| Term::Constant(stripped.to_string().into()))
+                    .map(|stripped| PrimitiveValue::Constant(stripped.to_string().into()))
                     .unwrap_or(term)
             } else {
                 term
@@ -292,18 +292,18 @@ fn parse_rdf_term_from_string(input: String) -> Term {
     if let Ok((remainder, _)) = parse_bare_name(span_from_str(trimmed)) {
         if remainder.is_empty() {
             // it is, pass as-is
-            return Term::Constant(trimmed.to_string().into());
+            return PrimitiveValue::Constant(trimmed.to_string().into());
         }
     }
 
     // might still be a full IRI
     if Iri::parse(trimmed).is_ok() {
         // it is, pass as-is
-        return Term::Constant(trimmed.to_string().into());
+        return PrimitiveValue::Constant(trimmed.to_string().into());
     }
 
     // otherwise we treat the input as a string literal
-    Term::StringLiteral(trimmed.to_string())
+    PrimitiveValue::StringLiteral(trimmed.to_string())
 }
 
 /// Generic Struct to extend LogicalColumnBuilderProxies with Parsing functionality
@@ -342,9 +342,9 @@ where
     }
 }
 
-impl<T> ColumnBuilderProxy<String> for GenericLogicalParser<Term, T>
+impl<T> ColumnBuilderProxy<String> for GenericLogicalParser<PrimitiveValue, T>
 where
-    T: ColumnBuilderProxy<Term>,
+    T: ColumnBuilderProxy<PrimitiveValue>,
 {
     logical_generic_trait_impl!();
 
@@ -409,71 +409,71 @@ mod test {
     fn any_parsing() {
         assert_eq!(
             parse_rdf_term_from_string("".to_string()),
-            Term::StringLiteral("".to_string())
+            PrimitiveValue::StringLiteral("".to_string())
         );
 
         assert_eq!(
             parse_rdf_term_from_string("<http://example.org>".to_string()),
-            Term::Constant("http://example.org".to_string().into())
+            PrimitiveValue::Constant("http://example.org".to_string().into())
         );
 
         assert_eq!(
             parse_rdf_term_from_string(
                 r#""23"^^<http://www.w3.org/2001/XMLSchema#string>"#.to_string()
             ),
-            Term::StringLiteral("23".to_string()),
+            PrimitiveValue::StringLiteral("23".to_string()),
         );
 
         assert_eq!(
             parse_rdf_term_from_string(
                 r#""12345"^^<http://www.w3.org/2001/XMLSchema#integer>"#.to_string()
             ),
-            Term::NumericLiteral(NumericLiteral::Integer(12345)),
+            PrimitiveValue::NumericLiteral(NumericLiteral::Integer(12345)),
         );
 
         assert_eq!(
             parse_rdf_term_from_string(r#""quoted""#.to_string()),
-            Term::StringLiteral("quoted".to_string()),
+            PrimitiveValue::StringLiteral("quoted".to_string()),
         );
 
         assert_eq!(
             parse_rdf_term_from_string("12345".to_string()),
-            Term::NumericLiteral(NumericLiteral::Integer(12345)),
+            PrimitiveValue::NumericLiteral(NumericLiteral::Integer(12345)),
         );
 
         assert_eq!(
             parse_rdf_term_from_string("_:foo".to_string()),
-            Term::Constant("_:foo".to_string().into()),
+            PrimitiveValue::Constant("_:foo".to_string().into()),
         );
 
         assert_eq!(
             parse_rdf_term_from_string("bare_name".to_string()),
-            Term::Constant("bare_name".to_string().into()),
+            PrimitiveValue::Constant("bare_name".to_string().into()),
         );
 
         assert_eq!(
             parse_rdf_term_from_string("http://example.org".to_string()),
-            Term::Constant("http://example.org".to_string().into()),
+            PrimitiveValue::Constant("http://example.org".to_string().into()),
         );
 
         assert_eq!(
             parse_rdf_term_from_string("with space".to_string()),
-            Term::Constant("with space".to_string().into()),
+            PrimitiveValue::Constant("with space".to_string().into()),
         );
 
         assert_eq!(
             parse_rdf_term_from_string("with_question_mark?".to_string()),
-            Term::StringLiteral("with_question_mark?".to_string()),
+            PrimitiveValue::StringLiteral("with_question_mark?".to_string()),
         );
 
         assert_eq!(
             parse_rdf_term_from_string("a. a a a".to_string()),
-            Term::StringLiteral("a. a a a".to_string()),
+            PrimitiveValue::StringLiteral("a. a a a".to_string()),
         );
 
         assert_eq!(
             parse_rdf_term_from_string("<a>. <a> <a> <a>".to_string()),
-            Term::StringLiteral("<a>. <a> <a> <a>".to_string()),
+            PrimitiveValue::StringLiteral("<a>. <a> <a> <a>".to_string()),
         );
     }
 
@@ -482,75 +482,78 @@ mod test {
         let string = LogicalString::from("my string".to_string());
         let integer = LogicalInteger::from(42);
         let double = LogicalFloat64::from(Double::new(3.41).unwrap());
-        let constant = Term::Constant("my constant".to_string().into());
-        let string_literal = Term::StringLiteral("string literal".to_string());
-        let num_int_literal = Term::NumericLiteral(NumericLiteral::Integer(45));
-        let num_decimal_literal = Term::NumericLiteral(NumericLiteral::Decimal(4, 2));
+        let constant = PrimitiveValue::Constant("my constant".to_string().into());
+        let string_literal = PrimitiveValue::StringLiteral("string literal".to_string());
+        let num_int_literal = PrimitiveValue::NumericLiteral(NumericLiteral::Integer(45));
+        let num_decimal_literal = PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(4, 2));
         let num_double_literal =
-            Term::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap()));
-        let language_string_literal = Term::try_from(RdfLiteral::LanguageString {
+            PrimitiveValue::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap()));
+        let language_string_literal = PrimitiveValue::try_from(RdfLiteral::LanguageString {
             value: "language string".to_string(),
             tag: "en".to_string(),
         })
         .unwrap();
-        let random_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let random_datavalue_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "some random datavalue".to_string(),
             datatype: "a datatype that I totally did not just make up".to_string(),
         })
         .unwrap();
-        let string_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let string_datavalue_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "string datavalue".to_string(),
             datatype: XSD_STRING.to_string(),
         })
         .unwrap();
-        let integer_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let integer_datavalue_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "73".to_string(),
             datatype: XSD_INTEGER.to_string(),
         })
         .unwrap();
-        let decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let decimal_datavalue_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "1.23".to_string(),
             datatype: XSD_DECIMAL.to_string(),
         })
         .unwrap();
-        let signed_decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
-            value: "+1.23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        })
-        .unwrap();
-        let negative_decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
-            value: "-1.23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        })
-        .unwrap();
-        let pointless_decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
-            value: "23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        })
-        .unwrap();
+        let signed_decimal_datavalue_literal =
+            PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
+                value: "+1.23".to_string(),
+                datatype: XSD_DECIMAL.to_string(),
+            })
+            .unwrap();
+        let negative_decimal_datavalue_literal =
+            PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
+                value: "-1.23".to_string(),
+                datatype: XSD_DECIMAL.to_string(),
+            })
+            .unwrap();
+        let pointless_decimal_datavalue_literal =
+            PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
+                value: "23".to_string(),
+                datatype: XSD_DECIMAL.to_string(),
+            })
+            .unwrap();
         let signed_pointless_decimal_datavalue_literal =
-            Term::try_from(RdfLiteral::DatatypeValue {
+            PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
                 value: "+23".to_string(),
                 datatype: XSD_DECIMAL.to_string(),
             })
             .unwrap();
         let negative_pointless_decimal_datavalue_literal =
-            Term::try_from(RdfLiteral::DatatypeValue {
+            PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
                 value: "-23".to_string(),
                 datatype: XSD_DECIMAL.to_string(),
             })
             .unwrap();
-        let double_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let double_datavalue_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "3.33".to_string(),
             datatype: XSD_DOUBLE.to_string(),
         })
         .unwrap();
-        let large_integer_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let large_integer_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "9950000000000000000".to_string(),
             datatype: XSD_INTEGER.to_string(),
         })
         .unwrap();
-        let large_decimal_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let large_decimal_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "9950000000000000001".to_string(),
             datatype: XSD_DECIMAL.to_string(),
         })

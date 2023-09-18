@@ -19,7 +19,8 @@ use nemo_physical::{
 
 use crate::{
     model::{
-        chase_model::ChaseAtom, Filter, FilterOperation, Identifier, PrimitiveType, Term, Variable,
+        chase_model::ChaseAtom, Filter, FilterOperation, Identifier, PrimitiveType, PrimitiveValue,
+        Variable,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::TableManager,
@@ -31,7 +32,7 @@ use crate::{
 /// This function for computing JoinBindings:
 ///         - Example: For a leapfrog join a(x, y, z) b(z, y) with order [x, y, z] you'd obtain [[0, 1, 2], [2, 1]]
 pub(super) fn atom_binding(atom: &ChaseAtom, variable_order: &VariableOrder) -> Vec<usize> {
-    atom.terms().iter().map(|t| if let Term::Variable(variable) = t {
+    atom.terms().iter().map(|t| if let PrimitiveValue::Variable(variable) = t {
         *variable_order.get(variable).unwrap()
     } else {
         panic!("It is assumed that this function is only called on atoms which only contain variables.");
@@ -55,7 +56,7 @@ pub(super) fn compute_filters(
         // Case 1: Variables equals another variable
         // In this case, we need to update the `filter_classes`
         if filter.operation == FilterOperation::Equals {
-            if let Term::Variable(right_variable) = &filter.rhs {
+            if let PrimitiveValue::Variable(right_variable) = &filter.rhs {
                 if !variable_order.contains(right_variable) {
                     continue;
                 }
@@ -110,7 +111,7 @@ pub(super) fn compute_filters(
         // In this case, we need to update the `filter_assignments`
 
         match &filter.rhs {
-            Term::Variable(right_variable) => {
+            PrimitiveValue::Variable(right_variable) => {
                 if !variable_order.contains(right_variable) {
                     continue;
                 }
@@ -253,7 +254,7 @@ pub(super) fn head_instruction_from_atom(
     analysis: &RuleAnalysis,
 ) -> HeadInstruction {
     let arity = atom.terms().len();
-    let mut reduced_terms = Vec::<Term>::with_capacity(arity);
+    let mut reduced_terms = Vec::<PrimitiveValue>::with_capacity(arity);
     let mut append_instructions = Vec::<Vec<AppendInstruction>>::new();
 
     append_instructions.push(vec![]);
@@ -267,7 +268,7 @@ pub(super) fn head_instruction_from_atom(
             t,
         )
     }) {
-        if let Term::Variable(variable) = term {
+        if let PrimitiveValue::Variable(variable) = term {
             let variable_identifier = match variable {
                 Variable::Universal(id) => id,
                 Variable::Existential(id) => id,
@@ -278,7 +279,7 @@ pub(super) fn head_instruction_from_atom(
                 current_append_vector.push(instruction);
             } else {
                 let reduced_index = reduced_terms.len();
-                reduced_terms.push(Term::Variable(variable.clone()));
+                reduced_terms.push(PrimitiveValue::Variable(variable.clone()));
 
                 variable_map.insert(variable_identifier.clone(), reduced_index);
 

@@ -10,7 +10,7 @@ use nemo_physical::{
 };
 
 use crate::model::{
-    Identifier, NumericLiteral, RdfLiteral, Term, XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER,
+    Identifier, NumericLiteral, PrimitiveValue, RdfLiteral, XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER,
 };
 
 use super::{error::InvalidRuleTermConversion, primitive_types::PrimitiveType};
@@ -110,19 +110,19 @@ struct DatatypeValue(String, String);
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Decimal(i64, u64);
 
-impl From<LogicalString> for Term {
+impl From<LogicalString> for PrimitiveValue {
     fn from(value: LogicalString) -> Self {
         Self::StringLiteral(value.into())
     }
 }
 
-impl From<LogicalInteger> for Term {
+impl From<LogicalInteger> for PrimitiveValue {
     fn from(value: LogicalInteger) -> Self {
         Self::NumericLiteral(NumericLiteral::Integer(value.into()))
     }
 }
 
-impl From<LogicalFloat64> for Term {
+impl From<LogicalFloat64> for PrimitiveValue {
     fn from(value: LogicalFloat64) -> Self {
         Self::NumericLiteral(NumericLiteral::Double(value.into()))
     }
@@ -226,49 +226,49 @@ impl TryFrom<LogicalInteger> for LogicalFloat64 {
     }
 }
 
-impl TryFrom<Term> for LogicalString {
+impl TryFrom<PrimitiveValue> for LogicalString {
     type Error = InvalidRuleTermConversion;
 
-    fn try_from(term: Term) -> Result<Self, Self::Error> {
+    fn try_from(term: PrimitiveValue) -> Result<Self, Self::Error> {
         match term {
-            Term::StringLiteral(s) => Ok(s.into()),
+            PrimitiveValue::StringLiteral(s) => Ok(s.into()),
             _ => Err(InvalidRuleTermConversion::new(term, PrimitiveType::String)),
         }
     }
 }
 
-impl TryFrom<Term> for LogicalInteger {
+impl TryFrom<PrimitiveValue> for LogicalInteger {
     type Error = InvalidRuleTermConversion;
 
-    fn try_from(term: Term) -> Result<Self, Self::Error> {
+    fn try_from(term: PrimitiveValue) -> Result<Self, Self::Error> {
         match term {
-            Term::NumericLiteral(NumericLiteral::Integer(i)) => Ok(i.into()),
-            Term::NumericLiteral(NumericLiteral::Decimal(i, 0)) => Ok(i.into()),
+            PrimitiveValue::NumericLiteral(NumericLiteral::Integer(i)) => Ok(i.into()),
+            PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(i, 0)) => Ok(i.into()),
             _ => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Integer)),
         }
     }
 }
 
-impl TryFrom<Term> for i64 {
+impl TryFrom<PrimitiveValue> for i64 {
     type Error = InvalidRuleTermConversion;
 
-    fn try_from(value: Term) -> Result<Self, Self::Error> {
+    fn try_from(value: PrimitiveValue) -> Result<Self, Self::Error> {
         Ok(LogicalInteger::try_from(value)?.into())
     }
 }
 
-impl TryFrom<Term> for LogicalFloat64 {
+impl TryFrom<PrimitiveValue> for LogicalFloat64 {
     type Error = InvalidRuleTermConversion;
 
-    fn try_from(term: Term) -> Result<Self, Self::Error> {
+    fn try_from(term: PrimitiveValue) -> Result<Self, Self::Error> {
         match term {
-            Term::NumericLiteral(NumericLiteral::Double(d)) => Ok(d.into()),
-            Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => format!("{a}.{b}")
+            PrimitiveValue::NumericLiteral(NumericLiteral::Double(d)) => Ok(d.into()),
+            PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(a, b)) => format!("{a}.{b}")
                 .parse()
                 .ok()
                 .and_then(|d: f64| Double::new(d).map(|d| d.into()).ok())
                 .ok_or(InvalidRuleTermConversion::new(term, PrimitiveType::Float64)),
-            Term::NumericLiteral(NumericLiteral::Integer(a)) => LogicalInteger(a)
+            PrimitiveValue::NumericLiteral(NumericLiteral::Integer(a)) => LogicalInteger(a)
                 .try_into()
                 .map_err(|_err| InvalidRuleTermConversion::new(term, PrimitiveType::Float64)),
             _ => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Float64)),
@@ -276,32 +276,42 @@ impl TryFrom<Term> for LogicalFloat64 {
     }
 }
 
-impl TryFrom<Term> for Double {
+impl TryFrom<PrimitiveValue> for Double {
     type Error = InvalidRuleTermConversion;
 
-    fn try_from(value: Term) -> Result<Self, Self::Error> {
+    fn try_from(value: PrimitiveValue) -> Result<Self, Self::Error> {
         Ok(LogicalFloat64::try_from(value)?.into())
     }
 }
 
-impl TryFrom<Term> for PhysicalString {
+impl TryFrom<PrimitiveValue> for PhysicalString {
     type Error = InvalidRuleTermConversion;
 
-    fn try_from(term: Term) -> Result<Self, Self::Error> {
+    fn try_from(term: PrimitiveValue) -> Result<Self, Self::Error> {
         match term {
-            Term::Variable(_) => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any)),
-            Term::Constant(c) => Ok(c.into()),
-            Term::NumericLiteral(NumericLiteral::Integer(i)) => Ok(LogicalInteger(i).into()),
-            Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => Ok(Decimal(a, b).into()),
-            Term::NumericLiteral(NumericLiteral::Double(d)) => Ok(LogicalFloat64(d).into()),
-            Term::StringLiteral(s) => Ok(LogicalString(s).into()),
-            Term::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
+            PrimitiveValue::Variable(_) => {
+                Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any))
+            }
+            PrimitiveValue::Constant(c) => Ok(c.into()),
+            PrimitiveValue::NumericLiteral(NumericLiteral::Integer(i)) => {
+                Ok(LogicalInteger(i).into())
+            }
+            PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
+                Ok(Decimal(a, b).into())
+            }
+            PrimitiveValue::NumericLiteral(NumericLiteral::Double(d)) => {
+                Ok(LogicalFloat64(d).into())
+            }
+            PrimitiveValue::StringLiteral(s) => Ok(LogicalString(s).into()),
+            PrimitiveValue::RdfLiteral(RdfLiteral::LanguageString { value, tag }) => {
                 Ok(LanguageString(value, tag).into())
             }
-            Term::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
+            PrimitiveValue::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
                 Ok(DatatypeValue(value, datatype).into())
             }
-            Term::Aggregate(_) => Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any)),
+            PrimitiveValue::Aggregate(_) => {
+                Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any))
+            }
         }
     }
 }
@@ -310,7 +320,7 @@ impl TryFrom<Term> for PhysicalString {
 #[derive(Debug)]
 pub enum PrimitiveLogicalValueT {
     /// Any variant
-    Any(Term),
+    Any(PrimitiveValue),
     /// String variant
     String(LogicalString),
     /// Integer variant
@@ -319,8 +329,8 @@ pub enum PrimitiveLogicalValueT {
     Float64(LogicalFloat64),
 }
 
-impl From<Term> for PrimitiveLogicalValueT {
-    fn from(value: Term) -> Self {
+impl From<PrimitiveValue> for PrimitiveLogicalValueT {
+    fn from(value: PrimitiveValue) -> Self {
         Self::Any(value)
     }
 }
@@ -343,7 +353,7 @@ impl From<LogicalFloat64> for PrimitiveLogicalValueT {
     }
 }
 
-pub(super) type DefaultAnyIterator<'a> = Box<dyn Iterator<Item = Term> + 'a>;
+pub(super) type DefaultAnyIterator<'a> = Box<dyn Iterator<Item = PrimitiveValue> + 'a>;
 pub(super) type DefaultStringIterator<'a> = Box<dyn Iterator<Item = LogicalString> + 'a>;
 pub(super) type DefaultIntegerIterator<'a> = Box<dyn Iterator<Item = LogicalInteger> + 'a>;
 pub(super) type DefaultFloat64Iterator<'a> = Box<dyn Iterator<Item = LogicalFloat64> + 'a>;
@@ -388,7 +398,7 @@ impl<'a> AnyOutputMapper<'a> {
     }
 }
 
-impl From<PhysicalString> for Term {
+impl From<PhysicalString> for PrimitiveValue {
     fn from(s: PhysicalString) -> Self {
         // unwrap physical string
         let s: String = s.into();
@@ -397,16 +407,16 @@ impl From<PhysicalString> for Term {
                     let (value, tag) = s[LANGUAGE_STRING_PREFIX.len()..]
                         .rsplit_once('@')
                         .expect("Physical Value should be well-formatted.");
-                    Term::RdfLiteral(RdfLiteral::LanguageString {
+                    PrimitiveValue::RdfLiteral(RdfLiteral::LanguageString {
                         value: value.to_string(),
                         tag: tag.to_string(),
                     })
                 }
                 s if s.starts_with(STRING_PREFIX) => {
-                    Term::StringLiteral(s[STRING_PREFIX.len()..].to_string())
+                    PrimitiveValue::StringLiteral(s[STRING_PREFIX.len()..].to_string())
                 }
                 s if s.starts_with(INTEGER_PREFIX) => {
-                    Term::NumericLiteral(NumericLiteral::Integer(
+                    PrimitiveValue::NumericLiteral(NumericLiteral::Integer(
                         s[INTEGER_PREFIX.len()..]
                             .parse()
                             .expect("Physical Value should be well-formatted."),
@@ -417,9 +427,9 @@ impl From<PhysicalString> for Term {
                         .rsplit_once('.')
                         .and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))
                         .expect("Physical Value should be well-formatted.");
-                    Term::NumericLiteral(NumericLiteral::Decimal(a, b))
+                    PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(a, b))
                 }
-                s if s.starts_with(DOUBLE_PREFIX) => Term::NumericLiteral(NumericLiteral::Double(
+                s if s.starts_with(DOUBLE_PREFIX) => PrimitiveValue::NumericLiteral(NumericLiteral::Double(
                     s[DOUBLE_PREFIX.len()..]
                         .parse()
                         .ok()
@@ -427,18 +437,18 @@ impl From<PhysicalString> for Term {
                         .expect("Physical Value should be well-formatted."),
                 )),
                 s if s.starts_with(CONSTANT_PREFIX) => {
-                    Term::Constant(s[CONSTANT_PREFIX.len()..].to_string().into())
+                    PrimitiveValue::Constant(s[CONSTANT_PREFIX.len()..].to_string().into())
                 }
                 s if s.starts_with(DATATYPE_VALUE_PREFIX) => {
                     let (value, datatype) = s[DATATYPE_VALUE_PREFIX.len()..]
                         .rsplit_once("^^")
                         .expect("Physical Value should be well-formatted.");
-                    Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                    PrimitiveValue::RdfLiteral(RdfLiteral::DatatypeValue {
                         value: value.to_string(),
                         datatype: datatype.to_string(),
                     })
                 }
-                s if s.starts_with(NULL_PREFIX) => Term::Constant(format!("{LOGICAL_NULL_PREFIX}{}", &s[NULL_PREFIX.len()..]).into()),
+                s if s.starts_with(NULL_PREFIX) => PrimitiveValue::Constant(format!("{LOGICAL_NULL_PREFIX}{}", &s[NULL_PREFIX.len()..]).into()),
                 _ => unreachable!("The physical strings should take one of the previous forms. Apparently we forgot to handle terms like: {s:?}"),
             }
     }
@@ -452,26 +462,26 @@ impl<'a> From<AnyOutputMapper<'a>> for DefaultAnyIterator<'a> {
 
 impl<'a> From<AnyOutputMapper<'a>> for DefaultSerializedIterator<'a> {
     fn from(source: AnyOutputMapper<'a>) -> Self {
-        // NOTE: depending on performance change, maybe implement shortcut here to not construct Term first;
+        // NOTE: depending on performance change, maybe implement shortcut here to not construct PrimitiveValue first;
         // I prefer the current solution at the moment since it is easier to maintain
         Box::new(DefaultAnyIterator::from(source).map(|term| {
             let mapped_term = match term {
                 // for numeric literals we do not use the standard display but convert them to a proper
                 // rdf literal first
-                Term::NumericLiteral(NumericLiteral::Integer(i)) => {
-                    Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                PrimitiveValue::NumericLiteral(NumericLiteral::Integer(i)) => {
+                    PrimitiveValue::RdfLiteral(RdfLiteral::DatatypeValue {
                         value: i.to_string(),
                         datatype: XSD_INTEGER.to_string(),
                     })
                 }
-                Term::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
-                    Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(a, b)) => {
+                    PrimitiveValue::RdfLiteral(RdfLiteral::DatatypeValue {
                         value: format!("{a}.{b}").to_string(),
                         datatype: XSD_DECIMAL.to_string(),
                     })
                 }
-                Term::NumericLiteral(NumericLiteral::Double(d)) => {
-                    Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                PrimitiveValue::NumericLiteral(NumericLiteral::Double(d)) => {
+                    PrimitiveValue::RdfLiteral(RdfLiteral::DatatypeValue {
                         value: format!("{:E}", f64::from(d)),
                         datatype: XSD_DOUBLE.to_string(),
                     })
@@ -599,76 +609,80 @@ mod test {
         let string = LogicalString::from("my string".to_string());
         let integer = LogicalInteger::from(42);
         let double = LogicalFloat64::from(Double::new(3.41).unwrap());
-        let constant = Term::Constant("my constant".to_string().into());
-        let string_literal = Term::StringLiteral("string literal".to_string());
-        let num_int_literal = Term::NumericLiteral(NumericLiteral::Integer(45));
-        let num_decimal_literal = Term::NumericLiteral(NumericLiteral::Decimal(4, 2));
-        let num_whole_decimal_literal = Term::NumericLiteral(NumericLiteral::Decimal(42, 0));
+        let constant = PrimitiveValue::Constant("my constant".to_string().into());
+        let string_literal = PrimitiveValue::StringLiteral("string literal".to_string());
+        let num_int_literal = PrimitiveValue::NumericLiteral(NumericLiteral::Integer(45));
+        let num_decimal_literal = PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(4, 2));
+        let num_whole_decimal_literal =
+            PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(42, 0));
         let num_double_literal =
-            Term::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap()));
-        let language_string_literal = Term::try_from(RdfLiteral::LanguageString {
+            PrimitiveValue::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap()));
+        let language_string_literal = PrimitiveValue::try_from(RdfLiteral::LanguageString {
             value: "language string".to_string(),
             tag: "en".to_string(),
         })
         .unwrap();
-        let random_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let random_datavalue_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "some random datavalue".to_string(),
             datatype: "a datatype that I totally did not just make up".to_string(),
         })
         .unwrap();
-        let string_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let string_datavalue_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "string datavalue".to_string(),
             datatype: XSD_STRING.to_string(),
         })
         .unwrap();
-        let integer_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let integer_datavalue_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "73".to_string(),
             datatype: XSD_INTEGER.to_string(),
         })
         .unwrap();
-        let decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let decimal_datavalue_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "1.23".to_string(),
             datatype: XSD_DECIMAL.to_string(),
         })
         .unwrap();
-        let signed_decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
-            value: "+1.23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        })
-        .unwrap();
-        let negative_decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
-            value: "-1.23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        })
-        .unwrap();
-        let pointless_decimal_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
-            value: "23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        })
-        .unwrap();
+        let signed_decimal_datavalue_literal =
+            PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
+                value: "+1.23".to_string(),
+                datatype: XSD_DECIMAL.to_string(),
+            })
+            .unwrap();
+        let negative_decimal_datavalue_literal =
+            PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
+                value: "-1.23".to_string(),
+                datatype: XSD_DECIMAL.to_string(),
+            })
+            .unwrap();
+        let pointless_decimal_datavalue_literal =
+            PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
+                value: "23".to_string(),
+                datatype: XSD_DECIMAL.to_string(),
+            })
+            .unwrap();
         let signed_pointless_decimal_datavalue_literal =
-            Term::try_from(RdfLiteral::DatatypeValue {
+            PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
                 value: "+23".to_string(),
                 datatype: XSD_DECIMAL.to_string(),
             })
             .unwrap();
         let negative_pointless_decimal_datavalue_literal =
-            Term::try_from(RdfLiteral::DatatypeValue {
+            PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
                 value: "-23".to_string(),
                 datatype: XSD_DECIMAL.to_string(),
             })
             .unwrap();
-        let double_datavalue_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let double_datavalue_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "3.33".to_string(),
             datatype: XSD_DOUBLE.to_string(),
         })
         .unwrap();
-        let large_integer_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let large_integer_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "9950000000000000000".to_string(),
             datatype: XSD_INTEGER.to_string(),
         })
         .unwrap();
-        let large_decimal_literal = Term::try_from(RdfLiteral::DatatypeValue {
+        let large_decimal_literal = PrimitiveValue::try_from(RdfLiteral::DatatypeValue {
             value: "9950000000000000001".to_string(),
             datatype: XSD_DECIMAL.to_string(),
         })
@@ -827,11 +841,11 @@ mod test {
             expected_large_decimal_literal
         );
         assert_eq!(
-            Term::try_from(invalid_integer_literal).unwrap_err(),
+            PrimitiveValue::try_from(invalid_integer_literal).unwrap_err(),
             expected_invalid_integer_literal
         );
         assert_eq!(
-            Term::try_from(invalid_decimal_literal).unwrap_err(),
+            PrimitiveValue::try_from(invalid_decimal_literal).unwrap_err(),
             expected_invalid_decimal_literal
         );
     }
@@ -887,7 +901,7 @@ mod test {
         let int_out: DefaultIntegerIterator = IntegerOutputMapper::new(phys_int_iter).into();
         let double_out: DefaultFloat64Iterator = Float64OutputMapper::new(phys_double_iter).into();
 
-        let any_vec: Vec<Term> = any_out.collect();
+        let any_vec: Vec<PrimitiveValue> = any_out.collect();
         let string_vec: Vec<LogicalString> = string_out.collect();
         let integer_vec: Vec<LogicalInteger> = int_out.collect();
         let double_vec: Vec<LogicalFloat64> = double_out.collect();
@@ -895,27 +909,27 @@ mod test {
         assert_eq!(
             any_vec,
             vec![
-                Term::StringLiteral("my string".to_string()),
-                Term::NumericLiteral(NumericLiteral::Integer(42)),
-                Term::NumericLiteral(NumericLiteral::Double(Double::new(3.41).unwrap())),
-                Term::Constant("my constant".to_string().into()),
-                Term::StringLiteral("string literal".to_string()),
-                Term::NumericLiteral(NumericLiteral::Integer(45)),
-                Term::NumericLiteral(NumericLiteral::Decimal(4, 2)),
-                Term::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap())),
-                Term::RdfLiteral(RdfLiteral::LanguageString {
+                PrimitiveValue::StringLiteral("my string".to_string()),
+                PrimitiveValue::NumericLiteral(NumericLiteral::Integer(42)),
+                PrimitiveValue::NumericLiteral(NumericLiteral::Double(Double::new(3.41).unwrap())),
+                PrimitiveValue::Constant("my constant".to_string().into()),
+                PrimitiveValue::StringLiteral("string literal".to_string()),
+                PrimitiveValue::NumericLiteral(NumericLiteral::Integer(45)),
+                PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(4, 2)),
+                PrimitiveValue::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap())),
+                PrimitiveValue::RdfLiteral(RdfLiteral::LanguageString {
                     value: "language string".to_string(),
                     tag: "en".to_string(),
                 }),
-                Term::RdfLiteral(RdfLiteral::DatatypeValue {
+                PrimitiveValue::RdfLiteral(RdfLiteral::DatatypeValue {
                     value: "some random datavalue".to_string(),
                     datatype: "a datatype that I totally did not just make up".to_string(),
                 }),
-                Term::StringLiteral("string datavalue".to_string()),
-                Term::NumericLiteral(NumericLiteral::Integer(73)),
-                Term::NumericLiteral(NumericLiteral::Decimal(1, 23)),
-                Term::NumericLiteral(NumericLiteral::Double(Double::new(3.33).unwrap())),
-                Term::Constant(format!("{LOGICAL_NULL_PREFIX}1000001").into()),
+                PrimitiveValue::StringLiteral("string datavalue".to_string()),
+                PrimitiveValue::NumericLiteral(NumericLiteral::Integer(73)),
+                PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(1, 23)),
+                PrimitiveValue::NumericLiteral(NumericLiteral::Double(Double::new(3.33).unwrap())),
+                PrimitiveValue::Constant(format!("{LOGICAL_NULL_PREFIX}1000001").into()),
             ]
         );
 

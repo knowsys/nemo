@@ -1,4 +1,4 @@
-use super::{Aggregate, Identifier, Term, TermTree, Variable};
+use super::{Aggregate, Identifier, PrimitiveValue, TermTree, Variable};
 
 /// An atom.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -37,14 +37,14 @@ impl Atom {
     }
 
     /// Returns all terms at the leave of the term trees of the atom.
-    pub fn terms(&self) -> impl Iterator<Item = &Term> {
+    pub fn terms(&self) -> impl Iterator<Item = &PrimitiveValue> {
         self.term_trees.iter().flat_map(|t| t.terms())
     }
 
     /// Return all variables in the atom.
     pub fn variables(&self) -> impl Iterator<Item = &Variable> {
         self.terms().filter_map(|term| match term {
-            Term::Variable(var) => Some(var),
+            PrimitiveValue::Variable(var) => Some(var),
             _ => None,
         })
     }
@@ -64,7 +64,7 @@ impl Atom {
     /// Return all aggregate in the atom.
     pub fn aggregates(&self) -> impl Iterator<Item = &Aggregate> + '_ {
         self.terms().filter_map(|term| match term {
-            Term::Aggregate(aggregate) => Some(aggregate),
+            PrimitiveValue::Aggregate(aggregate) => Some(aggregate),
             _ => None,
         })
     }

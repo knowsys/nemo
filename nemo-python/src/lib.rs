@@ -5,8 +5,8 @@ use nemo::{
     execution::ExecutionEngine,
     io::{resource_providers::ResourceProviders, OutputFileManager, RecordWriter},
     model::{
-        types::primitive_logical_value::PrimitiveLogicalValueT, NumericLiteral, RdfLiteral, Term,
-        XSD_STRING,
+        types::primitive_logical_value::PrimitiveLogicalValueT, NumericLiteral, PrimitiveValue,
+        RdfLiteral, XSD_STRING,
     },
 };
 
@@ -138,16 +138,18 @@ fn logical_value_to_python(py: Python<'_>, v: PrimitiveLogicalValueT) -> PyResul
     let decimal = py.import("decimal")?.getattr("Decimal")?;
     match v {
         PrimitiveLogicalValueT::Any(rdf) => match rdf {
-            Term::Variable(_) => panic!("Variables should not occur as results!"),
-            Term::Constant(c) => Ok(c.to_string().into_py(py).into_ref(py)),
-            Term::NumericLiteral(NumericLiteral::Integer(i)) => Ok(i.into_py(py).into_ref(py)),
-            Term::NumericLiteral(NumericLiteral::Double(d)) => {
+            PrimitiveValue::Variable(_) => panic!("Variables should not occur as results!"),
+            PrimitiveValue::Constant(c) => Ok(c.to_string().into_py(py).into_ref(py)),
+            PrimitiveValue::NumericLiteral(NumericLiteral::Integer(i)) => {
+                Ok(i.into_py(py).into_ref(py))
+            }
+            PrimitiveValue::NumericLiteral(NumericLiteral::Double(d)) => {
                 Ok(f64::from(d).into_py(py).into_ref(py))
             }
             // currently we pack decimals into strings, maybe this should change
-            Term::NumericLiteral(_) => decimal.call1((rdf.to_string(),)),
-            Term::StringLiteral(s) => Ok(s.into_py(py).into_ref(py)),
-            Term::RdfLiteral(lit) => (|| {
+            PrimitiveValue::NumericLiteral(_) => decimal.call1((rdf.to_string(),)),
+            PrimitiveValue::StringLiteral(s) => Ok(s.into_py(py).into_ref(py)),
+            PrimitiveValue::RdfLiteral(lit) => (|| {
                 let lit = match lit {
                     RdfLiteral::DatatypeValue { value, datatype } => NemoLiteral {
                         value,
@@ -162,7 +164,7 @@ fn logical_value_to_python(py: Python<'_>, v: PrimitiveLogicalValueT) -> PyResul
                 };
                 Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
             })(),
-            Term::Aggregate(_) => panic!("aggregates should not appear in the output"),
+            PrimitiveValue::Aggregate(_) => panic!("aggregates should not appear in the output"),
         },
         PrimitiveLogicalValueT::String(s) => Ok(String::from(s).into_py(py).into_ref(py)),
         PrimitiveLogicalValueT::Integer(i) => Ok(i64::from(i).into_py(py).into_ref(py)),

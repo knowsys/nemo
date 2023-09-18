@@ -7,7 +7,7 @@ use crate::{
     model::chase_model::{ChaseProgram, ChaseRule},
     model::{
         chase_model::ChaseAtom, types::error::TypeError, DataSource, FilterOperation, Identifier,
-        PrimitiveType, Term, TermOperation, TypeConstraint, Variable,
+        PrimitiveType, PrimitiveValue, TermOperation, TypeConstraint, Variable,
     },
     util::labeled_graph::LabeledGraph,
 };
@@ -87,7 +87,7 @@ fn count_distinct_existential_variables(rule: &ChaseRule) -> usize {
 
     for head_atom in rule.head() {
         for term in head_atom.terms() {
-            if let Term::Variable(Variable::Existential(id)) = term {
+            if let PrimitiveValue::Variable(Variable::Existential(id)) = term {
                 existentials.insert(Variable::Existential(id.clone()));
             }
         }
@@ -100,7 +100,7 @@ fn get_variables(atoms: &[ChaseAtom]) -> HashSet<Variable> {
     let mut result = HashSet::new();
     for atom in atoms {
         for term in atom.terms() {
-            if let Term::Variable(v) = term {
+            if let PrimitiveValue::Variable(v) = term {
                 result.insert(v.clone());
             }
         }
@@ -136,11 +136,13 @@ fn construct_existential_aux_rule(
     let mut aux_predicate_terms = Vec::new();
     for atom in &mut head_atoms {
         for term in atom.terms() {
-            let Term::Variable(Variable::Universal(variable)) = term else {
+            let PrimitiveValue::Variable(Variable::Universal(variable)) = term else {
                 continue;
             };
             if used_variables.insert(variable.clone()) {
-                aux_predicate_terms.push(Term::Variable(Variable::Universal(variable.clone())));
+                aux_predicate_terms.push(PrimitiveValue::Variable(Variable::Universal(
+                    variable.clone(),
+                )));
             }
         }
         atom.normalize(&mut generate_variable, &mut constraints);
@@ -153,7 +155,7 @@ fn construct_existential_aux_rule(
             .expect("Every predicate should have type information at this point");
 
         for (term_index, term) in atom.terms().iter().enumerate() {
-            if let Term::Variable(variable) = term {
+            if let PrimitiveValue::Variable(variable) = term {
                 variable_types.insert(variable.clone(), types[term_index]);
             }
         }
@@ -196,7 +198,7 @@ fn analyze_rule(
     let mut variable_types: HashMap<Variable, PrimitiveType> = HashMap::new();
     for atom in rule.all_atoms() {
         for (term_position, term) in atom.terms().iter().enumerate() {
-            if let Term::Variable(variable) = term {
+            if let PrimitiveValue::Variable(variable) = term {
                 variable_types.entry(variable.clone()).or_insert(
                     type_declarations
                         .get(&atom.predicate())
@@ -444,7 +446,7 @@ impl ChaseProgram {
 
             for atom in rule.head() {
                 for (term_position, term) in atom.terms().iter().enumerate() {
-                    if let Term::Variable(variable) = term {
+                    if let PrimitiveValue::Variable(variable) = term {
                         let predicate_position =
                             PredicatePosition::new(atom.predicate(), term_position);
 
@@ -460,7 +462,7 @@ impl ChaseProgram {
 
             for atom in rule.all_body() {
                 for (term_position, term) in atom.terms().iter().enumerate() {
-                    if let Term::Variable(variable) = term {
+                    if let PrimitiveValue::Variable(variable) = term {
                         let predicate_position =
                             PredicatePosition::new(atom.predicate(), term_position);
 
@@ -506,7 +508,7 @@ impl ChaseProgram {
                     .expect("The loop at the top went through all head atoms")[0];
 
                 for term in tree.terms() {
-                    if let Term::Variable(body_variable) = term {
+                    if let PrimitiveValue::Variable(body_variable) = term {
                         let body_position = variables_to_last_node
                             .get(body_variable)
                             .expect("The iteration above went through all body atoms")
@@ -527,7 +529,7 @@ impl ChaseProgram {
                     .expect("Variables in filters should also appear in the rule body")
                     .clone();
 
-                if let Term::Variable(variable_right) = &filter.rhs {
+                if let PrimitiveValue::Variable(variable_right) = &filter.rhs {
                     let position_right = variables_to_last_node
                         .get(variable_right)
                         .expect("Variables in filters should also appear in the rule body")
@@ -592,7 +594,7 @@ impl ChaseProgram {
                         a.terms()
                             .iter()
                             .map(|t| {
-                                if matches!(t, Term::Variable(Variable::Existential(_))) {
+                                if matches!(t, PrimitiveValue::Variable(Variable::Existential(_))) {
                                     TypeRequirement::Hard(PrimitiveType::Any)
                                 } else {
                                     TypeRequirement::None
@@ -784,7 +786,7 @@ impl ChaseProgram {
                     }
 
                     for term in term_tree.terms() {
-                        if let Term::Variable(variable) = term {
+                        if let PrimitiveValue::Variable(variable) = term {
                             let variable_type = analysis.variable_types.get(variable).expect(
                                 "Previous analysis should have assigned a type to each variable.",
                             );
@@ -830,7 +832,7 @@ impl ChaseProgram {
         for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
             for filter in rule.all_filters() {
                 let left_variable = &filter.lhs;
-                let right_term = if let Term::Variable(_) = filter.rhs {
+                let right_term = if let PrimitiveValue::Variable(_) = filter.rhs {
                     continue;
                 } else {
                     &filter.rhs
@@ -856,7 +858,7 @@ impl ChaseProgram {
                 );
 
                 for (term_index, term) in atom.terms().iter().enumerate() {
-                    if let Term::Variable(head_variable) = term {
+                    if let PrimitiveValue::Variable(head_variable) = term {
                         if rule.constructors().contains_key(head_variable) {
                             let variable_type = analysis.variable_types.get(head_variable).expect(
                                 "Previous analysis should have assigned a type to each variable.",
@@ -926,8 +928,8 @@ mod test {
     use crate::{
         model::{
             chase_model::{ChaseAtom, ChaseProgram, ChaseRule},
-            DataSourceDeclaration, DsvFile, Identifier, NativeDataSource, PrimitiveType, Term,
-            TupleConstraint, Variable,
+            DataSourceDeclaration, DsvFile, Identifier, NativeDataSource, PrimitiveType,
+            PrimitiveValue, TupleConstraint, Variable,
         },
         program_analysis::analysis::get_fresh_rule_predicate,
     };
@@ -944,8 +946,8 @@ mod test {
         let x = Variable::Universal(Identifier("x".to_string()));
         let z = Variable::Existential(Identifier("z".to_string()));
 
-        let tx = Term::Variable(x);
-        let tz = Term::Variable(z);
+        let tx = PrimitiveValue::Variable(x);
+        let tz = PrimitiveValue::Variable(z);
 
         // A(x) :- B(x), C(x).
         let basic_rule = ChaseRule::new(

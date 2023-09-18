@@ -538,8 +538,8 @@ mod test {
 
     use crate::model::chase_model::{ChaseAtom, ChaseProgram, ChaseRule};
     use crate::model::{
-        DataSourceDeclaration, DsvFile, Identifier, NativeDataSource, Term, TupleConstraint,
-        Variable,
+        DataSourceDeclaration, DsvFile, Identifier, NativeDataSource, PrimitiveValue,
+        TupleConstraint, Variable,
     };
     use nemo_physical::management::database::ColumnOrder;
 
@@ -608,9 +608,9 @@ mod test {
         let y = Variable::Universal(Identifier("y".to_string()));
         let z = Variable::Universal(Identifier("z".to_string()));
 
-        let tx = Term::Variable(x.clone());
-        let ty = Term::Variable(y.clone());
-        let tz = Term::Variable(z.clone());
+        let tx = PrimitiveValue::Variable(x.clone());
+        let ty = PrimitiveValue::Variable(y.clone());
+        let tz = PrimitiveValue::Variable(z.clone());
 
         (
             ChaseRule::new(
@@ -634,9 +634,9 @@ mod test {
         let y = Variable::Universal(Identifier("y".to_string()));
         let z = Variable::Universal(Identifier("z".to_string()));
 
-        let tx = Term::Variable(x.clone());
-        let ty = Term::Variable(y.clone());
-        let tz = Term::Variable(z.clone());
+        let tx = PrimitiveValue::Variable(x.clone());
+        let ty = PrimitiveValue::Variable(y.clone());
+        let tz = PrimitiveValue::Variable(z.clone());
 
         (
             ChaseRule::new(
@@ -867,12 +867,12 @@ mod test {
         let r = Variable::Universal(Identifier("r".to_string()));
         let e = Variable::Universal(Identifier("e".to_string()));
 
-        let tc = Term::Variable(c.clone());
-        let td1 = Term::Variable(d1.clone());
-        let td2 = Term::Variable(d2.clone());
-        let ty = Term::Variable(y.clone());
-        let tr = Term::Variable(r.clone());
-        let te = Term::Variable(e.clone());
+        let tc = PrimitiveValue::Variable(c.clone());
+        let td1 = PrimitiveValue::Variable(d1.clone());
+        let td2 = PrimitiveValue::Variable(d2.clone());
+        let ty = PrimitiveValue::Variable(y.clone());
+        let tr = PrimitiveValue::Variable(r.clone());
+        let te = PrimitiveValue::Variable(e.clone());
 
         let (rules, variables) = [
             (
@@ -1092,20 +1092,20 @@ mod test {
         let a = Variable::Universal(Identifier("a".to_string()));
         let b = Variable::Universal(Identifier("b".to_string()));
 
-        let tc = Term::Variable(c.clone());
-        let td1 = Term::Variable(d1.clone());
-        let td2 = Term::Variable(d2.clone());
-        let ty = Term::Variable(y.clone());
-        let tr = Term::Variable(r.clone());
-        let te = Term::Variable(e.clone());
-        let ts = Term::Variable(s.clone());
-        let tr1 = Term::Variable(r1.clone());
-        let tr2 = Term::Variable(r2.clone());
-        let ts1 = Term::Variable(s1.clone());
-        let ts2 = Term::Variable(s2.clone());
-        let td = Term::Variable(d.clone());
-        let ta = Term::Variable(a.clone());
-        let tb = Term::Variable(b.clone());
+        let tc = PrimitiveValue::Variable(c.clone());
+        let td1 = PrimitiveValue::Variable(d1.clone());
+        let td2 = PrimitiveValue::Variable(d2.clone());
+        let ty = PrimitiveValue::Variable(y.clone());
+        let tr = PrimitiveValue::Variable(r.clone());
+        let te = PrimitiveValue::Variable(e.clone());
+        let ts = PrimitiveValue::Variable(s.clone());
+        let tr1 = PrimitiveValue::Variable(r1.clone());
+        let tr2 = PrimitiveValue::Variable(r2.clone());
+        let ts1 = PrimitiveValue::Variable(s1.clone());
+        let ts2 = PrimitiveValue::Variable(s2.clone());
+        let td = PrimitiveValue::Variable(d.clone());
+        let ta = PrimitiveValue::Variable(a.clone());
+        let tb = PrimitiveValue::Variable(b.clone());
 
         let (rules, variables) = [
             (
