@@ -751,7 +751,19 @@ impl ChaseProgram {
             .collect::<HashMap<_, _>>();
 
         for source in self.sources() {
-            arities.insert(source.predicate.clone(), source.input_types().arity());
+            match arities.entry(source.predicate.clone()) {
+                std::collections::hash_map::Entry::Occupied(slot) => {
+                    // both declared and in a source
+                    let arity = slot.get();
+
+                    if *arity != source.input_types().arity() {
+                        return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(slot) => {
+                    slot.insert(source.input_types().arity());
+                }
+            }
         }
 
         for rule in self.rules() {
@@ -1423,9 +1435,9 @@ mod test {
         let program = ChaseProgram::try_from(
             parse_program(
                 r#"
-          @source q[3]: load-rdf("dummy.nt") .
-          p(?x, ?y) :- q(?x), q(?y) .
-        "#,
+                           @source q[3]: load-rdf("dummy.nt") .
+                           p(?x, ?y) :- q(?x), q(?y) .
+                         "#,
             )
             .unwrap(),
         )
@@ -1439,8 +1451,34 @@ mod test {
         let program = ChaseProgram::try_from(
             parse_program(
                 r#"
-          q(?x, ?y) :- q(?x), q(?y) .
-        "#,
+                           @source q[3]: load-rdf("dummy.nt") .
+                           @declare q(integer, integer) .
+                         "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            program.check_for_unsupported_features(),
+            Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading)
+        );
+
+        let program =
+            ChaseProgram::try_from(parse_program(r#"q(?x, ?y) :- q(?x), q(?y) ."#).unwrap())
+                .unwrap();
+
+        assert_eq!(
+            program.check_for_unsupported_features(),
+            Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading)
+        );
+
+        let program = ChaseProgram::try_from(
+            parse_program(
+                r#"
+                           p(?x, ?y) :- q(?x), q(?y) .
+                           q(23, 42) .
+                         "#,
             )
             .unwrap(),
         )
@@ -1454,26 +1492,10 @@ mod test {
         let program = ChaseProgram::try_from(
             parse_program(
                 r#"
-          p(?x, ?y) :- q(?x), q(?y) .
-          q(23, 42) .
-        "#,
-            )
-            .unwrap(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            program.check_for_unsupported_features(),
-            Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading)
-        );
-
-        let program = ChaseProgram::try_from(
-            parse_program(
-                r#"
-          @declare q(integer, integer) .
-          p(?x, ?y) :- q(?x), q(?y) .
-          q(23) .
-        "#,
+                           @declare q(integer, integer) .
+                           p(?x, ?y) :- q(?x), q(?y) .
+                           q(23) .
+                         "#,
             )
             .unwrap(),
         )
