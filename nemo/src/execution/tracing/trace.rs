@@ -44,17 +44,17 @@ pub enum ExecutionTrace {
 }
 
 impl ExecutionTrace {
-    /// Create a new leaf node in an [`ExecutionTree`].
+    /// Create a new leaf node in an [`ExecutionTrace`].
     pub fn leaf(fact: Atom) -> Self {
         ExecutionTrace::Fact(fact)
     }
 
-    /// Create a new node in an [`ExecutionTree`].
+    /// Create a new node in an [`ExecutionTrace`].
     pub fn node(rule_position: RuleApplication, subtraces: Vec<ExecutionTrace>) -> Self {
         ExecutionTrace::Rule(rule_position, subtraces)
     }
 
-    /// Create an [`acii_tree::Tree`] representation.
+    /// Create an ascii tree representation.
     pub fn ascii_tree(&self) -> ascii_tree::Tree {
         match self {
             ExecutionTrace::Fact(fact) => ascii_tree::Tree::Leaf(vec![fact.to_string()]),

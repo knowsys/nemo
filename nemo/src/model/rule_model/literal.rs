@@ -74,7 +74,7 @@ impl Literal {
         forward_to_atom!(self, existential_variables)
     }
 
-    /// Replace one [`Term`] with another.
+    /// Replace one term with another.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         match self {
             Literal::Positive(atom) => atom.apply_assignment(assignment),
