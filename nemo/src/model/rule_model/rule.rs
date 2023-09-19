@@ -180,8 +180,12 @@ impl Rule {
 
     /// Replace one [`Term`] with another.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
-        self.body.iter_mut().for_each(|l| l.apply_assignment(assignment));
-        self.head.iter_mut().for_each(|a| a.apply_assignment(assignment));
+        self.body
+            .iter_mut()
+            .for_each(|l| l.apply_assignment(assignment));
+        self.head
+            .iter_mut()
+            .for_each(|a| a.apply_assignment(assignment));
         self.filters
             .iter_mut()
             .for_each(|f| f.apply_assignment(assignment));
