@@ -50,6 +50,23 @@ impl StorageValueT {
             Self::Double(_) => StorageTypeName::Double,
         }
     }
+
+    /// Create an iterator over the single storage element.
+    pub fn iter_once(&self) -> StorageValueIteratorT {
+        macro_rules! to_iterator_for_type {
+            ($variant:ident, $value:ident) => {{
+                StorageValueIteratorT::$variant(Box::new(std::iter::once(*$value)))
+            }};
+        }
+
+        match self {
+            StorageValueT::U32(value) => to_iterator_for_type!(U32, value),
+            StorageValueT::U64(value) => to_iterator_for_type!(U64, value),
+            StorageValueT::I64(value) => to_iterator_for_type!(I64, value),
+            StorageValueT::Float(value) => to_iterator_for_type!(Float, value),
+            StorageValueT::Double(value) => to_iterator_for_type!(Double, value),
+        }
+    }
 }
 
 macro_rules! storage_value_try_into {

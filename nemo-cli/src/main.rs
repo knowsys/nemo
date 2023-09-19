@@ -197,7 +197,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     }
 
     if let Some(fact) = parsed_fact {
-        if let Some(trace) = engine.trace(fact.clone()) {
+        if let Some(trace) = engine.trace(fact.clone())? {
             println!("\n{trace}");
         } else {
             println!("{fact} was not derived");

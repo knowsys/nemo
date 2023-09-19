@@ -110,6 +110,17 @@ struct DatatypeValue(String, String);
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Decimal(i64, u64);
 
+impl From<PrimitiveLogicalValueT> for Term {
+    fn from(value: PrimitiveLogicalValueT) -> Self {
+        match value {
+            PrimitiveLogicalValueT::Any(term) => term,
+            PrimitiveLogicalValueT::String(value) => value.into(),
+            PrimitiveLogicalValueT::Integer(value) => value.into(),
+            PrimitiveLogicalValueT::Float64(value) => value.into(),
+        }
+    }
+}
+
 impl From<LogicalString> for Term {
     fn from(value: LogicalString) -> Self {
         Self::StringLiteral(value.into())

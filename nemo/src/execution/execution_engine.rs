@@ -1,6 +1,9 @@
 //! Functionality which handles the execution of a program
 
-use std::{borrow::BorrowMut, collections::HashMap};
+use std::{
+    borrow::BorrowMut,
+    collections::{hash_map::Entry, HashMap},
+};
 
 use nemo_physical::{
     datatypes::{DataValueT, StorageValueT},
@@ -10,6 +13,10 @@ use nemo_physical::{
 
 use crate::{
     error::Error,
+    execution::{
+        planning::{plan_body_seminaive::SeminaiveStrategy, BodyStrategy},
+        tracing::trace::RuleApplication,
+    },
     io::{input_manager::InputManager, resource_providers::ResourceProviders},
     model::{
         chase_model::ChaseProgram,
@@ -17,10 +24,11 @@ use crate::{
             primitive_logical_value::{PrimitiveLogicalValueIteratorT, PrimitiveLogicalValueT},
             primitive_types::PrimitiveType,
         },
-        Fact, Identifier, Program, TermOperation,
+        Atom, Fact, Filter, FilterOperation, Identifier, Program, Term, TermOperation, TermTree,
+        VariableAssignment,
     },
     program_analysis::analysis::ProgramAnalysis,
-    table_manager::{MemoryUsage, TableManager},
+    table_manager::{MemoryUsage, SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
 
 use super::{
@@ -50,6 +58,8 @@ impl RuleInfo {
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
 pub struct ExecutionEngine<RuleSelectionStrategy> {
+    input_program: Program,
+
     program: ChaseProgram,
     analysis: ProgramAnalysis,
 
@@ -73,31 +83,36 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         program: Program,
         resource_providers: ResourceProviders,
     ) -> Result<Self, Error> {
-        let program: ChaseProgram = program.try_into()?;
+        let chase_program: ChaseProgram = program.clone().try_into()?;
 
-        program.check_for_unsupported_features()?;
-
-        let analysis = program.analyze()?;
+        chase_program.check_for_unsupported_features()?;
+        let analysis = chase_program.analyze()?;
 
         let input_manager = InputManager::new(resource_providers);
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
-        Self::add_sources(&mut table_manager, &input_manager, &program, &analysis)?;
+        Self::add_sources(
+            &mut table_manager,
+            &input_manager,
+            &chase_program,
+            &analysis,
+        )?;
 
         let mut rule_infos = Vec::<RuleInfo>::new();
-        program
+        chase_program
             .rules()
             .iter()
             .for_each(|_| rule_infos.push(RuleInfo::new()));
 
         let rule_strategy = Strategy::new(
-            program.rules().iter().collect(),
+            chase_program.rules().iter().collect(),
             analysis.rule_analysis.iter().collect(),
         )?;
 
         Ok(Self {
-            program,
+            input_program: program,
+            program: chase_program,
             analysis,
             rule_strategy,
             input_manager,
@@ -105,7 +120,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             predicate_fragmentation: HashMap::new(),
             predicate_last_union: HashMap::new(),
             rule_infos,
-            rule_history: Vec::new(),
+            rule_history: vec![usize::MAX], // Placeholder, Step counting starts at 1
             current_step: 1,
         })
     }
@@ -392,13 +407,256 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         self.table_manager.memory_usage()
     }
 
-    /// Return a [`ExecutionTrace`] for a given fact
-    pub fn trace(&self, fact: Fact) -> Option<ExecutionTrace> {
-        let mut table_row = Vec::<StorageValueT>::new();
-        for entry in Self::fact_to_vec(&fact, &self.analysis) {
-            table_row.push(entry.to_storage_value(self.table_manager.get_dict().borrow_mut())?);
+    /// Recursive part of the function `trace`.
+    /// Takes as input the fact of which the trace should be computed.
+    /// The fact is passed as a predicate and its terms given as [`Term`]s and their physical values.
+    fn trace_recursive(
+        &self,
+        fact_predicate: Identifier,
+        fact_terms: Vec<Term>,
+        fact_values: Vec<StorageValueT>,
+    ) -> Result<Option<ExecutionTrace>, Error> {
+        // Find the origin of the given fact
+        let step = match self
+            .table_manager
+            .find_table_row(&fact_predicate, &fact_values)
+        {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        if step == 0 {
+            // If fact has no predecesor rule it must have been given as an EDB fact
+
+            return Ok(Some(ExecutionTrace::Fact(Atom::new(
+                fact_predicate,
+                fact_terms.into_iter().map(TermTree::leaf).collect(),
+            ))));
         }
 
-        todo!()
+        // Rule index of the rule that was applied to derive the given fact
+        let rule_index = self.rule_history[step];
+        let rule = &self.program.rules()[rule_index];
+
+        let predicate_types: &Vec<PrimitiveType> = self
+            .analysis
+            .predicate_types
+            .get(&fact_predicate)
+            .expect("Every predicate should be associated with a type.");
+
+        // Iterate over all head atoms which could have derived the given fact
+        for (head_index, head_atom) in rule.head().iter().enumerate() {
+            if head_atom.predicate() != fact_predicate {
+                continue;
+            }
+
+            // Unify the head atom with the given fact
+            // If unification is possible `compatible` remain true
+            // and `assignment` will contain the match which is responsible for the fact
+            let mut compatible = true;
+            let mut assignment = VariableAssignment::new();
+
+            for (ty, (head_term, fact_term)) in predicate_types
+                .iter()
+                .zip(head_atom.terms().iter().zip(fact_terms.iter()))
+            {
+                if head_term.is_ground() {
+                    if ty.ground_term_to_data_value_t(head_term.clone())
+                        != ty.ground_term_to_data_value_t(fact_term.clone())
+                    {
+                        compatible = false;
+                        break;
+                    }
+                } else {
+                    if let Term::Variable(variable) = head_term {
+                        // Matching with existential variables should not produce any restrictions,
+                        // so we just consider universal variables here
+                        if variable.is_existential() {
+                            continue;
+                        }
+
+                        if rule.constructors().contains_key(variable) {
+                            // TODO: Support arbitrary operations in the head
+                            return Err(Error::TraceUnsupportedFeature());
+                        }
+
+                        match assignment.entry(variable.clone()) {
+                            Entry::Occupied(entry) => {
+                                if ty.ground_term_to_data_value_t(entry.get().clone())
+                                    != ty.ground_term_to_data_value_t(fact_term.clone())
+                                {
+                                    compatible = false;
+                                    break;
+                                }
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(fact_term.clone());
+                            }
+                        }
+                    } else {
+                        unreachable!("Variables are the only non-ground terms");
+                    }
+                }
+            }
+
+            if !compatible {
+                // Fact could not haven unified
+                continue;
+            }
+
+            // The goal of this part of the code is to apply the rule which led to the given fact
+            // but with the variable binding derived from the unification above
+
+            let new_filters: Vec<Filter> = assignment
+                .iter()
+                .map(|(variable, term)| {
+                    Filter::new(FilterOperation::Equals, variable.clone(), term.clone())
+                })
+                .collect();
+
+            let mut rule = self.program.rules()[rule_index].clone();
+            rule.positive_filters_mut().extend(new_filters.into_iter());
+            let analysis = &self.analysis.rule_analysis[rule_index];
+
+            let body_execution = SeminaiveStrategy::initialize(&rule, analysis);
+            let mut current_plan = SubtableExecutionPlan::default();
+            let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
+
+            // When going backwards we disable semi-naive evaluation
+            let rule_info = RuleInfo {
+                step_last_applied: 0,
+            };
+
+            let node = body_execution.add_plan_body(
+                &self.table_manager,
+                &mut current_plan,
+                &rule_info,
+                &mut variable_order,
+                step,
+            );
+
+            // `execute_plan_first_match` requires one output node marked as permanent
+            current_plan.plan_mut().clear_write_nodes();
+            current_plan.add_permanent_table(
+                node,
+                "Tracing Query",
+                "Tracing Query",
+                SubtableIdentifier::new(fact_predicate.clone(), step),
+            );
+
+            if let Ok(Some(query_result)) =
+                self.table_manager.execute_plan_first_match(current_plan)
+            {
+                // Convert query answer from the phyical representation into logical Term-representation
+                let query_types: Vec<&PrimitiveType> = variable_order
+                    .as_ordered_list()
+                    .iter()
+                    .map(|v| {
+                        analysis
+                            .variable_types
+                            .get(v)
+                            .expect("Every variable must have been assigned a type")
+                    })
+                    .collect();
+
+                let query_terms: Vec<Term> = query_result
+                    .iter()
+                    .zip(query_types.iter())
+                    .map(|(entry, ty)| {
+                        let mut iterator = ty.primitive_logical_value_iterator(
+                            self.table_manager
+                                .database()
+                                .storage_to_data_iterator(ty.datatype_name(), entry.iter_once()),
+                        );
+
+                        iterator
+                            .next()
+                            .expect("Iterator must contain at least one value")
+                            .into()
+                    })
+                    .collect();
+
+                let rule_assignment: VariableAssignment = variable_order
+                    .as_ordered_list()
+                    .into_iter()
+                    .zip(query_terms.iter().cloned())
+                    .collect();
+
+                let mut fully_derived = true;
+                let mut subtraces = Vec::<ExecutionTrace>::new();
+                for body_atom in rule.positive_body() {
+                    let next_fact_predicate = body_atom.predicate();
+                    let mut next_fact_values = Vec::<StorageValueT>::new();
+                    let mut next_fact_terms = Vec::<Term>::new();
+
+                    for body_term in body_atom.terms() {
+                        // Use the query result to generate the next fact which should be traced
+                        if let Term::Variable(variable) = body_term {
+                            let query_index = *variable_order
+                                .get(variable)
+                                .expect("Variable order must contain every variable");
+
+                            next_fact_values.push(query_result[query_index]);
+                            next_fact_terms.push(query_terms[query_index].clone());
+                        } else {
+                            unreachable!(
+                                "Normalized body atoms should only contain universal variables."
+                            );
+                        }
+                    }
+
+                    if let Some(trace) = self.trace_recursive(
+                        next_fact_predicate,
+                        next_fact_terms,
+                        next_fact_values,
+                    )? {
+                        subtraces.push(trace);
+                    } else {
+                        fully_derived = false;
+                        break;
+                    }
+                }
+
+                if !fully_derived {
+                    continue;
+                }
+
+                return Ok(Some(ExecutionTrace::Rule(
+                    RuleApplication::new(
+                        self.input_program.rules()[rule_index].clone(),
+                        rule_assignment,
+                        head_index,
+                    ),
+                    subtraces,
+                )));
+            } else {
+                continue;
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Return a [`ExecutionTrace`] for a given fact
+    pub fn trace(&self, fact: Fact) -> Result<Option<ExecutionTrace>, Error> {
+        let predicate = fact.0.predicate();
+
+        if !self.table_manager.predicate_exists(&predicate) {
+            return Ok(None);
+        }
+
+        // Convert fact into physical representation
+        let mut fact_values = Vec::<StorageValueT>::new();
+        for entry in Self::fact_to_vec(&fact, &self.analysis) {
+            if let Some(value) = entry.to_storage_value(self.table_manager.get_dict().borrow_mut())
+            {
+                fact_values.push(value);
+            } else {
+                // Dictionary does not contain term
+                return Ok(None);
+            }
+        }
+
+        self.trace_recursive(predicate, fact.0.terms().cloned().collect(), fact_values)
     }
 }

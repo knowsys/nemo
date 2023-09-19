@@ -3,8 +3,11 @@ use crate::{
         adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
         traits::columnbuilder::ColumnBuilder,
     },
-    datatypes::StorageTypeName,
-    tabular::{table_types::trie::Trie, traits::trie_scan::TrieScan},
+    datatypes::{StorageTypeName, StorageValueT},
+    tabular::{
+        table_types::trie::Trie,
+        traits::{table::TableRow, trie_scan::TrieScan},
+    },
 };
 
 /// Given a TrieScan iterator, materialize its content into a trie
@@ -72,17 +75,29 @@ pub fn materialize(trie_scan: &mut impl TrieScan) -> Option<Trie> {
     materialize_up_to(trie_scan, 0)
 }
 
-/// Tests whether an iterator is empty by materializing it until the first element
-pub fn scan_is_empty(trie_scan: &mut impl TrieScan) -> bool {
-    trie_scan
-        .advance_on_layer(trie_scan.column_types().len())
-        .is_some()
+/// Tests whether an iterator is empty by materializing it until the first element.
+/// Returns the first row of the result or `None` if it is empty.
+pub fn scan_is_empty(trie_scan: &mut impl TrieScan) -> Option<TableRow> {
+    if trie_scan.column_types().len() == 0 {
+        return None;
+    }
+
+    trie_scan.advance_on_layer(trie_scan.column_types().len() - 1)?;
+
+    let mut result = Vec::<StorageValueT>::new();
+    for layer in 0..trie_scan.column_types().len() {
+        result.push(trie_scan.current(layer));
+    }
+
+    Some(result)
 }
 
 #[cfg(test)]
 mod test {
     use super::materialize;
     use crate::columnar::traits::column::Column;
+    use crate::datatypes::StorageValueT;
+    use crate::tabular::operations::materialize::scan_is_empty;
     use crate::tabular::operations::{JoinBindings, TrieScanJoin, TrieScanPrune};
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::tabular::traits::partial_trie_scan::TrieScanEnum;
@@ -226,5 +241,35 @@ mod test {
         );
     }
 
-    // TODO: Tets scan_is_empty
+    #[test]
+    fn trie_scan_empty() {
+        let column_a_x = make_column_with_intervals_t(&[1, 2, 3], &[0]);
+        let column_a_y = make_column_with_intervals_t(&[2, 3, 4, 5, 6, 7], &[0, 3, 4]);
+        let column_b_y = make_column_with_intervals_t(&[1, 2, 3, 6], &[0]);
+        let column_b_z = make_column_with_intervals_t(&[1, 8, 9, 10, 11, 12], &[0, 1, 3, 4]);
+
+        let trie_a = Trie::new(vec![column_a_x, column_a_y]);
+        let trie_b = Trie::new(vec![column_b_y, column_b_z]);
+
+        let join_iter = TrieScanJoin::new(
+            vec![
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
+                TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
+            ],
+            &JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
+        );
+
+        let first_result = scan_is_empty(&mut TrieScanPrune::new(TrieScanEnum::TrieScanJoin(
+            join_iter,
+        )))
+        .unwrap();
+
+        let expected_result = vec![
+            StorageValueT::U64(1),
+            StorageValueT::U64(2),
+            StorageValueT::U64(8),
+        ];
+
+        assert_eq!(first_result, expected_result);
+    }
 }

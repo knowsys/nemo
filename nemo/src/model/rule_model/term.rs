@@ -105,6 +105,22 @@ impl Variable {
             Self::Universal(identifier) | Self::Existential(identifier) => identifier.name(),
         }
     }
+
+    /// Return whether this is a universal variable.
+    pub fn is_universal(&self) -> bool {
+        match self {
+            Variable::Universal(_) => true,
+            Variable::Existential(_) => false,
+        }
+    }
+
+    /// Return whether this is an existential variable.
+    pub fn is_existential(&self) -> bool {
+        match self {
+            Variable::Universal(_) => false,
+            Variable::Existential(_) => true,
+        }
+    }
 }
 
 impl std::fmt::Display for Variable {

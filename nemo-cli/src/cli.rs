@@ -132,6 +132,6 @@ pub struct CliApp {
     #[arg(short = 'I', long = "input-dir")]
     pub input_directory: Option<PathBuf>,
     /// Specify a fact, the origin of which should be explained
-    #[arg(long = "trace", default_value = "None")]
-    pub trace_fact: Option<String>
+    #[arg(long = "trace")]
+    pub trace_fact: Option<String>,
 }

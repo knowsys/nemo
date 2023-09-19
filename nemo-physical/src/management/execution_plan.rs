@@ -445,8 +445,13 @@ impl ExecutionPlan {
         }
     }
 
+    /// Deletes all information which marks execution nodes as output.
+    pub fn clear_write_nodes(&mut self) {
+        self.out_nodes.clear();
+    }
+
     /// Return a list of [`ExecutionTree`] that are derived taking the subgraph at each write node.
-    /// Each tree will be associated with an id that corrsponds to the id of
+    /// Each tree will be associated with an id that corresponds to the id of
     /// the write node from which the tree is derived.
     pub(super) fn split_at_write_nodes(&self) -> Vec<(usize, ExecutionTree)> {
         let write_node_ids: HashSet<usize> = self.out_nodes.iter().map(|o| o.node.id()).collect();

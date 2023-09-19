@@ -12,13 +12,13 @@ use crate::dictionary::value_serializer::{
     serialize_constant_with_dict, TrieSerializer, ValueSerializer,
 };
 use crate::table_reader::TableReader;
-use crate::tabular::operations::materialize::materialize_up_to;
+use crate::tabular::operations::materialize::{materialize_up_to, scan_is_empty};
 use crate::tabular::operations::project_reorder::project_and_reorder;
 use crate::tabular::operations::triescan_minus::TrieScanSubtract;
 use crate::tabular::operations::triescan_project::ProjectReordering;
 use crate::tabular::operations::TrieScanPrune;
 use crate::tabular::table_types::trie::TrieRecords;
-use crate::tabular::traits::table::Table;
+use crate::tabular::traits::table::{Table, TableRow};
 use crate::tabular::traits::trie_scan::TrieScan;
 use crate::util::mapping::permutation::Permutation;
 use crate::util::mapping::traits::NatMapping;
@@ -702,11 +702,12 @@ impl DatabaseInstance {
         }
     }
 
-    /// Produces a new [`Trie`] from an [`ExecutionTree`].
+    /// Produces a new [`Trie`] by executing a [`ExecutionTree`].
+    ///
     /// # Panics
     /// Panics if the tables that are being loaded by the [`ExecutionTree`] are not available in memory.
     /// Also panics if the [`ExecutionTree`] wants to perform a project/reorder operation on a non-materialized trie.
-    fn produce_new_trie(
+    fn evaluate_execution_tree(
         &self,
         execution_tree: &ExecutionTree,
         type_tree: &TypeTree,
@@ -768,6 +769,31 @@ impl DatabaseInstance {
         }
     }
 
+    /// Evaluates a [`ExecutionTree`] until until it finds the first row in the result and returns it.
+    /// Returns `None` if the tree evaluates to the empty table.
+    ///
+    /// # Panics
+    /// Panics if the tables that are being loaded by the [`ExecutionTree`] are not available in memory.
+    /// Also panics if the [`ExecutionTree`] wants to perform a project/reorder operation on a non-materialized trie.
+    fn evaluate_execution_tree_until_first(
+        &self,
+        execution_tree: &ExecutionTree,
+        type_tree: &TypeTree,
+        computation_results: &HashMap<usize, ComputationResult>,
+    ) -> Result<Option<TableRow>, Error> {
+        let root_rc = execution_tree.root().get_rc();
+        let root_operation = &root_rc.borrow().operation;
+
+        if let ExecutionOperation::Project(_, _) = root_operation {
+            panic!("Project is not supported in this evaluation mode.");
+        }
+
+        let iter_opt =
+            self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
+
+        Ok(iter_opt.and_then(|iter| scan_is_empty(&mut TrieScanPrune::new(iter))))
+    }
+
     /// Executes a given [`ExecutionPlan`].
     /// Returns a map that assigns to each plan id of a permanenet table the [`TableId`] in the [`DatabaseInstance`]
     /// This may fail if certain operations are performed on tries with incompatible types
@@ -816,7 +842,7 @@ impl DatabaseInstance {
             let num_null_columns = Self::appends_nulls(execution_tree.root());
 
             let new_trie_opt =
-                self.produce_new_trie(&execution_tree, &type_tree, &computation_results)?;
+                self.evaluate_execution_tree(&execution_tree, &type_tree, &computation_results)?;
             type_trees.insert(tree_id, type_tree);
 
             if let Some(new_trie) = new_trie_opt {
@@ -867,6 +893,72 @@ impl DatabaseInstance {
         Ok(permanent_ids)
     }
 
+    /// Execute a given [`SubtableExecutionPlan`]
+    /// but evaluate it only until the first row of the result table
+    /// or return `None` if it is empty.
+    /// The result table is considered to be the (unique) table marked as permanent output.
+    ///
+    /// Assumes that the given plan has only one output node.
+    /// Further assumes that each input table is already available in memory.
+    /// No tables will be saved in the database.
+    ///
+    /// TODO: This code is very similar to `execute_plan`,
+    /// but hard to abstract because of the timing...
+    pub fn execute_plan_first_match(&self, plan: ExecutionPlan) -> Result<Option<TableRow>, Error> {
+        let execution_trees = plan.split_at_write_nodes();
+
+        // The variables below associate the write node ids of the given plan with some additional information
+        let mut type_trees = HashMap::<usize, TypeTree>::new();
+        let mut computation_results = HashMap::<usize, ComputationResult>::new();
+        let mut removed_temp_ids = HashSet::<usize>::new();
+
+        for (tree_id, mut execution_tree) in execution_trees {
+            execution_tree.satisfy_leapfrog_triejoin();
+
+            if let Some(simplified_tree) = execution_tree.simplify(&removed_temp_ids) {
+                execution_tree = simplified_tree;
+            } else {
+                removed_temp_ids.insert(tree_id);
+
+                continue;
+            }
+
+            let type_tree = TypeTree::from_execution_tree(self, &type_trees, &execution_tree)?;
+
+            match execution_tree.result() {
+                ExecutionResult::Temporary => {
+                    let new_trie_opt = self.evaluate_execution_tree(
+                        &execution_tree,
+                        &type_tree,
+                        &computation_results,
+                    )?;
+
+                    if let Some(new_trie) = new_trie_opt {
+                        if new_trie.row_num() > 0 || new_trie.get_types().is_empty() {
+                            computation_results
+                                .insert(tree_id, ComputationResult::Temporary(Some(new_trie)));
+                        } else {
+                            computation_results.insert(tree_id, ComputationResult::Temporary(None));
+                        }
+                    } else {
+                        computation_results.insert(tree_id, ComputationResult::Temporary(None));
+                    }
+                }
+                ExecutionResult::Permanent(_, _) => {
+                    return self.evaluate_execution_tree_until_first(
+                        &execution_tree,
+                        &type_tree,
+                        &computation_results,
+                    );
+                }
+            }
+
+            type_trees.insert(tree_id, type_tree);
+        }
+
+        Ok(None)
+    }
+
     /// Return a reference to a trie with the given id and order.
     ///
     /// # Panics
@@ -888,7 +980,7 @@ impl DatabaseInstance {
     /// # Panics
     /// Panics if no table under the given id exists.
     /// Panics if trie is not available in memory.
-    pub fn get_trie<'a>(&'a self, id: TableId) -> (&'a Trie, ColumnOrder) {
+    pub fn get_trie(&self, id: TableId) -> (&Trie, ColumnOrder) {
         let order = self
             .storage_handler
             .available_orders(id)
@@ -966,46 +1058,54 @@ impl DatabaseInstance {
         ))
     }
 
-    fn get_in_memory_table_column_iterators(&self, id: TableId) -> Vec<DataValueIteratorT> {
-        let trie = self.get_trie_order(id, &ColumnOrder::default());
-        let schema = self.table_schema(id);
-        let dict = self.get_dict_constants();
-
+    /// Convert a [`StorageValueIteratorT`] into a [`DataValueIteratorT`].
+    pub fn storage_to_data_iterator<'a>(
+        &'a self,
+        name: DataTypeName,
+        iterator: StorageValueIteratorT<'a>,
+    ) -> DataValueIteratorT<'a> {
         macro_rules! to_data_column_iter_no_string {
-            ($variant:ident, $iter:ident, $idx:ident) => {{
-                debug_assert!(schema[$idx] == DataTypeName::$variant);
+            ($variant:ident, $iter:ident, $name:ident) => {{
+                debug_assert!(name == DataTypeName::$variant);
 
                 DataValueIteratorT::$variant($iter)
             }};
         }
         macro_rules! to_data_column_iter {
-            ($variant:ident, $iter:ident, $idx:ident) => {
-                if schema[$idx] == DataTypeName::String {
+            ($variant:ident, $iter:ident, $name:ident) => {
+                if name == DataTypeName::String {
                     // should only clone the ref and not the dict (hopefully)
-                    let dict_ref_clone = Ref::clone(&dict);
+                    let dict_ref_clone = Ref::clone(&self.get_dict_constants());
                     DataValueIteratorT::String(Box::new($iter.map(move |constant| {
                         serialize_constant_with_dict(constant, Ref::clone(&dict_ref_clone))
                     })))
                 } else {
-                    to_data_column_iter_no_string!($variant, $iter, $idx)
+                    to_data_column_iter_no_string!($variant, $iter, $name)
                 }
             };
         }
 
+        match iterator {
+            StorageValueIteratorT::U32(iter) => to_data_column_iter!(U32, iter, name),
+            StorageValueIteratorT::U64(iter) => to_data_column_iter!(U64, iter, name),
+            StorageValueIteratorT::I64(iter) => to_data_column_iter!(I64, iter, name),
+            StorageValueIteratorT::Float(iter) => {
+                to_data_column_iter_no_string!(Float, iter, name)
+            }
+            StorageValueIteratorT::Double(iter) => {
+                to_data_column_iter_no_string!(Double, iter, name)
+            }
+        }
+    }
+
+    fn get_in_memory_table_column_iterators(&self, id: TableId) -> Vec<DataValueIteratorT> {
+        let trie = self.get_trie_order(id, &ColumnOrder::default());
+        let schema = self.table_schema(id);
+
         trie.get_full_column_iterators()
             .into_iter()
             .enumerate()
-            .map(|(idx, fci)| match fci {
-                StorageValueIteratorT::U32(iter) => to_data_column_iter!(U32, iter, idx),
-                StorageValueIteratorT::U64(iter) => to_data_column_iter!(U64, iter, idx),
-                StorageValueIteratorT::I64(iter) => to_data_column_iter!(I64, iter, idx),
-                StorageValueIteratorT::Float(iter) => {
-                    to_data_column_iter_no_string!(Float, iter, idx)
-                }
-                StorageValueIteratorT::Double(iter) => {
-                    to_data_column_iter_no_string!(Double, iter, idx)
-                }
-            })
+            .map(|(idx, fci)| self.storage_to_data_iterator(schema[idx], fci))
             .collect()
     }
 

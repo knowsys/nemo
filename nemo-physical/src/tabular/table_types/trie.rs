@@ -466,19 +466,22 @@ impl Table for Trie {
         debug_assert!(self.columns.len() == row.len());
 
         let mut trie_scan = self.scan();
-        trie_scan.down();
 
         for entry in row {
+            trie_scan.down();
+
             macro_rules! seek_for_datatype {
                 ($variant:ident, $entry:ident) => {
                     if let ColumnScanT::$variant(column_scan) =
                         trie_scan.current_scan().expect("We called down")
                     {
-                        if column_scan.seek($entry).is_none() {
+                        if let Some(closest) = column_scan.seek($entry) {
+                            if closest != $entry {
+                                return false;
+                            }
+                        } else {
                             return false;
                         }
-
-                        trie_scan.down();
                     }
                 };
             }

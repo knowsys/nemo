@@ -128,7 +128,7 @@ impl std::fmt::Display for ChaseAtom {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.predicate.fmt(f)?;
         f.write_str("(")?;
-        for (index, term) in self.terms().into_iter().enumerate() {
+        for (index, term) in self.terms().iter().enumerate() {
             term.fmt(f)?;
             if index < self.terms.len() - 1 {
                 f.write_str(", ")?;

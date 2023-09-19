@@ -367,6 +367,11 @@ impl TableManager {
         }
     }
 
+    /// Return a reference to the underlying [`DatabaseInstance`].
+    pub fn database(&self) -> &DatabaseInstance {
+        &self.database
+    }
+
     /// Return the [`TableId`] that is associated with a given subtable.
     /// Returns `None` if the predicate does not exist.
     fn table_id(&self, subtable: &SubtableIdentifier) -> Option<TableId> {
@@ -458,6 +463,11 @@ impl TableManager {
             .insert(predicate.clone(), predicate_info);
         self.predicate_subtables
             .insert(predicate, SubtableHandler::default());
+    }
+
+    /// Check whether a predicate has been registered.
+    pub fn predicate_exists(&self, predicate: &Identifier) -> bool {
+        self.predicate_subtables.get(predicate).is_some()
     }
 
     fn add_subtable(&mut self, subtable: SubtableIdentifier, table_id: TableId) {
@@ -637,12 +647,12 @@ impl TableManager {
 
     /// Return the chase step of the sub table that contains the given row within the given predicate.
     /// Returns `None` if the row does not exist.
-    pub fn find_table_row(&self, predicate: Identifier, row: TableRow) -> Option<usize> {
-        let handler = self.predicate_subtables.get(&predicate)?;
+    pub fn find_table_row(&self, predicate: &Identifier, row: &TableRow) -> Option<usize> {
+        let handler = self.predicate_subtables.get(predicate)?;
 
         for (step, id) in &handler.single {
             let (trie, order) = self.database.get_trie(*id);
-            let row_reorderd = order.permute(&row);
+            let row_reorderd = order.permute(row);
 
             if trie.contains_row(row_reorderd) {
                 return Some(*step);
@@ -650,6 +660,24 @@ impl TableManager {
         }
 
         None
+    }
+
+    /// Execute a given [`SubtableExecutionPlan`]
+    /// but evaluate it only until the first row of the result table
+    /// or return `None` if it is empty.
+    /// The result table is considered to be the (unique) table marked as permanent output.
+    ///
+    /// Assumes that the given plan has only one output node.
+    /// No tables will be saved in the database.
+    pub fn execute_plan_first_match(
+        &self,
+        subtable_plan: SubtableExecutionPlan,
+    ) -> Result<Option<TableRow>, Error> {
+        debug_assert!(subtable_plan.map_subtrees.len() == 1);
+
+        Ok(self
+            .database
+            .execute_plan_first_match(subtable_plan.execution_plan)?)
     }
 }
 
