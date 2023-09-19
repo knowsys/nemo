@@ -467,35 +467,33 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         compatible = false;
                         break;
                     }
-                } else {
-                    if let Term::Variable(variable) = head_term {
-                        // Matching with existential variables should not produce any restrictions,
-                        // so we just consider universal variables here
-                        if variable.is_existential() {
-                            continue;
-                        }
-
-                        if rule.constructors().contains_key(variable) {
-                            // TODO: Support arbitrary operations in the head
-                            return Err(Error::TraceUnsupportedFeature());
-                        }
-
-                        match assignment.entry(variable.clone()) {
-                            Entry::Occupied(entry) => {
-                                if ty.ground_term_to_data_value_t(entry.get().clone())
-                                    != ty.ground_term_to_data_value_t(fact_term.clone())
-                                {
-                                    compatible = false;
-                                    break;
-                                }
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(fact_term.clone());
-                            }
-                        }
-                    } else {
-                        unreachable!("Variables are the only non-ground terms");
+                } else if let Term::Variable(variable) = head_term {
+                    // Matching with existential variables should not produce any restrictions,
+                    // so we just consider universal variables here
+                    if variable.is_existential() {
+                        continue;
                     }
+
+                    if rule.constructors().contains_key(variable) {
+                        // TODO: Support arbitrary operations in the head
+                        return Err(Error::TraceUnsupportedFeature());
+                    }
+
+                    match assignment.entry(variable.clone()) {
+                        Entry::Occupied(entry) => {
+                            if ty.ground_term_to_data_value_t(entry.get().clone())
+                                != ty.ground_term_to_data_value_t(fact_term.clone())
+                            {
+                                compatible = false;
+                                break;
+                            }
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(fact_term.clone());
+                        }
+                    }
+                } else {
+                    unreachable!("Variables are the only non-ground terms");
                 }
             }
 

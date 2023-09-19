@@ -78,7 +78,7 @@ pub fn materialize(trie_scan: &mut impl TrieScan) -> Option<Trie> {
 /// Tests whether an iterator is empty by materializing it until the first element.
 /// Returns the first row of the result or `None` if it is empty.
 pub fn scan_is_empty(trie_scan: &mut impl TrieScan) -> Option<TableRow> {
-    if trie_scan.column_types().len() == 0 {
+    if trie_scan.column_types().is_empty() {
         return None;
     }
 
