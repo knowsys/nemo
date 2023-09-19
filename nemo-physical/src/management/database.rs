@@ -893,7 +893,7 @@ impl DatabaseInstance {
         Ok(permanent_ids)
     }
 
-    /// Execute a given [`SubtableExecutionPlan`]
+    /// Execute a given [`ExecutionPlan`]
     /// but evaluate it only until the first row of the result table
     /// or return `None` if it is empty.
     /// The result table is considered to be the (unique) table marked as permanent output.
