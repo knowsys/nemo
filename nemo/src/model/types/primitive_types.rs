@@ -145,6 +145,16 @@ impl PrimitiveType {
         Ok(result)
     }
 
+    /// Associate a physical data type to this primitive logical type
+    pub fn datatype_name(&self) -> DataTypeName {
+        match self {
+            PrimitiveType::Any => DataTypeName::String,
+            PrimitiveType::String => DataTypeName::String,
+            PrimitiveType::Integer => DataTypeName::I64,
+            PrimitiveType::Float64 => DataTypeName::Double,
+        }
+    }
+
     /// Whether this logical type can be used to perform numeric operations.
     pub fn allows_numeric_operations(&self) -> bool {
         match self {

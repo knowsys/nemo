@@ -1,5 +1,7 @@
 use std::ops::Neg;
 
+use crate::model::VariableAssignment;
+
 use super::{Atom, Identifier, TermTree, Variable};
 
 /// A literal.
@@ -70,5 +72,24 @@ impl Literal {
     /// Return the existentially quantified variables in the literal.
     pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
         forward_to_atom!(self, existential_variables)
+    }
+
+    /// Replace one term with another.
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
+        match self {
+            Literal::Positive(atom) => atom.apply_assignment(assignment),
+            Literal::Negative(atom) => atom.apply_assignment(assignment),
+        }
+    }
+}
+
+impl std::fmt::Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Literal::Positive(_) => {}
+            Literal::Negative(_) => f.write_str("~")?,
+        }
+
+        self.atom().fmt(f)
     }
 }

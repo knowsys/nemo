@@ -35,6 +35,18 @@ pub fn parse_program(input: impl AsRef<str>) -> Result<Program, Error> {
     Ok(program)
 }
 
+/// Parse a single fact in the given `input`-String and return a [`Program`].
+///
+/// The program will be parsed and checked for unsupported features.
+///
+/// # Error
+/// Returns an appropriate [`Error`] variant on parsing and feature check issues.
+pub fn parse_fact(mut input: String) -> Result<Fact, Error> {
+    input += ".";
+    let fact = all_input_consumed(RuleParser::new().parse_fact())(input.as_str())?;
+    Ok(fact)
+}
+
 /// A combinator to add tracing to the parser.
 /// [fun] is an identifier for the parser and [parser] is the actual parser.
 #[inline(always)]

@@ -10,10 +10,9 @@ use self::selection_strategy::{
 };
 
 pub mod planning;
-
 pub mod rule_execution;
-
 pub mod selection_strategy;
+pub mod tracing;
 
 /// The default strategy that will be used for reasoning
 pub type DefaultExecutionStrategy = StrategyStratifiedNegation<

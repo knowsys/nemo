@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::io::parser::ParseError;
+use crate::{io::parser::ParseError, model::VariableAssignment};
 
 use super::{Atom, Filter, Literal, Term, Variable};
 
@@ -176,5 +176,54 @@ impl Rule {
     #[must_use]
     pub fn filters_mut(&mut self) -> &mut Vec<Filter> {
         &mut self.filters
+    }
+
+    /// Replace one [`Term`] with another.
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
+        self.body
+            .iter_mut()
+            .for_each(|l| l.apply_assignment(assignment));
+        self.head
+            .iter_mut()
+            .for_each(|a| a.apply_assignment(assignment));
+        self.filters
+            .iter_mut()
+            .for_each(|f| f.apply_assignment(assignment));
+    }
+}
+
+impl std::fmt::Display for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, atom) in self.head.iter().enumerate() {
+            atom.fmt(f)?;
+
+            if index < self.head.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        f.write_str(" :- ")?;
+
+        for (index, literal) in self.body.iter().enumerate() {
+            literal.fmt(f)?;
+
+            if index < self.body.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        if !self.filters.is_empty() {
+            f.write_str(", ")?;
+        }
+
+        for (index, filter) in self.filters.iter().enumerate() {
+            filter.fmt(f)?;
+
+            if index < self.filters.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        f.write_str(" .")
     }
 }

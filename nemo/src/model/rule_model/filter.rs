@@ -1,3 +1,5 @@
+use crate::model::VariableAssignment;
+
 use super::{Term, Variable};
 
 /// Operation for a filter
@@ -32,6 +34,19 @@ impl FilterOperation {
     }
 }
 
+impl std::fmt::Display for FilterOperation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FilterOperation::Equals => f.write_str("="),
+            FilterOperation::Unequals => f.write_str("!="),
+            FilterOperation::LessThan => f.write_str("<"),
+            FilterOperation::GreaterThan => f.write_str(">"),
+            FilterOperation::LessThanEq => f.write_str("<="),
+            FilterOperation::GreaterThanEq => f.write_str(">="),
+        }
+    }
+}
+
 /// Filter of the form `<variable> <operation> <term>`
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct Filter {
@@ -56,5 +71,26 @@ impl Filter {
     /// Creates a new [`Filter]` with the arguments flipped
     pub fn flipped(operation: FilterOperation, lhs: Term, rhs: Variable) -> Self {
         Self::new(operation.flip(), rhs, lhs)
+    }
+
+    /// Replace one [`Term`] with another.
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
+        if let Term::Variable(variable) = &self.rhs {
+            if let Some(replacing_term) = assignment.get(variable) {
+                self.rhs = replacing_term.clone();
+            }
+        }
+
+        // TODO: What about self.lhs?
+    }
+}
+
+impl std::fmt::Display for Filter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.lhs.fmt(f)?;
+        f.write_str(" ")?;
+        self.operation.fmt(f)?;
+        f.write_str(" ")?;
+        self.rhs.fmt(f)
     }
 }

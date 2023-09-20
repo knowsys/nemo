@@ -1,3 +1,5 @@
+use crate::model::VariableAssignment;
+
 use super::{Aggregate, Identifier, Term, TermTree, Variable};
 
 /// An atom.
@@ -67,5 +69,26 @@ impl Atom {
             Term::Aggregate(aggregate) => Some(aggregate),
             _ => None,
         })
+    }
+
+    /// Replace one [`Term`] with another.
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
+        for tree in &mut self.term_trees {
+            tree.apply_assignment(assignment);
+        }
+    }
+}
+
+impl std::fmt::Display for Atom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.predicate.fmt(f)?;
+        f.write_str("(")?;
+        for (index, tree) in self.terms().enumerate() {
+            tree.fmt(f)?;
+            if index < self.term_trees.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+        f.write_str(")")
     }
 }

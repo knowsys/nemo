@@ -105,11 +105,26 @@ impl Variable {
             Self::Universal(identifier) | Self::Existential(identifier) => identifier.name(),
         }
     }
+
+    /// Return whether this is a universal variable.
+    pub fn is_universal(&self) -> bool {
+        matches!(self, Variable::Universal(_))
+    }
+
+    /// Return whether this is an existential variable.
+    pub fn is_existential(&self) -> bool {
+        matches!(self, Variable::Existential(_))
+    }
 }
 
 impl std::fmt::Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.name())
+        let prefix = match self {
+            Variable::Universal(_) => "?",
+            Variable::Existential(_) => "!",
+        };
+
+        write!(f, "{}{}", prefix, &self.name())
     }
 }
 

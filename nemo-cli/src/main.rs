@@ -28,7 +28,11 @@ use colored::Colorize;
 use nemo::{
     error::{Error, ReadingError},
     execution::{DefaultExecutionEngine, ExecutionEngine},
-    io::{parser::parse_program, resource_providers::ResourceProviders, RecordWriter},
+    io::{
+        parser::{parse_fact, parse_program},
+        resource_providers::ResourceProviders,
+        RecordWriter,
+    },
     meta::{timing::TimedDisplay, TimedCode},
     model::OutputPredicateSelection,
 };
@@ -113,6 +117,8 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     log::info!("Rules parsed");
     log::trace!("{:?}", program);
 
+    let parsed_fact = cli.trace_fact.map(parse_fact).transpose()?;
+
     if cli.write_all_idb_predicates {
         program.force_output_predicate_selection(OutputPredicateSelection::AllIDBPredicates)
     }
@@ -184,6 +190,14 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     if cli.detailed_memory {
         println!("\n{}", engine.memory_usage());
+    }
+
+    if let Some(fact) = parsed_fact {
+        if let Some(trace) = engine.trace(fact.clone())? {
+            println!("\n{trace}");
+        } else {
+            println!("{fact} was not derived");
+        }
     }
 
     Ok(())
