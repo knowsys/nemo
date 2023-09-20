@@ -135,6 +135,30 @@ impl Rule {
             }
         }
 
+        // Aggregates
+        {
+            // Check for aggregates in the body of a rule
+            for literal in &body {
+                #[allow(clippy::never_loop)]
+                for aggregate in literal.aggregates() {
+                    return Err(ParseError::AggregateInBody(aggregate.clone()));
+                }
+            }
+
+            // Check that variables used in aggregates also occur positively in the rule body
+            for literal in &head {
+                for aggregate in literal.aggregates() {
+                    for variable_identifier in &aggregate.variable_identifiers {
+                        if !positive_varibales
+                            .contains(&Variable::Universal(variable_identifier.clone()))
+                        {
+                            return Err(ParseError::UnsafeHeadVariable(variable_identifier.name()));
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(Rule {
             head,
             body,

@@ -1,13 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
-use nemo_physical::management::database::ColumnOrder;
+use nemo_physical::{aggregates::operation::AggregateOperation, management::database::ColumnOrder};
 
 use crate::{
     error::Error,
     model::chase_model::{ChaseProgram, ChaseRule},
     model::{
-        chase_model::ChaseAtom, types::error::TypeError, DataSource, FilterOperation, Identifier,
-        PrimitiveType, Term, TermOperation, TypeConstraint, Variable,
+        chase_model::{ChaseAtom, AGGREGATE_VARIABLE_PREFIX},
+        types::error::TypeError,
+        DataSource, FilterOperation, Identifier, PrimitiveType, Term, TermOperation,
+        TypeConstraint, Variable,
     },
     util::labeled_graph::LabeledGraph,
 };
@@ -31,6 +33,8 @@ pub struct RuleAnalysis {
     pub is_recursive: bool,
     /// Whether the rule has positive filters that need to be applied.
     pub has_positive_filters: bool,
+    /// Whether the rule has at least one aggregate term in the head.
+    pub has_aggregates: bool,
 
     /// Predicates appearing in the positive part of the body.
     pub positive_body_predicates: HashSet<Identifier>,
@@ -39,11 +43,11 @@ pub struct RuleAnalysis {
     /// Predicates appearing in the head.
     pub head_predicates: HashSet<Identifier>,
 
-    /// Variables occuring in the positive part of the body.
+    /// Variables occurring in the positive part of the body.
     pub positive_body_variables: HashSet<Variable>,
-    /// Variables occuring in the positive part of the body.
+    /// Variables occurring in the positive part of the body.
     pub negative_body_variables: HashSet<Variable>,
-    /// Variables occuring in the head.
+    /// Variables occurring in the head.
     pub head_variables: HashSet<Variable>,
     /// Number of existential variables.
     pub num_existential: usize,
@@ -169,6 +173,7 @@ fn construct_existential_aux_rule(
             head_atoms,
             constraints,
             vec![],
+            vec![],
         )
     };
 
@@ -200,7 +205,7 @@ fn analyze_rule(
                 variable_types.entry(variable.clone()).or_insert(
                     type_declarations
                         .get(&atom.predicate())
-                        .expect("Every predicate should have recived type information.")
+                        .expect("Every predicate should have received type information.")
                         [term_position],
                 );
             }
@@ -230,6 +235,7 @@ fn analyze_rule(
         is_existential: num_existential > 0,
         is_recursive: is_recursive(rule),
         has_positive_filters: !rule.positive_filters().is_empty(),
+        has_aggregates: !rule.aggregates().is_empty(),
         positive_body_predicates: get_predicates(rule.positive_body()),
         negative_body_predicates: get_predicates(rule.negative_body()),
         head_predicates: get_predicates(rule.head()),
@@ -271,7 +277,12 @@ impl PredicatePosition {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum PositionGraphEdge {
     WithinBody,
-    BodyToHead,
+    BodyToHeadSameVariable,
+    /// Describes data flow from an aggregate input variable to and aggregate output variable, where the output variable has a static type (see [`AggregateOperation::static_output_type`]).
+    /// This has no impact on type propagation from input to output, but is there for completeness sake, as it still describes some data flow.
+    BodyToHeadAggregateStaticOutputType,
+    /// Describes data flow from an aggregate input variable to and aggregate output variable, where the aggregate output variable has the same type as the input variable (see [`AggregateOperation::static_output_type`]).
+    BodyToHeadAggregateNonStaticOutputType,
 }
 /// Graph that represents a prioritization between rules.
 pub type PositionGraph = LabeledGraph<PredicatePosition, PositionGraphEdge, Directed>;
@@ -456,6 +467,24 @@ impl ChaseProgram {
                 }
             }
 
+            let mut aggregate_input_to_output_variables =
+                HashMap::<Identifier, Vec<(Identifier, PositionGraphEdge)>>::new();
+            for aggregate in rule.aggregates() {
+                for input_variable_identifier in &aggregate.variable_identifiers {
+                    let edge_label = if aggregate.aggregate_operation.static_output_type().is_some()
+                    {
+                        PositionGraphEdge::BodyToHeadAggregateStaticOutputType
+                    } else {
+                        PositionGraphEdge::BodyToHeadAggregateNonStaticOutputType
+                    };
+
+                    aggregate_input_to_output_variables
+                        .entry(input_variable_identifier.clone())
+                        .or_default()
+                        .push((aggregate.output_variable.clone(), edge_label));
+                }
+            }
+
             let mut variables_to_last_node = HashMap::<Variable, PredicatePosition>::new();
 
             for atom in rule.all_body() {
@@ -464,14 +493,42 @@ impl ChaseProgram {
                         let predicate_position =
                             PredicatePosition::new(atom.predicate(), term_position);
 
-                        // NOTE: we connect each body position to each head position of the same variable
-                        if let Some(head_positions) = variables_to_head_positions.get(variable) {
-                            for pos in head_positions {
-                                graph.add_edge(
-                                    predicate_position.clone(),
-                                    pos.clone(),
-                                    PositionGraphEdge::BodyToHead,
-                                );
+                        // Add head position edges
+                        {
+                            // NOTE: we connect each body position to each head position of the same variable
+                            if let Some(head_positions) = variables_to_head_positions.get(variable)
+                            {
+                                for pos in head_positions {
+                                    graph.add_edge(
+                                        predicate_position.clone(),
+                                        pos.clone(),
+                                        PositionGraphEdge::BodyToHeadSameVariable,
+                                    );
+                                }
+                            }
+
+                            // NOTE: we connect every aggregate input variable to it's corresponding output variable in the head
+                            if let Variable::Universal(identifier) = variable {
+                                if let Some(output_variable_identifiers) =
+                                    aggregate_input_to_output_variables.get(identifier)
+                                {
+                                    for (output_variable_identifier, edge_label) in
+                                        output_variable_identifiers.iter()
+                                    {
+                                        for pos in variables_to_head_positions
+                                            .get(&Variable::Universal(
+                                                output_variable_identifier.clone(),
+                                            ))
+                                            .unwrap()
+                                        {
+                                            graph.add_edge(
+                                                predicate_position.clone(),
+                                                pos.clone(),
+                                                *edge_label,
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -515,7 +572,7 @@ impl ChaseProgram {
                         graph.add_edge(
                             body_position,
                             head_position.clone(),
-                            PositionGraphEdge::BodyToHead,
+                            PositionGraphEdge::BodyToHeadSameVariable,
                         );
                     }
                 }
@@ -582,6 +639,38 @@ impl ChaseProgram {
                 })
                 .collect::<HashMap<_, _>>();
 
+            // Infer type of count aggregates, which is always `PrimitiveType::Integer`
+            let aggregate_decls = self
+                .rules()
+                .iter()
+                .flat_map(|rule| rule.head().iter().map(move |atom| (rule, atom)))
+                .map(|(rule, atom)| {
+                    (
+                        atom.predicate(),
+                        atom.terms()
+                            .iter()
+                            .map(|term| {
+                                if let Term::Variable(Variable::Universal(identifier)) = term {
+                                    if identifier.name().starts_with(AGGREGATE_VARIABLE_PREFIX) {
+                                        let aggregate = rule
+                                            .aggregates()
+                                            .iter()
+                                            .find(|aggregate| aggregate.output_variable == *identifier).expect("variable with aggregate prefix is missing an associated aggregate");
+                                        if
+                                            aggregate.aggregate_operation ==
+                                            AggregateOperation::Count
+                                        {
+                                            return TypeRequirement::Hard(PrimitiveType::Integer)
+                                        }
+                                    }
+                                }
+                                TypeRequirement::None
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+
             let existential_decls = self
                 .rules()
                 .iter()
@@ -605,7 +694,10 @@ impl ChaseProgram {
 
             let mut predicate_types = source_decls;
             predicate_types.extend(pred_decls);
-            for (pred, exis_types) in existential_decls {
+            for (pred, exis_types) in existential_decls
+                .into_iter()
+                .chain(aggregate_decls.into_iter())
+            {
                 // keep track of error that might occur on conflicting type changes
                 let mut types_not_in_conflict: Result<_, _> = Ok(());
 
@@ -657,7 +749,9 @@ impl ChaseProgram {
                 if let Some(start_node) = position_graph.get_node(&predicate_position) {
                     // Propagate each type from its declaration
                     let edge_filtered_graph = EdgeFiltered::from_fn(position_graph.graph(), |e| {
-                        *e.weight() == PositionGraphEdge::BodyToHead
+                        *e.weight() == PositionGraphEdge::BodyToHeadSameVariable
+                            || *e.weight()
+                                == PositionGraphEdge::BodyToHeadAggregateNonStaticOutputType
                     });
 
                     let mut dfs = Dfs::new(&edge_filtered_graph, start_node);
@@ -819,6 +913,23 @@ impl ChaseProgram {
         Ok(())
     }
 
+    fn check_aggregate_types(&self, analyses: &[RuleAnalysis]) -> Result<(), TypeError> {
+        for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
+            for aggregate in rule.aggregates() {
+                let variable_type = analysis
+                    .variable_types
+                    .get(&Variable::Universal(aggregate.variable_identifiers[0].clone()))
+                    .expect("Previous analysis should have assigned a type to each aggregate output variable.");
+
+                aggregate
+                    .logical_aggregate_operation
+                    .check_input_type(&aggregate.variable_identifiers[0].0, *variable_type)?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Check if there is a constant that cannot be converted into the type of
     /// the variable/predicate position it is compared to.
     fn check_for_incompatible_constant_types(
@@ -924,6 +1035,7 @@ impl ChaseProgram {
 
         self.check_for_incompatible_constant_types(&rule_analysis, &predicate_types)?;
         self.check_for_nonnumeric_arithmetic(&rule_analysis)?;
+        self.check_aggregate_types(&rule_analysis)?;
 
         Ok(ProgramAnalysis {
             rule_analysis,
@@ -974,6 +1086,7 @@ mod test {
             ],
             vec![],
             vec![],
+            vec![],
         );
 
         // R(x, !z) :- A(x).
@@ -981,6 +1094,7 @@ mod test {
             vec![ChaseAtom::new(r.clone(), vec![tx.clone(), tz])],
             HashMap::new(),
             vec![ChaseAtom::new(a.clone(), vec![tx])],
+            vec![],
             vec![],
             vec![],
         );

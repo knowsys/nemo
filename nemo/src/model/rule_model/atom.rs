@@ -63,7 +63,7 @@ impl Atom {
             .filter(|var| matches!(var, Variable::Existential(_)))
     }
 
-    /// Return all aggregate in the atom.
+    /// Return all aggregates in the atom.
     pub fn aggregates(&self) -> impl Iterator<Item = &Aggregate> + '_ {
         self.terms().filter_map(|term| match term {
             Term::Aggregate(aggregate) => Some(aggregate),

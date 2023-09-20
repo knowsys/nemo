@@ -9,9 +9,17 @@ use crate::{
     },
 };
 
-use super::ChaseAtom;
+use super::{ChaseAggregate, ChaseAtom};
+
+/// Prefix used for placeholder aggregate variables in a [`ChaseRule`]
+pub const AGGREGATE_VARIABLE_PREFIX: &str = "_AGGREGATE_";
 
 /// Representation of a rule in a [`super::ChaseProgram`].
+///
+/// Chase rules may include placeholder variables, which start with `_`
+/// * Additional filters: `_CONSTANT_AND_DUPLICATE_VARIABLE_FILTER_{term_counter}`
+/// * Head operations: `_HEAD_OPERATION_{term_counter}`:
+/// * Aggregates: `_AGGREGATE_{term_counter}`
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
 pub struct ChaseRule {
@@ -27,6 +35,9 @@ pub struct ChaseRule {
     negative_body: Vec<ChaseAtom>,
     /// Filters applied to the body
     negative_filters: Vec<Filter>,
+    /// In the transformation from a [`Rule`], every aggregate term gets it's own placeholder variable.
+    /// The [`ChaseAggregate`] then specifies how the values for this variable should be computed (i.e. which aggregate operation to use, on which input variables, ...).
+    aggregates: Vec<ChaseAggregate>,
 }
 
 #[allow(dead_code)]
@@ -38,6 +49,7 @@ impl ChaseRule {
         mut positive_body: Vec<ChaseAtom>,
         mut positive_filters: Vec<Filter>,
         mut negative_body: Vec<ChaseAtom>,
+        aggregates: Vec<ChaseAggregate>,
     ) -> Self {
         // apply equality constraints
         positive_filters.retain(|filter| {
@@ -89,6 +101,7 @@ impl ChaseRule {
             positive_filters,
             negative_body,
             negative_filters,
+            aggregates,
         }
     }
     /// Return the head atoms of the rule - immutable.
@@ -106,6 +119,11 @@ impl ChaseRule {
     /// Return the constructors of the rule.
     pub fn constructors(&self) -> &HashMap<Variable, TermTree> {
         &self.constructors
+    }
+
+    /// Return the aggregates of the rule.
+    pub fn aggregates(&self) -> &Vec<ChaseAggregate> {
+        &self.aggregates
     }
 
     /// Return all the atoms occuring in this rule.
@@ -182,6 +200,7 @@ impl TryFrom<Rule> for ChaseRule {
     fn try_from(rule: Rule) -> Result<ChaseRule, Error> {
         let mut positive_body = Vec::new();
         let mut negative_body = Vec::new();
+        let mut chase_aggregates = Vec::new();
 
         for literal in rule.body().iter().cloned() {
             match literal {
@@ -198,10 +217,24 @@ impl TryFrom<Rule> for ChaseRule {
 
             for term_tree in atom.term_trees() {
                 if let TermOperation::Term(term) = term_tree.operation() {
-                    new_terms.push(term.clone());
+                    if let Term::Aggregate(aggregate) = term {
+                        // Introduce place holder variable for the aggregates
+                        let new_variable_identifier =
+                            Identifier(format!("{AGGREGATE_VARIABLE_PREFIX}{term_counter}"));
+                        let new_variable = Variable::Universal(new_variable_identifier.clone());
+                        new_terms.push(Term::Variable(new_variable));
+
+                        // Add [`ChaseAggregate`] which ensures that the variable will get bound to the correct value
+                        chase_aggregates.push(ChaseAggregate::from_aggregate(
+                            aggregate.clone(),
+                            new_variable_identifier,
+                        ));
+                    } else {
+                        new_terms.push(term.clone());
+                    }
                 } else {
                     let new_variable =
-                        Variable::Universal(Identifier(format!("HEAD_OPERATION_{term_counter}")));
+                        Variable::Universal(Identifier(format!("_HEAD_OPERATION_{term_counter}")));
                     new_terms.push(Term::Variable(new_variable.clone()));
                     let exists = constructors.insert(new_variable, term_tree.clone());
 
@@ -220,6 +253,7 @@ impl TryFrom<Rule> for ChaseRule {
             positive_body,
             rule.filters().clone(),
             negative_body,
+            chase_aggregates,
         ))
     }
 }

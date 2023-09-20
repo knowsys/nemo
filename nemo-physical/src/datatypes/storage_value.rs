@@ -238,3 +238,33 @@ pub enum StorageValueIteratorT<'a> {
     /// Double Variant
     Double(Box<dyn Iterator<Item = Double> + 'a>),
 }
+
+impl From<u32> for StorageValueT {
+    fn from(value: u32) -> Self {
+        StorageValueT::U32(value)
+    }
+}
+
+impl From<u64> for StorageValueT {
+    fn from(value: u64) -> Self {
+        StorageValueT::U64(value)
+    }
+}
+
+impl From<i64> for StorageValueT {
+    fn from(value: i64) -> Self {
+        StorageValueT::I64(value)
+    }
+}
+
+impl From<Float> for StorageValueT {
+    fn from(value: Float) -> Self {
+        StorageValueT::Float(value)
+    }
+}
+
+impl From<Double> for StorageValueT {
+    fn from(value: Double) -> Self {
+        StorageValueT::Double(value)
+    }
+}

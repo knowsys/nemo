@@ -7,7 +7,7 @@ use nom::{
 use nom_locate::LocatedSpan;
 use thiserror::Error;
 
-use crate::model::PrimitiveType;
+use crate::model::{rule_model::Aggregate, PrimitiveType};
 
 /// A [`LocatedSpan`] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
@@ -239,6 +239,15 @@ pub enum ParseError {
     /// Expected an parenthesised term tree.
     #[error("Expected an parenthesised term tree")]
     ExpectedParenthesisedTermTree,
+    /// An aggregate term occurs in the body of a rule.
+    #[error(r#"An aggregate term ("{0}") occurs in the body of a rule"#)]
+    AggregateInBody(Aggregate),
+    /// An aggregate term uses an invalid amount of variables.
+    #[error(r#"An aggregate term ("{0}") uses an invalid amount of variables. Currently only exactly one variable is allowed inside aggregates"#)]
+    InvalidVariableCountInAggregate(Aggregate),
+    /// Unknown aggregate operation
+    #[error(r#"Aggregate operation "{0}" is not known"#)]
+    UnknownAggregateOperation(String),
 }
 
 impl ParseError {

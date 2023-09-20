@@ -41,6 +41,9 @@ impl LoggingArgs {
                 3 => log::LevelFilter::Trace,
                 _ => log::LevelFilter::Warn,
             });
+        } else {
+            // Default log level
+            builder.filter_level(log::LevelFilter::Warn);
         }
         builder.init();
     }

@@ -813,7 +813,7 @@ impl<'a> RuleParser<'a> {
             map_error(
                 move |input| {
                     let (remainder, _) = nom::character::complete::char('#')(input)?;
-                    let (remainder, aggregate_identifier) =
+                    let (remainder, aggregate_operation_identifier) =
                         self.parse_bare_iri_like_identifier()(remainder)?;
                     let (remainder, variable_identifiers) = self.parenthesised(separated_list1(
                         self.parse_comma(),
@@ -823,12 +823,31 @@ impl<'a> RuleParser<'a> {
                         }),
                     ))(remainder)?;
 
-                    let aggregate = Aggregate {
-                        aggregate_identifier,
-                        variable_identifiers,
-                    };
+                    if let Some(logical_aggregate_operation) =
+                        (&aggregate_operation_identifier).into()
+                    {
+                        let aggregate = Aggregate {
+                            logical_aggregate_operation,
+                            variable_identifiers,
+                        };
 
-                    Ok((remainder, Term::Aggregate(aggregate)))
+                        // Check that there is exactly one variable used in the aggregate
+                        // This may change when distinct variables are implemented
+                        if aggregate.variable_identifiers.len() != 1 {
+                            return Err(Err::Failure(
+                                ParseError::InvalidVariableCountInAggregate(aggregate).at(input),
+                            ));
+                        }
+
+                        Ok((remainder, Term::Aggregate(aggregate)))
+                    } else {
+                        Err(Err::Failure(
+                            ParseError::UnknownAggregateOperation(
+                                aggregate_operation_identifier.name(),
+                            )
+                            .at(input),
+                        ))
+                    }
                 },
                 || ParseError::ExpectedAggregate,
             ),
@@ -1306,14 +1325,16 @@ mod test {
     }
 
     macro_rules! assert_fails {
-        ($parser:expr, $left:expr, $right:pat $(,) ?) => {
-            assert_matches!(all_input_consumed($parser)($left), Err($right));
-        };
+        ($parser:expr, $left:expr, $right:pat $(,) ?) => {{
+            // Store in intermediate variable to prevent from being dropped too early
+            let result = all_input_consumed($parser)($left);
+            assert_matches!(result, Err($right))
+        }};
     }
 
     macro_rules! assert_parse_error {
         ($parser:expr, $left:expr, $right:pat $(,) ?) => {
-            assert_fails!($parser, $left, LocatedParseError { source: $right, .. });
+            assert_fails!($parser, $left, LocatedParseError { source: $right, .. })
         };
     }
 
@@ -1976,21 +1997,15 @@ mod test {
             parser.parse_aggregate(),
             "#min(?VARIABLE)",
             Term::Aggregate(Aggregate {
-                aggregate_identifier: Identifier(String::from("min")),
+                logical_aggregate_operation: LogicalAggregateOperation::MinNumber,
                 variable_identifiers: vec![Identifier(String::from("VARIABLE"))]
             })
         );
 
-        assert_parse!(
+        assert_parse_error!(
             parser.parse_aggregate(),
             "#test(?VAR1, ?VAR2)",
-            Term::Aggregate(Aggregate {
-                aggregate_identifier: Identifier(String::from("test")),
-                variable_identifiers: vec![
-                    Identifier(String::from("VAR1")),
-                    Identifier(String::from("VAR2"))
-                ]
-            })
-        );
+            ParseError::ExpectedAggregate
+        )
     }
 }
