@@ -117,11 +117,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     log::info!("Rules parsed");
     log::trace!("{:?}", program);
 
-    let parsed_fact = if let Some(fact_string) = cli.trace_fact {
-        Some(parse_fact(fact_string)?)
-    } else {
-        None
-    };
+    let parsed_fact = cli.trace_fact.map(parse_fact).transpose()?;
 
     if cli.write_all_idb_predicates {
         program.force_output_predicate_selection(OutputPredicateSelection::AllIDBPredicates)

@@ -77,7 +77,7 @@ pub fn materialize(trie_scan: &mut impl TrieScan) -> Option<Trie> {
 
 /// Tests whether an iterator is empty by materializing it until the first element.
 /// Returns the first row of the result or `None` if it is empty.
-pub fn scan_is_empty(trie_scan: &mut impl TrieScan) -> Option<TableRow> {
+pub fn scan_first_match(trie_scan: &mut impl TrieScan) -> Option<TableRow> {
     if trie_scan.column_types().is_empty() {
         return None;
     }
@@ -97,7 +97,7 @@ mod test {
     use super::materialize;
     use crate::columnar::traits::column::Column;
     use crate::datatypes::StorageValueT;
-    use crate::tabular::operations::materialize::scan_is_empty;
+    use crate::tabular::operations::materialize::scan_first_match;
     use crate::tabular::operations::{JoinBindings, TrieScanJoin, TrieScanPrune};
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::tabular::traits::partial_trie_scan::TrieScanEnum;
@@ -259,7 +259,7 @@ mod test {
             &JoinBindings::new(vec![vec![0, 1], vec![1, 2]]),
         );
 
-        let first_result = scan_is_empty(&mut TrieScanPrune::new(TrieScanEnum::TrieScanJoin(
+        let first_result = scan_first_match(&mut TrieScanPrune::new(TrieScanEnum::TrieScanJoin(
             join_iter,
         )))
         .unwrap();

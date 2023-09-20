@@ -12,7 +12,7 @@ use crate::dictionary::value_serializer::{
     serialize_constant_with_dict, TrieSerializer, ValueSerializer,
 };
 use crate::table_reader::TableReader;
-use crate::tabular::operations::materialize::{materialize_up_to, scan_is_empty};
+use crate::tabular::operations::materialize::{materialize_up_to, scan_first_match};
 use crate::tabular::operations::project_reorder::project_and_reorder;
 use crate::tabular::operations::triescan_minus::TrieScanSubtract;
 use crate::tabular::operations::triescan_project::ProjectReordering;
@@ -769,13 +769,13 @@ impl DatabaseInstance {
         }
     }
 
-    /// Evaluates a [`ExecutionTree`] until until it finds the first row in the result and returns it.
+    /// Evaluates an [`ExecutionTree`] until until it finds the first row in the result and returns it.
     /// Returns `None` if the tree evaluates to the empty table.
     ///
     /// # Panics
     /// Panics if the tables that are being loaded by the [`ExecutionTree`] are not available in memory.
     /// Also panics if the [`ExecutionTree`] wants to perform a project/reorder operation on a non-materialized trie.
-    fn evaluate_execution_tree_until_first(
+    fn evaluate_execution_tree_first_match(
         &self,
         execution_tree: &ExecutionTree,
         type_tree: &TypeTree,
@@ -791,7 +791,7 @@ impl DatabaseInstance {
         let iter_opt =
             self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
 
-        Ok(iter_opt.and_then(|iter| scan_is_empty(&mut TrieScanPrune::new(iter))))
+        Ok(iter_opt.and_then(|iter| scan_first_match(&mut TrieScanPrune::new(iter))))
     }
 
     /// Executes a given [`ExecutionPlan`].
@@ -945,7 +945,7 @@ impl DatabaseInstance {
                     }
                 }
                 ExecutionResult::Permanent(_, _) => {
-                    return self.evaluate_execution_tree_until_first(
+                    return self.evaluate_execution_tree_first_match(
                         &execution_tree,
                         &type_tree,
                         &computation_results,

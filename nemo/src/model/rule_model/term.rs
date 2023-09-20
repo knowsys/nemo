@@ -108,18 +108,12 @@ impl Variable {
 
     /// Return whether this is a universal variable.
     pub fn is_universal(&self) -> bool {
-        match self {
-            Variable::Universal(_) => true,
-            Variable::Existential(_) => false,
-        }
+        matches!(self, Variable::Universal(_))
     }
 
     /// Return whether this is an existential variable.
     pub fn is_existential(&self) -> bool {
-        match self {
-            Variable::Universal(_) => false,
-            Variable::Existential(_) => true,
-        }
+        matches!(self, Variable::Existential(_))
     }
 }
 

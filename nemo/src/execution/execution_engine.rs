@@ -498,7 +498,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
 
             if !compatible {
-                // Fact could not haven unified
+                // Fact could not have been unified
                 continue;
             }
 
