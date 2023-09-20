@@ -16,7 +16,7 @@ use crate::tabular::operations::materialize::{materialize_up_to, scan_first_matc
 use crate::tabular::operations::project_reorder::project_and_reorder;
 use crate::tabular::operations::triescan_minus::TrieScanSubtract;
 use crate::tabular::operations::triescan_project::ProjectReordering;
-use crate::tabular::operations::TrieScanPrune;
+use crate::tabular::operations::{TrieScanAggregate, TrieScanPrune};
 use crate::tabular::table_types::trie::TrieRecords;
 use crate::tabular::traits::table::{Table, TableRow};
 use crate::tabular::traits::trie_scan::TrieScan;
@@ -764,8 +764,12 @@ impl DatabaseInstance {
                 self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
             let cut_bottom = execution_tree.cut_bottom();
 
-            Ok(iter_opt
-                .and_then(|iter| materialize_up_to(&mut TrieScanPrune::new(iter), cut_bottom)))
+            Ok(iter_opt.and_then(|iter| match iter {
+                TrieScanEnum::TrieScanAggregateWrapper(mut aggregate_wrapper) => {
+                    materialize_up_to(&mut aggregate_wrapper.trie_scan, cut_bottom)
+                }
+                _ => materialize_up_to(&mut TrieScanPrune::new(iter), cut_bottom),
+            }))
         }
     }
 
@@ -795,7 +799,7 @@ impl DatabaseInstance {
     }
 
     /// Executes a given [`ExecutionPlan`].
-    /// Returns a map that assigns to each plan id of a permanenet table the [`TableId`] in the [`DatabaseInstance`]
+    /// Returns a map that assigns to each plan id of a permanent table the [`TableId`] in the [`DatabaseInstance`]
     /// This may fail if certain operations are performed on tries with incompatible types
     /// or if the plan references tries that do not exist.
     pub fn execute_plan(&mut self, plan: ExecutionPlan) -> Result<HashMap<usize, TableId>, Error> {
@@ -1377,10 +1381,35 @@ impl DatabaseInstance {
                     Ok(None)
                 }
             }
+            ExecutionOperation::Aggregate(subtable, aggregation_instructions) => {
+                let subiterator_opt = self.get_iterator_node(
+                    subtable.clone(),
+                    &type_node.subnodes[0],
+                    computation_results,
+                )?;
+
+                if let Some(subiterator) = subiterator_opt {
+                    let prune = TrieScanPrune::new(subiterator);
+
+                    let aggregate = TrieScanAggregate::new(
+                        prune,
+                        *aggregation_instructions,
+                        type_node.subnodes[0].schema.get_storage_types()
+                            [aggregation_instructions.aggregated_column_index],
+                    );
+
+                    // Wrap aggregate full trie scan because execution plan currently only support partial trie scans
+                    Ok(Some(TrieScanEnum::TrieScanAggregateWrapper(
+                        aggregate.into(),
+                    )))
+                } else {
+                    Ok(None)
+                }
+            }
         };
     }
 
-    /// Return the amount of memory cosumed by the table under the given [`TableId`].
+    /// Return the amount of memory consumed by the table under the given [`TableId`].
     /// This also includes additional index structures but excludes tables that are currently stored on disk.
     ///
     /// # Panics

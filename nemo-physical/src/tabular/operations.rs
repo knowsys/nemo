@@ -4,6 +4,10 @@
 pub mod materialize;
 pub use materialize::materialize;
 
+/// Module for defining [`TrieScanAggregate`]
+pub mod triescan_aggregate;
+pub use triescan_aggregate::TrieScanAggregate;
+
 /// Module for defining [`TrieScanProject`]
 pub mod triescan_project;
 pub use triescan_project::TrieScanProject;

@@ -9,9 +9,9 @@ use ascii_tree::{write_tree, Tree};
 
 use crate::{
     tabular::operations::{
-        triescan_append::AppendInstruction, triescan_join::JoinBindings,
-        triescan_minus::SubtractInfo, triescan_project::ProjectReordering,
-        triescan_select::SelectEqualClasses, ValueAssignment,
+        triescan_aggregate::AggregationInstructions, triescan_append::AppendInstruction,
+        triescan_join::JoinBindings, triescan_minus::SubtractInfo,
+        triescan_project::ProjectReordering, triescan_select::SelectEqualClasses, ValueAssignment,
     },
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
@@ -101,6 +101,7 @@ impl ExecutionNodeRef {
 
                 cloned
             }
+            ExecutionOperation::Aggregate(subnode, _) => vec![subnode.clone()],
         }
     }
 }
@@ -139,6 +140,8 @@ pub enum ExecutionOperation {
     AppendNulls(ExecutionNodeRef, usize),
     /// Operation wich subtracts multiple tables (potentially of different arities) from another table.
     Subtract(ExecutionNodeRef, Vec<ExecutionNodeRef>, Vec<SubtractInfo>),
+    /// Aggregate operation.
+    Aggregate(ExecutionNodeRef, AggregationInstructions),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently.
@@ -294,6 +297,16 @@ impl ExecutionPlan {
         self.push_and_return_ref(new_operation)
     }
 
+    /// Return [`ExecutionNodeRef`] for aggregating a trie.
+    pub fn aggregate(
+        &mut self,
+        subnode: ExecutionNodeRef,
+        instructions: AggregationInstructions,
+    ) -> ExecutionNodeRef {
+        let new_operation = ExecutionOperation::Aggregate(subnode, instructions);
+        self.push_and_return_ref(new_operation)
+    }
+
     /// Return [`ExecutionNodeRef`] for appending null-columns to a trie.
     pub fn append_nulls(
         &mut self,
@@ -342,7 +355,7 @@ impl ExecutionPlan {
         self.push_out_node(node, ExecutionResult::Temporary, tree_name, cut)
     }
 
-    /// Designate a [`ExecutionNode`] as an "output" node that will produce a permament table (in its default order).
+    /// Designate a [`ExecutionNode`] as an "output" node that will produce a permanent table (in its default order).
     /// Returns an id which will later be associated with the result of the computation.
     pub fn write_permanent(
         &mut self,
@@ -441,6 +454,10 @@ impl ExecutionPlan {
                     .collect();
 
                 new_plan.subtract(new_main, new_subtract, subtract_infos.clone())
+            }
+            ExecutionOperation::Aggregate(subnode, instructions) => {
+                let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
+                new_plan.aggregate(new_subnode, *instructions)
             }
         }
     }
@@ -590,6 +607,11 @@ impl ExecutionTree {
                     format!("Subtract {info:?}"),
                     vec![subtree_main, Tree::Node(String::new(), subtrees_subtract)],
                 )
+            }
+            ExecutionOperation::Aggregate(subnode, instructions) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(format!("Aggregate {instructions:?}"), vec![subtree])
             }
         }
     }
@@ -777,6 +799,12 @@ impl ExecutionTree {
                     simplified_infos,
                 ))
             }
+            ExecutionOperation::Aggregate(subnode, instructions) => {
+                let simplified =
+                    Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
+
+                Some(new_tree.aggregate(simplified, *instructions))
+            }
         }
     }
 
@@ -902,6 +930,13 @@ impl ExecutionTree {
                 for subnode in subnodes_subtract {
                     Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
                 }
+            }
+            ExecutionOperation::Aggregate(subnode, _instructions) => {
+                // TODO: A few other changes are needed to make this a bit simpler.
+                // Will update it then
+                assert!(permutation.is_identity());
+
+                Self::satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
             }
         }
     }

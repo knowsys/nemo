@@ -1,5 +1,5 @@
 use super::primitive_types::PrimitiveType;
-use crate::model::Term;
+use crate::model::{LogicalAggregateOperation, Term};
 
 use nemo_physical::error::ReadingError;
 use thiserror::Error;
@@ -28,6 +28,9 @@ impl From<InvalidRuleTermConversion> for ReadingError {
 /// Errors that can occur during type checking
 #[derive(Error, Debug)]
 pub enum TypeError {
+    /// Non-numerical aggregate input type
+    #[error("Aggregate operation \"{0:?}\" on input variable \"{1}\" requires a numerical input type, but was input type was \"{2}\".")]
+    NonNumericalAggregateInputType(LogicalAggregateOperation, String, PrimitiveType),
     /// Conflicting type declarations
     #[error("Conflicting type declarations. Predicate \"{0}\" at position {1} has been inferred to have the conflicting types {2} and {3}.")]
     InvalidRuleConflictingTypes(String, usize, PrimitiveType, PrimitiveType),

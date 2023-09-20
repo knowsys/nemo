@@ -384,6 +384,10 @@ impl<'a> TrieScanPruneState<'a> {
             }
         }
     }
+
+    fn clear_highest_peeked_layer(&mut self) {
+        self.highest_peeked_layer = None;
+    }
 }
 
 impl<'a> TrieScanPrune<'a> {
@@ -469,6 +473,16 @@ impl<'a> TrieScanPrune<'a> {
                 .advance_on_layer(target_layer, allow_advancements_above_target_layer)
         }
     }
+
+    /// Resets the highest peeked layer.
+    ///
+    /// This is required when using the [`TrieScanPrune`] as a full [`TrieScan`], where there are no column peek semantics as in a [`PartialTrieScan`].
+    pub fn clear_column_peeks(&mut self) {
+        unsafe {
+            assert!((*self.state.get()).initialized);
+            (*self.state.get()).clear_highest_peeked_layer()
+        }
+    }
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanPrune<'a> {
@@ -517,7 +531,10 @@ impl<'a> TrieScan for TrieScanPrune<'a> {
             }
         }
 
-        self.advance_on_layer(layer, true)
+        let uppermost_modified_column_index = self.advance_on_layer(layer, true);
+        // Reset column peeks because this behavior is not wanted by the [`TrieScan`] trait
+        self.clear_column_peeks();
+        uppermost_modified_column_index
     }
 
     fn current(&mut self, layer: usize) -> StorageValueT {

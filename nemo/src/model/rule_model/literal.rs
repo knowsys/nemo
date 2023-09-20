@@ -2,7 +2,7 @@ use std::ops::Neg;
 
 use crate::model::VariableAssignment;
 
-use super::{Atom, Identifier, TermTree, Variable};
+use super::{Aggregate, Atom, Identifier, TermTree, Variable};
 
 /// A literal.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -72,6 +72,11 @@ impl Literal {
     /// Return the existentially quantified variables in the literal.
     pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
         forward_to_atom!(self, existential_variables)
+    }
+
+    /// Return all aggregates in the literal.
+    pub fn aggregates(&self) -> impl Iterator<Item = &Aggregate> + '_ {
+        forward_to_atom!(self, aggregates)
     }
 
     /// Replace one term with another.

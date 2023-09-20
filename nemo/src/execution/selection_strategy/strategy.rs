@@ -8,7 +8,7 @@ use crate::{model::chase_model::ChaseRule, program_analysis::analysis::RuleAnaly
 #[derive(Error, Debug, Copy, Clone)]
 pub enum SelectionStrategyError {
     /// Non-Stratifyable
-    #[error("The rules of the program is not stratified.")]
+    #[error("The rules of the program are not stratified.")]
     NonStratifiedProgram,
 }
 

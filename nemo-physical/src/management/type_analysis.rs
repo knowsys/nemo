@@ -1,6 +1,7 @@
 use std::{cmp::Ordering, collections::HashMap, fmt::Display};
 
 use crate::{
+    aggregates::operation::AggregateOperation,
     columnar::operations::columnscan_arithmetic::ArithmeticOperation,
     datatypes::{casting::PartialUpperBound, DataTypeName},
     error::Error,
@@ -15,7 +16,7 @@ use super::{
 /// A [`TypeTree`] is just a [`TypeTreeNode`]
 pub(super) type TypeTree = TypeTreeNode;
 
-/// Tree that represents the types of an TypeTreeNodeoperator tree.
+/// Tree that represents the types of an TypeTreeNode operator tree.
 #[derive(Debug, Default)]
 pub(super) struct TypeTreeNode {
     /// Datatypes of the columns of the table represented by this node
@@ -100,9 +101,9 @@ impl TypeTree {
         node: ExecutionNodeRef,
     ) -> Result<TypeTreeNode, Error> {
         let node_rc = node.get_rc();
-        let node_opertation = &node_rc.borrow().operation;
+        let node_operation = &node_rc.borrow().operation;
 
-        match node_opertation {
+        match node_operation {
             ExecutionOperation::FetchExisting(id, order) => {
                 let schema = instance.table_schema(*id).permuted(order);
 
@@ -381,6 +382,25 @@ impl TypeTree {
                     subtype_nodes,
                 ))
             }
+            ExecutionOperation::Aggregate(subtree, aggregation_instructions) => {
+                let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
+                let mut new_schema = TableSchema::new();
+
+                // Clone types for group-by columns
+                for column_index in 0..aggregation_instructions.group_by_column_count {
+                    new_schema.add_entry_cloned(subtype_node.schema.get_entry(column_index));
+                }
+
+                // Determine type for aggregate output column
+                new_schema.add_entry(match aggregation_instructions.aggregate_operation {
+                    AggregateOperation::Count => DataTypeName::I64,
+                    _ => *subtype_node
+                        .schema
+                        .get_entry(aggregation_instructions.aggregated_column_index),
+                });
+
+                Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
+            }
         }
     }
 
@@ -578,10 +598,45 @@ impl TypeTree {
                     node_main.clone(),
                 );
             }
+            ExecutionOperation::Aggregate(subtree, aggregation_instructions) => {
+                let mut schema_map = HashMap::<usize, DataTypeName>::new();
+
+                // Clone group by columns
+                for (key, t) in type_node
+                    .schema
+                    .iter()
+                    .take(aggregation_instructions.group_by_column_count)
+                    .enumerate()
+                {
+                    schema_map.insert(key, *t);
+                }
+
+                // Handle aggregated column
+                // Propagate type information from aggregate output column to aggregate input column if aggregate operation has non-static type
+                // Otherwise, the input type can not be inferred
+                if aggregation_instructions
+                    .aggregate_operation
+                    .static_output_type()
+                    .is_none()
+                {
+                    schema_map.insert(
+                        aggregation_instructions.aggregated_column_index,
+                        *type_node
+                            .schema
+                            .get_entry(aggregation_instructions.group_by_column_count),
+                    );
+                }
+
+                Self::propagate_down(
+                    &mut type_node.subnodes[0],
+                    Some(schema_map),
+                    subtree.clone(),
+                );
+            }
         }
     }
 
-    /// Returns whether the given [`DataTypeName`]s are compatbile with each other.
+    /// Returns whether the given [`DataTypeName`]s are compatible with each other.
     /// I.e. if it would make sense to have values from both columns in one column.
     /// The rules for this are as following:
     ///     * The underlying data types must be compatible (e.g. `U32` is compatible with `U64` but not with `Float`)

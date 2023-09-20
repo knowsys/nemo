@@ -1,7 +1,7 @@
 use super::run_length_encodable::FloatingStep;
 use super::{FloatIsNaN, FloorToUsize, RunLengthEncodable};
 use crate::error::Error;
-use num::{Bounded, CheckedMul, FromPrimitive, One, Zero};
+use num::{Bounded, CheckedAdd, CheckedMul, FromPrimitive, One, Zero};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
@@ -62,6 +62,17 @@ impl Add for Float {
 
     fn add(self, rhs: Self) -> Self::Output {
         Float(self.0.add(rhs.0))
+    }
+}
+
+impl CheckedAdd for Float {
+    fn checked_add(&self, rhs: &Self) -> Option<Self> {
+        let sum = self.0 + rhs.0;
+        if sum.is_finite() {
+            Self::new(sum).ok()
+        } else {
+            None
+        }
     }
 }
 

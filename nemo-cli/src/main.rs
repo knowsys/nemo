@@ -117,6 +117,13 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     log::info!("Rules parsed");
     log::trace!("{:?}", program);
 
+    for atom in program.rules().iter().flat_map(|rule| rule.head()) {
+        if atom.aggregates().next().is_some() {
+            log::warn!("Program is using the experimental aggregates feature.",);
+            break;
+        }
+    }
+
     let parsed_fact = cli.trace_fact.map(parse_fact).transpose()?;
 
     if cli.write_all_idb_predicates {

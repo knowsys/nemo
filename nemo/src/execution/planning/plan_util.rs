@@ -26,10 +26,14 @@ use crate::{
 };
 
 /// This function replaces each variable in the atom with its position in the variable ordering
+///
 /// Example:
-///     * a(x, y, z) with atom order [0, 1, 2] and variable order [y, z, x] results in [1, 2, 0]
+///
+/// * a(x, y, z) with atom order [0, 1, 2] and variable order [y, z, x] results in [1, 2, 0]
+///
 /// This function for computing JoinBindings:
-///         - Example: For a leapfrog join a(x, y, z) b(z, y) with order [x, y, z] you'd obtain [[0, 1, 2], [2, 1]]
+///
+/// * Example: For a leapfrog join a(x, y, z) b(z, y) with order [x, y, z] you'd obtain [[0, 1, 2], [2, 1]]
 pub(super) fn atom_binding(atom: &ChaseAtom, variable_order: &VariableOrder) -> Vec<usize> {
     atom.terms().iter().map(|t| if let Term::Variable(variable) = t {
         *variable_order.get(variable).unwrap()
@@ -285,6 +289,8 @@ pub(super) fn head_instruction_from_atom(
                 append_instructions.push(vec![]);
                 current_append_vector = append_instructions.last_mut().unwrap();
             }
+        } else if let Term::Aggregate(_aggregate) = term {
+            panic!("Aggregate terms in the head should have already been replaced by placeholder variables in the chase rule creation and are thus not supported here")
         } else {
             let data_value_t = logical_type.ground_term_to_data_value_t(term.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.");
             let instruction = AppendInstruction::Constant(data_value_t);

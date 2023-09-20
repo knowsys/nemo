@@ -21,6 +21,7 @@
 #![feature(macro_metavar_expr)]
 #![feature(is_sorted)]
 
+pub mod aggregates;
 pub mod builder_proxy;
 pub mod columnar;
 pub mod datatypes;

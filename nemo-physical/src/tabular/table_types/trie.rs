@@ -76,7 +76,7 @@ where
 }
 
 /// Implementation of a trie data structure.
-/// The underlying data is oragnized in IntervalColumns.
+/// The underlying data is organized in IntervalColumns.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Trie {
     types: Vec<StorageTypeName>,
