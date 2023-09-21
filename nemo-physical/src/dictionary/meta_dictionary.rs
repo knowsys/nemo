@@ -16,8 +16,8 @@ enum DictionaryType {
     Blob,
     /// Dictionary for strings with a fixed prefix and suffix
     Infix { prefix: String, suffix: String },
-    /// Dictionary for numeric strings with a fixed prefix and suffix
-    NumInfix { prefix: String, suffix: String },
+    // /// Dictionary for numeric strings with a fixed prefix and suffix
+    //NumInfix { prefix: String, suffix: String },
     // /// Dictionary for named (actually: "numbered") nulls
     // NULL,
 }
@@ -29,7 +29,7 @@ impl DictionaryType {
             DictionaryType::String => !ds.is_long(),
             DictionaryType::Blob => ds.is_long(),
             DictionaryType::Infix { prefix, suffix } => !ds.is_long() && ds.has_infix(prefix,suffix),
-            DictionaryType::NumInfix { prefix, suffix } => false, // TODO
+            //DictionaryType::NumInfix { prefix, suffix } => false, // TODO
         }
     }
 }
@@ -203,13 +203,13 @@ impl Dictionary for MetaDictionary {
     fn fetch_id(&self, string: &str) -> Option<usize> {
         let ds = DictionaryString::new(string);
         let mut dict_idx = self.dicts.len();
-        // for all (relevant) dictionaries
-        //   check if string has a (local) id
-        //   and, if so, map it to a global id
+        // for all (relevant) dictionaries; most suitable dicts are to the left, hence rev()
         for dr in self.dicts.iter().rev() {
             dict_idx -= 1;
+            //   check if string has a (local) id
             if dr.dict_type.supports(&ds) {
                 let result = dr.dict.fetch_id(string);
+                //   and, if so, map it to a global id
                 if result.is_some() {
                     return Some(self.local_to_global_unchecked(dict_idx, result.unwrap()));
                 }
@@ -309,12 +309,6 @@ mod test {
         let res3known = dict.add_string("<http://www.wikidata.org/entity/Q2>".to_string());
         let res4known = dict.add_string("<http://www.wikidata.org/entity/Q3>".to_string()); 
         let res5known = dict.add_string("<https://www.wikidata.org/wiki/Special:EntityData/Q31>".to_string());
-
-        // let get1 = dict.get(res1.value());
-        // let get2 = dict.get(res2.value());
-        // let get4 = dict.get(res4.value());
-        // let getnone1 = dict.get(res6.value() + 1); // unused but in an allocated block
-        // let getnone2 = dict.get(1 << 30); // out of any allocated block
 
         assert_eq!(res1, AddResult::Fresh(res1.value()));
         assert_eq!(res2, AddResult::Fresh(res2.value()));
