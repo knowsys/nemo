@@ -23,8 +23,7 @@ impl LogicalAggregateOperation {
         input_type: PrimitiveType,
     ) -> Result<(), TypeError> {
         if self.requires_numerical_input()
-            && !(matches!(input_type, PrimitiveType::Float64)
-                || matches!(input_type, PrimitiveType::Integer))
+            && !(matches!(input_type, PrimitiveType::Float64 | PrimitiveType::Integer))
         {
             return Err(TypeError::NonNumericalAggregateInputType(
                 *self,

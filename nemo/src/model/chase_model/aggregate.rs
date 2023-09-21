@@ -14,7 +14,7 @@ pub struct ChaseAggregate {
 }
 
 impl ChaseAggregate {
-    #[allow(missing_docs)]
+    /// Convert an [`Aggregate`] to a [`ChaseAggregate`], given a placeholder name for the output variable
     pub fn from_aggregate(aggregate: Aggregate, output_variable: Identifier) -> ChaseAggregate {
         let logical_aggregate_operation = aggregate.logical_aggregate_operation;
 
