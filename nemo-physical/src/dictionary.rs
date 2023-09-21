@@ -16,6 +16,9 @@ pub use string_dictionary::StringDictionary;
 /// Module to define [HashMapDictionary]
 pub mod hash_map_dictionary;
 pub use hash_map_dictionary::HashMapDictionary;
+/// Module to define [InfixDictionary]
+pub mod infix_dictionary;
+pub use infix_dictionary::InfixDictionary;
 /// Module to define [MetaDictionary]
 pub mod meta_dictionary;
 pub use meta_dictionary::MetaDictionary;
@@ -50,11 +53,6 @@ impl AddResult {
 /// The "objects" are provided when the dictionary is used, whereas the ids are newly
 /// assigned by the dictionary itself.
 pub trait Dictionary: Debug {
-    /// Construct a new and empty [`Dictionary`]
-    fn new() -> Self
-    where
-        Self: Sized + Default;
-
     /// Adds a new string to the dictionary. If the string is not known yet, it will
     /// be assigned a new id. Unsupported strings can also be rejected, which specialized
     /// dictionary implementations might do.

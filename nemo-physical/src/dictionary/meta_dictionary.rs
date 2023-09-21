@@ -13,10 +13,10 @@ enum DictionaryType {
     String,
     /// Dictionary for long strings (blobs)
     Blob,
-    /// Dictionary for strings with a fixed prefix and postfix
-    Infix { prefix: String, postfix: String },
-    /// Dictionary for numeric strings with a fixed prefix and postfix
-    NumInfix { prefix: String, postfix: String },
+    /// Dictionary for strings with a fixed prefix and suffix
+    Infix { prefix: String, suffix: String },
+    /// Dictionary for numeric strings with a fixed prefix and suffix
+    NumInfix { prefix: String, suffix: String },
     // /// Dictionary for named (actually: "numbered") nulls
     // NULL,
 }
@@ -24,12 +24,11 @@ enum DictionaryType {
 impl DictionaryType {
     /// Returns true if the given string is supported by a dictinoary of this type.
     fn supports(&self, ds: &DictionaryString) -> bool {
-        ds.as_str(); // FIXME test, fails when using ds.prefix()
         match self {
             DictionaryType::String => !ds.is_long(),
             DictionaryType::Blob => ds.is_long(),
-            DictionaryType::Infix { prefix, postfix } => false, // TODO
-            DictionaryType::NumInfix { prefix, postfix } => false, // TODO
+            DictionaryType::Infix { prefix, suffix } => ds.has_infix(prefix,suffix),
+            DictionaryType::NumInfix { prefix, suffix } => false, // TODO
         }
     }
 }
@@ -81,6 +80,11 @@ impl Default for MetaDictionary {
 }
 
 impl MetaDictionary {
+    /// Construct a new and empty dictionary.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Convert the local ID of a given dictionary to a global ID.
     /// The function assumes that the given local id exists, and will crash
     /// otherwise. It can safely be used for conversion of previously stored data.
@@ -145,10 +149,6 @@ impl MetaDictionary {
 }
 
 impl Dictionary for MetaDictionary {
-    fn new() -> Self {
-        Default::default()
-    }
-
     fn add_string(&mut self, string: String) -> AddResult {
         self.add_dictionary_string(DictionaryString::from_string(string))
     }
@@ -186,7 +186,7 @@ impl Dictionary for MetaDictionary {
     }
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
-        let mut ds = DictionaryString::new(string);
+        let ds = DictionaryString::new(string);
         // for all (relevant) dictionaries
         //   check if string has a (local) id
         //   and, if so, map it to a global id

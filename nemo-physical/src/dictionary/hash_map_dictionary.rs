@@ -215,6 +215,13 @@ pub struct HashMapDictionary {
     buffer: usize,
 }
 
+impl HashMapDictionary {
+    /// Construct a new and empty dictionary.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 impl Default for HashMapDictionary {
     fn default() -> Self {
         unsafe {
@@ -236,10 +243,6 @@ impl Drop for HashMapDictionary {
 }
 
 impl Dictionary for HashMapDictionary {
-    fn new() -> Self {
-        Self::default()
-    }
-
     fn add_string(&mut self, string: String) -> AddResult {
         self.add_str(string.as_str())
     }

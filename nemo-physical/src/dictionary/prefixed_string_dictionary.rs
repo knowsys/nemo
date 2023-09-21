@@ -319,6 +319,13 @@ pub struct PrefixedStringDictionary {
     store: Rc<RefCell<TrieNode>>,
 }
 
+impl PrefixedStringDictionary {
+    /// Construct a new and empty dictionary.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 impl Default for PrefixedStringDictionary {
     /// Initialise a Default Prefixedstringdictionary
     /// It contains the empty string as the first element (position 0)
@@ -337,10 +344,6 @@ impl Default for PrefixedStringDictionary {
 }
 
 impl Dictionary for PrefixedStringDictionary {
-    fn new() -> Self {
-        Default::default()
-    }
-
     fn add_string(&mut self, entry: String) -> AddResult {
         log::trace!("add {entry:?} to {self:?}");
         match self.mapping.get(&entry) {

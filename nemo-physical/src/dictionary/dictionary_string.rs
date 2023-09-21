@@ -4,21 +4,33 @@ use std::cell::UnsafeCell;
 
 pub(crate) const LONG_STRING_THRESHOLD: usize = 1000;
 
+/// Inner struct where keep locations extracted from strings. This is separated
+/// to enable an iner mutability patters.
+#[derive(Debug,Clone,Copy)]
+struct DictionaryStringLocations {
+    prefix_length: usize,
+    infix_length: usize,
+    infix_done: bool,
+}
+
+impl DictionaryStringLocations{
+    fn new() -> Self {
+        DictionaryStringLocations { prefix_length: 0, infix_length: 0, infix_done: false }
+    }
+}
+
 /// String that computes and caches checks relevant for dictionary selection.
 #[derive(Debug)]
 pub struct DictionaryString {
     string: String,
-    prefix_lenght: usize,
-    infix_lenght: usize,
-    //    pieces: UnsafeCell<Option<(&'a str,&'a str,&'a str)>>,
+    positions: UnsafeCell<DictionaryStringLocations>,
 }
 impl DictionaryString {
     /// Constructor
     pub fn new(s: &str) -> Self {
         DictionaryString {
             string: s.to_string(),
-            prefix_lenght: 0,
-            infix_lenght: 0,
+            positions: UnsafeCell::new(DictionaryStringLocations::new())
         }
     }
 
@@ -26,8 +38,7 @@ impl DictionaryString {
     pub fn from_string(s: String) -> Self {
         DictionaryString {
             string: s,
-            prefix_lenght: 0,
-            infix_lenght: 0,
+            positions: UnsafeCell::new(DictionaryStringLocations::new())
         }
     }
 
@@ -43,62 +54,60 @@ impl DictionaryString {
     }
 
     /// Returns the first part of the standard split into pieces
-    pub fn prefix(&mut self) -> &str {
+    pub fn prefix(&self) -> &str {
         self.set_pieces();
-        /* unsafe {
-            (*self.pieces.get()).unwrap().0
-        } */
-        &self.string[..self.prefix_lenght]
-    }
-
-    /// Returns the middle part of the standard split into pieces
-    pub fn infix(&mut self) -> &str {
-        self.set_pieces();
-        /* unsafe {
-            (*self.pieces.get()).unwrap().1
-        } */
-        &self.string[self.prefix_lenght..(self.prefix_lenght + self.infix_lenght)]
-    }
-
-    /// Returns the last part of the standard split into pieces
-    pub fn postfix(&mut self) -> &str {
-        self.set_pieces();
-        /* unsafe {
-            (*self.pieces.get()).unwrap().2
-        } */
-        &self.string[(self.prefix_lenght + self.infix_lenght)..]
-    }
-
-    /// Computes the pieces from the string.
-    fn set_pieces(&mut self) {
-        /*         unsafe{
-            if (*self.pieces.get()).is_none() {
-                *self.pieces.get() = Some(Self::compute_pieces(&self.string));
-            }
-        } */
-        if self.prefix_lenght == 0 && self.infix_lenght == 0 {
-            static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([<].*?/)([^>/]*)([>])$").unwrap());
-            let (pre, inn, suf) = match RE.captures(&self.string) {
-                Some(caps) => (
-                    caps.get(1).unwrap().as_str(),
-                    caps.get(2).unwrap().as_str(),
-                    caps.get(3).unwrap().as_str(),
-                ),
-                None => ("", self.string.as_str(), ""),
-            };
-            self.prefix_lenght = pre.len();
-            self.infix_lenght = inn.len();
+        unsafe {
+            let prefix_length = (*self.positions.get()).prefix_length;
+            &self.string[..prefix_length]
         }
     }
 
-    /*     /// Computes the pieces from the string.
-    fn compute_pieces(string: &String) -> (&str,&str,&str) {
+    /// Returns the middle part of the standard split into pieces
+    pub fn infix(&self) -> &str {
+        self.set_pieces();
+        unsafe {
+            let prefix_end =  (*self.positions.get()).prefix_length;
+            let infix_end =  prefix_end + (*self.positions.get()).infix_length;
+            &self.string[prefix_end..infix_end]
+        }
+    }
+
+    /// Returns the last part of the standard split into pieces
+    pub fn suffix(&self) -> &str {
+        self.set_pieces();
+        unsafe {
+            let prefix_end =  (*self.positions.get()).prefix_length;
+            let infix_end =  prefix_end + (*self.positions.get()).infix_length;
+            &self.string[infix_end..]
+        }
+    }
+
+    /// Checks if the string can be viewed as an infix that is enclosed by the given prefix and suffix.
+    pub fn has_infix(&self, prefix: &str, suffix: &str) -> bool {
+        self.prefix() == prefix && self.suffix() == suffix 
+    }
+
+    /// Computes the pieces from the string.
+    fn set_pieces(&self) {
+        unsafe {
+            if  (*self.positions.get()).infix_done {
+                return
+            }
+        }
         static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([<].*?/)([^>/]*)([>])$").unwrap());
-        let Some(caps) = RE.captures(string) else {
-            return ("",string.as_str(),"");
+        let (prefix, infix, suffix) = match RE.captures(&self.string) {
+            Some(caps) => (
+                caps.get(1).unwrap().as_str(),
+                caps.get(2).unwrap().as_str(),
+                caps.get(3).unwrap().as_str(),
+            ),
+            None => ("", self.string.as_str(), ""),
         };
-        (caps.get(1).unwrap().as_str(),caps.get(2).unwrap().as_str(),caps.get(3).unwrap().as_str())
-    } */
+        unsafe{
+            (*self.positions.get()).prefix_length = prefix.len();
+            (*self.positions.get()).infix_length = infix.len();
+        }
+    }
 }
 
 #[cfg(test)]
@@ -110,7 +119,7 @@ mod test {
         let mut ds = DictionaryString::new("<http://www.wikidata.org/entity/Q233>");
         assert_eq!(ds.prefix(), "<http://www.wikidata.org/entity/");
         assert_eq!(ds.infix(), "Q233");
-        assert_eq!(ds.postfix(), ">");
+        assert_eq!(ds.suffix(), ">");
     }
 
     #[test]
@@ -118,7 +127,7 @@ mod test {
         let mut ds = DictionaryString::new("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
         assert_eq!(ds.prefix(), "<http://www.w3.org/1999/02/");
         assert_eq!(ds.infix(), "22-rdf-syntax-ns#type");
-        assert_eq!(ds.postfix(), ">");
+        assert_eq!(ds.suffix(), ">");
     }
 
     /* #[test]
@@ -126,6 +135,6 @@ mod test {
         let mut ds = DictionaryString::new("\"305\"^^<http://www.w3.org/2001/XMLSchema#integer>");
         assert_eq!(ds.prefix(), "<http://www.w3.org/1999/02/");
         assert_eq!(ds.infix(), "22-rdf-syntax-ns#type");
-        assert_eq!(ds.postfix(), ">");
+        assert_eq!(ds.suffix(), ">");
     } */
 }
