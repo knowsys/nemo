@@ -1,5 +1,6 @@
-use super::dictionary_string::DictionaryString;
-use super::hash_map_dictionary::HashMapDictionary;
+use super::DictionaryString;
+use super::HashMapDictionary;
+use super::InfixDictionary;
 use super::AddResult;
 use super::Dictionary;
 
@@ -27,7 +28,7 @@ impl DictionaryType {
         match self {
             DictionaryType::String => !ds.is_long(),
             DictionaryType::Blob => ds.is_long(),
-            DictionaryType::Infix { prefix, suffix } => ds.has_infix(prefix,suffix),
+            DictionaryType::Infix { prefix, suffix } => !ds.is_long() && ds.has_infix(prefix,suffix),
             DictionaryType::NumInfix { prefix, suffix } => false, // TODO
         }
     }
@@ -57,12 +58,12 @@ impl Default for MetaDictionary {
     /// Initialise a [MetaDictionary].
     /// Sets up relevant default dictionaries for basic blocks.
     fn default() -> Self {
-        // Initialize default dictionary and give it one block:
+        // Initialize default dictionary and give it no blocks:
         let default_dict = Box::new(HashMapDictionary::new());
         let default_dict_record = DictRecord {
             dict: default_dict,
             dict_type: DictionaryType::String,
-            gblocks: vec![0],
+            gblocks: Vec::new(), //vec![0],
         };
         // Initialize blob dictionary and give it no blocks:
         let blob_dict = Box::new(HashMapDictionary::new());
@@ -72,9 +73,14 @@ impl Default for MetaDictionary {
             gblocks: Vec::new(),
         };
 
+        // For testing, we hard-code some infix dictionaries:
         Self {
-            dictblocks: vec![(0, 0)],
-            dicts: vec![default_dict_record, blob_dict_record],
+            dictblocks: Vec::new(),//vec![(1, 0)],
+            dicts: vec![default_dict_record, blob_dict_record,
+                Self::prepare_infix_dict_record("<http://www.wikidata.org/entity/",">"), 
+                Self::prepare_infix_dict_record("<http://www.wikidata.org/entity/statement/",">"),
+                Self::prepare_infix_dict_record("<http://www.wikidata.org/reference/",">"),
+                Self::prepare_infix_dict_record("\"","\"^^<http://www.w3.org/2001/XMLSchema#dateTime>")],
         }
     }
 }
@@ -94,6 +100,16 @@ impl MetaDictionary {
         let gblock = self.dicts[dict].gblocks[lblock]; // Could fail if: (1) dictionary does not exist, or (2) block not used by dict
 
         (gblock << BLOCKSIZE) + offset
+    }
+
+    /// Creates a new empty infix dictionary for the given prefix and suffix.
+    fn prepare_infix_dict_record(prefix: &str, suffix: &str) -> DictRecord {
+        let infix_dict = Box::new(InfixDictionary::new(prefix.to_string(), suffix.to_string()));
+        DictRecord {
+            dict: infix_dict,
+            dict_type: DictionaryType::Infix { prefix: prefix.to_string(), suffix: suffix.to_string() },
+            gblocks: Vec::new(),
+        }
     }
 
     /// Convert the local ID of a given dictionary to a global ID.
@@ -158,43 +174,44 @@ impl Dictionary for MetaDictionary {
     }
 
     fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
-        // for all (relevant) dictionaries
-        //   check if string has a (local) id
-        //   and, if so, map it to a global id
-        for (index, dr) in self.dicts.iter().enumerate() {
+        let mut best_dict_idx = usize::MAX;
+        let mut dict_idx = self.dicts.len();
+        // for all (relevant) dictionaries; most suitable dicts are to the left, hence rev()
+        for dr in self.dicts.iter().rev() {
+            dict_idx -= 1;
             if dr.dict_type.supports(&ds) {
+                if best_dict_idx == usize::MAX {
+                    best_dict_idx = dict_idx;
+                }
+                //   check if string has a (local) id
                 match dr.dict.fetch_id(ds.as_str()) {
-                    Some(idx) => {
-                        return AddResult::Known(self.local_to_global_unchecked(index, idx));
+                    Some(idx) => { //   and, if so, map it to a global id
+                        return AddResult::Known(self.local_to_global_unchecked(dict_idx, idx));
                     }
                     _ => {}
                 }
             }
         }
+        assert!(best_dict_idx<self.dicts.len());
+
         // else add string to preferred dictionary
-        let local_id: usize;
-        let dict_idx: usize;
-        if ds.is_long() {
-            dict_idx = 1;
-            local_id = self.dicts[1].dict.add_dictionary_string(ds).value();
-        } else {
-            dict_idx = 0;
-            local_id = self.dicts[0].dict.add_dictionary_string(ds).value();
-        }
+        let local_id = self.dicts[best_dict_idx].dict.add_dictionary_string(ds).value();
         // compute global id based on block and local id, possibly allocating new block in the process
-        AddResult::Fresh(self.local_to_global(dict_idx, local_id))
+        AddResult::Fresh(self.local_to_global(best_dict_idx, local_id))
     }
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
         let ds = DictionaryString::new(string);
+        let mut dict_idx = self.dicts.len();
         // for all (relevant) dictionaries
         //   check if string has a (local) id
         //   and, if so, map it to a global id
-        for (dict_index, dr) in self.dicts.iter().enumerate() {
+        for dr in self.dicts.iter().rev() {
+            dict_idx -= 1;
             if dr.dict_type.supports(&ds) {
                 let result = dr.dict.fetch_id(string);
                 if result.is_some() {
-                    return Some(self.local_to_global_unchecked(dict_index, result.unwrap()));
+                    return Some(self.local_to_global_unchecked(dict_idx, result.unwrap()));
                 }
             }
         }
@@ -214,7 +231,9 @@ impl Dictionary for MetaDictionary {
 
     fn len(&self) -> usize {
         let mut len = 0;
+        println!("Computing total meta dict length ...");
         for dr in self.dicts.iter() {
+            println!("+ dict with {} entries.", dr.dict.len());
             len += dr.dict.len();
         }
         len
@@ -273,5 +292,40 @@ mod test {
 
         assert_eq!(getnone1, None);
         assert_eq!(getnone2, None);
+    }
+
+    #[test]
+    fn add_and_get_prefix() {
+        let mut dict = MetaDictionary::default();
+
+        let res1 = dict.add_string("entry0".to_string());
+        let res2 = dict.add_string("<http://www.wikidata.org/entity/Q1>".to_string());
+        let res3 = dict.add_string("<http://www.wikidata.org/entity/Q2>".to_string());
+        let res4 = dict.add_string("<http://www.wikidata.org/entity/Q3>".to_string()); 
+        let res5 = dict.add_string("<https://www.wikidata.org/wiki/Special:EntityData/Q31>".to_string());
+
+        let res1known = dict.add_string("entry0".to_string());
+        let res2known = dict.add_string("<http://www.wikidata.org/entity/Q1>".to_string());
+        let res3known = dict.add_string("<http://www.wikidata.org/entity/Q2>".to_string());
+        let res4known = dict.add_string("<http://www.wikidata.org/entity/Q3>".to_string()); 
+        let res5known = dict.add_string("<https://www.wikidata.org/wiki/Special:EntityData/Q31>".to_string());
+
+        // let get1 = dict.get(res1.value());
+        // let get2 = dict.get(res2.value());
+        // let get4 = dict.get(res4.value());
+        // let getnone1 = dict.get(res6.value() + 1); // unused but in an allocated block
+        // let getnone2 = dict.get(1 << 30); // out of any allocated block
+
+        assert_eq!(res1, AddResult::Fresh(res1.value()));
+        assert_eq!(res2, AddResult::Fresh(res2.value()));
+        assert_eq!(res3, AddResult::Fresh(res3.value()));
+        assert_eq!(res4, AddResult::Fresh(res4.value()));
+        assert_eq!(res5, AddResult::Fresh(res5.value()));
+
+        assert_eq!(res1known, AddResult::Known(res1.value()));
+        assert_eq!(res2known, AddResult::Known(res2.value()));
+        assert_eq!(res3known, AddResult::Known(res3.value()));
+        assert_eq!(res4known, AddResult::Known(res4.value()));
+        assert_eq!(res5known, AddResult::Known(res5.value()));
     }
 }

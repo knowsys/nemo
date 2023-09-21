@@ -84,7 +84,7 @@ fn main() {
     TimedCode::instance().sub("Dictionary filling").stop();
 
     println!(
-        "Processed {} strings (dictionary containts {} unique strings with {} bytes overall).",
+        "Processed {} strings (dictionary contains {} unique strings with {} bytes overall).",
         count_lines, count_unique, bytes
     );
 

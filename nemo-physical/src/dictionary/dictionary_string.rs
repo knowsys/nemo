@@ -1,5 +1,3 @@
-use once_cell::sync::Lazy;
-use regex::Regex;
 use std::cell::UnsafeCell;
 
 pub(crate) const LONG_STRING_THRESHOLD: usize = 1000;
@@ -94,18 +92,32 @@ impl DictionaryString {
                 return
             }
         }
-        static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([<].*?/)([^>/]*)([>])$").unwrap());
-        let (prefix, infix, suffix) = match RE.captures(&self.string) {
-            Some(caps) => (
-                caps.get(1).unwrap().as_str(),
-                caps.get(2).unwrap().as_str(),
-                caps.get(3).unwrap().as_str(),
-            ),
-            None => ("", self.string.as_str(), ""),
-        };
+
+        let mut prefix_length: usize = 0;
+        let mut infix_length: usize = self.string.len();
+
+        if self.string.starts_with("<") && self.string.ends_with(">") {
+            match self.string.as_str().rfind(|c: char| c=='/' || c=='#') {
+                Some(pos) => {
+                    prefix_length = pos+1;
+                    infix_length = self.string.len()-prefix_length-1;
+                },
+                None => {},
+            }
+        } else if self.string.starts_with("\"") && self.string.ends_with(">") {
+            match self.string.as_str()[1..].find('"') {
+                Some(pos) => {
+                    prefix_length = 1;
+                    infix_length = pos; // note that pos is relative to the slice that starts at 1
+                },
+                None => {},
+            }
+        } // else: use defaults from above
+
         unsafe{
-            (*self.positions.get()).prefix_length = prefix.len();
-            (*self.positions.get()).infix_length = infix.len();
+            (*self.positions.get()).prefix_length = prefix_length;
+            (*self.positions.get()).infix_length = infix_length;
+            (*self.positions.get()).infix_done = true;
         }
     }
 }
@@ -125,16 +137,16 @@ mod test {
     #[test]
     fn split_parts_rdf_type() {
         let ds = DictionaryString::new("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
-        assert_eq!(ds.prefix(), "<http://www.w3.org/1999/02/");
-        assert_eq!(ds.infix(), "22-rdf-syntax-ns#type");
+        assert_eq!(ds.prefix(), "<http://www.w3.org/1999/02/22-rdf-syntax-ns#");
+        assert_eq!(ds.infix(), "type");
         assert_eq!(ds.suffix(), ">");
     }
 
-    /* #[test]
+    #[test]
     fn split_parts_integer() {
-        let mut ds = DictionaryString::new("\"305\"^^<http://www.w3.org/2001/XMLSchema#integer>");
-        assert_eq!(ds.prefix(), "<http://www.w3.org/1999/02/");
-        assert_eq!(ds.infix(), "22-rdf-syntax-ns#type");
-        assert_eq!(ds.suffix(), ">");
-    } */
+        let ds = DictionaryString::new("\"305\"^^<http://www.w3.org/2001/XMLSchema#integer>");
+        assert_eq!(ds.prefix(), "\"");
+        assert_eq!(ds.infix(), "305");
+        assert_eq!(ds.suffix(), "\"^^<http://www.w3.org/2001/XMLSchema#integer>");
+    }
 }
