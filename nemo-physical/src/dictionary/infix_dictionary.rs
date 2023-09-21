@@ -70,3 +70,39 @@ impl Dictionary for InfixDictionary {
         self.dict.len()
     }
 }
+
+#[cfg(test)]
+mod test {
+
+    use crate::dictionary::AddResult;
+    use crate::dictionary::Dictionary;
+    use crate::dictionary::DictionaryString;
+
+    use super::InfixDictionary;
+
+    #[test]
+    fn add_and_get() {
+        let mut dict = InfixDictionary::new("<https://example.org/".to_string(), ">".to_string());
+
+        assert_eq!(dict.add_str("<https://example.org/test>"), AddResult::Fresh(0));
+        assert_eq!(dict.add_str("<https://wronginfix.example.org/test>"), AddResult::Rejected);
+        assert_eq!(dict.add_str("<https://example.org/test>wrongsuffix"), AddResult::Rejected);
+        assert_eq!(dict.get(0), Some("<https://example.org/test>".to_string()));
+        assert_eq!(dict.fetch_id("<https://example.org/test>"), Some(0));
+    }
+
+    #[test]
+    fn add_and_get_ds() {
+        let mut dict = InfixDictionary::new("<https://example.org/".to_string(), ">".to_string());
+
+        let ds1 = DictionaryString::new("<https://example.org/test>");
+        let ds2 = DictionaryString::new("<https://not.example.org/test2>"); // should still be accepted
+
+        assert_eq!(dict.add_dictionary_string(ds1), AddResult::Fresh(0));
+        assert_eq!(dict.add_dictionary_string(ds2), AddResult::Fresh(1));
+        assert_eq!(dict.get(0), Some("<https://example.org/test>".to_string()));
+        assert_eq!(dict.get(1), Some("<https://example.org/test2>".to_string()));
+        assert_eq!(dict.fetch_id("<https://example.org/test>"), Some(0));
+        assert_eq!(dict.fetch_id("<https://example.org/test2>"), Some(1));
+    }
+}

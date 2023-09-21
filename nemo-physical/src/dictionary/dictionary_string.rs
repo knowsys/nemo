@@ -116,7 +116,7 @@ mod test {
 
     #[test]
     fn split_parts_qids() {
-        let mut ds = DictionaryString::new("<http://www.wikidata.org/entity/Q233>");
+        let ds = DictionaryString::new("<http://www.wikidata.org/entity/Q233>");
         assert_eq!(ds.prefix(), "<http://www.wikidata.org/entity/");
         assert_eq!(ds.infix(), "Q233");
         assert_eq!(ds.suffix(), ">");
@@ -124,7 +124,7 @@ mod test {
 
     #[test]
     fn split_parts_rdf_type() {
-        let mut ds = DictionaryString::new("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
+        let ds = DictionaryString::new("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
         assert_eq!(ds.prefix(), "<http://www.w3.org/1999/02/");
         assert_eq!(ds.infix(), "22-rdf-syntax-ns#type");
         assert_eq!(ds.suffix(), ">");
