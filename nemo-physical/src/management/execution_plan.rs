@@ -847,11 +847,11 @@ impl ExecutionTree {
     /// Alters the given [`ExecutionTree`] in such a way as to comply with the constraints of the leapfrog trie join algorithm.
     /// Specifically, this will reorder tables if necessary
     pub fn satisfy_leapfrog_triejoin(&mut self) {
-        Self::satisfy_leapfrog_recurisve(self.root(), Permutation::default());
+        Self::satisfy_leapfrog_recursive(self.root(), Permutation::default());
     }
 
     /// Implements the functionality of `satisfy_leapfrog_triejoin` by traversing the tree recursively
-    fn satisfy_leapfrog_recurisve(node: ExecutionNodeRef, permutation: Permutation) {
+    fn satisfy_leapfrog_recursive(node: ExecutionNodeRef, permutation: Permutation) {
         let node_rc = node.get_rc();
         let node_operation = &mut node_rc.borrow_mut().operation;
 
@@ -872,7 +872,7 @@ impl ExecutionTree {
             ExecutionOperation::Project(subnode, project_reorder) => {
                 *project_reorder = project_reorder.chain_permutation(&permutation);
 
-                Self::satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
+                Self::satisfy_leapfrog_recursive(subnode.clone(), Permutation::default());
             }
             ExecutionOperation::Join(subnodes, bindings) => {
                 bindings.apply_permutation(&permutation);
@@ -880,17 +880,17 @@ impl ExecutionTree {
                 let subpermutations = bindings.comply_with_leapfrog();
 
                 for (subnode, subpermutation) in subnodes.iter().zip(subpermutations) {
-                    Self::satisfy_leapfrog_recurisve(subnode.clone(), subpermutation)
+                    Self::satisfy_leapfrog_recursive(subnode.clone(), subpermutation)
                 }
             }
             ExecutionOperation::Union(subnodes) => {
                 for subnode in subnodes {
-                    Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
+                    Self::satisfy_leapfrog_recursive(subnode.clone(), permutation.clone());
                 }
             }
             ExecutionOperation::Minus(left, right) => {
-                Self::satisfy_leapfrog_recurisve(left.clone(), permutation.clone());
-                Self::satisfy_leapfrog_recurisve(right.clone(), permutation);
+                Self::satisfy_leapfrog_recursive(left.clone(), permutation.clone());
+                Self::satisfy_leapfrog_recursive(right.clone(), permutation);
             }
             ExecutionOperation::SelectValue(subnode, _assignments) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
@@ -900,35 +900,35 @@ impl ExecutionTree {
                 //     assigment.column_idx = reorder.apply_element_reverse(assigment.column_idx);
                 // }
 
-                Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation);
+                Self::satisfy_leapfrog_recursive(subnode.clone(), permutation);
             }
             ExecutionOperation::SelectEqual(subnode, _classes) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
-                Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation);
+                Self::satisfy_leapfrog_recursive(subnode.clone(), permutation);
             }
             ExecutionOperation::AppendColumns(subnode, _instructions) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
 
-                Self::satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
+                Self::satisfy_leapfrog_recursive(subnode.clone(), Permutation::default());
             }
             ExecutionOperation::AppendNulls(subnode, _) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
-                Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
+                Self::satisfy_leapfrog_recursive(subnode.clone(), permutation.clone());
             }
             ExecutionOperation::Subtract(subnode_main, subnodes_subtract, _) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
 
-                Self::satisfy_leapfrog_recurisve(subnode_main.clone(), permutation.clone());
+                Self::satisfy_leapfrog_recursive(subnode_main.clone(), permutation.clone());
                 for subnode in subnodes_subtract {
-                    Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
+                    Self::satisfy_leapfrog_recursive(subnode.clone(), permutation.clone());
                 }
             }
             ExecutionOperation::Aggregate(subnode, _instructions) => {
@@ -936,7 +936,7 @@ impl ExecutionTree {
                 // Will update it then
                 assert!(permutation.is_identity());
 
-                Self::satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
+                Self::satisfy_leapfrog_recursive(subnode.clone(), Permutation::default());
             }
         }
     }
