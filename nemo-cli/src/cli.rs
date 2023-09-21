@@ -29,6 +29,10 @@ impl LoggingArgs {
     ///  * `Warn` otherwise
     pub fn initialize_logging(&self) {
         let mut builder = env_logger::Builder::new();
+
+        // Default log level
+        builder.filter_level(log::LevelFilter::Warn);
+
         builder.parse_env("NMO_LOG");
         if let Some(ref level) = self.log_level {
             builder.parse_filters(level);
@@ -41,9 +45,6 @@ impl LoggingArgs {
                 3 => log::LevelFilter::Trace,
                 _ => log::LevelFilter::Warn,
             });
-        } else {
-            // Default log level
-            builder.filter_level(log::LevelFilter::Warn);
         }
         builder.init();
     }

@@ -29,7 +29,7 @@ impl From<InvalidRuleTermConversion> for ReadingError {
 #[derive(Error, Debug)]
 pub enum TypeError {
     /// Non-numerical aggregate input type
-    #[error("Aggregate operation \"{0:?}\" on input variable \"{1}\" requires a numerical input type, but was input type was \"{2}\".")]
+    #[error("Aggregate operation \"{0:?}\" on input variable \"{1}\" requires a numerical input type, but the input type was \"{2}\".")]
     NonNumericalAggregateInputType(LogicalAggregateOperation, String, PrimitiveType),
     /// Conflicting type declarations
     #[error("Conflicting type declarations. Predicate \"{0}\" at position {1} has been inferred to have the conflicting types {2} and {3}.")]
