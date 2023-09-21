@@ -85,6 +85,14 @@ impl DictionaryString {
         self.prefix() == prefix && self.suffix() == suffix 
     }
 
+    /// Checks if the string has a non-empty prefix or suffix.
+    pub fn infixable(&self) -> bool {
+        self.set_pieces();
+        unsafe {
+            (*self.positions.get()).infix_length < self.string.len()
+        }
+    }
+
     /// Computes the pieces from the string.
     fn set_pieces(&self) {
         unsafe {

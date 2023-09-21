@@ -4,11 +4,17 @@ use super::InfixDictionary;
 use super::AddResult;
 use super::Dictionary;
 
+use lru::LruCache;
+use std::num::NonZeroUsize;
+
+/// Number of recent occurrences of a string pattern required for creating a bespoke dictionary
+const DICT_THRESHOLD: u32 = 500;
+
 /// Bits in the size of address blocks allocated to sub-dictionaries
 const BLOCKSIZE: u32 = 24;
 
 /// Enum to specify what kind of data a dictionary supports.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum DictionaryType {
     /// Plain string dictionary
     String,
@@ -52,6 +58,9 @@ pub struct MetaDictionary {
     dictblocks: Vec<(usize, usize)>,
     /// Vector of all sub-dictionaries, indexed by their sub-dictionary number
     dicts: Vec<DictRecord>,
+    /// Data structure to hold counters for recently encountered dictionary types that we might
+    /// want to make a dictionary for.
+    dict_candidates: LruCache<DictionaryType,u32>,
 }
 
 impl Default for MetaDictionary {
@@ -76,11 +85,8 @@ impl Default for MetaDictionary {
         // For testing, we hard-code some infix dictionaries:
         Self {
             dictblocks: Vec::new(),//vec![(1, 0)],
-            dicts: vec![default_dict_record, blob_dict_record,
-                Self::prepare_infix_dict_record("<http://www.wikidata.org/entity/",">"), 
-                Self::prepare_infix_dict_record("<http://www.wikidata.org/entity/statement/",">"),
-                Self::prepare_infix_dict_record("<http://www.wikidata.org/reference/",">"),
-                Self::prepare_infix_dict_record("\"","\"^^<http://www.w3.org/2001/XMLSchema#dateTime>")],
+            dicts: vec![default_dict_record, blob_dict_record],
+            dict_candidates: LruCache::new(NonZeroUsize::new(100).unwrap()),
         }
     }
 }
@@ -100,16 +106,6 @@ impl MetaDictionary {
         let gblock = self.dicts[dict].gblocks[lblock]; // Could fail if: (1) dictionary does not exist, or (2) block not used by dict
 
         (gblock << BLOCKSIZE) + offset
-    }
-
-    /// Creates a new empty infix dictionary for the given prefix and suffix.
-    fn prepare_infix_dict_record(prefix: &str, suffix: &str) -> DictRecord {
-        let infix_dict = Box::new(InfixDictionary::new(prefix.to_string(), suffix.to_string()));
-        DictRecord {
-            dict: infix_dict,
-            dict_type: DictionaryType::Infix { prefix: prefix.to_string(), suffix: suffix.to_string() },
-            gblocks: Vec::new(),
-        }
     }
 
     /// Convert the local ID of a given dictionary to a global ID.
@@ -162,6 +158,23 @@ impl MetaDictionary {
             self.dicts[dict].gblocks[local_block]
         }
     }
+
+    /// Creates and adds a new (sub)dictionary of the given type.
+    /// No blocks are allocated yet. It is not checked if a similar dictionary is already there.
+    fn add_dictionary(&mut self, dt: DictionaryType) {
+        let dict: Box<dyn Dictionary>;
+        match dt {
+            DictionaryType::String => dict = Box::new(HashMapDictionary::new()),
+            DictionaryType::Blob => dict = Box::new(HashMapDictionary::new()),
+            DictionaryType::Infix { ref prefix, ref suffix } => dict = Box::new(InfixDictionary::new(prefix.to_string(), suffix.to_string())),
+        }
+        let dr = DictRecord {
+            dict: dict,
+            dict_type: dt,
+            gblocks: Vec::new(),
+        };
+        self.dicts.push(dr);
+    }
 }
 
 impl Dictionary for MetaDictionary {
@@ -194,7 +207,23 @@ impl Dictionary for MetaDictionary {
         }
         assert!(best_dict_idx<self.dicts.len());
 
-        // else add string to preferred dictionary
+        // consider creating a new dictionary to encode this efficiently
+        if ds.infixable() {
+            if let DictionaryType::String = self.dicts[best_dict_idx].dict_type {
+                let dt_inf = DictionaryType::Infix { prefix: ds.prefix().to_string(), suffix: ds.suffix().to_string() };
+                let count = self.dict_candidates.get_or_insert_mut(dt_inf, ||0);
+                *count += 1;
+                if *count > DICT_THRESHOLD {
+                    let dt_inf_clone = DictionaryType::Infix { prefix: ds.prefix().to_string(), suffix: ds.suffix().to_string() };
+                    self.dict_candidates.pop(&dt_inf_clone);
+                    best_dict_idx = self.dicts.len();
+                    self.add_dictionary(dt_inf_clone);
+                    println!("New infix dictionary ({}) for {}...{}",best_dict_idx,ds.prefix(),ds.suffix());
+                }
+            }
+        }
+
+        // add string to preferred dictionary
         let local_id = self.dicts[best_dict_idx].dict.add_dictionary_string(ds).value();
         // compute global id based on block and local id, possibly allocating new block in the process
         AddResult::Fresh(self.local_to_global(best_dict_idx, local_id))
@@ -246,6 +275,7 @@ mod test {
     use crate::dictionary::Dictionary;
 
     use super::MetaDictionary;
+    use super::DICT_THRESHOLD;
     use crate::dictionary::dictionary_string::LONG_STRING_THRESHOLD;
 
     /// Pads a string to make it longer than the threshold applied to distinguish blobs.
@@ -299,27 +329,25 @@ mod test {
         let mut dict = MetaDictionary::default();
 
         let res1 = dict.add_string("entry0".to_string());
-        let res2 = dict.add_string("<http://www.wikidata.org/entity/Q1>".to_string());
-        let res3 = dict.add_string("<http://www.wikidata.org/entity/Q2>".to_string());
-        let res4 = dict.add_string("<http://www.wikidata.org/entity/Q3>".to_string()); 
-        let res5 = dict.add_string("<https://www.wikidata.org/wiki/Special:EntityData/Q31>".to_string());
+
+        for i in 0..DICT_THRESHOLD+2 {
+            dict.add_string("<http://www.wikidata.org/entity/Q".to_string() + i.to_string().as_str() + ">");
+            dict.add_string("\"". to_string() + i.to_string().as_str() + "\"^^<http://www.w3.org/2001/XMLSchema#decimal>");
+        }
+
+        let res2 = dict.add_string("<http://www.wikidata.org/entity/Another>".to_string());
+        let res3 = dict.add_string("\"42.3\"^^<http://www.w3.org/2001/XMLSchema#decimal>".to_string());
 
         let res1known = dict.add_string("entry0".to_string());
-        let res2known = dict.add_string("<http://www.wikidata.org/entity/Q1>".to_string());
-        let res3known = dict.add_string("<http://www.wikidata.org/entity/Q2>".to_string());
-        let res4known = dict.add_string("<http://www.wikidata.org/entity/Q3>".to_string()); 
-        let res5known = dict.add_string("<https://www.wikidata.org/wiki/Special:EntityData/Q31>".to_string());
+        let res2known = dict.add_string("<http://www.wikidata.org/entity/Another>".to_string());
+        let res3known = dict.add_string("\"42.3\"^^<http://www.w3.org/2001/XMLSchema#decimal>".to_string());
 
         assert_eq!(res1, AddResult::Fresh(res1.value()));
         assert_eq!(res2, AddResult::Fresh(res2.value()));
         assert_eq!(res3, AddResult::Fresh(res3.value()));
-        assert_eq!(res4, AddResult::Fresh(res4.value()));
-        assert_eq!(res5, AddResult::Fresh(res5.value()));
 
         assert_eq!(res1known, AddResult::Known(res1.value()));
         assert_eq!(res2known, AddResult::Known(res2.value()));
         assert_eq!(res3known, AddResult::Known(res3.value()));
-        assert_eq!(res4known, AddResult::Known(res4.value()));
-        assert_eq!(res5known, AddResult::Known(res5.value()));
     }
 }
