@@ -119,7 +119,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     for atom in program.rules().iter().flat_map(|rule| rule.head()) {
         if atom.aggregates().next().is_some() {
-            log::warn!("Program is using the experimental aggregates feature.",);
+            log::warn!("Program is using the experimental aggregates feature and currently depends on the internally chosen variable orders for predicates.",);
             break;
         }
     }
