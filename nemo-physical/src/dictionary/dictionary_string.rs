@@ -56,7 +56,7 @@ impl DictionaryString {
         self.set_pieces();
         unsafe {
             let prefix_length = (*self.positions.get()).prefix_length;
-            &self.string[..prefix_length]
+            &self.string.as_str().get_unchecked(..prefix_length)
         }
     }
 
@@ -66,7 +66,7 @@ impl DictionaryString {
         unsafe {
             let prefix_end =  (*self.positions.get()).prefix_length;
             let infix_end =  prefix_end + (*self.positions.get()).infix_length;
-            &self.string[prefix_end..infix_end]
+            &self.string.as_str().get_unchecked(prefix_end..infix_end)
         }
     }
 
@@ -76,11 +76,14 @@ impl DictionaryString {
         unsafe {
             let prefix_end =  (*self.positions.get()).prefix_length;
             let infix_end =  prefix_end + (*self.positions.get()).infix_length;
-            &self.string[infix_end..]
+            &self.string.as_str().get_unchecked(infix_end..)
         }
     }
 
     /// Checks if the string can be viewed as an infix that is enclosed by the given prefix and suffix.
+    /// Note that this uses the standard splitting approach to determine prefix and suffix, which means
+    /// that the funciton may return `false` even if the string actually starts and ends with the prefix
+    /// and suffix given (if these are not the ones detected).
     pub fn has_infix(&self, prefix: &str, suffix: &str) -> bool {
         self.prefix() == prefix && self.suffix() == suffix 
     }
@@ -104,21 +107,17 @@ impl DictionaryString {
         let mut prefix_length: usize = 0;
         let mut infix_length: usize = self.string.len();
 
-        if self.string.starts_with("<") && self.string.ends_with(">") {
-            match self.string.as_str().rfind(|c: char| c=='/' || c=='#') {
-                Some(pos) => {
+        if self.string.ends_with(">") {
+            if self.string.as_bytes()[0]==b'<' { // using bytes is safe at pos 0; we know string!="" from above
+                if let Some(pos) = self.string.as_str().rfind(|c: char| c=='/' || c=='#') {
                     prefix_length = pos+1;
                     infix_length = self.string.len()-prefix_length-1;
-                },
-                None => {},
-            }
-        } else if self.string.starts_with("\"") && self.string.ends_with(">") {
-            match self.string.as_str()[1..].find('"') {
-                Some(pos) => {
+                }
+            } else if self.string.as_bytes()[0]==b'"' { // using bytes is safe at pos 0; we know string!="" from above
+                if let Some(pos) = unsafe { self.string.as_str().get_unchecked(1..).find('"') } { 
                     prefix_length = 1;
                     infix_length = pos; // note that pos is relative to the slice that starts at 1
-                },
-                None => {},
+                }
             }
         } // else: use defaults from above
 

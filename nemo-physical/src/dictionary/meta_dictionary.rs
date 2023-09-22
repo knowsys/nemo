@@ -6,8 +6,11 @@ use super::Dictionary;
 
 use lru::LruCache;
 use std::collections::HashMap;
-use std::hash::Hash;
+use std::hash::{Hash,Hasher};
 use std::num::NonZeroUsize;
+use std::borrow::Borrow;
+
+
 
 /// Number of recent occurrences of a string pattern required for creating a bespoke dictionary
 const DICT_THRESHOLD: u32 = 500;
@@ -17,6 +20,58 @@ const DICT_THRESHOLD: u32 = 500;
 /// 2^8=256 such blocks available within the u32 address range (and
 /// 2^40 in 64bits).
 const BLOCKSIZE: u32 = 24;
+
+// The code for [StringPair] and [StringPairKey] is inspired by
+// https://stackoverflow.com/a/50478038 ("How to avoid temporary allocations when using a complex key for a HashMap?").
+// The goal is just that, since we have very frequent hashmap lookups here.
+#[derive(Debug, Eq, Hash, PartialEq)]
+struct StringPair {
+    first: String,
+    second: String,
+}
+impl StringPair {
+    fn new(first: impl Into<String>, second: impl Into<String>) -> Self {
+        StringPair { first: first.into(), second: second.into() }
+    }
+}
+
+trait StringPairKey {
+    fn to_key(&self) -> (&str, &str);
+}
+impl Hash for dyn StringPairKey + '_ {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.to_key().hash(state)
+    }
+}
+impl PartialEq for dyn StringPairKey + '_ {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_key() == other.to_key()
+    }
+}
+impl Eq for dyn StringPairKey + '_ {}
+
+impl StringPairKey for StringPair {
+    fn to_key(&self) -> (&str, &str) {
+        (&self.first, &self.second)
+    }
+}
+impl<'a> StringPairKey for (&'a str, &'a str) {
+    fn to_key(&self) -> (&str, &str) {
+        (self.0, self.1)
+    }
+}
+
+impl<'a> Borrow<dyn StringPairKey + 'a> for StringPair {
+    fn borrow(&self) -> &(dyn StringPairKey + 'a) {
+        self
+    }
+}
+impl<'a> Borrow<dyn StringPairKey + 'a> for (&'a str, &'a str) {
+    fn borrow(&self) -> &(dyn StringPairKey + 'a) {
+        self
+    }
+}
+// End of code for [StringPair].
 
 /// Enum to specify what kind of data a dictionary supports.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -32,7 +87,6 @@ enum DictionaryType {
     // /// Dictionary for named (actually: "numbered") nulls
     // NULL,
 }
-
 impl DictionaryType {
     /// Returns true if the given string is supported by a dictinoary of this type.
     fn supports(&self, ds: &DictionaryString) -> bool {
@@ -76,11 +130,11 @@ impl DictIterator {
         // First look for infix dictionary:
         if self.position == 0 {
             self.position = 1;
-            match md.infix_dicts.get(&(ds.prefix().to_string(),ds.suffix().to_string())) {
-                Some(dict_idx) => {
+            if ds.infixable() {
+                #[allow(trivial_casts)]
+                if let Some(dict_idx) = md.infix_dicts.get( (ds.prefix(),ds.suffix()).borrow() as &dyn StringPairKey ) {
                     return *dict_idx;
-                },
-                None => {}
+                }
             }
         }
 
@@ -108,7 +162,7 @@ pub struct MetaDictionary {
     /// want to make a dictionary for.
     dict_candidates: LruCache<DictionaryType,u32>,
     /// Auxiliary datastructure for finding fitting infix dictionaries.
-    infix_dicts: HashMap<(String,String),usize>,
+    infix_dicts: HashMap<StringPair,usize>,
     /// Auxiliary datastructure for finding fitting general purpose dictionaries.
     generic_dicts: Vec<usize>,
 }
@@ -215,7 +269,7 @@ impl MetaDictionary {
             },
             DictionaryType::Infix { ref prefix, ref suffix } => {
                 dict = Box::new(InfixDictionary::new(prefix.to_string(), suffix.to_string()));
-                self.infix_dicts.insert((prefix.to_string(), suffix.to_string()), self.dicts.len());
+                self.infix_dicts.insert(StringPair::new(prefix.to_string(),suffix.to_string()), self.dicts.len());
             },
         }
         let dr = DictRecord {
