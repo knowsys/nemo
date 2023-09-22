@@ -1694,10 +1694,13 @@ dependencies = [
 name = "nemo-benches"
 version = "0.3.1-dev"
 dependencies = [
+ "clap 4.3.11",
+ "colored",
  "criterion",
  "env_logger 0.10.0",
  "flate2",
  "iai",
+ "log",
  "nemo",
  "nemo-physical",
  "polars",

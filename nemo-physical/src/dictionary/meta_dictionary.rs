@@ -10,7 +10,10 @@ use std::num::NonZeroUsize;
 /// Number of recent occurrences of a string pattern required for creating a bespoke dictionary
 const DICT_THRESHOLD: u32 = 500;
 
-/// Bits in the size of address blocks allocated to sub-dictionaries
+/// Bits in the size of address blocks allocated to sub-dictionaries.
+/// For example 24bit blocks each contain 2^24 addresses, and there are
+/// 2^8=256 such blocks available within the u32 address range (and
+/// 2^40 in 64bits).
 const BLOCKSIZE: u32 = 24;
 
 /// Enum to specify what kind of data a dictionary supports.
@@ -140,7 +143,7 @@ impl MetaDictionary {
                 // extrapolate where global block should be relative to last allocated local block
                 new_block = self.dicts[dict].gblocks[btl_index - 1] + btl_index - 1;
             } else {
-                // determine "good" initial block for this dictionary (TODO)
+                // TODO determine "good" initial block for this dictionary
                 new_block = 0;
             }
             // Find first empty block right of the chosen new block
@@ -218,7 +221,7 @@ impl Dictionary for MetaDictionary {
                     self.dict_candidates.pop(&dt_inf_clone);
                     best_dict_idx = self.dicts.len();
                     self.add_dictionary(dt_inf_clone);
-                    println!("New infix dictionary ({}) for {}...{}",best_dict_idx,ds.prefix(),ds.suffix());
+                    log::info!("Initialized new infix dictionary (#{}) for '{}...{}'.",best_dict_idx,ds.prefix(),ds.suffix());
                 }
             }
         }
@@ -260,9 +263,9 @@ impl Dictionary for MetaDictionary {
 
     fn len(&self) -> usize {
         let mut len = 0;
-        println!("Computing total meta dict length ...");
+        log::info!("Computing total meta dict length ...");
         for dr in self.dicts.iter() {
-            println!("+ dict with {} entries.", dr.dict.len());
+            log::info!("+ {} entries in dict {:?}", dr.dict.len(), dr.dict_type);
             len += dr.dict.len();
         }
         len

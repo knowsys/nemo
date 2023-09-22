@@ -35,6 +35,7 @@ fn create_dictionary(dict_type: &str) -> Box<dyn Dictionary> {
 }
 
 fn main() {
+    env_logger::init();
     TimedCode::instance().start();
 
     let args: Vec<_> = env::args().collect();
