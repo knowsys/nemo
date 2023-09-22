@@ -5,6 +5,8 @@ use super::AddResult;
 use super::Dictionary;
 
 use lru::LruCache;
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::num::NonZeroUsize;
 
 /// Number of recent occurrences of a string pattern required for creating a bespoke dictionary
@@ -54,6 +56,47 @@ pub struct DictRecord {
     gblocks: Vec<usize>,
 }
 
+/// Iterator-like struct for cycling over suitable dictionaries for some [DictionaryString].
+/// It is mostly a device for reusing some iteration code, and requires all calls to provide
+/// the data to work on.
+struct DictIterator {
+    /// Internal encoding of a "position" in a single value.
+    /// It is interpreted as follows: 0 is the initial state ("before" any value),
+    /// 1 is the "fitting infix dictionary" (if any)
+    position: usize,
+}
+impl DictIterator {
+    /// Constructor.
+    fn new() -> Self {
+        DictIterator { position: 0 }
+    }
+
+    /// Advance iterator, and return the id of the next dictionary.
+    fn next(&mut self, ds: &DictionaryString, md: &MetaDictionary) -> usize {
+        // First look for infix dictionary:
+        if self.position == 0 {
+            self.position = 1;
+            match md.infix_dicts.get(&(ds.prefix().to_string(),ds.suffix().to_string())) {
+                Some(dict_idx) => {
+                    return *dict_idx;
+                },
+                None => {}
+            }
+        }
+
+        // Finally, interpret self.position-1 as an index in md.generic_dicts:
+        while self.position <= md.generic_dicts.len() {
+            self.position += 1;
+            if md.dicts[md.generic_dicts[self.position-2]].dict_type.supports(&ds) {
+                return md.generic_dicts[self.position-2];
+            }
+        }
+
+        usize::MAX // No further dictionaries left
+    }
+
+}
+
 /// A dictionary that combines several other dictionaries.
 #[derive(Debug)]
 pub struct MetaDictionary {
@@ -64,33 +107,28 @@ pub struct MetaDictionary {
     /// Data structure to hold counters for recently encountered dictionary types that we might
     /// want to make a dictionary for.
     dict_candidates: LruCache<DictionaryType,u32>,
+    /// Auxiliary datastructure for finding fitting infix dictionaries.
+    infix_dicts: HashMap<(String,String),usize>,
+    /// Auxiliary datastructure for finding fitting general purpose dictionaries.
+    generic_dicts: Vec<usize>,
 }
 
 impl Default for MetaDictionary {
     /// Initialise a [MetaDictionary].
     /// Sets up relevant default dictionaries for basic blocks.
     fn default() -> Self {
-        // Initialize default dictionary and give it no blocks:
-        let default_dict = Box::new(HashMapDictionary::new());
-        let default_dict_record = DictRecord {
-            dict: default_dict,
-            dict_type: DictionaryType::String,
-            gblocks: Vec::new(), //vec![0],
-        };
-        // Initialize blob dictionary and give it no blocks:
-        let blob_dict = Box::new(HashMapDictionary::new());
-        let blob_dict_record = DictRecord {
-            dict: blob_dict,
-            dict_type: DictionaryType::Blob,
-            gblocks: Vec::new(),
+        let mut result = Self {
+            dictblocks: Vec::new(),//vec![(1, 0)],
+            dicts: Vec::new(), //vec![default_dict_record, blob_dict_record],
+            dict_candidates: LruCache::new(NonZeroUsize::new(100).unwrap()),
+            infix_dicts: HashMap::new(),
+            generic_dicts: Vec::new(),
         };
 
-        // For testing, we hard-code some infix dictionaries:
-        Self {
-            dictblocks: Vec::new(),//vec![(1, 0)],
-            dicts: vec![default_dict_record, blob_dict_record],
-            dict_candidates: LruCache::new(NonZeroUsize::new(100).unwrap()),
-        }
+        result.add_dictionary(DictionaryType::Blob);
+        result.add_dictionary(DictionaryType::String);
+
+        result
     }
 }
 
@@ -167,9 +205,18 @@ impl MetaDictionary {
     fn add_dictionary(&mut self, dt: DictionaryType) {
         let dict: Box<dyn Dictionary>;
         match dt {
-            DictionaryType::String => dict = Box::new(HashMapDictionary::new()),
-            DictionaryType::Blob => dict = Box::new(HashMapDictionary::new()),
-            DictionaryType::Infix { ref prefix, ref suffix } => dict = Box::new(InfixDictionary::new(prefix.to_string(), suffix.to_string())),
+            DictionaryType::String => {
+                dict = Box::new(HashMapDictionary::new());
+                self.generic_dicts.push(self.dicts.len());
+            },
+            DictionaryType::Blob => {
+                dict = Box::new(HashMapDictionary::new());
+                self.generic_dicts.push(self.dicts.len());
+            },
+            DictionaryType::Infix { ref prefix, ref suffix } => {
+                dict = Box::new(InfixDictionary::new(prefix.to_string(), suffix.to_string()));
+                self.infix_dicts.insert((prefix.to_string(), suffix.to_string()), self.dicts.len());
+            },
         }
         let dr = DictRecord {
             dict: dict,
@@ -191,32 +238,28 @@ impl Dictionary for MetaDictionary {
 
     fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
         let mut best_dict_idx = usize::MAX;
-        let mut dict_idx = self.dicts.len();
-        // for all (relevant) dictionaries; most suitable dicts are to the left, hence rev()
-        for dr in self.dicts.iter().rev() {
-            dict_idx -= 1;
-            if dr.dict_type.supports(&ds) {
-                if best_dict_idx == usize::MAX {
-                    best_dict_idx = dict_idx;
-                }
-                //   check if string has a (local) id
-                match dr.dict.fetch_id(ds.as_str()) {
-                    Some(idx) => { //   and, if so, map it to a global id
-                        return AddResult::Known(self.local_to_global_unchecked(dict_idx, idx));
-                    }
-                    _ => {}
-                }
+
+        // Look up new entry in all applicable dictionaries.
+        let mut d_it = DictIterator::new();
+        let mut dict_idx: usize;
+        while {dict_idx=d_it.next(&ds, self); dict_idx} != usize::MAX {
+            if best_dict_idx == usize::MAX {
+                best_dict_idx = dict_idx;
+            }
+            if let Some(idx) = self.dicts[dict_idx].dict.fetch_id(ds.as_str()) {
+                return AddResult::Known(self.local_to_global_unchecked(dict_idx, idx));
             }
         }
         assert!(best_dict_idx<self.dicts.len());
 
-        // consider creating a new dictionary to encode this efficiently
+        // Consider creating a new dictionary for the new entry:
         if ds.infixable() {
             if let DictionaryType::String = self.dicts[best_dict_idx].dict_type {
                 let dt_inf = DictionaryType::Infix { prefix: ds.prefix().to_string(), suffix: ds.suffix().to_string() };
                 let count = self.dict_candidates.get_or_insert_mut(dt_inf, ||0);
                 *count += 1;
                 if *count > DICT_THRESHOLD {
+                    // Making the same DictionaryType again is better than cloning in the "hot" code above, since new dictionaries are rarely added
                     let dt_inf_clone = DictionaryType::Infix { prefix: ds.prefix().to_string(), suffix: ds.suffix().to_string() };
                     self.dict_candidates.pop(&dt_inf_clone);
                     best_dict_idx = self.dicts.len();
@@ -226,7 +269,7 @@ impl Dictionary for MetaDictionary {
             }
         }
 
-        // add string to preferred dictionary
+        // Add entry to preferred dictionary
         let local_id = self.dicts[best_dict_idx].dict.add_dictionary_string(ds).value();
         // compute global id based on block and local id, possibly allocating new block in the process
         AddResult::Fresh(self.local_to_global(best_dict_idx, local_id))
@@ -234,17 +277,13 @@ impl Dictionary for MetaDictionary {
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
         let ds = DictionaryString::new(string);
-        let mut dict_idx = self.dicts.len();
-        // for all (relevant) dictionaries; most suitable dicts are to the left, hence rev()
-        for dr in self.dicts.iter().rev() {
-            dict_idx -= 1;
-            //   check if string has a (local) id
-            if dr.dict_type.supports(&ds) {
-                let result = dr.dict.fetch_id(string);
-                //   and, if so, map it to a global id
-                if result.is_some() {
-                    return Some(self.local_to_global_unchecked(dict_idx, result.unwrap()));
-                }
+
+        // Look up new entry in all applicable dictionaries.
+        let mut d_it = DictIterator::new();
+        let mut dict_idx: usize;
+        while {dict_idx=d_it.next(&ds, self); dict_idx} != usize::MAX {
+            if let Some(idx) = self.dicts[dict_idx].dict.fetch_id(string) {
+                return Some(self.local_to_global_unchecked(dict_idx, idx));
             }
         }
         None
