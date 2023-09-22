@@ -10,8 +10,6 @@ use std::hash::{Hash,Hasher};
 use std::num::NonZeroUsize;
 use std::borrow::Borrow;
 
-
-
 /// Number of recent occurrences of a string pattern required for creating a bespoke dictionary
 const DICT_THRESHOLD: u32 = 500;
 
@@ -160,7 +158,7 @@ pub struct MetaDictionary {
     dicts: Vec<DictRecord>,
     /// Data structure to hold counters for recently encountered dictionary types that we might
     /// want to make a dictionary for.
-    dict_candidates: LruCache<DictionaryType,u32>,
+    dict_candidates: LruCache<StringPair,u32>,
     /// Auxiliary datastructure for finding fitting infix dictionaries.
     infix_dicts: HashMap<StringPair,usize>,
     /// Auxiliary datastructure for finding fitting general purpose dictionaries.
@@ -300,25 +298,27 @@ impl Dictionary for MetaDictionary {
             if best_dict_idx == usize::MAX {
                 best_dict_idx = dict_idx;
             }
-            if let Some(idx) = self.dicts[dict_idx].dict.fetch_id(ds.as_str()) {
+            if let Some(idx) = self.dicts[dict_idx].dict.fetch_id_for_dictionary_string(&ds) {
                 return AddResult::Known(self.local_to_global_unchecked(dict_idx, idx));
             }
         }
+        // Performance note: The remaining code is only executed once per unique string (i.e., typically much fewer times than the above).
         assert!(best_dict_idx<self.dicts.len());
 
         // Consider creating a new dictionary for the new entry:
         if ds.infixable() {
             if let DictionaryType::String = self.dicts[best_dict_idx].dict_type {
-                let dt_inf = DictionaryType::Infix { prefix: ds.prefix().to_string(), suffix: ds.suffix().to_string() };
-                let count = self.dict_candidates.get_or_insert_mut(dt_inf, ||0);
-                *count += 1;
-                if *count > DICT_THRESHOLD {
-                    // Making the same DictionaryType again is better than cloning in the "hot" code above, since new dictionaries are rarely added
-                    let dt_inf_clone = DictionaryType::Infix { prefix: ds.prefix().to_string(), suffix: ds.suffix().to_string() };
-                    self.dict_candidates.pop(&dt_inf_clone);
-                    best_dict_idx = self.dicts.len();
-                    self.add_dictionary(dt_inf_clone);
-                    log::info!("Initialized new infix dictionary (#{}) for '{}...{}'.",best_dict_idx,ds.prefix(),ds.suffix());
+                #[allow(trivial_casts)]
+                if let Some(count) = self.dict_candidates.get_mut( (ds.prefix(),ds.suffix()).borrow() as &dyn StringPairKey ) {
+                    *count += 1;
+                    if *count > DICT_THRESHOLD { // Performance note: The following code is very rarely executed.
+                        self.dict_candidates.pop(&StringPair::new(ds.prefix().to_string(),ds.suffix().to_string() ));
+                        best_dict_idx = self.dicts.len();
+                        self.add_dictionary(DictionaryType::Infix { prefix: ds.prefix().to_string(), suffix: ds.suffix().to_string() });
+                        log::info!("Initialized new infix dictionary (#{}) for '{}...{}'.",best_dict_idx,ds.prefix(),ds.suffix());
+                    }
+                } else {
+                    self.dict_candidates.put(StringPair::new(ds.prefix().to_string(),ds.suffix().to_string() ), 1);
                 }
             }
         }

@@ -60,6 +60,14 @@ impl Dictionary for InfixDictionary {
         }
     }
 
+    /// Look up a string in the dictionary, but assume that the added string
+    /// consists of the fixed prefix, followed by the given string's infix,
+    /// followed by the fixed suffix. There is no check that the given prefix
+    /// and suffix are actually the same as the fixed ones.
+    fn fetch_id_for_dictionary_string(&self, ds: &DictionaryString) -> Option<usize> {
+        self.dict.fetch_id(ds.infix())
+    }
+
     fn get(&self, id: usize) -> Option<String> {
         let subresult = self.dict.get(id);
         if subresult.is_some() {

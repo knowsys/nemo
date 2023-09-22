@@ -81,6 +81,15 @@ pub trait Dictionary: Debug {
     /// Looks for a given [&str] slice and returns `Some(id)` if it is in the dictionary, and `None` otherwise.
     fn fetch_id(&self, string: &str) -> Option<usize>;
 
+    /// Looks for a string and returns `Some(id)` if it is in the dictionary, and `None` otherwise.
+    /// This method is similar to `fetch_id()` but uses a pre-processed string. Some dictionary implementations
+    /// may extract only parts of the string to fit internal assumptions (e.g., a dictionary that requires a fixed
+    /// prefix may ignore the prefix and only look up the rest, as if the prefix would
+    /// match). To perform checks and possibly reject data, `fetch_id()` should be used.
+    fn fetch_id_for_dictionary_string(&self, ds: &DictionaryString) -> Option<usize> {
+        self.fetch_id(ds.as_str())
+    }
+
     /// Returns the [String] to the one associated with the `id` or None if the `id` is out of bounds
     fn get(&self, id: usize) -> Option<String>;
 
