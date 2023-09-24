@@ -54,3 +54,6 @@ pub use columnscan_cast::ColumnScanCastEnum;
 /// Module for defining [`ColumnScanArithmetic`].
 pub mod columnscan_arithmetic;
 pub use columnscan_arithmetic::ColumnScanArithmetic;
+
+/// Module defining helper structures for working with numeric expressions
+pub mod arithmetic;
