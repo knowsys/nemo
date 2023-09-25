@@ -244,6 +244,15 @@ impl Drop for HashMapDictionary {
 
 impl Dictionary for HashMapDictionary {
     fn add_string(&mut self, string: String) -> AddResult {
+        // Debug, TODO
+        // let ds = DictionaryString::from_string(string);
+        // if ds.infixable() {
+        //     if ds.prefix().len() == 4200 {
+        //         println!("Can't compile this away.");
+        //     }
+        // }
+        // self.add_dictionary_string(ds)
+        // Debug end
         self.add_str(string.as_str())
     }
 
