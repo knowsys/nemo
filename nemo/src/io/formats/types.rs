@@ -34,14 +34,25 @@ pub trait FileFormatMeta: std::fmt::Debug {
     fn required_attributes() -> HashSet<String>;
 
     /// Check whether the given attributes are a valid combination for this format.
-    fn attributes_are_valid(attributes: impl IntoIterator<Item = String>) -> bool {
+    fn validate_attributes(
+        attributes: impl IntoIterator<Item = String>,
+    ) -> Result<(), FileFormatError> {
         let given = attributes.into_iter().collect();
+
+        if let Some(missing) = Self::required_attributes().difference(&given).next() {
+            return Err(FileFormatError::MissingAttribute(missing.to_string()));
+        }
+
         let valid = Self::required_attributes()
             .union(&Self::optional_attributes())
             .cloned()
             .collect();
 
-        Self::required_attributes().is_subset(&given) && given.is_subset(&valid)
+        if let Some(unknown) = given.difference(&valid).next() {
+            return Err(FileFormatError::UnknownAttribute(unknown.to_string()));
+        }
+
+        Ok(())
     }
 }
 
