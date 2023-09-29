@@ -79,6 +79,17 @@ impl Dictionary for InfixDictionary {
     fn len(&self) -> usize {
         self.dict.len()
     }
+
+    /// Marks a string for this dictionary, as described in the documentation of [Dictionary].
+    /// The given string must use the dictionary's prefix and suffix: no further checks are
+    /// performed here. 
+    fn mark_str(&mut self, string: &str) -> AddResult {
+        self.dict.mark_str(&string[self.prefix.len()..string.len()-self.suffix.len()])
+    }
+
+    fn has_marked(&self) -> bool {
+        self.dict.has_marked()
+    }
 }
 
 #[cfg(test)]

@@ -26,6 +26,13 @@ pub use meta_dictionary::MetaDictionary;
 pub mod value_serializer;
 pub use value_serializer::ValueSerializer;
 
+/// Fake id that dictionaries use to indicate that an entry has no id.
+const NONEXISTING_ID_MARK: usize = usize::MAX; 
+/// Fake id that dictionaries use to indicate that an entry is known
+/// in some other dictionary (indicating that a search across multiple dictionaries
+/// should be continued).
+const KNOWN_ID_MARK: usize = usize::MAX-1;
+
 /// Result of adding new values to a dictionary.
 /// It indicates if the operation was successful, and whether the value was previously present or not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,12 +46,12 @@ pub enum AddResult {
 }
 impl AddResult {
     /// Returns the actual index.
-    /// In case of [AddResult::Rejected], `usize::MAX` is returned.
+    /// In case of [AddResult::Rejected], [NONEXISTING_ID_MARK] is returned.
     pub fn value(&self) -> usize {
         match self {
             AddResult::Fresh(value) => *value,
             AddResult::Known(value) => *value,
-            AddResult::Rejected => usize::MAX,
+            AddResult::Rejected => NONEXISTING_ID_MARK,
         }
     }
 }
@@ -93,6 +100,22 @@ pub trait Dictionary: Debug {
     /// Returns the [String] to the one associated with the `id` or None if the `id` is out of bounds
     fn get(&self, id: usize) -> Option<String>;
 
-    /// Returns the number of elements in the dictionary.
+    /// Returns the number of elements in the dictionary. For dictionaries that support marking elements as
+    /// known without giving IDs to them, such elements should not be counted.
     fn len(&self) -> usize;
+
+    /// Marks the given string as being known using the special id [KNOWN_ID_MARK] without
+    /// assigning an own id to it. If the entry exists already, the old id will be kept and
+    /// returned. If is possible to return [AddResult::Rejected] to indicate that the dictionary
+    /// does not support marking of strings.
+    fn mark_str(&mut self, _string: &str) -> AddResult {
+        AddResult::Rejected
+    }
+
+    /// Returns true if the dictionary contains any marked elements. The intention is that code marks all elements
+    /// that are relevant to this dictionary, or none at all, so that a return value of `true` indicates that
+    /// one can rely on unknown and non-marked elements to be missing in all dictionaries.
+    fn has_marked(&self) -> bool {
+        false
+    }
 }

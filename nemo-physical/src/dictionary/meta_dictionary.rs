@@ -129,7 +129,7 @@ impl DictIterator {
         if self.position == 0 {
             self.position = 1;
             if ds.infixable() {
-                #[allow(trivial_casts)]
+                 #[allow(trivial_casts)]
                 if let Some(dict_idx) = md.infix_dicts.get( (ds.prefix(),ds.suffix()).borrow() as &dyn StringPairKey ) {
                     return *dict_idx;
                 }
@@ -163,6 +163,8 @@ pub struct MetaDictionary {
     infix_dicts: HashMap<StringPair,usize>,
     /// Auxiliary datastructure for finding fitting general purpose dictionaries.
     generic_dicts: Vec<usize>,
+    /// Keep track of total number of entries for faster checks
+    size: usize,
 }
 
 impl Default for MetaDictionary {
@@ -172,9 +174,10 @@ impl Default for MetaDictionary {
         let mut result = Self {
             dictblocks: Vec::new(),//vec![(1, 0)],
             dicts: Vec::new(), //vec![default_dict_record, blob_dict_record],
-            dict_candidates: LruCache::new(NonZeroUsize::new(100).unwrap()),
+            dict_candidates: LruCache::new(NonZeroUsize::new(150).unwrap()),
             infix_dicts: HashMap::new(),
             generic_dicts: Vec::new(),
+            size: 0,
         };
 
         result.add_dictionary(DictionaryType::Blob);
@@ -299,8 +302,12 @@ impl Dictionary for MetaDictionary {
                 best_dict_idx = dict_idx;
             }
             if let Some(idx) = self.dicts[dict_idx].dict.fetch_id_for_dictionary_string(&ds) {
-                return AddResult::Known(self.local_to_global_unchecked(dict_idx, idx));
-            }
+                if idx != super::KNOWN_ID_MARK {
+                    return AddResult::Known(self.local_to_global_unchecked(dict_idx, idx));
+                } // else: marked, continue search for real id
+            } else if self.dicts[dict_idx].dict.has_marked() { // neither found nor marked in marked dict -> give up search
+                break;
+            } 
         }
         // Performance note: The remaining code is only executed once per unique string (i.e., typically much fewer times than the above).
         assert!(best_dict_idx<self.dicts.len());
@@ -316,6 +323,24 @@ impl Dictionary for MetaDictionary {
                         best_dict_idx = self.dicts.len();
                         self.add_dictionary(DictionaryType::Infix { prefix: ds.prefix().to_string(), suffix: ds.suffix().to_string() });
                         log::info!("Initialized new infix dictionary (#{}) for '{}...{}'.",best_dict_idx,ds.prefix(),ds.suffix());
+                        // Mark previously added strings to enable one-shot misses when looking up elements:
+                        if self.size < 50000 {
+                            let mut i: usize = 0;
+                            let mut c: usize = 0;
+                            let min_len = ds.prefix().len() + ds.suffix().len(); // presumably lets us discard many strings more quickly
+                            loop {
+                                if let Some(string) = self.dicts[1].dict.get(i) {
+                                    i+=1;
+                                    if string.len()>=min_len && string.starts_with(ds.prefix()) && string.ends_with(ds.suffix()) {
+                                        c+=1;
+                                        self.dicts[best_dict_idx].dict.mark_str(string.as_str());
+                                    }
+                                } else {
+                                    break;
+                                }
+                            }
+                            log::info!("Marked {} older strings of that type, iterating {} strings overall.",c,i);
+                        }
                     }
                 } else {
                     self.dict_candidates.put(StringPair::new(ds.prefix().to_string(),ds.suffix().to_string() ), 1);
@@ -324,8 +349,9 @@ impl Dictionary for MetaDictionary {
         }
 
         // Add entry to preferred dictionary
+        self.size += 1;
         let local_id = self.dicts[best_dict_idx].dict.add_dictionary_string(ds).value();
-        // compute global id based on block and local id, possibly allocating new block in the process
+        // Compute global id based on block and local id, possibly allocating new block in the process
         AddResult::Fresh(self.local_to_global(best_dict_idx, local_id))
     }
 
@@ -361,6 +387,7 @@ impl Dictionary for MetaDictionary {
             log::info!("+ {} entries in dict {:?}", dr.dict.len(), dr.dict_type);
             len += dr.dict.len();
         }
+        log::info!("Total len {}", len);
         len
     }
 }

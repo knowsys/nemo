@@ -33,6 +33,9 @@ struct StringBuffer {
     /// Vector of buffer ids and string buffers
     pages: Vec<(usize, String)>,
     /// Single temporary string per buffer. [StringRef] uses this for representing strings that are not in the buffer.
+    ///
+    /// TODO: It would be possible and more elegant to have a special alternative key implementation for our hashmap,
+    /// where the key has the relevant data instead of pointing to a temporary buffer.
     tmp_strings: Vec<String>,
     /// Currently active page for each buffer
     cur_pages: Vec<usize>,
@@ -100,7 +103,9 @@ impl StringBuffer {
     fn get_str(&self, address: usize, length: usize) -> &str {
         let page_num = address >> PAGE_ADDR_BITS;
         let page_addr = address % PAGE_SIZE;
-        &self.pages[page_num].1[page_addr..page_addr + length]
+        unsafe{
+            &self.pages[page_num].1.get_unchecked(page_addr..page_addr + length)
+        }
     }
 
     /// Creates a reference to the given string without adding the string to the buffer.
@@ -178,7 +183,7 @@ impl StringRef {
     /// Returns a direct string slice reference for this data.
     /// This is a pointer to global mutable data, and cannot be used safely.
     fn as_str(&self) -> &str {
-        if self.reference < (std::u64::MAX << 24) {
+        if ((!self.reference) >> 24) != 0 {
             unsafe { BUFFER.get_str(self.address(), self.len()) }
         } else {
             unsafe { BUFFER.get_tmp_string(self.len()) }
@@ -213,12 +218,46 @@ pub struct HashMapDictionary {
     store: Vec<StringRef>,
     mapping: HashMap<StringRef, usize>,
     buffer: usize,
+    has_known_mark: bool,
 }
 
 impl HashMapDictionary {
     /// Construct a new and empty dictionary.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Check if a string is already in the dictionary, and if not,
+    /// set its id to the given value. IDs are normally assigned consecutively
+    /// by this dictionary, but one can also assign [super::KNOWN_ID_MARK] to
+    /// merely mark a string as known. Other non-consecutive assignments
+    /// will generally lead to errors, since the same ID might be assigned
+    /// later on again.
+    /// 
+    /// If the given string is known but not assigned an ID (indicated by
+    /// [super::KNOWN_ID_MARK]), then the operation will still not assign an
+    /// ID either. In such a case, another dictionary should have that ID.
+    #[inline(always)]
+    fn add_str_with_id(&mut self, string: &str, id: usize) -> AddResult {
+        match self
+            .mapping
+            .get(unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string) })
+        {
+            Some(idx) => {
+                // if *idx == super::KNOWN_ID_MARK {
+                //     println!("Got KID for {} when attempting to add id {}",string,id);
+                // }
+                AddResult::Known(*idx)
+            },
+            None => unsafe {
+                let sref = BUFFER.push_str(self.buffer, string);
+                if id != super::KNOWN_ID_MARK {
+                    self.store.push(sref);
+                }
+                self.mapping.insert(sref, id);
+                AddResult::Fresh(id)
+            },
+        }
     }
 }
 
@@ -229,6 +268,7 @@ impl Default for HashMapDictionary {
                 store: Vec::new(),
                 mapping: HashMap::new(),
                 buffer: BUFFER.init_buffer(),
+                has_known_mark: false,
             }
         }
     }
@@ -244,36 +284,15 @@ impl Drop for HashMapDictionary {
 
 impl Dictionary for HashMapDictionary {
     fn add_string(&mut self, string: String) -> AddResult {
-        // Debug, TODO
-        // let ds = DictionaryString::from_string(string);
-        // if ds.infixable() {
-        //     if ds.prefix().len() == 4200 {
-        //         println!("Can't compile this away.");
-        //     }
-        // }
-        // self.add_dictionary_string(ds)
-        // Debug end
-        self.add_str(string.as_str())
+        self.add_str_with_id(string.as_str(), self.store.len())
     }
 
     fn add_str(&mut self, string: &str) -> AddResult {
-        match self
-            .mapping
-            .get(unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string) })
-        {
-            Some(idx) => AddResult::Known(*idx),
-            None => unsafe {
-                let sref = BUFFER.push_str(self.buffer, string);
-                let nxt_id = self.store.len();
-                self.store.push(sref);
-                self.mapping.insert(sref, nxt_id);
-                AddResult::Fresh(nxt_id)
-            },
-        }
+        self.add_str_with_id(string, self.store.len())
     }
 
     fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
-        self.add_str(ds.as_str())
+        self.add_str_with_id(ds.as_str(), self.store.len())
     }
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
@@ -289,7 +308,17 @@ impl Dictionary for HashMapDictionary {
     }
 
     fn len(&self) -> usize {
-        self.mapping.len()
+        self.store.len()
+    }
+
+    fn mark_str(&mut self, string: &str) -> AddResult {
+        // println!("Marking {} (hashmapdict)", string);
+        self.has_known_mark = true;
+        self.add_str_with_id(string, super::KNOWN_ID_MARK)
+    }
+
+    fn has_marked(&self) -> bool {
+        self.has_known_mark
     }
 }
 
