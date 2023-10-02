@@ -11,11 +11,14 @@ pub struct StringDictionary {
     mapping: HashMap<Rc<String>, usize>,
 }
 
-impl Dictionary for StringDictionary {
-    fn new() -> Self {
-        Default::default()
+impl StringDictionary {
+    /// Construct a new and empty dictionary.
+    pub fn new() -> Self {
+        Self::default()
     }
+}
 
+impl Dictionary for StringDictionary {
     fn add_string(&mut self, entry: String) -> AddResult {
         match self.mapping.get(&entry) {
             Some(idx) => AddResult::Known(*idx),

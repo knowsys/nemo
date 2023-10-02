@@ -35,16 +35,20 @@ fn create_dictionary(dict_type: &str) -> Box<dyn Dictionary> {
 }
 
 fn main() {
+    env_logger::init();
     TimedCode::instance().start();
 
     let args: Vec<_> = env::args().collect();
     if args.len() < 3 {
-        println!("Usage: dict-bench <filename> <dicttype>");
+        println!("Usage: dict-bench <filename> <dicttype> <nonstop>");
         println!(
             "  <filename> File with dictionary entries, one per line, possibly with duplicates."
         );
         println!(
             "  <dicttype> Identifier for the dictionary to test, e.g., \"hash\" or \"prefix\"."
+        );
+        println!(
+            "  <nonstop> If anything is given here, the program will terminate without asking for a prompt."
         );
     }
 
@@ -84,7 +88,7 @@ fn main() {
     TimedCode::instance().sub("Dictionary filling").stop();
 
     println!(
-        "Processed {} strings (dictionary containts {} unique strings with {} bytes overall).",
+        "Processed {} strings (dictionary contains {} unique strings with {} bytes overall).",
         count_lines, count_unique, bytes
     );
 
@@ -102,9 +106,11 @@ fn main() {
         )
     );
 
-    println!("All done. Press return to end benchmark (and free all memory).");
-    let mut s = String::new();
-    stdin().read_line(&mut s).expect("No string entered?");
+    if args.len() < 4 {
+        println!("All done. Press return to end benchmark (and free all memory).");
+        let mut s = String::new();
+        stdin().read_line(&mut s).expect("No string entered?");
+    }
 
     if dict.len() == 123456789 {
         // FWIW, prevent dict from going out of scope before really finishing

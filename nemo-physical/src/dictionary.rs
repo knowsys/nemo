@@ -16,12 +16,22 @@ pub use string_dictionary::StringDictionary;
 /// Module to define [HashMapDictionary]
 pub mod hash_map_dictionary;
 pub use hash_map_dictionary::HashMapDictionary;
+/// Module to define [InfixDictionary]
+pub mod infix_dictionary;
+pub use infix_dictionary::InfixDictionary;
 /// Module to define [MetaDictionary]
 pub mod meta_dictionary;
 pub use meta_dictionary::MetaDictionary;
 /// Module mapping physical types into logical types into Strings
 pub mod value_serializer;
 pub use value_serializer::ValueSerializer;
+
+/// Fake id that dictionaries use to indicate that an entry has no id.
+const NONEXISTING_ID_MARK: usize = usize::MAX; 
+/// Fake id that dictionaries use to indicate that an entry is known
+/// in some other dictionary (indicating that a search across multiple dictionaries
+/// should be continued).
+const KNOWN_ID_MARK: usize = usize::MAX-1;
 
 /// Result of adding new values to a dictionary.
 /// It indicates if the operation was successful, and whether the value was previously present or not.
@@ -36,12 +46,12 @@ pub enum AddResult {
 }
 impl AddResult {
     /// Returns the actual index.
-    /// In case of [AddResult::Rejected], `usize::MAX` is returned.
+    /// In case of [AddResult::Rejected], [NONEXISTING_ID_MARK] is returned.
     pub fn value(&self) -> usize {
         match self {
             AddResult::Fresh(value) => *value,
             AddResult::Known(value) => *value,
-            AddResult::Rejected => usize::MAX,
+            AddResult::Rejected => NONEXISTING_ID_MARK,
         }
     }
 }
@@ -50,11 +60,6 @@ impl AddResult {
 /// The "objects" are provided when the dictionary is used, whereas the ids are newly
 /// assigned by the dictionary itself.
 pub trait Dictionary: Debug {
-    /// Construct a new and empty [`Dictionary`]
-    fn new() -> Self
-    where
-        Self: Sized + Default;
-
     /// Adds a new string to the dictionary. If the string is not known yet, it will
     /// be assigned a new id. Unsupported strings can also be rejected, which specialized
     /// dictionary implementations might do.
@@ -83,9 +88,34 @@ pub trait Dictionary: Debug {
     /// Looks for a given [&str] slice and returns `Some(id)` if it is in the dictionary, and `None` otherwise.
     fn fetch_id(&self, string: &str) -> Option<usize>;
 
+    /// Looks for a string and returns `Some(id)` if it is in the dictionary, and `None` otherwise.
+    /// This method is similar to `fetch_id()` but uses a pre-processed string. Some dictionary implementations
+    /// may extract only parts of the string to fit internal assumptions (e.g., a dictionary that requires a fixed
+    /// prefix may ignore the prefix and only look up the rest, as if the prefix would
+    /// match). To perform checks and possibly reject data, `fetch_id()` should be used.
+    fn fetch_id_for_dictionary_string(&self, ds: &DictionaryString) -> Option<usize> {
+        self.fetch_id(ds.as_str())
+    }
+
     /// Returns the [String] to the one associated with the `id` or None if the `id` is out of bounds
     fn get(&self, id: usize) -> Option<String>;
 
-    /// Returns the number of elements in the dictionary.
+    /// Returns the number of elements in the dictionary. For dictionaries that support marking elements as
+    /// known without giving IDs to them, such elements should not be counted.
     fn len(&self) -> usize;
+
+    /// Marks the given string as being known using the special id [KNOWN_ID_MARK] without
+    /// assigning an own id to it. If the entry exists already, the old id will be kept and
+    /// returned. If is possible to return [AddResult::Rejected] to indicate that the dictionary
+    /// does not support marking of strings.
+    fn mark_str(&mut self, _string: &str) -> AddResult {
+        AddResult::Rejected
+    }
+
+    /// Returns true if the dictionary contains any marked elements. The intention is that code marks all elements
+    /// that are relevant to this dictionary, or none at all, so that a return value of `true` indicates that
+    /// one can rely on unknown and non-marked elements to be missing in all dictionaries.
+    fn has_marked(&self) -> bool {
+        false
+    }
 }
