@@ -53,10 +53,7 @@ impl<A: Aggregate> CountAggregateGroupProcessor<A> {
 
 impl<A: Aggregate> AggregateGroupProcessor<A> for CountAggregateGroupProcessor<A> {
     fn write_aggregate_input_value(&mut self, _value: A) {
-        self.current_count = self
-            .current_count
-            .checked_add(1)
-            .expect("integer overflow in count aggregate operation"); // TODO: Improve error handling
+        self.current_count += 1;
     }
 
     fn finish(&self) -> Option<StorageValueT> {

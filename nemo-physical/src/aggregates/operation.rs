@@ -35,7 +35,7 @@ impl AggregateOperation {
 
     /// Returns whether the aggregate operation always produces an aggregate output column of the same type.
     /// If [`Some`] is returned, this is the static output type of the aggregate operation.
-    /// If [`None`] is returns, the aggregate operation will always have the same output and input type.
+    /// If [`None`] is returned, the aggregate operation will always have the same output and input type.
     pub fn static_output_type(&self) -> Option<DataTypeName> {
         match self {
             AggregateOperation::Count => Some(DataTypeName::I64),

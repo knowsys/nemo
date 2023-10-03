@@ -702,6 +702,18 @@ impl DatabaseInstance {
         }
     }
 
+    /// Prunes and materializes a trie scan by
+    /// * either unwrapping an [`TrieScanAggregateWrapper`]
+    /// * or otherwise wrapping the [`TrieScanEnum`] using a [`TrieScanPrune`].
+    fn materialized_trie_scan(trie_scan: TrieScanEnum<'_>, cut_bottom: usize) -> Option<Trie> {
+        match trie_scan {
+            TrieScanEnum::TrieScanAggregateWrapper(mut aggregate_wrapper) => {
+                materialize_up_to(&mut aggregate_wrapper.trie_scan, cut_bottom)
+            }
+            _ => materialize_up_to(&mut TrieScanPrune::new(trie_scan), cut_bottom),
+        }
+    }
+
     /// Produces a new [`Trie`] by executing a [`ExecutionTree`].
     ///
     /// # Panics
@@ -764,12 +776,7 @@ impl DatabaseInstance {
                 self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
             let cut_bottom = execution_tree.cut_bottom();
 
-            Ok(iter_opt.and_then(|iter| match iter {
-                TrieScanEnum::TrieScanAggregateWrapper(mut aggregate_wrapper) => {
-                    materialize_up_to(&mut aggregate_wrapper.trie_scan, cut_bottom)
-                }
-                _ => materialize_up_to(&mut TrieScanPrune::new(iter), cut_bottom),
-            }))
+            Ok(iter_opt.and_then(|iter| Self::materialized_trie_scan(iter, cut_bottom)))
         }
     }
 
@@ -795,7 +802,12 @@ impl DatabaseInstance {
         let iter_opt =
             self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
 
-        Ok(iter_opt.and_then(|iter| scan_first_match(&mut TrieScanPrune::new(iter))))
+        Ok(iter_opt.and_then(|iter| match iter {
+            TrieScanEnum::TrieScanAggregateWrapper(mut aggregate_wrapper) => {
+                scan_first_match(&mut aggregate_wrapper.trie_scan)
+            }
+            _ => scan_first_match(&mut TrieScanPrune::new(iter)),
+        }))
     }
 
     /// Executes a given [`ExecutionPlan`].
