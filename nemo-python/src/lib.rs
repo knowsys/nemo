@@ -91,7 +91,7 @@ impl NemoLiteral {
     fn new(value: PyObject, lang: Option<String>) -> PyResult<NemoLiteral> {
         Python::with_gil(|py| {
             let inner: String = value.extract(py).map_err(|_| {
-                NemoError::new_err(format!("Only string arguments are currently supported"))
+                NemoError::new_err("Only string arguments are currently supported".to_string())
             })?;
 
             let datatype = if lang.is_some() {
