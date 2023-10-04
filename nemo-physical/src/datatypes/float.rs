@@ -76,17 +76,6 @@ impl Add for Float {
     }
 }
 
-impl CheckedAdd for Float {
-    fn checked_add(&self, rhs: &Self) -> Option<Self> {
-        let sum = self.0 + rhs.0;
-        if sum.is_finite() {
-            Self::new(sum).ok()
-        } else {
-            None
-        }
-    }
-}
-
 impl AddAssign for Float {
     fn add_assign(&mut self, rhs: Self) {
         self.0.add_assign(rhs.0)

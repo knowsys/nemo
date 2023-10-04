@@ -3,12 +3,10 @@
 use std::collections::HashMap;
 
 use nemo_physical::{
-    columnar::operations::arithmetic::arithmetic::ArithmeticTree,
+    columnar::operations::arithmetic::expression::ArithmeticTree,
     datatypes::DataValueT,
-    // columnar::operations::columnscan_arithmetic::ArithmeticOperation,
     management::{execution_plan::ExecutionNodeRef, ExecutionPlan},
     tabular::operations::triescan_append::AppendInstruction,
-    // tabular::operations::triescan_append::{AppendInstruction, OperationTreeT},
     util::TaggedTree,
 };
 
@@ -17,7 +15,7 @@ use crate::{
     program_analysis::variable_order::VariableOrder,
 };
 
-fn termtree_to_operationtree(
+fn termtree_to_arithmetictree(
     tree: &TaggedTree<TermOperation>,
     order: &VariableOrder,
     logical_type: &PrimitiveType,
@@ -41,34 +39,34 @@ fn termtree_to_operationtree(
         TermOperation::Addition => ArithmeticTree::Addition(
             tree.subtrees
                 .iter()
-                .map(|t| termtree_to_operationtree(t, order, logical_type))
+                .map(|t| termtree_to_arithmetictree(t, order, logical_type))
                 .collect(),
         ),
         TermOperation::Multiplication => ArithmeticTree::Multiplication(
             tree.subtrees
                 .iter()
-                .map(|t| termtree_to_operationtree(t, order, logical_type))
+                .map(|t| termtree_to_arithmetictree(t, order, logical_type))
                 .collect(),
         ),
         TermOperation::Subtraction => ArithmeticTree::Subtraction(
-            Box::new(termtree_to_operationtree(
+            Box::new(termtree_to_arithmetictree(
                 &tree.subtrees[0],
                 order,
                 logical_type,
             )),
-            Box::new(termtree_to_operationtree(
+            Box::new(termtree_to_arithmetictree(
                 &tree.subtrees[1],
                 order,
                 logical_type,
             )),
         ),
         TermOperation::Division => ArithmeticTree::Division(
-            Box::new(termtree_to_operationtree(
+            Box::new(termtree_to_arithmetictree(
                 &tree.subtrees[0],
                 order,
                 logical_type,
             )),
-            Box::new(termtree_to_operationtree(
+            Box::new(termtree_to_arithmetictree(
                 &tree.subtrees[1],
                 order,
                 logical_type,
@@ -93,7 +91,7 @@ pub(super) fn generate_node_arithmetic(
 
     for (constructor_index, (variable, tree)) in constructors.iter().enumerate() {
         new_variable_order.push_position(variable.clone(), first_unused_index + constructor_index);
-        constructor_instructions.push(AppendInstruction::Arithmetic(termtree_to_operationtree(
+        constructor_instructions.push(AppendInstruction::Arithmetic(termtree_to_arithmetictree(
             &tree.0,
             variable_order,
             types

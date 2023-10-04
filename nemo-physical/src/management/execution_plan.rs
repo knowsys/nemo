@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fmt::Debug,
     rc::{Rc, Weak},
 };
@@ -8,10 +8,12 @@ use std::{
 use ascii_tree::{write_tree, Tree};
 
 use crate::{
+    columnar::operations::condition::statement::ConditionStatement,
+    datatypes::DataValueT,
     tabular::operations::{
         triescan_aggregate::AggregationInstructions, triescan_append::AppendInstruction,
         triescan_join::JoinBindings, triescan_minus::SubtractInfo,
-        triescan_project::ProjectReordering, triescan_select::SelectEqualClasses, ValueAssignment,
+        triescan_project::ProjectReordering, triescan_select::SelectEqualClasses,
     },
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
@@ -131,7 +133,7 @@ pub enum ExecutionOperation {
     /// Table project operation; can only be applied to a `FetchTable` or `FetchTemp` node. TODO: FetchTable/Temp no longer existing in codebase
     Project(ExecutionNodeRef, ProjectReordering),
     /// Only leave entries in that have a certain value.
-    SelectValue(ExecutionNodeRef, HashMap<usize, ValueAssignment>),
+    SelectValue(ExecutionNodeRef, Vec<ConditionStatement<DataValueT>>),
     /// Only leave entries in that contain equal values in certain columns.
     SelectEqual(ExecutionNodeRef, SelectEqualClasses),
     /// Append certain columns to the trie.
@@ -271,9 +273,9 @@ impl ExecutionPlan {
     pub fn select_value(
         &mut self,
         subnode: ExecutionNodeRef,
-        assigments: HashMap<usize, ValueAssignment>,
+        conditions: Vec<ConditionStatement<DataValueT>>,
     ) -> ExecutionNodeRef {
-        let new_operation = ExecutionOperation::SelectValue(subnode, assigments);
+        let new_operation = ExecutionOperation::SelectValue(subnode, conditions);
         self.push_and_return_ref(new_operation)
     }
 

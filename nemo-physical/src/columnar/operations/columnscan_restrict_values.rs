@@ -1,83 +1,13 @@
-use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
+use super::{
+    super::traits::columnscan::{ColumnScan, ColumnScanCell},
+    arithmetic::{
+        expression::{ArithmeticTree, ArithmeticTreeLeaf},
+        traits::ArithmeticOperations,
+    },
+    condition::statement::ConditionStatement,
+};
 use crate::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
-
-/// Concrete value an interval bound can take.
-#[derive(Debug, Clone)]
-pub enum FilterValue<T>
-where
-    T: Clone,
-{
-    /// Interval bound is given as a value pointed by a column scan with the given index.
-    Column(usize),
-    /// Interval bound by the given constant.
-    Constant(T),
-}
-
-impl<T> FilterValue<T>
-where
-    T: Clone,
-{
-    /// Return the column index this value refers to.
-    /// Returns None if this is a constant.
-    pub fn column_index(&self) -> Option<usize> {
-        match self {
-            FilterValue::Column(index) => Some(*index),
-            FilterValue::Constant(_) => None,
-        }
-    }
-
-    /// Return a mutable reference to the column index this value refers to.
-    /// Returns None if this is a constant.
-    pub fn column_index_mut(&mut self) -> Option<&mut usize> {
-        match self {
-            FilterValue::Column(index) => Some(index),
-            FilterValue::Constant(_) => None,
-        }
-    }
-}
-
-/// Represents a bound
-#[derive(Debug, Clone)]
-pub enum FilterBound<T>
-where
-    T: Clone,
-{
-    /// Bound includes the given value.
-    Inclusive(FilterValue<T>),
-    /// Bound exclusdes the given value.
-    Exclusive(FilterValue<T>),
-}
-
-impl<T> FilterBound<T>
-where
-    T: Clone,
-{
-    /// Return the column index which this bound references.
-    /// Return `None` if the bound is given by a constant.
-    pub fn column_index(&self) -> Option<usize> {
-        match self {
-            FilterBound::Inclusive(value) | FilterBound::Exclusive(value) => value.column_index(),
-        }
-    }
-
-    /// Return a mutable reference to the column index which this bound references.
-    /// Return `None` if the bound is given by a constant.
-    pub fn column_index_mut(&mut self) -> Option<&mut usize> {
-        match self {
-            FilterBound::Inclusive(value) | FilterBound::Exclusive(value) => {
-                value.column_index_mut()
-            }
-        }
-    }
-
-    /// Return a mutable reference to the [`FilterValue`].
-    pub fn value_mut(&mut self) -> &mut FilterValue<T> {
-        match self {
-            FilterBound::Inclusive(value) | FilterBound::Exclusive(value) => value,
-        }
-    }
-}
 
 #[derive(Debug)]
 enum ColumnScanStatus {
@@ -89,70 +19,200 @@ enum ColumnScanStatus {
     After,
 }
 
+#[derive(Debug)]
+enum Bound<T> {
+    Inclusive(ArithmeticTree<T>),
+    Exclusive(ArithmeticTree<T>),
+}
+
+#[derive(Debug)]
+enum BoundKind<T> {
+    Lower(Bound<T>),
+    Upper(Bound<T>),
+}
+
+/// [`ArithmeticTree`] will reference the `value_scan` with this value
+const VALUE_SCAN_INDEX: usize = 0;
+
+impl<T> ConditionStatement<T>
+where
+    T: Clone,
+{
+    /// Check if condition is of the type
+    /// `value_scan <op> <expression>`
+    /// where `<expression>` must not depend on `value_scan`
+    fn special_form<'a>(
+        tree_value: &'a ArithmeticTree<T>,
+        tree_other: &'a ArithmeticTree<T>,
+    ) -> bool {
+        let value_is_reference = if let ArithmeticTree::Reference(index) = tree_value {
+            *index == VALUE_SCAN_INDEX
+        } else {
+            false
+        };
+
+        let other_not_contains_value_reference = tree_other.leaves().iter().all(|l| {
+            if let ArithmeticTreeLeaf::Reference(index) = l {
+                *index != VALUE_SCAN_INDEX
+            } else {
+                true
+            }
+        });
+
+        value_is_reference && other_not_contains_value_reference
+    }
+
+    fn into_bound(&self) -> Option<BoundKind<T>> {
+        match self {
+            ConditionStatement::Unequal(_, _) => None,
+            ConditionStatement::Equal(left, right) => {
+                if Self::special_form(left, right) {
+                    Some(BoundKind::Lower(Bound::Inclusive(right.clone())))
+                } else if Self::special_form(right, left) {
+                    Some(BoundKind::Lower(Bound::Inclusive(left.clone())))
+                } else {
+                    None
+                }
+            }
+            ConditionStatement::LessThan(left, right) => {
+                if Self::special_form(left, right) {
+                    Some(BoundKind::Upper(Bound::Exclusive(right.clone())))
+                } else if Self::special_form(right, left) {
+                    Some(BoundKind::Lower(Bound::Exclusive(left.clone())))
+                } else {
+                    None
+                }
+            }
+            ConditionStatement::LessThanEqual(left, right) => {
+                if Self::special_form(left, right) {
+                    Some(BoundKind::Upper(Bound::Inclusive(right.clone())))
+                } else if Self::special_form(right, left) {
+                    Some(BoundKind::Lower(Bound::Inclusive(left.clone())))
+                } else {
+                    None
+                }
+            }
+            ConditionStatement::GreaterThan(left, right) => {
+                if Self::special_form(left, right) {
+                    Some(BoundKind::Lower(Bound::Exclusive(right.clone())))
+                } else if Self::special_form(right, left) {
+                    Some(BoundKind::Upper(Bound::Exclusive(left.clone())))
+                } else {
+                    None
+                }
+            }
+            ConditionStatement::GreaterThanEqual(left, right) => {
+                if Self::special_form(left, right) {
+                    Some(BoundKind::Lower(Bound::Inclusive(right.clone())))
+                } else if Self::special_form(right, left) {
+                    Some(BoundKind::Upper(Bound::Inclusive(left.clone())))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
 /// [`ColumnScan`] which allows its sub scan to only jump to a certain value
 #[derive(Debug)]
 pub struct ColumnScanRestrictValues<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + ColumnDataType + ArithmeticOperations,
 {
-    /// The sub scan that provides the values
-    scan_value: &'a ColumnScanCell<'a, T>,
-    /// The sub scans relative to which `scan_value` will be restricted.
-    scans_restriction: Vec<&'a ColumnScanCell<'a, T>>,
+    /// Current scan the values of which are being restricted
+    value_scan: &'a ColumnScanCell<'a, T>,
+    /// Additional scans which may provide values for the conditions.
+    /// It is assumed that each of them is pointing at some value.
+    input_scans: Vec<&'a ColumnScanCell<'a, T>>,
 
-    /// Lower bounds for the value of `scan_value`.
-    lower_bounds: Vec<FilterBound<T>>,
-    /// Upper bounds for the vlaue of `scan_value`.
-    upper_bounds: Vec<FilterBound<T>>,
-    /// Values that are skipped in `scan_value`.
-    avoid_values: Vec<FilterValue<T>>,
+    /// Conditions that should be fulfilled.
+    /// `value_scan` can be referenced with 0
+    /// `input_scans` are referenced with their index incremented by 1.
+    conditions: Vec<ConditionStatement<T>>,
+    /// Lower bounds for the value of of the currently restricted scan.
+    /// These are used instead of conditions as an optimization,
+    /// as this allows you to use `seek`.
+    lower_bounds: Vec<Bound<T>>,
+    /// Upper bounds for the value of of the currently restricted scan.
+    /// These are used instead of conditions as an optimization,
+    /// as this allows you to abort computation early.
+    upper_bounds: Vec<Bound<T>>,
 
     /// Status of this scan.
     status: ColumnScanStatus,
 }
 impl<'a, T> ColumnScanRestrictValues<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + ColumnDataType + ArithmeticOperations,
 {
     /// Constructs a new [`ColumnScanRestrictValues`].
     pub fn new(
-        scan_value: &'a ColumnScanCell<'a, T>,
-        scans_restriction: Vec<&'a ColumnScanCell<'a, T>>,
-        lower_bounds: Vec<FilterBound<T>>,
-        upper_bounds: Vec<FilterBound<T>>,
-        avoid_values: Vec<FilterValue<T>>,
+        value_scan: &'a ColumnScanCell<'a, T>,
+        input_scans: Vec<&'a ColumnScanCell<'a, T>>,
+        conditions: Vec<ConditionStatement<T>>,
     ) -> ColumnScanRestrictValues<'a, T> {
+        // Find conditions that are lower/upper bounds for the currently restricted scan
+        let mut lower_bounds = Vec::<Bound<T>>::new();
+        let mut upper_bounds = Vec::<Bound<T>>::new();
+
+        let conditions = conditions
+            .into_iter()
+            .filter(|condition| {
+                if let Some(bound) = condition.into_bound() {
+                    match bound {
+                        BoundKind::Lower(b) => {
+                            lower_bounds.push(b);
+                        }
+                        BoundKind::Upper(b) => {
+                            upper_bounds.push(b);
+                        }
+                    }
+
+                    return false;
+                }
+
+                true
+            })
+            .collect();
+
         ColumnScanRestrictValues {
-            scan_value,
-            scans_restriction,
+            value_scan,
+            input_scans,
+            conditions,
             lower_bounds,
             upper_bounds,
-            avoid_values,
             status: ColumnScanStatus::Before,
         }
     }
 
-    fn get_value(&self, value: &FilterValue<T>) -> T {
-        match value {
-            FilterValue::Column(index) => self.scans_restriction[*index]
-                .current()
-                .expect("If the bound is set to Column then scan_lower must be Some"),
-            FilterValue::Constant(constant) => *constant,
-        }
+    /// Prepares input values to evaluate the [`ArithmeticTree`] in a condition
+    /// Since there is special handling for `self.value_scan` this inserts a placeholder at the front.
+    /// (We do not read value_scan yet because it might only be set later)
+    fn get_referenced_values(&self) -> Vec<T> {
+        let mut result = vec![T::zero()];
+
+        result.extend(self.input_scans.iter().map(|s| {
+            s.current()
+                .expect("Every referenced scan must have a value.")
+        }));
+
+        result
     }
 
-    fn satisfy_lower_bounds(&mut self) {
+    /// Set `self.value_scan` such that it satisfies each of the `self.lower_bounds`
+    fn satisfy_lower_bounds(&mut self, referenced_values: &[T]) -> Option<()> {
         for lower_bound in &self.lower_bounds {
             match lower_bound {
-                FilterBound::Inclusive(bound) => {
-                    let bound_value = self.get_value(bound);
-                    self.scan_value.seek(bound_value);
+                Bound::Inclusive(tree) => {
+                    let lower_value = tree.evaluate(referenced_values)?;
+                    self.value_scan.seek(lower_value);
                 }
-                FilterBound::Exclusive(bound) => {
-                    let bound_value = self.get_value(bound);
-                    if let Some(seeked) = self.scan_value.seek(bound_value) {
-                        if seeked == bound_value {
-                            self.scan_value.next();
+                Bound::Exclusive(tree) => {
+                    let lower_value = tree.evaluate(referenced_values)?;
+                    if let Some(seeked) = self.value_scan.seek(lower_value) {
+                        if seeked == lower_value {
+                            self.value_scan.next();
                         }
                     }
                 }
@@ -160,47 +220,48 @@ where
         }
 
         if self.lower_bounds.is_empty() {
-            self.scan_value.next();
+            self.value_scan.next();
         }
 
         self.status = ColumnScanStatus::Within;
+        Some(())
     }
 
-    fn check_upper_bounds(&self) -> bool {
-        if let Some(current) = self.current() {
-            for upper_bound in &self.upper_bounds {
-                match upper_bound {
-                    FilterBound::Inclusive(bound) => {
-                        if current > self.get_value(bound) {
-                            return false;
-                        }
+    /// Check if `self.value_scan` satisfies each of the `self.upper_bounds`.
+    /// Returns `None` if a expression was undefined.
+    fn check_upper_bounds(&self, referenced_values: &[T]) -> Option<bool> {
+        for bound in &self.upper_bounds {
+            match bound {
+                Bound::Inclusive(tree) => {
+                    let upper_value = tree.evaluate(referenced_values)?;
+
+                    if self.current()? > upper_value {
+                        return Some(false);
                     }
-                    FilterBound::Exclusive(bound) => {
-                        if current >= self.get_value(bound) {
-                            return false;
-                        }
+                }
+                Bound::Exclusive(tree) => {
+                    let upper_value = tree.evaluate(referenced_values)?;
+
+                    if self.current()? >= upper_value {
+                        return Some(false);
                     }
                 }
             }
-
-            return true;
         }
 
-        false
+        Some(true)
     }
 
-    fn check_avoid_values(&self) -> bool {
-        if let Some(current) = self.current() {
-            for avoid_value in &self.avoid_values {
-                if current == self.get_value(avoid_value) {
-                    return false;
-                }
+    /// Check if `self.value_scan` satisfies each of the `self.conditions`.
+    /// Returns `None` if a expression was undefined.
+    fn check_conditions(&self, referenced_values: &[T]) -> Option<bool> {
+        for condition in &self.conditions {
+            if !condition.evaluate(referenced_values)? {
+                return Some(false);
             }
-
-            return true;
         }
 
-        false
+        Some(true)
     }
 }
 
@@ -211,22 +272,30 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
+        let mut referenced_values = self.get_referenced_values();
+
         match self.status {
             ColumnScanStatus::Before => {
-                self.satisfy_lower_bounds();
+                self.satisfy_lower_bounds(&referenced_values)?;
                 self.status = ColumnScanStatus::Within;
             }
             ColumnScanStatus::Within => {
-                self.scan_value.next();
+                self.value_scan.next();
             }
             ColumnScanStatus::After => return None,
         }
 
-        if !self.check_avoid_values() {
-            self.scan_value.next();
+        loop {
+            referenced_values[VALUE_SCAN_INDEX] = self.value_scan.current()?;
+
+            if self.check_conditions(&referenced_values)? {
+                break;
+            } else {
+                self.value_scan.next();
+            }
         }
 
-        if self.check_upper_bounds() {
+        if self.check_upper_bounds(&referenced_values)? {
             self.current()
         } else {
             self.status = ColumnScanStatus::After;
@@ -240,24 +309,32 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
+        let mut referenced_values = self.get_referenced_values();
+
         match self.status {
             ColumnScanStatus::Before => {
-                self.satisfy_lower_bounds();
+                self.satisfy_lower_bounds(&referenced_values);
                 self.status = ColumnScanStatus::Within;
 
-                self.scan_value.seek(value);
+                self.value_scan.seek(value);
             }
             ColumnScanStatus::Within => {
-                self.scan_value.seek(value);
+                self.value_scan.seek(value);
             }
             ColumnScanStatus::After => return None,
         }
 
-        if !self.check_avoid_values() {
-            self.scan_value.next();
+        loop {
+            referenced_values[VALUE_SCAN_INDEX] = self.value_scan.current()?;
+
+            if self.check_conditions(&referenced_values)? {
+                break;
+            } else {
+                self.value_scan.next();
+            }
         }
 
-        if self.check_upper_bounds() {
+        if self.check_upper_bounds(&referenced_values)? {
             self.current()
         } else {
             self.status = ColumnScanStatus::After;
@@ -270,7 +347,7 @@ where
             return None;
         }
 
-        self.scan_value.current()
+        self.value_scan.current()
     }
 
     fn reset(&mut self) {
@@ -289,7 +366,9 @@ where
 mod test {
     use crate::columnar::{
         column_types::vector::ColumnVector,
-        operations::columnscan_restrict_values::{FilterBound, FilterValue},
+        operations::{
+            arithmetic::expression::ArithmeticTree, condition::statement::ConditionStatement,
+        },
         traits::{
             column::Column,
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
@@ -308,9 +387,10 @@ mod test {
         let mut restrict_scan = ColumnScanRestrictValues::new(
             &col_iter,
             vec![],
-            vec![FilterBound::Inclusive(FilterValue::Constant(4))],
-            vec![FilterBound::Inclusive(FilterValue::Constant(4))],
-            vec![],
+            vec![ConditionStatement::Equal(
+                ArithmeticTree::Reference(0),
+                ArithmeticTree::Constant(4),
+            )],
         );
 
         assert_eq!(restrict_scan.current(), None);
@@ -323,9 +403,10 @@ mod test {
         let mut restrict_scan = ColumnScanRestrictValues::new(
             &col_iter,
             vec![],
-            vec![FilterBound::Inclusive(FilterValue::Constant(7))],
-            vec![FilterBound::Inclusive(FilterValue::Constant(7))],
-            vec![],
+            vec![ConditionStatement::Equal(
+                ArithmeticTree::Reference(0),
+                ArithmeticTree::Constant(7),
+            )],
         );
         assert_eq!(restrict_scan.current(), None);
         assert_eq!(restrict_scan.next(), None);
@@ -340,9 +421,16 @@ mod test {
         let mut restrict_scan = ColumnScanRestrictValues::new(
             &col_iter,
             vec![],
-            vec![FilterBound::Exclusive(FilterValue::Constant(1))],
-            vec![FilterBound::Inclusive(FilterValue::Constant(4))],
-            vec![],
+            vec![
+                ConditionStatement::GreaterThan(
+                    ArithmeticTree::Reference(0),
+                    ArithmeticTree::Constant(1),
+                ),
+                ConditionStatement::LessThanEqual(
+                    ArithmeticTree::Reference(0),
+                    ArithmeticTree::Constant(4),
+                ),
+            ],
         );
 
         assert_eq!(restrict_scan.current(), None);
@@ -365,16 +453,23 @@ mod test {
         let upper_bound =
             ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_bounds.iter()));
 
-        lower_bound.next();
+        lower_bound.next(); // lower_bound = 2
         upper_bound.next();
-        upper_bound.next();
+        upper_bound.next(); // upper_bound = 7
 
         let mut restrict_scan = ColumnScanRestrictValues::new(
             &value_iter,
             vec![&lower_bound, &upper_bound],
-            vec![FilterBound::Exclusive(FilterValue::Column(0))],
-            vec![FilterBound::Inclusive(FilterValue::Column(1))],
-            vec![],
+            vec![
+                ConditionStatement::GreaterThan(
+                    ArithmeticTree::Reference(0),
+                    ArithmeticTree::Reference(1),
+                ),
+                ConditionStatement::LessThanEqual(
+                    ArithmeticTree::Reference(0),
+                    ArithmeticTree::Reference(2),
+                ),
+            ],
         );
 
         assert_eq!(restrict_scan.current(), None);
@@ -398,19 +493,26 @@ mod test {
         let unequal_2 =
             ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_unequal_2.iter()));
 
-        unequal_1.next();
+        unequal_1.next(); // unequal_1 = 1
         unequal_2.next();
-        unequal_2.next();
+        unequal_2.next(); // unequal_2 = 3
 
         let mut restrict_scan = ColumnScanRestrictValues::new(
             &value_iter,
             vec![&unequal_1, &unequal_2],
-            vec![],
-            vec![],
             vec![
-                FilterValue::Column(0),
-                FilterValue::Column(1),
-                FilterValue::Constant(5),
+                ConditionStatement::Unequal(
+                    ArithmeticTree::Reference(0),
+                    ArithmeticTree::Reference(1),
+                ),
+                ConditionStatement::Unequal(
+                    ArithmeticTree::Reference(0),
+                    ArithmeticTree::Reference(2),
+                ),
+                ConditionStatement::Unequal(
+                    ArithmeticTree::Reference(0),
+                    ArithmeticTree::Constant(5),
+                ),
             ],
         );
 
@@ -439,25 +541,92 @@ mod test {
             ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_filter.iter()));
         let unequals = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_filter.iter()));
 
-        lower_bound.next();
+        lower_bound.next(); // lower_bound = 2
         upper_bound.next();
         upper_bound.next();
-        upper_bound.next();
+        upper_bound.next(); // upper_bound = 7
         unequals.next();
-        unequals.next();
+        unequals.next(); // unequals = 5
 
         let mut restrict_scan = ColumnScanRestrictValues::new(
             &value_iter,
             vec![&lower_bound, &upper_bound, &unequals],
-            vec![FilterBound::Exclusive(FilterValue::Column(0))],
-            vec![FilterBound::Inclusive(FilterValue::Column(1))],
-            vec![FilterValue::Column(2), FilterValue::Constant(3)],
+            vec![
+                ConditionStatement::GreaterThan(
+                    ArithmeticTree::Reference(0),
+                    ArithmeticTree::Reference(1),
+                ),
+                ConditionStatement::LessThanEqual(
+                    ArithmeticTree::Reference(0),
+                    ArithmeticTree::Reference(2),
+                ),
+                ConditionStatement::Unequal(
+                    ArithmeticTree::Reference(0),
+                    ArithmeticTree::Reference(3),
+                ),
+            ],
         );
 
         assert_eq!(restrict_scan.current(), None);
+        assert_eq!(restrict_scan.next(), Some(3));
+        assert_eq!(restrict_scan.current(), Some(3));
         assert_eq!(restrict_scan.next(), Some(4));
         assert_eq!(restrict_scan.current(), Some(4));
         assert_eq!(restrict_scan.next(), Some(6));
+        assert_eq!(restrict_scan.current(), Some(6));
+        assert_eq!(restrict_scan.next(), None);
+        assert_eq!(restrict_scan.current(), None);
+    }
+
+    #[test]
+    fn restrict_complex() {
+        let column_value = ColumnVector::new(vec![1u64, 2, 3, 4, 5, 6, 8]);
+        let column_filter = ColumnVector::new(vec![2u64, 5, 7]);
+
+        let value_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_value.iter()));
+        let filter_iter =
+            ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_filter.iter()));
+
+        filter_iter.next();
+        filter_iter.next(); // filter = 5
+
+        // value^2 < value * filter + 7
+        // value * 2 >= filter
+        let mut restrict_scan = ColumnScanRestrictValues::new(
+            &value_iter,
+            vec![&filter_iter],
+            vec![
+                ConditionStatement::LessThan(
+                    ArithmeticTree::Multiplication(vec![
+                        ArithmeticTree::Reference(0),
+                        ArithmeticTree::Reference(0),
+                    ]),
+                    ArithmeticTree::Addition(vec![
+                        ArithmeticTree::Multiplication(vec![
+                            ArithmeticTree::Reference(0),
+                            ArithmeticTree::Reference(1),
+                        ]),
+                        ArithmeticTree::Constant(7),
+                    ]),
+                ),
+                ConditionStatement::GreaterThanEqual(
+                    ArithmeticTree::Multiplication(vec![
+                        ArithmeticTree::Reference(0),
+                        ArithmeticTree::Constant(2),
+                    ]),
+                    ArithmeticTree::Reference(1),
+                ),
+            ],
+        );
+
+        assert_eq!(restrict_scan.current(), None);
+        assert_eq!(restrict_scan.next(), Some(3));
+        assert_eq!(restrict_scan.current(), Some(3));
+        assert_eq!(restrict_scan.next(), Some(4));
+        assert_eq!(restrict_scan.current(), Some(4));
+        assert_eq!(restrict_scan.seek(5), Some(5));
+        assert_eq!(restrict_scan.current(), Some(5));
+        assert_eq!(restrict_scan.seek(6), Some(6));
         assert_eq!(restrict_scan.current(), Some(6));
         assert_eq!(restrict_scan.next(), None);
         assert_eq!(restrict_scan.current(), None);

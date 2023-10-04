@@ -31,9 +31,12 @@ pub enum ArithmeticTree<T> {
 
 /// Leaf node in an arithmetic tree
 #[derive(Debug)]
-pub enum ArithmeticTreeLeaf<'a, T> {
+pub enum ArithmeticTreeLeaf<T>
+where
+    T: Clone,
+{
     /// Evaluates to the given constant.
-    Constant(&'a T),
+    Constant(T),
     /// Evaluates to the value referenced with the given index.
     Reference(usize),
 }
@@ -77,7 +80,9 @@ impl<T: Clone> ArithmeticTree<T> {
     /// Return a reference to the values within the leaf nodes of this tree.
     pub fn leaves(&self) -> Vec<ArithmeticTreeLeaf<T>> {
         match self {
-            ArithmeticTree::Constant(constant) => vec![ArithmeticTreeLeaf::Constant(constant)],
+            ArithmeticTree::Constant(constant) => {
+                vec![ArithmeticTreeLeaf::Constant(constant.clone())]
+            }
             ArithmeticTree::Reference(index) => vec![ArithmeticTreeLeaf::Reference(*index)],
             ArithmeticTree::Addition(subs) | ArithmeticTree::Multiplication(subs) => {
                 subs.iter().flat_map(Self::leaves).collect()
@@ -118,14 +123,36 @@ impl<T: Clone> ArithmeticTree<T> {
         }
     }
 
-    /// Apply `function` to every constant leaf node of the tree
+    /// Apply `function` to every leaf node of the tree
     /// and return a new [`ArithmeticTree`] possibly of a different type.
-    pub fn map<O>(&self, function: &dyn Fn(T) -> O) -> ArithmeticTree<O> {
+    pub fn map<O>(
+        &self,
+        function: &dyn Fn(ArithmeticTreeLeaf<T>) -> ArithmeticTreeLeaf<O>,
+    ) -> ArithmeticTree<O>
+    where
+        O: Clone,
+    {
         match self {
             ArithmeticTree::Constant(constant) => {
-                ArithmeticTree::Constant(function(constant.clone()))
+                match function(ArithmeticTreeLeaf::Constant(constant.clone())) {
+                    ArithmeticTreeLeaf::Constant(new_constant) => {
+                        ArithmeticTree::Constant(new_constant.clone())
+                    }
+                    ArithmeticTreeLeaf::Reference(new_reference) => {
+                        ArithmeticTree::Reference(new_reference)
+                    }
+                }
             }
-            ArithmeticTree::Reference(index) => ArithmeticTree::Reference(*index),
+            ArithmeticTree::Reference(index) => {
+                match function(ArithmeticTreeLeaf::Reference(*index)) {
+                    ArithmeticTreeLeaf::Constant(new_constant) => {
+                        ArithmeticTree::Constant(new_constant.clone())
+                    }
+                    ArithmeticTreeLeaf::Reference(new_reference) => {
+                        ArithmeticTree::Reference(new_reference)
+                    }
+                }
+            }
             ArithmeticTree::Addition(sub) => {
                 ArithmeticTree::Addition(sub.iter().map(|s| s.map(function)).collect())
             }
@@ -156,6 +183,20 @@ impl<T: Clone> ArithmeticTree<T> {
             ArithmeticTree::Negation(sub) => ArithmeticTree::Negation(Box::new(sub.map(function))),
             ArithmeticTree::Abs(sub) => ArithmeticTree::Abs(Box::new(sub.map(function))),
         }
+    }
+
+    /// Return the maximum index that is referenced by a leaf node.
+    /// Returns `None` if all the leaf nodes are constants.
+    pub fn maximum_reference(&self) -> Option<usize> {
+        let mut result = None;
+
+        for leaf in self.leaves() {
+            if let ArithmeticTreeLeaf::Reference(index) = leaf {
+                result = result.map(|r| std::cmp::max(r, index));
+            }
+        }
+
+        result
     }
 }
 

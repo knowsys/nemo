@@ -1,4 +1,4 @@
-use super::{super::traits::columnscan::ColumnScan, arithmetic::arithmetic::ArithmeticTree};
+use super::{super::traits::columnscan::ColumnScan, arithmetic::expression::ArithmeticTree};
 use crate::{columnar::traits::columnscan::ColumnScanCell, datatypes::ColumnDataType};
 use std::{fmt::Debug, ops::Range};
 
@@ -17,7 +17,7 @@ where
     T: ColumnDataType,
 {
     /// List of subiterators that will be used in computing the arithmetic operation.
-    /// [`OperationTree`] refers to a [`ColumnScan`] by its position in this `Vec`.
+    /// The [`ArithmeticTree`] references [`ColumnScan`]s by its position in this `Vec`.
     column_scans: Vec<&'a ColumnScanCell<'a, T>>,
 
     /// The current value.
@@ -115,7 +115,7 @@ where
 mod test {
     use crate::columnar::{
         column_types::vector::{ColumnScanVector, ColumnVector},
-        operations::arithmetic::arithmetic::ArithmeticTree,
+        operations::arithmetic::expression::ArithmeticTree,
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 

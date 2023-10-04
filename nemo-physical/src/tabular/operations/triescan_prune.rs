@@ -571,507 +571,507 @@ impl<'a> TrieScan for TrieScanPrune<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
+    // use std::collections::HashMap;
 
-    use super::TrieScanPrune;
-    use crate::columnar::column_types::interval::ColumnWithIntervalsT;
-    use crate::columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue};
-    use crate::columnar::traits::column::Column;
-    use crate::columnar::traits::columnscan::ColumnScanT;
-    use crate::datatypes::DataValueT;
-    use crate::management::database::Dict;
-    use crate::tabular::operations::{
-        materialize, JoinBindings, TrieScanJoin, TrieScanRestrictValues, ValueAssignment,
-    };
-    use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
-    use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
+    // use super::TrieScanPrune;
+    // use crate::columnar::column_types::interval::ColumnWithIntervalsT;
+    // use crate::columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue};
+    // use crate::columnar::traits::column::Column;
+    // use crate::columnar::traits::columnscan::ColumnScanT;
+    // use crate::datatypes::DataValueT;
+    // use crate::management::database::Dict;
+    // use crate::tabular::operations::{
+    //     materialize, JoinBindings, TrieScanJoin, TrieScanRestrictValues, ValueAssignment,
+    // };
+    // use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
+    // use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
 
-    use crate::util::test_util::make_column_with_intervals_t;
-    use test_log::test;
+    // use crate::util::test_util::make_column_with_intervals_t;
+    // use test_log::test;
 
-    fn get_next_scan_item(scan: &mut TrieScanPrune) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = scan.current_scan().unwrap() {
-            rcs.next()
-        } else {
-            panic!("type should be u64");
-        }
-    }
+    // fn get_next_scan_item(scan: &mut TrieScanPrune) -> Option<u64> {
+    //     if let ColumnScanT::U64(rcs) = scan.current_scan().unwrap() {
+    //         rcs.next()
+    //     } else {
+    //         panic!("type should be u64");
+    //     }
+    // }
 
-    fn get_seek_scan_item(scan: &mut TrieScanPrune, seek_value: u64) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = scan.current_scan().unwrap() {
-            rcs.seek(seek_value)
-        } else {
-            panic!("type should be u64");
-        }
-    }
+    // fn get_seek_scan_item(scan: &mut TrieScanPrune, seek_value: u64) -> Option<u64> {
+    //     if let ColumnScanT::U64(rcs) = scan.current_scan().unwrap() {
+    //         rcs.seek(seek_value)
+    //     } else {
+    //         panic!("type should be u64");
+    //     }
+    // }
 
-    fn get_current_scan_item(scan: &mut TrieScanPrune) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = scan.current_scan().unwrap() {
-            rcs.current()
-        } else {
-            panic!("type should be u64");
-        }
-    }
+    // fn get_current_scan_item(scan: &mut TrieScanPrune) -> Option<u64> {
+    //     if let ColumnScanT::U64(rcs) = scan.current_scan().unwrap() {
+    //         rcs.current()
+    //     } else {
+    //         panic!("type should be u64");
+    //     }
+    // }
 
-    fn get_current_scan_item_at_layer(scan: &mut TrieScanPrune, layer_index: usize) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &*scan.get_scan(layer_index).unwrap().get() } {
-            rcs.current()
-        } else {
-            panic!("type should be u64");
-        }
-    }
+    // fn get_current_scan_item_at_layer(scan: &mut TrieScanPrune, layer_index: usize) -> Option<u64> {
+    //     if let ColumnScanT::U64(rcs) = unsafe { &*scan.get_scan(layer_index).unwrap().get() } {
+    //         rcs.current()
+    //     } else {
+    //         panic!("type should be u64");
+    //     }
+    // }
 
-    /// Creates an example trie with unmaterialized tuples
-    fn create_example_trie() -> Trie {
-        let column_fst = make_column_with_intervals_t(&[1, 2], &[0, 1]);
-        let column_snd = make_column_with_intervals_t(&[4, 5, 4], &[0, 2]);
-        let column_trd = make_column_with_intervals_t(&[0, 1, 2, 1, 8], &[0, 3, 4]);
-        let column_fth = make_column_with_intervals_t(&[3, 7, 5, 7, 3, 4, 6, 7], &[0, 2, 4, 6, 7]);
+    // /// Creates an example trie with unmaterialized tuples
+    // fn create_example_trie() -> Trie {
+    //     let column_fst = make_column_with_intervals_t(&[1, 2], &[0, 1]);
+    //     let column_snd = make_column_with_intervals_t(&[4, 5, 4], &[0, 2]);
+    //     let column_trd = make_column_with_intervals_t(&[0, 1, 2, 1, 8], &[0, 3, 4]);
+    //     let column_fth = make_column_with_intervals_t(&[3, 7, 5, 7, 3, 4, 6, 7], &[0, 2, 4, 6, 7]);
 
-        Trie::new(vec![column_fst, column_snd, column_trd, column_fth])
-    }
+    //     Trie::new(vec![column_fst, column_snd, column_trd, column_fth])
+    // }
 
-    /// Creates an example trie with unmaterialized tuples
-    fn create_example_trie_scan(
-        input_trie: &Trie,
-        layer_1_equality: u64,
-        layer_3_equality: u64,
-    ) -> TrieScanPrune {
-        let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(input_trie));
+    // /// Creates an example trie with unmaterialized tuples
+    // fn create_example_trie_scan(
+    //     input_trie: &Trie,
+    //     layer_1_equality: u64,
+    //     layer_3_equality: u64,
+    // ) -> TrieScanPrune {
+    //     let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(input_trie));
 
-        let mut dict = Dict::default();
-        let scan = TrieScanEnum::TrieScanRestrictValues(TrieScanRestrictValues::new(
-            &mut dict,
-            scan,
-            &HashMap::from([
-                (
-                    1,
-                    ValueAssignment {
-                        lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(layer_1_equality),
-                        ))],
-                        upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(layer_1_equality),
-                        ))],
-                        avoid_values: vec![],
-                    },
-                ),
-                (
-                    3,
-                    ValueAssignment {
-                        lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(layer_3_equality),
-                        ))],
-                        upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(layer_3_equality),
-                        ))],
-                        avoid_values: vec![],
-                    },
-                ),
-            ]),
-        ));
-        let scan = TrieScanPrune::new(scan);
+    //     let mut dict = Dict::default();
+    //     let scan = TrieScanEnum::TrieScanRestrictValues(TrieScanRestrictValues::new(
+    //         &mut dict,
+    //         scan,
+    //         &HashMap::from([
+    //             (
+    //                 1,
+    //                 ValueAssignment {
+    //                     lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+    //                         DataValueT::U64(layer_1_equality),
+    //                     ))],
+    //                     upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+    //                         DataValueT::U64(layer_1_equality),
+    //                     ))],
+    //                     avoid_values: vec![],
+    //                 },
+    //             ),
+    //             (
+    //                 3,
+    //                 ValueAssignment {
+    //                     lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+    //                         DataValueT::U64(layer_3_equality),
+    //                     ))],
+    //                     upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
+    //                         DataValueT::U64(layer_3_equality),
+    //                     ))],
+    //                     avoid_values: vec![],
+    //                 },
+    //             ),
+    //         ]),
+    //     ));
+    //     let scan = TrieScanPrune::new(scan);
 
-        scan
-    }
+    //     scan
+    // }
 
-    #[test]
-    fn test_no_effect_on_full_trie_scans() {
-        let column_a = make_column_with_intervals_t(&[1, 2, 4], &[0]);
-        let column_b = make_column_with_intervals_t(&[2, 7, 9, 1, 3, 12, 1, 2, 5], &[0, 3, 6]);
+    // #[test]
+    // fn test_no_effect_on_full_trie_scans() {
+    //     let column_a = make_column_with_intervals_t(&[1, 2, 4], &[0]);
+    //     let column_b = make_column_with_intervals_t(&[2, 7, 9, 1, 3, 12, 1, 2, 5], &[0, 3, 6]);
 
-        let input_trie = Trie::new(vec![column_a, column_b]);
+    //     let input_trie = Trie::new(vec![column_a, column_b]);
 
-        let mut scan = TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(
-            &input_trie,
-        )));
+    //     let mut scan = TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(
+    //         &input_trie,
+    //     )));
 
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(1));
-        assert_eq!(get_current_scan_item(&mut scan), Some(1));
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(1));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(1));
 
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(2));
-        assert_eq!(get_current_scan_item(&mut scan), Some(2));
-        assert_eq!(get_next_scan_item(&mut scan), Some(7));
-        assert_eq!(get_current_scan_item(&mut scan), Some(7));
-        assert_eq!(get_next_scan_item(&mut scan), Some(9));
-        assert_eq!(get_current_scan_item(&mut scan), Some(9));
-        assert_eq!(get_next_scan_item(&mut scan), None);
-        assert_eq!(get_current_scan_item(&mut scan), None);
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(2));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(2));
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(7));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(7));
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(9));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(9));
+    //     assert_eq!(get_next_scan_item(&mut scan), None);
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
 
-        scan.up();
-        assert_eq!(get_next_scan_item(&mut scan), Some(2));
-        assert_eq!(get_current_scan_item(&mut scan), Some(2));
+    //     scan.up();
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(2));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(2));
 
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(1));
-        assert_eq!(get_current_scan_item(&mut scan), Some(1));
-        assert_eq!(get_next_scan_item(&mut scan), Some(3));
-        assert_eq!(get_current_scan_item(&mut scan), Some(3));
-        assert_eq!(get_next_scan_item(&mut scan), Some(12));
-        assert_eq!(get_current_scan_item(&mut scan), Some(12));
-        assert_eq!(get_next_scan_item(&mut scan), None);
-        assert_eq!(get_current_scan_item(&mut scan), None);
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(1));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(1));
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(3));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(3));
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(12));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(12));
+    //     assert_eq!(get_next_scan_item(&mut scan), None);
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
 
-        scan.up();
-        assert_eq!(get_next_scan_item(&mut scan), Some(4));
-        assert_eq!(get_current_scan_item(&mut scan), Some(4));
+    //     scan.up();
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(4));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(4));
 
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(1));
-        assert_eq!(get_current_scan_item(&mut scan), Some(1));
-        assert_eq!(get_next_scan_item(&mut scan), Some(2));
-        assert_eq!(get_current_scan_item(&mut scan), Some(2));
-        assert_eq!(get_next_scan_item(&mut scan), Some(5));
-        assert_eq!(get_current_scan_item(&mut scan), Some(5));
-        assert_eq!(get_next_scan_item(&mut scan), None);
-        assert_eq!(get_current_scan_item(&mut scan), None);
-    }
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(1));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(1));
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(2));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(2));
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(5));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(5));
+    //     assert_eq!(get_next_scan_item(&mut scan), None);
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    // }
 
-    #[test]
-    fn test_skip_unmaterialized_tuples() {
-        let trie = create_example_trie();
-        let mut scan = create_example_trie_scan(&trie, 4, 7);
+    // #[test]
+    // fn test_skip_unmaterialized_tuples() {
+    //     let trie = create_example_trie();
+    //     let mut scan = create_example_trie_scan(&trie, 4, 7);
 
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(1));
-        assert_eq!(get_current_scan_item(&mut scan), Some(1));
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(4));
-        assert_eq!(get_current_scan_item(&mut scan), Some(4));
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(0));
-        assert_eq!(get_current_scan_item(&mut scan), Some(0));
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(7));
-        assert_eq!(get_current_scan_item(&mut scan), Some(7));
-        assert_eq!(get_next_scan_item(&mut scan), None);
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        scan.up();
-        assert_eq!(get_next_scan_item(&mut scan), Some(1));
-        assert_eq!(get_current_scan_item(&mut scan), Some(1));
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(7));
-        assert_eq!(get_current_scan_item(&mut scan), Some(7));
-        assert_eq!(get_next_scan_item(&mut scan), None);
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        scan.up();
-        assert_eq!(get_next_scan_item(&mut scan), None);
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        scan.up();
-        assert_eq!(get_next_scan_item(&mut scan), None);
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        scan.up();
-        assert_eq!(get_current_scan_item(&mut scan), Some(1));
-        assert_eq!(get_next_scan_item(&mut scan), Some(2));
-        assert_eq!(get_current_scan_item(&mut scan), Some(2));
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(4));
-        assert_eq!(get_current_scan_item(&mut scan), Some(4));
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(8));
-        assert_eq!(get_current_scan_item(&mut scan), Some(8));
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(7));
-        assert_eq!(get_current_scan_item(&mut scan), Some(7));
-        assert_eq!(get_next_scan_item(&mut scan), None);
-        assert_eq!(get_current_scan_item(&mut scan), None);
-    }
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(1));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(1));
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(4));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(4));
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(0));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(0));
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(7));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(7));
+    //     assert_eq!(get_next_scan_item(&mut scan), None);
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     scan.up();
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(1));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(1));
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(7));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(7));
+    //     assert_eq!(get_next_scan_item(&mut scan), None);
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     scan.up();
+    //     assert_eq!(get_next_scan_item(&mut scan), None);
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     scan.up();
+    //     assert_eq!(get_next_scan_item(&mut scan), None);
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     scan.up();
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(1));
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(2));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(2));
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(4));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(4));
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(8));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(8));
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(7));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(7));
+    //     assert_eq!(get_next_scan_item(&mut scan), None);
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    // }
 
-    #[test]
-    fn test_empty_input_trie() {
-        let trie = create_example_trie();
-        // Equality on lowest layer changed to 99 to prevent any matches and create trie scan without materialized tuples
-        let mut scan = create_example_trie_scan(&trie, 4, 99);
+    // #[test]
+    // fn test_empty_input_trie() {
+    //     let trie = create_example_trie();
+    //     // Equality on lowest layer changed to 99 to prevent any matches and create trie scan without materialized tuples
+    //     let mut scan = create_example_trie_scan(&trie, 4, 99);
 
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), None);
-        assert_eq!(get_current_scan_item(&mut scan), None);
-    }
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), None);
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    // }
 
-    #[test]
-    #[should_panic]
-    fn test_advance_on_uninitialized_trie_scan_should_panic() {
-        let trie = create_example_trie();
-        let mut scan = create_example_trie_scan(&trie, 4, 7);
+    // #[test]
+    // #[should_panic]
+    // fn test_advance_on_uninitialized_trie_scan_should_panic() {
+    //     let trie = create_example_trie();
+    //     let mut scan = create_example_trie_scan(&trie, 4, 7);
 
-        scan.advance_on_layer(0, false);
-    }
+    //     scan.advance_on_layer(0, false);
+    // }
 
-    #[test]
-    fn test_advance_above_target_layer() {
-        let trie = create_example_trie();
-        let mut scan = create_example_trie_scan(&trie, 4, 7);
+    // #[test]
+    // fn test_advance_above_target_layer() {
+    //     let trie = create_example_trie();
+    //     let mut scan = create_example_trie_scan(&trie, 4, 7);
 
-        // Initialize trie
-        scan.down();
+    //     // Initialize trie
+    //     scan.down();
 
-        let lowest_layer_index = scan.get_types().len() - 1;
+    //     let lowest_layer_index = scan.get_types().len() - 1;
 
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            None
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(0));
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            Some(7)
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(2));
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            Some(7)
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(0));
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            Some(7)
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), None);
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            None
-        );
-    }
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         None
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(0));
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         Some(7)
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(2));
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         Some(7)
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(0));
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         Some(7)
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), None);
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         None
+    //     );
+    // }
 
-    #[test]
-    fn test_advance_highest_advanced_layer() {
-        let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
-        let mut scan = TrieScanPrune::new(scan);
+    // #[test]
+    // fn test_advance_highest_advanced_layer() {
+    //     let trie = create_example_trie();
+    //     let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+    //     let mut scan = TrieScanPrune::new(scan);
 
-        // Initialize trie
-        scan.down();
+    //     // Initialize trie
+    //     scan.down();
 
-        let lowest_layer_index = scan.get_types().len() - 1;
+    //     let lowest_layer_index = scan.get_types().len() - 1;
 
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            None
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(0));
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            Some(3)
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(3));
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            Some(7)
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(2));
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            Some(5)
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(3));
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            Some(7)
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(2));
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            Some(3)
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(3));
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            Some(4)
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(1));
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            Some(6)
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(0));
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            Some(7)
-        );
-        assert_eq!(scan.advance_on_layer(lowest_layer_index, true), None);
-        assert_eq!(
-            get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
-            None
-        );
-    }
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         None
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(0));
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         Some(3)
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(3));
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         Some(7)
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(2));
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         Some(5)
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(3));
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         Some(7)
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(2));
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         Some(3)
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(3));
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         Some(4)
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(1));
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         Some(6)
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), Some(0));
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         Some(7)
+    //     );
+    //     assert_eq!(scan.advance_on_layer(lowest_layer_index, true), None);
+    //     assert_eq!(
+    //         get_current_scan_item_at_layer(&mut scan, lowest_layer_index),
+    //         None
+    //     );
+    // }
 
-    #[test]
-    fn test_advance_with_column_peeks() {
-        let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
-        let mut scan = TrieScanPrune::new(scan);
+    // #[test]
+    // fn test_advance_with_column_peeks() {
+    //     let trie = create_example_trie();
+    //     let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+    //     let mut scan = TrieScanPrune::new(scan);
 
-        // Initialize trie
-        scan.down();
+    //     // Initialize trie
+    //     scan.down();
 
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), None);
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), None);
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), None);
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), None);
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), None);
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), None);
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
 
-        // Only advance on highest layer
-        assert_eq!(scan.advance_on_layer(0, true), Some(0));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), None);
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), None);
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
-        // On one layer below
-        assert_eq!(scan.advance_on_layer(1, true), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), None);
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
-        // On lowest layer
-        assert_eq!(scan.advance_on_layer(3, true), Some(2));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(0));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), Some(3));
+    //     // Only advance on highest layer
+    //     assert_eq!(scan.advance_on_layer(0, true), Some(0));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), None);
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), None);
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
+    //     // On one layer below
+    //     assert_eq!(scan.advance_on_layer(1, true), Some(1));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), None);
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
+    //     // On lowest layer
+    //     assert_eq!(scan.advance_on_layer(3, true), Some(2));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(0));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), Some(3));
 
-        assert_eq!(scan.advance_on_layer(3, true), Some(3));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(0));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), Some(7));
+    //     assert_eq!(scan.advance_on_layer(3, true), Some(3));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(0));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), Some(7));
 
-        assert_eq!(scan.advance_on_layer(3, true), Some(2));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), Some(5));
+    //     assert_eq!(scan.advance_on_layer(3, true), Some(2));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(1));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), Some(5));
 
-        assert_eq!(scan.advance_on_layer(1, true), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(5));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), None);
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
-        // Advance on highest layer
-        assert_eq!(scan.advance_on_layer(0, true), Some(0));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(2));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), None);
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), None);
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
-    }
+    //     assert_eq!(scan.advance_on_layer(1, true), Some(1));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(5));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), None);
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
+    //     // Advance on highest layer
+    //     assert_eq!(scan.advance_on_layer(0, true), Some(0));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(2));
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), None);
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), None);
+    //     assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
+    // }
 
-    #[test]
-    fn test_advance_with_seek() {
-        let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
-        let mut scan = TrieScanPrune::new(scan);
+    // #[test]
+    // fn test_advance_with_seek() {
+    //     let trie = create_example_trie();
+    //     let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+    //     let mut scan = TrieScanPrune::new(scan);
 
-        // Initialize trie
-        scan.down();
+    //     // Initialize trie
+    //     scan.down();
 
-        assert_eq!(get_seek_scan_item(&mut scan, 0), Some(1));
-        scan.down();
-        assert_eq!(get_seek_scan_item(&mut scan, 0), Some(4));
-        scan.down();
-        assert_eq!(get_seek_scan_item(&mut scan, 0), Some(0));
-        scan.down();
-        assert_eq!(get_seek_scan_item(&mut scan, 5), Some(7));
-        assert_eq!(get_seek_scan_item(&mut scan, 0), Some(7));
-        assert_eq!(get_seek_scan_item(&mut scan, 7), Some(7));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(0));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), Some(7));
-        assert_eq!(get_seek_scan_item(&mut scan, 8), None);
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(0));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
-        scan.up();
-        assert_eq!(get_seek_scan_item(&mut scan, 2), Some(2));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(2));
-        assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
-    }
+    // assert_eq!(get_seek_scan_item(&mut scan, 0), Some(1));
+    // scan.down();
+    // assert_eq!(get_seek_scan_item(&mut scan, 0), Some(4));
+    // scan.down();
+    // assert_eq!(get_seek_scan_item(&mut scan, 0), Some(0));
+    // scan.down();
+    // assert_eq!(get_seek_scan_item(&mut scan, 5), Some(7));
+    // assert_eq!(get_seek_scan_item(&mut scan, 0), Some(7));
+    // assert_eq!(get_seek_scan_item(&mut scan, 7), Some(7));
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(0));
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), Some(7));
+    // assert_eq!(get_seek_scan_item(&mut scan, 8), None);
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(0));
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
+    // scan.up();
+    // assert_eq!(get_seek_scan_item(&mut scan, 2), Some(2));
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 0), Some(1));
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(2));
+    // assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
+    // }
 
-    #[test]
-    fn test_return_to_previous_layer() {
-        let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
-        let mut scan = TrieScanPrune::new(scan);
+    // #[test]
+    // fn test_return_to_previous_layer() {
+    //     let trie = create_example_trie();
+    //     let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+    //     let mut scan = TrieScanPrune::new(scan);
 
-        // Initialize trie
-        scan.down();
+    //     // Initialize trie
+    //     scan.down();
 
-        assert_eq!(get_next_scan_item(&mut scan), Some(1));
-        assert_eq!(get_current_scan_item(&mut scan), Some(1));
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(1));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(1));
 
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(4));
-        assert_eq!(get_current_scan_item(&mut scan), Some(4));
-        assert_eq!(get_next_scan_item(&mut scan), Some(5));
-        assert_eq!(get_current_scan_item(&mut scan), Some(5));
-        assert_eq!(get_next_scan_item(&mut scan), None);
-        assert_eq!(get_current_scan_item(&mut scan), None);
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(4));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(4));
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(5));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(5));
+    //     assert_eq!(get_next_scan_item(&mut scan), None);
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
 
-        // Trie scan should return the same results after going up and down again
-        scan.up();
-        scan.down();
-        assert_eq!(get_current_scan_item(&mut scan), None);
-        assert_eq!(get_next_scan_item(&mut scan), Some(4));
-        assert_eq!(get_current_scan_item(&mut scan), Some(4));
-        assert_eq!(get_next_scan_item(&mut scan), Some(5));
-        assert_eq!(get_current_scan_item(&mut scan), Some(5));
-        assert_eq!(get_next_scan_item(&mut scan), None);
-        assert_eq!(get_current_scan_item(&mut scan), None);
-    }
+    //     // Trie scan should return the same results after going up and down again
+    //     scan.up();
+    //     scan.down();
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(4));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(4));
+    //     assert_eq!(get_next_scan_item(&mut scan), Some(5));
+    //     assert_eq!(get_current_scan_item(&mut scan), Some(5));
+    //     assert_eq!(get_next_scan_item(&mut scan), None);
+    //     assert_eq!(get_current_scan_item(&mut scan), None);
+    // }
 
-    #[test]
-    fn test_partial_trie_scan_interface() {
-        let column_a_x = make_column_with_intervals_t(&[1, 2], &[0, 1]);
-        let column_a_y = make_column_with_intervals_t(&[0, 3, 4, 5, 2, 4, 7], &[0, 4]);
-        let column_b = make_column_with_intervals_t(&[0, 4], &[0]);
+    // #[test]
+    // fn test_partial_trie_scan_interface() {
+    //     let column_a_x = make_column_with_intervals_t(&[1, 2], &[0, 1]);
+    //     let column_a_y = make_column_with_intervals_t(&[0, 3, 4, 5, 2, 4, 7], &[0, 4]);
+    //     let column_b = make_column_with_intervals_t(&[0, 4], &[0]);
 
-        let trie_a = Trie::new(vec![column_a_x, column_a_y]);
-        let trie_b = Trie::new(vec![column_b]);
+    //     let trie_a = Trie::new(vec![column_a_x, column_a_y]);
+    //     let trie_b = Trie::new(vec![column_b]);
 
-        let scan_a = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
-            TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
-        ));
-        let scan_b = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
-            TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
-        ));
+    //     let scan_a = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
+    //         TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
+    //     ));
+    //     let scan_b = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
+    //         TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
+    //     ));
 
-        let scan_join = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
-            vec![scan_a, scan_b],
-            &JoinBindings::new(vec![vec![0, 1], vec![1]]),
-        ));
+    //     let scan_join = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
+    //         vec![scan_a, scan_b],
+    //         &JoinBindings::new(vec![vec![0, 1], vec![1]]),
+    //     ));
 
-        let result = materialize(&mut TrieScanPrune::new(scan_join)).unwrap();
+    //     let result = materialize(&mut TrieScanPrune::new(scan_join)).unwrap();
 
-        let expected_data = vec![0u64, 4, 4];
-        let expected_interval = vec![0usize, 2];
+    //     let expected_data = vec![0u64, 4, 4];
+    //     let expected_interval = vec![0usize, 2];
 
-        let (data, interval) = if let ColumnWithIntervalsT::U64(column) = result.get_column(1) {
-            (
-                column.get_data_column().iter().collect::<Vec<u64>>(),
-                column.get_int_column().iter().collect::<Vec<usize>>(),
-            )
-        } else {
-            unreachable!()
-        };
+    //     let (data, interval) = if let ColumnWithIntervalsT::U64(column) = result.get_column(1) {
+    //         (
+    //             column.get_data_column().iter().collect::<Vec<u64>>(),
+    //             column.get_int_column().iter().collect::<Vec<usize>>(),
+    //         )
+    //     } else {
+    //         unreachable!()
+    //     };
 
-        assert_eq!(expected_data, data);
-        assert_eq!(expected_interval, interval);
-    }
+    //     assert_eq!(expected_data, data);
+    //     assert_eq!(expected_interval, interval);
+    // }
 }

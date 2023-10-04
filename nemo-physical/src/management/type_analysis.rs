@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::HashMap, fmt::Display};
 
 use crate::{
     aggregates::operation::AggregateOperation,
-    columnar::operations::arithmetic::arithmetic::ArithmeticTreeLeaf,
+    columnar::operations::arithmetic::expression::ArithmeticTreeLeaf,
     datatypes::{casting::PartialUpperBound, DataTypeName},
     error::Error,
     tabular::{operations::triescan_append::AppendInstruction, traits::table_schema::TableSchema},
