@@ -1,13 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
-use nemo_physical::management::database::ColumnOrder;
+use nemo_physical::{management::database::ColumnOrder, util::TaggedTree};
 
 use crate::{
     error::Error,
     model::chase_model::{ChaseProgram, ChaseRule},
     model::{
         chase_model::ChaseAtom, types::error::TypeError, DataSource, FilterOperation, Identifier,
-        PrimitiveType, PrimitiveValue, TermOperation, TypeConstraint, Variable,
+        LeafTerm, PrimitiveType, PrimitiveValue, Term, TypeConstraint, Variable,
     },
     util::labeled_graph::LabeledGraph,
 };
@@ -446,7 +446,7 @@ impl ChaseProgram {
 
             for atom in rule.head() {
                 for (term_position, term) in atom.terms().iter().enumerate() {
-                    if let PrimitiveValue::Variable(variable) = term {
+                    if let LeafTerm::Variable(variable) = term {
                         let predicate_position =
                             PredicatePosition::new(atom.predicate(), term_position);
 
@@ -462,7 +462,7 @@ impl ChaseProgram {
 
             for atom in rule.all_body() {
                 for (term_position, term) in atom.terms().iter().enumerate() {
-                    if let PrimitiveValue::Variable(variable) = term {
+                    if let LeafTerm::Variable(variable) = term {
                         let predicate_position =
                             PredicatePosition::new(atom.predicate(), term_position);
 
@@ -507,19 +507,17 @@ impl ChaseProgram {
                     .get(head_variable)
                     .expect("The loop at the top went through all head atoms")[0];
 
-                for term in tree.terms() {
-                    if let PrimitiveValue::Variable(body_variable) = term {
-                        let body_position = variables_to_last_node
-                            .get(body_variable)
-                            .expect("The iteration above went through all body atoms")
-                            .clone();
+                for body_variable in tree.variables() {
+                    let body_position = variables_to_last_node
+                        .get(body_variable)
+                        .expect("The iteration above went through all body atoms")
+                        .clone();
 
-                        graph.add_edge(
-                            body_position,
-                            head_position.clone(),
-                            PositionGraphEdge::BodyToHead,
-                        );
-                    }
+                    graph.add_edge(
+                        body_position,
+                        head_position.clone(),
+                        PositionGraphEdge::BodyToHead,
+                    );
                 }
             }
 
@@ -774,19 +772,22 @@ impl ChaseProgram {
 
     fn check_for_nonnumeric_arithmetic(&self, analyses: &[RuleAnalysis]) -> Result<(), TypeError> {
         for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
-            for (variable, term_tree) in rule.constructors() {
-                if !term_tree.0.is_leaf() {
-                    let variable_type = analysis
-                        .variable_types
-                        .get(variable)
-                        .expect("Previous analysis should have assigned a type to each variable.");
+            for (variable, term) in rule.constructors() {
+                let expected_type = analysis
+                    .variable_types
+                    .get(variable)
+                    .expect("Previous analysis should have assigned a type to each variable.");
 
-                    if !variable_type.allows_numeric_operations() {
-                        return Err(TypeError::InvalidRuleNonNumericArithmetic);
-                    }
+                match term {
+                    Term::Operation {
+                        operation,
+                        subterms,
+                    } => {
+                        if !expected_type.allows_numeric_operations() {
+                            return Err(TypeError::InvalidRuleNonNumericArithmetic);
+                        }
 
-                    for term in term_tree.terms() {
-                        if let PrimitiveValue::Variable(variable) = term {
+                        for variable in term.variables() {
                             let variable_type = analysis.variable_types.get(variable).expect(
                                 "Previous analysis should have assigned a type to each variable.",
                             );
@@ -794,11 +795,13 @@ impl ChaseProgram {
                             if !variable_type.allows_numeric_operations() {
                                 return Err(TypeError::InvalidRuleNonNumericArithmetic);
                             }
-                        } else {
-                            variable_type.ground_term_to_data_value_t(term.clone())?;
                         }
+
+                        // TODO: check constants
                     }
-                }
+
+                    _ => {}
+                };
             }
         }
 
@@ -817,12 +820,11 @@ impl ChaseProgram {
                 .get(&fact.0.predicate())
                 .expect("Previous analysis should have assigned a type vector to each predicate.");
 
-            for (term_index, ground_term_tree) in fact.0.term_trees().iter().enumerate() {
-                if let TermOperation::Term(ground_term) = ground_term_tree.operation() {
-                    let logical_type = predicate_types[term_index];
-                    logical_type.ground_term_to_data_value_t(ground_term.clone())?;
+            for (ground_term, logical_type) in fact.0.term_trees().iter().zip(predicate_types) {
+                if let TaggedTree::Leaf(LeafTerm::Constant(value)) = ground_term.0 {
+                    logical_type.ground_term_to_data_value_t(value.clone())?;
                 } else {
-                    unreachable!(
+                    panic!(
                         "Its assumed that facts do not contain complicated expressions (for now?)"
                     );
                 }
@@ -832,7 +834,7 @@ impl ChaseProgram {
         for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
             for filter in rule.all_filters() {
                 let left_variable = &filter.lhs;
-                let right_term = if let PrimitiveValue::Variable(_) = filter.rhs {
+                let right_term = if let TaggedTree::Leaf(LeafTerm::Variable(_)) = filter.rhs.0 {
                     continue;
                 } else {
                     &filter.rhs
@@ -858,20 +860,23 @@ impl ChaseProgram {
                 );
 
                 for (term_index, term) in atom.terms().iter().enumerate() {
-                    if let PrimitiveValue::Variable(head_variable) = term {
-                        if rule.constructors().contains_key(head_variable) {
-                            let variable_type = analysis.variable_types.get(head_variable).expect(
+                    match term {
+                        LeafTerm::Variable(head_variable) => {
+                            if rule.constructors().contains_key(head_variable) {
+                                let variable_type = analysis.variable_types.get(head_variable).expect(
                                 "Previous analysis should have assigned a type to each variable.",
                             );
 
-                            if !variable_type.allows_numeric_operations() {
-                                return Err(TypeError::InvalidRuleNonNumericArithmetic);
+                                if !variable_type.allows_numeric_operations() {
+                                    return Err(TypeError::InvalidRuleNonNumericArithmetic);
+                                }
                             }
                         }
-                    } else {
-                        let logical_type = predicate_types[term_index];
-
-                        logical_type.ground_term_to_data_value_t(term.clone())?;
+                        LeafTerm::Constant(constant) => {
+                            let logical_type = predicate_types[term_index];
+                            logical_type.ground_term_to_data_value_t(constant.clone())?;
+                        }
+                        LeafTerm::Aggregate(_) => todo!("not handled"),
                     }
                 }
             }

@@ -6,7 +6,7 @@ use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
     execution::execution_engine::RuleInfo,
-    model::{chase_model::ChaseRule, PrimitiveValue, TermTree, Variable},
+    model::{chase_model::ChaseRule, PrimitiveValue, Term, Variable},
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, TableManager},
 };
@@ -20,7 +20,7 @@ use super::{
 #[derive(Debug)]
 pub struct SeminaiveStrategy {
     used_variables: HashSet<Variable>,
-    constructors: HashMap<Variable, TermTree>,
+    constructors: HashMap<Variable, Term>,
     join_generator: SeminaiveJoinGenerator,
     negation_generator: Option<NegationGenerator>,
 }
@@ -58,7 +58,7 @@ impl SeminaiveStrategy {
 
     fn get_used_variables(
         head_variables: &HashSet<Variable>,
-        constructors: &HashMap<Variable, TermTree>,
+        constructors: &HashMap<Variable, Term>,
     ) -> HashSet<Variable> {
         let mut result = HashSet::<Variable>::new();
 

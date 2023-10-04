@@ -1,4 +1,4 @@
-use super::{Aggregate, Identifier, PrimitiveValue, TermTree, Variable};
+use super::{Aggregate, Identifier, Term, Variable};
 
 /// An atom.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -6,16 +6,13 @@ pub struct Atom {
     /// The predicate.
     predicate: Identifier,
     /// The terms.
-    term_trees: Vec<TermTree>,
+    terms: Vec<Term>,
 }
 
 impl Atom {
     /// Construct a new Atom.
-    pub fn new(predicate: Identifier, terms: Vec<TermTree>) -> Self {
-        Self {
-            predicate,
-            term_trees: terms,
-        }
+    pub fn new(predicate: Identifier, terms: Vec<Term>) -> Self {
+        Self { predicate, terms }
     }
 
     /// Return the predicate [`Identifier`].
@@ -26,27 +23,19 @@ impl Atom {
 
     /// Return the terms trees in the atom - immutable.
     #[must_use]
-    pub fn term_trees(&self) -> &Vec<TermTree> {
-        &self.term_trees
+    pub fn term_trees(&self) -> &Vec<Term> {
+        &self.terms
     }
 
     /// Return the terms trees in the atom - mutable.
     #[must_use]
-    pub fn terms_trees_mut(&mut self) -> &mut Vec<TermTree> {
-        &mut self.term_trees
-    }
-
-    /// Returns all terms at the leave of the term trees of the atom.
-    pub fn terms(&self) -> impl Iterator<Item = &PrimitiveValue> {
-        self.term_trees.iter().flat_map(|t| t.terms())
+    pub fn terms_trees_mut(&mut self) -> &mut Vec<Term> {
+        &mut self.terms
     }
 
     /// Return all variables in the atom.
     pub fn variables(&self) -> impl Iterator<Item = &Variable> {
-        self.terms().filter_map(|term| match term {
-            PrimitiveValue::Variable(var) => Some(var),
-            _ => None,
-        })
+        self.terms.iter().flat_map(|t| t.variables())
     }
 
     /// Return all universally quantified variables in the atom.
@@ -63,9 +52,6 @@ impl Atom {
 
     /// Return all aggregate in the atom.
     pub fn aggregates(&self) -> impl Iterator<Item = &Aggregate> + '_ {
-        self.terms().filter_map(|term| match term {
-            PrimitiveValue::Aggregate(aggregate) => Some(aggregate),
-            _ => None,
-        })
+        self.terms.iter().flat_map(|t| t.aggregates())
     }
 }

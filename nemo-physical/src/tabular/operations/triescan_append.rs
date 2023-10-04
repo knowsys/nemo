@@ -9,7 +9,7 @@ use crate::{
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         column_types::rle::{ColumnBuilderRle, ColumnRle},
         operations::{
-            columnscan_arithmetic::{ArithmeticOperation, OperationTree},
+            columnscan_arithmetic::{ArithmeticOperand, OperationTree},
             ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant,
             ColumnScanCopy, ColumnScanPass,
         },
@@ -30,6 +30,7 @@ use crate::{
             table::Table,
         },
     },
+    util::TaggedTree,
 };
 use std::num::NonZeroUsize;
 
@@ -56,53 +57,24 @@ fn expand_range(columns: &[ColumnWithIntervalsT], range: Range<usize>) -> Range<
 pub type OperationTreeT = OperationTree<DataValueT>;
 
 impl OperationTreeT {
-    fn translate_recursive<F, T>(tree: OperationTreeT, translate_function: F) -> OperationTree<T>
+    fn translate_recursive<F, T>(self, translate_function: F) -> OperationTree<T>
     where
         F: Fn(DataValueT) -> T + Copy,
         T: ColumnDataType,
     {
-        match tree.tag {
-            ArithmeticOperation::Constant(constant) => OperationTree::<T>::leaf(
-                ArithmeticOperation::Constant(translate_function(constant)),
-            ),
-            ArithmeticOperation::ColumnScan(index) => {
-                OperationTree::<T>::leaf(ArithmeticOperation::ColumnScan(index))
-            }
-            ArithmeticOperation::Addition => {
-                let subtrees = tree
-                    .subtrees
+        match self {
+            TaggedTree::Node { tag, subtrees } => TaggedTree::Node {
+                tag,
+                subtrees: subtrees
                     .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Addition, subtrees)
+                    .map(|t| t.translate_recursive(translate_function))
+                    .collect(),
+            },
+            TaggedTree::Leaf(ArithmeticOperand::ColumnScan(u)) => {
+                TaggedTree::Leaf(ArithmeticOperand::ColumnScan(u))
             }
-            ArithmeticOperation::Subtraction => {
-                let subtrees = tree
-                    .subtrees
-                    .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Subtraction, subtrees)
-            }
-            ArithmeticOperation::Multiplication => {
-                let subtrees = tree
-                    .subtrees
-                    .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Multiplication, subtrees)
-            }
-            ArithmeticOperation::Division => {
-                let subtrees = tree
-                    .subtrees
-                    .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Division, subtrees)
+            TaggedTree::Leaf(ArithmeticOperand::Constant(c)) => {
+                TaggedTree::Leaf(ArithmeticOperand::Constant(translate_function(c)))
             }
         }
     }
@@ -123,13 +95,10 @@ impl OperationTreeT {
         input_types: &[StorageTypeName],
         dict: &mut Dict,
     ) -> StorageTypeName {
-        let first_leaf_node = self.leaves()[0];
+        let first_leaf_node = self.leaves().next().unwrap();
         match first_leaf_node {
-            ArithmeticOperation::Constant(constant) => {
-                constant.to_storage_value_mut(dict).get_type()
-            }
-            ArithmeticOperation::ColumnScan(index) => input_types[*index],
-            _ => unreachable!("Not a leave."),
+            ArithmeticOperand::Constant(constant) => constant.to_storage_value_mut(dict).get_type(),
+            ArithmeticOperand::ColumnScan(index) => input_types[*index],
         }
     }
 }
@@ -607,7 +576,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanAppend<'a> {
 mod test {
     use crate::{
         columnar::{
-            operations::columnscan_arithmetic::ArithmeticOperation, traits::columnscan::ColumnScanT,
+            operations::columnscan_arithmetic::{ArithmeticOperand, ArithmeticOperation},
+            traits::columnscan::ColumnScanT,
         },
         datatypes::{DataValueT, StorageTypeName},
         management::database::Dict,
@@ -1237,16 +1207,16 @@ mod test {
                         OperationTreeT::tree(
                             ArithmeticOperation::Addition,
                             vec![
-                                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(0)),
-                                OperationTreeT::leaf(ArithmeticOperation::Constant(
-                                    DataValueT::U64(3),
-                                )),
+                                OperationTreeT::leaf(ArithmeticOperand::ColumnScan(0)),
+                                OperationTreeT::leaf(ArithmeticOperand::Constant(DataValueT::U64(
+                                    3,
+                                ))),
                             ],
                         ),
-                        OperationTreeT::leaf(ArithmeticOperation::ColumnScan(1)),
+                        OperationTreeT::leaf(ArithmeticOperand::ColumnScan(1)),
                     ],
                 ),
-                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(0)),
+                OperationTreeT::leaf(ArithmeticOperand::ColumnScan(0)),
             ],
         );
 

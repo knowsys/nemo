@@ -4,10 +4,7 @@ use std::collections::HashMap;
 
 use crate::{
     error::Error,
-    model::{
-        Filter, FilterOperation, Identifier, Literal, PrimitiveValue, Rule, TermOperation,
-        TermTree, Variable,
-    },
+    model::{Filter, FilterOperation, Identifier, LeafTerm, Literal, Rule, Term, Variable},
 };
 
 use super::ChaseAtom;
@@ -19,7 +16,7 @@ pub struct ChaseRule {
     /// Head atoms of the rule
     head: Vec<ChaseAtom>,
     /// Head constructions
-    constructors: HashMap<Variable, TermTree>,
+    constructors: HashMap<Variable, Term>,
     /// Positive Body literals of the rule
     positive_body: Vec<ChaseAtom>,
     /// Filters applied to the body
@@ -35,7 +32,7 @@ impl ChaseRule {
     /// Construct a new rule.
     pub fn new(
         mut head: Vec<ChaseAtom>,
-        mut constructors: HashMap<Variable, TermTree>,
+        mut constructors: HashMap<Variable, Term>,
         mut positive_body: Vec<ChaseAtom>,
         mut positive_filters: Vec<Filter>,
         mut negative_body: Vec<ChaseAtom>,
@@ -43,7 +40,7 @@ impl ChaseRule {
         // apply equality constraints
         positive_filters.retain(|filter| {
             if filter.operation == FilterOperation::Equals {
-                if let PrimitiveValue::Variable(variable) = &filter.rhs {
+                if let Term::Leaf(LeafTerm::Variable(variable)) = &filter.rhs {
                     positive_body
                         .iter_mut()
                         .for_each(|atom| atom.substitute_variable(&filter.lhs, variable));
@@ -105,7 +102,7 @@ impl ChaseRule {
     }
 
     /// Return the constructors of the rule.
-    pub fn constructors(&self) -> &HashMap<Variable, TermTree> {
+    pub fn constructors(&self) -> &HashMap<Variable, Term> {
         &self.constructors
     }
 
@@ -191,25 +188,28 @@ impl TryFrom<Rule> for ChaseRule {
             }
         }
 
-        let mut constructors = HashMap::<Variable, TermTree>::new();
+        let mut constructors = HashMap::<Variable, Term>::new();
         let mut head_atoms = Vec::<ChaseAtom>::new();
-        let mut term_counter: usize = 1;
+        let mut term_counter: usize = 0;
+        let mut generate_head_operation_variable = move || {
+            term_counter += 1;
+            Variable::Universal(Identifier(format!("__HEAD_OPERATION_{term_counter}")))
+        };
         for atom in rule.head() {
-            let mut new_terms = Vec::<PrimitiveValue>::new();
+            let mut new_terms = Vec::<LeafTerm>::new();
 
-            for term_tree in atom.term_trees() {
-                if let TermOperation::Term(term) = term_tree.operation() {
-                    new_terms.push(term.clone());
-                } else {
-                    let new_variable =
-                        Variable::Universal(Identifier(format!("HEAD_OPERATION_{term_counter}")));
-                    new_terms.push(PrimitiveValue::Variable(new_variable.clone()));
-                    let exists = constructors.insert(new_variable, term_tree.clone());
-
-                    assert!(exists.is_none())
+            for term in atom.term_trees() {
+                match term {
+                    Term::Operation {
+                        operation,
+                        subterms,
+                    } => {
+                        let new_variable = generate_head_operation_variable();
+                        new_terms.push(LeafTerm::Variable(new_variable.clone()));
+                        _ = constructors.insert(new_variable, term.clone());
+                    }
+                    Term::Leaf(term) => new_terms.push(term.clone()),
                 }
-
-                term_counter += 1;
             }
 
             head_atoms.push(ChaseAtom::new(atom.predicate(), new_terms));

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::io::parser::ParseError;
 
-use super::{Atom, Filter, Literal, PrimitiveValue, Variable};
+use super::{Atom, Filter, LeafTerm, Literal, Term, Variable};
 
 /// A rule.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -115,7 +115,7 @@ impl Rule {
         for filter in &filters {
             let mut filter_variables = vec![&filter.lhs];
 
-            if let PrimitiveValue::Variable(right_variable) = &filter.rhs {
+            if let Term::Leaf(LeafTerm::Variable(right_variable)) = &filter.rhs {
                 filter_variables.push(right_variable);
             }
 

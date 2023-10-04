@@ -289,9 +289,6 @@ impl TryFrom<PrimitiveValue> for PhysicalString {
 
     fn try_from(term: PrimitiveValue) -> Result<Self, Self::Error> {
         match term {
-            PrimitiveValue::Variable(_) => {
-                Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any))
-            }
             PrimitiveValue::Constant(c) => Ok(c.into()),
             PrimitiveValue::NumericLiteral(NumericLiteral::Integer(i)) => {
                 Ok(LogicalInteger(i).into())
@@ -308,9 +305,6 @@ impl TryFrom<PrimitiveValue> for PhysicalString {
             }
             PrimitiveValue::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
                 Ok(DatatypeValue(value, datatype).into())
-            }
-            PrimitiveValue::Aggregate(_) => {
-                Err(InvalidRuleTermConversion::new(term, PrimitiveType::Any))
             }
         }
     }

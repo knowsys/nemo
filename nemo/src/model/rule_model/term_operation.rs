@@ -1,12 +1,33 @@
 use nemo_physical::util::TaggedTree;
 
-use super::{Identifier, PrimitiveValue, Variable};
+use super::{Aggregate, Identifier, PrimitiveValue};
 
+/// Variable occuring in a rule
+#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
+pub enum Variable {
+    /// A universally quantified variable.
+    Universal(Identifier),
+    /// An existentially quantified variable.
+    Existential(Identifier),
+}
+
+impl Variable {
+    /// Return the name of the variable.
+    pub fn name(&self) -> String {
+        match self {
+            Self::Universal(identifier) | Self::Existential(identifier) => identifier.name(),
+        }
+    }
+}
+
+impl std::fmt::Display for Variable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", &self.name())
+    }
+}
 /// Supported operations between terms.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub enum TermOperation {
-    /// Leaf node of the tree.
-    Term(PrimitiveValue),
     /// Add two terms.
     Addition,
     /// Subtract one term from another.
@@ -19,57 +40,77 @@ pub enum TermOperation {
     Function(Identifier),
 }
 
-/// [`TaggedTree`] with [`TermOperation`] as tags.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct TermTree(pub TaggedTree<TermOperation>);
+/// A nested Term.
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+pub struct Term(pub(crate) TaggedTree<TermOperation, LeafTerm>);
 
-impl From<TaggedTree<TermOperation>> for TermTree {
-    fn from(tree: TaggedTree<TermOperation>) -> Self {
-        TermTree(tree)
+/// A constant [`PrimitiveValue`], [`Variable`] or [`Aggregate`] operation.
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+pub enum LeafTerm {
+    /// A (universal or existential) variable
+    Variable(Variable),
+    /// A constant of type primitive
+    Constant(PrimitiveValue),
+    /// An aggregate operation
+    Aggregate(Aggregate),
+}
+
+impl LeafTerm {
+    pub fn substitute_variable(&mut self, var: &Variable, subst: &Variable) {
+        match self {
+            LeafTerm::Variable(v) => {
+                if v == var {
+                    *v = subst.clone()
+                }
+            }
+            LeafTerm::Constant(_) => {}
+            LeafTerm::Aggregate(a) => a.substitute_variable(var, subst),
+        }
     }
 }
 
-impl TermTree {
-    /// Create a new leaf node of a [`TermTree`].
-    pub fn leaf(term: PrimitiveValue) -> Self {
-        Self(TaggedTree::<TermOperation>::leaf(TermOperation::Term(term)))
+impl Term {
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
+        self.0.leaves().filter_map(|t| match t {
+            LeafTerm::Variable(v) => Some(v),
+            // TODO: should Aggregates be considered as well?
+            _ => None,
+        })
     }
 
-    /// Create a new [`TermTree`].
-    pub fn tree(operation: TermOperation, subtrees: Vec<TermTree>) -> Self {
-        Self(TaggedTree::<TermOperation>::tree(
-            operation,
-            subtrees.into_iter().map(|t| t.0).collect(),
-        ))
+    pub fn variables_mut(&mut self) -> impl Iterator<Item = &mut Variable> {
+        self.0.leaves_mut().filter_map(|t| match t {
+            LeafTerm::Variable(v) => Some(v),
+            // TODO: should Aggregates be considered as well?
+            _ => None,
+        })
     }
 
-    /// Return the [`TermOperation`] performed at this node.
-    pub fn operation(&self) -> &TermOperation {
-        &self.0.tag
+    pub fn aggregates(&self) -> impl Iterator<Item = &Aggregate> {
+        self.0.leaves().filter_map(|t| match t {
+            LeafTerm::Aggregate(a) => Some(a),
+            _ => None,
+        })
     }
 
-    /// Return a list of all the [`PrimitiveValue`]s contained in this tree.
-    pub fn terms(&self) -> Vec<&PrimitiveValue> {
-        self.0
-            .leaves()
-            .into_iter()
-            .map(|l| {
-                if let TermOperation::Term(term) = l {
-                    term
-                } else {
-                    unreachable!("This is the only Leaf type");
+    /// Substitutes all occurrences of `var` for `subst`.
+    pub fn substitute_variable(&mut self, var: &Variable, subst: &Variable) {
+        debug_assert!(matches!(var, Variable::Universal(_)));
+        fn substitute(
+            tree: &mut TaggedTree<TermOperation, LeafTerm>,
+            var: &Variable,
+            subst: &Variable,
+        ) {
+            match tree {
+                TaggedTree::Node { tag, subtrees } => {
+                    for tree in subtrees {
+                        substitute(tree, var, subst)
+                    }
                 }
-            })
-            .collect()
-    }
-
-    /// Substitutes all occurrences of `variable` for `subst`.
-    pub fn substitute_variable(&mut self, variable: &Variable, subst: &Variable) {
-        for leaf in self.0.leaves_mut() {
-            match leaf {
-                TermOperation::Term(t) => t.substitute_variable(variable, subst),
-                _ => continue,
+                TaggedTree::Leaf(l) => l.substitute_variable(var, subst),
             }
         }
+
+        substitute(&mut self.0, var, subst);
     }
 }

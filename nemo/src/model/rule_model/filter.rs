@@ -1,4 +1,4 @@
-use super::{PrimitiveValue, Variable};
+use super::{Term, Variable};
 
 /// Operation for a filter
 #[derive(Debug, Eq, PartialEq, Clone, Copy, PartialOrd, Ord)]
@@ -40,12 +40,12 @@ pub struct Filter {
     /// Left-hand side
     pub lhs: Variable,
     /// Right-hand side
-    pub rhs: PrimitiveValue,
+    pub rhs: Term,
 }
 
 impl Filter {
     /// Creates a new [`Filter`]
-    pub fn new(operation: FilterOperation, lhs: Variable, rhs: PrimitiveValue) -> Self {
+    pub fn new(operation: FilterOperation, lhs: Variable, rhs: Term) -> Self {
         Self {
             operation,
             lhs,
@@ -53,8 +53,8 @@ impl Filter {
         }
     }
 
-    /// Creates a new [`Filter]` with the arguments flipped
-    pub fn flipped(operation: FilterOperation, lhs: PrimitiveValue, rhs: Variable) -> Self {
+    /// Creates a new [`Filter`] with the arguments flipped
+    pub fn flipped(operation: FilterOperation, lhs: Term, rhs: Variable) -> Self {
         Self::new(operation.flip(), rhs, lhs)
     }
 }

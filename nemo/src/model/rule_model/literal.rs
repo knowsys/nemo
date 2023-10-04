@@ -1,6 +1,6 @@
 use std::ops::Neg;
 
-use super::{Atom, Identifier, TermTree, Variable};
+use super::{Atom, Identifier, Term, Variable};
 
 /// A literal.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -53,7 +53,7 @@ impl Literal {
 
     /// Return the terms in the literal.
     #[must_use]
-    pub fn terms(&self) -> &Vec<TermTree> {
+    pub fn terms(&self) -> &Vec<Term> {
         forward_to_atom!(self, term_trees)
     }
 

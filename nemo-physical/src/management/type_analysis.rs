@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, collections::HashMap, fmt::Display};
 
 use crate::{
-    columnar::operations::columnscan_arithmetic::ArithmeticOperation,
+    columnar::operations::columnscan_arithmetic::ArithmeticOperand,
     datatypes::{casting::PartialUpperBound, DataTypeName},
     error::Error,
     tabular::{operations::triescan_append::AppendInstruction, traits::table_schema::TableSchema},
@@ -304,21 +304,13 @@ impl TypeTree {
                                 // We check whether the type of each leaf node has the same upper bound
                                 for leaf in tree.leaves() {
                                     let current_type = match leaf {
-                                        ArithmeticOperation::Constant(constant) => {
+                                        ArithmeticOperand::Constant(constant) => {
                                             constant.get_type().partial_upper_bound()
                                         }
-                                        ArithmeticOperation::ColumnScan(column_index) => {
-                                            subtype_node
-                                                .schema
-                                                .get_entry(*column_index)
-                                                .partial_upper_bound()
-                                        }
-                                        ArithmeticOperation::Addition
-                                        | ArithmeticOperation::Subtraction
-                                        | ArithmeticOperation::Multiplication
-                                        | ArithmeticOperation::Division => {
-                                            unreachable!("Not a leaf node")
-                                        }
+                                        ArithmeticOperand::ColumnScan(column_index) => subtype_node
+                                            .schema
+                                            .get_entry(*column_index)
+                                            .partial_upper_bound(),
                                     };
 
                                     if let Some(operation_type) = operation_type {

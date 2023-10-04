@@ -619,7 +619,7 @@ impl<'a> RuleParser<'a> {
                     log::trace!(target: "parser", "found fact {predicate_name}({terms:?})");
 
                     // We do not allow complex term trees in facts for now
-                    let terms = terms.into_iter().map(TermTree::leaf).collect();
+                    let terms = terms.into_iter().map(Term::leaf).collect();
 
                     Ok((remainder, Fact(Atom::new(predicate, terms))))
                 },
@@ -954,7 +954,7 @@ impl<'a> RuleParser<'a> {
     /// This may consist of:
     /// * A function term
     /// * An arithmetic expression, which handles e.g. precedence of addition over multiplication
-    pub fn parse_term_tree(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    pub fn parse_term_tree(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_term_tree",
             map_error(
@@ -977,7 +977,7 @@ impl<'a> RuleParser<'a> {
     /// Parse a parenthesised term tree.
     pub fn parse_parenthesised_term_tree(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_parenthesised_term_tree",
             map_error(self.parenthesised(self.parse_term_tree()), || {
@@ -987,7 +987,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a function term, possibly with nested term trees.
-    pub fn parse_function_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    pub fn parse_function_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_function_term",
             map_error(
@@ -1001,7 +1001,7 @@ impl<'a> RuleParser<'a> {
 
                     Ok((
                         remainder,
-                        TermTree::tree(TermOperation::Function(identifier), subtrees),
+                        Term::tree(TermOperation::Function(identifier), subtrees),
                     ))
                 },
                 || ParseError::ExpectedFunctionTerm,
@@ -1012,7 +1012,7 @@ impl<'a> RuleParser<'a> {
     /// Parse an arithmetic expression
     pub fn parse_arithmetic_expression(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_arithmetic_expression",
             map_error(
@@ -1045,9 +1045,7 @@ impl<'a> RuleParser<'a> {
 
     /// Parse an arithmetic product, i.e., an expression involving
     /// only `*` and `/` over subexpressions.
-    pub fn parse_arithmetic_product(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    pub fn parse_arithmetic_product(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_arithmetic_product",
             map_error(
@@ -1076,14 +1074,12 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an arithmetic factor.
-    pub fn parse_arithmetic_factor(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    pub fn parse_arithmetic_factor(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_arithmetic_factor",
             map_error(
                 alt((
-                    map(self.parse_term(), TermTree::leaf),
+                    map(self.parse_term(), Term::leaf),
                     self.parse_parenthesised_term_tree(),
                 )),
                 || ParseError::ExpectedArithmeticFactor,
@@ -1091,12 +1087,9 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Fold a sequence of [Term trees][TermTree] interleaved with
-    /// [Term operations][TermOperation] into a single [`TermTree`].
-    fn fold_arithmetic_expressions(
-        initial: TermTree,
-        sequence: Vec<(TermOperation, TermTree)>,
-    ) -> TermTree {
+    /// Fold a sequence of [Term trees][Term] interleaved with
+    /// [Term operations][TermOperation] into a single [`Term`].
+    fn fold_arithmetic_expressions(initial: Term, sequence: Vec<(TermOperation, Term)>) -> Term {
         sequence.into_iter().fold(initial, |acc, pair| {
             let (operation, expression) = pair;
             let subtrees = vec![acc, expression];
@@ -1104,11 +1097,11 @@ impl<'a> RuleParser<'a> {
             use TermOperation::*;
 
             match operation {
-                Addition => TermTree::tree(Addition, subtrees),
-                Subtraction => TermTree::tree(Subtraction, subtrees),
-                Multiplication => TermTree::tree(Multiplication, subtrees),
-                Division => TermTree::tree(Division, subtrees),
-                Term(term) => TermTree::leaf(term),
+                Addition => Term::tree(Addition, subtrees),
+                Subtraction => Term::tree(Subtraction, subtrees),
+                Multiplication => Term::tree(Multiplication, subtrees),
+                Division => Term::tree(Division, subtrees),
+                Term(term) => Term::leaf(term),
                 Function(_) => panic!("expressions folding is not implemented for functions"),
             }
         })
@@ -1401,7 +1394,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![TermTree::leaf(PrimitiveValue::RdfLiteral(
+            vec![Term::leaf(PrimitiveValue::RdfLiteral(
                 RdfLiteral::DatatypeValue {
                     value: v,
                     datatype: t,
@@ -1427,10 +1420,7 @@ mod test {
 
         assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
 
-        let expected_fact = Fact(Atom::new(
-            p,
-            vec![TermTree::leaf(PrimitiveValue::Constant(v))],
-        ));
+        let expected_fact = Fact(Atom::new(p, vec![Term::leaf(PrimitiveValue::Constant(v))]));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1445,10 +1435,7 @@ mod test {
         let fact = format!(r#"{predicate}({pn}) ."#);
         let v = Identifier(pn);
 
-        let expected_fact = Fact(Atom::new(
-            p,
-            vec![TermTree::leaf(PrimitiveValue::Constant(v))],
-        ));
+        let expected_fact = Fact(Atom::new(p, vec![Term::leaf(PrimitiveValue::Constant(v))]));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1466,9 +1453,9 @@ mod test {
         let expected_fact = Fact(Atom::new(
             p,
             vec![
-                TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(int))),
-                TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Double(dbl))),
-                TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(
+                Term::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(int))),
+                Term::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Double(dbl))),
+                Term::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Decimal(
                     13, 37,
                 ))),
             ],
@@ -1497,7 +1484,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![TermTree::leaf(PrimitiveValue::StringLiteral(v))],
+            vec![Term::leaf(PrimitiveValue::StringLiteral(v))],
         ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
@@ -1514,7 +1501,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![TermTree::leaf(PrimitiveValue::StringLiteral(v))],
+            vec![Term::leaf(PrimitiveValue::StringLiteral(v))],
         ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
@@ -1533,7 +1520,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![TermTree::leaf(PrimitiveValue::RdfLiteral(
+            vec![Term::leaf(PrimitiveValue::RdfLiteral(
                 RdfLiteral::LanguageString { value, tag },
             ))],
         ));
@@ -1550,10 +1537,7 @@ mod test {
         let a = Identifier(name.to_string());
         let fact = format!(r#"{predicate}({name}) ."#);
 
-        let expected_fact = Fact(Atom::new(
-            p,
-            vec![TermTree::leaf(PrimitiveValue::Constant(a))],
-        ));
+        let expected_fact = Fact(Atom::new(p, vec![Term::leaf(PrimitiveValue::Constant(a))]));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1577,7 +1561,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![TermTree::leaf(PrimitiveValue::RdfLiteral(
+            vec![Term::leaf(PrimitiveValue::RdfLiteral(
                 RdfLiteral::DatatypeValue {
                     value: v,
                     datatype: t,
@@ -1611,23 +1595,23 @@ mod test {
         let expected_rule = Rule::new(
             vec![Atom::new(
                 p,
-                vec![TermTree::leaf(PrimitiveValue::Variable(
-                    Variable::Universal(x.clone()),
-                ))],
+                vec![Term::leaf(PrimitiveValue::Variable(Variable::Universal(
+                    x.clone(),
+                )))],
             )],
             vec![
                 Literal::Positive(Atom::new(
                     a,
                     vec![
-                        TermTree::leaf(PrimitiveValue::Variable(Variable::Universal(x.clone()))),
-                        TermTree::leaf(PrimitiveValue::Variable(Variable::Universal(y.clone()))),
+                        Term::leaf(PrimitiveValue::Variable(Variable::Universal(x.clone()))),
+                        Term::leaf(PrimitiveValue::Variable(Variable::Universal(y.clone()))),
                     ],
                 )),
                 Literal::Positive(Atom::new(
                     b,
-                    vec![TermTree::leaf(PrimitiveValue::Variable(
-                        Variable::Universal(z.clone()),
-                    ))],
+                    vec![Term::leaf(PrimitiveValue::Variable(Variable::Universal(
+                        z.clone(),
+                    )))],
                 )),
             ],
             vec![
@@ -1737,11 +1721,9 @@ mod test {
     fn parse_arithmetic_expressions() {
         let parser = RuleParser::new();
 
-        let twenty_three =
-            TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(23)));
-        let fourty_two =
-            TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(42)));
-        let twenty_three_times_fourty_two = TermTree::tree(
+        let twenty_three = Term::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(23)));
+        let fourty_two = Term::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(42)));
+        let twenty_three_times_fourty_two = Term::tree(
             TermOperation::Multiplication,
             vec![twenty_three.clone(), fourty_two],
         );
@@ -1781,45 +1763,39 @@ mod test {
         assert_parse!(
             parser.parse_arithmetic_expression(),
             "23 + 23 * 42 + 42 - (23 * 42)",
-            TermTree::tree(
+            Term::tree(
                 TermOperation::Subtraction,
                 vec![
-                    TermTree::tree(
+                    Term::tree(
                         TermOperation::Addition,
                         vec![
-                            TermTree::tree(
+                            Term::tree(
                                 TermOperation::Addition,
                                 vec![
-                                    TermTree::leaf(PrimitiveValue::NumericLiteral(
+                                    Term::leaf(PrimitiveValue::NumericLiteral(
                                         NumericLiteral::Integer(23)
                                     )),
-                                    TermTree::tree(
+                                    Term::tree(
                                         TermOperation::Multiplication,
                                         vec![
-                                            TermTree::leaf(PrimitiveValue::NumericLiteral(
+                                            Term::leaf(PrimitiveValue::NumericLiteral(
                                                 NumericLiteral::Integer(23)
                                             )),
-                                            TermTree::leaf(PrimitiveValue::NumericLiteral(
+                                            Term::leaf(PrimitiveValue::NumericLiteral(
                                                 NumericLiteral::Integer(42)
                                             ))
                                         ],
                                     )
                                 ]
                             ),
-                            TermTree::leaf(PrimitiveValue::NumericLiteral(
-                                NumericLiteral::Integer(42)
-                            ))
+                            Term::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(42)))
                         ]
                     ),
-                    TermTree::tree(
+                    Term::tree(
                         TermOperation::Multiplication,
                         vec![
-                            TermTree::leaf(PrimitiveValue::NumericLiteral(
-                                NumericLiteral::Integer(23)
-                            )),
-                            TermTree::leaf(PrimitiveValue::NumericLiteral(
-                                NumericLiteral::Integer(42)
-                            ))
+                            Term::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(23))),
+                            Term::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(42)))
                         ],
                     )
                 ]
@@ -1869,11 +1845,9 @@ mod test {
     fn parse_function_terms() {
         let parser = RuleParser::new();
 
-        let twenty_three =
-            TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(23)));
-        let fourty_two =
-            TermTree::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(42)));
-        let twenty_three_times_fourty_two = TermTree::tree(
+        let twenty_three = Term::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(23)));
+        let fourty_two = Term::leaf(PrimitiveValue::NumericLiteral(NumericLiteral::Integer(42)));
+        let twenty_three_times_fourty_two = Term::tree(
             TermOperation::Multiplication,
             vec![twenty_three.clone(), fourty_two.clone()],
         );
@@ -1884,7 +1858,7 @@ mod test {
             ParseError::ExpectedFunctionTerm
         );
 
-        let nullary_function = TermTree::tree(
+        let nullary_function = Term::tree(
             TermOperation::Function(Identifier(String::from("nullary_function"))),
             vec![],
         );
@@ -1904,7 +1878,7 @@ mod test {
             ParseError::ExpectedFunctionTerm
         );
 
-        let unary_function = TermTree::tree(
+        let unary_function = Term::tree(
             TermOperation::Function(Identifier(String::from("unary_function"))),
             vec![fourty_two.clone()],
         );
@@ -1924,7 +1898,7 @@ mod test {
             unary_function
         );
 
-        let binary_function = TermTree::tree(
+        let binary_function = Term::tree(
             TermOperation::Function(Identifier(String::from("binary_function"))),
             vec![fourty_two.clone(), twenty_three.clone()],
         );
@@ -1934,7 +1908,7 @@ mod test {
             binary_function
         );
 
-        let function_with_nested_algebraic_expression = TermTree::tree(
+        let function_with_nested_algebraic_expression = Term::tree(
             TermOperation::Function(Identifier(String::from("function"))),
             vec![twenty_three_times_fourty_two],
         );
@@ -1944,7 +1918,7 @@ mod test {
             function_with_nested_algebraic_expression
         );
 
-        let nested_function = TermTree::tree(
+        let nested_function = Term::tree(
             TermOperation::Function(Identifier(String::from("nested_function"))),
             vec![nullary_function.clone()],
         );
@@ -1954,11 +1928,11 @@ mod test {
             nested_function
         );
 
-        let triple_nested_function = TermTree::tree(
+        let triple_nested_function = Term::tree(
             TermOperation::Function(Identifier(String::from("nested_function"))),
-            vec![TermTree::tree(
+            vec![Term::tree(
                 TermOperation::Function(Identifier(String::from("nested_function"))),
-                vec![TermTree::tree(
+                vec![Term::tree(
                     TermOperation::Function(Identifier(String::from("nested_function"))),
                     vec![nullary_function.clone()],
                 )],
@@ -1980,7 +1954,7 @@ mod test {
         assert_parse!(
             parser.parse_term_tree(),
             "constant",
-            TermTree::leaf(PrimitiveValue::Constant(Identifier(String::from(
+            Term::leaf(PrimitiveValue::Constant(Identifier(String::from(
                 "constant"
             ))))
         );

@@ -3,67 +3,57 @@
 use std::collections::HashMap;
 
 use nemo_physical::{
-    columnar::operations::columnscan_arithmetic::ArithmeticOperation,
+    columnar::operations::columnscan_arithmetic::{ArithmeticOperand, ArithmeticOperation},
     management::{execution_plan::ExecutionNodeRef, ExecutionPlan},
     tabular::operations::triescan_append::{AppendInstruction, OperationTreeT},
     util::TaggedTree,
 };
 
 use crate::{
-    model::{PrimitiveType, PrimitiveValue, TermOperation, TermTree, Variable},
+    model::{LeafTerm, PrimitiveType, PrimitiveValue, Term, TermOperation, Variable},
     program_analysis::variable_order::VariableOrder,
 };
 
 fn termtree_to_operationtree(
-    tree: &TaggedTree<TermOperation>,
+    tree: &TaggedTree<TermOperation, LeafTerm>,
     order: &VariableOrder,
     logical_type: &PrimitiveType,
 ) -> OperationTreeT {
-    match &tree.tag {
-        TermOperation::Term(term) => {
-            if let PrimitiveValue::Variable(variable) = term {
-                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(
-                    *order
-                        .get(variable)
-                        .expect("Variable order must contain an entry for every variable."),
-                ))
-            } else {
-                OperationTreeT::leaf(ArithmeticOperation::Constant(
-                    logical_type
-                        .ground_term_to_data_value_t(term.clone())
-                        .expect("Type checker should have caught any errors at this point."),
-                ))
+    macro_rules! arithmetic_operation {
+        ($op:expr) => {
+            match $op {
+                TermOperation::Addition => ArithmeticOperation::Addition,
+                TermOperation::Subtraction => ArithmeticOperation::Subtraction,
+                TermOperation::Division => ArithmeticOperation::Division,
+                TermOperation::Multiplication => ArithmeticOperation::Multiplication,
+                TermOperation::Function(_) => unreachable!("checked separately"),
             }
-        }
-        TermOperation::Addition => OperationTreeT::tree(
-            ArithmeticOperation::Addition,
-            tree.subtrees
-                .iter()
-                .map(|t| termtree_to_operationtree(t, order, logical_type))
-                .collect(),
-        ),
-        TermOperation::Subtraction => OperationTreeT::tree(
-            ArithmeticOperation::Subtraction,
-            tree.subtrees
-                .iter()
-                .map(|t| termtree_to_operationtree(t, order, logical_type))
-                .collect(),
-        ),
-        TermOperation::Multiplication => OperationTreeT::tree(
-            ArithmeticOperation::Multiplication,
-            tree.subtrees
-                .iter()
-                .map(|t| termtree_to_operationtree(t, order, logical_type))
-                .collect(),
-        ),
-        TermOperation::Division => OperationTreeT::tree(
-            ArithmeticOperation::Division,
-            tree.subtrees
-                .iter()
-                .map(|t| termtree_to_operationtree(t, order, logical_type))
-                .collect(),
-        ),
-        TermOperation::Function(_) => todo!("function terms are not implemented yet."),
+        };
+    }
+    match tree {
+        TaggedTree::Leaf(term) => match term {
+            LeafTerm::Variable(variable) => OperationTreeT::leaf(ArithmeticOperand::ColumnScan(
+                *order
+                    .get(variable)
+                    .expect("Variable order must contain an entry for every variable."),
+            )),
+            LeafTerm::Constant(term) => OperationTreeT::leaf(ArithmeticOperand::Constant(
+                logical_type
+                    .ground_term_to_data_value_t(term.clone())
+                    .expect("Type checker should have caught any errors at this point."),
+            )),
+            LeafTerm::Aggregate(_) => todo!(),
+        },
+        TaggedTree::Node { tag, subtrees } => match tag {
+            TermOperation::Function(_) => todo!("function terms are not implemented yet."),
+            op => OperationTreeT::tree(
+                arithmetic_operation!(op),
+                subtrees
+                    .iter()
+                    .map(|t| termtree_to_operationtree(t, order, logical_type))
+                    .collect(),
+            ),
+        },
     }
 }
 
@@ -72,7 +62,7 @@ pub(super) fn generate_node_arithmetic(
     variable_order: &VariableOrder,
     node: ExecutionNodeRef,
     first_unused_index: usize,
-    constructors: &HashMap<Variable, TermTree>,
+    constructors: &HashMap<Variable, Term>,
     types: &HashMap<Variable, PrimitiveType>,
 ) -> (ExecutionNodeRef, VariableOrder) {
     let mut instructions = vec![vec![]; variable_order.len() + 1];

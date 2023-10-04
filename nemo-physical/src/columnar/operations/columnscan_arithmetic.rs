@@ -3,18 +3,20 @@ use crate::{
     columnar::traits::columnscan::ColumnScanCell, datatypes::ColumnDataType,
     util::tagged_tree::TaggedTree,
 };
-use std::{
-    fmt::{Debug, Display},
-    ops::Range,
-};
+use std::{fmt::Debug, ops::Range};
 
-/// Operation that can be exectued by a [`ColumnScanArithmetic`].
+/// Operands that appear in a [`ColumnScanArithmetic`]
 #[derive(Clone)]
-pub enum ArithmeticOperation<T> {
+pub enum ArithmeticOperand<T> {
     /// Value is the given constant.
     Constant(T),
     /// Value is read off the column scan with the given index.
     ColumnScan(usize),
+}
+
+/// Operation that can be exectued by a [`ColumnScanArithmetic`].
+#[derive(Copy, Clone, Debug)]
+pub enum ArithmeticOperation {
     /// Value is the sum of the values of the given subtrees.
     Addition,
     /// Value is the difference between the value of the first subtree and the second.
@@ -25,52 +27,26 @@ pub enum ArithmeticOperation<T> {
     Division,
 }
 
-impl<T> Debug for ArithmeticOperation<T>
-where
-    T: Debug,
-{
+impl<T: Debug> Debug for ArithmeticOperand<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Constant(constant) => write!(f, "{:?}", constant),
             Self::ColumnScan(index) => write!(f, "Column({:?})", index),
-            Self::Addition => write!(f, "Addition"),
-            Self::Subtraction => write!(f, "Subtraction"),
-            Self::Multiplication => write!(f, "Multiplication"),
-            Self::Division => write!(f, "Division"),
-        }
-    }
-}
-
-impl<T> Display for ArithmeticOperation<T>
-where
-    T: Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Constant(constant) => write!(f, "{}", constant),
-            Self::ColumnScan(index) => write!(f, "Column({})", index),
-            Self::Addition => write!(f, "Addition"),
-            Self::Subtraction => write!(f, "Subtraction"),
-            Self::Multiplication => write!(f, "Multiplication"),
-            Self::Division => write!(f, "Division"),
         }
     }
 }
 
 /// A [`TaggedTree`] that represents a series of arithmetic operations to be executed by the [`ColumnScanArithmetic`].
-pub type OperationTree<T> = TaggedTree<ArithmeticOperation<T>>;
+pub type OperationTree<T> = TaggedTree<ArithmeticOperation, ArithmeticOperand<T>>;
 
 impl<T> OperationTree<T> {
     /// Return a list of all the column scan indices used in this tree.
     pub fn input_indices(&self) -> Vec<&usize> {
         self.leaves()
             .into_iter()
-            .filter_map(|l| {
-                if let ArithmeticOperation::ColumnScan(index) = l {
-                    Some(index)
-                } else {
-                    None
-                }
+            .filter_map(|operand| match operand {
+                ArithmeticOperand::Constant(_) => None,
+                ArithmeticOperand::ColumnScan(i) => Some(i),
             })
             .collect()
     }
@@ -79,12 +55,9 @@ impl<T> OperationTree<T> {
     pub fn input_indices_mut(&mut self) -> Vec<&mut usize> {
         self.leaves_mut()
             .into_iter()
-            .filter_map(|l| {
-                if let ArithmeticOperation::ColumnScan(index) = l {
-                    Some(index)
-                } else {
-                    None
-                }
+            .filter_map(|operand| match operand {
+                ArithmeticOperand::Constant(_) => None,
+                ArithmeticOperand::ColumnScan(i) => Some(i),
             })
             .collect()
     }
@@ -133,39 +106,43 @@ where
     }
 
     fn evaluate_recursive(&self, tree: &OperationTree<T>) -> Option<T> {
-        match &tree.tag {
-            ArithmeticOperation::ColumnScan(index) => self.column_scans[*index].current(),
-            ArithmeticOperation::Constant(constant) => Some(*constant),
-            ArithmeticOperation::Addition => {
-                let mut result = T::zero();
-                for subtree in &tree.subtrees {
-                    result = result + self.evaluate_recursive(subtree)?;
+        match tree {
+            TaggedTree::Leaf(operand) => match operand {
+                ArithmeticOperand::ColumnScan(index) => self.column_scans[*index].current(),
+                ArithmeticOperand::Constant(constant) => Some(*constant),
+            },
+            TaggedTree::Node { tag, subtrees } => match tag {
+                ArithmeticOperation::Addition => {
+                    let mut result = T::zero();
+                    for subtree in subtrees {
+                        result = result + self.evaluate_recursive(subtree)?;
+                    }
+                    Some(result)
                 }
-                Some(result)
-            }
-            ArithmeticOperation::Subtraction => {
-                let left = self.evaluate_recursive(&tree.subtrees[0])?;
-                let right = self.evaluate_recursive(&tree.subtrees[1])?;
+                ArithmeticOperation::Subtraction => {
+                    let left = self.evaluate_recursive(&subtrees[0])?;
+                    let right = self.evaluate_recursive(&subtrees[1])?;
 
-                Some(left - right)
-            }
-            ArithmeticOperation::Multiplication => {
-                let mut result = T::one();
-                for subtree in &tree.subtrees {
-                    result = result * self.evaluate_recursive(subtree)?;
+                    Some(left - right)
                 }
-                Some(result)
-            }
-            ArithmeticOperation::Division => {
-                let left = self.evaluate_recursive(&tree.subtrees[0])?;
-                let right = self.evaluate_recursive(&tree.subtrees[1])?;
-
-                if right == T::zero() {
-                    return None;
+                ArithmeticOperation::Multiplication => {
+                    let mut result = T::one();
+                    for subtree in subtrees {
+                        result = result * self.evaluate_recursive(subtree)?;
+                    }
+                    Some(result)
                 }
+                ArithmeticOperation::Division => {
+                    let left = self.evaluate_recursive(&subtrees[0])?;
+                    let right = self.evaluate_recursive(&subtrees[1])?;
 
-                Some(left / right)
-            }
+                    if right == T::zero() {
+                        return None;
+                    }
+
+                    Some(left / right)
+                }
+            },
         }
     }
 
@@ -238,7 +215,7 @@ where
 mod test {
     use crate::columnar::{
         column_types::vector::{ColumnScanVector, ColumnVector},
-        operations::columnscan_arithmetic::OperationTree,
+        operations::columnscan_arithmetic::{ArithmeticOperand, OperationTree},
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 
@@ -262,7 +239,7 @@ mod test {
         let operation: OperationTree<u64> = OperationTree::tree(
             ArithmeticOperation::Addition,
             vec![
-                OperationTree::leaf(ArithmeticOperation::ColumnScan(0)),
+                OperationTree::leaf(ArithmeticOperand::ColumnScan(0)),
                 OperationTree::tree(
                     ArithmeticOperation::Multiplication,
                     vec![
@@ -272,14 +249,14 @@ mod test {
                                 OperationTree::tree(
                                     ArithmeticOperation::Division,
                                     vec![
-                                        OperationTree::leaf(ArithmeticOperation::ColumnScan(1)),
-                                        OperationTree::leaf(ArithmeticOperation::Constant(2)),
+                                        OperationTree::leaf(ArithmeticOperand::ColumnScan(1)),
+                                        OperationTree::leaf(ArithmeticOperand::Constant(2)),
                                     ],
                                 ),
-                                OperationTree::leaf(ArithmeticOperation::Constant(1)),
+                                OperationTree::leaf(ArithmeticOperand::Constant(1)),
                             ],
                         ),
-                        OperationTree::leaf(ArithmeticOperation::Constant(5)),
+                        OperationTree::leaf(ArithmeticOperand::Constant(5)),
                     ],
                 ),
             ],

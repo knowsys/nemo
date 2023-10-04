@@ -5,12 +5,7 @@ use nemo_physical::error::ReadingError;
 use sanitise_file_name::{sanitise_with_options, Options};
 use thiserror::Error;
 
-use crate::model::{
-    types::primitive_logical_value::{LogicalString, LOGICAL_NULL_PREFIX},
-    TypeConstraint,
-};
-
-use super::Aggregate;
+use crate::model::types::primitive_logical_value::{LogicalString, LOGICAL_NULL_PREFIX};
 
 /// XSD type for string
 pub const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
@@ -55,79 +50,17 @@ impl From<String> for Identifier {
     }
 }
 
-/// A qualified predicate name, i.e., a predicate name together with a type constraint.
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
-pub struct QualifiedPredicateName {
-    /// The predicate name
-    pub(crate) identifier: Identifier,
-    /// The type qualification
-    pub(crate) associated_type: Option<TypeConstraint>,
-}
-
-impl QualifiedPredicateName {
-    /// Construct a new qualified predicate name from an identifier,
-    /// leaving the arity unspecified.
-    pub fn new(identifier: Identifier) -> Self {
-        Self {
-            identifier,
-            associated_type: None,
-        }
-    }
-
-    /// Construct a new qualified predicate name with the given arity or a list of types.
-    pub fn with_constraint(identifier: Identifier, constraint: TypeConstraint) -> Self {
-        Self {
-            identifier,
-            associated_type: Some(constraint),
-        }
-    }
-}
-
-impl From<Identifier> for QualifiedPredicateName {
-    fn from(identifier: Identifier) -> Self {
-        Self::new(identifier)
-    }
-}
-
-/// Variable occuring in a rule
-#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
-pub enum Variable {
-    /// A universally quantified variable.
-    Universal(Identifier),
-    /// An existentially quantified variable.
-    Existential(Identifier),
-}
-
-impl Variable {
-    /// Return the name of the variable.
-    pub fn name(&self) -> String {
-        match self {
-            Self::Universal(identifier) | Self::Existential(identifier) => identifier.name(),
-        }
-    }
-}
-
-impl std::fmt::Display for Variable {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.name())
-    }
-}
-
 /// Terms occurring in programs.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum PrimitiveValue {
     /// An (abstract) constant.
     Constant(Identifier),
-    /// A variable.
-    Variable(Variable),
     /// A numeric literal.
     NumericLiteral(NumericLiteral),
     /// A string literal.
     StringLiteral(String),
     /// An RDF literal.
     RdfLiteral(RdfLiteral),
-    /// An aggregate consisting of the aggregate function identifier and the variable identifiers.
-    Aggregate(Aggregate),
 }
 
 impl std::fmt::Display for PrimitiveValue {
@@ -147,11 +80,9 @@ impl std::fmt::Display for PrimitiveValue {
                     write!(f, "<{s}>")
                 }
             }
-            PrimitiveValue::Variable(term) => write!(f, "{term}"),
             PrimitiveValue::NumericLiteral(term) => write!(f, "{term}"),
             PrimitiveValue::StringLiteral(term) => write!(f, "\"{term}\""),
             PrimitiveValue::RdfLiteral(term) => write!(f, "{term}"),
-            PrimitiveValue::Aggregate(aggregate) => write!(f, "{aggregate}"),
         }
     }
 }
@@ -163,20 +94,6 @@ impl PrimitiveValue {
             self,
             Self::Constant(_) | Self::NumericLiteral(_) | Self::RdfLiteral(_)
         )
-    }
-
-    /// Substitutes all occurrences of `var` for `subst`.
-    pub fn substitute_variable(&mut self, var: &Variable, subst: &Variable) {
-        debug_assert!(matches!(var, Variable::Universal(_)));
-        match self {
-            PrimitiveValue::Variable(v) => {
-                if v == var {
-                    *v = subst.clone()
-                }
-            }
-            PrimitiveValue::Aggregate(agg) => agg.substitute_variable(var, subst),
-            _ => {}
-        }
     }
 }
 
