@@ -1,3 +1,6 @@
+#![feature(alloc_error_hook)]
+
+use std::alloc::Layout;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::io::Cursor;
@@ -8,6 +11,7 @@ use js_sys::Set;
 use js_sys::Uint8Array;
 use nemo::execution::ExecutionEngine;
 
+use nemo::io::parser::parse_fact;
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo::model::types::primitive_logical_value::PrimitiveLogicalValueT;
@@ -158,7 +162,7 @@ fn std_io_error_from_js_value(js_value: JsValue, prefix: &str) -> std::io::Error
 struct SyncAccessHandleWriter(web_sys::FileSystemSyncAccessHandle);
 
 #[cfg(web_sys_unstable_apis)]
-impl Write for SyncAccessHandleWriter {
+impl std::io::Write for SyncAccessHandleWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         let mut buf: Vec<_> = buf.into();
         let bytes_written = self.0.write_with_u8_array(&mut buf).map_err(|js_value| {
@@ -263,7 +267,7 @@ impl NemoEngine {
     }
 
     #[cfg(web_sys_unstable_apis)]
-    #[wasm_bindgen(js_name = "save_predicate")]
+    #[wasm_bindgen(js_name = "savePredicate")]
     pub fn write_result_to_sync_access_handle(
         &mut self,
         predicate: String,
@@ -290,6 +294,21 @@ impl NemoEngine {
             writer.write_record(record).unwrap();
         }
         Ok(())
+    }
+
+    #[wasm_bindgen(js_name = "parseAndTraceFact")]
+    pub fn parse_and_trace_fact(&mut self, fact: &str) -> Result<Option<String>, NemoError> {
+        let parsed_fact = parse_fact(fact.to_owned())
+            .map_err(WasmOrInternalNemoError::NemoError)
+            .map_err(NemoError)?;
+
+        let trace = self
+            .0
+            .trace(parsed_fact)
+            .map_err(WasmOrInternalNemoError::NemoError)
+            .map_err(NemoError)?;
+
+        Ok(trace.map(|t| format!("{t}")))
     }
 }
 
@@ -346,7 +365,20 @@ impl NemoResults {
     }
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_name = "setPanicHook")]
 pub fn set_panic_hook() {
     console_error_panic_hook::set_once();
+}
+
+fn custom_alloc_error_hook(layout: Layout) {
+    panic!(
+        "memory allocation of {} bytes (align {}) failed",
+        layout.size(),
+        layout.align()
+    );
+}
+
+#[wasm_bindgen(js_name = "setAllocErrorHook")]
+pub fn set_alloc_error_hook() {
+    std::alloc::set_alloc_error_hook(custom_alloc_error_hook);
 }
