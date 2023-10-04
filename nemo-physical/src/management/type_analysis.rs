@@ -303,23 +303,16 @@ impl TypeTree {
                                 let mut operation_type: Option<DataTypeName> = None;
 
                                 // We check whether the type of each leaf node has the same upper bound
-                                for leaf in tree.leaves() {
-                                    let current_type = match leaf {
-                                        ArithmeticOperation::Constant(constant) => {
+                                for operation in tree {
+                                    let current_type = match operation {
+                                        ArithmeticOperation::PushConst(constant) => {
                                             constant.get_type().partial_upper_bound()
                                         }
-                                        ArithmeticOperation::ColumnScan(column_index) => {
-                                            subtype_node
-                                                .schema
-                                                .get_entry(*column_index)
-                                                .partial_upper_bound()
-                                        }
-                                        ArithmeticOperation::Addition
-                                        | ArithmeticOperation::Subtraction
-                                        | ArithmeticOperation::Multiplication
-                                        | ArithmeticOperation::Division => {
-                                            unreachable!("Not a leaf node")
-                                        }
+                                        ArithmeticOperation::PushRef(column_index) => subtype_node
+                                            .schema
+                                            .get_entry(*column_index)
+                                            .partial_upper_bound(),
+                                        ArithmeticOperation::BinaryOperation(_) => continue,
                                     };
 
                                     if let Some(operation_type) = operation_type {
@@ -530,7 +523,10 @@ impl TypeTree {
                 for instructions in instructions {
                     for instruction in instructions {
                         if let AppendInstruction::Operation(tree) = instruction {
-                            for &input_index in tree.input_indices() {
+                            for &input_index in tree.iter().filter_map(|op| match op {
+                                ArithmeticOperation::PushRef(i) => Some(i),
+                                _ => None,
+                            }) {
                                 let max_type = schema_map
                                     .get(&input_index)
                                     .expect(

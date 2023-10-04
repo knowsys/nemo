@@ -9,9 +9,8 @@ use crate::{
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         column_types::rle::{ColumnBuilderRle, ColumnRle},
         operations::{
-            columnscan_arithmetic::{ArithmeticOperation, OperationTree},
-            ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant,
-            ColumnScanCopy, ColumnScanPass,
+            columnscan_arithmetic::ArithmeticOperation, ColumnScanArithmetic, ColumnScanCast,
+            ColumnScanCastEnum, ColumnScanConstant, ColumnScanCopy, ColumnScanPass,
         },
         traits::{
             column::Column,
@@ -20,7 +19,8 @@ use crate::{
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         },
     },
-    datatypes::{ColumnDataType, DataValueT, StorageTypeName, StorageValueT},
+    datatypes::{DataValueT, Double, Float, StorageTypeName, StorageValueT},
+    error::Error,
     generate_cast_statements,
     management::database::Dict,
     tabular::{
@@ -52,88 +52,6 @@ fn expand_range(columns: &[ColumnWithIntervalsT], range: Range<usize>) -> Range<
     current_range
 }
 
-/// [`OperationTree`] with [`DataValueT`] constants.
-pub type OperationTreeT = OperationTree<DataValueT>;
-
-impl OperationTreeT {
-    fn translate_recursive<F, T>(tree: OperationTreeT, translate_function: F) -> OperationTree<T>
-    where
-        F: Fn(DataValueT) -> T + Copy,
-        T: ColumnDataType,
-    {
-        match tree.tag {
-            ArithmeticOperation::Constant(constant) => OperationTree::<T>::leaf(
-                ArithmeticOperation::Constant(translate_function(constant)),
-            ),
-            ArithmeticOperation::ColumnScan(index) => {
-                OperationTree::<T>::leaf(ArithmeticOperation::ColumnScan(index))
-            }
-            ArithmeticOperation::Addition => {
-                let subtrees = tree
-                    .subtrees
-                    .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Addition, subtrees)
-            }
-            ArithmeticOperation::Subtraction => {
-                let subtrees = tree
-                    .subtrees
-                    .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Subtraction, subtrees)
-            }
-            ArithmeticOperation::Multiplication => {
-                let subtrees = tree
-                    .subtrees
-                    .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Multiplication, subtrees)
-            }
-            ArithmeticOperation::Division => {
-                let subtrees = tree
-                    .subtrees
-                    .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Division, subtrees)
-            }
-        }
-    }
-
-    /// Translate the [`DataValueT`] constants into constatns of a certain type.
-    /// The conversion is given by a closure.
-    pub fn translate<F, T>(self, translate_function: F) -> OperationTree<T>
-    where
-        F: Fn(DataValueT) -> T + Copy,
-        T: ColumnDataType,
-    {
-        Self::translate_recursive(self, translate_function)
-    }
-
-    /// Return the [`StorageTypeName`] of the evaluation result of this tree.
-    pub fn storage_type(
-        &self,
-        input_types: &[StorageTypeName],
-        dict: &mut Dict,
-    ) -> StorageTypeName {
-        let first_leaf_node = self.leaves()[0];
-        match first_leaf_node {
-            ArithmeticOperation::Constant(constant) => {
-                constant.to_storage_value_mut(dict).get_type()
-            }
-            ArithmeticOperation::ColumnScan(index) => input_types[*index],
-            _ => unreachable!("Not a leave."),
-        }
-    }
-}
-
 /// Enum which represents an instruction to modify a trie by appending certain columns.
 #[derive(Debug, Clone)]
 pub enum AppendInstruction {
@@ -145,7 +63,17 @@ pub enum AppendInstruction {
     Constant(DataValueT),
     /// Add a column which results from performing a given mathematical operation
     /// based on existing columns.
-    Operation(OperationTreeT),
+    Operation(Vec<ArithmeticOperation<DataValueT>>),
+}
+
+struct OpWrapper<T>(Vec<ArithmeticOperation<T>>);
+
+impl<T: TryFrom<DataValueT>> TryFrom<Vec<ArithmeticOperation<DataValueT>>> for OpWrapper<T> {
+    type Error = Error;
+
+    fn try_from(_value: Vec<ArithmeticOperation<DataValueT>>) -> Result<Self, Self::Error> {
+        todo!()
+    }
 }
 
 /// Appends columns to an existing trie and returns the modified trie.
@@ -356,8 +284,8 @@ impl<'a> TrieScanAppend<'a> {
                         res.add_repeat_column(*repeat_index)
                     }
                     AppendInstruction::Constant(value) => res.add_constant_column(dict, value),
-                    AppendInstruction::Operation(operation_tree) => {
-                        res.add_operation_column(operation_tree.clone(), &src_types, dict)
+                    AppendInstruction::Operation(operation) => {
+                        res.add_operation_column(operation.clone(), &src_types, dict)
                     }
                 }
             }
@@ -372,11 +300,18 @@ impl<'a> TrieScanAppend<'a> {
 
     fn add_operation_column(
         &mut self,
-        operation_tree: OperationTreeT,
+        operation_tree: Vec<ArithmeticOperation<DataValueT>>,
         src_types: &[StorageTypeName],
         dict: &mut Dict,
     ) {
-        let src_type = operation_tree.storage_type(src_types, dict);
+        let src_type = operation_tree
+            .iter()
+            .find_map(|op| match op {
+                ArithmeticOperation::PushConst(c) => Some(c.to_storage_value_mut(dict).get_type()),
+                ArithmeticOperation::PushRef(i) => Some(src_types[*i]),
+                ArithmeticOperation::BinaryOperation(_) => None,
+            })
+            .expect("Every operation has some operands");
         let dst_type = self.target_types[self.column_scans.len()];
 
         // TODO: Cast the types if there are not equal.
@@ -387,7 +322,10 @@ impl<'a> TrieScanAppend<'a> {
                 let mut column_map = HashMap::<usize, usize>::new();
                 let mut input_scans = Vec::new();
 
-                for src_index in operation_tree.input_indices().into_iter() {
+                for src_index in operation_tree.iter().filter_map(|op| match op {
+                    ArithmeticOperation::PushRef(i) => Some(i),
+                    _ => None,
+                }) {
                     if column_map.contains_key(&src_index) {
                         continue;
                     }
@@ -417,9 +355,23 @@ impl<'a> TrieScanAppend<'a> {
                     }
                 };
 
-                let mut operation_tree = operation_tree.translate(translate_type);
+                let mut operation_tree: Vec<ArithmeticOperation<$type>> = operation_tree
+                    .into_iter()
+                    .map(|op| match op {
+                        ArithmeticOperation::PushConst(c) => {
+                            ArithmeticOperation::PushConst(translate_type(c))
+                        }
+                        ArithmeticOperation::PushRef(i) => ArithmeticOperation::PushRef(i),
+                        ArithmeticOperation::BinaryOperation(op) => {
+                            ArithmeticOperation::BinaryOperation(op)
+                        }
+                    })
+                    .collect();
 
-                for index in operation_tree.input_indices_mut() {
+                for index in operation_tree.iter_mut().filter_map(|op| match op {
+                    ArithmeticOperation::PushRef(i) => Some(i),
+                    _ => None,
+                }) {
                     *index = *column_map
                         .get(index)
                         .expect("The construction of this map insures that this value is present.");
@@ -438,8 +390,8 @@ impl<'a> TrieScanAppend<'a> {
             StorageTypeName::U32 => input_for_datatype!(U32, u32),
             StorageTypeName::U64 => input_for_datatype!(U64, u64),
             StorageTypeName::I64 => input_for_datatype!(I64, i64),
-            StorageTypeName::Float => input_for_datatype!(Float, f32),
-            StorageTypeName::Double => input_for_datatype!(Double, f64),
+            StorageTypeName::Float => input_for_datatype!(Float, Float),
+            StorageTypeName::Double => input_for_datatype!(Double, Double),
         }
     }
 
@@ -607,7 +559,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanAppend<'a> {
 mod test {
     use crate::{
         columnar::{
-            operations::columnscan_arithmetic::ArithmeticOperation, traits::columnscan::ColumnScanT,
+            operations::columnscan_arithmetic::{ArithmeticOperation, BinaryOperation},
+            traits::columnscan::ColumnScanT,
         },
         datatypes::{DataValueT, StorageTypeName},
         management::database::Dict,
@@ -618,8 +571,6 @@ mod test {
         },
         util::{make_column_with_intervals_t, test_util::make_column_with_intervals_int_t},
     };
-
-    use super::OperationTreeT;
 
     fn scan_next(int_scan: &mut TrieScanAppend) -> Option<u64> {
         if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
@@ -1228,27 +1179,16 @@ mod test {
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
         // ((x + 3) * y) / x
-        let operation_tree = OperationTreeT::tree(
-            ArithmeticOperation::Division,
-            vec![
-                OperationTreeT::tree(
-                    ArithmeticOperation::Multiplication,
-                    vec![
-                        OperationTreeT::tree(
-                            ArithmeticOperation::Addition,
-                            vec![
-                                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(0)),
-                                OperationTreeT::leaf(ArithmeticOperation::Constant(
-                                    DataValueT::U64(3),
-                                )),
-                            ],
-                        ),
-                        OperationTreeT::leaf(ArithmeticOperation::ColumnScan(1)),
-                    ],
-                ),
-                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(0)),
-            ],
-        );
+        // in polish notation: x 3 + y * x /
+        let operation_tree = vec![
+            ArithmeticOperation::PushRef(0),
+            ArithmeticOperation::PushConst(DataValueT::U64(3)),
+            ArithmeticOperation::BinaryOperation(BinaryOperation::Addition),
+            ArithmeticOperation::PushRef(1),
+            ArithmeticOperation::BinaryOperation(BinaryOperation::Multiplication),
+            ArithmeticOperation::PushRef(0),
+            ArithmeticOperation::BinaryOperation(BinaryOperation::Division),
+        ];
 
         let mut dict = Dict::default();
         let mut trie_iter = TrieScanAppend::new(

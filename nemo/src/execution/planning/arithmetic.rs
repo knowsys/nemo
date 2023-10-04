@@ -3,9 +3,10 @@
 use std::collections::HashMap;
 
 use nemo_physical::{
-    columnar::operations::columnscan_arithmetic::ArithmeticOperation,
+    columnar::operations::columnscan_arithmetic::{ArithmeticOperation, BinaryOperation},
+    datatypes::DataValueT,
     management::{execution_plan::ExecutionNodeRef, ExecutionPlan},
-    tabular::operations::triescan_append::{AppendInstruction, OperationTreeT},
+    tabular::operations::triescan_append::AppendInstruction,
     util::TaggedTree,
 };
 
@@ -14,55 +15,88 @@ use crate::{
     program_analysis::variable_order::VariableOrder,
 };
 
-fn termtree_to_operationtree(
-    tree: &TaggedTree<TermOperation>,
-    order: &VariableOrder,
+fn append_term_instructions(
+    term: &TaggedTree<TermOperation>,
+    variable_order: &VariableOrder,
     logical_type: &PrimitiveType,
-) -> OperationTreeT {
-    match &tree.tag {
+    instructions: &mut Vec<ArithmeticOperation<DataValueT>>,
+) {
+    match &term.tag {
         TermOperation::Term(term) => {
             if let Term::Variable(variable) = term {
-                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(
-                    *order
+                instructions.push(ArithmeticOperation::PushRef(
+                    *variable_order
                         .get(variable)
                         .expect("Variable order must contain an entry for every variable."),
                 ))
             } else {
-                OperationTreeT::leaf(ArithmeticOperation::Constant(
+                instructions.push(ArithmeticOperation::PushConst(
                     logical_type
                         .ground_term_to_data_value_t(term.clone())
                         .expect("Type checker should have caught any errors at this point."),
                 ))
             }
         }
-        TermOperation::Addition => OperationTreeT::tree(
-            ArithmeticOperation::Addition,
-            tree.subtrees
-                .iter()
-                .map(|t| termtree_to_operationtree(t, order, logical_type))
-                .collect(),
-        ),
-        TermOperation::Subtraction => OperationTreeT::tree(
-            ArithmeticOperation::Subtraction,
-            tree.subtrees
-                .iter()
-                .map(|t| termtree_to_operationtree(t, order, logical_type))
-                .collect(),
-        ),
-        TermOperation::Multiplication => OperationTreeT::tree(
-            ArithmeticOperation::Multiplication,
-            tree.subtrees
-                .iter()
-                .map(|t| termtree_to_operationtree(t, order, logical_type))
-                .collect(),
-        ),
-        TermOperation::Division => OperationTreeT::tree(
-            ArithmeticOperation::Division,
-            tree.subtrees
-                .iter()
-                .map(|t| termtree_to_operationtree(t, order, logical_type))
-                .collect(),
-        ),
+        TermOperation::Addition => {
+            let mut subtrees = term.subtrees.iter();
+            let lhs = subtrees
+                .next()
+                .expect("Arithmetic expression has at least two subtrees");
+
+            append_term_instructions(lhs, variable_order, logical_type, instructions);
+
+            for subtree in subtrees {
+                append_term_instructions(subtree, variable_order, logical_type, instructions);
+                instructions.push(ArithmeticOperation::BinaryOperation(
+                    BinaryOperation::Addition,
+                ));
+            }
+        }
+        TermOperation::Subtraction => {
+            let mut subtrees = term.subtrees.iter();
+            let lhs = subtrees
+                .next()
+                .expect("Arithmetic expression has at least two subtrees");
+
+            append_term_instructions(lhs, variable_order, logical_type, instructions);
+
+            for subtree in subtrees {
+                append_term_instructions(subtree, variable_order, logical_type, instructions);
+                instructions.push(ArithmeticOperation::BinaryOperation(
+                    BinaryOperation::Subtraction,
+                ));
+            }
+        }
+        TermOperation::Multiplication => {
+            let mut subtrees = term.subtrees.iter();
+            let lhs = subtrees
+                .next()
+                .expect("Arithmetic expression has at least two subtrees");
+
+            append_term_instructions(lhs, variable_order, logical_type, instructions);
+
+            for subtree in subtrees {
+                append_term_instructions(subtree, variable_order, logical_type, instructions);
+                instructions.push(ArithmeticOperation::BinaryOperation(
+                    BinaryOperation::Multiplication,
+                ));
+            }
+        }
+        TermOperation::Division => {
+            let mut subtrees = term.subtrees.iter();
+            let lhs = subtrees
+                .next()
+                .expect("Arithmetic expression has at least two subtrees");
+
+            append_term_instructions(lhs, variable_order, logical_type, instructions);
+
+            for subtree in subtrees {
+                append_term_instructions(subtree, variable_order, logical_type, instructions);
+                instructions.push(ArithmeticOperation::BinaryOperation(
+                    BinaryOperation::Division,
+                ));
+            }
+        }
         TermOperation::Function(_) => todo!("function terms are not implemented yet."),
     }
 }
@@ -82,13 +116,18 @@ pub(super) fn generate_node_arithmetic(
 
     for (constructor_index, (variable, tree)) in constructors.iter().enumerate() {
         new_variable_order.push_position(variable.clone(), first_unused_index + constructor_index);
-        constructor_instructions.push(AppendInstruction::Operation(termtree_to_operationtree(
+
+        let mut operation_instructions = Vec::new();
+        append_term_instructions(
             &tree.0,
             variable_order,
             types
                 .get(variable)
-                .expect("Every variable must be assigned to a type"),
-        )));
+                .expect("Every variables has an assigned type at this point"),
+            &mut operation_instructions,
+        );
+
+        constructor_instructions.push(AppendInstruction::Operation(operation_instructions));
     }
 
     (
