@@ -1,124 +1,62 @@
 //! Defines a variant of [`crate::model::Rule`], suitable for computing the chase.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     error::Error,
-    model::{
-        Condition, FilterOperation, Identifier, Literal, Rule, Term, TermOperation, TermTree,
-        Variable,
-    },
+    model::{Condition, Identifier, Literal, PrimitiveTerm, Rule, Term, Variable},
 };
 
-use super::{ChaseAggregate, ChaseAtom};
+use super::{ChaseAggregate, Constraint, Constructor, PrimitiveAtom, VariableAtom};
 
-/// Prefix used for placeholder aggregate variables in a [`ChaseRule`]
+/// Prefix used for generated aggregate variables in a [`ChaseRule`]
 pub const AGGREGATE_VARIABLE_PREFIX: &str = "_AGGREGATE_";
+/// Prefix used for generated variables encoding equality constraints in a [`ChaseRule`]
+pub const EQUALITY_VARIABLE_PREFIX: &str = "_EQUALITY_";
+/// Prefix used for generated variables for storing the value of complex terms in a [`ChaseRule`].
+pub const CONSTRUCT_VARIABLE_PREFIX: &str = "_CONSTRUCT_";
 
 /// Representation of a rule in a [`super::ChaseProgram`].
 ///
 /// Chase rules may include placeholder variables, which start with `_`
-/// * Additional filters: `_CONSTANT_AND_DUPLICATE_VARIABLE_FILTER_{term_counter}`
-/// * Head operations: `_HEAD_OPERATION_{term_counter}`:
+/// * Additional constraints: `_EQUALITY_{term_counter}`
+/// * Additional values: `_CONSTRUCT_{term_counter}`
 /// * Aggregates: `_AGGREGATE_{term_counter}`
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
 pub struct ChaseRule {
     /// Head atoms of the rule
-    head: Vec<ChaseAtom>,
+    head: Vec<PrimitiveAtom>,
     /// Head constructions
-    constructors: HashMap<Variable, TermTree>,
-    /// Positive Body literals of the rule
-    positive_body: Vec<ChaseAtom>,
-    /// Filters applied to the body
-    positive_filters: Vec<Condition>,
-    /// Negative Body literals of the rule
-    negative_body: Vec<ChaseAtom>,
-    /// Filters applied to the body
-    negative_filters: Vec<Condition>,
-    /// In the transformation from a [`Rule`], every aggregate term gets it's own placeholder variable.
-    /// The [`ChaseAggregate`] then specifies how the values for this variable should be computed (i.e. which aggregate operation to use, on which input variables, ...).
+    constructors: Vec<Constructor>,
+    /// Aggregates
     aggregates: Vec<ChaseAggregate>,
+    /// Positive Body literals of the rule
+    positive_body: Vec<VariableAtom>,
+    /// constraints applied to the body
+    positive_constraints: Vec<Constraint>,
+    /// Negative Body literals of the rule
+    negative_body: Vec<VariableAtom>,
+    /// constraints applied to the body
+    negative_constraints: Vec<Constraint>,
 }
 
 #[allow(dead_code)]
 impl ChaseRule {
-    /// Construct a new rule.
-    pub fn new(
-        mut head: Vec<ChaseAtom>,
-        mut constructors: HashMap<Variable, TermTree>,
-        mut positive_body: Vec<ChaseAtom>,
-        mut positive_filters: Vec<Condition>,
-        mut negative_body: Vec<ChaseAtom>,
-        aggregates: Vec<ChaseAggregate>,
-    ) -> Self {
-        // apply equality constraints
-        positive_filters.retain(|filter| {
-            if filter.operation == FilterOperation::Equals {
-                if let Term::Variable(variable) = &filter.rhs {
-                    positive_body
-                        .iter_mut()
-                        .for_each(|atom| atom.substitute_variable(&filter.lhs, variable));
-
-                    negative_body
-                        .iter_mut()
-                        .for_each(|atom| atom.substitute_variable(&filter.lhs, variable));
-
-                    head.iter_mut()
-                        .for_each(|atom| atom.substitute_variable(&filter.lhs, variable));
-
-                    for term_tree in constructors.values_mut() {
-                        term_tree.substitute_variable(&filter.lhs, variable)
-                    }
-
-                    return false;
-                }
-            }
-            true
-        });
-
-        let mut generated_variable_index = 0;
-        let mut generate_variable = move || {
-            generated_variable_index += 1;
-            let name = format!("__GENERATED_VARIABLE_{}", generated_variable_index);
-            Variable::Universal(Identifier::from(name))
-        };
-
-        // introduce equality constraints for positive atoms
-        for positive_atom in &mut positive_body {
-            positive_atom.normalize(&mut generate_variable, &mut positive_filters);
-        }
-
-        // introduce equality constraints for negative atoms
-        let mut negative_filters = Vec::new();
-        for negative_atom in &mut negative_body {
-            negative_atom.normalize(&mut generate_variable, &mut negative_filters);
-        }
-
-        Self {
-            head,
-            constructors,
-            positive_body,
-            positive_filters,
-            negative_body,
-            negative_filters,
-            aggregates,
-        }
-    }
     /// Return the head atoms of the rule - immutable.
     #[must_use]
-    pub fn head(&self) -> &Vec<ChaseAtom> {
+    pub fn head(&self) -> &Vec<PrimitiveAtom> {
         &self.head
     }
 
     /// Return the head atoms of the rule - mutable.
     #[must_use]
-    pub fn head_mut(&mut self) -> &mut Vec<ChaseAtom> {
+    pub fn head_mut(&mut self) -> &mut Vec<PrimitiveAtom> {
         &mut self.head
     }
 
     /// Return the constructors of the rule.
-    pub fn constructors(&self) -> &HashMap<Variable, TermTree> {
+    pub fn constructors(&self) -> &Vec<Constructor> {
         &self.constructors
     }
 
@@ -127,134 +65,225 @@ impl ChaseRule {
         &self.aggregates
     }
 
-    /// Return all the atoms occuring in this rule.
-    /// This includes the postive body atoms, the negative body atoms as well as the head atoms.
-    pub fn all_atoms(&self) -> impl Iterator<Item = &ChaseAtom> {
-        self.all_body().chain(self.head.iter())
-    }
-
     /// Return the all the atoms of the rules.
     /// This does not distinguish between positive and negative atoms.
-    pub fn all_body(&self) -> impl Iterator<Item = &ChaseAtom> {
+    pub fn all_body(&self) -> impl Iterator<Item = &VariableAtom> {
         self.positive_body.iter().chain(self.negative_body.iter())
     }
 
     /// Return the positive body atoms of the rule - immutable.
     #[must_use]
-    pub fn positive_body(&self) -> &Vec<ChaseAtom> {
+    pub fn positive_body(&self) -> &Vec<VariableAtom> {
         &self.positive_body
     }
 
     /// Return the positive body atoms of the rule - mutable.
     #[must_use]
-    pub fn positive_body_mut(&mut self) -> &mut Vec<ChaseAtom> {
+    pub fn positive_body_mut(&mut self) -> &mut Vec<VariableAtom> {
         &mut self.positive_body
     }
 
-    /// Return all the filters of the rule.
-    pub fn all_filters(&self) -> impl Iterator<Item = &Condition> {
-        self.positive_filters
+    /// Return all the constraints of the rule.
+    pub fn all_constraints(&self) -> impl Iterator<Item = &Constraint> {
+        self.positive_constraints
             .iter()
-            .chain(self.negative_filters.iter())
+            .chain(self.negative_constraints.iter())
     }
 
-    /// Return the positive filters of the rule - immutable.
+    /// Return the positive constraints of the rule - immutable.
     #[must_use]
-    pub fn positive_filters(&self) -> &Vec<Condition> {
-        &self.positive_filters
+    pub fn positive_constraints(&self) -> &Vec<Constraint> {
+        &self.positive_constraints
     }
 
-    /// Return the positive filters of the rule - mutable.
+    /// Return the positive constraints of the rule - mutable.
     #[must_use]
-    pub fn positive_filters_mut(&mut self) -> &mut Vec<Condition> {
-        &mut self.positive_filters
+    pub fn positive_constraints_mut(&mut self) -> &mut Vec<Constraint> {
+        &mut self.positive_constraints
     }
 
     /// Return the negative body atons of the rule - immutable.
     #[must_use]
-    pub fn negative_body(&self) -> &Vec<ChaseAtom> {
+    pub fn negative_body(&self) -> &Vec<VariableAtom> {
         &self.negative_body
     }
 
     /// Return the negative body atoms of the rule - mutable.
     #[must_use]
-    pub fn negative_body_mut(&mut self) -> &mut Vec<ChaseAtom> {
+    pub fn negative_body_mut(&mut self) -> &mut Vec<VariableAtom> {
         &mut self.negative_body
     }
 
-    /// Return the negative filters of the rule - immutable.
+    /// Return the negative constraints of the rule - immutable.
     #[must_use]
-    pub fn negative_filters(&self) -> &Vec<Condition> {
-        &self.negative_filters
+    pub fn negative_constraints(&self) -> &Vec<Constraint> {
+        &self.negative_constraints
     }
 
-    /// Return the negative filters of the rule - mutable.
+    /// Return the negative constraints of the rule - mutable.
     #[must_use]
-    pub fn negative_filters_mut(&mut self) -> &mut Vec<Condition> {
-        &mut self.negative_filters
+    pub fn negative_constraints_mut(&mut self) -> &mut Vec<Constraint> {
+        &mut self.negative_constraints
+    }
+}
+
+impl ChaseRule {
+    fn generate_variable_name(prefix: &str, counter: usize) -> Identifier {
+        Identifier(format!("{}{}", prefix, counter))
+    }
+
+    // Remove conditions of the form ?X = ?Y from the rule
+    // and apply the corresponding substitution
+    fn apply_equality(rule: &mut Rule) {
+        let mut assignment = HashMap::<Variable, Term>::new();
+
+        rule.conditions_mut().iter_mut().filter(|condition| {
+            if let Condition::Equals(
+                Term::Primitive(PrimitiveTerm::Variable(left)),
+                Term::Primitive(PrimitiveTerm::Variable(right)),
+            ) = condition
+            {
+                if let Some(assigned) = assignment.get(left) {
+                    assignment.insert(right.clone(), assigned.clone());
+                } else if let Some(assigned) = assignment.get(right) {
+                    assignment.insert(left.clone(), assigned.clone());
+                } else {
+                    assignment.insert(
+                        left.clone(),
+                        Term::Primitive(PrimitiveTerm::Variable(right.clone())),
+                    );
+                }
+
+                return false;
+            }
+
+            true
+        });
+
+        rule.apply_assignment(&assignment);
+    }
+
+    /// Modify the rule in such a way that it only contains variables within atoms.
+    /// Returns a vector of conditions that have been added for negative literals.
+    fn flatten_atoms(rule: &mut Rule) -> Vec<Condition> {
+        let mut global_term_index: usize = 0;
+
+        // Head atoms may only contain primitive terms
+        for atom in rule.head_mut() {
+            for term in atom.terms_mut() {
+                if !term.is_primitive() {
+                    let prefix = if let Term::Aggregation(_) = term {
+                        AGGREGATE_VARIABLE_PREFIX
+                    } else {
+                        CONSTRUCT_VARIABLE_PREFIX
+                    };
+
+                    rule.conditions_mut().push(Condition::Assignment(
+                        Variable::Universal(Self::generate_variable_name(
+                            prefix,
+                            global_term_index,
+                        )),
+                        term.clone(),
+                    ))
+                }
+
+                global_term_index += 1;
+            }
+        }
+
+        let mut result = Vec::new();
+
+        // Body literals must only contain variables
+        // and may not repeat variables within one atom
+        for literal in rule.body() {
+            let atom = literal.atom();
+            let mut current_variables = HashSet::<&Variable>::new();
+
+            for term in atom.terms_mut() {
+                let new_variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
+                    Self::generate_variable_name(EQUALITY_VARIABLE_PREFIX, global_term_index),
+                )));
+
+                if let Term::Primitive(PrimitiveTerm::Variable(variable)) = term {
+                    if !current_variables.contains(variable) {
+                        current_variables.insert(variable);
+
+                        continue;
+                    }
+                }
+
+                let new_condition = Condition::Equals(term.clone(), new_variable.clone());
+                if literal.is_positive() {
+                    rule.conditions_mut().push(new_condition);
+                } else {
+                    result.push(new_condition);
+                }
+
+                *term = new_variable;
+
+                global_term_index += 1;
+            }
+        }
+
+        result
     }
 }
 
 impl TryFrom<Rule> for ChaseRule {
     type Error = Error;
 
-    fn try_from(rule: Rule) -> Result<ChaseRule, Error> {
+    fn try_from(mut rule: Rule) -> Result<ChaseRule, Error> {
+        // Preprocess rule in order to make the translation simpler
+        Self::apply_equality(&mut rule);
+        let negative_conditions = Self::flatten_atoms(&mut rule);
+
+        let mut head = Vec::new();
         let mut positive_body = Vec::new();
+        let mut positive_constraints = Vec::new();
         let mut negative_body = Vec::new();
-        let mut chase_aggregates = Vec::new();
+        let mut negative_constraints = Vec::new();
+        let mut constructors = Vec::new();
+        let mut aggregates = Vec::new();
 
-        for literal in rule.body().iter().cloned() {
-            match literal {
-                Literal::Positive(atom) => positive_body.push(ChaseAtom::from_flat_atom(atom)?),
-                Literal::Negative(atom) => negative_body.push(ChaseAtom::from_flat_atom(atom)?),
-            }
-        }
-
-        let mut constructors = HashMap::<Variable, TermTree>::new();
-        let mut head_atoms = Vec::<ChaseAtom>::new();
-        let mut term_counter: usize = 1;
         for atom in rule.head() {
-            let mut new_terms = Vec::<Term>::new();
-
-            for term_tree in atom.term_trees() {
-                if let TermOperation::Term(term) = term_tree.operation() {
-                    if let Term::Aggregate(aggregate) = term {
-                        // Introduce place holder variable for the aggregates
-                        let new_variable_identifier =
-                            Identifier(format!("{AGGREGATE_VARIABLE_PREFIX}{term_counter}"));
-                        let new_variable = Variable::Universal(new_variable_identifier.clone());
-                        new_terms.push(Term::Variable(new_variable));
-
-                        // Add [`ChaseAggregate`] which ensures that the variable will get bound to the correct value
-                        chase_aggregates.push(ChaseAggregate::from_aggregate(
-                            aggregate.clone(),
-                            new_variable_identifier,
-                        ));
-                    } else {
-                        new_terms.push(term.clone());
-                    }
-                } else {
-                    let new_variable =
-                        Variable::Universal(Identifier(format!("_HEAD_OPERATION_{term_counter}")));
-                    new_terms.push(Term::Variable(new_variable.clone()));
-                    let exists = constructors.insert(new_variable, term_tree.clone());
-
-                    assert!(exists.is_none())
-                }
-
-                term_counter += 1;
-            }
-
-            head_atoms.push(ChaseAtom::new(atom.predicate(), new_terms));
+            head.push(PrimitiveAtom::from_flat_atom(atom));
         }
 
-        Ok(Self::new(
-            head_atoms,
+        for literal in rule.body() {
+            match literal {
+                Literal::Positive(atom) => positive_body.push(VariableAtom::from_flat_atom(atom)),
+                Literal::Negative(atom) => negative_body.push(VariableAtom::from_flat_atom(atom)),
+            }
+        }
+
+        for condition in rule.conditions() {
+            if let Condition::Assignment(variable, term) = condition {
+                if let Term::Aggregation(aggregate) = term {
+                    aggregates.push(ChaseAggregate::from_aggregate(
+                        aggregate.clone(),
+                        variable.clone(),
+                    ));
+                } else {
+                    constructors.push(Constructor::new(variable.clone(), term.clone()));
+                }
+            } else {
+                positive_constraints.push(Constraint::new(condition.clone()));
+            }
+        }
+
+        for condition in negative_conditions {
+            // Negative constraints can only be generated by the rule translation process
+            negative_constraints.push(Constraint::new(condition.clone()));
+        }
+
+        Ok(Self {
+            head,
             constructors,
+            aggregates,
             positive_body,
-            rule.filters().clone(),
+            positive_constraints,
             negative_body,
-            chase_aggregates,
-        ))
+            negative_constraints,
+        })
     }
 }

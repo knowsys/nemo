@@ -200,7 +200,7 @@ impl Rule {
         &mut self.conditions
     }
 
-    /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
+    /// Replaces [`Variable`]s with [`super::Term`]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         self.body
             .iter_mut()
