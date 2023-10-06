@@ -43,12 +43,13 @@ use super::{
     ByteSized, ExecutionPlan,
 };
 
-#[cfg(feature = "no-prefixed-string-dictionary")]
+//#[cfg(feature = "no-prefixed-string-dictionary")]
 /// Dictionary Implementation used in the current configuration
-pub type Dict = crate::dictionary::StringDictionary;
-#[cfg(not(feature = "no-prefixed-string-dictionary"))]
+//pub type Dict = crate::dictionary::StringDictionary;
+//#[cfg(not(feature = "no-prefixed-string-dictionary"))]
 /// Dictionary Implementation used in the current configuration
-pub type Dict = crate::dictionary::PrefixedStringDictionary;
+//pub type Dict = crate::dictionary::PrefixedStringDictionary;
+pub type Dict = crate::dictionary::MetaDictionary;
 
 /// Type that represents a reordering of the columns of a table.
 /// It is given in form of a permutation which encodes the transformation
