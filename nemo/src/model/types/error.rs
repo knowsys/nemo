@@ -1,27 +1,30 @@
 use super::primitive_types::PrimitiveType;
-use crate::model::{LogicalAggregateOperation, Term};
+use crate::model::{Constant, LogicalAggregateOperation};
 
 use nemo_physical::error::ReadingError;
 use thiserror::Error;
 
 /// An [`InvalidRuleTermConversion`]
 #[derive(Debug, Error, PartialEq)]
-#[error("The term \"{}\" cannot be converted to a {}.", .term, .target_type)]
+#[error("The term \"{}\" cannot be converted to a {}.", .constant, .target_type)]
 pub struct InvalidRuleTermConversion {
-    term: Term,
+    constant: Constant,
     target_type: PrimitiveType,
 }
 
 impl InvalidRuleTermConversion {
     /// Create new `InvalidRuleTermConversion` error
-    pub fn new(term: Term, target_type: PrimitiveType) -> Self {
-        Self { term, target_type }
+    pub fn new(constant: Constant, target_type: PrimitiveType) -> Self {
+        Self {
+            constant,
+            target_type,
+        }
     }
 }
 
 impl From<InvalidRuleTermConversion> for ReadingError {
     fn from(value: InvalidRuleTermConversion) -> Self {
-        Self::TypeConversionError(value.term.to_string(), value.target_type.to_string())
+        Self::TypeConversionError(value.constant.to_string(), value.target_type.to_string())
     }
 }
 

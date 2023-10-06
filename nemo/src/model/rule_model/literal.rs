@@ -2,7 +2,7 @@ use std::ops::Neg;
 
 use crate::model::VariableAssignment;
 
-use super::{Aggregate, Atom, Identifier, TermTree, Variable};
+use super::{Aggregate, Atom, Identifier, Term, Variable};
 
 /// A literal.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -55,31 +55,33 @@ impl Literal {
 
     /// Return the terms in the literal.
     #[must_use]
-    pub fn terms(&self) -> &Vec<TermTree> {
-        forward_to_atom!(self, term_trees)
+    pub fn terms(&self) -> &Vec<Term> {
+        forward_to_atom!(self, terms)
     }
 
-    /// Return the variables in the literal.
-    pub fn variables(&self) -> impl Iterator<Item = &Variable> + '_ {
-        forward_to_atom!(self, variables)
-    }
+    // TODO: Check which of those are needed
 
-    /// Return the universally quantified variables in the literal.
-    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
-        forward_to_atom!(self, universal_variables)
-    }
+    // /// Return the variables in the literal.
+    // pub fn variables(&self) -> Vec<Variable> {
+    //     forward_to_atom!(self, variables)
+    // }
 
-    /// Return the existentially quantified variables in the literal.
-    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
-        forward_to_atom!(self, existential_variables)
-    }
+    // /// Return the universally quantified variables in the literal.
+    // pub fn universal_variables(&self) -> Vec<Variable> {
+    //     forward_to_atom!(self, universal_variables)
+    // }
+
+    // /// Return the existentially quantified variables in the literal.
+    // pub fn existential_variables(&self) -> Vec<Variable> {
+    //     forward_to_atom!(self, existential_variables)
+    // }
 
     /// Return all aggregates in the literal.
     pub fn aggregates(&self) -> impl Iterator<Item = &Aggregate> + '_ {
         forward_to_atom!(self, aggregates)
     }
 
-    /// Replace one term with another.
+    /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         match self {
             Literal::Positive(atom) => atom.apply_assignment(assignment),

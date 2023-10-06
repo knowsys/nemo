@@ -19,7 +19,8 @@ use nemo_physical::{
 
 use crate::{
     model::{
-        chase_model::ChaseAtom, Filter, FilterOperation, Identifier, PrimitiveType, Term, Variable,
+        chase_model::ChaseAtom, Condition, FilterOperation, Identifier, PrimitiveType, Term,
+        Variable,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::TableManager,
@@ -45,7 +46,7 @@ pub(super) fn atom_binding(atom: &ChaseAtom, variable_order: &VariableOrder) -> 
 /// Calculate helper structures that define the filters that need to be applied.
 pub(super) fn compute_filters(
     variable_order: &VariableOrder,
-    filters: &[Filter],
+    filters: &[Condition],
     variable_types: &HashMap<Variable, PrimitiveType>,
 ) -> (SelectEqualClasses, HashMap<usize, ValueAssignment>) {
     let mut filter_assignments = HashMap::<usize, ValueAssignment>::new();

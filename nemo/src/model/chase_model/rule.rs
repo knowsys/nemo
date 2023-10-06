@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use crate::{
     error::Error,
     model::{
-        Filter, FilterOperation, Identifier, Literal, Rule, Term, TermOperation, TermTree, Variable,
+        Condition, FilterOperation, Identifier, Literal, Rule, Term, TermOperation, TermTree,
+        Variable,
     },
 };
 
@@ -30,11 +31,11 @@ pub struct ChaseRule {
     /// Positive Body literals of the rule
     positive_body: Vec<ChaseAtom>,
     /// Filters applied to the body
-    positive_filters: Vec<Filter>,
+    positive_filters: Vec<Condition>,
     /// Negative Body literals of the rule
     negative_body: Vec<ChaseAtom>,
     /// Filters applied to the body
-    negative_filters: Vec<Filter>,
+    negative_filters: Vec<Condition>,
     /// In the transformation from a [`Rule`], every aggregate term gets it's own placeholder variable.
     /// The [`ChaseAggregate`] then specifies how the values for this variable should be computed (i.e. which aggregate operation to use, on which input variables, ...).
     aggregates: Vec<ChaseAggregate>,
@@ -47,7 +48,7 @@ impl ChaseRule {
         mut head: Vec<ChaseAtom>,
         mut constructors: HashMap<Variable, TermTree>,
         mut positive_body: Vec<ChaseAtom>,
-        mut positive_filters: Vec<Filter>,
+        mut positive_filters: Vec<Condition>,
         mut negative_body: Vec<ChaseAtom>,
         aggregates: Vec<ChaseAggregate>,
     ) -> Self {
@@ -151,7 +152,7 @@ impl ChaseRule {
     }
 
     /// Return all the filters of the rule.
-    pub fn all_filters(&self) -> impl Iterator<Item = &Filter> {
+    pub fn all_filters(&self) -> impl Iterator<Item = &Condition> {
         self.positive_filters
             .iter()
             .chain(self.negative_filters.iter())
@@ -159,13 +160,13 @@ impl ChaseRule {
 
     /// Return the positive filters of the rule - immutable.
     #[must_use]
-    pub fn positive_filters(&self) -> &Vec<Filter> {
+    pub fn positive_filters(&self) -> &Vec<Condition> {
         &self.positive_filters
     }
 
     /// Return the positive filters of the rule - mutable.
     #[must_use]
-    pub fn positive_filters_mut(&mut self) -> &mut Vec<Filter> {
+    pub fn positive_filters_mut(&mut self) -> &mut Vec<Condition> {
         &mut self.positive_filters
     }
 
@@ -183,13 +184,13 @@ impl ChaseRule {
 
     /// Return the negative filters of the rule - immutable.
     #[must_use]
-    pub fn negative_filters(&self) -> &Vec<Filter> {
+    pub fn negative_filters(&self) -> &Vec<Condition> {
         &self.negative_filters
     }
 
     /// Return the negative filters of the rule - mutable.
     #[must_use]
-    pub fn negative_filters_mut(&mut self) -> &mut Vec<Filter> {
+    pub fn negative_filters_mut(&mut self) -> &mut Vec<Condition> {
         &mut self.negative_filters
     }
 }

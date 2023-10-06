@@ -1,6 +1,6 @@
-use crate::model::{types::error::TypeError, PrimitiveType};
+use crate::model::{types::error::TypeError, PrimitiveType, VariableAssignment};
 
-use super::{Identifier, Variable};
+use super::{Identifier, PrimitiveTerm, Term, Variable};
 
 /// Aggregate operation on logical values
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -65,19 +65,16 @@ pub struct Aggregate {
 }
 
 impl Aggregate {
-    /// Substitutes all occurrences of `var` for `subst`.
-    pub fn substitute_variable(&mut self, var: &Variable, subst: &Variable) {
-        let Variable::Universal(var) = var else {
-            panic!("cannot substitute existential variable")
-        };
-
-        let Variable::Universal(subst) = subst else {
-            panic!("cannot substitute with existential variable")
-        };
-
-        for id in &mut self.variable_identifiers {
-            if id == var {
-                *id = subst.clone();
+    /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
+        for variable_id in &mut self.variable_identifiers {
+            if let Some(value) = assignment.get(&Variable::Universal(variable_id.clone())) {
+                if let Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
+                    replacing_variable,
+                ))) = value
+                {
+                    *variable_id = replacing_variable.clone();
+                }
             }
         }
     }

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use thiserror::Error;
 
-use crate::model::{Atom, Filter, FilterOperation, Identifier, Term, TermOperation, Variable};
+use crate::model::{Atom, Condition, FilterOperation, Identifier, Term, TermOperation, Variable};
 
 /// Representation of an atom used in [`super::ChaseRule`].
 #[derive(Debug, Clone)]
@@ -53,7 +53,7 @@ impl ChaseAtom {
     pub fn normalize(
         &mut self,
         generate_variable: &mut impl FnMut() -> Variable,
-        constraints: &mut impl Extend<Filter>,
+        constraints: &mut impl Extend<Condition>,
     ) {
         let mut seen_variables = HashSet::new();
 
@@ -61,7 +61,7 @@ impl ChaseAtom {
             if let Term::Variable(variable) = term {
                 if !seen_variables.insert(variable.clone()) {
                     let fresh_variable = generate_variable();
-                    constraints.extend(Some(Filter {
+                    constraints.extend(Some(Condition {
                         operation: FilterOperation::Equals,
                         lhs: fresh_variable.clone(),
                         rhs: std::mem::replace(term, Term::Variable(fresh_variable)),
@@ -69,7 +69,7 @@ impl ChaseAtom {
                 }
             } else {
                 let fresh_variable = generate_variable();
-                constraints.extend(Some(Filter {
+                constraints.extend(Some(Condition {
                     operation: FilterOperation::Equals,
                     lhs: fresh_variable.clone(),
                     rhs: std::mem::replace(term, Term::Variable(fresh_variable)),

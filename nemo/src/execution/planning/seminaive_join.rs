@@ -8,7 +8,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    model::{chase_model::ChaseAtom, Filter, PrimitiveType, Variable},
+    model::{chase_model::ChaseAtom, Condition, PrimitiveType, Variable},
     program_analysis::variable_order::VariableOrder,
     table_manager::TableManager,
 };
@@ -23,7 +23,7 @@ pub struct SeminaiveJoinGenerator {
     /// the atoms to join
     pub atoms: Vec<ChaseAtom>,
     /// the filters to apply
-    pub filters: Vec<Filter>,
+    pub filters: Vec<Condition>,
 }
 
 impl SeminaiveJoinGenerator {

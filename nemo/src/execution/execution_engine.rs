@@ -24,7 +24,7 @@ use crate::{
             primitive_logical_value::{PrimitiveLogicalValueIteratorT, PrimitiveLogicalValueT},
             primitive_types::PrimitiveType,
         },
-        Atom, Fact, Filter, FilterOperation, Identifier, Program, Term, TermOperation, TermTree,
+        Atom, Condition, Fact, FilterOperation, Identifier, Program, Term, TermOperation, TermTree,
         VariableAssignment,
     },
     program_analysis::analysis::ProgramAnalysis,
@@ -505,10 +505,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             // The goal of this part of the code is to apply the rule which led to the given fact
             // but with the variable binding derived from the unification above
 
-            let new_filters: Vec<Filter> = assignment
+            let new_filters: Vec<Condition> = assignment
                 .iter()
                 .map(|(variable, term)| {
-                    Filter::new(FilterOperation::Equals, variable.clone(), term.clone())
+                    Condition::new(FilterOperation::Equals, variable.clone(), term.clone())
                 })
                 .collect();
 

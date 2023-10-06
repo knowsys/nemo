@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{io::parser::ParseError, model::VariableAssignment};
 
-use super::{Atom, Filter, Literal, Term, Variable};
+use super::{Atom, Condition, Literal, Variable};
 
 /// A rule.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -11,17 +11,17 @@ pub struct Rule {
     head: Vec<Atom>,
     /// Body literals of the rule
     body: Vec<Literal>,
-    /// Filters applied to the body
-    filters: Vec<Filter>,
+    /// Conditions expressed within the left side of the rule
+    conditions: Vec<Condition>,
 }
 
 impl Rule {
     /// Construct a new rule.
-    pub fn new(head: Vec<Atom>, body: Vec<Literal>, filters: Vec<Filter>) -> Self {
+    pub fn new(head: Vec<Atom>, body: Vec<Literal>, conditions: Vec<Condition>) -> Self {
         Self {
             head,
             body,
-            filters,
+            conditions,
         }
     }
 
@@ -29,21 +29,22 @@ impl Rule {
     pub(crate) fn new_validated(
         head: Vec<Atom>,
         body: Vec<Literal>,
-        filters: Vec<Filter>,
+        conditions: Vec<Condition>,
     ) -> Result<Self, ParseError> {
+        // TODO: Rework this to use the concept of
+        // 1. Bound variable = Primitive occuring in positve literal
+        // 2. Derived variable = Condition Assignment only using bound variables
+        // 3. Head and all literals may only use variables of type 1 and 2 (head may also use existentials)
+        // 4. Exception: Negative literals may use an unsafe variable as before
+
         // Check if existential variables occur in the body.
-        let existential_variables = body
+        let existential_variables_body = body
             .iter()
             .flat_map(|literal| literal.existential_variables())
             .collect::<Vec<_>>();
 
-        if !existential_variables.is_empty() {
-            return Err(ParseError::BodyExistential(
-                existential_variables
-                    .first()
-                    .expect("is not empty here")
-                    .name(),
-            ));
+        if let Some(variable) = existential_variables_body.first() {
+            return Err(ParseError::BodyExistential(variable.name()));
         }
 
         // Check if some variable in the body occurs only in negative literals.
@@ -51,21 +52,21 @@ impl Rule {
             .iter()
             .cloned()
             .partition(|literal| literal.is_positive());
-        let positive_varibales = positive
+        let positive_variables = positive
             .iter()
-            .flat_map(|literal| literal.universal_variables())
-            .collect::<HashSet<&Variable>>();
+            .flat_map(|literal| literal.variables())
+            .collect::<HashSet<Variable>>();
 
         let mut unsafe_negative_variables = HashSet::<Variable>::new();
         for negative_literal in negative {
             let mut current_unsafe = HashSet::<Variable>::new();
 
             for variable in negative_literal.variables() {
-                if positive_varibales.contains(variable) {
+                if positive_variables.contains(&variable) {
                     continue;
                 }
 
-                if unsafe_negative_variables.contains(variable) {
+                if unsafe_negative_variables.contains(&variable) {
                     return Err(ParseError::UnsafeVariableInMulltipleNegativeLiterals(
                         variable.name(),
                     ));
@@ -78,26 +79,38 @@ impl Rule {
         }
 
         // Check if a variable occurs with both existential and universal quantification.
-        let universal_variables = body
+        let universal_variables_names = body
             .iter()
-            .flat_map(|literal| literal.universal_variables())
-            .collect::<HashSet<_>>();
+            .flat_map(|literal| {
+                literal
+                    .universal_variables()
+                    .into_iter()
+                    .map(|v| v.name())
+                    .collect::<HashSet<String>>()
+            })
+            .collect::<HashSet<String>>();
 
-        let existential_variables = head
+        let existential_variables_names = head
             .iter()
-            .flat_map(|atom| atom.existential_variables())
+            .flat_map(|atom| {
+                atom.existential_variables()
+                    .into_iter()
+                    .map(|v| v.name())
+                    .collect::<HashSet<String>>()
+            })
             .collect();
 
-        let common_variables = universal_variables
-            .intersection(&existential_variables)
+        let common_variable_names = universal_variables_names
+            .intersection(&existential_variables_names)
             .take(1)
             .collect::<Vec<_>>();
 
-        if !common_variables.is_empty() {
-            return Err(ParseError::BothQuantifiers(
-                common_variables.first().expect("is not empty here").name(),
-            ));
+        if let Some(&&common_variable) = common_variable_names.first() {
+            return Err(ParseError::BothQuantifiers(common_variable));
         }
+
+        //
+        let mut defined_condition_variables = HashSet::<Variable>::new();
 
         // Check if there are universal variables in the head which do not occur in a positive body literal
         let head_universal_variables = head
@@ -106,23 +119,17 @@ impl Rule {
             .collect::<HashSet<_>>();
 
         for head_variable in &head_universal_variables {
-            if !positive_varibales.contains(head_variable) {
+            if !positive_variables.contains(head_variable) {
                 return Err(ParseError::UnsafeHeadVariable(head_variable.name()));
             }
         }
 
-        // Check if filters are correctly formed
-        for filter in &filters {
-            let mut filter_variables = vec![&filter.lhs];
-
-            if let Term::Variable(right_variable) = &filter.rhs {
-                filter_variables.push(right_variable);
-            }
-
-            for variable in filter_variables {
+        // Check if conditions are correctly formed
+        for condition in &conditions {
+            for variable in &condition.variables() {
                 match variable {
                     Variable::Universal(universal_variable) => {
-                        if !positive_varibales.contains(variable) {
+                        if !positive_variables.contains(variable) {
                             return Err(ParseError::UnsafeFilterVariable(
                                 universal_variable.name(),
                             ));
@@ -149,7 +156,7 @@ impl Rule {
             for literal in &head {
                 for aggregate in literal.aggregates() {
                     for variable_identifier in &aggregate.variable_identifiers {
-                        if !positive_varibales
+                        if !positive_variables
                             .contains(&Variable::Universal(variable_identifier.clone()))
                         {
                             return Err(ParseError::UnsafeHeadVariable(variable_identifier.name()));
@@ -162,7 +169,7 @@ impl Rule {
         Ok(Rule {
             head,
             body,
-            filters,
+            conditions,
         })
     }
 
@@ -190,19 +197,19 @@ impl Rule {
         &mut self.body
     }
 
-    /// Return the filters of the rule - immutable.
+    /// Return the conditions of the rule - immutable.
     #[must_use]
-    pub fn filters(&self) -> &Vec<Filter> {
-        &self.filters
+    pub fn conditions(&self) -> &Vec<Condition> {
+        &self.conditions
     }
 
     /// Return the filters of the rule - mutable.
     #[must_use]
-    pub fn filters_mut(&mut self) -> &mut Vec<Filter> {
-        &mut self.filters
+    pub fn conditions_mut(&mut self) -> &mut Vec<Condition> {
+        &mut self.conditions
     }
 
-    /// Replace one [`Term`] with another.
+    /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         self.body
             .iter_mut()
@@ -210,7 +217,7 @@ impl Rule {
         self.head
             .iter_mut()
             .for_each(|a| a.apply_assignment(assignment));
-        self.filters
+        self.conditions
             .iter_mut()
             .for_each(|f| f.apply_assignment(assignment));
     }
@@ -236,14 +243,14 @@ impl std::fmt::Display for Rule {
             }
         }
 
-        if !self.filters.is_empty() {
+        if !self.conditions.is_empty() {
             f.write_str(", ")?;
         }
 
-        for (index, filter) in self.filters.iter().enumerate() {
+        for (index, filter) in self.conditions.iter().enumerate() {
             filter.fmt(f)?;
 
-            if index < self.filters.len() - 1 {
+            if index < self.conditions.len() - 1 {
                 f.write_str(", ")?;
             }
         }

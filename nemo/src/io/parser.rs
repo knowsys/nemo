@@ -299,7 +299,7 @@ pub enum BodyExpression {
     /// Literal
     Literal(Literal),
     /// Filter
-    Filter(Filter),
+    Filter(Condition),
 }
 
 impl<'a> RuleParser<'a> {
@@ -1144,7 +1144,9 @@ impl<'a> RuleParser<'a> {
 
     /// Parse expression of the form `<variable> <operation> <term>`
     /// or `<term> <operation> <variable>`.
-    pub fn parse_filter_expression(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Filter> {
+    pub fn parse_filter_expression(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Condition> {
         traced(
             "parse_filter_expression",
             map_error(
@@ -1155,7 +1157,7 @@ impl<'a> RuleParser<'a> {
                             self.parse_filter_operator(),
                             cut(self.parse_term()),
                         )),
-                        |(lhs, operation, rhs)| Filter::new(operation, lhs, rhs),
+                        |(lhs, operation, rhs)| Condition::new(operation, lhs, rhs),
                     ),
                     map(
                         tuple((
@@ -1163,7 +1165,7 @@ impl<'a> RuleParser<'a> {
                             self.parse_filter_operator(),
                             cut(self.parse_universal_variable()),
                         )),
-                        |(lhs, operation, rhs)| Filter::flipped(operation, lhs, rhs),
+                        |(lhs, operation, rhs)| Condition::flipped(operation, lhs, rhs),
                     ),
                 )),
                 || ParseError::ExpectedFilterExpression,
@@ -1644,27 +1646,27 @@ mod test {
                 )),
             ],
             vec![
-                Filter::new(
+                Condition::new(
                     FilterOperation::GreaterThan,
                     Variable::Universal(y.clone()),
                     Term::Variable(Variable::Universal(x.clone())),
                 ),
-                Filter::new(
+                Condition::new(
                     FilterOperation::Equals,
                     Variable::Universal(x.clone()),
                     Term::NumericLiteral(NumericLiteral::Integer(3)),
                 ),
-                Filter::new(
+                Condition::new(
                     FilterOperation::LessThan,
                     Variable::Universal(z.clone()),
                     Term::NumericLiteral(NumericLiteral::Integer(7)),
                 ),
-                Filter::new(
+                Condition::new(
                     FilterOperation::LessThanEq,
                     Variable::Universal(x),
                     Term::Variable(Variable::Universal(z.clone())),
                 ),
-                Filter::new(
+                Condition::new(
                     FilterOperation::GreaterThanEq,
                     Variable::Universal(z),
                     Term::Variable(Variable::Universal(y)),

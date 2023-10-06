@@ -9,8 +9,8 @@ pub use atom::*;
 mod datasource;
 pub use datasource::*;
 
-mod filter;
-pub use filter::*;
+mod condition;
+pub use condition::*;
 
 mod literal;
 pub use literal::*;
@@ -24,5 +24,11 @@ pub use rule::*;
 mod term;
 pub use term::*;
 
-mod term_operation;
-pub use term_operation::*;
+mod predicate;
+pub use predicate::*;
+
+mod rdfliteral;
+pub use rdfliteral::*;
+
+mod numericliteral;
+pub use numericliteral::*;

@@ -10,7 +10,7 @@ use nemo_physical::{
 
 use crate::{
     execution::planning::plan_util::{compute_filters, subplan_union_reordered},
-    model::{chase_model::ChaseAtom, Filter, PrimitiveType, Variable},
+    model::{chase_model::ChaseAtom, Condition, PrimitiveType, Variable},
     program_analysis::variable_order::VariableOrder,
     table_manager::{SubtableExecutionPlan, TableManager},
 };
@@ -78,7 +78,7 @@ pub(super) struct NegationGenerator {
     /// The negated atoms.
     pub atoms: Vec<ChaseAtom>,
     /// The negated filters.
-    pub filters: Vec<Filter>,
+    pub filters: Vec<Condition>,
 }
 
 impl NegationGenerator {
