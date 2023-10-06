@@ -11,7 +11,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    model::{PrimitiveType, Term, TermOperation, TermTree, Variable},
+    model::{PrimitiveType, Term, Variable},
     program_analysis::variable_order::VariableOrder,
 };
 

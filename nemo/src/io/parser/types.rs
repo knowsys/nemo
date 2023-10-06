@@ -84,9 +84,18 @@ pub enum ParseError {
     /// The universal variable does not occur in a positive body literal.
     #[error(r#"The universal variable "{0}" does not occur in a positive body literal."#)]
     UnsafeHeadVariable(String),
+    /// The variable must only depend on variables that occur in a positive body literal.
+    #[error(r#"The variable "{0}" must only depend on variables that occur in a positive body literal."#)]
+    UnsafeDefinition(String),
+    /// Complex term uses an undefined variable.
+    #[error(r#"Complex term {0} uses an undefined variable {1}."#)]
+    UnsafeComplexTerm(String, String),
+    /// Variable has been defined multiple times.
+    #[error(r#"The variable "{0}" has been defined multiple times."#)]
+    MultipleDefinitions(String),
     /// The unsafe variable appears in multiple negative body literals.
     #[error(r#"The unsafe variable "{0}" appears in multuple negative body literals."#)]
-    UnsafeVariableInMulltipleNegativeLiterals(String),
+    UnsafeVariableInMultipleNegativeLiterals(String),
     /// A variable used in a comparison does not occur in a positive body literal.
     #[error(
         r#"The variable "{0}" used in a comparison does not occur in a positive body literal."#
@@ -242,6 +251,9 @@ pub enum ParseError {
     /// An aggregate term occurs in the body of a rule.
     #[error(r#"An aggregate term ("{0}") occurs in the body of a rule"#)]
     AggregateInBody(Aggregate),
+    /// An aggregate may not be used within a complex term.
+    #[error(r#"A term ("{0}") may not contain an aggregate as a subterm."#)]
+    AggregateSubterm(String),
     /// An aggregate term uses an invalid amount of variables.
     #[error(r#"An aggregate term ("{0}") uses an invalid amount of variables. Currently only exactly one variable is allowed inside aggregates"#)]
     InvalidVariableCountInAggregate(Aggregate),

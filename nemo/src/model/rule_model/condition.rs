@@ -48,44 +48,59 @@ impl Condition {
         }
     }
 
-    // /// Return all variables.
-    // pub fn variables(&self) -> Vec<Variable> {
-    //     match self {
-    //         Condition::Assignment(variable, term) => {
-    //             let mut result = term.variables();
-    //             result.push(variable.clone());
+    /// Return all terms.
+    pub fn terms(&self) -> Vec<&Term> {
+        match self {
+            Condition::Assignment(variable, term) => {
+                vec![term]
+            }
+            Condition::Equals(left, right)
+            | Condition::Unequals(left, right)
+            | Condition::LessThan(left, right)
+            | Condition::GreaterThan(left, right)
+            | Condition::LessThanEq(left, right)
+            | Condition::GreaterThanEq(left, right) => {
+                vec![left, right]
+            }
+        }
+    }
 
-    //             result
-    //         }
-    //         Condition::Equals(left, right)
-    //         | Condition::Unequals(left, right)
-    //         | Condition::LessThan(left, right)
-    //         | Condition::GreaterThan(left, right)
-    //         | Condition::LessThanEq(left, right)
-    //         | Condition::GreaterThanEq(left, right) => {
-    //             let mut result = left.variables();
-    //             result.extend(right.variables());
+    /// Return all variables.
+    pub fn variables(&self) -> Vec<&Variable> {
+        match self {
+            Condition::Assignment(variable, term) => {
+                let mut result = term.variables().collect::<Vec<_>>();
+                result.push(variable);
 
-    //             result
-    //         }
-    //     }
-    // }
+                result
+            }
+            Condition::Equals(left, right)
+            | Condition::Unequals(left, right)
+            | Condition::LessThan(left, right)
+            | Condition::GreaterThan(left, right)
+            | Condition::LessThanEq(left, right)
+            | Condition::GreaterThanEq(left, right) => {
+                let mut result = left.variables().collect::<Vec<_>>();
+                result.extend(right.variables());
 
-    // /// Return all universally quantified variables in the atom.
-    // pub fn universal_variables(&self) -> Vec<Variable> {
-    //     self.variables()
-    //         .into_iter()
-    //         .filter(|var| matches!(var, Variable::Universal(_)))
-    //         .collect()
-    // }
+                result
+            }
+        }
+    }
 
-    // /// Return all existentially quantified variables in the atom.
-    // pub fn existential_variables(&self) -> Vec<Variable> {
-    //     self.variables()
-    //         .into_iter()
-    //         .filter(|var| matches!(var, Variable::Existential(_)))
-    //         .collect()
-    // }
+    /// Return all universally quantified variables in the atom.
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.variables()
+            .into_iter()
+            .filter(|var| matches!(var, Variable::Universal(_)))
+    }
+
+    /// Return all existentially quantified variables in the atom.
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.variables()
+            .into_iter()
+            .filter(|var| matches!(var, Variable::Existential(_)))
+    }
 }
 
 impl Condition {

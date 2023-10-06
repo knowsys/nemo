@@ -1,5 +1,9 @@
-use nemo_physical::error::ReadingError;
+use nemo_physical::{datatypes::Double, error::ReadingError};
 use thiserror::Error;
+
+use crate::model::types::primitive_logical_value::LogicalString;
+
+use super::{Constant, NumericLiteral};
 
 /// XSD type for string
 pub const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
@@ -55,5 +59,73 @@ impl InvalidRdfLiteral {
 impl From<InvalidRdfLiteral> for ReadingError {
     fn from(value: InvalidRdfLiteral) -> Self {
         Self::InvalidRdfLiteral(value.literal.to_string())
+    }
+}
+
+impl TryFrom<RdfLiteral> for Constant {
+    type Error = InvalidRdfLiteral;
+
+    fn try_from(literal: RdfLiteral) -> Result<Self, Self::Error> {
+        match literal {
+            RdfLiteral::LanguageString { .. } => Ok(Self::RdfLiteral(literal)),
+            RdfLiteral::DatatypeValue {
+                ref value,
+                ref datatype,
+            } => match datatype.as_str() {
+                XSD_STRING => Ok(Constant::StringLiteral(
+                    LogicalString::from(value.to_string()).into(),
+                )),
+                XSD_INTEGER => {
+                    let trimmed = value.strip_prefix(['-', '+']).unwrap_or(value);
+
+                    if !trimmed.chars().all(|c| c.is_ascii_digit()) {
+                        Err(InvalidRdfLiteral::new(literal.clone()))
+                    } else {
+                        Ok(value
+                            .parse()
+                            .map(|v| Self::NumericLiteral(NumericLiteral::Integer(v)))
+                            .unwrap_or(Self::RdfLiteral(literal)))
+                    }
+                }
+                XSD_DECIMAL => match value.rsplit_once('.') {
+                    Some((a, b)) => {
+                        let trimmed_a = a.strip_prefix(['-', '+']).unwrap_or(a);
+                        let is_valid = trimmed_a.chars().all(|c| c.is_ascii_digit())
+                            && b.chars().all(|c| c.is_ascii_digit());
+
+                        if !is_valid {
+                            Err(InvalidRdfLiteral::new(literal.clone()))
+                        } else {
+                            Ok(a.parse()
+                                .ok()
+                                .and_then(|a| Some((a, b.parse().ok()?)))
+                                .map(|(a, b)| Self::NumericLiteral(NumericLiteral::Decimal(a, b)))
+                                .unwrap_or(Self::RdfLiteral(literal)))
+                        }
+                    }
+                    None => {
+                        let trimmed = value.strip_prefix(['-', '+']).unwrap_or(value);
+                        let is_valid = trimmed.chars().all(|c| c.is_ascii_digit());
+
+                        if !is_valid {
+                            Err(InvalidRdfLiteral::new(literal.clone()))
+                        } else {
+                            Ok(value
+                                .parse()
+                                .ok()
+                                .map(|v| Self::NumericLiteral(NumericLiteral::Decimal(v, 0)))
+                                .unwrap_or(Self::RdfLiteral(literal)))
+                        }
+                    }
+                },
+                XSD_DOUBLE => Ok(value
+                    .parse()
+                    .ok()
+                    .and_then(|f64| Double::new(f64).ok())
+                    .map(|d| Self::NumericLiteral(NumericLiteral::Double(d)))
+                    .unwrap_or(Self::RdfLiteral(literal))),
+                _ => Ok(Self::RdfLiteral(literal)),
+            },
+        }
     }
 }

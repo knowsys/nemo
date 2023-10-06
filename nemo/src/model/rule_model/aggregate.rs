@@ -1,6 +1,6 @@
 use crate::model::{types::error::TypeError, PrimitiveType, VariableAssignment};
 
-use super::{Identifier, PrimitiveTerm, Term, Variable};
+use super::{Identifier, PrimitiveTerm, Term};
 
 /// Aggregate operation on logical values
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -58,22 +58,21 @@ impl From<&Identifier> for Option<LogicalAggregateOperation> {
 }
 
 /// Aggregate occurring in a predicate in the head
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Aggregate {
     pub(crate) logical_aggregate_operation: LogicalAggregateOperation,
-    pub(crate) variable_identifiers: Vec<Identifier>,
+    pub(crate) terms: Vec<PrimitiveTerm>,
 }
 
 impl Aggregate {
     /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
-        for variable_id in &mut self.variable_identifiers {
-            if let Some(value) = assignment.get(&Variable::Universal(variable_id.clone())) {
-                if let Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
-                    replacing_variable,
-                ))) = value
-                {
-                    *variable_id = replacing_variable.clone();
+        for term in &mut self.terms {
+            if let PrimitiveTerm::Variable(variable) = term {
+                if let Some(value) = assignment.get(variable) {
+                    if let Term::Primitive(PrimitiveTerm::Variable(replacing_variable)) = value {
+                        *variable = replacing_variable.clone();
+                    }
                 }
             }
         }
@@ -85,7 +84,7 @@ impl std::fmt::Display for Aggregate {
         write!(
             f,
             "#{:?}({:?})",
-            self.logical_aggregate_operation, self.variable_identifiers
+            self.logical_aggregate_operation, self.terms
         )
     }
 }

@@ -1,12 +1,8 @@
 use std::fmt::{Debug, Display};
 
-use crate::model::{
-    types::primitive_logical_value::{LogicalString, LOGICAL_NULL_PREFIX},
-    VariableAssignment,
-};
-use nemo_physical::datatypes::Double;
+use crate::model::{types::primitive_logical_value::LOGICAL_NULL_PREFIX, VariableAssignment};
 
-use super::{Aggregate, Identifier, InvalidRdfLiteral, NumericLiteral, RdfLiteral};
+use super::{Aggregate, Identifier, NumericLiteral, RdfLiteral};
 
 /// Variable that can be bound to a specific value
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
@@ -156,10 +152,10 @@ impl Term {
     }
 
     /// Return all [`PrimitiveTerm`]s that make up this term.
-    pub fn primitive_terms(&self) -> Vec<PrimitiveTerm> {
+    pub fn primitive_terms(&self) -> Vec<&PrimitiveTerm> {
         match self {
             Term::Primitive(primitive) => {
-                vec![primitive.clone()]
+                vec![primitive]
             }
             Term::Addition(left, right)
             | Term::Subtraction(left, right)
@@ -172,39 +168,32 @@ impl Term {
                 terms
             }
             Term::SquareRoot(sub) | Term::UnaryMinus(sub) | Term::Abs(sub) => sub.primitive_terms(),
-            Term::Aggregation(aggregate) => aggregate
-                .variable_identifiers
-                .iter()
-                .map(|i| PrimitiveTerm::Variable(Variable::Universal(i.clone())))
-                .collect(),
+            Term::Aggregation(aggregate) => aggregate.terms.iter().collect(),
         }
     }
 
     /// Return all variables in the atom.
-    pub fn variables(&self) -> Vec<Variable> {
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
         self.primitive_terms()
             .into_iter()
             .filter_map(|term| match term {
                 PrimitiveTerm::Variable(var) => Some(var),
                 _ => None,
             })
-            .collect()
     }
 
     /// Return all universally quantified variables in the atom.
-    pub fn universal_variables(&self) -> Vec<Variable> {
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
         self.variables()
             .into_iter()
             .filter(|var| matches!(var, Variable::Universal(_)))
-            .collect()
     }
 
     /// Return all existentially quantified variables in the atom.
-    pub fn existential_variables(&self) -> Vec<Variable> {
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> {
         self.variables()
             .into_iter()
             .filter(|var| matches!(var, Variable::Existential(_)))
-            .collect()
     }
 
     /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
@@ -229,6 +218,42 @@ impl Term {
                 sub.apply_assignment(assignment)
             }
             Term::Aggregation(aggregate) => aggregate.apply_assignment(assignment),
+        }
+    }
+
+    fn aggregate_subterm_recursive(term: &Term) -> bool {
+        match term {
+            Term::Primitive(primitive) => false,
+            Term::Addition(left, right)
+            | Term::Subtraction(left, right)
+            | Term::Multiplication(left, right)
+            | Term::Division(left, right)
+            | Term::Exponent(left, right) => {
+                Self::aggregate_subterm_recursive(left) || Self::aggregate_subterm(right)
+            }
+            Term::SquareRoot(sub) | Term::UnaryMinus(sub) | Term::Abs(sub) => {
+                Self::aggregate_subterm_recursive(sub)
+            }
+            Term::Aggregation(aggregate) => true,
+        }
+    }
+
+    /// Checks if this term contains an aggregate as a sub term.
+    /// This is currently not allowed.
+    pub fn aggregate_subterm(&self) -> bool {
+        match self {
+            Term::Primitive(primitive) => false,
+            Term::Addition(left, right)
+            | Term::Subtraction(left, right)
+            | Term::Multiplication(left, right)
+            | Term::Division(left, right)
+            | Term::Exponent(left, right) => {
+                Self::aggregate_subterm_recursive(left) || Self::aggregate_subterm(right)
+            }
+            Term::SquareRoot(sub) | Term::UnaryMinus(sub) | Term::Abs(sub) => {
+                Self::aggregate_subterm_recursive(sub)
+            }
+            Term::Aggregation(aggregate) => false, // We allow aggregation on the top level
         }
     }
 }
@@ -380,77 +405,11 @@ impl Display for Term {
     }
 }
 
-impl TryFrom<RdfLiteral> for Constant {
-    type Error = InvalidRdfLiteral;
-
-    fn try_from(literal: RdfLiteral) -> Result<Self, Self::Error> {
-        match literal {
-            RdfLiteral::LanguageString { .. } => Ok(Self::RdfLiteral(literal)),
-            RdfLiteral::DatatypeValue {
-                ref value,
-                ref datatype,
-            } => match datatype {
-                XSD_STRING => Ok(Constant::StringLiteral(
-                    LogicalString::from(value.to_string()).into(),
-                )),
-                XSD_INTEGER => {
-                    let trimmed = value.strip_prefix(['-', '+']).unwrap_or(value);
-
-                    if !trimmed.chars().all(|c| c.is_ascii_digit()) {
-                        Err(InvalidRdfLiteral::new(literal.clone()))
-                    } else {
-                        Ok(value
-                            .parse()
-                            .map(|v| Self::NumericLiteral(NumericLiteral::Integer(v)))
-                            .unwrap_or(Self::RdfLiteral(literal)))
-                    }
-                }
-                XSD_DECIMAL => match value.rsplit_once('.') {
-                    Some((a, b)) => {
-                        let trimmed_a = a.strip_prefix(['-', '+']).unwrap_or(a);
-                        let is_valid = trimmed_a.chars().all(|c| c.is_ascii_digit())
-                            && b.chars().all(|c| c.is_ascii_digit());
-
-                        if !is_valid {
-                            Err(InvalidRdfLiteral::new(literal.clone()))
-                        } else {
-                            Ok(a.parse()
-                                .ok()
-                                .and_then(|a| Some((a, b.parse().ok()?)))
-                                .map(|(a, b)| Self::NumericLiteral(NumericLiteral::Decimal(a, b)))
-                                .unwrap_or(Self::RdfLiteral(literal)))
-                        }
-                    }
-                    None => {
-                        let trimmed = value.strip_prefix(['-', '+']).unwrap_or(value);
-                        let is_valid = trimmed.chars().all(|c| c.is_ascii_digit());
-
-                        if !is_valid {
-                            Err(InvalidRdfLiteral::new(literal.clone()))
-                        } else {
-                            Ok(value
-                                .parse()
-                                .ok()
-                                .map(|v| Self::NumericLiteral(NumericLiteral::Decimal(v, 0)))
-                                .unwrap_or(Self::RdfLiteral(literal)))
-                        }
-                    }
-                },
-                XSD_DOUBLE => Ok(value
-                    .parse()
-                    .ok()
-                    .and_then(|f64| Double::new(f64).ok())
-                    .map(|d| Self::NumericLiteral(NumericLiteral::Double(d)))
-                    .unwrap_or(Self::RdfLiteral(literal))),
-                _ => Ok(Self::RdfLiteral(literal)),
-            },
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use std::assert_eq;
+
+    use nemo_physical::datatypes::Double;
 
     use crate::model::{
         InvalidRdfLiteral, NumericLiteral, RdfLiteral, XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER,

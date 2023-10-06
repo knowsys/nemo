@@ -2,7 +2,7 @@ use std::ops::Neg;
 
 use crate::model::VariableAssignment;
 
-use super::{Aggregate, Atom, Identifier, Term, Variable};
+use super::{Aggregate, Atom, Identifier, PrimitiveTerm, Term, Variable};
 
 /// A literal.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -59,22 +59,25 @@ impl Literal {
         forward_to_atom!(self, terms)
     }
 
-    // TODO: Check which of those are needed
+    /// Return the variables in the literal.
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
+        forward_to_atom!(self, variables)
+    }
 
-    // /// Return the variables in the literal.
-    // pub fn variables(&self) -> Vec<Variable> {
-    //     forward_to_atom!(self, variables)
-    // }
+    /// Return the universally quantified variables in the literal.
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
+        forward_to_atom!(self, universal_variables)
+    }
 
-    // /// Return the universally quantified variables in the literal.
-    // pub fn universal_variables(&self) -> Vec<Variable> {
-    //     forward_to_atom!(self, universal_variables)
-    // }
+    /// Return the existentially quantified variables in the literal.
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> {
+        forward_to_atom!(self, existential_variables)
+    }
 
-    // /// Return the existentially quantified variables in the literal.
-    // pub fn existential_variables(&self) -> Vec<Variable> {
-    //     forward_to_atom!(self, existential_variables)
-    // }
+    /// Returns all terms at the leave of the term trees of the atom.
+    pub fn primitive_terms(&self) -> impl Iterator<Item = &PrimitiveTerm> {
+        forward_to_atom!(self, primitive_terms)
+    }
 
     /// Return all aggregates in the literal.
     pub fn aggregates(&self) -> impl Iterator<Item = &Aggregate> + '_ {

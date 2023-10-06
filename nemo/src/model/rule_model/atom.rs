@@ -36,33 +36,24 @@ impl Atom {
     }
 
     /// Returns all terms at the leave of the term trees of the atom.
-    pub fn primitive_terms(&self) -> Vec<PrimitiveTerm> {
-        self.terms
-            .iter()
-            .flat_map(|t| t.primitive_terms())
-            .collect()
+    pub fn primitive_terms(&self) -> impl Iterator<Item = &PrimitiveTerm> {
+        self.terms.iter().flat_map(|t| t.primitive_terms())
     }
 
-    // /// Return all variables in the atom.
-    // pub fn variables(&self) -> Vec<Variable> {
-    //     self.terms.iter().flat_map(|t| t.variables()).collect()
-    // }
+    /// Return all variables in the atom.
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
+        self.terms.iter().flat_map(|t| t.variables())
+    }
 
-    // /// Return all universally quantified variables in the atom.
-    // pub fn universal_variables(&self) -> Vec<Variable> {
-    //     self.terms
-    //         .iter()
-    //         .flat_map(|t| t.universal_variables())
-    //         .collect()
-    // }
+    /// Return all universally quantified variables in the atom.
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.terms.iter().flat_map(|t| t.universal_variables())
+    }
 
-    // /// Return all existentially quantified variables in the atom.
-    // pub fn existential_variables(&self) -> Vec<Variable> {
-    //     self.terms
-    //         .iter()
-    //         .flat_map(|t| t.existential_variables())
-    //         .collect()
-    // }
+    /// Return all existentially quantified variables in the atom.
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.terms.iter().flat_map(|t| t.existential_variables())
+    }
 
     /// Return all aggregates in the atom.
     pub fn aggregates(&self) -> impl Iterator<Item = &Aggregate> + '_ {

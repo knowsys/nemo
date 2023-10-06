@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{io::parser::ParseError, model::VariableAssignment};
 
-use super::{Atom, Condition, Literal, Variable};
+use super::{Atom, Condition, Literal, PrimitiveTerm, Variable};
 
 /// A rule.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -31,138 +31,129 @@ impl Rule {
         body: Vec<Literal>,
         conditions: Vec<Condition>,
     ) -> Result<Self, ParseError> {
-        // TODO: Rework this to use the concept of
-        // 1. Bound variable = Primitive occuring in positve literal
-        // 2. Derived variable = Condition Assignment only using bound variables
-        // 3. Head and all literals may only use variables of type 1 and 2 (head may also use existentials)
-        // 4. Exception: Negative literals may use an unsafe variable as before
-
-        // Check if existential variables occur in the body.
-        let existential_variables_body = body
+        // All the existential variables used in the rule
+        let existential_variable_names = head
             .iter()
-            .flat_map(|literal| literal.existential_variables())
-            .collect::<Vec<_>>();
+            .flat_map(|a| a.existential_variables().map(|v| v.name()))
+            .collect::<HashSet<_>>();
 
-        if let Some(variable) = existential_variables_body.first() {
-            return Err(ParseError::BodyExistential(variable.name()));
+        for variable in body
+            .iter()
+            .flat_map(|l| l.variables())
+            .chain(conditions.iter().flat_map(|c| c.variables()))
+        {
+            // Existential variables may only occur in the head
+            if variable.is_existential() {
+                return Err(ParseError::BodyExistential(variable.name()));
+            }
+
+            // There may not be a universal variable whose name is the same that of an existential
+            if existential_variable_names.contains(&variable.name()) {
+                return Err(ParseError::BothQuantifiers(variable.name()));
+            }
         }
 
-        // Check if some variable in the body occurs only in negative literals.
+        // Divide the literals into a positive and a negative part
         let (positive, negative): (Vec<_>, Vec<_>) = body
             .iter()
             .cloned()
             .partition(|literal| literal.is_positive());
-        let positive_variables = positive
-            .iter()
-            .flat_map(|literal| literal.variables())
-            .collect::<HashSet<Variable>>();
 
+        // Bound variables are considered to be all variables occuring as primitive terms in a positive body literal
+        let bound_variables = positive
+            .iter()
+            .flat_map(|l| l.primitive_terms())
+            .filter_map(|t| {
+                if let PrimitiveTerm::Variable(variable) = t {
+                    Some(variable)
+                } else {
+                    None
+                }
+            })
+            .collect::<HashSet<_>>();
+
+        // A derived variable is a variable which is defined in terms of bound variables
+        let mut derived_variables = HashSet::<&Variable>::new();
+        for condition in &conditions {
+            if let Condition::Assignment(variable, term) = condition {
+                if bound_variables.contains(variable) || derived_variables.contains(variable) {
+                    return Err(ParseError::MultipleDefinitions(variable.name()));
+                }
+
+                for term_variable in term.variables() {
+                    if !bound_variables.contains(term_variable) {
+                        return Err(ParseError::UnsafeDefinition(variable.name()));
+                    }
+                }
+
+                derived_variables.insert(variable);
+            }
+        }
+
+        // Each complex term in the body must only use derived or bound variables
+        for term in body
+            .iter()
+            .flat_map(|l| l.terms())
+            .chain(conditions.iter().flat_map(|c| c.terms()))
+            .chain(head.iter().flat_map(|a| a.terms()))
+        {
+            if term.is_primitive() {
+                continue;
+            }
+
+            for variable in term.variables() {
+                if !bound_variables.contains(variable) && !derived_variables.contains(variable) {
+                    return Err(ParseError::UnsafeComplexTerm(
+                        term.to_string(),
+                        variable.name(),
+                    ));
+                }
+            }
+        }
+
+        // Head atoms may only use variables that are either bound or derived
+        for variable in head.iter().flat_map(|a| a.variables()) {
+            if !bound_variables.contains(variable) && !derived_variables.contains(variable) {
+                return Err(ParseError::UnsafeHeadVariable(variable.name()));
+            }
+        }
+
+        // Unsafe variables in negative literals may only be used within one atom
         let mut unsafe_negative_variables = HashSet::<Variable>::new();
         for negative_literal in negative {
             let mut current_unsafe = HashSet::<Variable>::new();
 
-            for variable in negative_literal.variables() {
-                if positive_variables.contains(&variable) {
-                    continue;
-                }
+            for primitive_term in negative_literal.primitive_terms() {
+                if let PrimitiveTerm::Variable(variable) = primitive_term {
+                    if derived_variables.contains(&variable) || bound_variables.contains(variable) {
+                        continue;
+                    }
 
-                if unsafe_negative_variables.contains(&variable) {
-                    return Err(ParseError::UnsafeVariableInMulltipleNegativeLiterals(
-                        variable.name(),
-                    ));
-                }
+                    if unsafe_negative_variables.contains(&variable) {
+                        return Err(ParseError::UnsafeVariableInMultipleNegativeLiterals(
+                            variable.name(),
+                        ));
+                    }
 
-                current_unsafe.insert(variable.clone());
+                    current_unsafe.insert(variable.clone());
+                }
             }
 
             unsafe_negative_variables.extend(current_unsafe)
         }
 
-        // Check if a variable occurs with both existential and universal quantification.
-        let universal_variables_names = body
-            .iter()
-            .flat_map(|literal| {
-                literal
-                    .universal_variables()
-                    .into_iter()
-                    .map(|v| v.name())
-                    .collect::<HashSet<String>>()
-            })
-            .collect::<HashSet<String>>();
-
-        let existential_variables_names = head
-            .iter()
-            .flat_map(|atom| {
-                atom.existential_variables()
-                    .into_iter()
-                    .map(|v| v.name())
-                    .collect::<HashSet<String>>()
-            })
-            .collect();
-
-        let common_variable_names = universal_variables_names
-            .intersection(&existential_variables_names)
-            .take(1)
-            .collect::<Vec<_>>();
-
-        if let Some(&&common_variable) = common_variable_names.first() {
-            return Err(ParseError::BothQuantifiers(common_variable));
-        }
-
-        //
-        let mut defined_condition_variables = HashSet::<Variable>::new();
-
-        // Check if there are universal variables in the head which do not occur in a positive body literal
-        let head_universal_variables = head
-            .iter()
-            .flat_map(|atom| atom.universal_variables())
-            .collect::<HashSet<_>>();
-
-        for head_variable in &head_universal_variables {
-            if !positive_variables.contains(head_variable) {
-                return Err(ParseError::UnsafeHeadVariable(head_variable.name()));
+        // Check for aggregates in the body of a rule
+        for literal in &body {
+            #[allow(clippy::never_loop)]
+            for aggregate in literal.aggregates() {
+                return Err(ParseError::AggregateInBody(aggregate.clone()));
             }
         }
 
-        // Check if conditions are correctly formed
-        for condition in &conditions {
-            for variable in &condition.variables() {
-                match variable {
-                    Variable::Universal(universal_variable) => {
-                        if !positive_variables.contains(variable) {
-                            return Err(ParseError::UnsafeFilterVariable(
-                                universal_variable.name(),
-                            ));
-                        }
-                    }
-                    Variable::Existential(existential_variable) => {
-                        return Err(ParseError::BodyExistential(existential_variable.name()))
-                    }
-                }
-            }
-        }
-
-        // Aggregates
-        {
-            // Check for aggregates in the body of a rule
-            for literal in &body {
-                #[allow(clippy::never_loop)]
-                for aggregate in literal.aggregates() {
-                    return Err(ParseError::AggregateInBody(aggregate.clone()));
-                }
-            }
-
-            // Check that variables used in aggregates also occur positively in the rule body
-            for literal in &head {
-                for aggregate in literal.aggregates() {
-                    for variable_identifier in &aggregate.variable_identifiers {
-                        if !positive_variables
-                            .contains(&Variable::Universal(variable_identifier.clone()))
-                        {
-                            return Err(ParseError::UnsafeHeadVariable(variable_identifier.name()));
-                        }
-                    }
-                }
+        // Check if aggregate is used within another complex term
+        for term in head.iter().flat_map(|a| a.terms()) {
+            if term.aggregate_subterm() {
+                return Err(ParseError::AggregateSubterm(term.to_string()));
             }
         }
 
