@@ -54,17 +54,37 @@ pub struct TrieScanPruneState<'a> {
 }
 
 impl<'a> TrieScanPruneState<'a> {
-    /// Decrements the `external_current_layer`
+    /// Decrements the `external_current_layer` and goes up to the `external_current_layer` to reset already seen rows.
     pub fn external_up(&mut self) {
         debug_assert!(self.initialized);
-        assert!(self.external_current_layer > 0);
+
+        if self.external_current_layer == 0 {
+            // Move above the first input layer, thus resetting the input trie scan
+            self.input_trie_scan.up();
+            self.initialized = false;
+            self.highest_peeked_layer = None;
+            return;
+        }
 
         self.external_current_layer -= 1;
+
+        // Actually go up to the external layer
+        // This ensures that already seen rows will be seen again
+        // This is required by the partial trie scan interface
+        while self.input_trie_scan_current_layer > self.external_current_layer {
+            self.up();
+        }
+
+        // Reset column peeks up to the current layer
+        self.highest_peeked_layer = self.highest_peeked_layer.map(|highest_peeked_layer| {
+            std::cmp::min(highest_peeked_layer, self.external_current_layer)
+        });
     }
 
     /// Increments the `external_current_layer`
     pub fn external_down(&mut self) {
         if !self.initialized {
+            // First down initializes the trie scan
             self.initialized = true;
             self.input_trie_scan.down();
             return;
@@ -554,11 +574,15 @@ mod test {
     use std::collections::HashMap;
 
     use super::TrieScanPrune;
+    use crate::columnar::column_types::interval::ColumnWithIntervalsT;
     use crate::columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue};
+    use crate::columnar::traits::column::Column;
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;
-    use crate::tabular::operations::{TrieScanRestrictValues, ValueAssignment};
+    use crate::tabular::operations::{
+        materialize, JoinBindings, TrieScanJoin, TrieScanRestrictValues, ValueAssignment,
+    };
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
 
@@ -891,10 +915,6 @@ mod test {
         let trie = create_example_trie();
         let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
         let mut scan = TrieScanPrune::new(scan);
-        // let column_fst = make_column_with_intervals_t(&[1, 2], &[0, 1]);
-        // let column_snd = make_column_with_intervals_t(&[4, 5, 4], &[0, 2]);
-        // let column_trd = make_column_with_intervals_t(&[0, 1, 2, 1, 8], &[0, 3, 4]);
-        // let column_fth = make_column_with_intervals_t(&[3, 7, 5, 7, 3, 4, 6, 7], &[0, 2, 4, 6, 7]);
 
         // Initialize trie
         scan.down();
@@ -981,5 +1001,77 @@ mod test {
         assert_eq!(get_current_scan_item_at_layer(&mut scan, 1), Some(4));
         assert_eq!(get_current_scan_item_at_layer(&mut scan, 2), Some(2));
         assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
+    }
+
+    #[test]
+    fn test_return_to_previous_layer() {
+        let trie = create_example_trie();
+        let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
+        let mut scan = TrieScanPrune::new(scan);
+
+        // Initialize trie
+        scan.down();
+
+        assert_eq!(get_next_scan_item(&mut scan), Some(1));
+        assert_eq!(get_current_scan_item(&mut scan), Some(1));
+
+        scan.down();
+        assert_eq!(get_current_scan_item(&mut scan), None);
+        assert_eq!(get_next_scan_item(&mut scan), Some(4));
+        assert_eq!(get_current_scan_item(&mut scan), Some(4));
+        assert_eq!(get_next_scan_item(&mut scan), Some(5));
+        assert_eq!(get_current_scan_item(&mut scan), Some(5));
+        assert_eq!(get_next_scan_item(&mut scan), None);
+        assert_eq!(get_current_scan_item(&mut scan), None);
+
+        // Trie scan should return the same results after going up and down again
+        scan.up();
+        scan.down();
+        assert_eq!(get_current_scan_item(&mut scan), None);
+        assert_eq!(get_next_scan_item(&mut scan), Some(4));
+        assert_eq!(get_current_scan_item(&mut scan), Some(4));
+        assert_eq!(get_next_scan_item(&mut scan), Some(5));
+        assert_eq!(get_current_scan_item(&mut scan), Some(5));
+        assert_eq!(get_next_scan_item(&mut scan), None);
+        assert_eq!(get_current_scan_item(&mut scan), None);
+    }
+
+    #[test]
+    fn test_partial_trie_scan_interface() {
+        let column_a_x = make_column_with_intervals_t(&[1, 2], &[0, 1]);
+        let column_a_y = make_column_with_intervals_t(&[0, 3, 4, 5, 2, 4, 7], &[0, 4]);
+        let column_b = make_column_with_intervals_t(&[0, 4], &[0]);
+
+        let trie_a = Trie::new(vec![column_a_x, column_a_y]);
+        let trie_b = Trie::new(vec![column_b]);
+
+        let scan_a = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
+            TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_a)),
+        ));
+        let scan_b = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
+            TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie_b)),
+        ));
+
+        let scan_join = TrieScanEnum::TrieScanJoin(TrieScanJoin::new(
+            vec![scan_a, scan_b],
+            &JoinBindings::new(vec![vec![0, 1], vec![1]]),
+        ));
+
+        let result = materialize(&mut TrieScanPrune::new(scan_join)).unwrap();
+
+        let expected_data = vec![0u64, 4, 4];
+        let expected_interval = vec![0usize, 2];
+
+        let (data, interval) = if let ColumnWithIntervalsT::U64(column) = result.get_column(1) {
+            (
+                column.get_data_column().iter().collect::<Vec<u64>>(),
+                column.get_int_column().iter().collect::<Vec<usize>>(),
+            )
+        } else {
+            unreachable!()
+        };
+
+        assert_eq!(expected_data, data);
+        assert_eq!(expected_interval, interval);
     }
 }
