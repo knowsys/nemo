@@ -48,7 +48,7 @@ impl Float {
             return None;
         }
 
-        Some(Float::new(value).ok()?)
+        Float::new(value).ok()
     }
 }
 

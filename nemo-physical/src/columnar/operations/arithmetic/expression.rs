@@ -53,10 +53,10 @@ pub enum ArithmeticTreeLeafMut<'a, T> {
 impl<T> ArithmeticTree<T> {
     /// Return whether this node is a leaf node.
     pub fn is_leaf(&self) -> bool {
-        match self {
-            ArithmeticTree::Constant(_) | ArithmeticTree::Reference(_) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            ArithmeticTree::Constant(_) | ArithmeticTree::Reference(_)
+        )
     }
 
     /// Defines the relative priority between operations
@@ -214,7 +214,7 @@ where
             ArithmeticTree::Addition(sub) => {
                 let mut sum = T::zero();
 
-                for value in sub.into_iter().map(|s| s.evaluate(referenced_values)) {
+                for value in sub.iter().map(|s| s.evaluate(referenced_values)) {
                     sum = sum.checked_add(&value?)?;
                 }
 
@@ -229,7 +229,7 @@ where
             ArithmeticTree::Multiplication(sub) => {
                 let mut prod = T::one();
 
-                for value in sub.into_iter().map(|s| s.evaluate(referenced_values)) {
+                for value in sub.iter().map(|s| s.evaluate(referenced_values)) {
                     prod = prod.checked_mul(&value?)?;
                 }
 
@@ -261,7 +261,7 @@ where
                 let value_sub = sub.evaluate(referenced_values)?;
 
                 if value_sub < T::zero() {
-                    return Some(value_sub.checked_neg()?);
+                    return value_sub.checked_neg();
                 }
 
                 Some(value_sub)
@@ -284,7 +284,7 @@ where
             }
             ArithmeticTree::Addition(sub) => ascii_tree::Tree::Node(
                 "Addition".to_string(),
-                sub.into_iter().map(Self::ascii_tree).collect(),
+                sub.iter().map(Self::ascii_tree).collect(),
             ),
             ArithmeticTree::Subtraction(left, right) => ascii_tree::Tree::Node(
                 "Subtraction".to_string(),
@@ -292,7 +292,7 @@ where
             ),
             ArithmeticTree::Multiplication(sub) => ascii_tree::Tree::Node(
                 "Multiplication".to_string(),
-                sub.into_iter().map(Self::ascii_tree).collect(),
+                sub.iter().map(Self::ascii_tree).collect(),
             ),
             ArithmeticTree::Division(left, right) => ascii_tree::Tree::Node(
                 "Division".to_string(),

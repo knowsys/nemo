@@ -19,12 +19,12 @@ use crate::{
     },
     io::{input_manager::InputManager, resource_providers::ResourceProviders},
     model::{
-        chase_model::ChaseProgram,
+        chase_model::{ChaseAtom, ChaseFact, ChaseProgram, Constraint},
         types::{
             primitive_logical_value::{PrimitiveLogicalValueIteratorT, PrimitiveLogicalValueT},
             primitive_types::PrimitiveType,
         },
-        Atom, Condition, Fact, FilterOperation, Identifier, Program, Term, TermOperation, TermTree,
+        Condition, Constant, Fact, Identifier, PrimitiveTerm, Program, Term, Variable,
         VariableAssignment,
     },
     program_analysis::analysis::ProgramAnalysis,
@@ -138,22 +138,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
     }
 
-    fn fact_to_vec(fact: &Fact, analysis: &ProgramAnalysis) -> Vec<DataValueT> {
+    fn fact_to_vec(fact: &ChaseFact, analysis: &ProgramAnalysis) -> Vec<DataValueT> {
         fact
-        .0
-        .term_trees()
+        .terms()
         .iter()
         .enumerate()
-        // TODO: get rid of unwrap
         .map(|(i, t)| {
-            if let TermOperation::Term(ground_term) = t.operation() {
-                analysis.predicate_types.get(&fact.0.predicate()).unwrap()[i]
-                .ground_term_to_data_value_t(ground_term.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.")
-            } else {
-                unreachable!(
-                    "Its assumed that facts do not contain complicated expressions (for now?)"
-                );
-            }
+            analysis.predicate_types.get(&fact.predicate()).unwrap()[i]
+                .ground_term_to_data_value_t(t.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.")
         })
         .collect()
     }
@@ -187,7 +179,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<DataValueT>>>::new();
 
         for fact in program.facts() {
-            let rows = predicate_to_rows.entry(fact.0.predicate()).or_default();
+            let rows = predicate_to_rows.entry(fact.predicate()).or_default();
             rows.push(Self::fact_to_vec(fact, analysis));
         }
 
@@ -413,7 +405,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     fn trace_recursive(
         &self,
         fact_predicate: Identifier,
-        fact_terms: Vec<Term>,
+        fact_terms: Vec<Constant>,
         fact_values: Vec<StorageValueT>,
     ) -> Result<Option<ExecutionTrace>, Error> {
         // Find the origin of the given fact
@@ -428,9 +420,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         if step == 0 {
             // If fact has no predecesor rule it must have been given as an EDB fact
 
-            return Ok(Some(ExecutionTrace::Fact(Atom::new(
+            return Ok(Some(ExecutionTrace::Fact(ChaseFact::new(
                 fact_predicate,
-                fact_terms.into_iter().map(TermTree::leaf).collect(),
+                fact_terms,
             ))));
         }
 
@@ -454,46 +446,47 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             // If unification is possible `compatible` remain true
             // and `assignment` will contain the match which is responsible for the fact
             let mut compatible = true;
-            let mut assignment = VariableAssignment::new();
+            let mut assignment = HashMap::<Variable, Constant>::new();
 
             for (ty, (head_term, fact_term)) in predicate_types
                 .iter()
                 .zip(head_atom.terms().iter().zip(fact_terms.iter()))
             {
-                if head_term.is_ground() {
-                    if ty.ground_term_to_data_value_t(head_term.clone())
-                        != ty.ground_term_to_data_value_t(fact_term.clone())
-                    {
-                        compatible = false;
-                        break;
+                match head_term {
+                    PrimitiveTerm::Constant(constant) => {
+                        if ty.ground_term_to_data_value_t(constant.clone())
+                            != ty.ground_term_to_data_value_t(fact_term.clone())
+                        {
+                            compatible = false;
+                            break;
+                        }
                     }
-                } else if let Term::Variable(variable) = head_term {
-                    // Matching with existential variables should not produce any restrictions,
-                    // so we just consider universal variables here
-                    if variable.is_existential() {
-                        continue;
-                    }
+                    PrimitiveTerm::Variable(variable) => {
+                        // Matching with existential variables should not produce any restrictions,
+                        // so we just consider universal variables here
+                        if variable.is_existential() {
+                            continue;
+                        }
 
-                    if rule.constructors().contains_key(variable) {
-                        // TODO: Support arbitrary operations in the head
-                        return Err(Error::TraceUnsupportedFeature());
-                    }
+                        if rule.get_constructor(variable).is_some() {
+                            // TODO: Support arbitrary operations in the head
+                            return Err(Error::TraceUnsupportedFeature());
+                        }
 
-                    match assignment.entry(variable.clone()) {
-                        Entry::Occupied(entry) => {
-                            if ty.ground_term_to_data_value_t(entry.get().clone())
-                                != ty.ground_term_to_data_value_t(fact_term.clone())
-                            {
-                                compatible = false;
-                                break;
+                        match assignment.entry(variable.clone()) {
+                            Entry::Occupied(entry) => {
+                                if ty.ground_term_to_data_value_t(entry.get().clone())
+                                    != ty.ground_term_to_data_value_t(fact_term.clone())
+                                {
+                                    compatible = false;
+                                    break;
+                                }
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(fact_term.clone());
                             }
                         }
-                        Entry::Vacant(entry) => {
-                            entry.insert(fact_term.clone());
-                        }
                     }
-                } else {
-                    unreachable!("Variables are the only non-ground terms");
                 }
             }
 
@@ -505,15 +498,18 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             // The goal of this part of the code is to apply the rule which led to the given fact
             // but with the variable binding derived from the unification above
 
-            let new_filters: Vec<Condition> = assignment
+            let new_constraints: Vec<Constraint> = assignment
                 .iter()
                 .map(|(variable, term)| {
-                    Condition::new(FilterOperation::Equals, variable.clone(), term.clone())
+                    Constraint::new(Condition::Equals(
+                        Term::Primitive(PrimitiveTerm::Variable(variable.clone())),
+                        Term::Primitive(PrimitiveTerm::Constant(term.clone())),
+                    ))
                 })
                 .collect();
 
             let mut rule = self.program.rules()[rule_index].clone();
-            rule.positive_filters_mut().extend(new_filters.into_iter());
+            rule.positive_constraints_mut().extend(new_constraints);
             let analysis = &self.analysis.rule_analysis[rule_index];
 
             let body_execution = SeminaiveStrategy::initialize(&rule, analysis);
@@ -557,7 +553,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     })
                     .collect();
 
-                let query_terms: Vec<Term> = query_result
+                let query_terms: Vec<Constant> = query_result
                     .iter()
                     .zip(query_types.iter())
                     .map(|(entry, ty)| {
@@ -577,7 +573,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let rule_assignment: VariableAssignment = variable_order
                     .as_ordered_list()
                     .into_iter()
-                    .zip(query_terms.iter().cloned())
+                    .zip(
+                        query_terms
+                            .iter()
+                            .cloned()
+                            .map(|c| Term::Primitive(PrimitiveTerm::Constant(c))),
+                    )
                     .collect();
 
                 let mut fully_derived = true;
@@ -585,22 +586,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 for body_atom in rule.positive_body() {
                     let next_fact_predicate = body_atom.predicate();
                     let mut next_fact_values = Vec::<StorageValueT>::new();
-                    let mut next_fact_terms = Vec::<Term>::new();
+                    let mut next_fact_terms = Vec::<Constant>::new();
 
-                    for body_term in body_atom.terms() {
-                        // Use the query result to generate the next fact which should be traced
-                        if let Term::Variable(variable) = body_term {
-                            let query_index = *variable_order
-                                .get(variable)
-                                .expect("Variable order must contain every variable");
+                    for variable in body_atom.terms() {
+                        let query_index = *variable_order
+                            .get(variable)
+                            .expect("Variable order must contain every variable");
 
-                            next_fact_values.push(query_result[query_index]);
-                            next_fact_terms.push(query_terms[query_index].clone());
-                        } else {
-                            unreachable!(
-                                "Normalized body atoms should only contain universal variables."
-                            );
-                        }
+                        next_fact_values.push(query_result[query_index]);
+                        next_fact_terms.push(query_terms[query_index].clone());
                     }
 
                     if let Some(trace) = self.trace_recursive(
@@ -637,6 +631,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Return a [`ExecutionTrace`] for a given fact
     pub fn trace(&self, fact: Fact) -> Result<Option<ExecutionTrace>, Error> {
+        let chase_fact = ChaseFact::from_flat_atom(&fact.0);
         let predicate = fact.0.predicate();
 
         if !self.table_manager.predicate_exists(&predicate) {
@@ -645,7 +640,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Convert fact into physical representation
         let mut fact_values = Vec::<StorageValueT>::new();
-        for entry in Self::fact_to_vec(&fact, &self.analysis) {
+        for entry in Self::fact_to_vec(&chase_fact, &self.analysis) {
             if let Some(value) = entry.to_storage_value(self.table_manager.get_dict().borrow_mut())
             {
                 fact_values.push(value);
@@ -655,6 +650,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
         }
 
-        self.trace_recursive(predicate, fact.0.terms().cloned().collect(), fact_values)
+        self.trace_recursive(predicate, chase_fact.terms().clone(), fact_values)
     }
 }

@@ -17,35 +17,39 @@ use rio_xml::RdfXmlParser;
 use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    model::{types::primitive_types::PrimitiveType, InvalidRdfLiteral, RdfFile, RdfLiteral, Term},
+    model::{
+        types::primitive_types::PrimitiveType, Constant, InvalidRdfLiteral, RdfFile, RdfLiteral,
+    },
 };
 
-impl From<NamedNode<'_>> for Term {
+impl From<NamedNode<'_>> for Constant {
     fn from(value: NamedNode) -> Self {
-        Term::Constant(value.iri.to_string().into())
+        Constant::Abstract(value.iri.to_string().into())
     }
 }
 
-impl From<BlankNode<'_>> for Term {
+impl From<BlankNode<'_>> for Constant {
     fn from(value: BlankNode) -> Self {
-        Term::Constant(value.to_string().into())
+        Constant::Abstract(value.to_string().into())
     }
 }
 
-impl TryFrom<rio_api::model::Literal<'_>> for Term {
+impl TryFrom<rio_api::model::Literal<'_>> for Constant {
     type Error = InvalidRdfLiteral;
 
     fn try_from(value: rio_api::model::Literal<'_>) -> Result<Self, Self::Error> {
         match value {
-            rio_api::model::Literal::Simple { value } => Ok(Term::StringLiteral(value.to_string())),
+            rio_api::model::Literal::Simple { value } => {
+                Ok(Constant::StringLiteral(value.to_string()))
+            }
             rio_api::model::Literal::LanguageTaggedString { value, language } => {
-                Term::try_from(RdfLiteral::LanguageString {
+                Constant::try_from(RdfLiteral::LanguageString {
                     value: value.to_string(),
                     tag: language.to_string(),
                 })
             }
             rio_api::model::Literal::Typed { value, datatype } => {
-                Term::try_from(RdfLiteral::DatatypeValue {
+                Constant::try_from(RdfLiteral::DatatypeValue {
                     value: value.to_string(),
                     datatype: datatype.iri.to_string(),
                 })
@@ -54,7 +58,7 @@ impl TryFrom<rio_api::model::Literal<'_>> for Term {
     }
 }
 
-impl TryFrom<Subject<'_>> for Term {
+impl TryFrom<Subject<'_>> for Constant {
     type Error = ReadingError;
 
     fn try_from(value: Subject<'_>) -> Result<Self, Self::Error> {
@@ -66,7 +70,7 @@ impl TryFrom<Subject<'_>> for Term {
     }
 }
 
-impl TryFrom<rio_api::model::Term<'_>> for Term {
+impl TryFrom<rio_api::model::Term<'_>> for Constant {
     type Error = ReadingError;
 
     fn try_from(value: rio_api::model::Term<'_>) -> Result<Self, Self::Error> {
@@ -130,27 +134,33 @@ impl RDFTriplesReader {
 
         let mut triples = 0;
         let mut on_triple = |triple: Triple| {
-            let subject: Term = triple.subject.try_into()?;
-            let predicate: Term = triple.predicate.into();
-            let object: Term = triple.object.try_into()?;
+            let subject: Constant = triple.subject.try_into()?;
+            let predicate: Constant = triple.predicate.into();
+            let object: Constant = triple.object.try_into()?;
 
-            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
+            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
                 &mut builders[0],
                 subject,
             )?;
-            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
+            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
                 &mut builders[1],
                 predicate,
             ) {
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::forget(&mut builders[0]);
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
+                    &mut builders[0],
+                );
                 return Err(e);
             }
-            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::add(
+            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
                 &mut builders[2],
                 object,
             ) {
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::forget(&mut builders[0]);
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Term>>::forget(&mut builders[1]);
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
+                    &mut builders[0],
+                );
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
+                    &mut builders[1],
+                );
                 return Err(e);
             }
 

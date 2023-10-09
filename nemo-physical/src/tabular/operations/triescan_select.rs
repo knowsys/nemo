@@ -187,7 +187,7 @@ pub struct TrieScanRestrictValues<'a> {
 impl<'a> TrieScanRestrictValues<'a> {
     /// Construct new TrieScanRestrictValues object.
     pub fn new(
-        dict: &mut Dict,
+        dict: &Dict,
         base_trie: TrieScanEnum<'a>,
         conditions: &[ConditionStatement<DataValueT>],
     ) -> Self {
@@ -250,7 +250,7 @@ impl<'a> TrieScanRestrictValues<'a> {
 
         for (column_index, (input_indices, input_conditions)) in input_column_indices
             .into_iter()
-            .zip(input_column_conditions.into_iter())
+            .zip(input_column_conditions.iter())
             .enumerate()
         {
             if input_conditions.is_empty() {
@@ -498,11 +498,11 @@ mod test {
         let trie = Trie::new(vec![column_fst, column_snd, column_trd, column_fth]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let mut dict = Dict::default();
+        let dict = Dict::default();
         let mut restrict_iter = TrieScanRestrictValues::new(
-            &mut dict,
+            &dict,
             trie_iter,
-            &vec![
+            &[
                 ConditionStatement::Equal(
                     ArithmeticTree::Reference(1),
                     ArithmeticTree::Constant(DataValueT::U64(4)),
@@ -568,11 +568,11 @@ mod test {
         let trie = Trie::new(vec![column_fst, column_snd]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let mut dict = Dict::default();
+        let dict = Dict::default();
         let mut restrict_iter = TrieScanRestrictValues::new(
-            &mut dict,
+            &dict,
             trie_iter,
-            &vec![ConditionStatement::LessThan(
+            &[ConditionStatement::LessThan(
                 ArithmeticTree::Reference(1),
                 ArithmeticTree::Reference(0),
             )],
@@ -617,11 +617,11 @@ mod test {
         let trie = Trie::new(vec![column_fst, column_snd]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let mut dict = Dict::default();
+        let dict = Dict::default();
         let mut restrict_iter = TrieScanRestrictValues::new(
-            &mut dict,
+            &dict,
             trie_iter,
-            &vec![ConditionStatement::Unequal(
+            &[ConditionStatement::Unequal(
                 ArithmeticTree::Reference(1),
                 ArithmeticTree::Reference(0),
             )],

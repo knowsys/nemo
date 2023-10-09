@@ -111,6 +111,16 @@ impl Display for PrimitiveTerm {
     }
 }
 
+/// Represents an abstract logical function
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+pub struct AbstractFunction {
+    /// Name of the function
+    pub name: Identifier,
+    /// Its subterms
+    pub subterms: Vec<Term>,
+}
+
+/// Possibly complex term that may occur within an [`super::Atom`]
 #[derive(Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum Term {
     /// Primitive term.
@@ -133,6 +143,8 @@ pub enum Term {
     Abs(Box<Term>),
     /// Aggregation.
     Aggregation(Aggregate),
+    /// Abstract Function.
+    Function(AbstractFunction),
 }
 
 impl Term {
@@ -168,6 +180,11 @@ impl Term {
                 terms
             }
             Term::SquareRoot(sub) | Term::UnaryMinus(sub) | Term::Abs(sub) => sub.primitive_terms(),
+            Term::Function(f) => f
+                .subterms
+                .iter()
+                .flat_map(|t| t.primitive_terms())
+                .collect(),
             Term::Aggregation(aggregate) => aggregate.terms.iter().collect(),
         }
     }
@@ -185,14 +202,12 @@ impl Term {
     /// Return all universally quantified variables in the atom.
     pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
         self.variables()
-            .into_iter()
             .filter(|var| matches!(var, Variable::Universal(_)))
     }
 
     /// Return all existentially quantified variables in the atom.
     pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> {
         self.variables()
-            .into_iter()
             .filter(|var| matches!(var, Variable::Existential(_)))
     }
 
@@ -201,7 +216,7 @@ impl Term {
         match self {
             Term::Primitive(primitive) => {
                 if let PrimitiveTerm::Variable(variable) = primitive {
-                    if let Some(value) = assignment.get(&variable) {
+                    if let Some(value) = assignment.get(variable) {
                         *self = value.clone();
                     }
                 }
@@ -218,12 +233,16 @@ impl Term {
                 sub.apply_assignment(assignment)
             }
             Term::Aggregation(aggregate) => aggregate.apply_assignment(assignment),
+            Term::Function(sub) => sub
+                .subterms
+                .iter_mut()
+                .for_each(|t| t.apply_assignment(assignment)),
         }
     }
 
     fn aggregate_subterm_recursive(term: &Term) -> bool {
         match term {
-            Term::Primitive(primitive) => false,
+            Term::Primitive(_primitive) => false,
             Term::Addition(left, right)
             | Term::Subtraction(left, right)
             | Term::Multiplication(left, right)
@@ -234,7 +253,8 @@ impl Term {
             Term::SquareRoot(sub) | Term::UnaryMinus(sub) | Term::Abs(sub) => {
                 Self::aggregate_subterm_recursive(sub)
             }
-            Term::Aggregation(aggregate) => true,
+            Term::Aggregation(_aggregate) => true,
+            Term::Function(sub) => sub.subterms.iter().any(Self::aggregate_subterm_recursive),
         }
     }
 
@@ -242,7 +262,7 @@ impl Term {
     /// This is currently not allowed.
     pub fn aggregate_subterm(&self) -> bool {
         match self {
-            Term::Primitive(primitive) => false,
+            Term::Primitive(_primitive) => false,
             Term::Addition(left, right)
             | Term::Subtraction(left, right)
             | Term::Multiplication(left, right)
@@ -253,7 +273,8 @@ impl Term {
             Term::SquareRoot(sub) | Term::UnaryMinus(sub) | Term::Abs(sub) => {
                 Self::aggregate_subterm_recursive(sub)
             }
-            Term::Aggregation(aggregate) => false, // We allow aggregation on the top level
+            Term::Aggregation(_aggregate) => false, // We allow aggregation on the top level
+            Term::Function(sub) => sub.subterms.iter().any(Self::aggregate_subterm_recursive),
         }
     }
 }
@@ -298,6 +319,7 @@ impl Term {
             Term::Aggregation(aggregate) => {
                 ascii_tree::Tree::Leaf(vec![format!("{:?}", aggregate)])
             }
+            Term::Function(_) => todo!(),
         }
     }
 
@@ -315,6 +337,7 @@ impl Term {
             Term::UnaryMinus(_) => 5,
             Term::Abs(_) => 5,
             Term::Aggregation(_) => 5,
+            Term::Function(_) => 5,
         }
     }
 
@@ -401,6 +424,12 @@ impl Display for Term {
                 f.write_str("|")
             }
             Term::Aggregation(aggregate) => write!(f, "{}", aggregate),
+            Term::Function(function) => {
+                f.write_str(&function.name.to_string())?;
+                f.write_str("(")?;
+                self.format_multinary_operation(f, &function.subterms, ", ")?;
+                f.write_str(")")
+            }
         }
     }
 }

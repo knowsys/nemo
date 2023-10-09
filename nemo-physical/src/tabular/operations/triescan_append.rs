@@ -296,7 +296,7 @@ impl<'a> TrieScanAppend<'a> {
         &mut self,
         mut arithmetic_tree: ArithmeticTree<DataValueT>,
         output_type: StorageTypeName,
-        dict: &mut Dict,
+        dict: &Dict,
     ) {
         macro_rules! input_for_datatype {
             ($variant:ident, $type:ty) => {{

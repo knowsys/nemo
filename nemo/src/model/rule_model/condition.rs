@@ -51,7 +51,7 @@ impl Condition {
     /// Return all terms.
     pub fn terms(&self) -> Vec<&Term> {
         match self {
-            Condition::Assignment(variable, term) => {
+            Condition::Assignment(_variable, term) => {
                 vec![term]
             }
             Condition::Equals(left, right)
@@ -100,6 +100,11 @@ impl Condition {
         self.variables()
             .into_iter()
             .filter(|var| matches!(var, Variable::Existential(_)))
+    }
+
+    /// Return whether this type of condition only works on numeric values
+    pub fn is_numeric(&self) -> bool {
+        !(matches!(self, Condition::Equals(_, _)) || matches!(self, Condition::Unequals(_, _)))
     }
 }
 

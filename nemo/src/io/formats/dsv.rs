@@ -92,7 +92,7 @@ use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
     error::{Error, ReadingError},
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    model::{PrimitiveType, Term},
+    model::{Constant, PrimitiveType},
 };
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
@@ -201,7 +201,7 @@ impl DSVReader {
         macro_rules! into_parser {
             ($it:ident, $lcbp:ident) => {{
                 let boxed: Box<dyn ColumnBuilderProxy<String>> = match $it {
-                    TypeConstraint::Exact(PrimitiveType::Any) | TypeConstraint::AtLeast(PrimitiveType::Any) => Box::new($lcbp.into_parser::<Term>()),
+                    TypeConstraint::Exact(PrimitiveType::Any) | TypeConstraint::AtLeast(PrimitiveType::Any) => Box::new($lcbp.into_parser::<Constant>()),
                     TypeConstraint::Exact(PrimitiveType::String) | TypeConstraint::AtLeast(PrimitiveType::String) => Box::new($lcbp.into_parser::<LogicalString>()),
                     TypeConstraint::Exact(PrimitiveType::Integer) | TypeConstraint::AtLeast(PrimitiveType::Integer) => Box::new($lcbp.into_parser::<LogicalInteger>()),
                     TypeConstraint::Exact(PrimitiveType::Float64) | TypeConstraint::AtLeast(PrimitiveType::Float64) => Box::new($lcbp.into_parser::<LogicalFloat64>()),

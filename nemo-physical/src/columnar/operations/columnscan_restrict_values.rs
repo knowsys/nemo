@@ -62,7 +62,7 @@ where
         value_is_reference && other_not_contains_value_reference
     }
 
-    fn into_bound(&self) -> Option<BoundKind<T>> {
+    fn as_bound(&self) -> Option<BoundKind<T>> {
         match self {
             ConditionStatement::Unequal(_, _) => None,
             ConditionStatement::Equal(left, right) => {
@@ -159,7 +159,7 @@ where
         let conditions = conditions
             .into_iter()
             .filter(|condition| {
-                if let Some(bound) = condition.into_bound() {
+                if let Some(bound) = condition.as_bound() {
                     match bound {
                         BoundKind::Lower(b) => {
                             lower_bounds.push(b);

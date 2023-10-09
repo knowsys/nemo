@@ -48,7 +48,7 @@ impl Double {
             return None;
         }
 
-        Some(Double::new(value).ok()?)
+        Double::new(value).ok()
     }
 }
 

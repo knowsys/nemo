@@ -244,7 +244,7 @@ impl TryFrom<Constant> for LogicalString {
         match constant {
             Constant::StringLiteral(s) => Ok(s.into()),
             _ => Err(InvalidRuleTermConversion::new(
-                constant.into(),
+                constant,
                 PrimitiveType::String,
             )),
         }
@@ -259,7 +259,7 @@ impl TryFrom<Constant> for LogicalInteger {
             Constant::NumericLiteral(NumericLiteral::Integer(i)) => Ok(i.into()),
             Constant::NumericLiteral(NumericLiteral::Decimal(i, 0)) => Ok(i.into()),
             _ => Err(InvalidRuleTermConversion::new(
-                constant.into(),
+                constant,
                 PrimitiveType::Integer,
             )),
         }
@@ -285,16 +285,14 @@ impl TryFrom<Constant> for LogicalFloat64 {
                 .ok()
                 .and_then(|d: f64| Double::new(d).map(|d| d.into()).ok())
                 .ok_or(InvalidRuleTermConversion::new(
-                    constant.into(),
+                    constant,
                     PrimitiveType::Float64,
                 )),
-            Constant::NumericLiteral(NumericLiteral::Integer(a)) => {
-                LogicalInteger(a).try_into().map_err(|_err| {
-                    InvalidRuleTermConversion::new(constant.into(), PrimitiveType::Float64)
-                })
-            }
+            Constant::NumericLiteral(NumericLiteral::Integer(a)) => LogicalInteger(a)
+                .try_into()
+                .map_err(|_err| InvalidRuleTermConversion::new(constant, PrimitiveType::Float64)),
             _ => Err(InvalidRuleTermConversion::new(
-                constant.into(),
+                constant,
                 PrimitiveType::Float64,
             )),
         }

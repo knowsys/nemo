@@ -24,8 +24,16 @@ impl Literal {
         matches!(self, Self::Negative(_))
     }
 
-    /// Returns the underlying atom
+    /// Returns a reference to the underlying atom.
     pub fn atom(&self) -> &Atom {
+        match self {
+            Self::Positive(atom) => atom,
+            Self::Negative(atom) => atom,
+        }
+    }
+
+    /// Returns a mutable reference to the underlying atom.
+    pub fn atom_mut(&mut self) -> &mut Atom {
         match self {
             Self::Positive(atom) => atom,
             Self::Negative(atom) => atom,

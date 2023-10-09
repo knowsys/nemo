@@ -10,7 +10,10 @@ use nemo_physical::{
 
 use crate::{
     execution::execution_engine::RuleInfo,
-    model::{chase_model::ChaseRule, Identifier},
+    model::{
+        chase_model::{ChaseAtom, ChaseRule},
+        Identifier,
+    },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };

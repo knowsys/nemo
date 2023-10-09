@@ -129,7 +129,7 @@ impl Rule {
                         continue;
                     }
 
-                    if unsafe_negative_variables.contains(&variable) {
+                    if unsafe_negative_variables.contains(variable) {
                         return Err(ParseError::UnsafeVariableInMultipleNegativeLiterals(
                             variable.name(),
                         ));

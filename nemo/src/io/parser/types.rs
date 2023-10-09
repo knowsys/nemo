@@ -238,7 +238,7 @@ pub enum ParseError {
     ExpectedFunctionTerm,
     /// Expected a term tree (i.e. a term that can additionally involve e.g. arithmetic operations)
     #[error("Expected a term tree (i.e. a term that can additionally involve e.g. arithmetic operations)")]
-    ExpectedTermTree,
+    ExpectedPrimitiveTerm,
     /// Expected an aggregate
     #[error("Expected an aggregate term")]
     ExpectedAggregate,
@@ -247,7 +247,7 @@ pub enum ParseError {
     ExpectedParenthesisedExpression,
     /// Expected an parenthesised term tree.
     #[error("Expected an parenthesised term tree")]
-    ExpectedParenthesisedTermTree,
+    ExpectedParenthesisedTerm,
     /// An aggregate term occurs in the body of a rule.
     #[error(r#"An aggregate term ("{0}") occurs in the body of a rule"#)]
     AggregateInBody(Aggregate),

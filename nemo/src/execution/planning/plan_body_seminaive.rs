@@ -1,6 +1,6 @@
 //! Module defining the strategy for calculating all body matches for a rule application.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use nemo_physical::{
     management::execution_plan::ExecutionNodeRef,
@@ -10,8 +10,8 @@ use nemo_physical::{
 use crate::{
     execution::execution_engine::RuleInfo,
     model::{
-        chase_model::{ChaseAggregate, ChaseRule, AGGREGATE_VARIABLE_PREFIX},
-        Term, TermTree, Variable,
+        chase_model::{ChaseAggregate, ChaseRule, Constructor, AGGREGATE_VARIABLE_PREFIX},
+        Variable,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, TableManager},
@@ -30,7 +30,7 @@ pub struct SeminaiveStrategy {
     /// This includes normal variables in the head and variables that are used by arithmetic operations in the head.
     /// Furthermore, this includes aggregate output variables (but not their input variables, except if they are output variables too).
     used_variables_before_arithmetic_operations: HashSet<Variable>,
-    constructors: HashMap<Variable, TermTree>,
+    constructors: Vec<Constructor>,
     join_generator: SeminaiveJoinGenerator,
     negation_generator: Option<NegationGenerator>,
     aggregates: Vec<ChaseAggregate>,
@@ -50,7 +50,7 @@ impl SeminaiveStrategy {
 
         let join_generator = SeminaiveJoinGenerator {
             atoms: rule.positive_body().clone(),
-            filters: rule.positive_filters().clone(),
+            constraints: rule.positive_constraints().clone(),
             variable_types: analysis.variable_types.clone(),
         };
 
@@ -58,7 +58,7 @@ impl SeminaiveStrategy {
             Some(NegationGenerator {
                 variable_types: analysis.variable_types.clone(),
                 atoms: rule.negative_body().clone(),
-                filters: rule.negative_filters().clone(),
+                constraints: rule.negative_constraints().clone(),
             })
         } else {
             None
@@ -88,19 +88,13 @@ impl SeminaiveStrategy {
     /// Returns used head variables before aggregates and constructors are computed.
     fn used_variables_before_arithmetic_operations(
         head_variables: &HashSet<Variable>,
-        constructors: &HashMap<Variable, TermTree>,
+        constructors: &[Constructor],
     ) -> HashSet<Variable> {
         let mut used_variables = HashSet::<Variable>::new();
 
         for variable in head_variables {
-            if let Some(tree) = constructors.get(variable) {
-                used_variables.extend(tree.terms().into_iter().filter_map(|t| {
-                    if let Term::Variable(variable) = t {
-                        Some(variable.clone())
-                    } else {
-                        None
-                    }
-                }));
+            if let Some(constructor) = constructors.iter().find(|c| c.variable() == variable) {
+                used_variables.extend(constructor.term().variables().cloned());
             } else {
                 used_variables.insert(variable.clone());
             }
@@ -146,13 +140,13 @@ impl BodyStrategy for SeminaiveStrategy {
             let aggregate_group_by_variables = self.aggregate_group_by_variables.as_ref().unwrap();
 
             let aggregated_column_index = *variable_order
-                .get(&Variable::Universal(
-                    aggregate
-                        .variable_identifiers
+                .get(
+                    &aggregate
+                        .variables
                         .get(0)
                         .expect("min aggregate requires exactly one variable")
                         .clone(),
-                ))
+                )
                 .expect("variable that is aggregated has to be in the variable order");
 
             // Check that the group-by variables are exactly the first variables in the variable order
@@ -172,7 +166,7 @@ impl BodyStrategy for SeminaiveStrategy {
                 // because otherwise the the result would not change by intermediate columns in the variable order
                 if aggregated_column_index != aggregate_group_by_variables.len() {
                     panic!("aggregated variable {} is at an invalid position in the variable order to allow for aggregation without projection/reorder (index is {aggregated_column_index}, but should equal {}).", aggregate
-                    .variable_identifiers
+                    .variables
                     .get(0).unwrap(), aggregate_group_by_variables.len());
                 }
             }
@@ -192,7 +186,7 @@ impl BodyStrategy for SeminaiveStrategy {
                 // Remove distinct and unused variables of the aggregate
                 *variable_order = variable_order.restrict_to(aggregate_group_by_variables);
                 // Add aggregate output variable
-                variable_order.push(Variable::Universal(aggregate.output_variable.clone()));
+                variable_order.push(aggregate.output_variable.clone());
             }
         }
 

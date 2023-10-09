@@ -243,7 +243,9 @@ impl TypeTree {
 
                 Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
-            ExecutionOperation::SelectValue(subtree, _assignments) => {
+            ExecutionOperation::Filter(subtree, _condition) => {
+                // TODO: Shouldnt I do something here?
+
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
                 Ok(TypeTreeNode::new(
                     subtype_node.schema.clone(),
@@ -479,7 +481,7 @@ impl TypeTree {
                     subtree.clone(),
                 );
             }
-            ExecutionOperation::SelectValue(subtree, _assignments) => {
+            ExecutionOperation::Filter(subtree, _assignments) => {
                 let mut schema_map = HashMap::<usize, DataTypeName>::new();
                 for (column_index, schema_entry) in type_node.schema.iter().enumerate() {
                     schema_map.insert(column_index, *schema_entry);

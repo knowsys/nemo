@@ -93,7 +93,7 @@ impl ExecutionNodeRef {
                 vec![subnode_left.clone(), subnode_right.clone()]
             }
             ExecutionOperation::Project(subnode, _) => vec![subnode.clone()],
-            ExecutionOperation::SelectValue(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::Filter(subnode, _) => vec![subnode.clone()],
             ExecutionOperation::SelectEqual(subnode, _) => vec![subnode.clone()],
             ExecutionOperation::AppendColumns(subnode, _) => vec![subnode.clone()],
             ExecutionOperation::AppendNulls(subnode, _) => vec![subnode.clone()],
@@ -133,7 +133,7 @@ pub enum ExecutionOperation {
     /// Table project operation; can only be applied to a `FetchTable` or `FetchTemp` node. TODO: FetchTable/Temp no longer existing in codebase
     Project(ExecutionNodeRef, ProjectReordering),
     /// Only leave entries in that have a certain value.
-    SelectValue(ExecutionNodeRef, Vec<ConditionStatement<DataValueT>>),
+    Filter(ExecutionNodeRef, Vec<ConditionStatement<DataValueT>>),
     /// Only leave entries in that contain equal values in certain columns.
     SelectEqual(ExecutionNodeRef, SelectEqualClasses),
     /// Append certain columns to the trie.
@@ -270,12 +270,12 @@ impl ExecutionPlan {
     }
 
     /// Return [`ExecutionNodeRef`] for restricing a column to a certain value.
-    pub fn select_value(
+    pub fn filter(
         &mut self,
         subnode: ExecutionNodeRef,
         conditions: Vec<ConditionStatement<DataValueT>>,
     ) -> ExecutionNodeRef {
-        let new_operation = ExecutionOperation::SelectValue(subnode, conditions);
+        let new_operation = ExecutionOperation::Filter(subnode, conditions);
         self.push_and_return_ref(new_operation)
     }
 
@@ -431,9 +431,9 @@ impl ExecutionPlan {
                 let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
                 new_plan.project(new_subnode, reorder.clone())
             }
-            ExecutionOperation::SelectValue(subnode, assignments) => {
+            ExecutionOperation::Filter(subnode, assignments) => {
                 let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
-                new_plan.select_value(new_subnode, assignments.clone())
+                new_plan.filter(new_subnode, assignments.clone())
             }
             ExecutionOperation::SelectEqual(subnode, classes) => {
                 let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
@@ -578,10 +578,10 @@ impl ExecutionTree {
 
                 Tree::Node(format!("Project {reorder:?}"), vec![subtree])
             }
-            ExecutionOperation::SelectValue(subnode, assignments) => {
+            ExecutionOperation::Filter(subnode, conditions) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
-                Tree::Node(format!("Select Value {assignments:?}"), vec![subtree])
+                Tree::Node(format!("Filter {conditions:?}"), vec![subtree])
             }
             ExecutionOperation::SelectEqual(subnode, classes) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
@@ -732,14 +732,14 @@ impl ExecutionTree {
                     Some(new_tree.project(simplified, reorder.clone()))
                 }
             }
-            ExecutionOperation::SelectValue(subnode, assignments) => {
+            ExecutionOperation::Filter(subnode, conditions) => {
                 let simplified =
                     Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
-                if assignments.is_empty() {
+                if conditions.is_empty() {
                     Some(simplified)
                 } else {
-                    Some(new_tree.select_value(simplified, assignments.clone()))
+                    Some(new_tree.filter(simplified, conditions.clone()))
                 }
             }
             ExecutionOperation::SelectEqual(subnode, classes) => {
@@ -894,13 +894,10 @@ impl ExecutionTree {
                 Self::satisfy_leapfrog_recursive(left.clone(), permutation.clone());
                 Self::satisfy_leapfrog_recursive(right.clone(), permutation);
             }
-            ExecutionOperation::SelectValue(subnode, _assignments) => {
+            ExecutionOperation::Filter(subnode, _conditions) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
-                // for assigment in assignments {
-                //     assigment.column_idx = reorder.apply_element_reverse(assigment.column_idx);
-                // }
 
                 Self::satisfy_leapfrog_recursive(subnode.clone(), permutation);
             }

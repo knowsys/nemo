@@ -69,10 +69,10 @@ impl Aggregate {
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         for term in &mut self.terms {
             if let PrimitiveTerm::Variable(variable) = term {
-                if let Some(value) = assignment.get(variable) {
-                    if let Term::Primitive(PrimitiveTerm::Variable(replacing_variable)) = value {
-                        *variable = replacing_variable.clone();
-                    }
+                if let Some(Term::Primitive(PrimitiveTerm::Variable(replacing_variable))) =
+                    assignment.get(variable)
+                {
+                    *variable = replacing_variable.clone();
                 }
             }
         }

@@ -8,7 +8,10 @@ use nemo_physical::{
 };
 
 use crate::{
-    model::{chase_model::ChaseAtom, Condition, PrimitiveType, Variable},
+    model::{
+        chase_model::{ChaseAtom, Constraint, VariableAtom},
+        PrimitiveType, Variable,
+    },
     program_analysis::variable_order::VariableOrder,
     table_manager::TableManager,
 };
@@ -21,9 +24,9 @@ pub struct SeminaiveJoinGenerator {
     /// logical types of the variables
     pub variable_types: HashMap<Variable, PrimitiveType>,
     /// the atoms to join
-    pub atoms: Vec<ChaseAtom>,
+    pub atoms: Vec<VariableAtom>,
     /// the filters to apply
-    pub filters: Vec<Condition>,
+    pub constraints: Vec<Constraint>,
 }
 
 impl SeminaiveJoinGenerator {
@@ -122,11 +125,8 @@ impl SeminaiveJoinGenerator {
         }
 
         // Apply filters
-        let (filter_classes, filter_assignments) =
-            compute_filters(variable_order, &self.filters, &self.variable_types);
+        let conditions = compute_filters(variable_order, &self.constraints, &self.variable_types);
 
-        let node_select_value = plan.select_value(seminaive_union, filter_assignments);
-
-        plan.select_equal(node_select_value, filter_classes)
+        plan.filter(seminaive_union, conditions)
     }
 }

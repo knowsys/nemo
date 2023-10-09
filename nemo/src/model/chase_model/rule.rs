@@ -43,6 +43,27 @@ pub struct ChaseRule {
 
 #[allow(dead_code)]
 impl ChaseRule {
+    /// Construct a new [`ChaseRule`].
+    pub fn new(
+        head: Vec<PrimitiveAtom>,
+        constructors: Vec<Constructor>,
+        aggregates: Vec<ChaseAggregate>,
+        positive_body: Vec<VariableAtom>,
+        positive_constraints: Vec<Constraint>,
+        negative_body: Vec<VariableAtom>,
+        negative_constraints: Vec<Constraint>,
+    ) -> Self {
+        Self {
+            head,
+            constructors,
+            aggregates,
+            positive_body,
+            positive_constraints,
+            negative_body,
+            negative_constraints,
+        }
+    }
+
     /// Return the head atoms of the rule - immutable.
     #[must_use]
     pub fn head(&self) -> &Vec<PrimitiveAtom> {
@@ -125,6 +146,13 @@ impl ChaseRule {
     pub fn negative_constraints_mut(&mut self) -> &mut Vec<Constraint> {
         &mut self.negative_constraints
     }
+
+    /// Return the [`Constructor`] associated with a given variable
+    pub fn get_constructor(&self, variable: &Variable) -> Option<&Constructor> {
+        self.constructors
+            .iter()
+            .find(|&constructor| constructor.variable() == variable)
+    }
 }
 
 impl ChaseRule {
@@ -137,7 +165,7 @@ impl ChaseRule {
     fn apply_equality(rule: &mut Rule) {
         let mut assignment = HashMap::<Variable, Term>::new();
 
-        rule.conditions_mut().iter_mut().filter(|condition| {
+        rule.conditions_mut().retain(|condition| {
             if let Condition::Equals(
                 Term::Primitive(PrimitiveTerm::Variable(left)),
                 Term::Primitive(PrimitiveTerm::Variable(right)),
@@ -166,6 +194,10 @@ impl ChaseRule {
     /// Modify the rule in such a way that it only contains variables within atoms.
     /// Returns a vector of conditions that have been added for negative literals.
     fn flatten_atoms(rule: &mut Rule) -> Vec<Condition> {
+        // New conditions that will be introduced due to the flattening of the atom
+        let mut positive_conditions = Vec::<Condition>::new();
+        let mut negative_conditions = Vec::<Condition>::new();
+
         let mut global_term_index: usize = 0;
 
         // Head atoms may only contain primitive terms
@@ -178,34 +210,35 @@ impl ChaseRule {
                         CONSTRUCT_VARIABLE_PREFIX
                     };
 
-                    rule.conditions_mut().push(Condition::Assignment(
-                        Variable::Universal(Self::generate_variable_name(
-                            prefix,
-                            global_term_index,
-                        )),
-                        term.clone(),
-                    ))
+                    let new_variable = Variable::Universal(Self::generate_variable_name(
+                        prefix,
+                        global_term_index,
+                    ));
+
+                    positive_conditions
+                        .push(Condition::Assignment(new_variable.clone(), term.clone()));
+
+                    *term = Term::Primitive(PrimitiveTerm::Variable(new_variable));
                 }
 
                 global_term_index += 1;
             }
         }
 
-        let mut result = Vec::new();
-
         // Body literals must only contain variables
         // and may not repeat variables within one atom
-        for literal in rule.body() {
-            let atom = literal.atom();
-            let mut current_variables = HashSet::<&Variable>::new();
+        for literal in rule.body_mut() {
+            let is_positive = literal.is_positive();
+            let atom = literal.atom_mut();
+            let mut current_variables = HashSet::<Variable>::new();
 
             for term in atom.terms_mut() {
                 let new_variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
                     Self::generate_variable_name(EQUALITY_VARIABLE_PREFIX, global_term_index),
                 )));
 
-                if let Term::Primitive(PrimitiveTerm::Variable(variable)) = term {
-                    if !current_variables.contains(variable) {
+                if let Term::Primitive(PrimitiveTerm::Variable(variable)) = term.clone() {
+                    if !current_variables.contains(&variable) {
                         current_variables.insert(variable);
 
                         continue;
@@ -213,10 +246,10 @@ impl ChaseRule {
                 }
 
                 let new_condition = Condition::Equals(term.clone(), new_variable.clone());
-                if literal.is_positive() {
-                    rule.conditions_mut().push(new_condition);
+                if is_positive {
+                    positive_conditions.push(new_condition);
                 } else {
-                    result.push(new_condition);
+                    negative_conditions.push(new_condition);
                 }
 
                 *term = new_variable;
@@ -225,7 +258,8 @@ impl ChaseRule {
             }
         }
 
-        result
+        rule.conditions_mut().extend(positive_conditions);
+        negative_conditions
     }
 }
 

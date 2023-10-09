@@ -1292,7 +1292,7 @@ impl DatabaseInstance {
 
                 Ok(Some(TrieScanEnum::TrieScanProject(project_scan)))
             }
-            ExecutionOperation::SelectValue(subtable, conditions) => {
+            ExecutionOperation::Filter(subtable, conditions) => {
                 let subiterator_opt = self.get_iterator_node(
                     subtable.clone(),
                     &type_node.subnodes[0],
@@ -1301,7 +1301,7 @@ impl DatabaseInstance {
 
                 if let Some(subiterator) = subiterator_opt {
                     let restrict_scan = TrieScanRestrictValues::new(
-                        &mut self.dict_constants.borrow_mut(),
+                        &self.dict_constants.borrow_mut(),
                         subiterator,
                         conditions,
                     );
