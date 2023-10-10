@@ -1209,7 +1209,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parse an expression of the form <Variable> := <Term>.
+    /// Parse an expression of the form `<variable> := <term>`.
     pub fn parse_assignment(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Condition> {
         traced(
             "parse_assignment",
