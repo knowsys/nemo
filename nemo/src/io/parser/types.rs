@@ -236,6 +236,9 @@ pub enum ParseError {
     /// Expected a function term
     #[error("Expected a function term")]
     ExpectedFunctionTerm,
+    /// Expected a known unary function
+    #[error("Expected a known unary function")]
+    ExpectedUnaryFunction,
     /// Expected a term tree (i.e. a term that can additionally involve e.g. arithmetic operations)
     #[error("Expected a term tree (i.e. a term that can additionally involve e.g. arithmetic operations)")]
     ExpectedPrimitiveTerm,
