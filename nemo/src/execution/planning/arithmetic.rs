@@ -42,7 +42,7 @@ pub(super) fn termtree_to_arithmetictree(
             let left_tree = termtree_to_arithmetictree(left, order, logical_type);
             let right_tree = termtree_to_arithmetictree(right, order, logical_type);
 
-            ArithmeticTree::Addition(vec![left_tree, right_tree])
+            ArithmeticTree::Subtraction(Box::new(left_tree), Box::new(right_tree))
         }
         Term::Multiplication(left, right) => {
             let left_tree = termtree_to_arithmetictree(left, order, logical_type);

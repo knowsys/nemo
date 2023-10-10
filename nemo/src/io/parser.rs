@@ -1046,6 +1046,7 @@ impl<'a> RuleParser<'a> {
                         alt((
                             self.parse_function_term(),
                             self.parse_arithmetic_expression(),
+                            self.parse_aggregate(),
                             self.parse_parenthesised_term(),
                         )),
                         multispace_or_comment0,

@@ -113,7 +113,10 @@ impl Rule {
 
         // Head atoms may only use variables that are either bound or derived
         for variable in head.iter().flat_map(|a| a.variables()) {
-            if !bound_variables.contains(variable) && !derived_variables.contains(variable) {
+            if variable.is_universal()
+                && !bound_variables.contains(variable)
+                && !derived_variables.contains(variable)
+            {
                 return Err(ParseError::UnsafeHeadVariable(variable.name()));
             }
         }

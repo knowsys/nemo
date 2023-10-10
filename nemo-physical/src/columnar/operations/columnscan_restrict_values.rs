@@ -32,7 +32,7 @@ enum BoundKind<T> {
 }
 
 /// [`ArithmeticTree`] will reference the `value_scan` with this value
-const VALUE_SCAN_INDEX: usize = 0;
+pub const VALUE_SCAN_INDEX: usize = 0;
 
 impl<T> ConditionStatement<T>
 where
@@ -62,52 +62,58 @@ where
         value_is_reference && other_not_contains_value_reference
     }
 
-    fn as_bound(&self) -> Option<BoundKind<T>> {
+    fn as_bounds(&self) -> Vec<BoundKind<T>> {
         match self {
-            ConditionStatement::Unequal(_, _) => None,
+            ConditionStatement::Unequal(_, _) => vec![],
             ConditionStatement::Equal(left, right) => {
                 if Self::special_form(left, right) {
-                    Some(BoundKind::Lower(Bound::Inclusive(right.clone())))
+                    vec![
+                        BoundKind::Lower(Bound::Inclusive(right.clone())),
+                        BoundKind::Upper(Bound::Inclusive(right.clone())),
+                    ]
                 } else if Self::special_form(right, left) {
-                    Some(BoundKind::Lower(Bound::Inclusive(left.clone())))
+                    vec![
+                        BoundKind::Lower(Bound::Inclusive(left.clone())),
+                        BoundKind::Upper(Bound::Inclusive(left.clone())),
+                    ]
                 } else {
-                    None
+                    vec![]
                 }
             }
             ConditionStatement::LessThan(left, right) => {
                 if Self::special_form(left, right) {
-                    Some(BoundKind::Upper(Bound::Exclusive(right.clone())))
+                    vec![BoundKind::Upper(Bound::Exclusive(right.clone()))]
                 } else if Self::special_form(right, left) {
-                    Some(BoundKind::Lower(Bound::Exclusive(left.clone())))
+                    vec![BoundKind::Lower(Bound::Exclusive(left.clone()))]
                 } else {
-                    None
+                    vec![]
                 }
             }
             ConditionStatement::LessThanEqual(left, right) => {
                 if Self::special_form(left, right) {
-                    Some(BoundKind::Upper(Bound::Inclusive(right.clone())))
+                    vec![BoundKind::Upper(Bound::Inclusive(right.clone()))]
                 } else if Self::special_form(right, left) {
-                    Some(BoundKind::Lower(Bound::Inclusive(left.clone())))
+                    vec![BoundKind::Lower(Bound::Inclusive(left.clone()))]
                 } else {
-                    None
+                    vec![]
                 }
             }
             ConditionStatement::GreaterThan(left, right) => {
                 if Self::special_form(left, right) {
-                    Some(BoundKind::Lower(Bound::Exclusive(right.clone())))
+                    vec![BoundKind::Lower(Bound::Exclusive(right.clone()))]
                 } else if Self::special_form(right, left) {
-                    Some(BoundKind::Upper(Bound::Exclusive(left.clone())))
+                    vec![BoundKind::Upper(Bound::Exclusive(left.clone()))]
                 } else {
-                    None
+                    vec![]
                 }
             }
             ConditionStatement::GreaterThanEqual(left, right) => {
                 if Self::special_form(left, right) {
-                    Some(BoundKind::Lower(Bound::Inclusive(right.clone())))
+                    vec![BoundKind::Lower(Bound::Inclusive(right.clone()))]
                 } else if Self::special_form(right, left) {
-                    Some(BoundKind::Upper(Bound::Inclusive(left.clone())))
+                    vec![BoundKind::Upper(Bound::Inclusive(left.clone()))]
                 } else {
-                    None
+                    vec![]
                 }
             }
         }
@@ -159,7 +165,13 @@ where
         let conditions = conditions
             .into_iter()
             .filter(|condition| {
-                if let Some(bound) = condition.as_bound() {
+                let bounds = condition.as_bounds();
+
+                if bounds.is_empty() {
+                    return true;
+                }
+
+                for bound in bounds {
                     match bound {
                         BoundKind::Lower(b) => {
                             lower_bounds.push(b);
@@ -168,11 +180,9 @@ where
                             upper_bounds.push(b);
                         }
                     }
-
-                    return false;
                 }
 
-                true
+                false
             })
             .collect();
 

@@ -627,60 +627,73 @@ mod test {
         let num_whole_decimal_literal = Constant::NumericLiteral(NumericLiteral::Decimal(42, 0));
         let num_double_literal =
             Constant::NumericLiteral(NumericLiteral::Double(Double::new(2.99).unwrap()));
-        let language_string_literal = Constant::RdfLiteral(RdfLiteral::LanguageString {
+        let language_string_literal = Constant::try_from(RdfLiteral::LanguageString {
             value: "language string".to_string(),
             tag: "en".to_string(),
-        });
-        let random_datavalue_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+        })
+        .unwrap();
+        let random_datavalue_literal = Constant::try_from(RdfLiteral::DatatypeValue {
             value: "some random datavalue".to_string(),
             datatype: "a datatype that I totally did not just make up".to_string(),
-        });
-        let string_datavalue_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+        })
+        .unwrap();
+        let string_datavalue_literal = Constant::try_from(RdfLiteral::DatatypeValue {
             value: "string datavalue".to_string(),
             datatype: XSD_STRING.to_string(),
-        });
-        let integer_datavalue_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+        })
+        .unwrap();
+        let integer_datavalue_literal = Constant::try_from(RdfLiteral::DatatypeValue {
             value: "73".to_string(),
             datatype: XSD_INTEGER.to_string(),
-        });
-        let decimal_datavalue_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+        })
+        .unwrap();
+        let decimal_datavalue_literal = Constant::try_from(RdfLiteral::DatatypeValue {
             value: "1.23".to_string(),
             datatype: XSD_DECIMAL.to_string(),
-        });
-        let signed_decimal_datavalue_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+        })
+        .unwrap();
+        let signed_decimal_datavalue_literal = Constant::try_from(RdfLiteral::DatatypeValue {
             value: "+1.23".to_string(),
             datatype: XSD_DECIMAL.to_string(),
-        });
-        let negative_decimal_datavalue_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+        })
+        .unwrap();
+        let negative_decimal_datavalue_literal = Constant::try_from(RdfLiteral::DatatypeValue {
             value: "-1.23".to_string(),
             datatype: XSD_DECIMAL.to_string(),
-        });
-        let pointless_decimal_datavalue_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+        })
+        .unwrap();
+        let pointless_decimal_datavalue_literal = Constant::try_from(RdfLiteral::DatatypeValue {
             value: "23".to_string(),
             datatype: XSD_DECIMAL.to_string(),
-        });
+        })
+        .unwrap();
         let signed_pointless_decimal_datavalue_literal =
-            Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+            Constant::try_from(RdfLiteral::DatatypeValue {
                 value: "+23".to_string(),
                 datatype: XSD_DECIMAL.to_string(),
-            });
+            })
+            .unwrap();
         let negative_pointless_decimal_datavalue_literal =
-            Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+            Constant::try_from(RdfLiteral::DatatypeValue {
                 value: "-23".to_string(),
                 datatype: XSD_DECIMAL.to_string(),
-            });
-        let double_datavalue_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+            })
+            .unwrap();
+        let double_datavalue_literal = Constant::try_from(RdfLiteral::DatatypeValue {
             value: "3.33".to_string(),
             datatype: XSD_DOUBLE.to_string(),
-        });
-        let large_integer_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+        })
+        .unwrap();
+        let large_integer_literal = Constant::try_from(RdfLiteral::DatatypeValue {
             value: "9950000000000000000".to_string(),
             datatype: XSD_INTEGER.to_string(),
-        });
-        let large_decimal_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
+        })
+        .unwrap();
+        let large_decimal_literal = Constant::try_from(RdfLiteral::DatatypeValue {
             value: "9950000000000000001".to_string(),
             datatype: XSD_DECIMAL.to_string(),
-        });
+        })
+        .unwrap();
         let invalid_integer_literal = RdfLiteral::DatatypeValue {
             value: "123.45".to_string(),
             datatype: XSD_INTEGER.to_string(),

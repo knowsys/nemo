@@ -270,7 +270,7 @@ impl ExecutionPlan {
     }
 
     /// Return [`ExecutionNodeRef`] for restricing a column to a certain value.
-    pub fn filter(
+    pub fn filter_values(
         &mut self,
         subnode: ExecutionNodeRef,
         conditions: Vec<ConditionStatement<DataValueT>>,
@@ -433,7 +433,7 @@ impl ExecutionPlan {
             }
             ExecutionOperation::Filter(subnode, assignments) => {
                 let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
-                new_plan.filter(new_subnode, assignments.clone())
+                new_plan.filter_values(new_subnode, assignments.clone())
             }
             ExecutionOperation::SelectEqual(subnode, classes) => {
                 let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
@@ -739,7 +739,7 @@ impl ExecutionTree {
                 if conditions.is_empty() {
                     Some(simplified)
                 } else {
-                    Some(new_tree.filter(simplified, conditions.clone()))
+                    Some(new_tree.filter_values(simplified, conditions.clone()))
                 }
             }
             ExecutionOperation::SelectEqual(subnode, classes) => {

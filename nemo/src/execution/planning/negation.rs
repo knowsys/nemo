@@ -73,7 +73,7 @@ impl AtomNegationInfo {
     }
 }
 
-/// Generator for creating excution plans which applies the negated [`Atom`]s and [`Filter`]s.
+/// Generator for creating excution plans which applies the negated [`ChaseAtom`]s and [`Constraint`]s.
 #[derive(Debug)]
 pub(super) struct NegationGenerator {
     /// Logical types of all the variables.
@@ -116,7 +116,7 @@ impl NegationGenerator {
                     &self.variable_types,
                 );
 
-                let node_filtered = plan.plan_mut().filter(node_union, conditions);
+                let node_filtered = plan.plan_mut().filter_values(node_union, conditions);
 
                 let node_result = if info.projection.is_identity() {
                     node_filtered

@@ -192,7 +192,7 @@ impl<T: Clone> ArithmeticTree<T> {
 
         for leaf in self.leaves() {
             if let ArithmeticTreeLeaf::Reference(index) = leaf {
-                result = result.map(|r| std::cmp::max(r, index));
+                result = Some(result.map_or(index, |r| std::cmp::max(r, index)));
             }
         }
 

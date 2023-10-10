@@ -1,7 +1,8 @@
 use crate::{
     columnar::{
         operations::{
-            arithmetic::expression::ArithmeticTreeLeaf, condition::statement::ConditionStatement,
+            arithmetic::expression::ArithmeticTreeLeaf,
+            columnscan_restrict_values::VALUE_SCAN_INDEX, condition::statement::ConditionStatement,
             ColumnScanEqualColumn, ColumnScanPass, ColumnScanRestrictValues,
         },
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
@@ -275,6 +276,11 @@ impl<'a> TrieScanRestrictValues<'a> {
                     // to indices that reference the column scans that will
                     // be the input for the new scan
                     let mut map_index = HashMap::<usize, usize>::new();
+
+                    // The index of the scan which will be restricted will have
+                    // the special value `VALUE_SCAN_INDEX`
+                    map_index.insert(column_index, VALUE_SCAN_INDEX);
+
                     // References to scans which serve as input for the new column scan
                     let mut scans_restriction = Vec::new();
 

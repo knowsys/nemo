@@ -18,7 +18,7 @@ use crate::{
 
 use super::plan_util::{atom_binding, compute_filters, subplan_union};
 
-/// Generator for creating excution plans for seminaive joins of a fixed set of [`ChaseAtom`]s and [`Filter`]s.
+/// Generator for creating excution plans for seminaive joins of a fixed set of [`ChaseAtom`]s and [`Constraint`]s.
 #[derive(Debug)]
 pub struct SeminaiveJoinGenerator {
     /// logical types of the variables
@@ -127,6 +127,6 @@ impl SeminaiveJoinGenerator {
         // Apply filters
         let conditions = compute_filters(variable_order, &self.constraints, &self.variable_types);
 
-        plan.filter(seminaive_union, conditions)
+        plan.filter_values(seminaive_union, conditions)
     }
 }

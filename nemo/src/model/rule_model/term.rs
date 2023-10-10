@@ -74,7 +74,7 @@ impl Display for Constant {
                 }
             }
             Constant::NumericLiteral(literal) => write!(f, "{}", literal),
-            Constant::StringLiteral(literal) => write!(f, "{}", literal),
+            Constant::StringLiteral(literal) => write!(f, "\"{}\"", literal),
             Constant::RdfLiteral(literal) => write!(f, "{}", literal),
         }
     }
@@ -319,7 +319,10 @@ impl Term {
             Term::Aggregation(aggregate) => {
                 ascii_tree::Tree::Leaf(vec![format!("{:?}", aggregate)])
             }
-            Term::Function(_) => todo!(),
+            Term::Function(function) => ascii_tree::Tree::Node(
+                function.name.to_string(),
+                function.subterms.iter().map(|s| s.ascii_tree()).collect(),
+            ),
         }
     }
 

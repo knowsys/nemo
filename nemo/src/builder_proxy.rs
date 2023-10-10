@@ -283,8 +283,8 @@ fn parse_rdf_term_from_string(input: String) -> Constant {
 
     if let Ok(constant) = constants {
         // make sure this really parsed as a single triple
-        if let Some(constant) = constant.first().cloned() {
-            return constant;
+        if constant.len() == 1 {
+            return constant.first().expect("Length of constant is 1.").clone();
         }
     }
 
