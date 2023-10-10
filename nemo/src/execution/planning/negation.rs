@@ -9,7 +9,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    execution::planning::plan_util::{compute_filters, subplan_union_reordered},
+    execution::planning::plan_util::{compute_conditions, subplan_union_reordered},
     model::{
         chase_model::{ChaseAtom, Constraint, VariableAtom},
         PrimitiveType, Variable,
@@ -110,7 +110,7 @@ impl NegationGenerator {
                     info.reorder,
                 );
 
-                let conditions = compute_filters(
+                let conditions = compute_conditions(
                     &info.restricted_variable_order,
                     &self.constraints,
                     &self.variable_types,

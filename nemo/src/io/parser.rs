@@ -2,7 +2,10 @@
 
 use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
-use crate::{error::Error, model::*};
+use crate::{
+    error::Error,
+    model::{chase_model::Constraint, *},
+};
 use nemo_physical::error::ReadingError;
 use nom::{
     branch::alt,
@@ -311,8 +314,6 @@ pub enum BodyExpression {
 /// Has one entry for every variant in [`Condition`].
 #[derive(Debug, Clone, Copy)]
 pub enum ConditionOperator {
-    /// Variable is assigned to the term.
-    Assignment,
     /// Two terms are equal.
     Equals,
     /// Two terms are unequal.
@@ -329,22 +330,14 @@ pub enum ConditionOperator {
 
 impl ConditionOperator {
     /// Turn operator into [`Condition`].
-    pub fn into_condition(&self, left: Term, right: Term) -> Condition {
+    pub fn into_constraint(&self, left: Term, right: Term) -> Constraint {
         match self {
-            ConditionOperator::Assignment => {
-                if let Term::Primitive(PrimitiveTerm::Variable(variable)) = left {
-                    Condition::Assignment(variable, right)
-                } else {
-                    // TODO: Proper error handling
-                    panic!("Unexpected term on the left side of an assignment");
-                }
-            }
-            ConditionOperator::Equals => Condition::Equals(left, right),
-            ConditionOperator::Unequals => Condition::Unequals(left, right),
-            ConditionOperator::LessThan => Condition::LessThan(left, right),
-            ConditionOperator::GreaterThan => Condition::GreaterThan(left, right),
-            ConditionOperator::LessThanEq => Condition::LessThanEq(left, right),
-            ConditionOperator::GreaterThanEq => Condition::GreaterThanEq(left, right),
+            ConditionOperator::Equals => Constraint::Equals(left, right),
+            ConditionOperator::Unequals => Constraint::Unequals(left, right),
+            ConditionOperator::LessThan => Constraint::LessThan(left, right),
+            ConditionOperator::GreaterThan => Constraint::GreaterThan(left, right),
+            ConditionOperator::LessThanEq => Constraint::LessThanEq(left, right),
+            ConditionOperator::GreaterThanEq => Constraint::GreaterThanEq(left, right),
         }
     }
 }
@@ -1007,16 +1000,15 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse operation that is filters a variable
-    pub fn parse_condition_operator(
+    pub fn parse_constraint_operator(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<ConditionOperator> {
         traced(
-            "parse_filter_operator",
+            "parse_constraint_operator",
             map_error(
                 delimited(
                     multispace_or_comment0,
                     alt((
-                        value(ConditionOperator::Assignment, token(":=")),
                         value(ConditionOperator::LessThanEq, token("<=")),
                         value(ConditionOperator::LessThan, token("<")),
                         value(ConditionOperator::Equals, token("=")),
@@ -1179,31 +1171,58 @@ impl<'a> RuleParser<'a> {
             use ArithmeticOperator::*;
 
             match operation {
-                Addition => Term::Addition(Box::new(acc), Box::new(expression)),
-                Subtraction => Term::Subtraction(Box::new(acc), Box::new(expression)),
-                Multiplication => Term::Multiplication(Box::new(acc), Box::new(expression)),
-                Division => Term::Division(Box::new(acc), Box::new(expression)),
+                Addition => Term::Binary(BinaryOperation::Addition(
+                    Box::new(acc),
+                    Box::new(expression),
+                )),
+                Subtraction => Term::Binary(BinaryOperation::Subtraction(
+                    Box::new(acc),
+                    Box::new(expression),
+                )),
+                Multiplication => Term::Binary(BinaryOperation::Multiplication(
+                    Box::new(acc),
+                    Box::new(expression),
+                )),
+                Division => Term::Binary(BinaryOperation::Division(
+                    Box::new(acc),
+                    Box::new(expression),
+                )),
             }
         })
     }
 
-    /// Parse expression of the form `<variable> <operation> <term>`
-    /// or `<term> <operation> <variable>`.
-    pub fn parse_filter_expression(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Condition> {
+    /// Parse expression of the form `<term> <operation> <term>` expressing a constraint.
+    pub fn parse_constraint(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Constraint> {
         traced(
-            "parse_filter_expression",
+            "parse_constraint",
             map_error(
                 map(
                     tuple((
                         self.parse_term(),
-                        self.parse_condition_operator(),
+                        self.parse_constraint_operator(),
                         cut(self.parse_term()),
                     )),
-                    |(lhs, operation, rhs)| operation.into_condition(lhs, rhs),
+                    |(lhs, operation, rhs)| operation.into_constraint(lhs, rhs),
                 ),
-                || ParseError::ExpectedFilterExpression,
+                || ParseError::ExpectedCondition,
+            ),
+        )
+    }
+
+    /// Parse an expression of the form <Variable> := <Term>.
+    pub fn parse_assignment(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Condition> {
+        traced(
+            "parse_assignment",
+            map_error(
+                map(
+                    tuple((
+                        self.parse_universal_variable(),
+                        token(":="),
+                        self.parse_term(),
+                    )),
+                    |(lhs, _, rhs)| Condition::Assignment(lhs, rhs),
+                ),
+                || ParseError::ExpectedCondition,
             ),
         )
     }
@@ -1216,7 +1235,10 @@ impl<'a> RuleParser<'a> {
             "parse_body_expression",
             map_error(
                 alt((
-                    map(self.parse_filter_expression(), BodyExpression::Condition),
+                    map(self.parse_constraint(), |c| {
+                        BodyExpression::Condition(Condition::Constraint(c))
+                    }),
+                    map(self.parse_assignment(), BodyExpression::Condition),
                     map(self.parse_literal(), BodyExpression::Literal),
                 )),
                 || ParseError::ExpectedBodyExpression,
@@ -1347,6 +1369,8 @@ mod test {
     use test_log::test;
 
     use nemo_physical::datatypes::Double;
+
+    use crate::model::chase_model::Constraint;
 
     use super::*;
 
@@ -1712,30 +1736,30 @@ mod test {
                 )),
             ],
             vec![
-                Condition::GreaterThan(
+                Condition::Constraint(Constraint::GreaterThan(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(y.clone()))),
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x.clone()))),
-                ),
-                Condition::Equals(
+                )),
+                Condition::Constraint(Constraint::Equals(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x.clone()))),
                     Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
                         NumericLiteral::Integer(3),
                     ))),
-                ),
-                Condition::LessThan(
+                )),
+                Condition::Constraint(Constraint::LessThan(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z.clone()))),
                     Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
                         NumericLiteral::Integer(7),
                     ))),
-                ),
-                Condition::LessThanEq(
+                )),
+                Condition::Constraint(Constraint::LessThanEq(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x))),
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z.clone()))),
-                ),
-                Condition::GreaterThanEq(
+                )),
+                Condition::Constraint(Constraint::GreaterThanEq(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z))),
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(y))),
-                ),
+                )),
             ],
         );
 
@@ -1823,8 +1847,10 @@ mod test {
         let fourty_two = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
             NumericLiteral::Integer(42),
         )));
-        let twenty_three_times_fourty_two =
-            Term::Multiplication(Box::new(twenty_three.clone()), Box::new(fourty_two));
+        let twenty_three_times_fourty_two = Term::Binary(BinaryOperation::Multiplication(
+            Box::new(twenty_three.clone()),
+            Box::new(fourty_two),
+        ));
 
         assert_parse_error!(
             parser.parse_arithmetic_factor(),
@@ -1858,37 +1884,38 @@ mod test {
             "23 * 42",
             twenty_three_times_fourty_two
         );
+
         assert_parse!(
             parser.parse_arithmetic_expression(),
             "23 + 23 * 42 + 42 - (23 * 42)",
-            Term::Subtraction(
-                Box::new(Term::Addition(
-                    Box::new(Term::Addition(
+            Term::Binary(BinaryOperation::Subtraction(
+                Box::new(Term::Binary(BinaryOperation::Addition(
+                    Box::new(Term::Binary(BinaryOperation::Addition(
                         Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                            Constant::NumericLiteral(NumericLiteral::Integer(23))
+                            Constant::NumericLiteral(NumericLiteral::Integer(23),)
                         ))),
-                        Box::new(Term::Multiplication(
+                        Box::new(Term::Binary(BinaryOperation::Multiplication(
                             Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                                Constant::NumericLiteral(NumericLiteral::Integer(23))
+                                Constant::NumericLiteral(NumericLiteral::Integer(23)),
                             ))),
                             Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                                Constant::NumericLiteral(NumericLiteral::Integer(42))
-                            )))
-                        ))
-                    )),
+                                Constant::NumericLiteral(NumericLiteral::Integer(42)),
+                            ))),
+                        )))
+                    )),),
                     Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                        Constant::NumericLiteral(NumericLiteral::Integer(42))
-                    )))
-                )),
-                Box::new(Term::Multiplication(
+                        Constant::NumericLiteral(NumericLiteral::Integer(42),)
+                    ))),
+                ),)),
+                Box::new(Term::Binary(BinaryOperation::Multiplication(
                     Box::new(Term::Primitive(PrimitiveTerm::Constant(
                         Constant::NumericLiteral(NumericLiteral::Integer(23))
                     ))),
                     Box::new(Term::Primitive(PrimitiveTerm::Constant(
                         Constant::NumericLiteral(NumericLiteral::Integer(42))
                     )))
-                ))
-            )
+                )))
+            ))
         );
     }
 
@@ -1940,8 +1967,10 @@ mod test {
         let fourty_two = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
             NumericLiteral::Integer(42),
         )));
-        let twenty_three_times_fourty_two =
-            Term::Multiplication(Box::new(twenty_three.clone()), Box::new(fourty_two.clone()));
+        let twenty_three_times_fourty_two = Term::Binary(BinaryOperation::Multiplication(
+            Box::new(twenty_three.clone()),
+            Box::new(fourty_two.clone()),
+        ));
 
         assert_parse_error!(
             parser.parse_function_term(),

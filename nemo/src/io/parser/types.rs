@@ -213,8 +213,8 @@ pub enum ParseError {
     #[error("Expected a filter operator")]
     ExpectedFilterOperator,
     /// Expected a filter expression.
-    #[error("Expected a filter expression")]
-    ExpectedFilterExpression,
+    #[error("Expected a condition")]
+    ExpectedCondition,
     /// Expected a body expression.
     #[error("Expected a literal or a filter expression")]
     ExpectedBodyExpression,

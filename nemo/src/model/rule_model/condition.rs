@@ -1,4 +1,4 @@
-use crate::model::VariableAssignment;
+use crate::model::{chase_model::Constraint, VariableAssignment};
 
 use super::{PrimitiveTerm, Term, Variable};
 
@@ -7,18 +7,8 @@ use super::{PrimitiveTerm, Term, Variable};
 pub enum Condition {
     /// Variable is assigned to the term.
     Assignment(Variable, Term),
-    /// Two terms are equal.
-    Equals(Term, Term),
-    /// Two terms are unequal.
-    Unequals(Term, Term),
-    /// Value of the left term is less than the value of the right term.
-    LessThan(Term, Term),
-    /// Value of the left term is greater than the value of the right term.
-    GreaterThan(Term, Term),
-    /// Value of the left term is less than or equal to the value of the right term.
-    LessThanEq(Term, Term),
-    /// Value of the left term is greater than or equal to the value of the right term.
-    GreaterThanEq(Term, Term),
+    /// Constraint on two terms
+    Constraint(Constraint),
 }
 
 impl Condition {
@@ -26,25 +16,19 @@ impl Condition {
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         match self {
             Condition::Assignment(variable, term) => {
+                term.apply_assignment(assignment);
+
                 if let Some(replacing_term) = assignment.get(variable) {
                     if let Term::Primitive(PrimitiveTerm::Variable(replacing_variable)) =
                         replacing_term
                     {
                         *variable = replacing_variable.clone();
                     } else {
-                        *self = Condition::Equals(replacing_term.clone(), term.clone());
+                        panic!("You may not replace a variable with a non-variable term within an assigment.");
                     }
                 }
             }
-            Condition::Equals(left, right)
-            | Condition::Unequals(left, right)
-            | Condition::LessThan(left, right)
-            | Condition::GreaterThan(left, right)
-            | Condition::LessThanEq(left, right)
-            | Condition::GreaterThanEq(left, right) => {
-                left.apply_assignment(assignment);
-                right.apply_assignment(assignment);
-            }
+            Condition::Constraint(constraint) => constraint.apply_assignment(assignment),
         }
     }
 
@@ -54,12 +38,9 @@ impl Condition {
             Condition::Assignment(_variable, term) => {
                 vec![term]
             }
-            Condition::Equals(left, right)
-            | Condition::Unequals(left, right)
-            | Condition::LessThan(left, right)
-            | Condition::GreaterThan(left, right)
-            | Condition::LessThanEq(left, right)
-            | Condition::GreaterThanEq(left, right) => {
+            Condition::Constraint(constraint) => {
+                let (left, right) = constraint.terms();
+
                 vec![left, right]
             }
         }
@@ -74,12 +55,9 @@ impl Condition {
 
                 result
             }
-            Condition::Equals(left, right)
-            | Condition::Unequals(left, right)
-            | Condition::LessThan(left, right)
-            | Condition::GreaterThan(left, right)
-            | Condition::LessThanEq(left, right)
-            | Condition::GreaterThanEq(left, right) => {
+            Condition::Constraint(constraint) => {
+                let (left, right) = constraint.terms();
+
                 let mut result = left.variables().collect::<Vec<_>>();
                 result.extend(right.variables());
 
@@ -104,21 +82,9 @@ impl Condition {
 
     /// Return whether this type of condition only works on numeric values
     pub fn is_numeric(&self) -> bool {
-        !(matches!(self, Condition::Equals(_, _)) || matches!(self, Condition::Unequals(_, _)))
-    }
-}
-
-impl Condition {
-    /// Returns a string representation for the operation defined by this condition.
-    fn operator_string(&self) -> &'static str {
         match self {
-            Condition::Assignment(_, _) => ":-",
-            Condition::Equals(_, _) => "=",
-            Condition::Unequals(_, _) => "!=",
-            Condition::LessThan(_, _) => "<",
-            Condition::GreaterThan(_, _) => ">",
-            Condition::LessThanEq(_, _) => "<=",
-            Condition::GreaterThanEq(_, _) => ">=",
+            Condition::Assignment(_, _) => false,
+            Condition::Constraint(constraint) => constraint.is_numeric(),
         }
     }
 }
@@ -126,23 +92,10 @@ impl Condition {
 impl std::fmt::Display for Condition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Condition::Assignment(variable, term) => f.write_fmt(format_args!(
-                "{} {} {}",
-                variable,
-                self.operator_string(),
-                term
-            )),
-            Condition::Equals(left, right)
-            | Condition::Unequals(left, right)
-            | Condition::LessThan(left, right)
-            | Condition::GreaterThan(left, right)
-            | Condition::LessThanEq(left, right)
-            | Condition::GreaterThanEq(left, right) => f.write_fmt(format_args!(
-                "{} {} {}",
-                left,
-                self.operator_string(),
-                right
-            )),
+            Condition::Assignment(variable, term) => {
+                f.write_fmt(format_args!("{} := {}", variable, term))
+            }
+            Condition::Constraint(constraint) => constraint.fmt(f),
         }
     }
 }

@@ -18,7 +18,7 @@ use nemo_physical::{
 use crate::{
     model::{
         chase_model::{ChaseAtom, Constraint, PrimitiveAtom, VariableAtom},
-        Condition, Identifier, PrimitiveTerm, PrimitiveType, Variable,
+        Identifier, PrimitiveTerm, PrimitiveType, Variable,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::TableManager,
@@ -47,7 +47,7 @@ pub(super) fn atom_binding(atom: &VariableAtom, variable_order: &VariableOrder) 
 }
 
 /// Calculate helper structures that define the filters that need to be applied.
-pub(super) fn compute_filters(
+pub(super) fn compute_conditions(
     variable_order: &VariableOrder,
     constraints: &[Constraint],
     variable_types: &HashMap<Variable, PrimitiveType>,
@@ -67,14 +67,15 @@ pub(super) fn compute_filters(
         let left_tree = termtree_to_arithmetictree(left, variable_order, variable_type);
         let right_tree = termtree_to_arithmetictree(right, variable_order, variable_type);
 
-        let new_statement = match constraint.condition() {
-            Condition::Assignment(_, _) => unreachable!("Not a valid constraint"),
-            Condition::Equals(_, _) => ConditionStatement::Equal(left_tree, right_tree),
-            Condition::Unequals(_, _) => ConditionStatement::Unequal(left_tree, right_tree),
-            Condition::LessThan(_, _) => ConditionStatement::LessThan(left_tree, right_tree),
-            Condition::GreaterThan(_, _) => ConditionStatement::GreaterThan(left_tree, right_tree),
-            Condition::LessThanEq(_, _) => ConditionStatement::LessThanEqual(left_tree, right_tree),
-            Condition::GreaterThanEq(_, _) => {
+        let new_statement = match constraint {
+            Constraint::Equals(_, _) => ConditionStatement::Equal(left_tree, right_tree),
+            Constraint::Unequals(_, _) => ConditionStatement::Unequal(left_tree, right_tree),
+            Constraint::LessThan(_, _) => ConditionStatement::LessThan(left_tree, right_tree),
+            Constraint::GreaterThan(_, _) => ConditionStatement::GreaterThan(left_tree, right_tree),
+            Constraint::LessThanEq(_, _) => {
+                ConditionStatement::LessThanEqual(left_tree, right_tree)
+            }
+            Constraint::GreaterThanEq(_, _) => {
                 ConditionStatement::GreaterThanEqual(left_tree, right_tree)
             }
         };

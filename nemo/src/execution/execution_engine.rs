@@ -24,8 +24,7 @@ use crate::{
             primitive_logical_value::{PrimitiveLogicalValueIteratorT, PrimitiveLogicalValueT},
             primitive_types::PrimitiveType,
         },
-        Condition, Constant, Fact, Identifier, PrimitiveTerm, Program, Term, Variable,
-        VariableAssignment,
+        Constant, Fact, Identifier, PrimitiveTerm, Program, Term, Variable, VariableAssignment,
     },
     program_analysis::analysis::ProgramAnalysis,
     table_manager::{MemoryUsage, SubtableExecutionPlan, SubtableIdentifier, TableManager},
@@ -501,10 +500,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let new_constraints: Vec<Constraint> = assignment
                 .iter()
                 .map(|(variable, term)| {
-                    Constraint::new(Condition::Equals(
+                    Constraint::Equals(
                         Term::Primitive(PrimitiveTerm::Variable(variable.clone())),
                         Term::Primitive(PrimitiveTerm::Constant(term.clone())),
-                    ))
+                    )
                 })
                 .collect();
 

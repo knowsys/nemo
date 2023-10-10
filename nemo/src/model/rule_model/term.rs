@@ -120,11 +120,9 @@ pub struct AbstractFunction {
     pub subterms: Vec<Term>,
 }
 
-/// Possibly complex term that may occur within an [`super::Atom`]
-#[derive(Eq, PartialEq, Clone, PartialOrd, Ord)]
-pub enum Term {
-    /// Primitive term.
-    Primitive(PrimitiveTerm),
+/// Binary operation between two [`Term`]
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+pub enum BinaryOperation {
     /// Sum between terms.
     Addition(Box<Term>, Box<Term>),
     /// Difference between two terms.
@@ -135,12 +133,106 @@ pub enum Term {
     Division(Box<Term>, Box<Term>),
     /// First term raised to the power of the second term.
     Exponent(Box<Term>, Box<Term>),
+}
+
+impl BinaryOperation {
+    /// Returns the left and the right [`Term`] of this binary operation.
+    pub fn terms(&self) -> (&Term, &Term) {
+        match self {
+            BinaryOperation::Addition(left, right)
+            | BinaryOperation::Subtraction(left, right)
+            | BinaryOperation::Multiplication(left, right)
+            | BinaryOperation::Division(left, right)
+            | BinaryOperation::Exponent(left, right) => (left, right),
+        }
+    }
+
+    /// Returns a mutable reference to the left and the right [`Term`] of this binary operation.
+    pub fn terms_mut(&mut self) -> (&mut Term, &mut Term) {
+        match self {
+            BinaryOperation::Addition(left, right)
+            | BinaryOperation::Subtraction(left, right)
+            | BinaryOperation::Multiplication(left, right)
+            | BinaryOperation::Division(left, right)
+            | BinaryOperation::Exponent(left, right) => (left, right),
+        }
+    }
+
+    /// Returns the left [`Term`] of this binary operation.
+    pub fn left(&self) -> &Term {
+        self.terms().0
+    }
+
+    /// Returns the right [`Term`] of this binary operation.
+    pub fn right(&self) -> &Term {
+        self.terms().1
+    }
+
+    /// Return the name of the operation.
+    pub fn name(&self) -> String {
+        let name = match self {
+            BinaryOperation::Addition(_, _) => "Addition",
+            BinaryOperation::Subtraction(_, _) => "Subtraction",
+            BinaryOperation::Multiplication(_, _) => "Multiplication",
+            BinaryOperation::Division(_, _) => "Division",
+            BinaryOperation::Exponent(_, _) => "Exponent",
+        };
+
+        String::from(name)
+    }
+}
+
+/// Unary operation applied to a [`Term`]
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+pub enum UnaryOperation {
     /// Squareroot of the given term
     SquareRoot(Box<Term>),
     /// Additive inverse of the given term.
     UnaryMinus(Box<Term>),
     /// Absolute value of the given term.
     Abs(Box<Term>),
+}
+
+impl UnaryOperation {
+    /// Return the [`Term`] to which the unary operation is applied.
+    pub fn term(&self) -> &Term {
+        match self {
+            UnaryOperation::SquareRoot(term)
+            | UnaryOperation::UnaryMinus(term)
+            | UnaryOperation::Abs(term) => term,
+        }
+    }
+
+    /// Return the [`Term`] to which the unary operation is applied.
+    pub fn term_mut(&mut self) -> &mut Term {
+        match self {
+            UnaryOperation::SquareRoot(term)
+            | UnaryOperation::UnaryMinus(term)
+            | UnaryOperation::Abs(term) => term,
+        }
+    }
+
+    /// Return the name of the operation.
+    pub fn name(&self) -> String {
+        let name = match self {
+            UnaryOperation::SquareRoot(_) => "SquareRoot",
+            UnaryOperation::UnaryMinus(_) => "UnaryMinus",
+            UnaryOperation::Abs(_) => "Abs",
+        };
+
+        String::from(name)
+    }
+}
+
+/// Possibly complex term that may occur within an [`super::Atom`]
+#[derive(Eq, PartialEq, Clone, PartialOrd, Ord)]
+pub enum Term {
+    /// Primitive term.
+    Primitive(PrimitiveTerm),
+    /// Binary operation.
+    Binary(BinaryOperation),
+    /// Unary operation.
+    Unary(UnaryOperation),
     /// Aggregation.
     Aggregation(Aggregate),
     /// Abstract Function.
@@ -169,17 +261,15 @@ impl Term {
             Term::Primitive(primitive) => {
                 vec![primitive]
             }
-            Term::Addition(left, right)
-            | Term::Subtraction(left, right)
-            | Term::Multiplication(left, right)
-            | Term::Division(left, right)
-            | Term::Exponent(left, right) => {
+            Term::Binary(binary) => {
+                let (left, right) = binary.terms();
+
                 let mut terms = left.primitive_terms();
                 terms.extend(right.primitive_terms());
 
                 terms
             }
-            Term::SquareRoot(sub) | Term::UnaryMinus(sub) | Term::Abs(sub) => sub.primitive_terms(),
+            Term::Unary(unary) => unary.term().primitive_terms(),
             Term::Function(f) => f
                 .subterms
                 .iter()
@@ -221,17 +311,13 @@ impl Term {
                     }
                 }
             }
-            Term::Addition(left, right)
-            | Term::Subtraction(left, right)
-            | Term::Multiplication(left, right)
-            | Term::Division(left, right)
-            | Term::Exponent(left, right) => {
+            Term::Binary(binary) => {
+                let (left, right) = binary.terms_mut();
+
                 left.apply_assignment(assignment);
                 right.apply_assignment(assignment);
             }
-            Term::SquareRoot(sub) | Term::UnaryMinus(sub) | Term::Abs(sub) => {
-                sub.apply_assignment(assignment)
-            }
+            Term::Unary(unary) => unary.term_mut().apply_assignment(assignment),
             Term::Aggregation(aggregate) => aggregate.apply_assignment(assignment),
             Term::Function(sub) => sub
                 .subterms
@@ -243,16 +329,12 @@ impl Term {
     fn aggregate_subterm_recursive(term: &Term) -> bool {
         match term {
             Term::Primitive(_primitive) => false,
-            Term::Addition(left, right)
-            | Term::Subtraction(left, right)
-            | Term::Multiplication(left, right)
-            | Term::Division(left, right)
-            | Term::Exponent(left, right) => {
+            Term::Binary(binary) => {
+                let (left, right) = binary.terms();
+
                 Self::aggregate_subterm_recursive(left) || Self::aggregate_subterm(right)
             }
-            Term::SquareRoot(sub) | Term::UnaryMinus(sub) | Term::Abs(sub) => {
-                Self::aggregate_subterm_recursive(sub)
-            }
+            Term::Unary(unary) => Self::aggregate_subterm_recursive(unary.term()),
             Term::Aggregation(_aggregate) => true,
             Term::Function(sub) => sub.subterms.iter().any(Self::aggregate_subterm_recursive),
         }
@@ -263,16 +345,12 @@ impl Term {
     pub fn aggregate_subterm(&self) -> bool {
         match self {
             Term::Primitive(_primitive) => false,
-            Term::Addition(left, right)
-            | Term::Subtraction(left, right)
-            | Term::Multiplication(left, right)
-            | Term::Division(left, right)
-            | Term::Exponent(left, right) => {
+            Term::Binary(binary) => {
+                let (left, right) = binary.terms();
+
                 Self::aggregate_subterm_recursive(left) || Self::aggregate_subterm(right)
             }
-            Term::SquareRoot(sub) | Term::UnaryMinus(sub) | Term::Abs(sub) => {
-                Self::aggregate_subterm_recursive(sub)
-            }
+            Term::Unary(unary) => Self::aggregate_subterm_recursive(unary.term()),
             Term::Aggregation(_aggregate) => false, // We allow aggregation on the top level
             Term::Function(sub) => sub.subterms.iter().any(Self::aggregate_subterm_recursive),
         }
@@ -289,33 +367,13 @@ impl Term {
     fn ascii_tree(&self) -> ascii_tree::Tree {
         match self {
             Term::Primitive(primitive) => ascii_tree::Tree::Leaf(vec![format!("{:?}", primitive)]),
-            Term::Addition(left, right) => ascii_tree::Tree::Node(
-                "Addition".to_string(),
-                vec![left.ascii_tree(), right.ascii_tree()],
+            Term::Binary(binary) => ascii_tree::Tree::Node(
+                binary.name(),
+                vec![binary.left().ascii_tree(), binary.right().ascii_tree()],
             ),
-            Term::Subtraction(left, right) => ascii_tree::Tree::Node(
-                "Subtraction".to_string(),
-                vec![left.ascii_tree(), right.ascii_tree()],
-            ),
-            Term::Multiplication(left, right) => ascii_tree::Tree::Node(
-                "Multiplication".to_string(),
-                vec![left.ascii_tree(), right.ascii_tree()],
-            ),
-            Term::Division(left, right) => ascii_tree::Tree::Node(
-                "Division".to_string(),
-                vec![left.ascii_tree(), right.ascii_tree()],
-            ),
-            Term::Exponent(left, right) => ascii_tree::Tree::Node(
-                "Exponent".to_string(),
-                vec![left.ascii_tree(), right.ascii_tree()],
-            ),
-            Term::SquareRoot(sub) => {
-                ascii_tree::Tree::Node("Squareroot".to_string(), vec![sub.ascii_tree()])
+            Term::Unary(unary) => {
+                ascii_tree::Tree::Node(unary.name(), vec![unary.term().ascii_tree()])
             }
-            Term::UnaryMinus(sub) => {
-                ascii_tree::Tree::Node("Negation".to_string(), vec![sub.ascii_tree()])
-            }
-            Term::Abs(sub) => ascii_tree::Tree::Node("Abs".to_string(), vec![sub.ascii_tree()]),
             Term::Aggregation(aggregate) => {
                 ascii_tree::Tree::Leaf(vec![format!("{:?}", aggregate)])
             }
@@ -331,14 +389,14 @@ impl Term {
     fn priority(&self) -> usize {
         match self {
             Term::Primitive(_) => 0,
-            Term::Addition(_, _) => 1,
-            Term::Subtraction(_, _) => 1,
-            Term::Multiplication(_, _) => 2,
-            Term::Division(_, _) => 2,
-            Term::Exponent(_, _) => 3,
-            Term::SquareRoot(_) => 5,
-            Term::UnaryMinus(_) => 5,
-            Term::Abs(_) => 5,
+            Term::Binary(BinaryOperation::Addition(_, _)) => 1,
+            Term::Binary(BinaryOperation::Subtraction(_, _)) => 1,
+            Term::Binary(BinaryOperation::Multiplication(_, _)) => 2,
+            Term::Binary(BinaryOperation::Division(_, _)) => 2,
+            Term::Binary(BinaryOperation::Exponent(_, _)) => 3,
+            Term::Unary(UnaryOperation::SquareRoot(_)) => 5,
+            Term::Unary(UnaryOperation::UnaryMinus(_)) => 5,
+            Term::Unary(UnaryOperation::Abs(_)) => 5,
             Term::Aggregation(_) => 5,
             Term::Function(_) => 5,
         }
@@ -404,24 +462,32 @@ impl Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Term::Primitive(primitive) => write!(f, "{}", primitive),
-            Term::Addition(left, right) => self.format_binary_operation(f, left, right, " + "),
-            Term::Subtraction(left, right) => self.format_binary_operation(f, left, right, " - "),
-            Term::Multiplication(left, right) => {
+            Term::Binary(BinaryOperation::Addition(left, right)) => {
+                self.format_binary_operation(f, left, right, " + ")
+            }
+            Term::Binary(BinaryOperation::Subtraction(left, right)) => {
+                self.format_binary_operation(f, left, right, " - ")
+            }
+            Term::Binary(BinaryOperation::Multiplication(left, right)) => {
                 self.format_binary_operation(f, left, right, " * ")
             }
-            Term::Division(left, right) => self.format_binary_operation(f, left, right, " / "),
-            Term::Exponent(left, right) => self.format_binary_operation(f, left, right, " ^ "),
-            Term::SquareRoot(sub) => {
+            Term::Binary(BinaryOperation::Division(left, right)) => {
+                self.format_binary_operation(f, left, right, " / ")
+            }
+            Term::Binary(BinaryOperation::Exponent(left, right)) => {
+                self.format_binary_operation(f, left, right, " ^ ")
+            }
+            Term::Unary(UnaryOperation::SquareRoot(sub)) => {
                 f.write_str("sqrt(")?;
                 write!(f, "{}", sub)?;
                 f.write_str(")")
             }
-            Term::UnaryMinus(sub) => {
+            Term::Unary(UnaryOperation::UnaryMinus(sub)) => {
                 f.write_str("-")?;
 
                 self.format_braces_priority(f, sub)
             }
-            Term::Abs(sub) => {
+            Term::Unary(UnaryOperation::Abs(sub)) => {
                 f.write_str("|")?;
                 write!(f, "{}", sub)?;
                 f.write_str("|")

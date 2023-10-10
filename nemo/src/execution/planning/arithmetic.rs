@@ -10,7 +10,10 @@ use nemo_physical::{
 };
 
 use crate::{
-    model::{chase_model::Constructor, PrimitiveTerm, PrimitiveType, Term, Variable},
+    model::{
+        chase_model::Constructor, BinaryOperation, PrimitiveTerm, PrimitiveType, Term,
+        UnaryOperation, Variable,
+    },
     program_analysis::variable_order::VariableOrder,
 };
 
@@ -32,47 +35,47 @@ pub(super) fn termtree_to_arithmetictree(
                     .expect("Type checker should have caught any errors at this point."),
             ),
         },
-        Term::Addition(left, right) => {
+        Term::Binary(BinaryOperation::Addition(left, right)) => {
             let left_tree = termtree_to_arithmetictree(left, order, logical_type);
             let right_tree = termtree_to_arithmetictree(right, order, logical_type);
 
             ArithmeticTree::Addition(vec![left_tree, right_tree])
         }
-        Term::Subtraction(left, right) => {
+        Term::Binary(BinaryOperation::Subtraction(left, right)) => {
             let left_tree = termtree_to_arithmetictree(left, order, logical_type);
             let right_tree = termtree_to_arithmetictree(right, order, logical_type);
 
             ArithmeticTree::Subtraction(Box::new(left_tree), Box::new(right_tree))
         }
-        Term::Multiplication(left, right) => {
+        Term::Binary(BinaryOperation::Multiplication(left, right)) => {
             let left_tree = termtree_to_arithmetictree(left, order, logical_type);
             let right_tree = termtree_to_arithmetictree(right, order, logical_type);
 
             ArithmeticTree::Multiplication(vec![left_tree, right_tree])
         }
-        Term::Division(left, right) => {
+        Term::Binary(BinaryOperation::Division(left, right)) => {
             let left_tree = termtree_to_arithmetictree(left, order, logical_type);
             let right_tree = termtree_to_arithmetictree(right, order, logical_type);
 
             ArithmeticTree::Division(Box::new(left_tree), Box::new(right_tree))
         }
-        Term::Exponent(left, right) => {
+        Term::Binary(BinaryOperation::Exponent(left, right)) => {
             let left_tree = termtree_to_arithmetictree(left, order, logical_type);
             let right_tree = termtree_to_arithmetictree(right, order, logical_type);
 
             ArithmeticTree::Exponent(Box::new(left_tree), Box::new(right_tree))
         }
-        Term::SquareRoot(sub) => {
+        Term::Unary(UnaryOperation::SquareRoot(sub)) => {
             let sub_tree = termtree_to_arithmetictree(sub, order, logical_type);
 
             ArithmeticTree::SquareRoot(Box::new(sub_tree))
         }
-        Term::UnaryMinus(sub) => {
+        Term::Unary(UnaryOperation::UnaryMinus(sub)) => {
             let sub_tree = termtree_to_arithmetictree(sub, order, logical_type);
 
             ArithmeticTree::Negation(Box::new(sub_tree))
         }
-        Term::Abs(sub) => {
+        Term::Unary(UnaryOperation::Abs(sub)) => {
             let sub_tree = termtree_to_arithmetictree(sub, order, logical_type);
 
             ArithmeticTree::Abs(Box::new(sub_tree))

@@ -10,8 +10,7 @@ use crate::{
             ChaseAtom, Constraint, PrimitiveAtom, VariableAtom, AGGREGATE_VARIABLE_PREFIX,
         },
         types::error::TypeError,
-        Condition, DataSource, Identifier, PrimitiveTerm, PrimitiveType, Term, TypeConstraint,
-        Variable,
+        DataSource, Identifier, PrimitiveTerm, PrimitiveType, Term, TypeConstraint, Variable,
     },
     util::labeled_graph::LabeledGraph,
 };
@@ -155,10 +154,8 @@ fn construct_existential_aux_rule(
                 PrimitiveTerm::Constant(_) => {
                     let generated_variable =
                         Term::Primitive(PrimitiveTerm::Variable(generate_variable()));
-                    let new_constraint = Constraint::new(Condition::Equals(
-                        generated_variable,
-                        Term::Primitive(term.clone()),
-                    ));
+                    let new_constraint =
+                        Constraint::Equals(generated_variable, Term::Primitive(term.clone()));
 
                     constraints.push(new_constraint);
                 }
