@@ -85,7 +85,10 @@ impl Rule {
             }
         }
 
-        // Each complex term in the body and head must only use derived or safe variables
+        // Each complex term in the body and head must only use safe variables
+        // TODO: Allow the use of derived variables.
+        //       To implement this, the planner has to apply the filters
+        //       after the appends and not right after the join
         for term in body
             .iter()
             .flat_map(|l| l.terms())
@@ -96,7 +99,7 @@ impl Rule {
             }
 
             for variable in term.variables() {
-                if !safe_variables.contains(variable) && !derived_variables.contains(variable) {
+                if !safe_variables.contains(variable) {
                     return Err(ParseError::UnsafeComplexTerm(
                         term.to_string(),
                         variable.name(),
