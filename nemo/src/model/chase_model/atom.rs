@@ -137,6 +137,19 @@ impl VariableAtom {
     }
 }
 
+impl From<VariableAtom> for PrimitiveAtom {
+    fn from(atom: VariableAtom) -> Self {
+        Self {
+            predicate: atom.predicate,
+            terms: atom
+                .variables
+                .into_iter()
+                .map(PrimitiveTerm::Variable)
+                .collect(),
+        }
+    }
+}
+
 impl ChaseAtom for VariableAtom {
     type TypeTerm = Variable;
 

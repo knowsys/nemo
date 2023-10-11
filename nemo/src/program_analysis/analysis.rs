@@ -660,6 +660,92 @@ impl ChaseProgram {
                 })
                 .collect::<HashMap<_, _>>();
 
+            let mut fact_and_constant_term_decls: HashMap<Identifier, Vec<Option<PrimitiveType>>> =
+                HashMap::new();
+            for fact in self.facts() {
+                let new_types: Vec<Option<PrimitiveType>> = fact
+                    .terms()
+                    .iter()
+                    .map(|c| c.primitive_type())
+                    .map(Some)
+                    .collect();
+
+                fact_and_constant_term_decls
+                    .entry(fact.predicate())
+                    .and_modify(|types| {
+                        *types = types
+                            .iter()
+                            .zip(new_types.iter())
+                            .map(|(a, b)| {
+                                a.as_ref()
+                                    .map(|a| b.as_ref().map(|b| a.max_type(b)).unwrap_or(*a))
+                                    .or(*b)
+                            })
+                            .collect();
+                    })
+                    .or_insert(new_types);
+            }
+
+            for chase_rule in self.rules() {
+                let constructors = chase_rule.constructors();
+                let constraints = chase_rule.all_constraints().collect::<Vec<_>>();
+
+                for chase_atom in chase_rule
+                    .all_body()
+                    .cloned()
+                    .map(Into::into)
+                    .chain(chase_rule.head().iter().cloned())
+                {
+                    let new_types: Vec<Option<PrimitiveType>> = chase_atom
+                        .terms()
+                        .iter()
+                        .map(|t| match t {
+                            // TODO: should we respect other things here?
+                            // variables nested in terms in constraints in particular?
+                            PrimitiveTerm::Variable(v) => constructors
+                                .iter()
+                                .filter_map(|c| (c.variable() == v).then_some(c.term()))
+                                .chain(constraints.iter().filter_map(|c| {
+                                    match c.left() {
+                                        Term::Primitive(PrimitiveTerm::Variable(var)) => (*t
+                                            == PrimitiveTerm::Variable(var.clone()))
+                                        .then_some(c.right()),
+                                        _ => match c.right() {
+                                            Term::Primitive(PrimitiveTerm::Variable(var)) => (*t
+                                                == PrimitiveTerm::Variable(var.clone()))
+                                            .then_some(c.left()),
+                                            _ => None,
+                                        },
+                                    }
+                                }))
+                                .fold(None, |acc, t| {
+                                    let b = t.primitive_type();
+                                    acc.map(|a: PrimitiveType| {
+                                        b.map(|b| a.max_type(&b)).unwrap_or(a)
+                                    })
+                                    .or(b)
+                                }),
+                            _ => t.primitive_type(),
+                        })
+                        .collect();
+
+                    fact_and_constant_term_decls
+                        .entry(chase_atom.predicate())
+                        .and_modify(|types| {
+                            *types = types
+                                .iter()
+                                .zip(new_types.iter())
+                                .map(|(a, b)| {
+                                    a.as_ref()
+                                        .map(|a| b.as_ref().map(|b| a.max_type(b)).unwrap_or(*a))
+                                        .or(*b)
+                                })
+                                .collect();
+                        })
+                        .or_insert(new_types);
+                }
+            }
+
             let source_decls: HashMap<Identifier, Vec<TypeRequirement>> = self
                 .sources()
                 .map(|source| {
@@ -729,6 +815,43 @@ impl ChaseProgram {
                 .collect::<HashMap<_, _>>();
 
             let mut predicate_types = source_decls;
+            for (pred, fact_types) in fact_and_constant_term_decls {
+                // keep track of error that might occur on conflicting type changes
+                let mut types_not_in_conflict: Result<_, _> = Ok(());
+
+                let pred_clone = pred.clone();
+
+                predicate_types
+                    .entry(pred)
+                    .and_modify(|ts| {
+                        ts.iter_mut()
+                            .zip(&fact_types)
+                            .enumerate()
+                            .for_each(|(index, (tr, ft))| match tr.stricter_requirement(ft.map(TypeRequirement::Soft).unwrap_or(TypeRequirement::None)) {
+                                Some(res) => {
+                                    *tr = res;
+                                }
+                                None => {
+                                    if let TypeRequirement::Soft(t) = tr {
+                                        *tr = ft.map(|ft| TypeRequirement::Soft(t.max_type(&ft))).unwrap_or(*tr)
+                                    } else {
+                                        types_not_in_conflict = Err(TypeError::InvalidRuleConflictingTypes(
+                                            pred_clone.0.clone(),
+                                            index,
+                                            Option::<PrimitiveType>::from(*tr).expect(
+                                                "if the type requirement is none, there is a maximum",
+                                            ),
+                                            ft.expect("if the type requirement is none, there is a maximum"),
+                                        ));
+                                    }
+                                }
+                            })
+                    })
+                    .or_insert(fact_types.into_iter().map(|ft| ft.map(TypeRequirement::Soft).unwrap_or(TypeRequirement::None)).collect());
+
+                // abort if there is a type error
+                types_not_in_conflict?
+            }
             predicate_types.extend(pred_decls);
             for (pred, exis_types) in existential_decls.into_iter().chain(aggregate_decls) {
                 // keep track of error that might occur on conflicting type changes
@@ -775,12 +898,12 @@ impl ChaseProgram {
 
         let initial_types = predicate_types.clone();
 
-        for (predicate, types) in initial_types {
-            for (position, logical_type_requirement) in types.into_iter().enumerate() {
+        // Propagate each type from its declaration
+        for (predicate, types) in &initial_types {
+            for (position, logical_type_requirement) in types.iter().enumerate() {
                 let predicate_position = PredicatePosition::new(predicate.clone(), position);
 
                 if let Some(start_node) = position_graph.get_node(&predicate_position) {
-                    // Propagate each type from its declaration
                     let edge_filtered_graph = EdgeFiltered::from_fn(position_graph.graph(), |e| {
                         *e.weight() == PositionGraphEdge::BodyToHeadSameVariable
                             || *e.weight()
@@ -801,7 +924,7 @@ impl ChaseProgram {
                             [next_position.position];
 
                         if let Some(replacement) = current_type_requirement
-                            .replacement_type_if_compatible(logical_type_requirement)
+                            .replacement_type_if_compatible(*logical_type_requirement)
                         {
                             *current_type_requirement = replacement;
                         } else {
@@ -810,13 +933,21 @@ impl ChaseProgram {
                                 next_position.position + 1,
                                 Option::<PrimitiveType>::from(*current_type_requirement)
                                     .expect("if the type requirement is none, there is a maximum"),
-                                Option::<PrimitiveType>::from(logical_type_requirement)
+                                Option::<PrimitiveType>::from(*logical_type_requirement)
                                     .expect("if the type requirement is none, there is a maximum"),
                             ));
                         }
                     }
+                }
+            }
+        }
 
-                    // Check compatibility of body types without overwriting
+        // Check compatibility of body types without overwriting
+        for (predicate, types) in &predicate_types {
+            for (position, logical_type_requirement) in types.iter().enumerate() {
+                let predicate_position = PredicatePosition::new(predicate.clone(), position);
+
+                if let Some(start_node) = position_graph.get_node(&predicate_position) {
                     let edge_filtered_graph = EdgeFiltered::from_fn(position_graph.graph(), |e| {
                         *e.weight() == PositionGraphEdge::WithinBody
                     });
@@ -829,12 +960,13 @@ impl ChaseProgram {
                             .node_weight(next_node)
                             .expect("The DFS iterator guarantees that every node exists.");
 
-                        let current_type_requirement = &mut predicate_types
-                            .get_mut(&next_position.predicate)
+                        let current_type_requirement = &predicate_types
+                            .get(&next_position.predicate)
                             .expect("The initialization step inserted every known predicate")
                             [next_position.position];
 
-                        if !current_type_requirement.allowed_to_merge_with(logical_type_requirement)
+                        if !current_type_requirement
+                            .allowed_to_merge_with(*logical_type_requirement)
                         {
                             // TODO: maybe just throw a warning here? (comparison of incompatible
                             // types can be done but will trivially result in inequality)
@@ -843,7 +975,7 @@ impl ChaseProgram {
                                 next_position.position + 1,
                                 Option::<PrimitiveType>::from(*current_type_requirement)
                                     .expect("if the type requirement is none, merging is allowed"),
-                                Option::<PrimitiveType>::from(logical_type_requirement)
+                                Option::<PrimitiveType>::from(*logical_type_requirement)
                                     .expect("if the type requirement is none, merging is allowed"),
                             ));
                         }
@@ -853,6 +985,11 @@ impl ChaseProgram {
         }
 
         // All the types that are not set will be mapped to a default type
+        // NOTE: the propagation and checks above should be enough to
+        // ensure that the unset types are never populated with any values
+        // Otherwise, since the default type is not necessarily compartible with all other types,
+        // this can lead to runtime errors
+        // TODO: Constraints are not fully covered in inference and checks at the moment
         let result = predicate_types
             .into_iter()
             .map(|(predicate, types)| {
@@ -1080,27 +1217,61 @@ mod test {
     use crate::{
         io::parser::parse_program,
         model::{
-            chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom},
-            DataSourceDeclaration, DsvFile, Identifier, NativeDataSource, PrimitiveTerm,
-            PrimitiveType, TupleConstraint, Variable,
+            chase_model::{
+                ChaseFact, ChaseProgram, ChaseRule, Constructor, PrimitiveAtom, VariableAtom,
+            },
+            Constant, Constraint, DataSourceDeclaration, DsvFile, Identifier, NativeDataSource,
+            NumericLiteral, PrimitiveTerm, PrimitiveType, Term, TupleConstraint, Variable,
         },
         program_analysis::analysis::{get_fresh_rule_predicate, RuleAnalysisError},
     };
 
-    fn get_test_rules_and_predicates() -> (
-        (ChaseRule, ChaseRule),
-        (Identifier, Identifier, Identifier, Identifier),
-    ) {
+    type TestData = (
+        (ChaseRule, ChaseRule, ChaseRule),
+        (ChaseFact, ChaseFact, ChaseFact),
+        (
+            Identifier,
+            Identifier,
+            Identifier,
+            Identifier,
+            Identifier,
+            Identifier,
+            Identifier,
+        ),
+    );
+
+    fn get_test_rules_and_facts_and_predicates() -> TestData {
         let a = Identifier("a".to_string());
         let b = Identifier("b".to_string());
         let c = Identifier("c".to_string());
         let r = Identifier("r".to_string());
+        let s = Identifier("s".to_string());
+        let t = Identifier("t".to_string());
+        let q = Identifier("q".to_string());
 
         let x = Variable::Universal(Identifier("x".to_string()));
+        let headop = Variable::Universal(Identifier("headop".to_string()));
         let z = Variable::Existential(Identifier("z".to_string()));
 
         let tx = PrimitiveTerm::Variable(x.clone());
+        let theadop = PrimitiveTerm::Variable(headop.clone());
         let tz = PrimitiveTerm::Variable(z);
+
+        let v42 = Variable::Universal(Identifier("PLACEHOLDER_42".to_string()));
+        let c42 = Constant::NumericLiteral(NumericLiteral::Integer(42));
+        let t42 = PrimitiveTerm::Constant(c42.clone());
+        let tt42 = Term::Primitive(t42.clone());
+
+        let c3 = Constant::NumericLiteral(NumericLiteral::Integer(3));
+
+        let v7 = Variable::Universal(Identifier("PLACEHOLDER_7".to_string()));
+        let c7 = Constant::NumericLiteral(NumericLiteral::Integer(7));
+        let t7 = PrimitiveTerm::Constant(c7.clone());
+        let tt7 = Term::Primitive(t7.clone());
+
+        let tt55 = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
+            NumericLiteral::Integer(55),
+        )));
 
         // A(x) :- B(x), C(x).
         let basic_rule = ChaseRule::new(
@@ -1121,25 +1292,54 @@ mod test {
             vec![PrimitiveAtom::new(r.clone(), vec![tx.clone(), tz])],
             vec![],
             vec![],
-            vec![VariableAtom::new(a.clone(), vec![x])],
+            vec![VariableAtom::new(a.clone(), vec![x.clone()])],
             vec![],
             vec![],
             vec![],
         );
 
-        ((basic_rule, exis_rule), (a, b, c, r))
+        // S(x, 55) :- T(42, x), Q(7).
+        let rule_with_constant = ChaseRule::new(
+            vec![PrimitiveAtom::new(s.clone(), vec![tx.clone(), theadop])],
+            vec![Constructor::new(headop, tt55)],
+            vec![],
+            vec![
+                VariableAtom::new(t.clone(), vec![v42.clone(), x]),
+                VariableAtom::new(q.clone(), vec![v7.clone()]),
+            ],
+            vec![
+                Constraint::Equals(Term::Primitive(PrimitiveTerm::Variable(v42)), tt42),
+                Constraint::Equals(Term::Primitive(PrimitiveTerm::Variable(v7)), tt7),
+            ],
+            vec![],
+            vec![],
+        );
+
+        let fact1 = ChaseFact::new(t.clone(), vec![c42.clone(), c3.clone()]);
+        let fact2 = ChaseFact::new(t.clone(), vec![c3, c7.clone()]);
+        let fact3 = ChaseFact::new(t.clone(), vec![c7, c42]);
+
+        (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, r, s, t, q),
+        )
     }
 
     #[test]
     fn infer_types_no_decl() {
-        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, r, s, t, q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let no_decl = ChaseProgram::new(
             None,
             Default::default(),
             Default::default(),
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             Default::default(),
             Default::default(),
         );
@@ -1149,6 +1349,9 @@ mod test {
             (b, vec![PrimitiveType::Any]),
             (c, vec![PrimitiveType::Any]),
             (r, vec![PrimitiveType::Any, PrimitiveType::Any]),
+            (s, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (t, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (q, vec![PrimitiveType::Integer]),
             (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
@@ -1165,14 +1368,18 @@ mod test {
 
     #[test]
     fn infer_types_a_string_decl() {
-        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, r, s, t, q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let a_string_decl = ChaseProgram::new(
             None,
             Default::default(),
             Default::default(),
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             [(a.clone(), vec![PrimitiveType::String])]
                 .into_iter()
                 .collect(),
@@ -1184,6 +1391,9 @@ mod test {
             (b, vec![PrimitiveType::Any]),
             (c, vec![PrimitiveType::Any]),
             (r, vec![PrimitiveType::String, PrimitiveType::Any]),
+            (s, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (t, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (q, vec![PrimitiveType::Integer]),
             (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
@@ -1200,14 +1410,18 @@ mod test {
 
     #[test]
     fn infer_types_a_int_decl() {
-        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, r, s, t, q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let a_int_decl = ChaseProgram::new(
             None,
             Default::default(),
             Default::default(),
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             [(a.clone(), vec![PrimitiveType::Integer])]
                 .into_iter()
                 .collect(),
@@ -1219,6 +1433,9 @@ mod test {
             (b, vec![PrimitiveType::Any]),
             (c, vec![PrimitiveType::Any]),
             (r, vec![PrimitiveType::Integer, PrimitiveType::Any]),
+            (s, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (t, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (q, vec![PrimitiveType::Integer]),
             (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
@@ -1235,14 +1452,18 @@ mod test {
 
     #[test]
     fn infer_types_b_string_decl() {
-        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, r, s, t, q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let b_string_decl = ChaseProgram::new(
             None,
             Default::default(),
             Default::default(),
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             [(b.clone(), vec![PrimitiveType::String])]
                 .into_iter()
                 .collect(),
@@ -1254,6 +1475,9 @@ mod test {
             (b, vec![PrimitiveType::String]),
             (c, vec![PrimitiveType::Any]),
             (r, vec![PrimitiveType::String, PrimitiveType::Any]),
+            (s, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (t, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (q, vec![PrimitiveType::Integer]),
             (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
@@ -1270,14 +1494,18 @@ mod test {
 
     #[test]
     fn infer_types_b_int_decl() {
-        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, r, s, t, q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let b_integer_decl = ChaseProgram::new(
             None,
             Default::default(),
             Default::default(),
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             [(b.clone(), vec![PrimitiveType::Integer])]
                 .into_iter()
                 .collect(),
@@ -1289,6 +1517,9 @@ mod test {
             (b, vec![PrimitiveType::Integer]),
             (c, vec![PrimitiveType::Any]),
             (r, vec![PrimitiveType::Integer, PrimitiveType::Any]),
+            (s, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (t, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (q, vec![PrimitiveType::Integer]),
             (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
@@ -1305,7 +1536,11 @@ mod test {
 
     #[test]
     fn infer_types_b_source_decl() {
-        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, r, s, t, q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let b_source_decl = ChaseProgram::new(
             None,
@@ -1314,8 +1549,8 @@ mod test {
                 b.clone(),
                 NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
             )],
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             Default::default(),
             Default::default(),
         );
@@ -1325,6 +1560,9 @@ mod test {
             (b, vec![PrimitiveType::String]),
             (c, vec![PrimitiveType::Any]),
             (r, vec![PrimitiveType::String, PrimitiveType::Any]),
+            (s, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (t, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (q, vec![PrimitiveType::Integer]),
             (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
@@ -1341,7 +1579,11 @@ mod test {
 
     #[test]
     fn infer_types_c_explicit_decl_overrides_source_type() {
-        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, r, s, t, q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let c_explicit_decl_overrides_source_type = ChaseProgram::new(
             None,
@@ -1350,8 +1592,8 @@ mod test {
                 c.clone(),
                 NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
             )],
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             [(c.clone(), vec![PrimitiveType::Integer])]
                 .into_iter()
                 .collect(),
@@ -1363,6 +1605,9 @@ mod test {
             (b, vec![PrimitiveType::Any]),
             (c, vec![PrimitiveType::Integer]),
             (r, vec![PrimitiveType::Integer, PrimitiveType::Any]),
+            (s, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (t, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (q, vec![PrimitiveType::Integer]),
             (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
@@ -1379,7 +1624,11 @@ mod test {
 
     #[test]
     fn infer_types_a_and_c_conflict_with_implicit_source_decl() {
-        let ((basic_rule, exis_rule), (a, _b, c, _r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, _b, c, _r, _s, _t, _q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let a_and_c_conflict_with_implicit_source_decl = ChaseProgram::new(
             None,
@@ -1388,8 +1637,8 @@ mod test {
                 c,
                 NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
             )],
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             [(a, vec![PrimitiveType::Integer])].into_iter().collect(),
             Default::default(),
         );
@@ -1404,7 +1653,11 @@ mod test {
     #[test]
     fn infer_types_a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around(
     ) {
-        let ((basic_rule, exis_rule), (a, _b, c, _r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, _b, c, _r, _s, _t, _q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around =
             ChaseProgram::new(
@@ -1417,8 +1670,8 @@ mod test {
                         [PrimitiveType::Any].into_iter().collect(),
                     )),
                 )],
-                vec![basic_rule, exis_rule],
-                Default::default(),
+                vec![basic_rule, exis_rule, rule_with_constant],
+                vec![fact1, fact2, fact3],
                 [(a, vec![PrimitiveType::String])].into_iter().collect(),
                 Default::default(),
             );
@@ -1436,7 +1689,11 @@ mod test {
 
     #[test]
     fn infer_types_a_and_b_source_decl_resolvable_conflict() {
-        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, r, s, t, q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let a_and_b_source_decl_resolvable_conflict = ChaseProgram::new(
             None,
@@ -1445,8 +1702,8 @@ mod test {
                 b.clone(),
                 NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
             )],
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             [(a.clone(), vec![PrimitiveType::Any])]
                 .into_iter()
                 .collect(),
@@ -1458,6 +1715,9 @@ mod test {
             (b, vec![PrimitiveType::String]),
             (c, vec![PrimitiveType::Any]),
             (r, vec![PrimitiveType::Any, PrimitiveType::Any]),
+            (s, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (t, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (q, vec![PrimitiveType::Integer]),
             (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
@@ -1474,7 +1734,11 @@ mod test {
 
     #[test]
     fn infer_types_r_source_decl_resolvable_conflict_with_exis() {
-        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, r, s, t, q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let r_source_decl_resolvable_conflict_with_exis = ChaseProgram::new(
             None,
@@ -1483,8 +1747,8 @@ mod test {
                 r.clone(),
                 NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(2))),
             )],
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             Default::default(),
             Default::default(),
         );
@@ -1494,6 +1758,9 @@ mod test {
             (b, vec![PrimitiveType::Any]),
             (c, vec![PrimitiveType::Any]),
             (r, vec![PrimitiveType::String, PrimitiveType::Any]),
+            (s, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (t, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (q, vec![PrimitiveType::Integer]),
             (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()
@@ -1510,14 +1777,18 @@ mod test {
 
     #[test]
     fn infer_types_b_and_c_conflict_decl() {
-        let ((basic_rule, exis_rule), (_a, b, c, _r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (_a, b, c, _r, _s, _t, _q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let b_and_c_conflict_decl = ChaseProgram::new(
             None,
             Default::default(),
             Default::default(),
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             [
                 (b, vec![PrimitiveType::Integer]),
                 (c, vec![PrimitiveType::String]),
@@ -1536,14 +1807,18 @@ mod test {
 
     #[test]
     fn infer_types_b_anc_c_conflict_decl_resolvable() {
-        let ((basic_rule, exis_rule), (a, b, c, r)) = get_test_rules_and_predicates();
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, r, s, t, q),
+        ) = get_test_rules_and_facts_and_predicates();
 
         let b_and_c_conflict_decl_resolvable = ChaseProgram::new(
             None,
             Default::default(),
             Default::default(),
-            vec![basic_rule, exis_rule],
-            Default::default(),
+            vec![basic_rule, exis_rule, rule_with_constant],
+            vec![fact1, fact2, fact3],
             [
                 (b.clone(), vec![PrimitiveType::Any]),
                 (c.clone(), vec![PrimitiveType::String]),
@@ -1558,6 +1833,9 @@ mod test {
             (b, vec![PrimitiveType::Any]),
             (c, vec![PrimitiveType::String]),
             (r, vec![PrimitiveType::Any, PrimitiveType::Any]),
+            (s, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (t, vec![PrimitiveType::Integer, PrimitiveType::Integer]),
+            (q, vec![PrimitiveType::Integer]),
             (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
         ]
         .into_iter()

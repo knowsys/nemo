@@ -68,6 +68,18 @@ pub enum Constant {
     RdfLiteral(RdfLiteral),
 }
 
+impl Constant {
+    /// Get primitive type that fits the constant
+    pub fn primitive_type(&self) -> PrimitiveType {
+        match self {
+            Self::Abstract(_) => PrimitiveType::Any,
+            Self::RdfLiteral(_) => PrimitiveType::Any,
+            Self::StringLiteral(_) => PrimitiveType::String,
+            Self::NumericLiteral(nl) => nl.primitive_type(),
+        }
+    }
+}
+
 impl Display for Constant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -108,6 +120,13 @@ impl From<Constant> for PrimitiveTerm {
 }
 
 impl PrimitiveTerm {
+    /// Get primitive type that fits the primitive term; return None for variables
+    pub fn primitive_type(&self) -> Option<PrimitiveType> {
+        match self {
+            Self::Constant(c) => Some(c.primitive_type()),
+            Self::Variable(_) => None,
+        }
+    }
     /// Return `true` if term is not a variable.
     pub fn is_ground(&self) -> bool {
         !matches!(self, PrimitiveTerm::Variable(_))
@@ -132,6 +151,18 @@ pub struct AbstractFunction {
     pub subterms: Vec<Term>,
 }
 
+impl AbstractFunction {
+    /// Get primitive type that fits the terms within the function
+    pub fn primitive_type(&self) -> Option<PrimitiveType> {
+        self.subterms
+            .iter()
+            .map(|t| t.primitive_type())
+            .fold(None, |acc, opt| {
+                acc.and_then(|a| opt.map(|b| a.max_type(&b)))
+            })
+    }
+}
+
 /// Binary operation between two [`Term`]
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum BinaryOperation {
@@ -148,6 +179,13 @@ pub enum BinaryOperation {
 }
 
 impl BinaryOperation {
+    /// Get primitive type that fits the term within the operation
+    pub fn primitive_type(&self) -> Option<PrimitiveType> {
+        let (a, b) = self.terms();
+        a.primitive_type()
+            .and_then(|a| b.primitive_type().map(|b| a.max_type(&b)))
+    }
+
     /// Returns the left and the right [`Term`] of this binary operation.
     pub fn terms(&self) -> (&Term, &Term) {
         match self {
@@ -206,6 +244,11 @@ pub enum UnaryOperation {
 }
 
 impl UnaryOperation {
+    /// Get primitive type that fits the term within the operation
+    pub fn primitive_type(&self) -> Option<PrimitiveType> {
+        self.term().primitive_type()
+    }
+
     /// Return a function which is able to construct the respective term based on the function name.
     /// Returns `None` if the provided function name does not correspond to a know unary function.
     pub fn construct_from_name(name: &str) -> Option<Box<dyn Fn(Term) -> Term>> {
@@ -264,6 +307,17 @@ pub enum Term {
 }
 
 impl Term {
+    /// Get primitive type that fits the term
+    pub fn primitive_type(&self) -> Option<PrimitiveType> {
+        match self {
+            Self::Primitive(pt) => pt.primitive_type(),
+            Self::Unary(un) => un.primitive_type(),
+            Self::Binary(bin) => bin.primitive_type(),
+            Self::Aggregation(agg) => agg.primitive_type(),
+            Self::Function(func) => func.primitive_type(),
+        }
+    }
+
     /// If the term is a simple [`PrimitiveTerm`] then return it.
     /// Otherwise return `None`.
     pub fn as_primitive(&self) -> Option<PrimitiveTerm> {

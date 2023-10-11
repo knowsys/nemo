@@ -65,6 +65,16 @@ pub struct Aggregate {
 }
 
 impl Aggregate {
+    /// Get primitive type that fits the terms within the aggregate
+    pub fn primitive_type(&self) -> Option<PrimitiveType> {
+        self.terms
+            .iter()
+            .map(|t| t.primitive_type())
+            .fold(None, |acc, opt| {
+                acc.and_then(|a| opt.map(|b| a.max_type(&b)))
+            })
+    }
+
     /// Replaces [`super::Variable`]s with [`Term`]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         for term in &mut self.terms {
