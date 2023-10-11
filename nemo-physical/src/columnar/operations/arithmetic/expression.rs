@@ -60,7 +60,7 @@ impl<T> ArithmeticTree<T> {
     }
 
     /// Defines the relative priority between operations
-    fn priority(&self) -> usize {
+    fn precedence(&self) -> usize {
         match self {
             ArithmeticTree::Constant(_) => 0,
             ArithmeticTree::Reference(_) => 0,
@@ -324,7 +324,7 @@ where
         f: &mut std::fmt::Formatter<'_>,
         subtree: &ArithmeticTree<T>,
     ) -> std::fmt::Result {
-        let need_braces = self.priority() > subtree.priority() && !subtree.is_leaf();
+        let need_braces = self.precedence() > subtree.precedence() && !subtree.is_leaf();
 
         if need_braces {
             self.format_braces(f, subtree)
@@ -408,7 +408,7 @@ where
             ArithmeticTree::Negation(sub) => {
                 f.write_str("-")?;
 
-                let need_braces = self.priority() > sub.priority() && !sub.is_leaf();
+                let need_braces = self.precedence() > sub.precedence() && !sub.is_leaf();
                 if need_braces {
                     f.write_str("(")?;
                 }

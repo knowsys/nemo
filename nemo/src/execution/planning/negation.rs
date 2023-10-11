@@ -9,7 +9,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    execution::planning::plan_util::{compute_conditions, subplan_union_reordered},
+    execution::planning::plan_util::{compute_constraints, subplan_union_reordered},
     model::{
         chase_model::{ChaseAtom, VariableAtom},
         Constraint, PrimitiveType, Variable,
@@ -110,13 +110,13 @@ impl NegationGenerator {
                     info.reorder,
                 );
 
-                let conditions = compute_conditions(
+                let constraints = compute_constraints(
                     &info.restricted_variable_order,
                     &self.constraints,
                     &self.variable_types,
                 );
 
-                let node_filtered = plan.plan_mut().filter_values(node_union, conditions);
+                let node_filtered = plan.plan_mut().filter_values(node_union, constraints);
 
                 let node_result = if info.projection.is_identity() {
                     node_filtered

@@ -47,7 +47,7 @@ pub(super) fn atom_binding(atom: &VariableAtom, variable_order: &VariableOrder) 
 }
 
 /// Calculate helper structures that define the filters that need to be applied.
-pub(super) fn compute_conditions(
+pub(super) fn compute_constraints(
     variable_order: &VariableOrder,
     constraints: &[Constraint],
     variable_types: &HashMap<Variable, PrimitiveType>,

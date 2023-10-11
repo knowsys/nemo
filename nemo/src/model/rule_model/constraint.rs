@@ -59,7 +59,7 @@ impl Constraint {
         self.left().variables().chain(self.right().variables())
     }
 
-    /// Return whether this type of condition only works on numeric values
+    /// Return whether this type of constraints only works on numeric values
     pub fn is_numeric(&self) -> bool {
         !(matches!(self, Constraint::Equals(_, _)) || matches!(self, Constraint::Unequals(_, _)))
     }
@@ -80,7 +80,7 @@ impl Constraint {
     pub fn has_form_assignment(&self) -> Option<(&Variable, &Term)> {
         if let Constraint::Equals(Term::Primitive(PrimitiveTerm::Variable(variable)), term) = self {
             Some((variable, term))
-        } else if let Constraint::Equals(Term::Primitive(PrimitiveTerm::Variable(variable)), term) =
+        } else if let Constraint::Equals(term, Term::Primitive(PrimitiveTerm::Variable(variable))) =
             self
         {
             Some((variable, term))
@@ -91,7 +91,7 @@ impl Constraint {
 }
 
 impl Constraint {
-    /// Returns a string representation for the operation defined by this condition.
+    /// Returns a string representation for the operation defined by this constraint.
     fn operator_string(&self) -> &'static str {
         match self {
             Constraint::Equals(_, _) => "=",

@@ -16,7 +16,7 @@ use crate::{
     table_manager::TableManager,
 };
 
-use super::plan_util::{atom_binding, compute_conditions, subplan_union};
+use super::plan_util::{atom_binding, compute_constraints, subplan_union};
 
 /// Generator for creating excution plans for seminaive joins of a fixed set of [`ChaseAtom`]s and [`Constraint`]s.
 #[derive(Debug)]
@@ -125,9 +125,9 @@ impl SeminaiveJoinGenerator {
         }
 
         // Apply filters
-        let conditions =
-            compute_conditions(variable_order, &self.constraints, &self.variable_types);
+        let constraints =
+            compute_constraints(variable_order, &self.constraints, &self.variable_types);
 
-        plan.filter_values(seminaive_union, conditions)
+        plan.filter_values(seminaive_union, constraints)
     }
 }

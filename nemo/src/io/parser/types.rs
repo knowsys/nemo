@@ -7,7 +7,10 @@ use nom::{
 use nom_locate::LocatedSpan;
 use thiserror::Error;
 
-use crate::model::{rule_model::Aggregate, PrimitiveType};
+use crate::model::{
+    rule_model::{Aggregate, Constraint, Literal, Term},
+    PrimitiveType,
+};
 
 /// A [`LocatedSpan`] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
@@ -59,6 +62,56 @@ fn format_parse_error_context(context: &[LocatedParseError]) -> String {
     }
 }
 
+/// Body may contain literals or filter expressions
+#[derive(Debug, Clone)]
+pub enum BodyExpression {
+    /// Literal
+    Literal(Literal),
+    /// Constraint
+    Constraint(Constraint),
+}
+
+/// Different operators allows in a constraint.
+/// Has one entry for every variant in [`Constraint`].
+#[derive(Debug, Clone, Copy)]
+pub enum ConstraintOperator {
+    /// Two terms are equal.
+    Equals,
+    /// Two terms are unequal.
+    Unequals,
+    /// Value of the left term is less than the value of the right term.
+    LessThan,
+    /// Value of the left term is greater than the value of the right term.
+    GreaterThan,
+    /// Value of the left term is less than or equal to the value of the right term.
+    LessThanEq,
+    /// Value of the left term is greater than or equal to the value of the right term.
+    GreaterThanEq,
+}
+
+impl ConstraintOperator {
+    /// Turn operator into [`Constraint`].
+    pub fn into_constraint(self, left: Term, right: Term) -> Constraint {
+        match self {
+            ConstraintOperator::Equals => Constraint::Equals(left, right),
+            ConstraintOperator::Unequals => Constraint::Unequals(left, right),
+            ConstraintOperator::LessThan => Constraint::LessThan(left, right),
+            ConstraintOperator::GreaterThan => Constraint::GreaterThan(left, right),
+            ConstraintOperator::LessThanEq => Constraint::LessThanEq(left, right),
+            ConstraintOperator::GreaterThanEq => Constraint::GreaterThanEq(left, right),
+        }
+    }
+}
+
+/// Defines arithmetic operators
+#[derive(Debug, Clone, Copy)]
+pub(super) enum ArithmeticOperator {
+    Addition,
+    Subtraction,
+    Multiplication,
+    Division,
+}
+
 /// Errors that can occur during parsing.
 #[derive(Debug, Error)]
 pub enum ParseError {
@@ -88,7 +141,7 @@ pub enum ParseError {
     #[error(r#"The variable "{0}" must only depend on variables that occur in a positive body literal."#)]
     UnsafeDefinition(String),
     /// Complex term uses an undefined variable.
-    #[error(r#"Complex term {0} uses an undefined variable {1}."#)]
+    #[error(r#"Complex term "{0}" uses an undefined variable "{1}"."#)]
     UnsafeComplexTerm(String, String),
     /// Variable has been defined multiple times.
     #[error(r#"The variable "{0}" has been defined multiple times."#)]
@@ -212,9 +265,9 @@ pub enum ParseError {
     /// Expected a filter operator.
     #[error("Expected a filter operator")]
     ExpectedFilterOperator,
-    /// Expected a filter expression.
-    #[error("Expected a condition")]
-    ExpectedCondition,
+    /// Expected a constraint.
+    #[error("Expected a constraint")]
+    ExpectedConstraint,
     /// Expected a body expression.
     #[error("Expected a literal or a filter expression")]
     ExpectedBodyExpression,

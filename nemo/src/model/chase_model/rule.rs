@@ -160,20 +160,20 @@ impl ChaseRule {
         Identifier(format!("{}{}", prefix, counter))
     }
 
-    // Remove conditions of the form ?X = ?Y from the rule
+    // Remove constraints of the form ?X = ?Y from the rule
     // and apply the corresponding substitution
     fn apply_equality(rule: &mut Rule) {
         let mut assignment = HashMap::<Variable, Term>::new();
 
-        rule.constraints_mut().retain(|condition| {
+        rule.constraints_mut().retain(|constraint| {
             if let Constraint::Equals(
                 Term::Primitive(PrimitiveTerm::Variable(left)),
                 Term::Primitive(PrimitiveTerm::Variable(right)),
-            ) = condition
+            ) = constraint
             {
-                if let Some(assigned) = assignment.get(&left) {
+                if let Some(assigned) = assignment.get(left) {
                     assignment.insert(right.clone(), assigned.clone());
-                } else if let Some(assigned) = assignment.get(&right) {
+                } else if let Some(assigned) = assignment.get(right) {
                     assignment.insert(left.clone(), assigned.clone());
                 } else {
                     assignment.insert(
@@ -199,7 +199,7 @@ impl ChaseRule {
         aggregates: &mut Vec<ChaseAggregate>,
         negative_constraints: &mut Vec<Constraint>,
     ) {
-        // New conditions that will be introduced due to the flattening of the atom
+        // New constraints that will be introduced due to the flattening of the atom
         let mut positive_constraints = Vec::<Constraint>::new();
 
         let mut global_term_index: usize = 0;
@@ -258,11 +258,11 @@ impl ChaseRule {
                     }
                 }
 
-                let new_condition = Constraint::Equals(term.clone(), new_variable.clone());
+                let new_constraint = Constraint::Equals(term.clone(), new_variable.clone());
                 if is_positive {
-                    positive_constraints.push(new_condition);
+                    positive_constraints.push(new_constraint);
                 } else {
-                    negative_constraints.push(new_condition);
+                    negative_constraints.push(new_constraint);
                 }
 
                 *term = new_variable;

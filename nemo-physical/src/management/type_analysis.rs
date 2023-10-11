@@ -244,8 +244,6 @@ impl TypeTree {
                 Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
             ExecutionOperation::Filter(subtree, _condition) => {
-                // TODO: Shouldnt I do something here?
-
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
                 Ok(TypeTreeNode::new(
                     subtype_node.schema.clone(),

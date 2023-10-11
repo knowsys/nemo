@@ -24,11 +24,11 @@ pub use term::*;
 mod predicate;
 pub use predicate::*;
 
-mod rdfliteral;
-pub use rdfliteral::*;
+mod rdf_literal;
+pub use rdf_literal::*;
 
-mod numericliteral;
-pub use numericliteral::*;
+mod numeric_literal;
+pub use numeric_literal::*;
 
 mod constraint;
 pub use constraint::*;

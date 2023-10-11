@@ -194,6 +194,18 @@ pub enum UnaryOperation {
 }
 
 impl UnaryOperation {
+    /// Return a function which is able to construct the respective term based on the function name.
+    /// Returns `None` if the provided function name does not correspond to a know unary function.
+    pub fn construct_from_name(name: &str) -> Option<Box<dyn Fn(Term) -> Term>> {
+        match name {
+            "Abs" => Some(Box::new(|t| Term::Unary(UnaryOperation::Abs(Box::new(t))))),
+            "Sqrt" => Some(Box::new(|t| {
+                Term::Unary(UnaryOperation::SquareRoot(Box::new(t)))
+            })),
+            _ => None,
+        }
+    }
+
     /// Return the [`Term`] to which the unary operation is applied.
     pub fn term(&self) -> &Term {
         match self {
@@ -384,9 +396,9 @@ impl Term {
         }
     }
 
-    /// Defines the relative priority between term operations.
+    /// Defines the precedence of the term operations.
     /// This is only relevant for the [`Display`] implementation.
-    fn priority(&self) -> usize {
+    fn precedence(&self) -> usize {
         match self {
             Term::Primitive(_) => 0,
             Term::Binary(BinaryOperation::Addition(_, _)) => 1,
@@ -407,7 +419,7 @@ impl Term {
         f: &mut std::fmt::Formatter<'_>,
         term: &Term,
     ) -> std::fmt::Result {
-        let need_braces = self.priority() > term.priority() && !term.is_primitive();
+        let need_braces = self.precedence() > term.precedence() && !term.is_primitive();
 
         if need_braces {
             self.format_braces(f, term)

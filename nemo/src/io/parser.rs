@@ -4,6 +4,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
 use crate::{
     error::Error,
+    io::parser::types::{ArithmeticOperator, BodyExpression},
     model::{rule_model::Constraint, *},
 };
 use nemo_physical::error::ReadingError;
@@ -26,6 +27,8 @@ pub(crate) mod rfc5234;
 pub(crate) mod sparql;
 pub(crate) mod turtle;
 pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
+
+use self::types::ConstraintOperator;
 
 /// Parse a program in the given `input`-String and return a [`Program`].
 ///
@@ -299,67 +302,6 @@ pub struct RuleParser<'a> {
     sources: RefCell<Vec<DataSourceDeclaration>>,
     /// Declarations of predicates with their types.
     predicate_declarations: RefCell<HashMap<Identifier, Vec<PrimitiveType>>>,
-}
-
-/// Body may contain literals or filter expressions
-#[derive(Debug, Clone)]
-pub enum BodyExpression {
-    /// Literal
-    Literal(Literal),
-    /// Constraint
-    Constraint(Constraint),
-}
-
-/// Different operators allows in a condition.
-/// Has one entry for every variant in [`Condition`].
-#[derive(Debug, Clone, Copy)]
-pub enum ConditionOperator {
-    /// Two terms are equal.
-    Equals,
-    /// Two terms are unequal.
-    Unequals,
-    /// Value of the left term is less than the value of the right term.
-    LessThan,
-    /// Value of the left term is greater than the value of the right term.
-    GreaterThan,
-    /// Value of the left term is less than or equal to the value of the right term.
-    LessThanEq,
-    /// Value of the left term is greater than or equal to the value of the right term.
-    GreaterThanEq,
-}
-
-/// Predefined unary functions
-#[derive(Debug, Clone, Copy)]
-pub enum UnaryFunctions {
-    /// Absolute Value.
-    Abs,
-    /// Additive Inverse.
-    Minus,
-    /// Square Root.
-    SquareRoot,
-}
-
-impl ConditionOperator {
-    /// Turn operator into [`Condition`].
-    pub fn into_constraint(&self, left: Term, right: Term) -> Constraint {
-        match self {
-            ConditionOperator::Equals => Constraint::Equals(left, right),
-            ConditionOperator::Unequals => Constraint::Unequals(left, right),
-            ConditionOperator::LessThan => Constraint::LessThan(left, right),
-            ConditionOperator::GreaterThan => Constraint::GreaterThan(left, right),
-            ConditionOperator::LessThanEq => Constraint::LessThanEq(left, right),
-            ConditionOperator::GreaterThanEq => Constraint::GreaterThanEq(left, right),
-        }
-    }
-}
-
-/// Defines arithmetic operators
-#[derive(Debug, Clone, Copy)]
-enum ArithmeticOperator {
-    Addition,
-    Subtraction,
-    Multiplication,
-    Division,
 }
 
 impl<'a> RuleParser<'a> {
@@ -1013,19 +955,19 @@ impl<'a> RuleParser<'a> {
     /// Parse operation that is filters a variable
     pub fn parse_constraint_operator(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<ConditionOperator> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<ConstraintOperator> {
         traced(
             "parse_constraint_operator",
             map_error(
                 delimited(
                     multispace_or_comment0,
                     alt((
-                        value(ConditionOperator::LessThanEq, token("<=")),
-                        value(ConditionOperator::LessThan, token("<")),
-                        value(ConditionOperator::Equals, token("=")),
-                        value(ConditionOperator::Unequals, token("!=")),
-                        value(ConditionOperator::GreaterThanEq, token(">=")),
-                        value(ConditionOperator::GreaterThan, token(">")),
+                        value(ConstraintOperator::LessThanEq, token("<=")),
+                        value(ConstraintOperator::LessThan, token("<")),
+                        value(ConstraintOperator::Equals, token("=")),
+                        value(ConstraintOperator::Unequals, token("!=")),
+                        value(ConstraintOperator::GreaterThanEq, token(">=")),
+                        value(ConstraintOperator::GreaterThan, token(">")),
                     )),
                     multispace_or_comment0,
                 ),
@@ -1078,15 +1020,22 @@ impl<'a> RuleParser<'a> {
                 move |input| {
                     let (remainder, name) = self.parse_iri_like_identifier()(input)?;
 
-                    let (remainder, subterms) = (self
-                        .parenthesised(separated_list0(self.parse_comma(), self.parse_term())))(
-                        remainder,
-                    )?;
+                    if let Some(term_function) = UnaryOperation::construct_from_name(&name.0) {
+                        let (remainder, subterm) =
+                            (self.parenthesised(self.parse_term()))(remainder)?;
 
-                    Ok((
-                        remainder,
-                        Term::Function(AbstractFunction { name, subterms }),
-                    ))
+                        Ok((remainder, term_function(subterm)))
+                    } else {
+                        let (remainder, subterms) = (self.parenthesised(separated_list0(
+                            self.parse_comma(),
+                            self.parse_term(),
+                        )))(remainder)?;
+
+                        Ok((
+                            remainder,
+                            Term::Function(AbstractFunction { name, subterms }),
+                        ))
+                    }
                 },
                 || ParseError::ExpectedFunctionTerm,
             ),
@@ -1163,49 +1112,11 @@ impl<'a> RuleParser<'a> {
             "parse_arithmetic_factor",
             map_error(
                 alt((
-                    self.parse_unary_function(),
+                    self.parse_function_term(),
                     map(self.parse_primitive_term(), Term::Primitive),
                     self.parse_parenthesised_term(),
                 )),
                 || ParseError::ExpectedArithmeticFactor,
-            ),
-        )
-    }
-
-    /// Parse the function name of a known unary function.
-    fn parse_unary_function_name(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<UnaryFunctions> {
-        traced(
-            "parse_unary_function_name",
-            alt((
-                map(token("Abs"), |_| UnaryFunctions::Abs),
-                map(token("Sqrt"), |_| UnaryFunctions::SquareRoot),
-            )),
-        )
-    }
-
-    /// Parse a unary function applied to a term.
-    pub fn parse_unary_function(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
-        traced(
-            "parse_unary_function",
-            map_error(
-                map(
-                    pair(
-                        self.parse_unary_function_name(),
-                        self.parenthesised(self.parse_arithmetic_expression()),
-                    ),
-                    |(name, term)| match name {
-                        UnaryFunctions::Abs => Term::Unary(UnaryOperation::Abs(Box::new(term))),
-                        UnaryFunctions::Minus => {
-                            Term::Unary(UnaryOperation::UnaryMinus(Box::new(term)))
-                        }
-                        UnaryFunctions::SquareRoot => {
-                            Term::Unary(UnaryOperation::SquareRoot(Box::new(term)))
-                        }
-                    },
-                ),
-                || ParseError::ExpectedUnaryFunction,
             ),
         )
     }
@@ -1254,7 +1165,7 @@ impl<'a> RuleParser<'a> {
                     )),
                     |(lhs, operation, rhs)| operation.into_constraint(lhs, rhs),
                 ),
-                || ParseError::ExpectedCondition,
+                || ParseError::ExpectedConstraint,
             ),
         )
     }
@@ -2067,20 +1978,18 @@ mod test {
             function_with_nested_algebraic_expression
         );
 
-        let _nested_function = Term::Function(AbstractFunction {
+        let nested_function = Term::Function(AbstractFunction {
             name: Identifier(String::from("nested_function")),
             subterms: vec![nullary_function.clone()],
         });
 
-        // TODO: Fix parser to support nested functions
+        assert_parse!(
+            parser.parse_function_term(),
+            "nested_function(nullary_function())",
+            nested_function
+        );
 
-        // assert_parse!(
-        //     parser.parse_function_term(),
-        //     "nested_function(nullary_function())",
-        //     nested_function
-        // );
-
-        let _triple_nested_function = Term::Function(AbstractFunction {
+        let triple_nested_function = Term::Function(AbstractFunction {
             name: Identifier(String::from("nested_function")),
             subterms: vec![Term::Function(AbstractFunction {
                 name: Identifier(String::from("nested_function")),
@@ -2090,11 +1999,11 @@ mod test {
                 })],
             })],
         });
-        // assert_parse!(
-        //     parser.parse_function_term(),
-        //     "nested_function(  nested_function(  (nested_function(nullary_function()) )  ))",
-        //     triple_nested_function
-        // );
+        assert_parse!(
+            parser.parse_function_term(),
+            "nested_function(  nested_function(  (nested_function(nullary_function()) )  ))",
+            triple_nested_function
+        );
     }
 
     #[test]
