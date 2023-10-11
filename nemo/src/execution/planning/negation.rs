@@ -11,8 +11,8 @@ use nemo_physical::{
 use crate::{
     execution::planning::plan_util::{compute_conditions, subplan_union_reordered},
     model::{
-        chase_model::{ChaseAtom, Constraint, VariableAtom},
-        PrimitiveType, Variable,
+        chase_model::{ChaseAtom, VariableAtom},
+        Constraint, PrimitiveType, Variable,
     },
     program_analysis::variable_order::VariableOrder,
     table_manager::{SubtableExecutionPlan, TableManager},

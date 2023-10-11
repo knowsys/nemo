@@ -4,13 +4,13 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
 use crate::{
     error::Error,
-    model::{chase_model::Constraint, *},
+    model::{rule_model::Constraint, *},
 };
 use nemo_physical::error::ReadingError;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
-    character::complete::{alpha1, digit1, multispace0, multispace1, none_of, satisfy},
+    character::complete::{alpha1, digit1, multispace1, none_of, satisfy},
     combinator::{all_consuming, cut, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
@@ -306,8 +306,8 @@ pub struct RuleParser<'a> {
 pub enum BodyExpression {
     /// Literal
     Literal(Literal),
-    /// Condition
-    Condition(Condition),
+    /// Constraint
+    Constraint(Constraint),
 }
 
 /// Different operators allows in a condition.
@@ -810,16 +810,16 @@ impl<'a> RuleParser<'a> {
                             _ => None,
                         })
                         .collect();
-                    let filters = body
+                    let constraints = body
                         .into_iter()
                         .filter_map(|expr| match expr {
-                            BodyExpression::Condition(f) => Some(f),
+                            BodyExpression::Constraint(c) => Some(c),
                             _ => None,
                         })
                         .collect();
                     Ok((
                         remainder,
-                        Rule::new_validated(head, literals, filters)
+                        Rule::new_validated(head, literals, constraints)
                             .map_err(|e| Err::Failure(e.at(input)))?,
                     ))
                 },
@@ -1259,24 +1259,6 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parse an expression of the form `<variable> := <term>`.
-    pub fn parse_assignment(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Condition> {
-        traced(
-            "parse_assignment",
-            map_error(
-                map(
-                    tuple((
-                        delimited(multispace0, self.parse_universal_variable(), multispace0),
-                        token(":="),
-                        self.parse_term(),
-                    )),
-                    |(lhs, _, rhs)| Condition::Assignment(lhs, rhs),
-                ),
-                || ParseError::ExpectedCondition,
-            ),
-        )
-    }
-
     /// Parse body expression
     pub fn parse_body_expression(
         &'a self,
@@ -1285,10 +1267,7 @@ impl<'a> RuleParser<'a> {
             "parse_body_expression",
             map_error(
                 alt((
-                    map(self.parse_constraint(), |c| {
-                        BodyExpression::Condition(Condition::Constraint(c))
-                    }),
-                    map(self.parse_assignment(), BodyExpression::Condition),
+                    map(self.parse_constraint(), BodyExpression::Constraint),
                     map(self.parse_literal(), BodyExpression::Literal),
                 )),
                 || ParseError::ExpectedBodyExpression,
@@ -1420,7 +1399,7 @@ mod test {
 
     use nemo_physical::datatypes::Double;
 
-    use crate::model::chase_model::Constraint;
+    use crate::model::rule_model::Constraint;
 
     use super::*;
 
@@ -1786,30 +1765,30 @@ mod test {
                 )),
             ],
             vec![
-                Condition::Constraint(Constraint::GreaterThan(
+                Constraint::GreaterThan(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(y.clone()))),
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x.clone()))),
-                )),
-                Condition::Constraint(Constraint::Equals(
+                ),
+                Constraint::Equals(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x.clone()))),
                     Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
                         NumericLiteral::Integer(3),
                     ))),
-                )),
-                Condition::Constraint(Constraint::LessThan(
+                ),
+                Constraint::LessThan(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z.clone()))),
                     Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
                         NumericLiteral::Integer(7),
                     ))),
-                )),
-                Condition::Constraint(Constraint::LessThanEq(
+                ),
+                Constraint::LessThanEq(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x))),
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z.clone()))),
-                )),
-                Condition::Constraint(Constraint::GreaterThanEq(
+                ),
+                Constraint::GreaterThanEq(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z))),
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(y))),
-                )),
+                ),
             ],
         );
 
@@ -2200,9 +2179,12 @@ mod test {
     fn parse_assignment() {
         let parser = RuleParser::new();
 
-        let expression = "?X := Abs(?Y - 5) * (7 + ?Z)";
+        let expression = "?X = Abs(?Y - 5) * (7 + ?Z)";
 
-        let variable = Variable::Universal(Identifier("X".to_string()));
+        let variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
+            "X".to_string(),
+        ))));
+
         let term = Term::Binary(BinaryOperation::Multiplication(
             Box::new(Term::Unary(UnaryOperation::Abs(Box::new(Term::Binary(
                 BinaryOperation::Subtraction(
@@ -2224,9 +2206,9 @@ mod test {
             ))),
         ));
 
-        let expected = Condition::Assignment(variable, term);
+        let expected = Constraint::Equals(variable, term);
 
-        assert_parse!(parser.parse_assignment(), expression, expected);
+        assert_parse!(parser.parse_constraint(), expression, expected);
     }
 
     #[test]

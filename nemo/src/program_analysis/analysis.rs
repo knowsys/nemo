@@ -6,11 +6,10 @@ use crate::{
     error::Error,
     model::chase_model::{ChaseProgram, ChaseRule},
     model::{
-        chase_model::{
-            ChaseAtom, Constraint, PrimitiveAtom, VariableAtom, AGGREGATE_VARIABLE_PREFIX,
-        },
+        chase_model::{ChaseAtom, PrimitiveAtom, VariableAtom, AGGREGATE_VARIABLE_PREFIX},
         types::error::TypeError,
-        DataSource, Identifier, PrimitiveTerm, PrimitiveType, Term, TypeConstraint, Variable,
+        Constraint, DataSource, Identifier, PrimitiveTerm, PrimitiveType, Term, TypeConstraint,
+        Variable,
     },
     util::labeled_graph::LabeledGraph,
 };

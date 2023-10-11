@@ -9,9 +9,6 @@ pub use atom::*;
 mod datasource;
 pub use datasource::*;
 
-mod condition;
-pub use condition::*;
-
 mod literal;
 pub use literal::*;
 
@@ -32,3 +29,6 @@ pub use rdfliteral::*;
 
 mod numericliteral;
 pub use numericliteral::*;
+
+mod constraint;
+pub use constraint::*;

@@ -19,12 +19,13 @@ use crate::{
     },
     io::{input_manager::InputManager, resource_providers::ResourceProviders},
     model::{
-        chase_model::{ChaseAtom, ChaseFact, ChaseProgram, Constraint},
+        chase_model::{ChaseAtom, ChaseFact, ChaseProgram},
         types::{
             primitive_logical_value::{PrimitiveLogicalValueIteratorT, PrimitiveLogicalValueT},
             primitive_types::PrimitiveType,
         },
-        Constant, Fact, Identifier, PrimitiveTerm, Program, Term, Variable, VariableAssignment,
+        Constant, Constraint, Fact, Identifier, PrimitiveTerm, Program, Term, Variable,
+        VariableAssignment,
     },
     program_analysis::analysis::ProgramAnalysis,
     table_manager::{MemoryUsage, SubtableExecutionPlan, SubtableIdentifier, TableManager},

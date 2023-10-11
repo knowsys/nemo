@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{io::parser::ParseError, model::VariableAssignment};
 
-use super::{Atom, Condition, Literal, PrimitiveTerm, Variable};
+use super::{Atom, Constraint, Literal, PrimitiveTerm, Term, Variable};
 
 /// A rule.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -11,17 +11,17 @@ pub struct Rule {
     head: Vec<Atom>,
     /// Body literals of the rule
     body: Vec<Literal>,
-    /// Conditions expressed within the left side of the rule
-    conditions: Vec<Condition>,
+    /// Constraints on the body of the rule
+    constraints: Vec<Constraint>,
 }
 
 impl Rule {
     /// Construct a new rule.
-    pub fn new(head: Vec<Atom>, body: Vec<Literal>, conditions: Vec<Condition>) -> Self {
+    pub fn new(head: Vec<Atom>, body: Vec<Literal>, constraints: Vec<Constraint>) -> Self {
         Self {
             head,
             body,
-            conditions,
+            constraints,
         }
     }
 
@@ -29,7 +29,7 @@ impl Rule {
     pub(crate) fn new_validated(
         head: Vec<Atom>,
         body: Vec<Literal>,
-        conditions: Vec<Condition>,
+        constraints: Vec<Constraint>,
     ) -> Result<Self, ParseError> {
         // All the existential variables used in the rule
         let existential_variable_names = head
@@ -40,7 +40,7 @@ impl Rule {
         for variable in body
             .iter()
             .flat_map(|l| l.variables())
-            .chain(conditions.iter().flat_map(|c| c.variables()))
+            .chain(constraints.iter().flat_map(|c| c.variables()))
         {
             // Existential variables may only occur in the head
             if variable.is_existential() {
@@ -59,42 +59,36 @@ impl Rule {
             .cloned()
             .partition(|literal| literal.is_positive());
 
-        // Bound variables are considered to be all variables occuring as primitive terms in a positive body literal
-        let bound_variables = positive
-            .iter()
-            .flat_map(|l| l.primitive_terms())
-            .filter_map(|t| {
-                if let PrimitiveTerm::Variable(variable) = t {
-                    Some(variable)
-                } else {
-                    None
-                }
-            })
-            .collect::<HashSet<_>>();
+        // Safe variables are considered to be all variables occuring as primitive terms in a positive body literal
+        let safe_variables = Self::safe_variables_literals(&positive);
 
         // A derived variable is a variable which is defined in terms of bound variables
+        // using a simple equality operation
         let mut derived_variables = HashSet::<&Variable>::new();
-        for condition in &conditions {
-            if let Condition::Assignment(variable, term) = condition {
-                if bound_variables.contains(variable) || derived_variables.contains(variable) {
-                    return Err(ParseError::MultipleDefinitions(variable.name()));
+        for constraint in &constraints {
+            if let Some((variable, term)) = constraint.has_form_assignment() {
+                if safe_variables.contains(variable) {
+                    continue;
                 }
 
                 for term_variable in term.variables() {
-                    if !bound_variables.contains(term_variable) {
+                    if !safe_variables.contains(term_variable) {
                         return Err(ParseError::UnsafeDefinition(variable.name()));
                     }
                 }
 
-                derived_variables.insert(variable);
+                if !derived_variables.contains(variable) {
+                    derived_variables.insert(variable);
+                } else {
+                    return Err(ParseError::MultipleDefinitions(variable.name()));
+                }
             }
         }
 
-        // Each complex term in the body must only use derived or bound variables
+        // Each complex term in the body and head must only use derived or safe variables
         for term in body
             .iter()
             .flat_map(|l| l.terms())
-            .chain(conditions.iter().flat_map(|c| c.terms()))
             .chain(head.iter().flat_map(|a| a.terms()))
         {
             if term.is_primitive() {
@@ -102,7 +96,7 @@ impl Rule {
             }
 
             for variable in term.variables() {
-                if !bound_variables.contains(variable) && !derived_variables.contains(variable) {
+                if !safe_variables.contains(variable) && !derived_variables.contains(variable) {
                     return Err(ParseError::UnsafeComplexTerm(
                         term.to_string(),
                         variable.name(),
@@ -111,10 +105,30 @@ impl Rule {
             }
         }
 
+        // Every constraint that is not an assignment mus only use derived or safe varaibles
+        for constraint in &constraints {
+            if let Some((variable, _)) = constraint.has_form_assignment() {
+                if derived_variables.contains(variable) {
+                    continue;
+                }
+            }
+
+            for term in [constraint.left(), constraint.right()] {
+                for variable in term.variables() {
+                    if !safe_variables.contains(variable) && !derived_variables.contains(variable) {
+                        return Err(ParseError::UnsafeComplexTerm(
+                            term.to_string(),
+                            variable.name(),
+                        ));
+                    }
+                }
+            }
+        }
+
         // Head atoms may only use variables that are either bound or derived
         for variable in head.iter().flat_map(|a| a.variables()) {
             if variable.is_universal()
-                && !bound_variables.contains(variable)
+                && !safe_variables.contains(variable)
                 && !derived_variables.contains(variable)
             {
                 return Err(ParseError::UnsafeHeadVariable(variable.name()));
@@ -128,7 +142,7 @@ impl Rule {
 
             for primitive_term in negative_literal.primitive_terms() {
                 if let PrimitiveTerm::Variable(variable) = primitive_term {
-                    if derived_variables.contains(&variable) || bound_variables.contains(variable) {
+                    if derived_variables.contains(&variable) || safe_variables.contains(variable) {
                         continue;
                     }
 
@@ -163,8 +177,32 @@ impl Rule {
         Ok(Rule {
             head,
             body,
-            conditions,
+            constraints,
         })
+    }
+
+    /// Return all variables that are "safe".
+    /// A variable is safe if it occurs in a positive body literal.
+    fn safe_variables_literals(literals: &[Literal]) -> HashSet<Variable> {
+        let mut result = HashSet::new();
+
+        for literal in literals {
+            if let Literal::Positive(atom) = literal {
+                for term in atom.terms() {
+                    if let Term::Primitive(PrimitiveTerm::Variable(variable)) = term {
+                        result.insert(variable.clone());
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Return all variables that are "safe".
+    /// A variable is safe if it occurs in a positive body literal.
+    pub fn safe_variables(&self) -> HashSet<Variable> {
+        Self::safe_variables_literals(&self.body)
     }
 
     /// Return the head atoms of the rule - immutable.
@@ -191,16 +229,16 @@ impl Rule {
         &mut self.body
     }
 
-    /// Return the conditions of the rule - immutable.
+    /// Return the constraints of the rule - immutable.
     #[must_use]
-    pub fn conditions(&self) -> &Vec<Condition> {
-        &self.conditions
+    pub fn constraints(&self) -> &Vec<Constraint> {
+        &self.constraints
     }
 
     /// Return the filters of the rule - mutable.
     #[must_use]
-    pub fn conditions_mut(&mut self) -> &mut Vec<Condition> {
-        &mut self.conditions
+    pub fn constraints_mut(&mut self) -> &mut Vec<Constraint> {
+        &mut self.constraints
     }
 
     /// Replaces [`Variable`]s with [`super::Term`]s according to the provided assignment.
@@ -211,7 +249,7 @@ impl Rule {
         self.head
             .iter_mut()
             .for_each(|a| a.apply_assignment(assignment));
-        self.conditions
+        self.constraints
             .iter_mut()
             .for_each(|f| f.apply_assignment(assignment));
     }
@@ -237,14 +275,14 @@ impl std::fmt::Display for Rule {
             }
         }
 
-        if !self.conditions.is_empty() {
+        if !self.constraints.is_empty() {
             f.write_str(", ")?;
         }
 
-        for (index, filter) in self.conditions.iter().enumerate() {
-            filter.fmt(f)?;
+        for (index, constraint) in self.constraints.iter().enumerate() {
+            constraint.fmt(f)?;
 
-            if index < self.conditions.len() - 1 {
+            if index < self.constraints.len() - 1 {
                 f.write_str(", ")?;
             }
         }

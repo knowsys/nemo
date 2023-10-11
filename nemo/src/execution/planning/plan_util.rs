@@ -17,8 +17,8 @@ use nemo_physical::{
 
 use crate::{
     model::{
-        chase_model::{ChaseAtom, Constraint, PrimitiveAtom, VariableAtom},
-        Identifier, PrimitiveTerm, PrimitiveType, Variable,
+        chase_model::{ChaseAtom, PrimitiveAtom, VariableAtom},
+        Constraint, Identifier, PrimitiveTerm, PrimitiveType, Variable,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::TableManager,

@@ -1,4 +1,6 @@
-use crate::model::{Condition, Term, Variable, VariableAssignment};
+use crate::model::{Term, Variable, VariableAssignment};
+
+use super::PrimitiveTerm;
 
 /// Represents a constraint which is expressed as a binary operator applied to two terms
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
@@ -18,18 +20,6 @@ pub enum Constraint {
 }
 
 impl Constraint {
-    /// Create a new [`Constraint`].
-    ///
-    /// # Panics
-    /// Panics if the provided condition is not a constraint.
-    pub fn from_condition(condition: Condition) -> Option<Self> {
-        if let Condition::Constraint(constraint) = condition {
-            Some(constraint)
-        } else {
-            None
-        }
-    }
-
     /// Return the left and right term used in the constraint.
     pub fn terms(&self) -> (&Term, &Term) {
         match &self {
@@ -80,6 +70,23 @@ impl Constraint {
 
         left.apply_assignment(assignment);
         right.apply_assignment(assignment);
+    }
+
+    /// Return whether the constraint could be interpreted as an assignment,
+    /// i.e. has the form `?Variable = Term`.
+    ///
+    /// If so returns a tuple containing the variable and the term.
+    /// Returns `None` otherwise.
+    pub fn has_form_assignment(&self) -> Option<(&Variable, &Term)> {
+        if let Constraint::Equals(Term::Primitive(PrimitiveTerm::Variable(variable)), term) = self {
+            Some((variable, term))
+        } else if let Constraint::Equals(Term::Primitive(PrimitiveTerm::Variable(variable)), term) =
+            self
+        {
+            Some((variable, term))
+        } else {
+            None
+        }
     }
 }
 

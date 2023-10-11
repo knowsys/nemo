@@ -12,8 +12,5 @@ pub use rule::*;
 mod atom;
 pub use atom::*;
 
-mod constraint;
-pub use constraint::*;
-
 mod constructor;
 pub use constructor::*;
