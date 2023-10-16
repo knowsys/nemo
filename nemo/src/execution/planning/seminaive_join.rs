@@ -8,22 +8,25 @@ use nemo_physical::{
 };
 
 use crate::{
-    model::{chase_model::ChaseAtom, Filter, PrimitiveType, Variable},
+    model::{
+        chase_model::{ChaseAtom, VariableAtom},
+        Constraint, PrimitiveType, Variable,
+    },
     program_analysis::variable_order::VariableOrder,
     table_manager::TableManager,
 };
 
-use super::plan_util::{atom_binding, compute_filters, subplan_union};
+use super::plan_util::{atom_binding, compute_constraints, subplan_union};
 
-/// Generator for creating excution plans for seminaive joins of a fixed set of [`ChaseAtom`]s and [`Filter`]s.
+/// Generator for creating excution plans for seminaive joins of a fixed set of [`ChaseAtom`]s and [`Constraint`]s.
 #[derive(Debug)]
 pub struct SeminaiveJoinGenerator {
     /// logical types of the variables
     pub variable_types: HashMap<Variable, PrimitiveType>,
     /// the atoms to join
-    pub atoms: Vec<ChaseAtom>,
+    pub atoms: Vec<VariableAtom>,
     /// the filters to apply
-    pub filters: Vec<Filter>,
+    pub constraints: Vec<Constraint>,
 }
 
 impl SeminaiveJoinGenerator {
@@ -122,11 +125,9 @@ impl SeminaiveJoinGenerator {
         }
 
         // Apply filters
-        let (filter_classes, filter_assignments) =
-            compute_filters(variable_order, &self.filters, &self.variable_types);
+        let constraints =
+            compute_constraints(variable_order, &self.constraints, &self.variable_types);
 
-        let node_select_value = plan.select_value(seminaive_union, filter_assignments);
-
-        plan.select_equal(node_select_value, filter_classes)
+        plan.filter_values(seminaive_union, constraints)
     }
 }

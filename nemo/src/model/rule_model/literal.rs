@@ -2,7 +2,7 @@ use std::ops::Neg;
 
 use crate::model::VariableAssignment;
 
-use super::{Aggregate, Atom, Identifier, TermTree, Variable};
+use super::{Aggregate, Atom, Identifier, PrimitiveTerm, Term, Variable};
 
 /// A literal.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -24,8 +24,16 @@ impl Literal {
         matches!(self, Self::Negative(_))
     }
 
-    /// Returns the underlying atom
+    /// Returns a reference to the underlying atom.
     pub fn atom(&self) -> &Atom {
+        match self {
+            Self::Positive(atom) => atom,
+            Self::Negative(atom) => atom,
+        }
+    }
+
+    /// Returns a mutable reference to the underlying atom.
+    pub fn atom_mut(&mut self) -> &mut Atom {
         match self {
             Self::Positive(atom) => atom,
             Self::Negative(atom) => atom,
@@ -55,23 +63,28 @@ impl Literal {
 
     /// Return the terms in the literal.
     #[must_use]
-    pub fn terms(&self) -> &Vec<TermTree> {
-        forward_to_atom!(self, term_trees)
+    pub fn terms(&self) -> &Vec<Term> {
+        forward_to_atom!(self, terms)
     }
 
     /// Return the variables in the literal.
-    pub fn variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
         forward_to_atom!(self, variables)
     }
 
     /// Return the universally quantified variables in the literal.
-    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
         forward_to_atom!(self, universal_variables)
     }
 
     /// Return the existentially quantified variables in the literal.
-    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> {
         forward_to_atom!(self, existential_variables)
+    }
+
+    /// Returns all terms at the leave of the term trees of the atom.
+    pub fn primitive_terms(&self) -> impl Iterator<Item = &PrimitiveTerm> {
+        forward_to_atom!(self, primitive_terms)
     }
 
     /// Return all aggregates in the literal.
@@ -79,7 +92,7 @@ impl Literal {
         forward_to_atom!(self, aggregates)
     }
 
-    /// Replace one term with another.
+    /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         match self {
             Literal::Positive(atom) => atom.apply_assignment(assignment),

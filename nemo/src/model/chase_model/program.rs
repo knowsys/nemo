@@ -5,12 +5,12 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     error::Error,
     model::{
-        DataSourceDeclaration, Fact, Identifier, OutputPredicateSelection, PrimitiveType, Program,
+        DataSourceDeclaration, Identifier, OutputPredicateSelection, PrimitiveType, Program,
         QualifiedPredicateName,
     },
 };
 
-use super::ChaseRule;
+use super::{ChaseAtom, ChaseFact, ChaseRule};
 
 #[allow(dead_code)]
 /// Representation of a datalog program that is used for generating execution plans for the physical layer.
@@ -20,7 +20,7 @@ pub struct ChaseProgram {
     prefixes: HashMap<String, String>,
     sources: Vec<DataSourceDeclaration>,
     rules: Vec<ChaseRule>,
-    facts: Vec<Fact>,
+    facts: Vec<ChaseFact>,
     parsed_predicate_declarations: HashMap<Identifier, Vec<PrimitiveType>>,
     output_predicates: OutputPredicateSelection,
 }
@@ -52,7 +52,7 @@ impl ChaseProgram {
         prefixes: HashMap<String, String>,
         sources: Vec<DataSourceDeclaration>,
         rules: Vec<ChaseRule>,
-        facts: Vec<Fact>,
+        facts: Vec<ChaseFact>,
         parsed_predicate_declarations: HashMap<Identifier, Vec<PrimitiveType>>,
         output_predicates: OutputPredicateSelection,
     ) -> Self {
@@ -87,7 +87,7 @@ impl ChaseProgram {
 
     /// Return all facts in the program.
     #[must_use]
-    pub fn facts(&self) -> &Vec<Fact> {
+    pub fn facts(&self) -> &Vec<ChaseFact> {
         &self.facts
     }
 
@@ -102,7 +102,7 @@ impl ChaseProgram {
                     .map(|atom| atom.predicate())
                     .chain(rule.all_body().map(|atom| atom.predicate()))
             })
-            .chain(self.facts().iter().map(|atom| atom.0.predicate()))
+            .chain(self.facts().iter().map(|atom| atom.predicate()))
             .collect()
     }
 
@@ -186,7 +186,11 @@ impl TryFrom<Program> for ChaseProgram {
                 .iter()
                 .map(|rule| rule.clone().try_into())
                 .collect::<Result<Vec<ChaseRule>, Error>>()?,
-            program.facts().to_vec(),
+            program
+                .facts()
+                .iter()
+                .map(|f| ChaseFact::from_flat_atom(&f.0))
+                .collect(),
             program.parsed_predicate_declarations(),
             program
                 .output_predicates()

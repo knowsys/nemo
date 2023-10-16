@@ -1,17 +1,21 @@
 use crate::{
     columnar::{
         operations::{
-            columnscan_restrict_values::{FilterBound, FilterValue},
+            arithmetic::expression::ArithmeticTreeLeaf,
+            columnscan_restrict_values::VALUE_SCAN_INDEX, condition::statement::ConditionStatement,
             ColumnScanEqualColumn, ColumnScanPass, ColumnScanRestrictValues,
         },
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::{DataValueT, Double, Float, StorageTypeName, StorageValueT},
+    datatypes::{DataValueT, StorageTypeName, StorageValueT},
     management::database::Dict,
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
 };
-use std::fmt::Debug;
-use std::{cell::UnsafeCell, collections::HashMap};
+use std::{
+    cell::UnsafeCell,
+    collections::{hash_map::Entry, HashMap},
+};
+use std::{collections::HashSet, fmt::Debug};
 
 /// [`SelectEqualClasses`] contains a vectors that indicate which column indices should be forced to the same value
 /// E.g. for R(a, a, b, c, d, c) eq_classes = [[0, 1], [3, 5]]
@@ -181,29 +185,19 @@ pub struct TrieScanRestrictValues<'a> {
     current_layer: Option<usize>,
 }
 
-/// Struct representing the restriction of a column to a certain values
-/// bounded by the given lower and upper bounds.
-#[derive(Debug, Default, Clone)]
-pub struct ValueAssignment {
-    /// List of lower bounds that the column must satisfy.
-    pub lower_bounds: Vec<FilterBound<DataValueT>>,
-    /// List of upper bounds that the column must satisfy.
-    pub upper_bounds: Vec<FilterBound<DataValueT>>,
-    /// List of values that the column must avoid.
-    pub avoid_values: Vec<FilterValue<DataValueT>>,
-}
-
 impl<'a> TrieScanRestrictValues<'a> {
     /// Construct new TrieScanRestrictValues object.
     pub fn new(
-        dict: &mut Dict,
+        dict: &Dict,
         base_trie: TrieScanEnum<'a>,
-        assignments: &HashMap<usize, ValueAssignment>,
+        conditions: &[ConditionStatement<DataValueT>],
     ) -> Self {
         let column_types = base_trie.get_types();
         let arity = column_types.len();
         let mut select_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
 
+        // Initialize `select_scans` with column scans
+        // that just pass through values of the previous layer
         for (col_index, col_type) in column_types.iter().enumerate() {
             macro_rules! init_scans_for_datatype {
                 ($variant:ident) => {
@@ -233,116 +227,125 @@ impl<'a> TrieScanRestrictValues<'a> {
             }
         }
 
-        macro_rules! translate_filter_value {
-            ($variant:ident, $filter_value:expr, $dict:expr) => {
-                match $filter_value {
-                    FilterValue::Column(index) => FilterValue::Column(*index),
-                    FilterValue::Constant(constant) => {
-                        if let StorageValueT::$variant(constant_typed) =
-                            constant.to_storage_value_mut($dict)
-                        {
-                            FilterValue::Constant(constant_typed)
-                        } else {
-                            panic!("Expected a column scan of type {}", stringify!($variant));
-                        }
-                    }
+        // For each column in the input trie contains the set of column indices,
+        // which are needed to evaluate the condition for this column
+        let mut input_column_indices = vec![HashSet::<usize>::new(); arity];
+        // For each column the conditions that need to be evaluated on that column
+        let mut input_column_conditions =
+            vec![Vec::<&ConditionStatement<DataValueT>>::new(); arity];
+
+        // A condition is always applied in the layer that corresponds to
+        // the maximum index referenced by the condition
+        for condition in conditions {
+            let maximum_reference = condition.maximum_reference().unwrap_or(0);
+            let (left, right) = condition.expressions();
+
+            for leaf in left.leaves().iter().chain(right.leaves().iter()) {
+                if let ArithmeticTreeLeaf::Reference(index) = leaf {
+                    input_column_indices[maximum_reference].insert(*index);
                 }
-            };
+            }
+
+            input_column_conditions[maximum_reference].push(condition);
         }
 
-        macro_rules! translate_filter_bound {
-            ($variant:ident, $filter_bound:expr, $dict:expr) => {
-                match $filter_bound {
-                    FilterBound::Inclusive(value) => {
-                        FilterBound::Inclusive(translate_filter_value!($variant, value, $dict))
-                    }
-                    FilterBound::Exclusive(value) => {
-                        FilterBound::Exclusive(translate_filter_value!($variant, value, $dict))
-                    }
-                }
-            };
-        }
+        for (column_index, (input_indices, input_conditions)) in input_column_indices
+            .into_iter()
+            .zip(input_column_conditions.iter())
+            .enumerate()
+        {
+            if input_conditions.is_empty() {
+                // No conditions apply to this column
+                // So we just leave the Pass scans built above
+                continue;
+            }
 
-        for (column_idx_value, assignment) in assignments {
-            macro_rules! init_scans_for_datatype {
-                ($variant:ident, $type:ty) => {{
+            macro_rules! build_scans_for_datatype {
+                ($variant:ident) => {{
+                    // Scan whose values are being restricted
                     let scan_value = if let ColumnScanT::$variant(scan) =
-                        unsafe { &*base_trie.get_scan(*column_idx_value).unwrap().get() }
+                        unsafe { &*base_trie.get_scan(column_index).unwrap().get() }
                     {
                         scan
                     } else {
                         panic!("Expected a column scan of type {}", stringify!($variant));
                     };
 
-                    let mut column_map = HashMap::<usize, usize>::new();
+                    // Mapping from the indices used in the input_conditions
+                    // that reference layers in the base trie
+                    // to indices that reference the column scans that will
+                    // be the input for the new scan
+                    let mut map_index = HashMap::<usize, usize>::new();
+
+                    // The index of the scan which will be restricted will have
+                    // the special value `VALUE_SCAN_INDEX`
+                    map_index.insert(column_index, VALUE_SCAN_INDEX);
+
+                    // References to scans which serve as input for the new column scan
                     let mut scans_restriction = Vec::new();
-                    let mut lower_bounds: Vec<FilterBound<$type>> = assignment
-                        .lower_bounds
-                        .iter()
-                        .map(|b| translate_filter_bound!($variant, b, dict))
-                        .collect();
-                    let mut upper_bounds: Vec<FilterBound<$type>> = assignment
-                        .upper_bounds
-                        .iter()
-                        .map(|b| translate_filter_bound!($variant, b, dict))
-                        .collect();
-                    let mut avoid_values: Vec<FilterValue<$type>> = assignment
-                        .avoid_values
-                        .iter()
-                        .map(|v| translate_filter_value!($variant, v, dict))
-                        .collect();
 
-                    for value in lower_bounds
-                        .iter_mut()
-                        .map(|b| b.value_mut())
-                        .chain(upper_bounds.iter_mut().map(|b| b.value_mut()))
-                        .chain(avoid_values.iter_mut())
-                    {
-                        if let Some(column_index) = value.column_index_mut() {
-                            let map_len = column_map.len();
-                            let mapped_index =
-                                *column_map.entry(*column_index).or_insert_with(|| {
-                                    let referenced_scan = if let ColumnScanT::$variant(scan) =
-                                        unsafe { &*base_trie.get_scan(*column_index).unwrap().get() }
-                                    {
-                                        scan
-                                    } else {
-                                        panic!(
-                                            "Expected a column scan of type {}",
-                                            stringify!($variant)
-                                        );
-                                    };
+                    for input_index in input_indices {
+                        let map_index_len = map_index.len();
 
-                                    scans_restriction.push(referenced_scan);
+                        match map_index.entry(input_index) {
+                            Entry::Occupied(_) => {}
+                            Entry::Vacant(entry) => {
+                                entry.insert(map_index_len);
 
-                                    map_len
-                                });
+                                let scan_restriction = if let ColumnScanT::$variant(scan) =
+                                    unsafe { &*base_trie.get_scan(input_index).unwrap().get() }
+                                {
+                                    scan
+                                } else {
+                                    panic!("Expected a column scan of type {}", stringify!($variant));
+                                };
 
-                            *column_index = mapped_index;
+                                scans_restriction.push(scan_restriction);
+                            }
                         }
                     }
 
+                    // Translates DataValueT into $type and the references according to map_index
+                    let translate_type_index = |l: ArithmeticTreeLeaf<DataValueT>| match l {
+                        ArithmeticTreeLeaf::Constant(t) => {
+                            if let StorageValueT::$variant(value) = t
+                                .to_storage_value(dict)
+                                .expect("We don't have string operations so this cannot fail.")
+                            {
+                                ArithmeticTreeLeaf::Constant(value)
+                            } else {
+                                panic!(
+                                    "Expected a operation tree value of type {}",
+                                    stringify!($src_name)
+                                );
+                            }
+                        }
+                        ArithmeticTreeLeaf::Reference(index) => {
+                            ArithmeticTreeLeaf::Reference(*map_index.get(&index).expect(
+                                "Every input index should have been recorded while building the hash set.",
+                            ))
+                        }
+                    };
+
+                    let conditions = input_conditions
+                        .into_iter()
+                        .map(|c| c.map(&translate_type_index))
+                        .collect();
+
                     let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanRestrictValues(
-                        ColumnScanRestrictValues::new(
-                            scan_value,
-                            scans_restriction,
-                            lower_bounds,
-                            upper_bounds,
-                            avoid_values,
-                        ),
+                        ColumnScanRestrictValues::new(scan_value, scans_restriction, conditions),
                     ));
 
-                    select_scans[*column_idx_value] =
-                        UnsafeCell::new(ColumnScanT::$variant(next_scan));
+                    select_scans[column_index] = UnsafeCell::new(ColumnScanT::$variant(next_scan));
                 }};
             }
 
-            match column_types[*column_idx_value] {
-                StorageTypeName::U32 => init_scans_for_datatype!(U32, u32),
-                StorageTypeName::U64 => init_scans_for_datatype!(U64, u64),
-                StorageTypeName::I64 => init_scans_for_datatype!(I64, i64),
-                StorageTypeName::Float => init_scans_for_datatype!(Float, Float),
-                StorageTypeName::Double => init_scans_for_datatype!(Double, Double),
+            match column_types[column_index] {
+                StorageTypeName::U32 => build_scans_for_datatype!(U32),
+                StorageTypeName::U64 => build_scans_for_datatype!(U64),
+                StorageTypeName::I64 => build_scans_for_datatype!(I64),
+                StorageTypeName::Float => build_scans_for_datatype!(Float),
+                StorageTypeName::Double => build_scans_for_datatype!(Double),
             }
         }
 
@@ -393,10 +396,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanRestrictValues<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
-
-    use super::{TrieScanRestrictValues, TrieScanSelectEqual, ValueAssignment};
-    use crate::columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue};
+    use super::{TrieScanRestrictValues, TrieScanSelectEqual};
+    use crate::columnar::operations::arithmetic::expression::ArithmeticTree;
+    use crate::columnar::operations::condition::statement::ConditionStatement;
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;
@@ -502,36 +504,20 @@ mod test {
         let trie = Trie::new(vec![column_fst, column_snd, column_trd, column_fth]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let mut dict = Dict::default();
+        let dict = Dict::default();
         let mut restrict_iter = TrieScanRestrictValues::new(
-            &mut dict,
+            &dict,
             trie_iter,
-            &HashMap::from([
-                (
-                    1,
-                    ValueAssignment {
-                        lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(4),
-                        ))],
-                        upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(4),
-                        ))],
-                        avoid_values: vec![],
-                    },
+            &[
+                ConditionStatement::Equal(
+                    ArithmeticTree::Reference(1),
+                    ArithmeticTree::Constant(DataValueT::U64(4)),
                 ),
-                (
-                    3,
-                    ValueAssignment {
-                        lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(7),
-                        ))],
-                        upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(7),
-                        ))],
-                        avoid_values: vec![],
-                    },
+                ConditionStatement::Equal(
+                    ArithmeticTree::Reference(3),
+                    ArithmeticTree::Constant(DataValueT::U64(7)),
                 ),
-            ]),
+            ],
         );
 
         assert_eq!(restrict_val_current(&mut restrict_iter), None);
@@ -588,18 +574,14 @@ mod test {
         let trie = Trie::new(vec![column_fst, column_snd]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let mut dict = Dict::default();
+        let dict = Dict::default();
         let mut restrict_iter = TrieScanRestrictValues::new(
-            &mut dict,
+            &dict,
             trie_iter,
-            &HashMap::from([(
-                1,
-                ValueAssignment {
-                    lower_bounds: vec![],
-                    upper_bounds: vec![FilterBound::Exclusive(FilterValue::Column(0))],
-                    avoid_values: vec![],
-                },
-            )]),
+            &[ConditionStatement::LessThan(
+                ArithmeticTree::Reference(1),
+                ArithmeticTree::Reference(0),
+            )],
         );
 
         assert_eq!(restrict_val_current(&mut restrict_iter), None);
@@ -641,18 +623,14 @@ mod test {
         let trie = Trie::new(vec![column_fst, column_snd]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let mut dict = Dict::default();
+        let dict = Dict::default();
         let mut restrict_iter = TrieScanRestrictValues::new(
-            &mut dict,
+            &dict,
             trie_iter,
-            &HashMap::from([(
-                1,
-                ValueAssignment {
-                    lower_bounds: vec![],
-                    upper_bounds: vec![],
-                    avoid_values: vec![FilterValue::Column(0)],
-                },
-            )]),
+            &[ConditionStatement::Unequal(
+                ArithmeticTree::Reference(1),
+                ArithmeticTree::Reference(0),
+            )],
         );
 
         assert_eq!(restrict_val_current(&mut restrict_iter), None);

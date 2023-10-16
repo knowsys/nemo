@@ -15,7 +15,7 @@ use super::primitive_logical_value::{
     AnyOutputMapper, DefaultSerializedIterator, Float64OutputMapper, IntegerOutputMapper,
     PrimitiveLogicalValueIteratorT, StringOutputMapper,
 };
-use crate::model::{NestedType, Term};
+use crate::model::{Constant, NestedType};
 
 macro_rules! count {
     () => (0usize);
@@ -133,13 +133,13 @@ impl PrimitiveType {
     /// Convert a given ground term to a DataValueT fitting the current logical type
     pub fn ground_term_to_data_value_t(
         &self,
-        gt: Term,
+        constant: Constant,
     ) -> Result<DataValueT, InvalidRuleTermConversion> {
         let result = match self {
-            Self::Any => DataValueT::String(gt.try_into()?),
-            Self::String => DataValueT::String(gt.try_into()?),
-            Self::Integer => DataValueT::I64(gt.try_into()?),
-            Self::Float64 => DataValueT::Double(gt.try_into()?),
+            Self::Any => DataValueT::String(constant.try_into()?),
+            Self::String => DataValueT::String(constant.try_into()?),
+            Self::Integer => DataValueT::I64(constant.try_into()?),
+            Self::Float64 => DataValueT::Double(constant.try_into()?),
         };
 
         Ok(result)

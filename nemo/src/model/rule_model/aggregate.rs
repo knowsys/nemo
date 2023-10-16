@@ -1,6 +1,6 @@
-use crate::model::{types::error::TypeError, PrimitiveType};
+use crate::model::{types::error::TypeError, PrimitiveType, VariableAssignment};
 
-use super::{Identifier, Variable};
+use super::{Identifier, PrimitiveTerm, Term};
 
 /// Aggregate operation on logical values
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -58,26 +58,22 @@ impl From<&Identifier> for Option<LogicalAggregateOperation> {
 }
 
 /// Aggregate occurring in a predicate in the head
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Aggregate {
     pub(crate) logical_aggregate_operation: LogicalAggregateOperation,
-    pub(crate) variable_identifiers: Vec<Identifier>,
+    pub(crate) terms: Vec<PrimitiveTerm>,
 }
 
 impl Aggregate {
-    /// Substitutes all occurrences of `var` for `subst`.
-    pub fn substitute_variable(&mut self, var: &Variable, subst: &Variable) {
-        let Variable::Universal(var) = var else {
-            panic!("cannot substitute existential variable")
-        };
-
-        let Variable::Universal(subst) = subst else {
-            panic!("cannot substitute with existential variable")
-        };
-
-        for id in &mut self.variable_identifiers {
-            if id == var {
-                *id = subst.clone();
+    /// Replaces [`super::Variable`]s with [`Term`]s according to the provided assignment.
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
+        for term in &mut self.terms {
+            if let PrimitiveTerm::Variable(variable) = term {
+                if let Some(Term::Primitive(PrimitiveTerm::Variable(replacing_variable))) =
+                    assignment.get(variable)
+                {
+                    *variable = replacing_variable.clone();
+                }
             }
         }
     }
@@ -88,7 +84,7 @@ impl std::fmt::Display for Aggregate {
         write!(
             f,
             "#{:?}({:?})",
-            self.logical_aggregate_operation, self.variable_identifiers
+            self.logical_aggregate_operation, self.terms
         )
     }
 }

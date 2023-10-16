@@ -7,7 +7,10 @@ use nom::{
 use nom_locate::LocatedSpan;
 use thiserror::Error;
 
-use crate::model::{rule_model::Aggregate, PrimitiveType};
+use crate::model::{
+    rule_model::{Aggregate, Constraint, Literal, Term},
+    PrimitiveType,
+};
 
 /// A [`LocatedSpan`] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
@@ -59,6 +62,56 @@ fn format_parse_error_context(context: &[LocatedParseError]) -> String {
     }
 }
 
+/// Body may contain literals or filter expressions
+#[derive(Debug, Clone)]
+pub enum BodyExpression {
+    /// Literal
+    Literal(Literal),
+    /// Constraint
+    Constraint(Constraint),
+}
+
+/// Different operators allows in a constraint.
+/// Has one entry for every variant in [`Constraint`].
+#[derive(Debug, Clone, Copy)]
+pub enum ConstraintOperator {
+    /// Two terms are equal.
+    Equals,
+    /// Two terms are unequal.
+    Unequals,
+    /// Value of the left term is less than the value of the right term.
+    LessThan,
+    /// Value of the left term is greater than the value of the right term.
+    GreaterThan,
+    /// Value of the left term is less than or equal to the value of the right term.
+    LessThanEq,
+    /// Value of the left term is greater than or equal to the value of the right term.
+    GreaterThanEq,
+}
+
+impl ConstraintOperator {
+    /// Turn operator into [`Constraint`].
+    pub fn into_constraint(self, left: Term, right: Term) -> Constraint {
+        match self {
+            ConstraintOperator::Equals => Constraint::Equals(left, right),
+            ConstraintOperator::Unequals => Constraint::Unequals(left, right),
+            ConstraintOperator::LessThan => Constraint::LessThan(left, right),
+            ConstraintOperator::GreaterThan => Constraint::GreaterThan(left, right),
+            ConstraintOperator::LessThanEq => Constraint::LessThanEq(left, right),
+            ConstraintOperator::GreaterThanEq => Constraint::GreaterThanEq(left, right),
+        }
+    }
+}
+
+/// Defines arithmetic operators
+#[derive(Debug, Clone, Copy)]
+pub(super) enum ArithmeticOperator {
+    Addition,
+    Subtraction,
+    Multiplication,
+    Division,
+}
+
 /// Errors that can occur during parsing.
 #[derive(Debug, Error)]
 pub enum ParseError {
@@ -84,9 +137,18 @@ pub enum ParseError {
     /// The universal variable does not occur in a positive body literal.
     #[error(r#"The universal variable "{0}" does not occur in a positive body literal."#)]
     UnsafeHeadVariable(String),
+    /// The variable must only depend on variables that occur in a positive body literal.
+    #[error(r#"The variable "{0}" must only depend on variables that occur in a positive body literal."#)]
+    UnsafeDefinition(String),
+    /// Complex term uses an undefined variable.
+    #[error(r#"Complex term "{0}" uses an undefined variable "{1}"."#)]
+    UnsafeComplexTerm(String, String),
+    /// Variable has been defined multiple times.
+    #[error(r#"The variable "{0}" has been defined multiple times."#)]
+    MultipleDefinitions(String),
     /// The unsafe variable appears in multiple negative body literals.
     #[error(r#"The unsafe variable "{0}" appears in multuple negative body literals."#)]
-    UnsafeVariableInMulltipleNegativeLiterals(String),
+    UnsafeVariableInMultipleNegativeLiterals(String),
     /// A variable used in a comparison does not occur in a positive body literal.
     #[error(
         r#"The variable "{0}" used in a comparison does not occur in a positive body literal."#
@@ -203,9 +265,9 @@ pub enum ParseError {
     /// Expected a filter operator.
     #[error("Expected a filter operator")]
     ExpectedFilterOperator,
-    /// Expected a filter expression.
-    #[error("Expected a filter expression")]
-    ExpectedFilterExpression,
+    /// Expected a constraint.
+    #[error("Expected a constraint")]
+    ExpectedConstraint,
     /// Expected a body expression.
     #[error("Expected a literal or a filter expression")]
     ExpectedBodyExpression,
@@ -227,9 +289,12 @@ pub enum ParseError {
     /// Expected a function term
     #[error("Expected a function term")]
     ExpectedFunctionTerm,
+    /// Expected a known unary function
+    #[error("Expected a known unary function")]
+    ExpectedUnaryFunction,
     /// Expected a term tree (i.e. a term that can additionally involve e.g. arithmetic operations)
     #[error("Expected a term tree (i.e. a term that can additionally involve e.g. arithmetic operations)")]
-    ExpectedTermTree,
+    ExpectedPrimitiveTerm,
     /// Expected an aggregate
     #[error("Expected an aggregate term")]
     ExpectedAggregate,
@@ -238,10 +303,13 @@ pub enum ParseError {
     ExpectedParenthesisedExpression,
     /// Expected an parenthesised term tree.
     #[error("Expected an parenthesised term tree")]
-    ExpectedParenthesisedTermTree,
+    ExpectedParenthesisedTerm,
     /// An aggregate term occurs in the body of a rule.
     #[error(r#"An aggregate term ("{0}") occurs in the body of a rule"#)]
     AggregateInBody(Aggregate),
+    /// An aggregate may not be used within a complex term.
+    #[error(r#"A term ("{0}") may not contain an aggregate as a subterm."#)]
+    AggregateSubterm(String),
     /// An aggregate term uses an invalid amount of variables.
     #[error(r#"An aggregate term ("{0}") uses an invalid amount of variables. Currently only exactly one variable is allowed inside aggregates"#)]
     InvalidVariableCountInAggregate(Aggregate),

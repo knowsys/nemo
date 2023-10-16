@@ -571,17 +571,17 @@ impl<'a> TrieScan for TrieScanPrune<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
-
     use super::TrieScanPrune;
+
     use crate::columnar::column_types::interval::ColumnWithIntervalsT;
-    use crate::columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue};
+    use crate::columnar::operations::arithmetic::expression::ArithmeticTree;
+    use crate::columnar::operations::condition::statement::ConditionStatement;
     use crate::columnar::traits::column::Column;
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;
     use crate::tabular::operations::{
-        materialize, JoinBindings, TrieScanJoin, TrieScanRestrictValues, ValueAssignment,
+        materialize, JoinBindings, TrieScanJoin, TrieScanRestrictValues,
     };
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
@@ -639,36 +639,20 @@ mod test {
     ) -> TrieScanPrune {
         let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(input_trie));
 
-        let mut dict = Dict::default();
+        let dict = Dict::default();
         let scan = TrieScanEnum::TrieScanRestrictValues(TrieScanRestrictValues::new(
-            &mut dict,
+            &dict,
             scan,
-            &HashMap::from([
-                (
-                    1,
-                    ValueAssignment {
-                        lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(layer_1_equality),
-                        ))],
-                        upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(layer_1_equality),
-                        ))],
-                        avoid_values: vec![],
-                    },
+            &[
+                ConditionStatement::Equal(
+                    ArithmeticTree::Reference(1),
+                    ArithmeticTree::Constant(DataValueT::U64(layer_1_equality)),
                 ),
-                (
-                    3,
-                    ValueAssignment {
-                        lower_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(layer_3_equality),
-                        ))],
-                        upper_bounds: vec![FilterBound::Inclusive(FilterValue::Constant(
-                            DataValueT::U64(layer_3_equality),
-                        ))],
-                        avoid_values: vec![],
-                    },
+                ConditionStatement::Equal(
+                    ArithmeticTree::Reference(3),
+                    ArithmeticTree::Constant(DataValueT::U64(layer_3_equality)),
                 ),
-            ]),
+            ],
         ));
         let scan = TrieScanPrune::new(scan);
 

@@ -6,24 +6,25 @@ use std::{
 };
 
 use nemo_physical::{
-    columnar::operations::columnscan_restrict_values::{FilterBound, FilterValue},
+    columnar::operations::condition::statement::ConditionStatement,
     datatypes::DataValueT,
     management::{
         database::{ColumnOrder, TableId},
         execution_plan::{ExecutionNodeRef, ExecutionPlan},
     },
-    tabular::operations::{
-        triescan_append::AppendInstruction, triescan_select::SelectEqualClasses, ValueAssignment,
-    },
+    tabular::operations::triescan_append::AppendInstruction,
 };
 
 use crate::{
     model::{
-        chase_model::ChaseAtom, Filter, FilterOperation, Identifier, PrimitiveType, Term, Variable,
+        chase_model::{ChaseAtom, PrimitiveAtom, VariableAtom},
+        Constraint, Identifier, PrimitiveTerm, PrimitiveType, Variable,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::TableManager,
 };
+
+use super::arithmetic::termtree_to_arithmetictree;
 
 /// This function replaces each variable in the atom with its position in the variable ordering
 ///
@@ -34,170 +35,55 @@ use crate::{
 /// This function for computing JoinBindings:
 ///
 /// * Example: For a leapfrog join a(x, y, z) b(z, y) with order [x, y, z] you'd obtain [[0, 1, 2], [2, 1]]
-pub(super) fn atom_binding(atom: &ChaseAtom, variable_order: &VariableOrder) -> Vec<usize> {
-    atom.terms().iter().map(|t| if let Term::Variable(variable) = t {
-        *variable_order.get(variable).unwrap()
-    } else {
-        panic!("It is assumed that this function is only called on atoms which only contain variables.");
-    }).collect()
+pub(super) fn atom_binding(atom: &VariableAtom, variable_order: &VariableOrder) -> Vec<usize> {
+    atom.terms()
+        .iter()
+        .map(|v| {
+            *variable_order
+                .get(v)
+                .expect("Function assumed that every variable is contained in the variable order")
+        })
+        .collect()
 }
 
 /// Calculate helper structures that define the filters that need to be applied.
-pub(super) fn compute_filters(
+pub(super) fn compute_constraints(
     variable_order: &VariableOrder,
-    filters: &[Filter],
+    constraints: &[Constraint],
     variable_types: &HashMap<Variable, PrimitiveType>,
-) -> (SelectEqualClasses, HashMap<usize, ValueAssignment>) {
-    let mut filter_assignments = HashMap::<usize, ValueAssignment>::new();
-    let mut filter_classes = Vec::<HashSet<&Variable>>::new();
-    for filter in filters {
-        let left_variable = &filter.lhs;
-        if !variable_order.contains(left_variable) {
-            continue;
-        }
+) -> Vec<ConditionStatement<DataValueT>> {
+    let mut result = Vec::new();
 
-        // Case 1: Variables equals another variable
-        // In this case, we need to update the `filter_classes`
-        if filter.operation == FilterOperation::Equals {
-            if let Term::Variable(right_variable) = &filter.rhs {
-                if !variable_order.contains(right_variable) {
-                    continue;
-                }
+    for constraint in constraints {
+        let some_variable = constraint
+            .variables()
+            .next()
+            .expect("A constraint should contain at least one variable");
+        let variable_type = variable_types
+            .get(some_variable)
+            .expect("Every variable should have a type.");
 
-                let left_index = filter_classes
-                    .iter()
-                    .position(|s| s.contains(left_variable));
-                let right_index = filter_classes
-                    .iter()
-                    .position(|s| s.contains(right_variable));
+        let (left, right) = constraint.terms();
+        let left_tree = termtree_to_arithmetictree(left, variable_order, variable_type);
+        let right_tree = termtree_to_arithmetictree(right, variable_order, variable_type);
 
-                match left_index {
-                    Some(li) => match right_index {
-                        Some(ri) => match ri.cmp(&li) {
-                            std::cmp::Ordering::Less => {
-                                let other_set = filter_classes[li].clone();
-                                filter_classes[ri].extend(other_set);
-
-                                filter_classes.remove(li);
-                            }
-                            std::cmp::Ordering::Equal => todo!(),
-                            std::cmp::Ordering::Greater => {
-                                let other_set = filter_classes[ri].clone();
-                                filter_classes[li].extend(other_set);
-
-                                filter_classes.remove(ri);
-                            }
-                        },
-                        None => {
-                            filter_classes[li].insert(right_variable);
-                        }
-                    },
-                    None => match right_index {
-                        Some(ri) => {
-                            filter_classes[ri].insert(left_variable);
-                        }
-                        None => {
-                            let mut new_set = HashSet::new();
-                            new_set.insert(left_variable);
-                            new_set.insert(right_variable);
-
-                            filter_classes.push(new_set);
-                        }
-                    },
-                }
-
-                continue;
+        let new_statement = match constraint {
+            Constraint::Equals(_, _) => ConditionStatement::Equal(left_tree, right_tree),
+            Constraint::Unequals(_, _) => ConditionStatement::Unequal(left_tree, right_tree),
+            Constraint::LessThan(_, _) => ConditionStatement::LessThan(left_tree, right_tree),
+            Constraint::GreaterThan(_, _) => ConditionStatement::GreaterThan(left_tree, right_tree),
+            Constraint::LessThanEq(_, _) => {
+                ConditionStatement::LessThanEqual(left_tree, right_tree)
             }
-        }
-
-        // Case 2: Variable is compared to another variable or with a constant
-        // In this case, we need to update the `filter_assignments`
-
-        match &filter.rhs {
-            Term::Variable(right_variable) => {
-                if !variable_order.contains(right_variable) {
-                    continue;
-                }
-
-                let column_idx_left = *variable_order
-                    .get(left_variable)
-                    .expect("Loop iteration is skipped for unknown variables.");
-                let column_idx_right = *variable_order
-                    .get(right_variable)
-                    .expect("Loop iteration is skipped for unknown variables.");
-
-                let (column_idx_value, column_idx_bound, operation) =
-                    if column_idx_left > column_idx_right {
-                        (column_idx_left, column_idx_right, filter.operation)
-                    } else {
-                        (column_idx_right, column_idx_left, filter.operation.flip())
-                    };
-
-                let current_assignment = filter_assignments.entry(column_idx_value).or_default();
-
-                add_restriction(
-                    &operation,
-                    FilterValue::Column(column_idx_bound),
-                    &mut current_assignment.lower_bounds,
-                    &mut current_assignment.upper_bounds,
-                    &mut current_assignment.avoid_values,
-                );
+            Constraint::GreaterThanEq(_, _) => {
+                ConditionStatement::GreaterThanEqual(left_tree, right_tree)
             }
-            _ => {
-                let column_idx_value = *variable_order
-                    .get(&filter.lhs)
-                    .expect("Loop iteration is skipped for unknown variables.");
-                let right_value = variable_types
-                    .get(&filter.lhs)
-                    .expect("Each variable should have been assigned a type.")
-                    .ground_term_to_data_value_t(filter.rhs.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.");
+        };
 
-                let current_assignment = filter_assignments.entry(column_idx_value).or_default();
-
-                add_restriction(
-                    &filter.operation,
-                    FilterValue::Constant(right_value),
-                    &mut current_assignment.lower_bounds,
-                    &mut current_assignment.upper_bounds,
-                    &mut current_assignment.avoid_values,
-                );
-            }
-        }
+        result.push(new_statement);
     }
 
-    let filter_classes: SelectEqualClasses = filter_classes
-        .iter()
-        .map(|s| {
-            let mut r = s
-                .iter()
-                .map(|v| *variable_order.get(v).expect("The above loop skips iterations if one of the filter variables is not contained in the variable order."))
-                .collect::<Vec<usize>>();
-            r.sort();
-            r
-        })
-        .collect();
-
-    (filter_classes, filter_assignments)
-}
-
-fn add_restriction(
-    operation: &FilterOperation,
-    value: FilterValue<DataValueT>,
-    lower_bounds: &mut Vec<FilterBound<DataValueT>>,
-    upper_bounds: &mut Vec<FilterBound<DataValueT>>,
-    avoid_values: &mut Vec<FilterValue<DataValueT>>,
-) {
-    match operation {
-        FilterOperation::Equals => {
-            lower_bounds.push(FilterBound::Inclusive(value.clone()));
-            upper_bounds.push(FilterBound::Inclusive(value))
-        }
-        FilterOperation::LessThan => upper_bounds.push(FilterBound::Exclusive(value)),
-        FilterOperation::GreaterThan => lower_bounds.push(FilterBound::Exclusive(value)),
-        FilterOperation::LessThanEq => upper_bounds.push(FilterBound::Inclusive(value)),
-        FilterOperation::GreaterThanEq => lower_bounds.push(FilterBound::Inclusive(value)),
-        FilterOperation::Unequals => avoid_values.push(value),
-    }
+    result
 }
 
 /// Compute the subplan that represents the union of a tables within a certain step range.
@@ -243,7 +129,7 @@ pub(super) fn subplan_union_reordered(
 #[derive(Debug)]
 pub(super) struct HeadInstruction {
     /// Reduced form of the the atom which only contains duplicate variables, constants or existential variables.
-    pub reduced_atom: ChaseAtom,
+    pub reduced_atom: VariableAtom,
     /// The [`AppendInstruction`]s to get the original atom.
     pub append_instructions: Vec<Vec<AppendInstruction>>,
     /// The arity of the original atom.
@@ -253,11 +139,11 @@ pub(super) struct HeadInstruction {
 /// Given an atom, bring compute the corresponding [`HeadInstruction`].
 /// TODO: This needs to be revised once the Type System on the logical layer has been implemented.
 pub(super) fn head_instruction_from_atom(
-    atom: &ChaseAtom,
+    atom: &PrimitiveAtom,
     analysis: &RuleAnalysis,
 ) -> HeadInstruction {
     let arity = atom.terms().len();
-    let mut reduced_terms = Vec::<Term>::with_capacity(arity);
+    let mut reduced_terms = Vec::<Variable>::with_capacity(arity);
     let mut append_instructions = Vec::<Vec<AppendInstruction>>::new();
 
     append_instructions.push(vec![]);
@@ -271,34 +157,35 @@ pub(super) fn head_instruction_from_atom(
             t,
         )
     }) {
-        if let Term::Variable(variable) = term {
-            let variable_identifier = match variable {
-                Variable::Universal(id) => id,
-                Variable::Existential(id) => id,
-            };
+        match term {
+            PrimitiveTerm::Variable(variable) => {
+                let variable_identifier = match variable {
+                    Variable::Universal(id) => id,
+                    Variable::Existential(id) => id,
+                };
 
-            if let Some(repeat_index) = variable_map.get(variable_identifier) {
-                let instruction = AppendInstruction::RepeatColumn(*repeat_index);
-                current_append_vector.push(instruction);
-            } else {
-                let reduced_index = reduced_terms.len();
-                reduced_terms.push(Term::Variable(variable.clone()));
+                if let Some(repeat_index) = variable_map.get(variable_identifier) {
+                    let instruction = AppendInstruction::RepeatColumn(*repeat_index);
+                    current_append_vector.push(instruction);
+                } else {
+                    let reduced_index = reduced_terms.len();
+                    reduced_terms.push(variable.clone());
 
-                variable_map.insert(variable_identifier.clone(), reduced_index);
+                    variable_map.insert(variable_identifier.clone(), reduced_index);
 
-                append_instructions.push(vec![]);
-                current_append_vector = append_instructions.last_mut().unwrap();
+                    append_instructions.push(vec![]);
+                    current_append_vector = append_instructions.last_mut().unwrap();
+                }
             }
-        } else if let Term::Aggregate(_aggregate) = term {
-            panic!("Aggregate terms in the head should have already been replaced by placeholder variables in the chase rule creation and are thus not supported here")
-        } else {
-            let data_value_t = logical_type.ground_term_to_data_value_t(term.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.");
-            let instruction = AppendInstruction::Constant(data_value_t);
-            current_append_vector.push(instruction);
+            PrimitiveTerm::Constant(constant) => {
+                let data_value_t = logical_type.ground_term_to_data_value_t(constant.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.");
+                let instruction = AppendInstruction::Constant(data_value_t);
+                current_append_vector.push(instruction);
+            }
         }
     }
 
-    let reduced_atom = ChaseAtom::new(atom.predicate(), reduced_terms);
+    let reduced_atom = VariableAtom::new(atom.predicate(), reduced_terms);
 
     HeadInstruction {
         reduced_atom,

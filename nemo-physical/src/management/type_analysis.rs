@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::HashMap, fmt::Display};
 
 use crate::{
     aggregates::operation::AggregateOperation,
-    columnar::operations::columnscan_arithmetic::ArithmeticOperation,
+    columnar::operations::arithmetic::expression::ArithmeticTreeLeaf,
     datatypes::{casting::PartialUpperBound, DataTypeName},
     error::Error,
     tabular::{operations::triescan_append::AppendInstruction, traits::table_schema::TableSchema},
@@ -243,7 +243,7 @@ impl TypeTree {
 
                 Ok(TypeTreeNode::new(new_schema, vec![subtype_node]))
             }
-            ExecutionOperation::SelectValue(subtree, _assignments) => {
+            ExecutionOperation::Filter(subtree, _condition) => {
                 let subtype_node = Self::propagate_up(instance, previous_trees, subtree.clone())?;
                 Ok(TypeTreeNode::new(
                     subtype_node.schema.clone(),
@@ -295,7 +295,7 @@ impl TypeTree {
                             AppendInstruction::Constant(value) => {
                                 new_schema.add_entry(value.get_type());
                             }
-                            AppendInstruction::Operation(tree) => {
+                            AppendInstruction::Arithmetic(tree) => {
                                 if subtype_node.schema.is_empty() {
                                     continue;
                                 }
@@ -305,21 +305,13 @@ impl TypeTree {
                                 // We check whether the type of each leaf node has the same upper bound
                                 for leaf in tree.leaves() {
                                     let current_type = match leaf {
-                                        ArithmeticOperation::Constant(constant) => {
+                                        ArithmeticTreeLeaf::Constant(constant) => {
                                             constant.get_type().partial_upper_bound()
                                         }
-                                        ArithmeticOperation::ColumnScan(column_index) => {
-                                            subtype_node
-                                                .schema
-                                                .get_entry(*column_index)
-                                                .partial_upper_bound()
-                                        }
-                                        ArithmeticOperation::Addition
-                                        | ArithmeticOperation::Subtraction
-                                        | ArithmeticOperation::Multiplication
-                                        | ArithmeticOperation::Division => {
-                                            unreachable!("Not a leaf node")
-                                        }
+                                        ArithmeticTreeLeaf::Reference(column_index) => subtype_node
+                                            .schema
+                                            .get_entry(column_index)
+                                            .partial_upper_bound(),
                                     };
 
                                     if let Some(operation_type) = operation_type {
@@ -487,7 +479,7 @@ impl TypeTree {
                     subtree.clone(),
                 );
             }
-            ExecutionOperation::SelectValue(subtree, _assignments) => {
+            ExecutionOperation::Filter(subtree, _assignments) => {
                 let mut schema_map = HashMap::<usize, DataTypeName>::new();
                 for (column_index, schema_entry) in type_node.schema.iter().enumerate() {
                     schema_map.insert(column_index, *schema_entry);
@@ -529,16 +521,18 @@ impl TypeTree {
                 // Overwrite type of input columns to an operation to maximum type
                 for instructions in instructions {
                     for instruction in instructions {
-                        if let AppendInstruction::Operation(tree) = instruction {
-                            for &input_index in tree.input_indices() {
-                                let max_type = schema_map
+                        if let AppendInstruction::Arithmetic(tree) = instruction {
+                            for leaf in tree.leaves() {
+                                if let ArithmeticTreeLeaf::Reference(input_index) = leaf {
+                                    let max_type = schema_map
                                     .get(&input_index)
                                     .expect(
                                         "operation tree should only contain valid input indices",
                                     )
                                     .partial_upper_bound();
 
-                                schema_map.insert(input_index, max_type);
+                                    schema_map.insert(input_index, max_type);
+                                }
                             }
                         }
                     }

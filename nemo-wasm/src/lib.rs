@@ -15,10 +15,10 @@ use nemo::io::parser::parse_fact;
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo::model::types::primitive_logical_value::PrimitiveLogicalValueT;
+use nemo::model::Constant;
 use nemo::model::DataSource;
 use nemo::model::DataSourceDeclaration;
 use nemo::model::NumericLiteral;
-use nemo::model::Term;
 use nemo_physical::datatypes::Double;
 use nemo_physical::error::ExternalReadingError;
 use nemo_physical::error::ReadingError;
@@ -334,17 +334,15 @@ impl NemoResults {
                 .into_iter()
                 .map(|v| match v {
                     PrimitiveLogicalValueT::Any(rdf) => match rdf {
-                        Term::Variable(_) => panic!("Variables should not occur as results!"),
-                        Term::Constant(c) => JsValue::from(c.to_string()),
-                        Term::NumericLiteral(NumericLiteral::Integer(i)) => JsValue::from(i),
-                        Term::NumericLiteral(NumericLiteral::Double(d)) => {
+                        Constant::Abstract(c) => JsValue::from(c.to_string()),
+                        Constant::NumericLiteral(NumericLiteral::Integer(i)) => JsValue::from(i),
+                        Constant::NumericLiteral(NumericLiteral::Double(d)) => {
                             JsValue::from(f64::from(d))
                         }
                         // currently we pack decimals into strings, maybe this should change
-                        Term::NumericLiteral(_) => JsValue::from(rdf.to_string()),
-                        Term::StringLiteral(s) => JsValue::from(s),
-                        Term::RdfLiteral(lit) => JsValue::from(lit.to_string()),
-                        Term::Aggregate(_) => panic!("Aggregates should not occur as results!"),
+                        Constant::NumericLiteral(_) => JsValue::from(rdf.to_string()),
+                        Constant::StringLiteral(s) => JsValue::from(s),
+                        Constant::RdfLiteral(lit) => JsValue::from(lit.to_string()),
                     },
                     PrimitiveLogicalValueT::String(s) => JsValue::from(String::from(s)),
                     PrimitiveLogicalValueT::Integer(i) => JsValue::from(i64::from(i)),

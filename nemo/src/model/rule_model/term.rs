@@ -1,95 +1,10 @@
-use std::path::PathBuf;
+use std::fmt::{Debug, Display};
 
-use nemo_physical::datatypes::Double;
-use nemo_physical::error::ReadingError;
-use sanitise_file_name::{sanitise_with_options, Options};
-use thiserror::Error;
+use crate::model::{types::primitive_logical_value::LOGICAL_NULL_PREFIX, VariableAssignment};
 
-use crate::model::{
-    types::primitive_logical_value::{LogicalString, LOGICAL_NULL_PREFIX},
-    TypeConstraint,
-};
+use super::{Aggregate, Identifier, NumericLiteral, RdfLiteral};
 
-use super::Aggregate;
-
-/// XSD type for string
-pub const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
-/// XSD type for double
-pub const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
-/// XSD type for decimal
-pub const XSD_DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
-/// XSD type for integer
-pub const XSD_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
-
-/// An identifier for, e.g., a Term or a Predicate.
-#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
-pub struct Identifier(pub(crate) String);
-
-impl Identifier {
-    /// Returns the associated name
-    pub fn name(&self) -> String {
-        self.0.clone()
-    }
-
-    /// Returns a sanitised path with respect to the associated name
-    pub fn sanitised_file_name(&self, mut path: PathBuf) -> PathBuf {
-        let sanitise_options = Options::<Option<char>> {
-            url_safe: true,
-            ..Default::default()
-        };
-        let file_name = sanitise_with_options(&self.name(), &sanitise_options);
-        path.push(file_name);
-        path
-    }
-}
-
-impl std::fmt::Display for Identifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.name())
-    }
-}
-
-impl From<String> for Identifier {
-    fn from(value: String) -> Self {
-        Identifier(value)
-    }
-}
-
-/// A qualified predicate name, i.e., a predicate name together with a type constraint.
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
-pub struct QualifiedPredicateName {
-    /// The predicate name
-    pub(crate) identifier: Identifier,
-    /// The type qualification
-    pub(crate) associated_type: Option<TypeConstraint>,
-}
-
-impl QualifiedPredicateName {
-    /// Construct a new qualified predicate name from an identifier,
-    /// leaving the arity unspecified.
-    pub fn new(identifier: Identifier) -> Self {
-        Self {
-            identifier,
-            associated_type: None,
-        }
-    }
-
-    /// Construct a new qualified predicate name with the given arity or a list of types.
-    pub fn with_constraint(identifier: Identifier, constraint: TypeConstraint) -> Self {
-        Self {
-            identifier,
-            associated_type: Some(constraint),
-        }
-    }
-}
-
-impl From<Identifier> for QualifiedPredicateName {
-    fn from(identifier: Identifier) -> Self {
-        Self::new(identifier)
-    }
-}
-
-/// Variable occuring in a rule
+/// Variable that can be bound to a specific value
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 pub enum Variable {
     /// A universally quantified variable.
@@ -117,7 +32,7 @@ impl Variable {
     }
 }
 
-impl std::fmt::Display for Variable {
+impl Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = match self {
             Variable::Universal(_) => "?",
@@ -128,204 +43,474 @@ impl std::fmt::Display for Variable {
     }
 }
 
-/// Terms occurring in programs.
+/// A term with a specific constant value
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
-pub enum Term {
+pub enum Constant {
     /// An (abstract) constant.
-    Constant(Identifier),
-    /// A variable.
-    Variable(Variable),
+    Abstract(Identifier),
     /// A numeric literal.
     NumericLiteral(NumericLiteral),
     /// A string literal.
     StringLiteral(String),
-    /// An RDF literal.
+    /// An RDF-literal.
     RdfLiteral(RdfLiteral),
-    /// An aggregate consisting of the aggregate function identifier and the variable identifiers.
-    Aggregate(Aggregate),
 }
 
-impl std::fmt::Display for Term {
+impl Display for Constant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            Term::Constant(Identifier(s)) => {
+        match self {
+            Constant::Abstract(Identifier(abstract_string)) => {
                 // Nulls on logical level start with __Null# and shall be wrapped in angle brackets
                 // blank nodes and anything that starts with an ascii letter (like bare names)
                 // should not be wrapped in angle brackets
-                if !s.starts_with(LOGICAL_NULL_PREFIX)
-                    && s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                if !abstract_string.starts_with(LOGICAL_NULL_PREFIX)
+                    && abstract_string.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
                 {
-                    write!(f, "{s}")
+                    write!(f, "{abstract_string}")
                 }
                 // everything else (including nulls) shall be wrapped in angle_brackets
                 else {
-                    write!(f, "<{s}>")
+                    write!(f, "<{abstract_string}>")
                 }
             }
-            Term::Variable(term) => write!(f, "{term}"),
-            Term::NumericLiteral(term) => write!(f, "{term}"),
-            Term::StringLiteral(term) => write!(f, "\"{term}\""),
-            Term::RdfLiteral(term) => write!(f, "{term}"),
-            Term::Aggregate(aggregate) => write!(f, "{aggregate}"),
+            Constant::NumericLiteral(literal) => write!(f, "{}", literal),
+            Constant::StringLiteral(literal) => write!(f, "\"{}\"", literal),
+            Constant::RdfLiteral(literal) => write!(f, "{}", literal),
         }
+    }
+}
+
+/// Simple term that is either a constant or a variable
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+pub enum PrimitiveTerm {
+    /// A constant.
+    Constant(Constant),
+    /// A variable.
+    Variable(Variable),
+}
+
+impl From<Constant> for PrimitiveTerm {
+    fn from(value: Constant) -> Self {
+        Self::Constant(value)
+    }
+}
+
+impl PrimitiveTerm {
+    /// Return `true` if term is not a variable.
+    pub fn is_ground(&self) -> bool {
+        !matches!(self, PrimitiveTerm::Variable(_))
+    }
+}
+
+impl Display for PrimitiveTerm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PrimitiveTerm::Constant(term) => write!(f, "{}", term),
+            PrimitiveTerm::Variable(term) => write!(f, "{}", term),
+        }
+    }
+}
+
+/// Represents an abstract logical function
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+pub struct AbstractFunction {
+    /// Name of the function
+    pub name: Identifier,
+    /// Its subterms
+    pub subterms: Vec<Term>,
+}
+
+/// Binary operation between two [`Term`]
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+pub enum BinaryOperation {
+    /// Sum between terms.
+    Addition(Box<Term>, Box<Term>),
+    /// Difference between two terms.
+    Subtraction(Box<Term>, Box<Term>),
+    /// Product between terms.
+    Multiplication(Box<Term>, Box<Term>),
+    /// Ratio between the two terms.
+    Division(Box<Term>, Box<Term>),
+    /// First term raised to the power of the second term.
+    Exponent(Box<Term>, Box<Term>),
+}
+
+impl BinaryOperation {
+    /// Returns the left and the right [`Term`] of this binary operation.
+    pub fn terms(&self) -> (&Term, &Term) {
+        match self {
+            BinaryOperation::Addition(left, right)
+            | BinaryOperation::Subtraction(left, right)
+            | BinaryOperation::Multiplication(left, right)
+            | BinaryOperation::Division(left, right)
+            | BinaryOperation::Exponent(left, right) => (left, right),
+        }
+    }
+
+    /// Returns a mutable reference to the left and the right [`Term`] of this binary operation.
+    pub fn terms_mut(&mut self) -> (&mut Term, &mut Term) {
+        match self {
+            BinaryOperation::Addition(left, right)
+            | BinaryOperation::Subtraction(left, right)
+            | BinaryOperation::Multiplication(left, right)
+            | BinaryOperation::Division(left, right)
+            | BinaryOperation::Exponent(left, right) => (left, right),
+        }
+    }
+
+    /// Returns the left [`Term`] of this binary operation.
+    pub fn left(&self) -> &Term {
+        self.terms().0
+    }
+
+    /// Returns the right [`Term`] of this binary operation.
+    pub fn right(&self) -> &Term {
+        self.terms().1
+    }
+
+    /// Return the name of the operation.
+    pub fn name(&self) -> String {
+        let name = match self {
+            BinaryOperation::Addition(_, _) => "Addition",
+            BinaryOperation::Subtraction(_, _) => "Subtraction",
+            BinaryOperation::Multiplication(_, _) => "Multiplication",
+            BinaryOperation::Division(_, _) => "Division",
+            BinaryOperation::Exponent(_, _) => "Exponent",
+        };
+
+        String::from(name)
+    }
+}
+
+/// Unary operation applied to a [`Term`]
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+pub enum UnaryOperation {
+    /// Squareroot of the given term
+    SquareRoot(Box<Term>),
+    /// Additive inverse of the given term.
+    UnaryMinus(Box<Term>),
+    /// Absolute value of the given term.
+    Abs(Box<Term>),
+}
+
+impl UnaryOperation {
+    /// Return a function which is able to construct the respective term based on the function name.
+    /// Returns `None` if the provided function name does not correspond to a know unary function.
+    pub fn construct_from_name(name: &str) -> Option<Box<dyn Fn(Term) -> Term>> {
+        match name {
+            "Abs" => Some(Box::new(|t| Term::Unary(UnaryOperation::Abs(Box::new(t))))),
+            "Sqrt" => Some(Box::new(|t| {
+                Term::Unary(UnaryOperation::SquareRoot(Box::new(t)))
+            })),
+            _ => None,
+        }
+    }
+
+    /// Return the [`Term`] to which the unary operation is applied.
+    pub fn term(&self) -> &Term {
+        match self {
+            UnaryOperation::SquareRoot(term)
+            | UnaryOperation::UnaryMinus(term)
+            | UnaryOperation::Abs(term) => term,
+        }
+    }
+
+    /// Return the [`Term`] to which the unary operation is applied.
+    pub fn term_mut(&mut self) -> &mut Term {
+        match self {
+            UnaryOperation::SquareRoot(term)
+            | UnaryOperation::UnaryMinus(term)
+            | UnaryOperation::Abs(term) => term,
+        }
+    }
+
+    /// Return the name of the operation.
+    pub fn name(&self) -> String {
+        let name = match self {
+            UnaryOperation::SquareRoot(_) => "SquareRoot",
+            UnaryOperation::UnaryMinus(_) => "UnaryMinus",
+            UnaryOperation::Abs(_) => "Abs",
+        };
+
+        String::from(name)
+    }
+}
+
+/// Possibly complex term that may occur within an [`super::Atom`]
+#[derive(Eq, PartialEq, Clone, PartialOrd, Ord)]
+pub enum Term {
+    /// Primitive term.
+    Primitive(PrimitiveTerm),
+    /// Binary operation.
+    Binary(BinaryOperation),
+    /// Unary operation.
+    Unary(UnaryOperation),
+    /// Aggregation.
+    Aggregation(Aggregate),
+    /// Abstract Function.
+    Function(AbstractFunction),
+}
+
+impl Term {
+    /// If the term is a simple [`PrimitiveTerm`] then return it.
+    /// Otherwise return `None`.
+    pub fn as_primitive(&self) -> Option<PrimitiveTerm> {
+        match self {
+            Term::Primitive(primitive) => Some(primitive.clone()),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if term is primitive.
+    /// Returns `false` if term is composite.
+    pub fn is_primitive(&self) -> bool {
+        self.as_primitive().is_some()
+    }
+
+    /// Return all [`PrimitiveTerm`]s that make up this term.
+    pub fn primitive_terms(&self) -> Vec<&PrimitiveTerm> {
+        match self {
+            Term::Primitive(primitive) => {
+                vec![primitive]
+            }
+            Term::Binary(binary) => {
+                let (left, right) = binary.terms();
+
+                let mut terms = left.primitive_terms();
+                terms.extend(right.primitive_terms());
+
+                terms
+            }
+            Term::Unary(unary) => unary.term().primitive_terms(),
+            Term::Function(f) => f
+                .subterms
+                .iter()
+                .flat_map(|t| t.primitive_terms())
+                .collect(),
+            Term::Aggregation(aggregate) => aggregate.terms.iter().collect(),
+        }
+    }
+
+    /// Return all variables in the atom.
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
+        self.primitive_terms()
+            .into_iter()
+            .filter_map(|term| match term {
+                PrimitiveTerm::Variable(var) => Some(var),
+                _ => None,
+            })
+    }
+
+    /// Return all universally quantified variables in the atom.
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.variables()
+            .filter(|var| matches!(var, Variable::Universal(_)))
+    }
+
+    /// Return all existentially quantified variables in the atom.
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.variables()
+            .filter(|var| matches!(var, Variable::Existential(_)))
+    }
+
+    /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
+        match self {
+            Term::Primitive(primitive) => {
+                if let PrimitiveTerm::Variable(variable) = primitive {
+                    if let Some(value) = assignment.get(variable) {
+                        *self = value.clone();
+                    }
+                }
+            }
+            Term::Binary(binary) => {
+                let (left, right) = binary.terms_mut();
+
+                left.apply_assignment(assignment);
+                right.apply_assignment(assignment);
+            }
+            Term::Unary(unary) => unary.term_mut().apply_assignment(assignment),
+            Term::Aggregation(aggregate) => aggregate.apply_assignment(assignment),
+            Term::Function(sub) => sub
+                .subterms
+                .iter_mut()
+                .for_each(|t| t.apply_assignment(assignment)),
+        }
+    }
+
+    fn aggregate_subterm_recursive(term: &Term) -> bool {
+        match term {
+            Term::Primitive(_primitive) => false,
+            Term::Binary(binary) => {
+                let (left, right) = binary.terms();
+
+                Self::aggregate_subterm_recursive(left) || Self::aggregate_subterm(right)
+            }
+            Term::Unary(unary) => Self::aggregate_subterm_recursive(unary.term()),
+            Term::Aggregation(_aggregate) => true,
+            Term::Function(sub) => sub.subterms.iter().any(Self::aggregate_subterm_recursive),
+        }
+    }
+
+    /// Checks if this term contains an aggregate as a sub term.
+    /// This is currently not allowed.
+    pub fn aggregate_subterm(&self) -> bool {
+        match self {
+            Term::Primitive(_primitive) => false,
+            Term::Binary(binary) => {
+                let (left, right) = binary.terms();
+
+                Self::aggregate_subterm_recursive(left) || Self::aggregate_subterm(right)
+            }
+            Term::Unary(unary) => Self::aggregate_subterm_recursive(unary.term()),
+            Term::Aggregation(_aggregate) => false, // We allow aggregation on the top level
+            Term::Function(sub) => sub.subterms.iter().any(Self::aggregate_subterm_recursive),
+        }
+    }
+}
+
+impl From<PrimitiveTerm> for Term {
+    fn from(value: PrimitiveTerm) -> Self {
+        Term::Primitive(value)
     }
 }
 
 impl Term {
-    /// Check if the term is ground.
-    pub fn is_ground(&self) -> bool {
-        matches!(
-            self,
-            Self::Constant(_) | Self::NumericLiteral(_) | Self::RdfLiteral(_)
-        )
-    }
-
-    /// Substitutes all occurrences of `var` for `subst`.
-    pub fn substitute_variable(&mut self, var: &Variable, subst: &Variable) {
-        debug_assert!(matches!(var, Variable::Universal(_)));
+    fn ascii_tree(&self) -> ascii_tree::Tree {
         match self {
-            Term::Variable(v) => {
-                if v == var {
-                    *v = subst.clone()
-                }
+            Term::Primitive(primitive) => ascii_tree::Tree::Leaf(vec![format!("{:?}", primitive)]),
+            Term::Binary(binary) => ascii_tree::Tree::Node(
+                binary.name(),
+                vec![binary.left().ascii_tree(), binary.right().ascii_tree()],
+            ),
+            Term::Unary(unary) => {
+                ascii_tree::Tree::Node(unary.name(), vec![unary.term().ascii_tree()])
             }
-            Term::Aggregate(agg) => agg.substitute_variable(var, subst),
-            _ => {}
+            Term::Aggregation(aggregate) => {
+                ascii_tree::Tree::Leaf(vec![format!("{:?}", aggregate)])
+            }
+            Term::Function(function) => ascii_tree::Tree::Node(
+                function.name.to_string(),
+                function.subterms.iter().map(|s| s.ascii_tree()).collect(),
+            ),
         }
+    }
+
+    /// Defines the precedence of the term operations.
+    /// This is only relevant for the [`Display`] implementation.
+    fn precedence(&self) -> usize {
+        match self {
+            Term::Primitive(_) => 0,
+            Term::Binary(BinaryOperation::Addition(_, _)) => 1,
+            Term::Binary(BinaryOperation::Subtraction(_, _)) => 1,
+            Term::Binary(BinaryOperation::Multiplication(_, _)) => 2,
+            Term::Binary(BinaryOperation::Division(_, _)) => 2,
+            Term::Binary(BinaryOperation::Exponent(_, _)) => 3,
+            Term::Unary(UnaryOperation::SquareRoot(_)) => 5,
+            Term::Unary(UnaryOperation::UnaryMinus(_)) => 5,
+            Term::Unary(UnaryOperation::Abs(_)) => 5,
+            Term::Aggregation(_) => 5,
+            Term::Function(_) => 5,
+        }
+    }
+
+    fn format_braces_priority(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        term: &Term,
+    ) -> std::fmt::Result {
+        let need_braces = self.precedence() > term.precedence() && !term.is_primitive();
+
+        if need_braces {
+            self.format_braces(f, term)
+        } else {
+            write!(f, "{}", term)
+        }
+    }
+
+    fn format_braces(&self, f: &mut std::fmt::Formatter<'_>, term: &Term) -> std::fmt::Result {
+        f.write_str("(")?;
+        write!(f, "{}", term)?;
+        f.write_str(")")
+    }
+
+    fn format_multinary_operation(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        terms: &[Term],
+        delimiter: &str,
+    ) -> std::fmt::Result {
+        for (index, term) in terms.iter().enumerate() {
+            self.format_braces_priority(f, term)?;
+
+            if index < terms.len() - 1 {
+                f.write_str(delimiter)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn format_binary_operation(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        left: &Term,
+        right: &Term,
+        delimiter: &str,
+    ) -> std::fmt::Result {
+        self.format_braces_priority(f, left)?;
+        f.write_str(delimiter)?;
+        self.format_braces_priority(f, right)
     }
 }
 
-/// A numerical literal.
-#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
-pub enum NumericLiteral {
-    /// An integer literal.
-    Integer(i64),
-    /// A decimal literal.
-    Decimal(i64, u64),
-    /// A double literal.
-    Double(Double),
+impl Debug for Term {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        ascii_tree::write_tree(f, &self.ascii_tree())
+    }
 }
 
-impl std::fmt::Display for NumericLiteral {
+impl Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            NumericLiteral::Integer(value) => write!(f, "{value}"),
-            NumericLiteral::Decimal(left, right) => write!(f, "{left}.{right}"),
-            NumericLiteral::Double(value) => write!(f, "{:E}", f64::from(*value)),
-        }
-    }
-}
+            Term::Primitive(primitive) => write!(f, "{}", primitive),
+            Term::Binary(BinaryOperation::Addition(left, right)) => {
+                self.format_binary_operation(f, left, right, " + ")
+            }
+            Term::Binary(BinaryOperation::Subtraction(left, right)) => {
+                self.format_binary_operation(f, left, right, " - ")
+            }
+            Term::Binary(BinaryOperation::Multiplication(left, right)) => {
+                self.format_binary_operation(f, left, right, " * ")
+            }
+            Term::Binary(BinaryOperation::Division(left, right)) => {
+                self.format_binary_operation(f, left, right, " / ")
+            }
+            Term::Binary(BinaryOperation::Exponent(left, right)) => {
+                self.format_binary_operation(f, left, right, " ^ ")
+            }
+            Term::Unary(UnaryOperation::SquareRoot(sub)) => {
+                f.write_str("sqrt(")?;
+                write!(f, "{}", sub)?;
+                f.write_str(")")
+            }
+            Term::Unary(UnaryOperation::UnaryMinus(sub)) => {
+                f.write_str("-")?;
 
-/// An RDF literal.
-#[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
-pub enum RdfLiteral {
-    /// A language string.
-    LanguageString {
-        /// The literal value.
-        value: String,
-        /// The language tag.
-        tag: String,
-    },
-    /// A literal with a datatype.
-    DatatypeValue {
-        /// The literal value.
-        value: String,
-        /// The datatype IRI.
-        datatype: String,
-    },
-}
-
-impl std::fmt::Display for RdfLiteral {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RdfLiteral::LanguageString { value, tag } => write!(f, "\"{value}\"@{tag}"),
-            RdfLiteral::DatatypeValue { value, datatype } => write!(f, "\"{value}\"^^<{datatype}>"),
-        }
-    }
-}
-
-/// An [`InvalidRdfLiteral`]
-#[derive(Debug, Error, PartialEq)]
-#[error("The literal \"{}\" is not valid.", .literal)]
-pub struct InvalidRdfLiteral {
-    literal: RdfLiteral,
-}
-
-impl InvalidRdfLiteral {
-    /// Create new `InvalidRdfLiteral` error
-    pub fn new(literal: RdfLiteral) -> Self {
-        Self { literal }
-    }
-}
-
-impl From<InvalidRdfLiteral> for ReadingError {
-    fn from(value: InvalidRdfLiteral) -> Self {
-        Self::InvalidRdfLiteral(value.literal.to_string())
-    }
-}
-
-impl TryFrom<RdfLiteral> for Term {
-    type Error = InvalidRdfLiteral;
-
-    fn try_from(literal: RdfLiteral) -> Result<Self, Self::Error> {
-        match literal {
-            RdfLiteral::LanguageString { .. } => Ok(Self::RdfLiteral(literal)),
-            RdfLiteral::DatatypeValue {
-                ref value,
-                ref datatype,
-            } => match datatype.as_ref() {
-                XSD_STRING => Ok(LogicalString::from(value.to_string()).into()),
-                XSD_INTEGER => {
-                    let trimmed = value.strip_prefix(['-', '+']).unwrap_or(value);
-
-                    if !trimmed.chars().all(|c| c.is_ascii_digit()) {
-                        Err(InvalidRdfLiteral::new(literal.clone()))
-                    } else {
-                        Ok(value
-                            .parse()
-                            .map(|v| Self::NumericLiteral(NumericLiteral::Integer(v)))
-                            .unwrap_or(Self::RdfLiteral(literal)))
-                    }
-                }
-                XSD_DECIMAL => match value.rsplit_once('.') {
-                    Some((a, b)) => {
-                        let trimmed_a = a.strip_prefix(['-', '+']).unwrap_or(a);
-                        let is_valid = trimmed_a.chars().all(|c| c.is_ascii_digit())
-                            && b.chars().all(|c| c.is_ascii_digit());
-
-                        if !is_valid {
-                            Err(InvalidRdfLiteral::new(literal.clone()))
-                        } else {
-                            Ok(a.parse()
-                                .ok()
-                                .and_then(|a| Some((a, b.parse().ok()?)))
-                                .map(|(a, b)| Self::NumericLiteral(NumericLiteral::Decimal(a, b)))
-                                .unwrap_or(Self::RdfLiteral(literal)))
-                        }
-                    }
-                    None => {
-                        let trimmed = value.strip_prefix(['-', '+']).unwrap_or(value);
-                        let is_valid = trimmed.chars().all(|c| c.is_ascii_digit());
-
-                        if !is_valid {
-                            Err(InvalidRdfLiteral::new(literal.clone()))
-                        } else {
-                            Ok(value
-                                .parse()
-                                .ok()
-                                .map(|v| Self::NumericLiteral(NumericLiteral::Decimal(v, 0)))
-                                .unwrap_or(Self::RdfLiteral(literal)))
-                        }
-                    }
-                },
-                XSD_DOUBLE => Ok(value
-                    .parse()
-                    .ok()
-                    .and_then(|f64| Double::new(f64).ok())
-                    .map(|d| Self::NumericLiteral(NumericLiteral::Double(d)))
-                    .unwrap_or(Self::RdfLiteral(literal))),
-                _ => Ok(Self::RdfLiteral(literal)),
-            },
+                self.format_braces_priority(f, sub)
+            }
+            Term::Unary(UnaryOperation::Abs(sub)) => {
+                f.write_str("|")?;
+                write!(f, "{}", sub)?;
+                f.write_str("|")
+            }
+            Term::Aggregation(aggregate) => write!(f, "{}", aggregate),
+            Term::Function(function) => {
+                f.write_str(&function.name.to_string())?;
+                f.write_str("(")?;
+                self.format_multinary_operation(f, &function.subterms, ", ")?;
+                f.write_str(")")
+            }
         }
     }
 }
@@ -333,6 +518,13 @@ impl TryFrom<RdfLiteral> for Term {
 #[cfg(test)]
 mod test {
     use std::assert_eq;
+
+    use nemo_physical::datatypes::Double;
+
+    use crate::model::{
+        InvalidRdfLiteral, NumericLiteral, RdfLiteral, XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER,
+        XSD_STRING,
+    };
 
     use super::*;
 
@@ -399,29 +591,33 @@ mod test {
             datatype: XSD_DECIMAL.to_string(),
         };
 
-        let expected_language_string_literal = Term::RdfLiteral(language_string_literal.clone());
-        let expected_random_datavalue_literal = Term::RdfLiteral(random_datavalue_literal.clone());
-        let expected_string_datavalue_literal = Term::StringLiteral("string datavalue".to_string());
-        let expected_integer_datavalue_literal = Term::NumericLiteral(NumericLiteral::Integer(73));
+        let expected_language_string_literal =
+            Constant::RdfLiteral(language_string_literal.clone());
+        let expected_random_datavalue_literal =
+            Constant::RdfLiteral(random_datavalue_literal.clone());
+        let expected_string_datavalue_literal =
+            Constant::StringLiteral("string datavalue".to_string());
+        let expected_integer_datavalue_literal =
+            Constant::NumericLiteral(NumericLiteral::Integer(73));
         let expected_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(1, 23));
+            Constant::NumericLiteral(NumericLiteral::Decimal(1, 23));
         let expected_signed_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(1, 23));
+            Constant::NumericLiteral(NumericLiteral::Decimal(1, 23));
         let expected_negative_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(-1, 23));
+            Constant::NumericLiteral(NumericLiteral::Decimal(-1, 23));
         let expected_pointless_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(23, 0));
+            Constant::NumericLiteral(NumericLiteral::Decimal(23, 0));
         let expected_signed_pointless_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(23, 0));
+            Constant::NumericLiteral(NumericLiteral::Decimal(23, 0));
         let expected_negative_pointless_decimal_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Decimal(-23, 0));
+            Constant::NumericLiteral(NumericLiteral::Decimal(-23, 0));
         let expected_double_datavalue_literal =
-            Term::NumericLiteral(NumericLiteral::Double(Double::new(3.33).unwrap()));
-        let expected_large_integer_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+            Constant::NumericLiteral(NumericLiteral::Double(Double::new(3.33).unwrap()));
+        let expected_large_integer_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
             value: "9950000000000000000".to_string(),
             datatype: XSD_INTEGER.to_string(),
         });
-        let expected_large_decimal_literal = Term::RdfLiteral(RdfLiteral::DatatypeValue {
+        let expected_large_decimal_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
             value: "9950000000000000001".to_string(),
             datatype: XSD_DECIMAL.to_string(),
         });
@@ -435,63 +631,63 @@ mod test {
         });
 
         assert_eq!(
-            Term::try_from(language_string_literal).unwrap(),
+            Constant::try_from(language_string_literal).unwrap(),
             expected_language_string_literal
         );
         assert_eq!(
-            Term::try_from(random_datavalue_literal).unwrap(),
+            Constant::try_from(random_datavalue_literal).unwrap(),
             expected_random_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(string_datavalue_literal).unwrap(),
+            Constant::try_from(string_datavalue_literal).unwrap(),
             expected_string_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(integer_datavalue_literal).unwrap(),
+            Constant::try_from(integer_datavalue_literal).unwrap(),
             expected_integer_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(decimal_datavalue_literal).unwrap(),
+            Constant::try_from(decimal_datavalue_literal).unwrap(),
             expected_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(signed_decimal_datavalue_literal).unwrap(),
+            Constant::try_from(signed_decimal_datavalue_literal).unwrap(),
             expected_signed_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(negative_decimal_datavalue_literal).unwrap(),
+            Constant::try_from(negative_decimal_datavalue_literal).unwrap(),
             expected_negative_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(pointless_decimal_datavalue_literal).unwrap(),
+            Constant::try_from(pointless_decimal_datavalue_literal).unwrap(),
             expected_pointless_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(signed_pointless_decimal_datavalue_literal).unwrap(),
+            Constant::try_from(signed_pointless_decimal_datavalue_literal).unwrap(),
             expected_signed_pointless_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(negative_pointless_decimal_datavalue_literal).unwrap(),
+            Constant::try_from(negative_pointless_decimal_datavalue_literal).unwrap(),
             expected_negative_pointless_decimal_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(double_datavalue_literal).unwrap(),
+            Constant::try_from(double_datavalue_literal).unwrap(),
             expected_double_datavalue_literal
         );
         assert_eq!(
-            Term::try_from(large_integer_literal).unwrap(),
+            Constant::try_from(large_integer_literal).unwrap(),
             expected_large_integer_literal
         );
         assert_eq!(
-            Term::try_from(large_decimal_literal).unwrap(),
+            Constant::try_from(large_decimal_literal).unwrap(),
             expected_large_decimal_literal
         );
         assert_eq!(
-            Term::try_from(invalid_integer_literal).unwrap_err(),
+            Constant::try_from(invalid_integer_literal).unwrap_err(),
             expected_invalid_integer_literal
         );
         assert_eq!(
-            Term::try_from(invalid_decimal_literal).unwrap_err(),
+            Constant::try_from(invalid_decimal_literal).unwrap_err(),
             expected_invalid_decimal_literal
         );
     }

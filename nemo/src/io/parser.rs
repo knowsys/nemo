@@ -2,7 +2,11 @@
 
 use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
-use crate::{error::Error, model::*};
+use crate::{
+    error::Error,
+    io::parser::types::{ArithmeticOperator, BodyExpression},
+    model::{rule_model::Constraint, *},
+};
 use nemo_physical::error::ReadingError;
 use nom::{
     branch::alt,
@@ -23,6 +27,8 @@ pub(crate) mod rfc5234;
 pub(crate) mod sparql;
 pub(crate) mod turtle;
 pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
+
+use self::types::ConstraintOperator;
 
 /// Parse a program in the given `input`-String and return a [`Program`].
 ///
@@ -259,19 +265,24 @@ fn parse_iri_constant<'a>(
 /// Parse a ground term.
 pub fn parse_ground_term<'a>(
     prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
-) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, PrimitiveTerm> {
     traced(
         "parse_ground_term",
         map_error(
             alt((
-                map(parse_iri_constant(prefixes), Term::Constant),
-                map(turtle::numeric_literal, Term::NumericLiteral),
+                map(parse_iri_constant(prefixes), |c| {
+                    PrimitiveTerm::Constant(Constant::Abstract(c))
+                }),
+                map(turtle::numeric_literal, |n| {
+                    PrimitiveTerm::Constant(Constant::NumericLiteral(n))
+                }),
                 map_res(turtle::rdf_literal, move |literal| {
-                    Term::try_from(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
+                    Constant::try_from(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
                         .map_err(ReadingError::from)
+                        .map(PrimitiveTerm::Constant)
                 }),
                 map(turtle::string, move |literal| {
-                    Term::StringLiteral(literal.to_string())
+                    PrimitiveTerm::Constant(Constant::StringLiteral(literal.to_string()))
                 }),
             )),
             || ParseError::ExpectedGroundTerm,
@@ -291,15 +302,6 @@ pub struct RuleParser<'a> {
     sources: RefCell<Vec<DataSourceDeclaration>>,
     /// Declarations of predicates with their types.
     predicate_declarations: RefCell<HashMap<Identifier, Vec<PrimitiveType>>>,
-}
-
-/// Body may contain literals or filter expressions
-#[derive(Debug, Clone)]
-pub enum BodyExpression {
-    /// Literal
-    Literal(Literal),
-    /// Filter
-    Filter(Filter),
 }
 
 impl<'a> RuleParser<'a> {
@@ -628,7 +630,7 @@ impl<'a> RuleParser<'a> {
                     log::trace!(target: "parser", "found fact {predicate_name}({terms:?})");
 
                     // We do not allow complex term trees in facts for now
-                    let terms = terms.into_iter().map(TermTree::leaf).collect();
+                    let terms = terms.into_iter().map(Term::Primitive).collect();
 
                     Ok((remainder, Fact(Atom::new(predicate, terms))))
                 },
@@ -750,16 +752,16 @@ impl<'a> RuleParser<'a> {
                             _ => None,
                         })
                         .collect();
-                    let filters = body
+                    let constraints = body
                         .into_iter()
                         .filter_map(|expr| match expr {
-                            BodyExpression::Filter(f) => Some(f),
+                            BodyExpression::Constraint(c) => Some(c),
                             _ => None,
                         })
                         .collect();
                     Ok((
                         remainder,
-                        Rule::new_validated(head, literals, filters)
+                        Rule::new_validated(head, literals, constraints)
                             .map_err(|e| Err::Failure(e.at(input)))?,
                     ))
                 },
@@ -777,7 +779,7 @@ impl<'a> RuleParser<'a> {
                     let (remainder, predicate) = self.parse_iri_like_identifier()(input)?;
                     let (remainder, terms) = delimited(
                         self.parse_open_parenthesis(),
-                        cut(separated_list1(self.parse_comma(), self.parse_term_tree())),
+                        cut(separated_list1(self.parse_comma(), self.parse_term())),
                         cut(self.parse_close_parenthesis()),
                     )(remainder)?;
 
@@ -791,17 +793,15 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parse a term.
-    pub fn parse_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    /// Parse a [`PrimitiveTerm`].
+    pub fn parse_primitive_term(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
         traced(
-            "parse_term",
+            "parse_primitive_term",
             map_error(
-                alt((
-                    parse_ground_term(&self.prefixes),
-                    self.parse_variable(),
-                    self.parse_aggregate(),
-                )),
-                || ParseError::ExpectedTerm,
+                alt((parse_ground_term(&self.prefixes), self.parse_variable())),
+                || ParseError::ExpectedPrimitiveTerm,
             ),
         )
     }
@@ -815,31 +815,30 @@ impl<'a> RuleParser<'a> {
                     let (remainder, _) = nom::character::complete::char('#')(input)?;
                     let (remainder, aggregate_operation_identifier) =
                         self.parse_bare_iri_like_identifier()(remainder)?;
-                    let (remainder, variable_identifiers) = self.parenthesised(separated_list1(
+                    let (remainder, variables) = self.parenthesised(separated_list1(
                         self.parse_comma(),
-                        map(self.parse_universal_variable(), |variable| match variable {
-                            Variable::Universal(identifier) => identifier,
-                            Variable::Existential(_) => panic!(),
-                        }),
+                        self.parse_universal_variable(),
                     ))(remainder)?;
 
                     if let Some(logical_aggregate_operation) =
                         (&aggregate_operation_identifier).into()
                     {
+                        let len_variables = variables.len();
+
                         let aggregate = Aggregate {
                             logical_aggregate_operation,
-                            variable_identifiers,
+                            terms: variables.into_iter().map(PrimitiveTerm::Variable).collect(),
                         };
 
                         // Check that there is exactly one variable used in the aggregate
                         // This may change when distinct variables are implemented
-                        if aggregate.variable_identifiers.len() != 1 {
+                        if len_variables != 1 {
                             return Err(Err::Failure(
                                 ParseError::InvalidVariableCountInAggregate(aggregate).at(input),
                             ));
                         }
 
-                        Ok((remainder, Term::Aggregate(aggregate)))
+                        Ok((remainder, Term::Aggregation(aggregate)))
                     } else {
                         Err(Err::Failure(
                             ParseError::UnknownAggregateOperation(
@@ -855,7 +854,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a variable.
-    pub fn parse_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    pub fn parse_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
         traced(
             "parse_variable",
             map_error(
@@ -864,7 +863,7 @@ impl<'a> RuleParser<'a> {
                         self.parse_universal_variable(),
                         self.parse_existential_variable(),
                     )),
-                    Term::Variable,
+                    PrimitiveTerm::Variable,
                 ),
                 || ParseError::ExpectedVariable,
             ),
@@ -954,21 +953,21 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse operation that is filters a variable
-    pub fn parse_filter_operator(
+    pub fn parse_constraint_operator(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<FilterOperation> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<ConstraintOperator> {
         traced(
-            "parse_filter_operator",
+            "parse_constraint_operator",
             map_error(
                 delimited(
                     multispace_or_comment0,
                     alt((
-                        value(FilterOperation::LessThanEq, token("<=")),
-                        value(FilterOperation::LessThan, token("<")),
-                        value(FilterOperation::Equals, token("=")),
-                        value(FilterOperation::Unequals, token("!=")),
-                        value(FilterOperation::GreaterThanEq, token(">=")),
-                        value(FilterOperation::GreaterThan, token(">")),
+                        value(ConstraintOperator::LessThanEq, token("<=")),
+                        value(ConstraintOperator::LessThan, token("<")),
+                        value(ConstraintOperator::Equals, token("=")),
+                        value(ConstraintOperator::Unequals, token("!=")),
+                        value(ConstraintOperator::GreaterThanEq, token(">=")),
+                        value(ConstraintOperator::GreaterThan, token(">")),
                     )),
                     multispace_or_comment0,
                 ),
@@ -982,55 +981,61 @@ impl<'a> RuleParser<'a> {
     /// This may consist of:
     /// * A function term
     /// * An arithmetic expression, which handles e.g. precedence of addition over multiplication
-    pub fn parse_term_tree(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    pub fn parse_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
-            "parse_term_tree",
+            "parse_term",
             map_error(
                 move |input| {
                     delimited(
                         multispace_or_comment0,
                         alt((
-                            self.parse_function_term(),
                             self.parse_arithmetic_expression(),
-                            self.parse_parenthesised_term_tree(),
+                            self.parse_parenthesised_term(),
+                            self.parse_function_term(),
+                            self.parse_aggregate(),
                         )),
                         multispace_or_comment0,
                     )(input)
                 },
-                || ParseError::ExpectedTermTree,
+                || ParseError::ExpectedTerm,
             ),
         )
     }
 
     /// Parse a parenthesised term tree.
-    pub fn parse_parenthesised_term_tree(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    pub fn parse_parenthesised_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
-            "parse_parenthesised_term_tree",
-            map_error(self.parenthesised(self.parse_term_tree()), || {
-                ParseError::ExpectedParenthesisedTermTree
+            "parse_parenthesised_term",
+            map_error(self.parenthesised(self.parse_term()), || {
+                ParseError::ExpectedParenthesisedTerm
             }),
         )
     }
 
     /// Parse a function term, possibly with nested term trees.
-    pub fn parse_function_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    pub fn parse_function_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_function_term",
             map_error(
                 move |input| {
-                    let (remainder, identifier) = self.parse_iri_like_identifier()(input)?;
+                    let (remainder, name) = self.parse_iri_like_identifier()(input)?;
 
-                    let (remainder, subtrees) = (self.parenthesised(separated_list0(
-                        self.parse_comma(),
-                        self.parse_term_tree(),
-                    )))(remainder)?;
+                    if let Some(term_function) = UnaryOperation::construct_from_name(&name.0) {
+                        let (remainder, subterm) =
+                            (self.parenthesised(self.parse_term()))(remainder)?;
 
-                    Ok((
-                        remainder,
-                        TermTree::tree(TermOperation::Function(identifier), subtrees),
-                    ))
+                        Ok((remainder, term_function(subterm)))
+                    } else {
+                        let (remainder, subterms) = (self.parenthesised(separated_list0(
+                            self.parse_comma(),
+                            self.parse_term(),
+                        )))(remainder)?;
+
+                        Ok((
+                            remainder,
+                            Term::Function(AbstractFunction { name, subterms }),
+                        ))
+                    }
                 },
                 || ParseError::ExpectedFunctionTerm,
             ),
@@ -1040,7 +1045,7 @@ impl<'a> RuleParser<'a> {
     /// Parse an arithmetic expression
     pub fn parse_arithmetic_expression(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_arithmetic_expression",
             map_error(
@@ -1050,13 +1055,13 @@ impl<'a> RuleParser<'a> {
                         preceded(
                             delimited(multispace_or_comment0, token("+"), multispace_or_comment0),
                             map(self.parse_arithmetic_product(), |term| {
-                                (TermOperation::Addition, term)
+                                (ArithmeticOperator::Addition, term)
                             }),
                         ),
                         preceded(
                             delimited(multispace_or_comment0, token("-"), multispace_or_comment0),
                             map(self.parse_arithmetic_product(), |term| {
-                                (TermOperation::Subtraction, term)
+                                (ArithmeticOperator::Subtraction, term)
                             }),
                         ),
                     )))(remainder)?;
@@ -1073,9 +1078,7 @@ impl<'a> RuleParser<'a> {
 
     /// Parse an arithmetic product, i.e., an expression involving
     /// only `*` and `/` over subexpressions.
-    pub fn parse_arithmetic_product(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    pub fn parse_arithmetic_product(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_arithmetic_product",
             map_error(
@@ -1085,13 +1088,13 @@ impl<'a> RuleParser<'a> {
                         preceded(
                             delimited(multispace_or_comment0, token("*"), multispace_or_comment0),
                             map(self.parse_arithmetic_factor(), |term| {
-                                (TermOperation::Multiplication, term)
+                                (ArithmeticOperator::Multiplication, term)
                             }),
                         ),
                         preceded(
                             delimited(multispace_or_comment0, token("/"), multispace_or_comment0),
                             map(self.parse_arithmetic_factor(), |term| {
-                                (TermOperation::Division, term)
+                                (ArithmeticOperator::Division, term)
                             }),
                         ),
                     )))(remainder)?;
@@ -1104,69 +1107,65 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an arithmetic factor.
-    pub fn parse_arithmetic_factor(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TermTree> {
+    pub fn parse_arithmetic_factor(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_arithmetic_factor",
             map_error(
                 alt((
-                    map(self.parse_term(), TermTree::leaf),
-                    self.parse_parenthesised_term_tree(),
+                    self.parse_function_term(),
+                    map(self.parse_primitive_term(), Term::Primitive),
+                    self.parse_parenthesised_term(),
                 )),
                 || ParseError::ExpectedArithmeticFactor,
             ),
         )
     }
 
-    /// Fold a sequence of [Term trees][TermTree] interleaved with
-    /// [Term operations][TermOperation] into a single [`TermTree`].
+    /// Fold a sequence of ([`ArithmeticOperator`], [`PrimitiveTerm`]) pairs into a single [`Term`].
     fn fold_arithmetic_expressions(
-        initial: TermTree,
-        sequence: Vec<(TermOperation, TermTree)>,
-    ) -> TermTree {
+        initial: Term,
+        sequence: Vec<(ArithmeticOperator, Term)>,
+    ) -> Term {
         sequence.into_iter().fold(initial, |acc, pair| {
             let (operation, expression) = pair;
-            let subtrees = vec![acc, expression];
 
-            use TermOperation::*;
+            use ArithmeticOperator::*;
 
             match operation {
-                Addition => TermTree::tree(Addition, subtrees),
-                Subtraction => TermTree::tree(Subtraction, subtrees),
-                Multiplication => TermTree::tree(Multiplication, subtrees),
-                Division => TermTree::tree(Division, subtrees),
-                Term(term) => TermTree::leaf(term),
-                Function(_) => panic!("expressions folding is not implemented for functions"),
+                Addition => Term::Binary(BinaryOperation::Addition(
+                    Box::new(acc),
+                    Box::new(expression),
+                )),
+                Subtraction => Term::Binary(BinaryOperation::Subtraction(
+                    Box::new(acc),
+                    Box::new(expression),
+                )),
+                Multiplication => Term::Binary(BinaryOperation::Multiplication(
+                    Box::new(acc),
+                    Box::new(expression),
+                )),
+                Division => Term::Binary(BinaryOperation::Division(
+                    Box::new(acc),
+                    Box::new(expression),
+                )),
             }
         })
     }
 
-    /// Parse expression of the form `<variable> <operation> <term>`
-    /// or `<term> <operation> <variable>`.
-    pub fn parse_filter_expression(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Filter> {
+    /// Parse expression of the form `<term> <operation> <term>` expressing a constraint.
+    pub fn parse_constraint(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Constraint> {
         traced(
-            "parse_filter_expression",
+            "parse_constraint",
             map_error(
-                alt((
-                    map(
-                        tuple((
-                            self.parse_universal_variable(),
-                            self.parse_filter_operator(),
-                            cut(self.parse_term()),
-                        )),
-                        |(lhs, operation, rhs)| Filter::new(operation, lhs, rhs),
-                    ),
-                    map(
-                        tuple((
-                            self.parse_term(),
-                            self.parse_filter_operator(),
-                            cut(self.parse_universal_variable()),
-                        )),
-                        |(lhs, operation, rhs)| Filter::flipped(operation, lhs, rhs),
-                    ),
-                )),
-                || ParseError::ExpectedFilterExpression,
+                map(
+                    tuple((
+                        self.parse_term(),
+                        self.parse_constraint_operator(),
+                        cut(self.parse_term()),
+                    )),
+                    |(lhs, operation, rhs)| operation.into_constraint(lhs, rhs),
+                ),
+                || ParseError::ExpectedConstraint,
             ),
         )
     }
@@ -1179,7 +1178,7 @@ impl<'a> RuleParser<'a> {
             "parse_body_expression",
             map_error(
                 alt((
-                    map(self.parse_filter_expression(), BodyExpression::Filter),
+                    map(self.parse_constraint(), BodyExpression::Constraint),
                     map(self.parse_literal(), BodyExpression::Literal),
                 )),
                 || ParseError::ExpectedBodyExpression,
@@ -1311,6 +1310,8 @@ mod test {
 
     use nemo_physical::datatypes::Double;
 
+    use crate::model::rule_model::Constraint;
+
     use super::*;
 
     macro_rules! assert_parse {
@@ -1431,11 +1432,11 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![TermTree::leaf(Term::RdfLiteral(
-                RdfLiteral::DatatypeValue {
+            vec![Term::Primitive(PrimitiveTerm::Constant(
+                Constant::RdfLiteral(RdfLiteral::DatatypeValue {
                     value: v,
                     datatype: t,
-                },
+                }),
             ))],
         ));
 
@@ -1457,7 +1458,12 @@ mod test {
 
         assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
 
-        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::Constant(v))]));
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![Term::Primitive(PrimitiveTerm::Constant(
+                Constant::Abstract(v),
+            ))],
+        ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1472,7 +1478,12 @@ mod test {
         let fact = format!(r#"{predicate}({pn}) ."#);
         let v = Identifier(pn);
 
-        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::Constant(v))]));
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![Term::Primitive(PrimitiveTerm::Constant(
+                Constant::Abstract(v),
+            ))],
+        ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1490,9 +1501,15 @@ mod test {
         let expected_fact = Fact(Atom::new(
             p,
             vec![
-                TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(int))),
-                TermTree::leaf(Term::NumericLiteral(NumericLiteral::Double(dbl))),
-                TermTree::leaf(Term::NumericLiteral(NumericLiteral::Decimal(13, 37))),
+                Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
+                    NumericLiteral::Integer(int),
+                ))),
+                Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
+                    NumericLiteral::Double(dbl),
+                ))),
+                Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
+                    NumericLiteral::Decimal(13, 37),
+                ))),
             ],
         ));
 
@@ -1517,7 +1534,12 @@ mod test {
         let v = value.to_string();
         let fact = format!(r#"{predicate}("{value}"^^{datatype}) ."#);
 
-        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::StringLiteral(v))]));
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![Term::Primitive(PrimitiveTerm::Constant(
+                Constant::StringLiteral(v),
+            ))],
+        ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1531,7 +1553,12 @@ mod test {
         let v = value.to_string();
         let fact = format!(r#"{predicate}("{value}") ."#);
 
-        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::StringLiteral(v))]));
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![Term::Primitive(PrimitiveTerm::Constant(
+                Constant::StringLiteral(v),
+            ))],
+        ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1549,8 +1576,8 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![TermTree::leaf(Term::RdfLiteral(
-                RdfLiteral::LanguageString { value, tag },
+            vec![Term::Primitive(PrimitiveTerm::Constant(
+                Constant::RdfLiteral(RdfLiteral::LanguageString { value, tag }),
             ))],
         ));
 
@@ -1566,7 +1593,12 @@ mod test {
         let a = Identifier(name.to_string());
         let fact = format!(r#"{predicate}({name}) ."#);
 
-        let expected_fact = Fact(Atom::new(p, vec![TermTree::leaf(Term::Constant(a))]));
+        let expected_fact = Fact(Atom::new(
+            p,
+            vec![Term::Primitive(PrimitiveTerm::Constant(
+                Constant::Abstract(a),
+            ))],
+        ));
 
         assert_parse!(parser.parse_fact(), &fact, expected_fact,);
     }
@@ -1590,11 +1622,11 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![TermTree::leaf(Term::RdfLiteral(
-                RdfLiteral::DatatypeValue {
+            vec![Term::Primitive(PrimitiveTerm::Constant(
+                Constant::RdfLiteral(RdfLiteral::DatatypeValue {
                     value: v,
                     datatype: t,
-                },
+                }),
             ))],
         ));
 
@@ -1624,50 +1656,49 @@ mod test {
         let expected_rule = Rule::new(
             vec![Atom::new(
                 p,
-                vec![TermTree::leaf(Term::Variable(Variable::Universal(
-                    x.clone(),
-                )))],
+                vec![Term::Primitive(PrimitiveTerm::Variable(
+                    Variable::Universal(x.clone()),
+                ))],
             )],
             vec![
                 Literal::Positive(Atom::new(
                     a,
                     vec![
-                        TermTree::leaf(Term::Variable(Variable::Universal(x.clone()))),
-                        TermTree::leaf(Term::Variable(Variable::Universal(y.clone()))),
+                        Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x.clone()))),
+                        Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(y.clone()))),
                     ],
                 )),
                 Literal::Positive(Atom::new(
                     b,
-                    vec![TermTree::leaf(Term::Variable(Variable::Universal(
-                        z.clone(),
-                    )))],
+                    vec![Term::Primitive(PrimitiveTerm::Variable(
+                        Variable::Universal(z.clone()),
+                    ))],
                 )),
             ],
             vec![
-                Filter::new(
-                    FilterOperation::GreaterThan,
-                    Variable::Universal(y.clone()),
-                    Term::Variable(Variable::Universal(x.clone())),
+                Constraint::GreaterThan(
+                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(y.clone()))),
+                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x.clone()))),
                 ),
-                Filter::new(
-                    FilterOperation::Equals,
-                    Variable::Universal(x.clone()),
-                    Term::NumericLiteral(NumericLiteral::Integer(3)),
+                Constraint::Equals(
+                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x.clone()))),
+                    Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
+                        NumericLiteral::Integer(3),
+                    ))),
                 ),
-                Filter::new(
-                    FilterOperation::LessThan,
-                    Variable::Universal(z.clone()),
-                    Term::NumericLiteral(NumericLiteral::Integer(7)),
+                Constraint::LessThan(
+                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z.clone()))),
+                    Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
+                        NumericLiteral::Integer(7),
+                    ))),
                 ),
-                Filter::new(
-                    FilterOperation::LessThanEq,
-                    Variable::Universal(x),
-                    Term::Variable(Variable::Universal(z.clone())),
+                Constraint::LessThanEq(
+                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x))),
+                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z.clone()))),
                 ),
-                Filter::new(
-                    FilterOperation::GreaterThanEq,
-                    Variable::Universal(z),
-                    Term::Variable(Variable::Universal(y)),
+                Constraint::GreaterThanEq(
+                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z))),
+                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(y))),
                 ),
             ],
         );
@@ -1750,12 +1781,16 @@ mod test {
     fn parse_arithmetic_expressions() {
         let parser = RuleParser::new();
 
-        let twenty_three = TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(23)));
-        let fourty_two = TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)));
-        let twenty_three_times_fourty_two = TermTree::tree(
-            TermOperation::Multiplication,
-            vec![twenty_three.clone(), fourty_two],
-        );
+        let twenty_three = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
+            NumericLiteral::Integer(23),
+        )));
+        let fourty_two = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
+            NumericLiteral::Integer(42),
+        )));
+        let twenty_three_times_fourty_two = Term::Binary(BinaryOperation::Multiplication(
+            Box::new(twenty_three.clone()),
+            Box::new(fourty_two),
+        ));
 
         assert_parse_error!(
             parser.parse_arithmetic_factor(),
@@ -1763,9 +1798,9 @@ mod test {
             ParseError::ExpectedArithmeticFactor
         );
         assert_parse_error!(
-            parser.parse_parenthesised_term_tree(),
+            parser.parse_parenthesised_term(),
             "",
-            ParseError::ExpectedParenthesisedTermTree
+            ParseError::ExpectedParenthesisedTerm
         );
         assert_parse_error!(
             parser.parse_arithmetic_product(),
@@ -1789,46 +1824,38 @@ mod test {
             "23 * 42",
             twenty_three_times_fourty_two
         );
+
         assert_parse!(
             parser.parse_arithmetic_expression(),
             "23 + 23 * 42 + 42 - (23 * 42)",
-            TermTree::tree(
-                TermOperation::Subtraction,
-                vec![
-                    TermTree::tree(
-                        TermOperation::Addition,
-                        vec![
-                            TermTree::tree(
-                                TermOperation::Addition,
-                                vec![
-                                    TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(
-                                        23
-                                    ))),
-                                    TermTree::tree(
-                                        TermOperation::Multiplication,
-                                        vec![
-                                            TermTree::leaf(Term::NumericLiteral(
-                                                NumericLiteral::Integer(23)
-                                            )),
-                                            TermTree::leaf(Term::NumericLiteral(
-                                                NumericLiteral::Integer(42)
-                                            ))
-                                        ],
-                                    )
-                                ]
-                            ),
-                            TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)))
-                        ]
-                    ),
-                    TermTree::tree(
-                        TermOperation::Multiplication,
-                        vec![
-                            TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(23))),
-                            TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)))
-                        ],
-                    )
-                ]
-            )
+            Term::Binary(BinaryOperation::Subtraction(
+                Box::new(Term::Binary(BinaryOperation::Addition(
+                    Box::new(Term::Binary(BinaryOperation::Addition(
+                        Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                            Constant::NumericLiteral(NumericLiteral::Integer(23),)
+                        ))),
+                        Box::new(Term::Binary(BinaryOperation::Multiplication(
+                            Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                                Constant::NumericLiteral(NumericLiteral::Integer(23)),
+                            ))),
+                            Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                                Constant::NumericLiteral(NumericLiteral::Integer(42)),
+                            ))),
+                        )))
+                    )),),
+                    Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                        Constant::NumericLiteral(NumericLiteral::Integer(42),)
+                    ))),
+                ),)),
+                Box::new(Term::Binary(BinaryOperation::Multiplication(
+                    Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                        Constant::NumericLiteral(NumericLiteral::Integer(23))
+                    ))),
+                    Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                        Constant::NumericLiteral(NumericLiteral::Integer(42))
+                    )))
+                )))
+            ))
         );
     }
 
@@ -1874,12 +1901,16 @@ mod test {
     fn parse_function_terms() {
         let parser = RuleParser::new();
 
-        let twenty_three = TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(23)));
-        let fourty_two = TermTree::leaf(Term::NumericLiteral(NumericLiteral::Integer(42)));
-        let twenty_three_times_fourty_two = TermTree::tree(
-            TermOperation::Multiplication,
-            vec![twenty_three.clone(), fourty_two.clone()],
-        );
+        let twenty_three = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
+            NumericLiteral::Integer(23),
+        )));
+        let fourty_two = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
+            NumericLiteral::Integer(42),
+        )));
+        let twenty_three_times_fourty_two = Term::Binary(BinaryOperation::Multiplication(
+            Box::new(twenty_three.clone()),
+            Box::new(fourty_two.clone()),
+        ));
 
         assert_parse_error!(
             parser.parse_function_term(),
@@ -1887,10 +1918,10 @@ mod test {
             ParseError::ExpectedFunctionTerm
         );
 
-        let nullary_function = TermTree::tree(
-            TermOperation::Function(Identifier(String::from("nullary_function"))),
-            vec![],
-        );
+        let nullary_function = Term::Function(AbstractFunction {
+            name: Identifier(String::from("nullary_function")),
+            subterms: vec![],
+        });
         assert_parse!(
             parser.parse_function_term(),
             "nullary_function()",
@@ -1907,10 +1938,10 @@ mod test {
             ParseError::ExpectedFunctionTerm
         );
 
-        let unary_function = TermTree::tree(
-            TermOperation::Function(Identifier(String::from("unary_function"))),
-            vec![fourty_two.clone()],
-        );
+        let unary_function = Term::Function(AbstractFunction {
+            name: Identifier(String::from("unary_function")),
+            subterms: vec![fourty_two.clone()],
+        });
         assert_parse!(
             parser.parse_function_term(),
             "unary_function(42)",
@@ -1927,46 +1958,47 @@ mod test {
             unary_function
         );
 
-        let binary_function = TermTree::tree(
-            TermOperation::Function(Identifier(String::from("binary_function"))),
-            vec![fourty_two.clone(), twenty_three.clone()],
-        );
+        let binary_function = Term::Function(AbstractFunction {
+            name: Identifier(String::from("binary_function")),
+            subterms: vec![fourty_two.clone(), twenty_three.clone()],
+        });
         assert_parse!(
             parser.parse_function_term(),
             "binary_function(42, 23)",
             binary_function
         );
 
-        let function_with_nested_algebraic_expression = TermTree::tree(
-            TermOperation::Function(Identifier(String::from("function"))),
-            vec![twenty_three_times_fourty_two],
-        );
+        let function_with_nested_algebraic_expression = Term::Function(AbstractFunction {
+            name: Identifier(String::from("function")),
+            subterms: vec![twenty_three_times_fourty_two],
+        });
         assert_parse!(
             parser.parse_function_term(),
             "function( 23 *42)",
             function_with_nested_algebraic_expression
         );
 
-        let nested_function = TermTree::tree(
-            TermOperation::Function(Identifier(String::from("nested_function"))),
-            vec![nullary_function.clone()],
-        );
+        let nested_function = Term::Function(AbstractFunction {
+            name: Identifier(String::from("nested_function")),
+            subterms: vec![nullary_function.clone()],
+        });
+
         assert_parse!(
             parser.parse_function_term(),
             "nested_function(nullary_function())",
             nested_function
         );
 
-        let triple_nested_function = TermTree::tree(
-            TermOperation::Function(Identifier(String::from("nested_function"))),
-            vec![TermTree::tree(
-                TermOperation::Function(Identifier(String::from("nested_function"))),
-                vec![TermTree::tree(
-                    TermOperation::Function(Identifier(String::from("nested_function"))),
-                    vec![nullary_function.clone()],
-                )],
-            )],
-        );
+        let triple_nested_function = Term::Function(AbstractFunction {
+            name: Identifier(String::from("nested_function")),
+            subterms: vec![Term::Function(AbstractFunction {
+                name: Identifier(String::from("nested_function")),
+                subterms: vec![Term::Function(AbstractFunction {
+                    name: Identifier(String::from("nested_function")),
+                    subterms: vec![nullary_function.clone()],
+                })],
+            })],
+        });
         assert_parse!(
             parser.parse_function_term(),
             "nested_function(  nested_function(  (nested_function(nullary_function()) )  ))",
@@ -1975,15 +2007,17 @@ mod test {
     }
 
     #[test]
-    fn parse_term_trees() {
+    fn parse_terms() {
         let parser = RuleParser::new();
 
-        assert_parse_error!(parser.parse_term_tree(), "", ParseError::ExpectedTermTree);
+        assert_parse_error!(parser.parse_term(), "", ParseError::ExpectedTerm);
 
         assert_parse!(
-            parser.parse_term_tree(),
+            parser.parse_term(),
             "constant",
-            TermTree::leaf(Term::Constant(Identifier(String::from("constant"))))
+            Term::Primitive(PrimitiveTerm::Constant(Constant::Abstract(Identifier(
+                String::from("constant")
+            ))))
         );
     }
 
@@ -1996,9 +2030,11 @@ mod test {
         assert_parse!(
             parser.parse_aggregate(),
             "#min(?VARIABLE)",
-            Term::Aggregate(Aggregate {
+            Term::Aggregation(Aggregate {
                 logical_aggregate_operation: LogicalAggregateOperation::MinNumber,
-                variable_identifiers: vec![Identifier(String::from("VARIABLE"))]
+                terms: vec![PrimitiveTerm::Variable(Variable::Universal(Identifier(
+                    String::from("VARIABLE")
+                )))]
             })
         );
 
@@ -2007,5 +2043,113 @@ mod test {
             "#test(?VAR1, ?VAR2)",
             ParseError::ExpectedAggregate
         )
+    }
+
+    #[test]
+    fn parse_unary_function() {
+        let parser = RuleParser::new();
+
+        let expression = "Abs(4)";
+        let expected_term = Term::Unary(UnaryOperation::Abs(Box::new(Term::Primitive(
+            PrimitiveTerm::Constant(Constant::NumericLiteral(NumericLiteral::Integer(4))),
+        ))));
+
+        assert_parse!(parser.parse_arithmetic_factor(), expression, expected_term);
+    }
+
+    #[test]
+    fn parse_arithmetic_and_functions() {
+        let parser = RuleParser::new();
+
+        let expression = "5 * Abs(Sqrt(4) - 3)";
+
+        let expected_term = Term::Binary(BinaryOperation::Multiplication(
+            Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                Constant::NumericLiteral(NumericLiteral::Integer(5)),
+            ))),
+            Box::new(Term::Unary(UnaryOperation::Abs(Box::new(Term::Binary(
+                BinaryOperation::Subtraction(
+                    Box::new(Term::Unary(UnaryOperation::SquareRoot(Box::new(
+                        Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
+                            NumericLiteral::Integer(4),
+                        ))),
+                    )))),
+                    Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                        Constant::NumericLiteral(NumericLiteral::Integer(3)),
+                    ))),
+                ),
+            ))))),
+        ));
+
+        assert_parse!(parser.parse_term(), expression, expected_term);
+    }
+
+    #[test]
+    fn parse_assignment() {
+        let parser = RuleParser::new();
+
+        let expression = "?X = Abs(?Y - 5) * (7 + ?Z)";
+
+        let variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
+            "X".to_string(),
+        ))));
+
+        let term = Term::Binary(BinaryOperation::Multiplication(
+            Box::new(Term::Unary(UnaryOperation::Abs(Box::new(Term::Binary(
+                BinaryOperation::Subtraction(
+                    Box::new(Term::Primitive(PrimitiveTerm::Variable(
+                        Variable::Universal(Identifier::new("Y".to_string())),
+                    ))),
+                    Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                        Constant::NumericLiteral(NumericLiteral::Integer(5)),
+                    ))),
+                ),
+            ))))),
+            Box::new(Term::Binary(BinaryOperation::Addition(
+                Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                    Constant::NumericLiteral(NumericLiteral::Integer(7)),
+                ))),
+                Box::new(Term::Primitive(PrimitiveTerm::Variable(
+                    Variable::Universal(Identifier::new("Z".to_string())),
+                ))),
+            ))),
+        ));
+
+        let expected = Constraint::Equals(variable, term);
+
+        assert_parse!(parser.parse_constraint(), expression, expected);
+    }
+
+    #[test]
+    fn parse_complex_condition() {
+        let parser = RuleParser::new();
+
+        let expression = "Abs(?X - ?Y) <= ?Z + Sqrt(?Y)";
+
+        let left_term = Term::Unary(UnaryOperation::Abs(Box::new(Term::Binary(
+            BinaryOperation::Subtraction(
+                Box::new(Term::Primitive(PrimitiveTerm::Variable(
+                    Variable::Universal(Identifier(String::from("X"))),
+                ))),
+                Box::new(Term::Primitive(PrimitiveTerm::Variable(
+                    Variable::Universal(Identifier(String::from("Y"))),
+                ))),
+            ),
+        ))));
+
+        let right_term = Term::Binary(BinaryOperation::Addition(
+            Box::new(Term::Primitive(PrimitiveTerm::Variable(
+                Variable::Universal(Identifier(String::from("Z"))),
+            ))),
+            Box::new(Term::Unary(UnaryOperation::SquareRoot(Box::new(
+                Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
+                    String::from("Y"),
+                )))),
+            )))),
+        ));
+
+        let expected = Constraint::LessThanEq(left_term, right_term);
+
+        assert_parse!(parser.parse_constraint(), expression, expected);
     }
 }

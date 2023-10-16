@@ -9,8 +9,11 @@ use nemo_physical::{
 };
 
 use crate::{
-    execution::planning::plan_util::{compute_filters, subplan_union_reordered},
-    model::{chase_model::ChaseAtom, Filter, PrimitiveType, Variable},
+    execution::planning::plan_util::{compute_constraints, subplan_union_reordered},
+    model::{
+        chase_model::{ChaseAtom, VariableAtom},
+        Constraint, PrimitiveType, Variable,
+    },
     program_analysis::variable_order::VariableOrder,
     table_manager::{SubtableExecutionPlan, TableManager},
 };
@@ -29,11 +32,11 @@ struct AtomNegationInfo {
 }
 
 impl AtomNegationInfo {
-    fn new(positive_order: &VariableOrder, atom: &ChaseAtom) -> AtomNegationInfo {
-        let atom_variables: Vec<Variable> = atom.variables().cloned().collect();
+    fn new(positive_order: &VariableOrder, atom: &VariableAtom) -> AtomNegationInfo {
+        let atom_variables: Vec<Variable> = atom.terms().clone();
 
         let mut restricted_variable_order =
-            positive_order.restrict_to(&atom.variables().cloned().collect());
+            positive_order.restrict_to(&atom.terms().iter().cloned().collect());
 
         let old_variables = restricted_variable_order.len();
         let mut new_variables: usize = 0;
@@ -70,15 +73,15 @@ impl AtomNegationInfo {
     }
 }
 
-/// Generator for creating excution plans which applies the negated [`Atom`]s and [`Filter`]s.
+/// Generator for creating excution plans which applies the negated [`ChaseAtom`]s and [`Constraint`]s.
 #[derive(Debug)]
 pub(super) struct NegationGenerator {
     /// Logical types of all the variables.
     pub variable_types: HashMap<Variable, PrimitiveType>,
     /// The negated atoms.
-    pub atoms: Vec<ChaseAtom>,
-    /// The negated filters.
-    pub filters: Vec<Filter>,
+    pub atoms: Vec<VariableAtom>,
+    /// The constraints.
+    pub constraints: Vec<Constraint>,
 }
 
 impl NegationGenerator {
@@ -107,14 +110,13 @@ impl NegationGenerator {
                     info.reorder,
                 );
 
-                let (classes, assignments) = compute_filters(
+                let constraints = compute_constraints(
                     &info.restricted_variable_order,
-                    &self.filters,
+                    &self.constraints,
                     &self.variable_types,
                 );
 
-                let node_filtered = plan.plan_mut().select_value(node_union, assignments);
-                let node_filtered = plan.plan_mut().select_equal(node_filtered, classes);
+                let node_filtered = plan.plan_mut().filter_values(node_union, constraints);
 
                 let node_result = if info.projection.is_identity() {
                     node_filtered

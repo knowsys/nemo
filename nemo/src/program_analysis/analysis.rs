@@ -6,10 +6,10 @@ use crate::{
     error::Error,
     model::chase_model::{ChaseProgram, ChaseRule},
     model::{
-        chase_model::{ChaseAtom, AGGREGATE_VARIABLE_PREFIX},
+        chase_model::{ChaseAtom, PrimitiveAtom, VariableAtom, AGGREGATE_VARIABLE_PREFIX},
         types::error::TypeError,
-        DataSource, FilterOperation, Identifier, PrimitiveType, Term, TermOperation,
-        TypeConstraint, Variable,
+        Constraint, DataSource, Identifier, PrimitiveTerm, PrimitiveType, Term, TypeConstraint,
+        Variable,
     },
     util::labeled_graph::LabeledGraph,
 };
@@ -31,8 +31,8 @@ pub struct RuleAnalysis {
     pub is_existential: bool,
     /// Whether an atom in the head also occurs in the body.
     pub is_recursive: bool,
-    /// Whether the rule has positive filters that need to be applied.
-    pub has_positive_filters: bool,
+    /// Whether the rule has positive constraints that need to be applied.
+    pub has_positive_constraints: bool,
     /// Whether the rule has at least one aggregate term in the head.
     pub has_aggregates: bool,
 
@@ -91,7 +91,7 @@ fn count_distinct_existential_variables(rule: &ChaseRule) -> usize {
 
     for head_atom in rule.head() {
         for term in head_atom.terms() {
-            if let Term::Variable(Variable::Existential(id)) = term {
+            if let PrimitiveTerm::Variable(Variable::Existential(id)) = term {
                 existentials.insert(Variable::Existential(id.clone()));
             }
         }
@@ -100,19 +100,17 @@ fn count_distinct_existential_variables(rule: &ChaseRule) -> usize {
     existentials.len()
 }
 
-fn get_variables(atoms: &[ChaseAtom]) -> HashSet<Variable> {
+fn get_variables<Atom: ChaseAtom>(atoms: &[Atom]) -> HashSet<Variable> {
     let mut result = HashSet::new();
     for atom in atoms {
-        for term in atom.terms() {
-            if let Term::Variable(v) = term {
-                result.insert(v.clone());
-            }
+        for variable in atom.get_variables() {
+            result.insert(variable);
         }
     }
     result
 }
 
-fn get_predicates(atoms: &[ChaseAtom]) -> HashSet<Identifier> {
+fn get_predicates<Atom: ChaseAtom>(atoms: &[Atom]) -> HashSet<Identifier> {
     atoms.iter().map(|a| a.predicate()).collect()
 }
 
@@ -124,11 +122,13 @@ fn get_fresh_rule_predicate(rule_index: usize) -> Identifier {
 
 fn construct_existential_aux_rule(
     rule_index: usize,
-    mut head_atoms: Vec<ChaseAtom>,
+    head_atoms: Vec<PrimitiveAtom>,
     predicate_types: &HashMap<Identifier, Vec<PrimitiveType>>,
     column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
 ) -> (ChaseRule, VariableOrder, HashMap<Variable, PrimitiveType>) {
+    let mut new_body = Vec::new();
     let mut constraints = Vec::new();
+
     let mut variable_index = 0;
     let mut generate_variable = move || {
         variable_index += 1;
@@ -138,16 +138,30 @@ fn construct_existential_aux_rule(
 
     let mut used_variables = HashSet::new();
     let mut aux_predicate_terms = Vec::new();
-    for atom in &mut head_atoms {
+    for atom in &head_atoms {
+        let mut new_terms = Vec::new();
+
         for term in atom.terms() {
-            let Term::Variable(Variable::Universal(variable)) = term else {
-                continue;
-            };
-            if used_variables.insert(variable.clone()) {
-                aux_predicate_terms.push(Term::Variable(Variable::Universal(variable.clone())));
+            match term {
+                PrimitiveTerm::Variable(variable) => {
+                    if variable.is_universal() && used_variables.insert(variable.clone()) {
+                        aux_predicate_terms.push(PrimitiveTerm::Variable(variable.clone()));
+                    }
+
+                    new_terms.push(variable.clone());
+                }
+                PrimitiveTerm::Constant(_) => {
+                    let generated_variable =
+                        Term::Primitive(PrimitiveTerm::Variable(generate_variable()));
+                    let new_constraint =
+                        Constraint::Equals(generated_variable, Term::Primitive(term.clone()));
+
+                    constraints.push(new_constraint);
+                }
             }
         }
-        atom.normalize(&mut generate_variable, &mut constraints);
+
+        new_body.push(VariableAtom::new(atom.predicate(), new_terms));
     }
 
     let mut variable_types = HashMap::<Variable, PrimitiveType>::new();
@@ -157,7 +171,7 @@ fn construct_existential_aux_rule(
             .expect("Every predicate should have type information at this point");
 
         for (term_index, term) in atom.terms().iter().enumerate() {
-            if let Term::Variable(variable) = term {
+            if let PrimitiveTerm::Variable(variable) = term {
                 variable_types.insert(variable.clone(), types[term_index]);
             }
         }
@@ -166,11 +180,12 @@ fn construct_existential_aux_rule(
     let temp_rule = {
         let temp_head_identifier = get_fresh_rule_predicate(rule_index);
 
-        let temp_head_atom = ChaseAtom::new(temp_head_identifier, aux_predicate_terms);
+        let temp_head_atom = PrimitiveAtom::new(temp_head_identifier, aux_predicate_terms);
         ChaseRule::new(
             vec![temp_head_atom],
-            HashMap::default(),
-            head_atoms,
+            vec![],
+            vec![],
+            new_body,
             constraints,
             vec![],
             vec![],
@@ -199,9 +214,13 @@ fn analyze_rule(
     let num_existential = count_distinct_existential_variables(rule);
 
     let mut variable_types: HashMap<Variable, PrimitiveType> = HashMap::new();
-    for atom in rule.all_atoms() {
+    let mut rule_all_predicates = Vec::<Identifier>::new();
+
+    for atom in rule.head() {
+        rule_all_predicates.push(atom.predicate());
+
         for (term_position, term) in atom.terms().iter().enumerate() {
-            if let Term::Variable(variable) = term {
+            if let PrimitiveTerm::Variable(variable) = term {
                 variable_types.entry(variable.clone()).or_insert(
                     type_declarations
                         .get(&atom.predicate())
@@ -211,12 +230,18 @@ fn analyze_rule(
             }
         }
     }
+    for atom in rule.all_body() {
+        rule_all_predicates.push(atom.predicate());
 
-    let rule_all_predicates: Vec<Identifier> = rule
-        .all_body()
-        .chain(rule.head())
-        .map(|a| a.predicate())
-        .collect();
+        for (term_position, variable) in atom.terms().iter().enumerate() {
+            variable_types.entry(variable.clone()).or_insert(
+                type_declarations
+                    .get(&atom.predicate())
+                    .expect("Every predicate should have received type information.")
+                    [term_position],
+            );
+        }
+    }
 
     let (existential_aux_rule, existential_aux_order, existential_aux_types) =
         if num_existential > 0 {
@@ -234,7 +259,7 @@ fn analyze_rule(
     RuleAnalysis {
         is_existential: num_existential > 0,
         is_recursive: is_recursive(rule),
-        has_positive_filters: !rule.positive_filters().is_empty(),
+        has_positive_constraints: !rule.positive_constraints().is_empty(),
         has_aggregates: !rule.aggregates().is_empty(),
         positive_body_predicates: get_predicates(rule.positive_body()),
         negative_body_predicates: get_predicates(rule.negative_body()),
@@ -417,14 +442,18 @@ impl ChaseProgram {
 
         // Predicates in rules
         for rule in self.rules() {
-            for atom in rule.all_atoms() {
+            for atom in rule.head() {
+                result.insert((atom.predicate(), atom.terms().len()));
+            }
+
+            for atom in rule.all_body() {
                 result.insert((atom.predicate(), atom.terms().len()));
             }
         }
 
         // Predicates in facts
         for fact in self.facts() {
-            result.insert((fact.0.predicate(), fact.0.term_trees().len()));
+            result.insert((fact.predicate(), fact.terms().len()));
         }
 
         // Additional predicates for existential rules
@@ -455,7 +484,7 @@ impl ChaseProgram {
 
             for atom in rule.head() {
                 for (term_position, term) in atom.terms().iter().enumerate() {
-                    if let Term::Variable(variable) = term {
+                    if let PrimitiveTerm::Variable(variable) = term {
                         let predicate_position =
                             PredicatePosition::new(atom.predicate(), term_position);
 
@@ -468,9 +497,9 @@ impl ChaseProgram {
             }
 
             let mut aggregate_input_to_output_variables =
-                HashMap::<Identifier, Vec<(Identifier, PositionGraphEdge)>>::new();
+                HashMap::<Variable, Vec<(Variable, PositionGraphEdge)>>::new();
             for aggregate in rule.aggregates() {
-                for input_variable_identifier in &aggregate.variable_identifiers {
+                for input_variable_identifier in &aggregate.variables {
                     let edge_label = if aggregate.aggregate_operation.static_output_type().is_some()
                     {
                         PositionGraphEdge::BodyToHeadAggregateStaticOutputType
@@ -488,114 +517,121 @@ impl ChaseProgram {
             let mut variables_to_last_node = HashMap::<Variable, PredicatePosition>::new();
 
             for atom in rule.all_body() {
-                for (term_position, term) in atom.terms().iter().enumerate() {
-                    if let Term::Variable(variable) = term {
-                        let predicate_position =
-                            PredicatePosition::new(atom.predicate(), term_position);
+                for (term_position, variable) in atom.terms().iter().enumerate() {
+                    let predicate_position =
+                        PredicatePosition::new(atom.predicate(), term_position);
 
-                        // Add head position edges
-                        {
-                            // NOTE: we connect each body position to each head position of the same variable
-                            if let Some(head_positions) = variables_to_head_positions.get(variable)
-                            {
-                                for pos in head_positions {
-                                    graph.add_edge(
-                                        predicate_position.clone(),
-                                        pos.clone(),
-                                        PositionGraphEdge::BodyToHeadSameVariable,
-                                    );
-                                }
-                            }
-
-                            // NOTE: we connect every aggregate input variable to it's corresponding output variable in the head
-                            if let Variable::Universal(identifier) = variable {
-                                if let Some(output_variable_identifiers) =
-                                    aggregate_input_to_output_variables.get(identifier)
-                                {
-                                    for (output_variable_identifier, edge_label) in
-                                        output_variable_identifiers.iter()
-                                    {
-                                        for pos in variables_to_head_positions
-                                            .get(&Variable::Universal(
-                                                output_variable_identifier.clone(),
-                                            ))
-                                            .unwrap()
-                                        {
-                                            graph.add_edge(
-                                                predicate_position.clone(),
-                                                pos.clone(),
-                                                *edge_label,
-                                            );
-                                        }
-                                    }
-                                }
+                    // Add head position edges
+                    {
+                        // NOTE: we connect each body position to each head position of the same variable
+                        if let Some(head_positions) = variables_to_head_positions.get(variable) {
+                            for pos in head_positions {
+                                graph.add_edge(
+                                    predicate_position.clone(),
+                                    pos.clone(),
+                                    PositionGraphEdge::BodyToHeadSameVariable,
+                                );
                             }
                         }
 
-                        // NOTE: we do not fully interconnect body positions as we start DFS from
-                        // each possible position later covering all possible combinations
-                        // nonetheless
-                        variables_to_last_node
-                            .entry(variable.clone())
-                            .and_modify(|entry| {
-                                let last_position =
-                                    std::mem::replace(entry, predicate_position.clone());
-                                graph.add_edge(
-                                    last_position.clone(),
-                                    predicate_position.clone(),
-                                    PositionGraphEdge::WithinBody,
-                                );
-                                graph.add_edge(
-                                    predicate_position.clone(),
-                                    last_position,
-                                    PositionGraphEdge::WithinBody,
-                                );
-                            })
-                            .or_insert(predicate_position);
+                        // NOTE: we connect every aggregate input variable to it's corresponding output variable in the head
+                        if let Some(output_variable_identifiers) =
+                            aggregate_input_to_output_variables.get(variable)
+                        {
+                            for (output_variable_identifier, edge_label) in
+                                output_variable_identifiers.iter()
+                            {
+                                for pos in variables_to_head_positions
+                                    .get(&output_variable_identifier.clone())
+                                    .unwrap()
+                                {
+                                    graph.add_edge(
+                                        predicate_position.clone(),
+                                        pos.clone(),
+                                        *edge_label,
+                                    );
+                                }
+                            }
+                        }
                     }
+
+                    // NOTE: we do not fully interconnect body positions as we start DFS from
+                    // each possible position later covering all possible combinations
+                    // nonetheless
+                    variables_to_last_node
+                        .entry(variable.clone())
+                        .and_modify(|entry| {
+                            let last_position =
+                                std::mem::replace(entry, predicate_position.clone());
+                            graph.add_edge(
+                                last_position.clone(),
+                                predicate_position.clone(),
+                                PositionGraphEdge::WithinBody,
+                            );
+                            graph.add_edge(
+                                predicate_position.clone(),
+                                last_position,
+                                PositionGraphEdge::WithinBody,
+                            );
+                        })
+                        .or_insert(predicate_position);
                 }
             }
 
-            for (head_variable, tree) in rule.constructors() {
+            for constructor in rule.constructors() {
                 // Note that the head variable for constructors is unique so we can get the first entry of this vector
-                let head_position = &variables_to_head_positions
-                    .get(head_variable)
-                    .expect("The loop at the top went through all head atoms")[0];
+                for head_position in variables_to_head_positions
+                    .get(constructor.variable())
+                    .expect("The loop at the top went through all head atoms")
+                {
+                    for term in constructor.term().primitive_terms() {
+                        if let PrimitiveTerm::Variable(body_variable) = term {
+                            let body_position = variables_to_last_node
+                                .get(body_variable)
+                                .expect("The iteration above went through all body atoms")
+                                .clone();
 
-                for term in tree.terms() {
-                    if let Term::Variable(body_variable) = term {
-                        let body_position = variables_to_last_node
-                            .get(body_variable)
-                            .expect("The iteration above went through all body atoms")
-                            .clone();
-
-                        graph.add_edge(
-                            body_position,
-                            head_position.clone(),
-                            PositionGraphEdge::BodyToHeadSameVariable,
-                        );
+                            graph.add_edge(
+                                body_position,
+                                head_position.clone(),
+                                PositionGraphEdge::BodyToHeadSameVariable,
+                            );
+                        }
                     }
                 }
             }
 
-            for filter in rule.all_filters() {
-                let position_left = variables_to_last_node
-                    .get(&filter.lhs)
-                    .expect("Variables in filters should also appear in the rule body")
-                    .clone();
+            for constraint in rule.all_constraints() {
+                let variables = constraint
+                    .left()
+                    .variables()
+                    .chain(constraint.right().variables());
+                let next_variables = constraint
+                    .left()
+                    .variables()
+                    .chain(constraint.right().variables())
+                    .skip(1);
 
-                if let Term::Variable(variable_right) = &filter.rhs {
-                    let position_right = variables_to_last_node
-                        .get(variable_right)
+                for (current_variable, next_variable) in variables.zip(next_variables) {
+                    let position_current = variables_to_last_node
+                        .get(current_variable)
+                        .expect("Variables in filters should also appear in the rule body")
+                        .clone();
+                    let position_next = variables_to_last_node
+                        .get(next_variable)
                         .expect("Variables in filters should also appear in the rule body")
                         .clone();
 
                     graph.add_edge(
-                        position_left.clone(),
-                        position_right.clone(),
+                        position_current.clone(),
+                        position_next.clone(),
                         PositionGraphEdge::WithinBody,
                     );
-                    graph.add_edge(position_right, position_left, PositionGraphEdge::WithinBody);
+                    graph.add_edge(
+                        position_next,
+                        position_current,
+                        PositionGraphEdge::WithinBody,
+                    );
                 }
             }
         }
@@ -650,12 +686,12 @@ impl ChaseProgram {
                         atom.terms()
                             .iter()
                             .map(|term| {
-                                if let Term::Variable(Variable::Universal(identifier)) = term {
+                                if let PrimitiveTerm::Variable(Variable::Universal(identifier)) = term {
                                     if identifier.name().starts_with(AGGREGATE_VARIABLE_PREFIX) {
                                         let aggregate = rule
                                             .aggregates()
                                             .iter()
-                                            .find(|aggregate| aggregate.output_variable == *identifier).expect("variable with aggregate prefix is missing an associated aggregate");
+                                            .find(|aggregate| aggregate.output_variable.name() == *identifier.0).expect("variable with aggregate prefix is missing an associated aggregate");
                                         if
                                             aggregate.aggregate_operation ==
                                             AggregateOperation::Count
@@ -681,7 +717,7 @@ impl ChaseProgram {
                         a.terms()
                             .iter()
                             .map(|t| {
-                                if matches!(t, Term::Variable(Variable::Existential(_))) {
+                                if matches!(t, PrimitiveTerm::Variable(Variable::Existential(_))) {
                                     TypeRequirement::Hard(PrimitiveType::Any)
                                 } else {
                                     TypeRequirement::None
@@ -694,10 +730,7 @@ impl ChaseProgram {
 
             let mut predicate_types = source_decls;
             predicate_types.extend(pred_decls);
-            for (pred, exis_types) in existential_decls
-                .into_iter()
-                .chain(aggregate_decls.into_iter())
-            {
+            for (pred, exis_types) in existential_decls.into_iter().chain(aggregate_decls) {
                 // keep track of error that might occur on conflicting type changes
                 let mut types_not_in_conflict: Result<_, _> = Ok(());
 
@@ -861,7 +894,15 @@ impl ChaseProgram {
         }
 
         for rule in self.rules() {
-            for atom in rule.all_atoms() {
+            for atom in rule.head() {
+                // check for consistent predicate arities
+                let arity = atom.terms().len();
+                if arity != *arities.entry(atom.predicate()).or_insert(arity) {
+                    return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
+                }
+            }
+
+            for atom in rule.all_body() {
                 // check for consistent predicate arities
                 let arity = atom.terms().len();
                 if arity != *arities.entry(atom.predicate()).or_insert(arity) {
@@ -871,8 +912,8 @@ impl ChaseProgram {
         }
 
         for fact in self.facts() {
-            let arity = fact.0.term_trees().len();
-            if arity != *arities.entry(fact.0.predicate()).or_insert(arity) {
+            let arity = fact.terms().len();
+            if arity != *arities.entry(fact.predicate()).or_insert(arity) {
                 return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
             }
         }
@@ -882,30 +923,37 @@ impl ChaseProgram {
 
     fn check_for_nonnumeric_arithmetic(&self, analyses: &[RuleAnalysis]) -> Result<(), TypeError> {
         for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
-            for (variable, term_tree) in rule.constructors() {
-                if !term_tree.0.is_leaf() {
+            for constraint in rule.all_constraints() {
+                if let Some(example_variable) = constraint.variables().next() {
                     let variable_type = analysis
                         .variable_types
-                        .get(variable)
+                        .get(example_variable)
                         .expect("Previous analysis should have assigned a type to each variable.");
 
-                    if !variable_type.allows_numeric_operations() {
+                    // Note: For now, separating this two checks doesn't make much sense
+                    // because every type that allows for instance an addition, also allows comparison such as <
+
+                    if constraint.is_numeric() && !variable_type.allows_numeric_operations() {
+                        return Err(TypeError::InvalidRuleNonNumericComparison);
+                    }
+
+                    if (!constraint.left().is_primitive() || !constraint.right().is_primitive())
+                        && !variable_type.allows_numeric_operations()
+                    {
                         return Err(TypeError::InvalidRuleNonNumericArithmetic);
                     }
+                }
+            }
 
-                    for term in term_tree.terms() {
-                        if let Term::Variable(variable) = term {
-                            let variable_type = analysis.variable_types.get(variable).expect(
-                                "Previous analysis should have assigned a type to each variable.",
-                            );
+            for constructor in rule.constructors() {
+                let variable_type = analysis
+                    .variable_types
+                    .get(constructor.variable())
+                    .expect("Previous analysis should have assigned a type to each variable.");
 
-                            if !variable_type.allows_numeric_operations() {
-                                return Err(TypeError::InvalidRuleNonNumericArithmetic);
-                            }
-                        } else {
-                            variable_type.ground_term_to_data_value_t(term.clone())?;
-                        }
-                    }
+                if !constructor.term().is_primitive() && !variable_type.allows_numeric_operations()
+                {
+                    return Err(TypeError::InvalidRuleNonNumericArithmetic);
                 }
             }
         }
@@ -918,12 +966,12 @@ impl ChaseProgram {
             for aggregate in rule.aggregates() {
                 let variable_type = analysis
                     .variable_types
-                    .get(&Variable::Universal(aggregate.variable_identifiers[0].clone()))
+                    .get(&aggregate.variables[0])
                     .expect("Previous analysis should have assigned a type to each aggregate output variable.");
 
                 aggregate
                     .logical_aggregate_operation
-                    .check_input_type(&aggregate.variable_identifiers[0].0, *variable_type)?;
+                    .check_input_type(&aggregate.variables[0].name(), *variable_type)?;
             }
         }
 
@@ -939,64 +987,42 @@ impl ChaseProgram {
     ) -> Result<(), TypeError> {
         for fact in self.facts() {
             let predicate_types = predicate_types
-                .get(&fact.0.predicate())
+                .get(&fact.predicate())
                 .expect("Previous analysis should have assigned a type vector to each predicate.");
 
-            for (term_index, ground_term_tree) in fact.0.term_trees().iter().enumerate() {
-                if let TermOperation::Term(ground_term) = ground_term_tree.operation() {
-                    let logical_type = predicate_types[term_index];
-                    logical_type.ground_term_to_data_value_t(ground_term.clone())?;
-                } else {
-                    unreachable!(
-                        "Its assumed that facts do not contain complicated expressions (for now?)"
-                    );
-                }
+            for (term_index, constant) in fact.terms().iter().enumerate() {
+                let logical_type = predicate_types[term_index];
+                logical_type.ground_term_to_data_value_t(constant.clone())?;
             }
         }
 
         for (rule, analysis) in self.rules().iter().zip(analyses.iter()) {
-            for filter in rule.all_filters() {
-                let left_variable = &filter.lhs;
-                let right_term = if let Term::Variable(_) = filter.rhs {
-                    continue;
-                } else {
-                    &filter.rhs
-                };
+            for constraint in rule.all_constraints() {
+                if let Some(example_variable) = constraint.variables().next() {
+                    let variable_type = analysis
+                        .variable_types
+                        .get(example_variable)
+                        .expect("Previous analysis should have assigned a type to each variable.");
 
-                let variable_type = analysis
-                    .variable_types
-                    .get(left_variable)
-                    .expect("Previous analysis should have assigned a type to each variable.");
-
-                if filter.operation != FilterOperation::Equals
-                    && !variable_type.allows_numeric_operations()
-                {
-                    return Err(TypeError::InvalidRuleNonNumericComparison);
-                }
-
-                variable_type.ground_term_to_data_value_t(right_term.clone())?;
-            }
-
-            for atom in rule.head() {
-                let predicate_types = predicate_types.get(&atom.predicate()).expect(
-                    "Previous analysis should have assigned a type vector to each predicate.",
-                );
-
-                for (term_index, term) in atom.terms().iter().enumerate() {
-                    if let Term::Variable(head_variable) = term {
-                        if rule.constructors().contains_key(head_variable) {
-                            let variable_type = analysis.variable_types.get(head_variable).expect(
-                                "Previous analysis should have assigned a type to each variable.",
-                            );
-
-                            if !variable_type.allows_numeric_operations() {
-                                return Err(TypeError::InvalidRuleNonNumericArithmetic);
+                    for term in [constraint.left(), constraint.right()] {
+                        for primitive_term in term.primitive_terms() {
+                            if let PrimitiveTerm::Constant(constant) = primitive_term {
+                                variable_type.ground_term_to_data_value_t(constant.clone())?;
                             }
                         }
-                    } else {
-                        let logical_type = predicate_types[term_index];
+                    }
+                }
+            }
 
-                        logical_type.ground_term_to_data_value_t(term.clone())?;
+            for constructor in rule.constructors() {
+                let variable_type = analysis
+                    .variable_types
+                    .get(constructor.variable())
+                    .expect("Previous analysis should have assigned a type to each variable.");
+
+                for term in constructor.term().primitive_terms() {
+                    if let PrimitiveTerm::Constant(constant) = term {
+                        variable_type.ground_term_to_data_value_t(constant.clone())?;
                     }
                 }
             }
@@ -1054,9 +1080,9 @@ mod test {
     use crate::{
         io::parser::parse_program,
         model::{
-            chase_model::{ChaseAtom, ChaseProgram, ChaseRule},
-            DataSourceDeclaration, DsvFile, Identifier, NativeDataSource, PrimitiveType, Term,
-            TupleConstraint, Variable,
+            chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom},
+            DataSourceDeclaration, DsvFile, Identifier, NativeDataSource, PrimitiveTerm,
+            PrimitiveType, TupleConstraint, Variable,
         },
         program_analysis::analysis::{get_fresh_rule_predicate, RuleAnalysisError},
     };
@@ -1073,16 +1099,17 @@ mod test {
         let x = Variable::Universal(Identifier("x".to_string()));
         let z = Variable::Existential(Identifier("z".to_string()));
 
-        let tx = Term::Variable(x);
-        let tz = Term::Variable(z);
+        let tx = PrimitiveTerm::Variable(x.clone());
+        let tz = PrimitiveTerm::Variable(z);
 
         // A(x) :- B(x), C(x).
         let basic_rule = ChaseRule::new(
-            vec![ChaseAtom::new(a.clone(), vec![tx.clone()])],
-            HashMap::new(),
+            vec![PrimitiveAtom::new(a.clone(), vec![tx.clone()])],
+            vec![],
+            vec![],
             vec![
-                ChaseAtom::new(b.clone(), vec![tx.clone()]),
-                ChaseAtom::new(c.clone(), vec![tx.clone()]),
+                VariableAtom::new(b.clone(), vec![x.clone()]),
+                VariableAtom::new(c.clone(), vec![x.clone()]),
             ],
             vec![],
             vec![],
@@ -1091,9 +1118,10 @@ mod test {
 
         // R(x, !z) :- A(x).
         let exis_rule = ChaseRule::new(
-            vec![ChaseAtom::new(r.clone(), vec![tx.clone(), tz])],
-            HashMap::new(),
-            vec![ChaseAtom::new(a.clone(), vec![tx])],
+            vec![PrimitiveAtom::new(r.clone(), vec![tx.clone(), tz])],
+            vec![],
+            vec![],
+            vec![VariableAtom::new(a.clone(), vec![x])],
             vec![],
             vec![],
             vec![],
