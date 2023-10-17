@@ -443,10 +443,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
 
             // Unify the head atom with the given fact
-            // If unification is possible `compatible` remain true
-            // and `assignment` will contain the match which is responsible for the fact
+
+            // If unification is possible `compatible` remains true
             let mut compatible = true;
-            let mut assignment = HashMap::<Variable, Constant>::new();
+            // Contains the head variable and the constant it aligns with.
+            let mut assignment_constant = HashMap::<Variable, Constant>::new();
+            // For each constructor variable, contains the term which describes its calculation
+            // and the constant it should equal to based on the input fact
+            let mut assignment_constructor = HashMap::<Variable, (Constant, Term)>::new();
 
             for (ty, (head_term, fact_term)) in predicate_types
                 .iter()
@@ -468,22 +472,64 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                             continue;
                         }
 
-                        if rule.get_constructor(variable).is_some() {
-                            // TODO: Support arbitrary operations in the head
-                            return Err(Error::TraceUnsupportedFeature());
-                        }
+                        if let Some(constructor) = rule.get_constructor(variable) {
+                            match assignment_constructor.entry(variable.clone()) {
+                                Entry::Occupied(entry) => {
+                                    let (stored_constant, _) = entry.get();
 
-                        match assignment.entry(variable.clone()) {
-                            Entry::Occupied(entry) => {
-                                if ty.ground_term_to_data_value_t(entry.get().clone())
-                                    != ty.ground_term_to_data_value_t(fact_term.clone())
-                                {
-                                    compatible = false;
-                                    break;
+                                    if stored_constant != fact_term {
+                                        compatible = false;
+                                        break;
+                                    }
+                                }
+                                Entry::Vacant(entry) => {
+                                    if constructor.term().variables().next().is_none() {
+                                        if let Term::Primitive(PrimitiveTerm::Constant(constant)) =
+                                            constructor.term()
+                                        {
+                                            if fact_term != constant {
+                                                compatible = false;
+                                                break;
+                                            }
+                                        } else {
+                                            // Here, we assume that terms are numeric and can be evaluated as floats
+                                            // TODO: This changes if complex terms an also be operations on strings for example
+                                            if let Ok(DataValueT::Double(fact_term_float)) =
+                                                PrimitiveType::Float64
+                                                    .ground_term_to_data_value_t(fact_term.clone())
+                                            {
+                                                if let Some(constructor_float) =
+                                                    constructor.term().evaluate_constant_numeric()
+                                                {
+                                                    if fact_term_float != constructor_float {
+                                                        compatible = false;
+                                                        break;
+                                                    }
+                                                } else {
+                                                    return Err(Error::TraceUnsupportedFeature());
+                                                }
+                                            } else {
+                                                return Err(Error::TraceUnsupportedFeature());
+                                            }
+                                        }
+                                    }
+
+                                    entry.insert((fact_term.clone(), constructor.term().clone()));
                                 }
                             }
-                            Entry::Vacant(entry) => {
-                                entry.insert(fact_term.clone());
+                        } else {
+                            match assignment_constant.entry(variable.clone()) {
+                                Entry::Occupied(entry) => {
+                                    if ty.ground_term_to_data_value_t(entry.get().clone())
+                                        != ty.ground_term_to_data_value_t(fact_term.clone())
+                                    {
+                                        compatible = false;
+                                        break;
+                                    }
+                                }
+                                Entry::Vacant(entry) => {
+                                    entry.insert(fact_term.clone());
+                                }
                             }
                         }
                     }
@@ -498,18 +544,28 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             // The goal of this part of the code is to apply the rule which led to the given fact
             // but with the variable binding derived from the unification above
 
-            let new_constraints: Vec<Constraint> = assignment
-                .iter()
-                .map(|(variable, term)| {
-                    Constraint::Equals(
-                        Term::Primitive(PrimitiveTerm::Variable(variable.clone())),
-                        Term::Primitive(PrimitiveTerm::Constant(term.clone())),
-                    )
-                })
-                .collect();
+            let unification_constraints: Vec<Constraint> =
+                assignment_constant
+                    .into_iter()
+                    .map(|(variable, term)| {
+                        Constraint::Equals(
+                            Term::Primitive(PrimitiveTerm::Variable(variable)),
+                            Term::Primitive(PrimitiveTerm::Constant(term)),
+                        )
+                    })
+                    .chain(assignment_constructor.into_iter().map(
+                        |(_variable, (constant, term))| {
+                            Constraint::Equals(
+                                Term::Primitive(PrimitiveTerm::Constant(constant)),
+                                term,
+                            )
+                        },
+                    ))
+                    .collect();
 
             let mut rule = self.program.rules()[rule_index].clone();
-            rule.positive_constraints_mut().extend(new_constraints);
+            rule.positive_constraints_mut()
+                .extend(unification_constraints);
             let analysis = &self.analysis.rule_analysis[rule_index];
 
             let body_execution = SeminaiveStrategy::initialize(&rule, analysis);

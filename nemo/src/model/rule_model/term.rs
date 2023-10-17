@@ -1,6 +1,14 @@
 use std::fmt::{Debug, Display};
 
-use crate::model::{types::primitive_logical_value::LOGICAL_NULL_PREFIX, VariableAssignment};
+use nemo_physical::{
+    columnar::operations::arithmetic::traits::{CheckedPow, CheckedSquareRoot},
+    datatypes::{DataValueT, Double},
+};
+use num::{traits::CheckedNeg, Zero};
+
+use crate::model::{
+    types::primitive_logical_value::LOGICAL_NULL_PREFIX, PrimitiveType, VariableAssignment,
+};
 
 use super::{Aggregate, Identifier, NumericLiteral, RdfLiteral};
 
@@ -365,6 +373,58 @@ impl Term {
             Term::Unary(unary) => Self::aggregate_subterm_recursive(unary.term()),
             Term::Aggregation(_aggregate) => false, // We allow aggregation on the top level
             Term::Function(sub) => sub.subterms.iter().any(Self::aggregate_subterm_recursive),
+        }
+    }
+
+    /// Evaluates a constant (numeric) term
+    /// We do this by casting everything to `f64` as it seems like the most general number type.
+    /// Returns `None` if this not possible.
+    pub fn evaluate_constant_numeric(&self) -> Option<Double> {
+        match self {
+            Term::Primitive(primitive) => match primitive {
+                PrimitiveTerm::Constant(constant) => {
+                    if let DataValueT::Double(value) = PrimitiveType::Float64
+                        .ground_term_to_data_value_t(constant.clone())
+                        .ok()?
+                    {
+                        Some(value)
+                    } else {
+                        None
+                    }
+                }
+                PrimitiveTerm::Variable(_) => todo!(),
+            },
+            Term::Binary(binary) => {
+                let (left, right) = binary.terms();
+                let value_left = left.evaluate_constant_numeric()?;
+                let value_right = right.evaluate_constant_numeric()?;
+
+                match binary {
+                    BinaryOperation::Addition(_, _) => Some(value_left + value_right),
+                    BinaryOperation::Subtraction(_, _) => Some(value_left - value_right),
+                    BinaryOperation::Multiplication(_, _) => Some(value_left * value_right),
+                    BinaryOperation::Division(_, _) => Some(value_left / value_right),
+                    BinaryOperation::Exponent(_, _) => Some(value_left.checked_pow(value_right)?),
+                }
+            }
+            Term::Unary(unary) => {
+                let sub = unary.term();
+                let mut value_sub = sub.evaluate_constant_numeric()?;
+
+                match unary {
+                    UnaryOperation::SquareRoot(_) => Some(value_sub.checked_sqrt()?),
+                    UnaryOperation::UnaryMinus(_) => Some(value_sub.checked_neg()?),
+                    UnaryOperation::Abs(_) => {
+                        if value_sub < Double::zero() {
+                            value_sub *= Double::new(-1.0).unwrap();
+                        }
+
+                        Some(value_sub)
+                    }
+                }
+            }
+            Term::Aggregation(_) => None,
+            Term::Function(_) => None,
         }
     }
 }
