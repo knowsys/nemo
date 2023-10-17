@@ -4,7 +4,7 @@ use nemo_physical::{
     columnar::operations::arithmetic::traits::{CheckedPow, CheckedSquareRoot},
     datatypes::{DataValueT, Double},
 };
-use num::{traits::CheckedNeg, Zero};
+use num::{traits::CheckedNeg, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Zero};
 
 use crate::model::{
     types::primitive_logical_value::LOGICAL_NULL_PREFIX, PrimitiveType, VariableAssignment,
@@ -400,10 +400,14 @@ impl Term {
                 let value_right = right.evaluate_constant_numeric()?;
 
                 match binary {
-                    BinaryOperation::Addition(_, _) => Some(value_left + value_right),
-                    BinaryOperation::Subtraction(_, _) => Some(value_left - value_right),
-                    BinaryOperation::Multiplication(_, _) => Some(value_left * value_right),
-                    BinaryOperation::Division(_, _) => Some(value_left / value_right),
+                    BinaryOperation::Addition(_, _) => Some(value_left.checked_add(&value_right)?),
+                    BinaryOperation::Subtraction(_, _) => {
+                        Some(value_left.checked_sub(&value_right)?)
+                    }
+                    BinaryOperation::Multiplication(_, _) => {
+                        Some(value_left.checked_mul(&value_right)?)
+                    }
+                    BinaryOperation::Division(_, _) => Some(value_left.checked_div(&value_right)?),
                     BinaryOperation::Exponent(_, _) => Some(value_left.checked_pow(value_right)?),
                 }
             }
