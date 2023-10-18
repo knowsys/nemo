@@ -17,7 +17,9 @@ use crate::{
     program_analysis::variable_order::VariableOrder,
 };
 
-pub(super) fn termtree_to_arithmetictree(
+/// Builds an [`ArithmeticTree`] with [`DataValueT`]
+/// from a given [`Term`].
+pub fn termtree_to_arithmetictree(
     term: &Term,
     order: &VariableOrder,
     logical_type: &PrimitiveType,

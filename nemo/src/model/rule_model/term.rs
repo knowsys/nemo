@@ -1,6 +1,18 @@
 use std::fmt::{Debug, Display};
 
-use crate::model::{types::primitive_logical_value::LOGICAL_NULL_PREFIX, VariableAssignment};
+use nemo_physical::{
+    columnar::operations::arithmetic::expression::ArithmeticTreeLeaf,
+    datatypes::{DataValueT, StorageTypeName, StorageValueT},
+    management::database::Dict,
+};
+
+use crate::{
+    execution::planning::arithmetic::termtree_to_arithmetictree,
+    model::{
+        types::primitive_logical_value::LOGICAL_NULL_PREFIX, PrimitiveType, VariableAssignment,
+    },
+    program_analysis::variable_order::VariableOrder,
+};
 
 use super::{Aggregate, Identifier, NumericLiteral, RdfLiteral};
 
@@ -365,6 +377,50 @@ impl Term {
             Term::Unary(unary) => Self::aggregate_subterm_recursive(unary.term()),
             Term::Aggregation(_aggregate) => false, // We allow aggregation on the top level
             Term::Function(sub) => sub.subterms.iter().any(Self::aggregate_subterm_recursive),
+        }
+    }
+
+    /// Evaluates a constant (numeric) term.
+    pub fn evaluate_constant_numeric(
+        &self,
+        ty: &PrimitiveType,
+        dict: &Dict,
+    ) -> Option<StorageValueT> {
+        let arithmetic_tree = termtree_to_arithmetictree(self, &VariableOrder::new(), ty);
+        let storage_type = ty.datatype_name().to_storage_type_name();
+
+        macro_rules! translate_data_type {
+            ($variant:ident, $type:ty) => {{
+                let translate_function = |l: ArithmeticTreeLeaf<DataValueT>| match l {
+                    ArithmeticTreeLeaf::Constant(t) => {
+                        if let StorageValueT::$variant(value) = t
+                            .to_storage_value(dict)
+                            .expect("We don't have string operations so this cannot fail.")
+                        {
+                            ArithmeticTreeLeaf::Constant(value)
+                        } else {
+                            panic!(
+                                "Expected a operation tree value of type {}",
+                                stringify!($src_name)
+                            );
+                        }
+                    }
+                    ArithmeticTreeLeaf::Reference(index) => ArithmeticTreeLeaf::Reference(index),
+                };
+
+                let arithmetic_tree_typed = arithmetic_tree.map(&translate_function);
+                Some(StorageValueT::$variant(
+                    arithmetic_tree_typed.evaluate(&[])?,
+                ))
+            }};
+        }
+
+        match storage_type {
+            StorageTypeName::U32 => translate_data_type!(U32, u32),
+            StorageTypeName::U64 => translate_data_type!(U64, u64),
+            StorageTypeName::I64 => translate_data_type!(I64, i64),
+            StorageTypeName::Float => translate_data_type!(Float, f32),
+            StorageTypeName::Double => translate_data_type!(Double, f64),
         }
     }
 }
