@@ -298,7 +298,7 @@ where
         loop {
             referenced_values[VALUE_SCAN_INDEX] = self.value_scan.current()?;
 
-            if self.check_conditions(&referenced_values)? {
+            if self.check_conditions(&referenced_values).unwrap_or(false) {
                 break;
             } else {
                 self.value_scan.next();
