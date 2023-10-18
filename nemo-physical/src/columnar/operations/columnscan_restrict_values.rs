@@ -211,19 +211,31 @@ where
     }
 
     /// Set `self.value_scan` such that it satisfies each of the `self.lower_bounds`
-    fn satisfy_lower_bounds(&mut self, referenced_values: &[T]) -> Option<()> {
+    ///
+    /// Returns `false` if the expression encoding the lower bound is undefined.
+    /// In such a case, we can enter the state `ColumnScanStatus::After`
+    /// as the bounds do not change with respect to `self.value_scan`.
+    ///
+    /// Returns `true` in all other cases
+    fn satisfy_lower_bounds(&mut self, referenced_values: &[T]) -> bool {
         for lower_bound in &self.lower_bounds {
             match lower_bound {
                 Bound::Inclusive(tree) => {
-                    let lower_value = tree.evaluate(referenced_values)?;
-                    self.value_scan.seek(lower_value);
+                    if let Some(lower_value) = tree.evaluate(referenced_values) {
+                        self.value_scan.seek(lower_value);
+                    } else {
+                        return false;
+                    }
                 }
                 Bound::Exclusive(tree) => {
-                    let lower_value = tree.evaluate(referenced_values)?;
-                    if let Some(seeked) = self.value_scan.seek(lower_value) {
-                        if seeked == lower_value {
-                            self.value_scan.next();
+                    if let Some(lower_value) = tree.evaluate(referenced_values) {
+                        if let Some(seeked) = self.value_scan.seek(lower_value) {
+                            if seeked == lower_value {
+                                self.value_scan.next();
+                            }
                         }
+                    } else {
+                        return false;
                     }
                 }
             }
@@ -234,44 +246,64 @@ where
         }
 
         self.status = ColumnScanStatus::Within;
-        Some(())
+        true
     }
 
     /// Check if `self.value_scan` satisfies each of the `self.upper_bounds`.
-    /// Returns `None` if a expression was undefined.
-    fn check_upper_bounds(&self, referenced_values: &[T]) -> Option<bool> {
+    ///
+    /// Returns `false` if there is a bound that is not satisfied
+    /// or its expression is undefined.
+    ///
+    /// Returns `true` if all bounds are satisfied.
+    fn check_upper_bounds(&self, referenced_values: &[T]) -> bool {
         for bound in &self.upper_bounds {
             match bound {
                 Bound::Inclusive(tree) => {
-                    let upper_value = tree.evaluate(referenced_values)?;
-
-                    if self.current()? > upper_value {
-                        return Some(false);
+                    if let Some(upper_value) = tree.evaluate(referenced_values) {
+                        if let Some(current_value) = self.current() {
+                            if current_value <= upper_value {
+                                continue;
+                            }
+                        }
                     }
+
+                    return false;
                 }
                 Bound::Exclusive(tree) => {
-                    let upper_value = tree.evaluate(referenced_values)?;
-
-                    if self.current()? >= upper_value {
-                        return Some(false);
+                    if let Some(upper_value) = tree.evaluate(referenced_values) {
+                        if let Some(current_value) = self.current() {
+                            if current_value < upper_value {
+                                continue;
+                            }
+                        }
                     }
+
+                    return false;
                 }
             }
         }
 
-        Some(true)
+        true
     }
 
     /// Check if `self.value_scan` satisfies each of the `self.conditions`.
-    /// Returns `None` if a expression was undefined.
-    fn check_conditions(&self, referenced_values: &[T]) -> Option<bool> {
+    ///
+    /// Returns `false` if there is an condition which is not satisfied
+    /// or which is undefined.
+    ///
+    /// Returns `true` if all conditions are satisfied.
+    fn check_conditions(&self, referenced_values: &[T]) -> bool {
         for condition in &self.conditions {
-            if !condition.evaluate(referenced_values)? {
-                return Some(false);
+            if let Some(result) = condition.evaluate(referenced_values) {
+                if result {
+                    continue;
+                }
             }
+
+            return false;
         }
 
-        Some(true)
+        true
     }
 }
 
@@ -286,7 +318,11 @@ where
 
         match self.status {
             ColumnScanStatus::Before => {
-                self.satisfy_lower_bounds(&referenced_values)?;
+                if !self.satisfy_lower_bounds(&referenced_values) {
+                    self.status = ColumnScanStatus::After;
+                    return None;
+                }
+
                 self.status = ColumnScanStatus::Within;
             }
             ColumnScanStatus::Within => {
@@ -298,14 +334,14 @@ where
         loop {
             referenced_values[VALUE_SCAN_INDEX] = self.value_scan.current()?;
 
-            if self.check_conditions(&referenced_values).unwrap_or(false) {
+            if self.check_conditions(&referenced_values) {
                 break;
             } else {
                 self.value_scan.next();
             }
         }
 
-        if self.check_upper_bounds(&referenced_values)? {
+        if self.check_upper_bounds(&referenced_values) {
             self.current()
         } else {
             self.status = ColumnScanStatus::After;
@@ -323,7 +359,11 @@ where
 
         match self.status {
             ColumnScanStatus::Before => {
-                self.satisfy_lower_bounds(&referenced_values);
+                if !self.satisfy_lower_bounds(&referenced_values) {
+                    self.status = ColumnScanStatus::After;
+                    return None;
+                }
+
                 self.status = ColumnScanStatus::Within;
 
                 self.value_scan.seek(value);
@@ -337,14 +377,14 @@ where
         loop {
             referenced_values[VALUE_SCAN_INDEX] = self.value_scan.current()?;
 
-            if self.check_conditions(&referenced_values)? {
+            if self.check_conditions(&referenced_values) {
                 break;
             } else {
                 self.value_scan.next();
             }
         }
 
-        if self.check_upper_bounds(&referenced_values)? {
+        if self.check_upper_bounds(&referenced_values) {
             self.current()
         } else {
             self.status = ColumnScanStatus::After;
