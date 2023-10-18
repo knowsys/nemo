@@ -294,10 +294,8 @@ where
     /// Returns `true` if all conditions are satisfied.
     fn check_conditions(&self, referenced_values: &[T]) -> bool {
         for condition in &self.conditions {
-            if let Some(result) = condition.evaluate(referenced_values) {
-                if result {
-                    continue;
-                }
+            if let Some(true) = condition.evaluate(referenced_values) {
+                continue;
             }
 
             return false;
