@@ -44,11 +44,8 @@ rec {
           cargo = toolchain;
           rustc = toolchain;
         };
-        defaultBuildInputs = [pkgs.openssl pkgs.openssl.dev];
-        defaultNativeBuildInputs = [
-          toolchain
-          pkgs.pkg-config
-        ];
+        defaultBuildInputs = [pkgs.openssl pkgs.openssl.dev] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [pkgs.darwin.apple_sdk.frameworks.Security];
+        defaultNativeBuildInputs = [toolchain pkgs.pkg-config];
       in rec {
         packages = let
           cargoMeta = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package;
@@ -274,34 +271,29 @@ rec {
             export PATH=''${HOME}/.cargo/bin''${PATH+:''${PATH}}
           '';
 
-          buildInputs = let
-            ifNotOn = systems:
-              pkgs.lib.optionals (!builtins.elem pkgs.system systems);
-          in
-            pkgs.lib.concatLists [
-              defaultBuildInputs
-              defaultNativeBuildInputs
-              [
-                pkgs.cargo-audit
-                pkgs.cargo-license
-                pkgs.cargo-tarpaulin
-                pkgs.gnuplot
-                pkgs.maturin
-                pkgs.python3
-                pkgs.wasm-pack
-                pkgs.wasm-bindgen-cli
-                pkgs.nodejs
-              ]
-              # valgrind is linux-only
-              (ifNotOn ["aarch64-darwin" "x86_64-darwin"] [pkgs.valgrind])
-            ];
+          buildInputs = pkgs.lib.concatLists [
+            defaultBuildInputs
+            defaultNativeBuildInputs
+            [
+              pkgs.cargo-audit
+              pkgs.cargo-license
+              pkgs.cargo-tarpaulin
+              pkgs.gnuplot
+              pkgs.maturin
+              pkgs.python3
+              pkgs.wasm-pack
+              pkgs.wasm-bindgen-cli
+              pkgs.nodejs
+            ]
+            # valgrind is linux-only
+            (pkgs.lib.optionals (!pkgs.stdenv.isDarwin) [pkgs.valgrind])
+          ];
         };
 
         formatter = channels.nixpkgs.alejandra;
       };
     };
 }
-
 # Local Variables:
 # apheleia-formatter: alejandra
 # End:
