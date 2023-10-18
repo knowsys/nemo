@@ -487,34 +487,47 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                                         if let Term::Primitive(PrimitiveTerm::Constant(constant)) =
                                             constructor.term()
                                         {
-                                            if fact_term != constant {
+                                            if ty.ground_term_to_data_value_t(constant.clone())
+                                                != ty.ground_term_to_data_value_t(fact_term.clone())
+                                            {
                                                 compatible = false;
                                                 break;
                                             }
                                         } else {
-                                            // Here, we assume that terms are numeric and can be evaluated as floats
-                                            // TODO: This changes if complex terms an also be operations on strings for example
-                                            if let Ok(DataValueT::Double(fact_term_float)) =
-                                                PrimitiveType::Float64
-                                                    .ground_term_to_data_value_t(fact_term.clone())
+                                            if let Ok(fact_term_data) =
+                                                ty.ground_term_to_data_value_t(fact_term.clone())
                                             {
-                                                if let Some(constructor_float) =
-                                                    constructor.term().evaluate_constant_numeric()
+                                                if let Some(fact_term_storage) = fact_term_data
+                                                    .to_storage_value(
+                                                        &self.table_manager.get_dict(),
+                                                    )
                                                 {
-                                                    if fact_term_float != constructor_float {
-                                                        compatible = false;
-                                                        break;
+                                                    if let Some(constructor_value_storage) =
+                                                        constructor
+                                                            .term()
+                                                            .evaluate_constant_numeric(
+                                                                ty,
+                                                                &self.table_manager.get_dict(),
+                                                            )
+                                                    {
+                                                        if fact_term_storage
+                                                            == constructor_value_storage
+                                                        {
+                                                            continue;
+                                                        }
                                                     }
-                                                } else {
-                                                    return Err(Error::TraceUnsupportedFeature());
                                                 }
-                                            } else {
-                                                return Err(Error::TraceUnsupportedFeature());
                                             }
-                                        }
-                                    }
 
-                                    entry.insert((fact_term.clone(), constructor.term().clone()));
+                                            compatible = false;
+                                            break;
+                                        }
+                                    } else {
+                                        entry.insert((
+                                            fact_term.clone(),
+                                            constructor.term().clone(),
+                                        ));
+                                    }
                                 }
                             }
                         } else {
