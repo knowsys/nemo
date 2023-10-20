@@ -15,8 +15,15 @@ class TestExample(unittest.TestCase):
         data(hello, world) .
         data(py, 3.14) .
         data(msg, "hello world"@en) .
+        data(3.14, circle).
 
         calculated(?x, !v) :- data(?y, ?x) .
+        
+        interesting(py).
+        interesting(msg).
+
+        interesting(?x) :- data(?x, ?y), interesting(?y).
+        interesting(?y) :- data(?x, ?y), interesting(?x).
         """
 
         self.engine = NemoEngine(load_string(self.rules))
@@ -31,6 +38,7 @@ class TestExample(unittest.TestCase):
                 NemoLiteral("hello world", lang="en"),
                 "__Null#9223372036854775813",
             ],
+            ["circle", "__Null#9223372036854775814"],
         ]
 
         self.expected_serialized_result = [
@@ -51,6 +59,7 @@ class TestExample(unittest.TestCase):
                 '"hello world"@en',
                 "<__Null#9223372036854775813>",
             ],
+            ["circle", "<__Null#9223372036854775814>"],
         ]
 
     def test_result(self):
@@ -68,6 +77,24 @@ class TestExample(unittest.TestCase):
             with open(results_file_name) as results_file:
                 results = list(csv.reader(results_file))
                 self.assertEqual(results, self.expected_serialized_result)
+
+    def test_trace(self):
+        trace = self.engine.trace("interesting(circle)")
+        expected_trace = {
+            "rule": "interesting(circle) :- data(3.14, circle), interesting(3.14) .",
+            "subtraces": [
+                {"fact": "data(3.14, circle)"},
+                {
+                    "rule": "interesting(3.14) :- data(py, 3.14), interesting(py) .",
+                    "subtraces": [
+                        {"fact": "data(py, 3.14)"},
+                        {"fact": "interesting(py)"},
+                    ],
+                },
+            ],
+        }
+
+        self.assertEqual(trace.dict(), expected_trace)
 
 
 if __name__ == "__main__":

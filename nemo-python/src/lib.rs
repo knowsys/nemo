@@ -1,16 +1,17 @@
-use std::{collections::HashSet, fs::read_to_string};
+use std::{collections::HashSet, fmt::format, fs::read_to_string};
 
 use nemo::{
     datatypes::Double,
-    execution::ExecutionEngine,
+    execution::{tracing::trace::ExecutionTrace, ExecutionEngine},
     io::{resource_providers::ResourceProviders, OutputFileManager, RecordWriter},
     model::{
-        types::primitive_logical_value::PrimitiveLogicalValueT, Constant, NumericLiteral,
-        RdfLiteral, XSD_STRING,
+        chase_model::{ChaseAtom, ChaseFact},
+        types::primitive_logical_value::PrimitiveLogicalValueT,
+        Constant, NumericLiteral, RdfLiteral, XSD_STRING,
     },
 };
 
-use pyo3::{create_exception, exceptions::PyNotImplementedError, prelude::*};
+use pyo3::{create_exception, exceptions::PyNotImplementedError, prelude::*, types::PyDict};
 
 create_exception!(module, NemoError, pyo3::exceptions::PyException);
 
@@ -134,40 +135,115 @@ impl NemoLiteral {
 #[pyclass]
 struct NemoResults(Box<dyn Iterator<Item = Vec<PrimitiveLogicalValueT>> + Send>);
 
-fn logical_value_to_python(py: Python<'_>, v: PrimitiveLogicalValueT) -> PyResult<&PyAny> {
+fn constant_to_python<'a>(py: Python<'a>, v: &Constant) -> PyResult<&'a PyAny> {
     let decimal = py.import("decimal")?.getattr("Decimal")?;
     match v {
-        PrimitiveLogicalValueT::Any(rdf) => match rdf {
-            Constant::Abstract(c) => Ok(c.to_string().into_py(py).into_ref(py)),
-            Constant::NumericLiteral(NumericLiteral::Integer(i)) => Ok(i.into_py(py).into_ref(py)),
-            Constant::NumericLiteral(NumericLiteral::Double(d)) => {
-                Ok(f64::from(d).into_py(py).into_ref(py))
-            }
-            // currently we pack decimals into strings, maybe this should change
-            Constant::NumericLiteral(_) => decimal.call1((rdf.to_string(),)),
-            Constant::StringLiteral(s) => Ok(s.into_py(py).into_ref(py)),
-            Constant::RdfLiteral(lit) => (|| {
-                let lit = match lit {
-                    RdfLiteral::DatatypeValue { value, datatype } => NemoLiteral {
-                        value,
-                        language: None,
-                        datatype,
-                    },
-                    RdfLiteral::LanguageString { value, tag } => NemoLiteral {
-                        value,
-                        language: Some(tag),
-                        datatype: RDF_LANG_STRING.to_string(),
-                    },
-                };
-                Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
-            })(),
-        },
+        Constant::Abstract(c) => Ok(c.to_string().into_py(py).into_ref(py)),
+        Constant::NumericLiteral(NumericLiteral::Integer(i)) => Ok(i.into_py(py).into_ref(py)),
+        Constant::NumericLiteral(NumericLiteral::Double(d)) => {
+            Ok(f64::from(*d).into_py(py).into_ref(py))
+        }
+        // currently we pack decimals into strings, maybe this should change
+        Constant::NumericLiteral(_) => decimal.call1((v.to_string(),)),
+        Constant::StringLiteral(s) => Ok(s.into_py(py).into_ref(py)),
+        Constant::RdfLiteral(lit) => (|| {
+            let lit = match lit {
+                RdfLiteral::DatatypeValue { value, datatype } => NemoLiteral {
+                    value: value.clone(),
+                    language: None,
+                    datatype: datatype.clone(),
+                },
+                RdfLiteral::LanguageString { value, tag } => NemoLiteral {
+                    value: value.clone(),
+                    language: Some(tag.clone()),
+                    datatype: RDF_LANG_STRING.to_string(),
+                },
+            };
+            Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
+        })(),
+    }
+}
+
+fn logical_value_to_python(py: Python<'_>, v: PrimitiveLogicalValueT) -> PyResult<&PyAny> {
+    match v {
+        PrimitiveLogicalValueT::Any(rdf) => constant_to_python(py, &rdf),
         PrimitiveLogicalValueT::String(s) => Ok(String::from(s).into_py(py).into_ref(py)),
         PrimitiveLogicalValueT::Integer(i) => Ok(i64::from(i).into_py(py).into_ref(py)),
         PrimitiveLogicalValueT::Float64(d) => {
             Ok(f64::from(Double::from(d)).into_py(py).into_ref(py))
         }
     }
+}
+
+#[pyclass]
+struct NemoFact(ChaseFact);
+
+#[pymethods]
+impl NemoFact {
+    fn predicate(&self) -> String {
+        self.0.predicate().to_string()
+    }
+
+    fn constants<'a>(&self, py: Python<'a>) -> PyResult<Vec<&'a PyAny>> {
+        self.0
+            .terms()
+            .iter()
+            .map(|c| constant_to_python(py, c))
+            .collect()
+    }
+
+    fn __repr__(&self) -> String {
+        self.0.to_string()
+    }
+}
+
+#[pyclass]
+struct NemoTrace(ExecutionTrace);
+
+#[pymethods]
+impl NemoTrace {
+    fn subtraces(&self) -> Option<Vec<NemoTrace>> {
+        match &self.0 {
+            ExecutionTrace::Fact(_) => None,
+            ExecutionTrace::Rule(_, subtraces) => {
+                Some(subtraces.iter().map(|t| NemoTrace(t.clone())).collect())
+            }
+        }
+    }
+
+    fn fact(&self) -> Option<NemoFact> {
+        match &self.0 {
+            ExecutionTrace::Fact(f) => Some(NemoFact(f.clone())),
+            ExecutionTrace::Rule(_, _) => None,
+        }
+    }
+
+    fn rule(&self) -> Option<String> {
+        match &self.0 {
+            ExecutionTrace::Fact(_) => None,
+            ExecutionTrace::Rule(rule, _) => Some(rule.to_string()),
+        }
+    }
+
+    fn dict(&self, py: Python) -> PyResult<PyObject> {
+        trace_to_dict(&self.0, py)
+    }
+}
+
+fn trace_to_dict(trace: &ExecutionTrace, py: Python) -> PyResult<PyObject> {
+    let result = PyDict::new(py);
+    match &trace {
+        ExecutionTrace::Fact(fact) => result.set_item("fact", fact.to_string())?,
+        ExecutionTrace::Rule(rule, subtraces) => {
+            result.set_item("rule", rule.to_string())?;
+            let subtraces: Vec<_> = subtraces
+                .iter()
+                .map(|trace| trace_to_dict(trace, py))
+                .collect::<PyResult<_>>()?;
+            result.set_item("subtraces", subtraces)?;
+        }
+    };
+    Ok(result.to_object(py))
 }
 
 #[pymethods]
@@ -204,6 +280,12 @@ impl NemoEngine {
     fn reason(&mut self) -> PyResult<()> {
         self.0.execute().py_res()?;
         Ok(())
+    }
+
+    fn trace(&self, fact: String) -> PyResult<Option<NemoTrace>> {
+        let parsed_fact = nemo::io::parser::parse_fact(fact).py_res()?;
+        let trace = self.0.trace(parsed_fact).py_res()?;
+        Ok(trace.map(|trace| NemoTrace(trace)))
     }
 
     fn write_result(
