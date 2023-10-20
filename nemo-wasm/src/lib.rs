@@ -302,13 +302,20 @@ impl NemoEngine {
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
 
-        let trace = self
+        let (trace, handles) = self
             .0
-            .trace(parsed_fact)
+            .trace(vec![parsed_fact])
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
 
-        Ok(trace.map(|t| format!("{t}")))
+        Ok(handles[0].map(|h| {
+            format!(
+                "{}",
+                trace
+                    .ascii_tree_string(h)
+                    .expect("Returned handle must lead to succesful derivation")
+            )
+        }))
     }
 }
 

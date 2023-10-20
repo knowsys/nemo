@@ -135,7 +135,7 @@ pub struct CliApp {
     /// Specify directory for input files.
     #[arg(short = 'I', long = "input-dir")]
     pub input_directory: Option<PathBuf>,
-    /// Specify a fact, the origin of which should be explained
-    #[arg(long = "trace")]
-    pub trace_fact: Option<String>,
+    /// Specify a semicolon seperated list of facts whose origins should be explained
+    #[arg(long = "trace", value_delimiter = ';')]
+    pub trace_facts: Option<Vec<String>>,
 }
