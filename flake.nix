@@ -188,7 +188,7 @@ rec {
               cargo doc --workspace
 
               pushd nemo-python
-                pycodestyle .
+                pycodestyle . --max-line-length 90
                 VENV="$(mktemp -d)"
                 python3 -m venv "''${VENV}"
                 # shellcheck disable=SC1091
