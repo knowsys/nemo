@@ -5,7 +5,7 @@ use ascii_tree::write_tree;
 use crate::model::{chase_model::ChaseFact, Rule, VariableAssignment};
 
 /// Identifies an atom within the head of a rule
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RuleApplication {
     rule: Rule,
     assignment: VariableAssignment,
@@ -35,7 +35,7 @@ impl std::fmt::Display for RuleApplication {
 }
 
 /// Represents the derivation tree for one derived fact
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExecutionTrace {
     /// Fact was given as input
     Fact(ChaseFact),
