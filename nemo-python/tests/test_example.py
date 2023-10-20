@@ -4,7 +4,12 @@ import os
 import csv
 from decimal import Decimal
 
-from nmo_python import load_string, NemoEngine, NemoOutputManager, NemoLiteral
+from nmo_python import (
+    load_string,
+    NemoEngine,
+    NemoOutputManager,
+    NemoLiteral,
+)
 
 
 class TestExample(unittest.TestCase):
@@ -18,7 +23,7 @@ class TestExample(unittest.TestCase):
         data(3.14, circle).
 
         calculated(?x, !v) :- data(?y, ?x) .
-        
+
         interesting(py).
         interesting(msg).
 

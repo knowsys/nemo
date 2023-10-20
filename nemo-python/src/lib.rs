@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::format, fs::read_to_string};
+use std::{collections::HashSet, fs::read_to_string};
 
 use nemo::{
     datatypes::Double,
@@ -285,7 +285,7 @@ impl NemoEngine {
     fn trace(&self, fact: String) -> PyResult<Option<NemoTrace>> {
         let parsed_fact = nemo::io::parser::parse_fact(fact).py_res()?;
         let trace = self.0.trace(parsed_fact).py_res()?;
-        Ok(trace.map(|trace| NemoTrace(trace)))
+        Ok(trace.map(NemoTrace))
     }
 
     fn write_result(
