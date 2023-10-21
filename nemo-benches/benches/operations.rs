@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fs::File};
+use std::{cell::RefCell, fs::File, sync::Arc};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use polars::prelude::{
@@ -138,11 +138,11 @@ pub fn benchmark_join(c: &mut Criterion) {
         .unwrap();
 
     let table_a = CsvReader::new(file_a)
-        .with_schema(table_a_schema.into())
+        .with_schema(Some(Arc::new(table_a_schema)))
         .has_header(false)
         .finish()
         .unwrap()
-        .sort(["AX", "AY"], vec![false, false])
+        .sort(["AX", "AY"], vec![false, false], false)
         .unwrap();
 
     let mut table_b_schema = Schema::new();
@@ -157,11 +157,11 @@ pub fn benchmark_join(c: &mut Criterion) {
         .unwrap();
 
     let table_b = CsvReader::new(file_b)
-        .with_schema(table_b_schema.into())
+        .with_schema(Some(Arc::new(table_b_schema)))
         .has_header(false)
         .finish()
         .unwrap()
-        .sort(["BX", "BY"], vec![false, false])
+        .sort(["BX", "BY"], vec![false, false], false)
         .unwrap();
 
     let mut group_polar = c.benchmark_group("polar_join");
@@ -175,8 +175,7 @@ pub fn benchmark_join(c: &mut Criterion) {
                         &table_b,
                         vec!["AX", "AY"],
                         vec!["BX", "BY"],
-                        JoinType::Inner,
-                        None,
+                        JoinType::Inner.into(),
                     )
                     .unwrap();
             },
@@ -317,11 +316,11 @@ fn benchmark_union(c: &mut Criterion) {
             .unwrap();
 
         let frame = CsvReader::new(file)
-            .with_schema(table_schema.into())
+            .with_schema(Some(Arc::new(table_schema)))
             .has_header(false)
             .finish()
             .unwrap()
-            .sort(["X", "Y", "Z"], vec![false, false, false])
+            .sort(["X", "Y", "Z"], vec![false, false, false], false)
             .unwrap();
 
         frames.push(frame);
