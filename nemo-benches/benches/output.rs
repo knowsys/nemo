@@ -4,7 +4,7 @@ use nemo_physical::datatypes::data_value::{DataValueIteratorT, PhysicalString};
 use rand::{distributions::Alphanumeric, prelude::*};
 use rand_pcg::Pcg64;
 
-pub fn benchmark_input(c: &mut Criterion) {
+pub fn benchmark_output(c: &mut Criterion) {
     let mut rng = Pcg64::seed_from_u64(21564);
 
     let strings = (0..100000)
@@ -134,5 +134,5 @@ pub fn benchmark_input(c: &mut Criterion) {
     serialized_output.finish();
 }
 
-criterion_group!(benches, benchmark_input);
+criterion_group!(benches, benchmark_output);
 criterion_main!(benches);
