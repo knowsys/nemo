@@ -285,8 +285,6 @@ rec {
               pkgs.wasm-bindgen-cli
               pkgs.nodejs
             ]
-            # valgrind is linux-only
-            (pkgs.lib.optionals (!pkgs.stdenv.isDarwin) [pkgs.valgrind])
           ];
         };
 

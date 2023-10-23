@@ -19,16 +19,8 @@ env_logger = "*"
 criterion = { version = "0.5", features = [ "html_reports" ] }
 rand_pcg = "0.3"
 
-[target.'cfg(unix)'.dev-dependencies]
-iai = "0.1" # needs valgrind -> unix only
-
 [[bench]]
 name = "seek"
-harness = false
-
-# iai - based benchmarks, only on unix
-[[bench]]
-name = "seek_iai"
 harness = false
 
 [[bench]]
