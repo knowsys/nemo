@@ -1573,6 +1573,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn overloading_is_unsupported() {
         let program = ChaseProgram::try_from(
             parse_program(
