@@ -18,7 +18,6 @@ rand = "0.8.5"
 env_logger = "*"
 criterion = { version = "0.5", features = [ "html_reports" ] }
 rand_pcg = "0.3"
-polars = "0.33"
 
 [target.'cfg(unix)'.dev-dependencies]
 iai = "0.1" # needs valgrind -> unix only
@@ -30,10 +29,6 @@ harness = false
 # iai - based benchmarks, only on unix
 [[bench]]
 name = "seek_iai"
-harness = false
-
-[[bench]]
-name = "operations"
 harness = false
 
 [[bench]]
