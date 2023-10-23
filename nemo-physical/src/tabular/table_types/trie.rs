@@ -310,7 +310,7 @@ impl Table for Trie {
     fn from_cols(cols: Vec<VecT>) -> Self {
         debug_assert!({
             // assert that columns have the same length
-            cols.get(0)
+            cols.first()
                 .map(|col| {
                     let len = col.len();
                     cols.iter().all(|col| col.len() == len)
