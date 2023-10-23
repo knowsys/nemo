@@ -1372,6 +1372,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn source() {
         let parser = RuleParser::new();
         let file = "drinks.csv";
@@ -1634,6 +1635,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn filter() {
         let parser = RuleParser::new();
         let aa = "A";
@@ -1778,6 +1780,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_arithmetic_expressions() {
         let parser = RuleParser::new();
 
@@ -1860,6 +1863,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn program_statement_order() {
         assert_matches!(
             parse_program(
@@ -1898,6 +1902,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_function_terms() {
         let parser = RuleParser::new();
 

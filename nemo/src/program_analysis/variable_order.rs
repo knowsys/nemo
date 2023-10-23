@@ -972,6 +972,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn build_preferable_variable_orders_with_galen_el_part_ie_5_rules_without_constant() {
         let (rules, var_lists, predicates) =
             get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant();
@@ -1343,6 +1344,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn build_preferable_variable_orders_with_el_without_constant() {
         let (rules, var_lists, predicates) = get_el_test_ruleset_without_constants();
 
