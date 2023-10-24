@@ -1020,21 +1020,18 @@ impl<'a> RuleParser<'a> {
                 move |input| {
                     let (remainder, name) = self.parse_iri_like_identifier()(input)?;
 
-                    if let Some(term_function) = UnaryOperation::construct_from_name(&name.0) {
+                    if let Ok(op) = UnaryOperation::construct_from_name(&name.0) {
                         let (remainder, subterm) =
                             (self.parenthesised(self.parse_term()))(remainder)?;
 
-                        Ok((remainder, term_function(subterm)))
+                        Ok((remainder, Term::Unary(op, Box::new(subterm))))
                     } else {
                         let (remainder, subterms) = (self.parenthesised(separated_list0(
                             self.parse_comma(),
                             self.parse_term(),
                         )))(remainder)?;
 
-                        Ok((
-                            remainder,
-                            Term::Function(AbstractFunction { name, subterms }),
-                        ))
+                        Ok((remainder, Term::Function(name, subterms)))
                     }
                 },
                 || ParseError::ExpectedFunctionTerm,
@@ -1131,23 +1128,17 @@ impl<'a> RuleParser<'a> {
 
             use ArithmeticOperator::*;
 
-            match operation {
-                Addition => Term::Binary(BinaryOperation::Addition(
-                    Box::new(acc),
-                    Box::new(expression),
-                )),
-                Subtraction => Term::Binary(BinaryOperation::Subtraction(
-                    Box::new(acc),
-                    Box::new(expression),
-                )),
-                Multiplication => Term::Binary(BinaryOperation::Multiplication(
-                    Box::new(acc),
-                    Box::new(expression),
-                )),
-                Division => Term::Binary(BinaryOperation::Division(
-                    Box::new(acc),
-                    Box::new(expression),
-                )),
+            let operation = match operation {
+                Addition => BinaryOperation::Addition,
+                Subtraction => BinaryOperation::Subtraction,
+                Multiplication => BinaryOperation::Multiplication,
+                Division => BinaryOperation::Division,
+            };
+
+            Term::Binary {
+                operation,
+                lhs: Box::new(acc),
+                rhs: Box::new(expression),
             }
         })
     }
@@ -1790,10 +1781,11 @@ mod test {
         let fourty_two = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
             NumericLiteral::Integer(42),
         )));
-        let twenty_three_times_fourty_two = Term::Binary(BinaryOperation::Multiplication(
-            Box::new(twenty_three.clone()),
-            Box::new(fourty_two),
-        ));
+        let twenty_three_times_fourty_two = Term::Binary {
+            operation: BinaryOperation::Multiplication,
+            lhs: Box::new(twenty_three.clone()),
+            rhs: Box::new(fourty_two),
+        };
 
         assert_parse_error!(
             parser.parse_arithmetic_factor(),
@@ -1831,34 +1823,39 @@ mod test {
         assert_parse!(
             parser.parse_arithmetic_expression(),
             "23 + 23 * 42 + 42 - (23 * 42)",
-            Term::Binary(BinaryOperation::Subtraction(
-                Box::new(Term::Binary(BinaryOperation::Addition(
-                    Box::new(Term::Binary(BinaryOperation::Addition(
-                        Box::new(Term::Primitive(PrimitiveTerm::Constant(
+            Term::Binary {
+                operation: BinaryOperation::Subtraction,
+                lhs: Box::new(Term::Binary {
+                    operation: BinaryOperation::Addition,
+                    lhs: Box::new(Term::Binary {
+                        operation: BinaryOperation::Addition,
+                        lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                             Constant::NumericLiteral(NumericLiteral::Integer(23),)
                         ))),
-                        Box::new(Term::Binary(BinaryOperation::Multiplication(
-                            Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                        rhs: Box::new(Term::Binary {
+                            operation: BinaryOperation::Multiplication,
+                            lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                                 Constant::NumericLiteral(NumericLiteral::Integer(23)),
                             ))),
-                            Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                            rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                                 Constant::NumericLiteral(NumericLiteral::Integer(42)),
                             ))),
-                        )))
-                    )),),
-                    Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                        })
+                    }),
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                         Constant::NumericLiteral(NumericLiteral::Integer(42),)
                     ))),
-                ),)),
-                Box::new(Term::Binary(BinaryOperation::Multiplication(
-                    Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                }),
+                rhs: Box::new(Term::Binary {
+                    operation: BinaryOperation::Multiplication,
+                    lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                         Constant::NumericLiteral(NumericLiteral::Integer(23))
                     ))),
-                    Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                         Constant::NumericLiteral(NumericLiteral::Integer(42))
                     )))
-                )))
-            ))
+                })
+            }
         );
     }
 
@@ -1912,10 +1909,11 @@ mod test {
         let fourty_two = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
             NumericLiteral::Integer(42),
         )));
-        let twenty_three_times_fourty_two = Term::Binary(BinaryOperation::Multiplication(
-            Box::new(twenty_three.clone()),
-            Box::new(fourty_two.clone()),
-        ));
+        let twenty_three_times_fourty_two = Term::Binary {
+            operation: BinaryOperation::Multiplication,
+            lhs: Box::new(twenty_three.clone()),
+            rhs: Box::new(fourty_two.clone()),
+        };
 
         assert_parse_error!(
             parser.parse_function_term(),
@@ -1923,10 +1921,7 @@ mod test {
             ParseError::ExpectedFunctionTerm
         );
 
-        let nullary_function = Term::Function(AbstractFunction {
-            name: Identifier(String::from("nullary_function")),
-            subterms: vec![],
-        });
+        let nullary_function = Term::Function(Identifier(String::from("nullary_function")), vec![]);
         assert_parse!(
             parser.parse_function_term(),
             "nullary_function()",
@@ -1943,10 +1938,10 @@ mod test {
             ParseError::ExpectedFunctionTerm
         );
 
-        let unary_function = Term::Function(AbstractFunction {
-            name: Identifier(String::from("unary_function")),
-            subterms: vec![fourty_two.clone()],
-        });
+        let unary_function = Term::Function(
+            Identifier(String::from("unary_function")),
+            vec![fourty_two.clone()],
+        );
         assert_parse!(
             parser.parse_function_term(),
             "unary_function(42)",
@@ -1963,30 +1958,30 @@ mod test {
             unary_function
         );
 
-        let binary_function = Term::Function(AbstractFunction {
-            name: Identifier(String::from("binary_function")),
-            subterms: vec![fourty_two.clone(), twenty_three.clone()],
-        });
+        let binary_function = Term::Function(
+            Identifier(String::from("binary_function")),
+            vec![fourty_two.clone(), twenty_three.clone()],
+        );
         assert_parse!(
             parser.parse_function_term(),
             "binary_function(42, 23)",
             binary_function
         );
 
-        let function_with_nested_algebraic_expression = Term::Function(AbstractFunction {
-            name: Identifier(String::from("function")),
-            subterms: vec![twenty_three_times_fourty_two],
-        });
+        let function_with_nested_algebraic_expression = Term::Function(
+            Identifier(String::from("function")),
+            vec![twenty_three_times_fourty_two],
+        );
         assert_parse!(
             parser.parse_function_term(),
             "function( 23 *42)",
             function_with_nested_algebraic_expression
         );
 
-        let nested_function = Term::Function(AbstractFunction {
-            name: Identifier(String::from("nested_function")),
-            subterms: vec![nullary_function.clone()],
-        });
+        let nested_function = Term::Function(
+            Identifier(String::from("nested_function")),
+            vec![nullary_function.clone()],
+        );
 
         assert_parse!(
             parser.parse_function_term(),
@@ -1994,16 +1989,16 @@ mod test {
             nested_function
         );
 
-        let triple_nested_function = Term::Function(AbstractFunction {
-            name: Identifier(String::from("nested_function")),
-            subterms: vec![Term::Function(AbstractFunction {
-                name: Identifier(String::from("nested_function")),
-                subterms: vec![Term::Function(AbstractFunction {
-                    name: Identifier(String::from("nested_function")),
-                    subterms: vec![nullary_function.clone()],
-                })],
-            })],
-        });
+        let triple_nested_function = Term::Function(
+            Identifier(String::from("nested_function")),
+            vec![Term::Function(
+                Identifier(String::from("nested_function")),
+                vec![Term::Function(
+                    Identifier(String::from("nested_function")),
+                    vec![nullary_function.clone()],
+                )],
+            )],
+        );
         assert_parse!(
             parser.parse_function_term(),
             "nested_function(  nested_function(  (nested_function(nullary_function()) )  ))",
@@ -2055,9 +2050,12 @@ mod test {
         let parser = RuleParser::new();
 
         let expression = "Abs(4)";
-        let expected_term = Term::Unary(UnaryOperation::Abs(Box::new(Term::Primitive(
-            PrimitiveTerm::Constant(Constant::NumericLiteral(NumericLiteral::Integer(4))),
-        ))));
+        let expected_term = Term::Unary(
+            UnaryOperation::Abs,
+            Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                Constant::NumericLiteral(NumericLiteral::Integer(4)),
+            ))),
+        );
 
         assert_parse!(parser.parse_arithmetic_factor(), expression, expected_term);
     }
@@ -2068,23 +2066,27 @@ mod test {
 
         let expression = "5 * Abs(Sqrt(4) - 3)";
 
-        let expected_term = Term::Binary(BinaryOperation::Multiplication(
-            Box::new(Term::Primitive(PrimitiveTerm::Constant(
+        let expected_term = Term::Binary {
+            operation: BinaryOperation::Multiplication,
+            lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                 Constant::NumericLiteral(NumericLiteral::Integer(5)),
             ))),
-            Box::new(Term::Unary(UnaryOperation::Abs(Box::new(Term::Binary(
-                BinaryOperation::Subtraction(
-                    Box::new(Term::Unary(UnaryOperation::SquareRoot(Box::new(
-                        Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
-                            NumericLiteral::Integer(4),
+            rhs: Box::new(Term::Unary(
+                UnaryOperation::Abs,
+                Box::new(Term::Binary {
+                    operation: BinaryOperation::Subtraction,
+                    lhs: Box::new(Term::Unary(
+                        UnaryOperation::SquareRoot,
+                        Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                            Constant::NumericLiteral(NumericLiteral::Integer(4)),
                         ))),
-                    )))),
-                    Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                    )),
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                         Constant::NumericLiteral(NumericLiteral::Integer(3)),
                     ))),
-                ),
-            ))))),
-        ));
+                }),
+            )),
+        };
 
         assert_parse!(parser.parse_term(), expression, expected_term);
     }
@@ -2099,26 +2101,30 @@ mod test {
             "X".to_string(),
         ))));
 
-        let term = Term::Binary(BinaryOperation::Multiplication(
-            Box::new(Term::Unary(UnaryOperation::Abs(Box::new(Term::Binary(
-                BinaryOperation::Subtraction(
-                    Box::new(Term::Primitive(PrimitiveTerm::Variable(
+        let term = Term::Binary {
+            operation: BinaryOperation::Multiplication,
+            lhs: Box::new(Term::Unary(
+                UnaryOperation::Abs,
+                Box::new(Term::Binary {
+                    operation: BinaryOperation::Subtraction,
+                    lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
                         Variable::Universal(Identifier::new("Y".to_string())),
                     ))),
-                    Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                         Constant::NumericLiteral(NumericLiteral::Integer(5)),
                     ))),
-                ),
-            ))))),
-            Box::new(Term::Binary(BinaryOperation::Addition(
-                Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                }),
+            )),
+            rhs: Box::new(Term::Binary {
+                operation: BinaryOperation::Addition,
+                lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                     Constant::NumericLiteral(NumericLiteral::Integer(7)),
                 ))),
-                Box::new(Term::Primitive(PrimitiveTerm::Variable(
+                rhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
                     Variable::Universal(Identifier::new("Z".to_string())),
                 ))),
-            ))),
-        ));
+            }),
+        };
 
         let expected = Constraint::Equals(variable, term);
 
@@ -2131,27 +2137,31 @@ mod test {
 
         let expression = "Abs(?X - ?Y) <= ?Z + Sqrt(?Y)";
 
-        let left_term = Term::Unary(UnaryOperation::Abs(Box::new(Term::Binary(
-            BinaryOperation::Subtraction(
-                Box::new(Term::Primitive(PrimitiveTerm::Variable(
+        let left_term = Term::Unary(
+            UnaryOperation::Abs,
+            Box::new(Term::Binary {
+                operation: BinaryOperation::Subtraction,
+                lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
                     Variable::Universal(Identifier(String::from("X"))),
                 ))),
+                rhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
+                    Variable::Universal(Identifier(String::from("Y"))),
+                ))),
+            }),
+        );
+
+        let right_term = Term::Binary {
+            operation: BinaryOperation::Addition,
+            lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
+                Variable::Universal(Identifier(String::from("Z"))),
+            ))),
+            rhs: Box::new(Term::Unary(
+                UnaryOperation::SquareRoot,
                 Box::new(Term::Primitive(PrimitiveTerm::Variable(
                     Variable::Universal(Identifier(String::from("Y"))),
                 ))),
-            ),
-        ))));
-
-        let right_term = Term::Binary(BinaryOperation::Addition(
-            Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                Variable::Universal(Identifier(String::from("Z"))),
-            ))),
-            Box::new(Term::Unary(UnaryOperation::SquareRoot(Box::new(
-                Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
-                    String::from("Y"),
-                )))),
-            )))),
-        ));
+            )),
+        };
 
         let expected = Constraint::LessThanEq(left_term, right_term);
 

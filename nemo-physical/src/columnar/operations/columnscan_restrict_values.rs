@@ -1,13 +1,13 @@
 use super::{
     super::traits::columnscan::{ColumnScan, ColumnScanCell},
     arithmetic::{
-        expression::{ArithmeticTree, ArithmeticTreeLeaf},
+        expression::{StackProgram, StackValue},
         traits::ArithmeticOperations,
     },
-    condition::statement::ConditionStatement,
+    condition::statement::{ConditionOperator, ConditionStatement},
 };
 use crate::datatypes::ColumnDataType;
-use std::{fmt::Debug, ops::Range};
+use std::{fmt::Debug, iter::repeat_with, ops::Range};
 
 #[derive(Debug)]
 enum ColumnScanStatus {
@@ -19,104 +19,84 @@ enum ColumnScanStatus {
     After,
 }
 
-#[derive(Debug)]
-enum Bound<T> {
-    Inclusive(ArithmeticTree<T>),
-    Exclusive(ArithmeticTree<T>),
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum BoundEndpoint {
+    Inclusive,
+    Exclusive,
 }
 
-#[derive(Debug)]
-enum BoundKind<T> {
-    Lower(Bound<T>),
-    Upper(Bound<T>),
+#[derive(Debug, Clone)]
+struct Bound<T> {
+    endpoint: BoundEndpoint,
+    value: StackProgram<T>,
 }
 
-/// [`ArithmeticTree`] will reference the `value_scan` with this value
+#[derive(Debug, Copy, Clone)]
+struct UpperEndpoint(Option<BoundEndpoint>);
+
+#[derive(Debug, Copy, Clone)]
+struct LowerEndpoint(Option<BoundEndpoint>);
+
+/// The [`StackProgram`] will reference the `value_scan` (i.e. the
+/// column being restricted) with this value
 pub const VALUE_SCAN_INDEX: usize = 0;
 
 impl<T> ConditionStatement<T>
 where
     T: Clone,
 {
-    /// Check if condition is of the type
-    /// `value_scan <op> <expression>`
-    /// where `<expression>` must not depend on `value_scan`
-    fn special_form<'a>(
-        tree_value: &'a ArithmeticTree<T>,
-        tree_other: &'a ArithmeticTree<T>,
-    ) -> bool {
-        let value_is_reference = if let ArithmeticTree::Reference(index) = tree_value {
-            *index == VALUE_SCAN_INDEX
-        } else {
-            false
-        };
+    fn try_into_bounds(self) -> Result<(UpperEndpoint, LowerEndpoint, StackProgram<T>), Self> {
+        if self.operation == ConditionOperator::Unequal {
+            return Err(self);
+        }
 
-        let other_not_contains_value_reference = tree_other.leaves().iter().all(|l| {
-            if let ArithmeticTreeLeaf::Reference(index) = l {
-                *index != VALUE_SCAN_INDEX
-            } else {
-                true
-            }
-        });
+        if let Some(StackValue::Reference(index)) = self.lhs.trivial() {
+            if index == VALUE_SCAN_INDEX {
+                let upper_bound = UpperEndpoint(match self.operation {
+                    ConditionOperator::Equal => Some(BoundEndpoint::Inclusive),
+                    ConditionOperator::Unequal => unreachable!("checked above"),
+                    ConditionOperator::LessThan => Some(BoundEndpoint::Exclusive),
+                    ConditionOperator::LessThanEqual => Some(BoundEndpoint::Inclusive),
+                    ConditionOperator::GreaterThan => None,
+                    ConditionOperator::GreaterThanEqual => None,
+                });
 
-        value_is_reference && other_not_contains_value_reference
-    }
+                let lower_bound = LowerEndpoint(match self.operation {
+                    ConditionOperator::Equal => Some(BoundEndpoint::Inclusive),
+                    ConditionOperator::Unequal => unreachable!("checked above"),
+                    ConditionOperator::LessThan => None,
+                    ConditionOperator::LessThanEqual => None,
+                    ConditionOperator::GreaterThan => Some(BoundEndpoint::Exclusive),
+                    ConditionOperator::GreaterThanEqual => Some(BoundEndpoint::Inclusive),
+                });
 
-    fn as_bounds(&self) -> Vec<BoundKind<T>> {
-        match self {
-            ConditionStatement::Unequal(_, _) => vec![],
-            ConditionStatement::Equal(left, right) => {
-                if Self::special_form(left, right) {
-                    vec![
-                        BoundKind::Lower(Bound::Inclusive(right.clone())),
-                        BoundKind::Upper(Bound::Inclusive(right.clone())),
-                    ]
-                } else if Self::special_form(right, left) {
-                    vec![
-                        BoundKind::Lower(Bound::Inclusive(left.clone())),
-                        BoundKind::Upper(Bound::Inclusive(left.clone())),
-                    ]
-                } else {
-                    vec![]
-                }
+                return Ok((upper_bound, lower_bound, self.rhs));
             }
-            ConditionStatement::LessThan(left, right) => {
-                if Self::special_form(left, right) {
-                    vec![BoundKind::Upper(Bound::Exclusive(right.clone()))]
-                } else if Self::special_form(right, left) {
-                    vec![BoundKind::Lower(Bound::Exclusive(left.clone()))]
-                } else {
-                    vec![]
-                }
-            }
-            ConditionStatement::LessThanEqual(left, right) => {
-                if Self::special_form(left, right) {
-                    vec![BoundKind::Upper(Bound::Inclusive(right.clone()))]
-                } else if Self::special_form(right, left) {
-                    vec![BoundKind::Lower(Bound::Inclusive(left.clone()))]
-                } else {
-                    vec![]
-                }
-            }
-            ConditionStatement::GreaterThan(left, right) => {
-                if Self::special_form(left, right) {
-                    vec![BoundKind::Lower(Bound::Exclusive(right.clone()))]
-                } else if Self::special_form(right, left) {
-                    vec![BoundKind::Upper(Bound::Exclusive(left.clone()))]
-                } else {
-                    vec![]
-                }
-            }
-            ConditionStatement::GreaterThanEqual(left, right) => {
-                if Self::special_form(left, right) {
-                    vec![BoundKind::Lower(Bound::Inclusive(right.clone()))]
-                } else if Self::special_form(right, left) {
-                    vec![BoundKind::Upper(Bound::Inclusive(left.clone()))]
-                } else {
-                    vec![]
-                }
+        } else if let Some(StackValue::Reference(index)) = self.rhs.trivial() {
+            if index == VALUE_SCAN_INDEX {
+                let lower_bound = LowerEndpoint(match self.operation {
+                    ConditionOperator::Equal => Some(BoundEndpoint::Inclusive),
+                    ConditionOperator::Unequal => unreachable!("checked above"),
+                    ConditionOperator::LessThan => Some(BoundEndpoint::Exclusive),
+                    ConditionOperator::LessThanEqual => Some(BoundEndpoint::Inclusive),
+                    ConditionOperator::GreaterThan => None,
+                    ConditionOperator::GreaterThanEqual => None,
+                });
+
+                let upper_bound = UpperEndpoint(match self.operation {
+                    ConditionOperator::Equal => Some(BoundEndpoint::Inclusive),
+                    ConditionOperator::Unequal => unreachable!("checked above"),
+                    ConditionOperator::LessThan => None,
+                    ConditionOperator::LessThanEqual => None,
+                    ConditionOperator::GreaterThan => Some(BoundEndpoint::Exclusive),
+                    ConditionOperator::GreaterThanEqual => Some(BoundEndpoint::Inclusive),
+                });
+
+                return Ok((upper_bound, lower_bound, self.lhs));
             }
         }
+
+        Err(self)
     }
 }
 
@@ -147,7 +127,14 @@ where
 
     /// Status of this scan.
     status: ColumnScanStatus,
+
+    /// Buffer for the current input values
+    referenced_values: Box<[T]>,
+
+    /// Buffer for stack calculations
+    stack: Vec<T>,
 }
+
 impl<'a, T> ColumnScanRestrictValues<'a, T>
 where
     T: 'a + ColumnDataType + ArithmeticOperations,
@@ -156,35 +143,39 @@ where
     pub fn new(
         value_scan: &'a ColumnScanCell<'a, T>,
         input_scans: Vec<&'a ColumnScanCell<'a, T>>,
-        conditions: Vec<ConditionStatement<T>>,
+        input_conditions: Vec<ConditionStatement<T>>,
     ) -> ColumnScanRestrictValues<'a, T> {
         // Find conditions that are lower/upper bounds for the currently restricted scan
         let mut lower_bounds = Vec::<Bound<T>>::new();
         let mut upper_bounds = Vec::<Bound<T>>::new();
+        let mut conditions = Vec::new();
 
-        let conditions = conditions
-            .into_iter()
-            .filter(|condition| {
-                let bounds = condition.as_bounds();
+        let mut stack_size = 0;
 
-                if bounds.is_empty() {
-                    return true;
-                }
+        for condition in input_conditions {
+            match condition.try_into_bounds() {
+                Ok((UpperEndpoint(upper), LowerEndpoint(lower), value)) => {
+                    stack_size = std::cmp::max(stack_size, value.space_requirement());
 
-                for bound in bounds {
-                    match bound {
-                        BoundKind::Lower(b) => {
-                            lower_bounds.push(b);
-                        }
-                        BoundKind::Upper(b) => {
-                            upper_bounds.push(b);
-                        }
+                    if let Some(endpoint) = upper {
+                        upper_bounds.push(Bound {
+                            endpoint,
+                            value: value.clone(),
+                        });
+                    }
+                    if let Some(endpoint) = lower {
+                        lower_bounds.push(Bound { endpoint, value });
                     }
                 }
+                Err(condition) => {
+                    stack_size = std::cmp::max(stack_size, condition.space_requirement());
+                    conditions.push(condition);
+                }
+            }
+        }
 
-                false
-            })
-            .collect();
+        // allocate buffer for referenced values
+        let referenced_values = repeat_with(T::zero).take(input_scans.len() + 1).collect();
 
         ColumnScanRestrictValues {
             value_scan,
@@ -193,21 +184,23 @@ where
             lower_bounds,
             upper_bounds,
             status: ColumnScanStatus::Before,
+            referenced_values,
+            stack: Vec::with_capacity(stack_size),
         }
     }
 
     /// Prepares input values to evaluate the [`ArithmeticTree`] in a condition
     /// Since there is special handling for `self.value_scan` this inserts a placeholder at the front.
     /// (We do not read value_scan yet because it might only be set later)
-    fn get_referenced_values(&self) -> Vec<T> {
-        let mut result = vec![T::zero()];
+    fn update_referenced_values(&mut self) {
+        // the 0s  entry is where the VALUE_SCAN_INDEX points
+        self.referenced_values[0] = T::zero();
 
-        result.extend(self.input_scans.iter().map(|s| {
-            s.current()
-                .expect("Every referenced scan must have a value.")
-        }));
-
-        result
+        for (index, scan) in self.input_scans.iter().enumerate() {
+            self.referenced_values[index + 1] = scan
+                .current()
+                .expect("Every input should have a current value.")
+        }
     }
 
     /// Set `self.value_scan` such that it satisfies each of the `self.lower_bounds`
@@ -217,25 +210,24 @@ where
     /// as the bounds do not change with respect to `self.value_scan`.
     ///
     /// Returns `true` in all other cases
-    fn satisfy_lower_bounds(&mut self, referenced_values: &[T]) -> bool {
+    fn satisfy_lower_bounds(&mut self) -> bool {
         for lower_bound in &self.lower_bounds {
-            match lower_bound {
-                Bound::Inclusive(tree) => {
-                    if let Some(lower_value) = tree.evaluate(referenced_values) {
-                        self.value_scan.seek(lower_value);
-                    } else {
-                        return false;
-                    }
+            let Some(lower_value) = lower_bound
+                .value
+                .evaluate(&mut self.stack, &self.referenced_values)
+            else {
+                return false;
+            };
+
+            match lower_bound.endpoint {
+                BoundEndpoint::Inclusive => {
+                    self.value_scan.seek(lower_value);
                 }
-                Bound::Exclusive(tree) => {
-                    if let Some(lower_value) = tree.evaluate(referenced_values) {
-                        if let Some(seeked) = self.value_scan.seek(lower_value) {
-                            if seeked == lower_value {
-                                self.value_scan.next();
-                            }
+                BoundEndpoint::Exclusive => {
+                    if let Some(seeked) = self.value_scan.seek(lower_value) {
+                        if seeked == lower_value {
+                            self.value_scan.next();
                         }
-                    } else {
-                        return false;
                     }
                 }
             }
@@ -255,31 +247,26 @@ where
     /// or its expression is undefined.
     ///
     /// Returns `true` if all bounds are satisfied.
-    fn check_upper_bounds(&self, referenced_values: &[T]) -> bool {
+    fn check_upper_bounds(&mut self) -> bool {
         for bound in &self.upper_bounds {
-            match bound {
-                Bound::Inclusive(tree) => {
-                    if let Some(upper_value) = tree.evaluate(referenced_values) {
-                        if let Some(current_value) = self.current() {
-                            if current_value <= upper_value {
-                                continue;
-                            }
-                        }
-                    }
+            let Some(upper_value) = bound
+                .value
+                .evaluate(&mut self.stack, &self.referenced_values)
+            else {
+                return false;
+            };
 
-                    return false;
-                }
-                Bound::Exclusive(tree) => {
-                    if let Some(upper_value) = tree.evaluate(referenced_values) {
-                        if let Some(current_value) = self.current() {
-                            if current_value < upper_value {
-                                continue;
-                            }
-                        }
-                    }
+            let Some(current_value) = self.current() else {
+                return false;
+            };
 
-                    return false;
-                }
+            let condition = match bound.endpoint {
+                BoundEndpoint::Inclusive => current_value <= upper_value,
+                BoundEndpoint::Exclusive => current_value < upper_value,
+            };
+
+            if !condition {
+                return false;
             }
         }
 
@@ -292,9 +279,9 @@ where
     /// or which is undefined.
     ///
     /// Returns `true` if all conditions are satisfied.
-    fn check_conditions(&self, referenced_values: &[T]) -> bool {
+    fn check_conditions(&mut self) -> bool {
         for condition in &self.conditions {
-            if let Some(true) = condition.evaluate(referenced_values) {
+            if let Some(true) = condition.evaluate(&mut self.stack, &self.referenced_values) {
                 continue;
             }
 
@@ -312,11 +299,11 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut referenced_values = self.get_referenced_values();
+        self.update_referenced_values();
 
         match self.status {
             ColumnScanStatus::Before => {
-                if !self.satisfy_lower_bounds(&referenced_values) {
+                if !self.satisfy_lower_bounds() {
                     self.status = ColumnScanStatus::After;
                     return None;
                 }
@@ -330,16 +317,16 @@ where
         }
 
         loop {
-            referenced_values[VALUE_SCAN_INDEX] = self.value_scan.current()?;
+            self.referenced_values[VALUE_SCAN_INDEX] = self.value_scan.current()?;
 
-            if self.check_conditions(&referenced_values) {
+            if self.check_conditions() {
                 break;
             } else {
                 self.value_scan.next();
             }
         }
 
-        if self.check_upper_bounds(&referenced_values) {
+        if self.check_upper_bounds() {
             self.current()
         } else {
             self.status = ColumnScanStatus::After;
@@ -353,11 +340,11 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        let mut referenced_values = self.get_referenced_values();
+        self.update_referenced_values();
 
         match self.status {
             ColumnScanStatus::Before => {
-                if !self.satisfy_lower_bounds(&referenced_values) {
+                if !self.satisfy_lower_bounds() {
                     self.status = ColumnScanStatus::After;
                     return None;
                 }
@@ -373,16 +360,16 @@ where
         }
 
         loop {
-            referenced_values[VALUE_SCAN_INDEX] = self.value_scan.current()?;
+            self.referenced_values[VALUE_SCAN_INDEX] = self.value_scan.current()?;
 
-            if self.check_conditions(&referenced_values) {
+            if self.check_conditions() {
                 break;
             } else {
                 self.value_scan.next();
             }
         }
 
-        if self.check_upper_bounds(&referenced_values) {
+        if self.check_upper_bounds() {
             self.current()
         } else {
             self.status = ColumnScanStatus::After;
@@ -415,7 +402,8 @@ mod test {
     use crate::columnar::{
         column_types::vector::ColumnVector,
         operations::{
-            arithmetic::expression::ArithmeticTree, condition::statement::ConditionStatement,
+            arithmetic::expression::{BinaryOperation, StackOperation, StackProgram, StackValue},
+            condition::statement::{ConditionOperator, ConditionStatement},
         },
         traits::{
             column::Column,
@@ -435,9 +423,9 @@ mod test {
         let mut restrict_scan = ColumnScanRestrictValues::new(
             &col_iter,
             vec![],
-            vec![ConditionStatement::Equal(
-                ArithmeticTree::Reference(0),
-                ArithmeticTree::Constant(4),
+            vec![ConditionStatement::equal(
+                StackValue::Reference(0),
+                StackValue::Constant(4),
             )],
         );
 
@@ -451,9 +439,9 @@ mod test {
         let mut restrict_scan = ColumnScanRestrictValues::new(
             &col_iter,
             vec![],
-            vec![ConditionStatement::Equal(
-                ArithmeticTree::Reference(0),
-                ArithmeticTree::Constant(7),
+            vec![ConditionStatement::equal(
+                StackValue::Reference(0),
+                StackValue::Constant(7),
             )],
         );
         assert_eq!(restrict_scan.current(), None);
@@ -470,13 +458,10 @@ mod test {
             &col_iter,
             vec![],
             vec![
-                ConditionStatement::GreaterThan(
-                    ArithmeticTree::Reference(0),
-                    ArithmeticTree::Constant(1),
-                ),
-                ConditionStatement::LessThanEqual(
-                    ArithmeticTree::Reference(0),
-                    ArithmeticTree::Constant(4),
+                ConditionStatement::greater_than(StackValue::Reference(0), StackValue::Constant(1)),
+                ConditionStatement::less_than_equal(
+                    StackValue::Reference(0),
+                    StackValue::Constant(4),
                 ),
             ],
         );
@@ -509,13 +494,13 @@ mod test {
             &value_iter,
             vec![&lower_bound, &upper_bound],
             vec![
-                ConditionStatement::GreaterThan(
-                    ArithmeticTree::Reference(0),
-                    ArithmeticTree::Reference(1),
+                ConditionStatement::greater_than(
+                    StackValue::Reference(0),
+                    StackValue::Reference(1),
                 ),
-                ConditionStatement::LessThanEqual(
-                    ArithmeticTree::Reference(0),
-                    ArithmeticTree::Reference(2),
+                ConditionStatement::less_than_equal(
+                    StackValue::Reference(0),
+                    StackValue::Reference(2),
                 ),
             ],
         );
@@ -549,18 +534,9 @@ mod test {
             &value_iter,
             vec![&unequal_1, &unequal_2],
             vec![
-                ConditionStatement::Unequal(
-                    ArithmeticTree::Reference(0),
-                    ArithmeticTree::Reference(1),
-                ),
-                ConditionStatement::Unequal(
-                    ArithmeticTree::Reference(0),
-                    ArithmeticTree::Reference(2),
-                ),
-                ConditionStatement::Unequal(
-                    ArithmeticTree::Reference(0),
-                    ArithmeticTree::Constant(5),
-                ),
+                ConditionStatement::unequal(StackValue::Reference(0), StackValue::Reference(1)),
+                ConditionStatement::unequal(StackValue::Reference(0), StackValue::Reference(2)),
+                ConditionStatement::unequal(StackValue::Reference(0), StackValue::Constant(5)),
             ],
         );
 
@@ -600,18 +576,15 @@ mod test {
             &value_iter,
             vec![&lower_bound, &upper_bound, &unequals],
             vec![
-                ConditionStatement::GreaterThan(
-                    ArithmeticTree::Reference(0),
-                    ArithmeticTree::Reference(1),
+                ConditionStatement::greater_than(
+                    StackValue::Reference(0),
+                    StackValue::Reference(1),
                 ),
-                ConditionStatement::LessThanEqual(
-                    ArithmeticTree::Reference(0),
-                    ArithmeticTree::Reference(2),
+                ConditionStatement::less_than_equal(
+                    StackValue::Reference(0),
+                    StackValue::Reference(2),
                 ),
-                ConditionStatement::Unequal(
-                    ArithmeticTree::Reference(0),
-                    ArithmeticTree::Reference(3),
-                ),
+                ConditionStatement::unequal(StackValue::Reference(0), StackValue::Reference(3)),
             ],
         );
 
@@ -638,33 +611,43 @@ mod test {
         filter_iter.next();
         filter_iter.next(); // filter = 5
 
-        // value^2 < value * filter + 7
+        // value*value < value * filter + 7
+        // stack notation: [value value *] < [value filter * 7 +]
+        let condition_one = ConditionStatement {
+            operation: ConditionOperator::LessThan,
+            lhs: StackProgram::new([
+                StackOperation::Push(StackValue::Reference(0)),
+                StackOperation::Push(StackValue::Reference(0)),
+                StackOperation::BinaryOperation(BinaryOperation::Multiplication),
+            ])
+            .unwrap(),
+            rhs: StackProgram::new([
+                StackOperation::Push(StackValue::Reference(0)),
+                StackOperation::Push(StackValue::Reference(1)),
+                StackOperation::BinaryOperation(BinaryOperation::Multiplication),
+                StackOperation::Push(StackValue::Constant(7)),
+                StackOperation::BinaryOperation(BinaryOperation::Addition),
+            ])
+            .unwrap(),
+        };
+
         // value * 2 >= filter
+        // stack notation: [value 2 *] >= filter
+        let condition_two = ConditionStatement {
+            operation: ConditionOperator::GreaterThanEqual,
+            lhs: StackProgram::new([
+                StackOperation::Push(StackValue::Reference(0)),
+                StackOperation::Push(StackValue::Constant(2)),
+                StackOperation::BinaryOperation(BinaryOperation::Multiplication),
+            ])
+            .unwrap(),
+            rhs: StackValue::Reference(1).into(),
+        };
+
         let mut restrict_scan = ColumnScanRestrictValues::new(
             &value_iter,
             vec![&filter_iter],
-            vec![
-                ConditionStatement::LessThan(
-                    ArithmeticTree::Multiplication(vec![
-                        ArithmeticTree::Reference(0),
-                        ArithmeticTree::Reference(0),
-                    ]),
-                    ArithmeticTree::Addition(vec![
-                        ArithmeticTree::Multiplication(vec![
-                            ArithmeticTree::Reference(0),
-                            ArithmeticTree::Reference(1),
-                        ]),
-                        ArithmeticTree::Constant(7),
-                    ]),
-                ),
-                ConditionStatement::GreaterThanEqual(
-                    ArithmeticTree::Multiplication(vec![
-                        ArithmeticTree::Reference(0),
-                        ArithmeticTree::Constant(2),
-                    ]),
-                    ArithmeticTree::Reference(1),
-                ),
-            ],
+            vec![condition_one, condition_two],
         );
 
         assert_eq!(restrict_scan.current(), None);

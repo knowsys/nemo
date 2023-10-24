@@ -1,148 +1,148 @@
 //! Provides data structures and functionality to represent conditional statements
 
-use std::fmt::Display;
-
 use crate::columnar::operations::arithmetic::{
-    expression::{ArithmeticTree, ArithmeticTreeLeaf},
-    traits::ArithmeticOperations,
+    expression::StackProgram, traits::ArithmeticOperations,
 };
+
+/// A boolean-valued operation on two values.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ConditionOperator {
+    /// First operand is equal to the second operand.
+    Equal,
+    /// First operand is not equal to the second operand.
+    Unequal,
+    /// First operand is smaller than the second operand.
+    LessThan,
+    /// First operand is smaller than or equal the second operand.
+    LessThanEqual,
+    /// First operand is greater than the second operand.
+    GreaterThan,
+    /// First operand is greater than or equal to the second operand.
+    GreaterThanEqual,
+}
+
+impl ConditionOperator {
+    /// Returns a symbolic representation of this operator.
+    pub fn symbol(&self) -> String {
+        match self {
+            ConditionOperator::Equal => "=".to_string(),
+            ConditionOperator::Unequal => "!=".to_string(),
+            ConditionOperator::LessThan => "<".to_string(),
+            ConditionOperator::LessThanEqual => "<=".to_string(),
+            ConditionOperator::GreaterThan => ">".to_string(),
+            ConditionOperator::GreaterThanEqual => ">=".to_string(),
+        }
+    }
+
+    /// Performs the operation represented by this object.
+    pub fn evaluate<T: Ord + Eq>(&self, lhs: T, rhs: T) -> bool {
+        match self {
+            ConditionOperator::Equal => lhs == rhs,
+            ConditionOperator::Unequal => lhs != rhs,
+            ConditionOperator::LessThan => lhs < rhs,
+            ConditionOperator::LessThanEqual => lhs <= rhs,
+            ConditionOperator::GreaterThan => lhs > rhs,
+            ConditionOperator::GreaterThanEqual => lhs >= rhs,
+        }
+    }
+}
 
 /// Represents a condition
 #[derive(Debug, Clone)]
-pub enum ConditionStatement<T> {
-    /// First entry is equal to the second entry.
-    Equal(ArithmeticTree<T>, ArithmeticTree<T>),
-    /// First entry is not equal to the second entry.
-    Unequal(ArithmeticTree<T>, ArithmeticTree<T>),
-    /// First entry is smaller than the second entry.
-    LessThan(ArithmeticTree<T>, ArithmeticTree<T>),
-    /// First entry is smaller than or equal the second entry.
-    LessThanEqual(ArithmeticTree<T>, ArithmeticTree<T>),
-    /// First entry is greater than the second entry.
-    GreaterThan(ArithmeticTree<T>, ArithmeticTree<T>),
-    /// First entry is greater than or equal to the second entry.
-    GreaterThanEqual(ArithmeticTree<T>, ArithmeticTree<T>),
-}
-
-impl<T> Display for ConditionStatement<T>
-where
-    T: Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (left, right) = self.expressions();
-
-        left.fmt(f)?;
-        f.write_fmt(format_args!(" {} ", self.symbol_condition()))?;
-        right.fmt(f)
-    }
+pub struct ConditionStatement<T> {
+    /// Program to compute the left hand side expression.
+    pub lhs: StackProgram<T>,
+    /// Program to compute the right hand side expression.
+    pub rhs: StackProgram<T>,
+    /// The operation to be performed.
+    pub operation: ConditionOperator,
 }
 
 impl<T> ConditionStatement<T> {
     /// Return the sub-expressions of this condition.
-    pub fn expressions(&self) -> (&ArithmeticTree<T>, &ArithmeticTree<T>) {
-        match self {
-            ConditionStatement::Equal(left, right) => (left, right),
-            ConditionStatement::Unequal(left, right) => (left, right),
-            ConditionStatement::LessThan(left, right) => (left, right),
-            ConditionStatement::LessThanEqual(left, right) => (left, right),
-            ConditionStatement::GreaterThan(left, right) => (left, right),
-            ConditionStatement::GreaterThanEqual(left, right) => (left, right),
-        }
+    pub fn expressions(&self) -> (&StackProgram<T>, &StackProgram<T>) {
+        (&self.lhs, &self.rhs)
     }
 
-    /// Return the left sub expression of this condition.
-    pub fn left(&self) -> &ArithmeticTree<T> {
-        self.expressions().0
+    /// Iterates over the references used by this computation.
+    /// May contain duplicates.
+    pub fn references(&self) -> impl Iterator<Item = usize> + '_ {
+        self.lhs.references().chain(self.rhs.references())
     }
 
-    /// Return the right sub expression of this condition.
-    pub fn right(&self) -> &ArithmeticTree<T> {
-        self.expressions().1
-    }
-
-    /// Associates a string symbol to each
-    pub fn symbol_condition(&self) -> String {
-        match self {
-            ConditionStatement::Equal(_, _) => "=".to_string(),
-            ConditionStatement::Unequal(_, _) => "!=".to_string(),
-            ConditionStatement::LessThan(_, _) => "<".to_string(),
-            ConditionStatement::LessThanEqual(_, _) => "<=".to_string(),
-            ConditionStatement::GreaterThan(_, _) => ">".to_string(),
-            ConditionStatement::GreaterThanEqual(_, _) => ">=".to_string(),
-        }
-    }
-}
-
-impl<T> ConditionStatement<T>
-where
-    T: Clone,
-{
     /// Return the maximum index that is referenced by a leaf node.
     /// Returns `None` if all the leaf nodes are constants.
     pub fn maximum_reference(&self) -> Option<usize> {
         let (left, right) = self.expressions();
 
-        std::cmp::max(left.maximum_reference(), right.maximum_reference())
+        std::cmp::max(left.references().max(), right.references().max())
     }
 
-    /// Apply `function` to every leaf node of the tree
-    /// and return a new [`ArithmeticTree`] possibly of a different type.
-    pub fn map<O>(
-        &self,
-        function: &dyn Fn(ArithmeticTreeLeaf<T>) -> ArithmeticTreeLeaf<O>,
-    ) -> ConditionStatement<O>
-    where
-        O: Clone,
-    {
-        match self {
-            ConditionStatement::Equal(left, right) => {
-                ConditionStatement::Equal(left.map(function), right.map(function))
-            }
-            ConditionStatement::Unequal(left, right) => {
-                ConditionStatement::Unequal(left.map(function), right.map(function))
-            }
-            ConditionStatement::LessThan(left, right) => {
-                ConditionStatement::LessThan(left.map(function), right.map(function))
-            }
-            ConditionStatement::LessThanEqual(left, right) => {
-                ConditionStatement::LessThanEqual(left.map(function), right.map(function))
-            }
-            ConditionStatement::GreaterThan(left, right) => {
-                ConditionStatement::GreaterThan(left.map(function), right.map(function))
-            }
-            ConditionStatement::GreaterThanEqual(left, right) => {
-                ConditionStatement::GreaterThanEqual(left.map(function), right.map(function))
-            }
+    /// Returns the maximum stack size needed to compute this condition
+    pub fn space_requirement(&self) -> usize {
+        std::cmp::max(self.lhs.space_requirement(), self.rhs.space_requirement())
+    }
+
+    /// Creates an [`ConditionOperator::Equal`] condition.
+    pub fn equal<SP: Into<StackProgram<T>>>(lhs: SP, rhs: SP) -> Self {
+        ConditionStatement {
+            lhs: lhs.into(),
+            rhs: rhs.into(),
+            operation: ConditionOperator::Equal,
+        }
+    }
+
+    /// Creates an [`ConditionOperator::Unequal`] condition.
+    pub fn unequal<SP: Into<StackProgram<T>>>(lhs: SP, rhs: SP) -> Self {
+        ConditionStatement {
+            lhs: lhs.into(),
+            rhs: rhs.into(),
+            operation: ConditionOperator::Unequal,
+        }
+    }
+
+    /// Creates a [`ConditionOperator::GreaterThan`] condition.
+    pub fn greater_than<SP: Into<StackProgram<T>>>(lhs: SP, rhs: SP) -> Self {
+        ConditionStatement {
+            lhs: lhs.into(),
+            rhs: rhs.into(),
+            operation: ConditionOperator::GreaterThan,
+        }
+    }
+
+    /// Creates a [`ConditionOperator::GreaterThanEqual`] condition.
+    pub fn greater_than_equal<SP: Into<StackProgram<T>>>(lhs: SP, rhs: SP) -> Self {
+        ConditionStatement {
+            lhs: lhs.into(),
+            rhs: rhs.into(),
+            operation: ConditionOperator::GreaterThanEqual,
+        }
+    }
+
+    /// Creates a [`ConditionOperator::LessThan`] condition.
+    pub fn less_than<SP: Into<StackProgram<T>>>(lhs: SP, rhs: SP) -> Self {
+        ConditionStatement {
+            lhs: lhs.into(),
+            rhs: rhs.into(),
+            operation: ConditionOperator::LessThan,
+        }
+    }
+
+    /// Creates a [`ConditionOperator::LessThanEqual`] condition.
+    pub fn less_than_equal<SP: Into<StackProgram<T>>>(lhs: SP, rhs: SP) -> Self {
+        ConditionStatement {
+            lhs: lhs.into(),
+            rhs: rhs.into(),
+            operation: ConditionOperator::LessThanEqual,
         }
     }
 }
 
-impl<T> ConditionStatement<T>
-where
-    T: Ord + Eq + ArithmeticOperations,
-{
-    /// Evaluate the condition.
-    /// Returns `None` if some expression is undefined.
-    pub fn evaluate(&self, referenced_values: &[T]) -> Option<bool> {
-        match self {
-            ConditionStatement::Equal(left, right) => {
-                Some(left.evaluate(referenced_values)? == right.evaluate(referenced_values)?)
-            }
-            ConditionStatement::Unequal(left, right) => {
-                Some(left.evaluate(referenced_values)? != right.evaluate(referenced_values)?)
-            }
-            ConditionStatement::LessThan(left, right) => {
-                Some(left.evaluate(referenced_values)? < right.evaluate(referenced_values)?)
-            }
-            ConditionStatement::LessThanEqual(left, right) => {
-                Some(left.evaluate(referenced_values)? <= right.evaluate(referenced_values)?)
-            }
-            ConditionStatement::GreaterThan(left, right) => {
-                Some(left.evaluate(referenced_values)? > right.evaluate(referenced_values)?)
-            }
-            ConditionStatement::GreaterThanEqual(left, right) => {
-                Some(left.evaluate(referenced_values)? >= right.evaluate(referenced_values)?)
-            }
-        }
+impl<T: ArithmeticOperations + Copy + Eq + Ord> ConditionStatement<T> {
+    /// Evaluates the condition represented by this object.
+    pub fn evaluate(&self, stack: &mut Vec<T>, referenced_values: &[T]) -> Option<bool> {
+        let lhs = self.lhs.evaluate(stack, referenced_values)?;
+        let rhs = self.rhs.evaluate(stack, referenced_values)?;
+        Some(self.operation.evaluate(lhs, rhs))
     }
 }

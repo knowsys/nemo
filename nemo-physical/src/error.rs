@@ -91,6 +91,9 @@ pub enum Error {
     /// Error that happened while reading a Table
     #[error(transparent)]
     ReadingError(#[from] ReadingError),
+    /// Error computing the memory requirements for a stack program
+    #[error("The supplied stack program was malformed")]
+    MalformedStackProgram,
 }
 
 impl From<Infallible> for ReadingError {

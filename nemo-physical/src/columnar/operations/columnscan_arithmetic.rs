@@ -1,6 +1,6 @@
-use super::{super::traits::columnscan::ColumnScan, arithmetic::expression::ArithmeticTree};
+use super::{super::traits::columnscan::ColumnScan, arithmetic::expression::StackProgram};
 use crate::{columnar::traits::columnscan::ColumnScanCell, datatypes::ColumnDataType};
-use std::{fmt::Debug, ops::Range};
+use std::{fmt::Debug, iter::repeat_with, ops::Range};
 
 /// Cursor position of the scan
 #[derive(Debug, Eq, PartialEq)]
@@ -17,17 +17,23 @@ where
     T: ColumnDataType,
 {
     /// List of subiterators that will be used in computing the arithmetic operation.
-    /// The [`ArithmeticTree`] references [`ColumnScan`]s by its position in this `Vec`.
+    /// The [`StackProgram`] references [`ColumnScan`]s by its position in this `Vec`.
     column_scans: Vec<&'a ColumnScanCell<'a, T>>,
 
     /// The current value.
     value: Option<T>,
 
-    /// [`ArithmeticTree`] representing the operation that will be performed.
-    expression: ArithmeticTree<T>,
+    /// [`StackProgram`] representing the operation that will be performed.
+    expression: StackProgram<T>,
 
     /// Where the virtual cursor is.
     cursor: CursorPosition,
+
+    /// Buffer for the referenced input values
+    inputs: Box<[T]>,
+
+    /// The stack for computing
+    stack: Vec<T>,
 }
 
 impl<'a, T> ColumnScanArithmetic<'a, T>
@@ -35,15 +41,17 @@ where
     T: ColumnDataType,
 {
     /// Constructs a new [`ColumnScanArithmetic`].
-    pub fn new(
-        column_scans: Vec<&'a ColumnScanCell<'a, T>>,
-        expression: ArithmeticTree<T>,
-    ) -> Self {
+    pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>, expression: StackProgram<T>) -> Self {
+        let inputs = repeat_with(T::zero).take(column_scans.len()).collect();
+        let stack_size = expression.space_requirement();
+
         Self {
             column_scans,
             value: None,
             expression,
             cursor: CursorPosition::Before,
+            stack: Vec::with_capacity(stack_size),
+            inputs,
         }
     }
 }
@@ -57,11 +65,12 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         match self.cursor {
             CursorPosition::Before => {
-                let inputs: Option<Vec<T>> =
-                    self.column_scans.iter().map(|s| s.current()).collect();
+                for (index, column_scan) in self.column_scans.iter().enumerate() {
+                    self.inputs[index] = column_scan.current()?;
+                }
 
                 self.cursor = CursorPosition::At;
-                self.value = self.expression.evaluate(&inputs?);
+                self.value = self.expression.evaluate(&mut self.stack, &self.inputs);
 
                 self.value
             }
@@ -115,7 +124,9 @@ where
 mod test {
     use crate::columnar::{
         column_types::vector::{ColumnScanVector, ColumnVector},
-        operations::arithmetic::expression::ArithmeticTree,
+        operations::arithmetic::expression::{
+            BinaryOperation, StackOperation, StackProgram, StackValue,
+        },
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 
@@ -136,20 +147,19 @@ mod test {
         let scan_b_cell = ColumnScanCell::new(scan_b);
 
         // a + (b/2 - 1) * 5
-        let operation: ArithmeticTree<u64> = ArithmeticTree::Addition(vec![
-            ArithmeticTree::Reference(0),
-            ArithmeticTree::Multiplication(vec![
-                ArithmeticTree::Subtraction(
-                    Box::new(ArithmeticTree::Division(
-                        Box::new(ArithmeticTree::Reference(1)),
-                        Box::new(ArithmeticTree::Constant(2)),
-                    )),
-                    Box::new(ArithmeticTree::Constant(1)),
-                ),
-                ArithmeticTree::Constant(5),
-            ]),
-        ]);
-
+        // stack notation: a b 2 / 1 - 5 * +
+        let operation = StackProgram::new([
+            StackOperation::Push(StackValue::Reference(0)),
+            StackOperation::Push(StackValue::Reference(1)),
+            StackOperation::Push(StackValue::Constant(2)),
+            StackOperation::BinaryOperation(BinaryOperation::Division),
+            StackOperation::Push(StackValue::Constant(1)),
+            StackOperation::BinaryOperation(BinaryOperation::Subtraction),
+            StackOperation::Push(StackValue::Constant(5)),
+            StackOperation::BinaryOperation(BinaryOperation::Multiplication),
+            StackOperation::BinaryOperation(BinaryOperation::Addition),
+        ])
+        .unwrap();
         let scans = vec![&scan_a_cell, &scan_b_cell];
         let mut arithmetic = ColumnScanArithmetic::new(scans, operation);
 

@@ -1,13 +1,14 @@
 use std::fmt::{Debug, Display};
 
 use nemo_physical::{
-    columnar::operations::arithmetic::expression::ArithmeticTreeLeaf,
+    columnar::operations::arithmetic::expression::StackValue,
     datatypes::{DataValueT, StorageTypeName, StorageValueT},
     management::database::Dict,
 };
 
 use crate::{
-    execution::planning::arithmetic::termtree_to_arithmetictree,
+    error::Error,
+    execution::planning::arithmetic::compile_termtree,
     model::{
         types::primitive_logical_value::LOGICAL_NULL_PREFIX, PrimitiveType, VariableAssignment,
     },
@@ -142,149 +143,94 @@ impl Display for PrimitiveTerm {
     }
 }
 
-/// Represents an abstract logical function
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
-pub struct AbstractFunction {
-    /// Name of the function
-    pub name: Identifier,
-    /// Its subterms
-    pub subterms: Vec<Term>,
-}
-
-impl AbstractFunction {
-    /// Get primitive type that fits the terms within the function
-    pub fn primitive_type(&self) -> Option<PrimitiveType> {
-        self.subterms
-            .iter()
-            .map(|t| t.primitive_type())
-            .fold(None, |acc, opt| {
-                acc.and_then(|a| opt.map(|b| a.max_type(&b)))
-            })
-    }
-}
-
 /// Binary operation between two [`Term`]
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
 pub enum BinaryOperation {
     /// Sum between terms.
-    Addition(Box<Term>, Box<Term>),
+    Addition,
     /// Difference between two terms.
-    Subtraction(Box<Term>, Box<Term>),
+    Subtraction,
     /// Product between terms.
-    Multiplication(Box<Term>, Box<Term>),
+    Multiplication,
     /// Ratio between the two terms.
-    Division(Box<Term>, Box<Term>),
+    Division,
     /// First term raised to the power of the second term.
-    Exponent(Box<Term>, Box<Term>),
+    Exponent,
 }
 
 impl BinaryOperation {
-    /// Get primitive type that fits the term within the operation
-    pub fn primitive_type(&self) -> Option<PrimitiveType> {
-        let (a, b) = self.terms();
-        a.primitive_type()
-            .and_then(|a| b.primitive_type().map(|b| a.max_type(&b)))
-    }
-
-    /// Returns the left and the right [`Term`] of this binary operation.
-    pub fn terms(&self) -> (&Term, &Term) {
-        match self {
-            BinaryOperation::Addition(left, right)
-            | BinaryOperation::Subtraction(left, right)
-            | BinaryOperation::Multiplication(left, right)
-            | BinaryOperation::Division(left, right)
-            | BinaryOperation::Exponent(left, right) => (left, right),
-        }
-    }
-
-    /// Returns a mutable reference to the left and the right [`Term`] of this binary operation.
-    pub fn terms_mut(&mut self) -> (&mut Term, &mut Term) {
-        match self {
-            BinaryOperation::Addition(left, right)
-            | BinaryOperation::Subtraction(left, right)
-            | BinaryOperation::Multiplication(left, right)
-            | BinaryOperation::Division(left, right)
-            | BinaryOperation::Exponent(left, right) => (left, right),
-        }
-    }
-
-    /// Returns the left [`Term`] of this binary operation.
-    pub fn left(&self) -> &Term {
-        self.terms().0
-    }
-
-    /// Returns the right [`Term`] of this binary operation.
-    pub fn right(&self) -> &Term {
-        self.terms().1
-    }
-
     /// Return the name of the operation.
     pub fn name(&self) -> String {
         let name = match self {
-            BinaryOperation::Addition(_, _) => "Addition",
-            BinaryOperation::Subtraction(_, _) => "Subtraction",
-            BinaryOperation::Multiplication(_, _) => "Multiplication",
-            BinaryOperation::Division(_, _) => "Division",
-            BinaryOperation::Exponent(_, _) => "Exponent",
+            BinaryOperation::Addition => "Addition",
+            BinaryOperation::Subtraction => "Subtraction",
+            BinaryOperation::Multiplication => "Multiplication",
+            BinaryOperation::Division => "Division",
+            BinaryOperation::Exponent => "Exponent",
         };
 
         String::from(name)
     }
 }
 
+impl From<BinaryOperation>
+    for nemo_physical::columnar::operations::arithmetic::expression::BinaryOperation
+{
+    fn from(value: BinaryOperation) -> Self {
+        use nemo_physical::columnar::operations::arithmetic::expression::BinaryOperation::*;
+        match value {
+            BinaryOperation::Addition => Addition,
+            BinaryOperation::Subtraction => Subtraction,
+            BinaryOperation::Multiplication => Multiplication,
+            BinaryOperation::Division => Division,
+            BinaryOperation::Exponent => Exponent,
+        }
+    }
+}
+
 /// Unary operation applied to a [`Term`]
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
 pub enum UnaryOperation {
     /// Squareroot of the given term
-    SquareRoot(Box<Term>),
+    SquareRoot,
     /// Additive inverse of the given term.
-    UnaryMinus(Box<Term>),
+    UnaryMinus,
     /// Absolute value of the given term.
-    Abs(Box<Term>),
+    Abs,
+}
+
+impl From<UnaryOperation>
+    for nemo_physical::columnar::operations::arithmetic::expression::UnaryOperation
+{
+    fn from(value: UnaryOperation) -> Self {
+        use nemo_physical::columnar::operations::arithmetic::expression::UnaryOperation::*;
+        match value {
+            UnaryOperation::SquareRoot => SquareRoot,
+            UnaryOperation::UnaryMinus => Negation,
+            UnaryOperation::Abs => Abs,
+        }
+    }
 }
 
 impl UnaryOperation {
-    /// Get primitive type that fits the term within the operation
-    pub fn primitive_type(&self) -> Option<PrimitiveType> {
-        self.term().primitive_type()
-    }
-
     /// Return a function which is able to construct the respective term based on the function name.
     /// Returns `None` if the provided function name does not correspond to a know unary function.
-    pub fn construct_from_name(name: &str) -> Option<Box<dyn Fn(Term) -> Term>> {
+    pub fn construct_from_name(name: &str) -> Result<UnaryOperation, Error> {
         match name {
-            "Abs" => Some(Box::new(|t| Term::Unary(UnaryOperation::Abs(Box::new(t))))),
-            "Sqrt" => Some(Box::new(|t| {
-                Term::Unary(UnaryOperation::SquareRoot(Box::new(t)))
-            })),
-            _ => None,
-        }
-    }
-
-    /// Return the [`Term`] to which the unary operation is applied.
-    pub fn term(&self) -> &Term {
-        match self {
-            UnaryOperation::SquareRoot(term)
-            | UnaryOperation::UnaryMinus(term)
-            | UnaryOperation::Abs(term) => term,
-        }
-    }
-
-    /// Return the [`Term`] to which the unary operation is applied.
-    pub fn term_mut(&mut self) -> &mut Term {
-        match self {
-            UnaryOperation::SquareRoot(term)
-            | UnaryOperation::UnaryMinus(term)
-            | UnaryOperation::Abs(term) => term,
+            "Abs" => Ok(UnaryOperation::Abs),
+            "Sqrt" => Ok(UnaryOperation::SquareRoot),
+            s => Err(Error::UnknonwUnaryOpertation {
+                operation: s.into(),
+            }),
         }
     }
 
     /// Return the name of the operation.
     pub fn name(&self) -> String {
         let name = match self {
-            UnaryOperation::SquareRoot(_) => "SquareRoot",
-            UnaryOperation::UnaryMinus(_) => "UnaryMinus",
-            UnaryOperation::Abs(_) => "Abs",
+            UnaryOperation::SquareRoot => "SquareRoot",
+            UnaryOperation::UnaryMinus => "UnaryMinus",
+            UnaryOperation::Abs => "Abs",
         };
 
         String::from(name)
@@ -297,13 +243,20 @@ pub enum Term {
     /// Primitive term.
     Primitive(PrimitiveTerm),
     /// Binary operation.
-    Binary(BinaryOperation),
+    Binary {
+        /// The operation to be executed.
+        operation: BinaryOperation,
+        /// The left hand side operand.
+        lhs: Box<Term>,
+        /// The right hand side operand.
+        rhs: Box<Term>,
+    },
     /// Unary operation.
-    Unary(UnaryOperation),
+    Unary(UnaryOperation, Box<Term>),
     /// Aggregation.
     Aggregation(Aggregate),
     /// Abstract Function.
-    Function(AbstractFunction),
+    Function(Identifier, Vec<Term>),
 }
 
 impl Term {
@@ -311,10 +264,14 @@ impl Term {
     pub fn primitive_type(&self) -> Option<PrimitiveType> {
         match self {
             Self::Primitive(pt) => pt.primitive_type(),
-            Self::Unary(un) => un.primitive_type(),
-            Self::Binary(bin) => bin.primitive_type(),
+            Self::Unary(_, term) => term.primitive_type(),
+            Self::Binary { lhs, rhs, .. } => lhs
+                .primitive_type()
+                .zip(rhs.primitive_type())
+                .map(|(lhs, rhs)| lhs.max_type(&rhs)),
+
             Self::Aggregation(agg) => agg.primitive_type(),
-            Self::Function(func) => func.primitive_type(),
+            Self::Function(_, _) => Some(PrimitiveType::Any),
         }
     }
 
@@ -339,20 +296,16 @@ impl Term {
             Term::Primitive(primitive) => {
                 vec![primitive]
             }
-            Term::Binary(binary) => {
-                let (left, right) = binary.terms();
-
-                let mut terms = left.primitive_terms();
-                terms.extend(right.primitive_terms());
+            Term::Binary { lhs, rhs, .. } => {
+                let mut terms = lhs.primitive_terms();
+                terms.extend(rhs.primitive_terms());
 
                 terms
             }
-            Term::Unary(unary) => unary.term().primitive_terms(),
-            Term::Function(f) => f
-                .subterms
-                .iter()
-                .flat_map(|t| t.primitive_terms())
-                .collect(),
+            Term::Unary(_, inner) => inner.primitive_terms(),
+            Term::Function(_, subterms) => {
+                subterms.iter().flat_map(|t| t.primitive_terms()).collect()
+            }
             Term::Aggregation(aggregate) => aggregate.terms.iter().collect(),
         }
     }
@@ -389,16 +342,13 @@ impl Term {
                     }
                 }
             }
-            Term::Binary(binary) => {
-                let (left, right) = binary.terms_mut();
-
-                left.apply_assignment(assignment);
-                right.apply_assignment(assignment);
+            Term::Binary { lhs, rhs, .. } => {
+                lhs.apply_assignment(assignment);
+                rhs.apply_assignment(assignment);
             }
-            Term::Unary(unary) => unary.term_mut().apply_assignment(assignment),
+            Term::Unary(_, inner) => inner.apply_assignment(assignment),
             Term::Aggregation(aggregate) => aggregate.apply_assignment(assignment),
-            Term::Function(sub) => sub
-                .subterms
+            Term::Function(_, subterms) => subterms
                 .iter_mut()
                 .for_each(|t| t.apply_assignment(assignment)),
         }
@@ -407,14 +357,12 @@ impl Term {
     fn aggregate_subterm_recursive(term: &Term) -> bool {
         match term {
             Term::Primitive(_primitive) => false,
-            Term::Binary(binary) => {
-                let (left, right) = binary.terms();
-
-                Self::aggregate_subterm_recursive(left) || Self::aggregate_subterm(right)
+            Term::Binary { lhs, rhs, .. } => {
+                Self::aggregate_subterm_recursive(lhs) || Self::aggregate_subterm(rhs)
             }
-            Term::Unary(unary) => Self::aggregate_subterm_recursive(unary.term()),
+            Term::Unary(_, inner) => Self::aggregate_subterm_recursive(inner),
             Term::Aggregation(_aggregate) => true,
-            Term::Function(sub) => sub.subterms.iter().any(Self::aggregate_subterm_recursive),
+            Term::Function(_, subterms) => subterms.iter().any(Self::aggregate_subterm_recursive),
         }
     }
 
@@ -423,14 +371,13 @@ impl Term {
     pub fn aggregate_subterm(&self) -> bool {
         match self {
             Term::Primitive(_primitive) => false,
-            Term::Binary(binary) => {
-                let (left, right) = binary.terms();
-
-                Self::aggregate_subterm_recursive(left) || Self::aggregate_subterm(right)
+            Term::Binary { lhs, rhs, .. } => {
+                Self::aggregate_subterm_recursive(lhs) || Self::aggregate_subterm(rhs)
             }
-            Term::Unary(unary) => Self::aggregate_subterm_recursive(unary.term()),
-            Term::Aggregation(_aggregate) => false, // We allow aggregation on the top level
-            Term::Function(sub) => sub.subterms.iter().any(Self::aggregate_subterm_recursive),
+            Term::Unary(_, inner) => Self::aggregate_subterm_recursive(inner),
+            // this is allowed, because the aggregate is on the top-level
+            Term::Aggregation(_aggregate) => false,
+            Term::Function(_, subterms) => subterms.iter().any(Self::aggregate_subterm_recursive),
         }
     }
 
@@ -440,18 +387,18 @@ impl Term {
         ty: &PrimitiveType,
         dict: &Dict,
     ) -> Option<StorageValueT> {
-        let arithmetic_tree = termtree_to_arithmetictree(self, &VariableOrder::new(), ty);
+        let arithmetic_tree = compile_termtree(self, &VariableOrder::new(), ty);
         let storage_type = ty.datatype_name().to_storage_type_name();
 
         macro_rules! translate_data_type {
             ($variant:ident, $type:ty) => {{
-                let translate_function = |l: ArithmeticTreeLeaf<DataValueT>| match l {
-                    ArithmeticTreeLeaf::Constant(t) => {
+                let translate_function = |l: &StackValue<DataValueT>| match l {
+                    StackValue::Constant(t) => {
                         if let StorageValueT::$variant(value) = t
                             .to_storage_value(dict)
                             .expect("We don't have string operations so this cannot fail.")
                         {
-                            ArithmeticTreeLeaf::Constant(value)
+                            StackValue::Constant(value)
                         } else {
                             panic!(
                                 "Expected a operation tree value of type {}",
@@ -459,12 +406,12 @@ impl Term {
                             );
                         }
                     }
-                    ArithmeticTreeLeaf::Reference(index) => ArithmeticTreeLeaf::Reference(index),
+                    StackValue::Reference(index) => StackValue::Reference(*index),
                 };
 
-                let arithmetic_tree_typed = arithmetic_tree.map(&translate_function);
+                let arithmetic_tree_typed = arithmetic_tree.map_values(&translate_function);
                 Some(StorageValueT::$variant(
-                    arithmetic_tree_typed.evaluate(&[])?,
+                    arithmetic_tree_typed.evaluate(&mut Vec::new(), &[])?,
                 ))
             }};
         }
@@ -489,19 +436,20 @@ impl Term {
     fn ascii_tree(&self) -> ascii_tree::Tree {
         match self {
             Term::Primitive(primitive) => ascii_tree::Tree::Leaf(vec![format!("{:?}", primitive)]),
-            Term::Binary(binary) => ascii_tree::Tree::Node(
-                binary.name(),
-                vec![binary.left().ascii_tree(), binary.right().ascii_tree()],
-            ),
-            Term::Unary(unary) => {
-                ascii_tree::Tree::Node(unary.name(), vec![unary.term().ascii_tree()])
+            Term::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => ascii_tree::Tree::Node(operation.name(), vec![lhs.ascii_tree(), rhs.ascii_tree()]),
+            Term::Unary(operation, inner) => {
+                ascii_tree::Tree::Node(operation.name(), vec![inner.ascii_tree()])
             }
             Term::Aggregation(aggregate) => {
                 ascii_tree::Tree::Leaf(vec![format!("{:?}", aggregate)])
             }
-            Term::Function(function) => ascii_tree::Tree::Node(
-                function.name.to_string(),
-                function.subterms.iter().map(|s| s.ascii_tree()).collect(),
+            Term::Function(function, subterms) => ascii_tree::Tree::Node(
+                function.to_string(),
+                subterms.iter().map(|s| s.ascii_tree()).collect(),
             ),
         }
     }
@@ -511,16 +459,29 @@ impl Term {
     fn precedence(&self) -> usize {
         match self {
             Term::Primitive(_) => 0,
-            Term::Binary(BinaryOperation::Addition(_, _)) => 1,
-            Term::Binary(BinaryOperation::Subtraction(_, _)) => 1,
-            Term::Binary(BinaryOperation::Multiplication(_, _)) => 2,
-            Term::Binary(BinaryOperation::Division(_, _)) => 2,
-            Term::Binary(BinaryOperation::Exponent(_, _)) => 3,
-            Term::Unary(UnaryOperation::SquareRoot(_)) => 5,
-            Term::Unary(UnaryOperation::UnaryMinus(_)) => 5,
-            Term::Unary(UnaryOperation::Abs(_)) => 5,
+            Term::Binary {
+                operation: BinaryOperation::Addition,
+                ..
+            } => 1,
+            Term::Binary {
+                operation: BinaryOperation::Subtraction,
+                ..
+            } => 1,
+            Term::Binary {
+                operation: BinaryOperation::Multiplication,
+                ..
+            } => 2,
+            Term::Binary {
+                operation: BinaryOperation::Division,
+                ..
+            } => 2,
+            Term::Binary {
+                operation: BinaryOperation::Exponent,
+                ..
+            } => 3,
+            Term::Unary(_, _) => 5,
             Term::Aggregation(_) => 5,
-            Term::Function(_) => 5,
+            Term::Function(_, _) => 5,
         }
     }
 
@@ -566,10 +527,16 @@ impl Term {
         f: &mut std::fmt::Formatter<'_>,
         left: &Term,
         right: &Term,
-        delimiter: &str,
+        operation: BinaryOperation,
     ) -> std::fmt::Result {
         self.format_braces_priority(f, left)?;
-        f.write_str(delimiter)?;
+        match operation {
+            BinaryOperation::Addition => write!(f, " + ")?,
+            BinaryOperation::Subtraction => write!(f, " - ")?,
+            BinaryOperation::Multiplication => write!(f, " * ")?,
+            BinaryOperation::Division => write!(f, " / ")?,
+            BinaryOperation::Exponent => write!(f, " ^ ")?,
+        }
         self.format_braces_priority(f, right)
     }
 }
@@ -584,41 +551,26 @@ impl Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Term::Primitive(primitive) => write!(f, "{}", primitive),
-            Term::Binary(BinaryOperation::Addition(left, right)) => {
-                self.format_binary_operation(f, left, right, " + ")
+            Term::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => self.format_binary_operation(f, lhs, rhs, *operation),
+            Term::Unary(UnaryOperation::SquareRoot, inner) => {
+                write!(f, "sqrt({})", inner)
             }
-            Term::Binary(BinaryOperation::Subtraction(left, right)) => {
-                self.format_binary_operation(f, left, right, " - ")
+            Term::Unary(UnaryOperation::UnaryMinus, inner) => {
+                write!(f, "-")?;
+                self.format_braces_priority(f, inner)
             }
-            Term::Binary(BinaryOperation::Multiplication(left, right)) => {
-                self.format_binary_operation(f, left, right, " * ")
-            }
-            Term::Binary(BinaryOperation::Division(left, right)) => {
-                self.format_binary_operation(f, left, right, " / ")
-            }
-            Term::Binary(BinaryOperation::Exponent(left, right)) => {
-                self.format_binary_operation(f, left, right, " ^ ")
-            }
-            Term::Unary(UnaryOperation::SquareRoot(sub)) => {
-                f.write_str("sqrt(")?;
-                write!(f, "{}", sub)?;
-                f.write_str(")")
-            }
-            Term::Unary(UnaryOperation::UnaryMinus(sub)) => {
-                f.write_str("-")?;
-
-                self.format_braces_priority(f, sub)
-            }
-            Term::Unary(UnaryOperation::Abs(sub)) => {
-                f.write_str("|")?;
-                write!(f, "{}", sub)?;
-                f.write_str("|")
+            Term::Unary(UnaryOperation::Abs, inner) => {
+                write!(f, "|{}|", inner)
             }
             Term::Aggregation(aggregate) => write!(f, "{}", aggregate),
-            Term::Function(function) => {
-                f.write_str(&function.name.to_string())?;
+            Term::Function(function, subterms) => {
+                f.write_str(&function.to_string())?;
                 f.write_str("(")?;
-                self.format_multinary_operation(f, &function.subterms, ", ")?;
+                self.format_multinary_operation(f, subterms, ", ")?;
                 f.write_str(")")
             }
         }
