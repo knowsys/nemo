@@ -5,3 +5,6 @@ pub mod analysis;
 
 /// Functionality for computing promising variable orders from a program
 pub mod variable_order;
+
+/// Type Inference and Checks
+pub mod type_inference;
