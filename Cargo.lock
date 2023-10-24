@@ -226,9 +226,9 @@ checksum = "7f30e7476521f6f8af1a1c4c0b8cc94f0bee37d91763d0ca2665f299b6cd8aec"
 
 [[package]]
 name = "bytecount"
-version = "0.6.5"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1a12477b7237a01c11a80a51278165f9ba0edd28fa6db00a65ab230320dc58c"
+checksum = "ad152d03a2c813c80bb94fedbf3a3f02b28f793e39e7c214c8a0bcc196343de7"
 
 [[package]]
 name = "bytes"
@@ -1167,6 +1167,7 @@ version = "0.3.1-dev"
 dependencies = [
  "ascii_tree",
  "assert_fs",
+ "bytecount",
  "bytesize",
  "csv",
  "env_logger 0.10.0",
