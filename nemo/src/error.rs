@@ -69,6 +69,12 @@ pub enum Error {
     /// Error in the physical layer
     #[error(transparent)]
     PhysicalError(#[from] nemo_physical::error::Error),
+    /// Error when trying to lookup unary operations
+    #[error("The unary operation {operation} is unknown.")]
+    UnknonwUnaryOpertation {
+        /// The operation causing the failure
+        operation: String,
+    },
 }
 
 impl From<ReadingError> for Error {

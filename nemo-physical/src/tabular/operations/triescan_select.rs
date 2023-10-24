@@ -1,9 +1,9 @@
 use crate::{
     columnar::{
         operations::{
-            arithmetic::expression::ArithmeticTreeLeaf,
-            columnscan_restrict_values::VALUE_SCAN_INDEX, condition::statement::ConditionStatement,
-            ColumnScanEqualColumn, ColumnScanPass, ColumnScanRestrictValues,
+            arithmetic::expression::StackValue, columnscan_restrict_values::VALUE_SCAN_INDEX,
+            condition::statement::ConditionStatement, ColumnScanEqualColumn, ColumnScanPass,
+            ColumnScanRestrictValues,
         },
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
@@ -238,12 +238,9 @@ impl<'a> TrieScanRestrictValues<'a> {
         // the maximum index referenced by the condition
         for condition in conditions {
             let maximum_reference = condition.maximum_reference().unwrap_or(0);
-            let (left, right) = condition.expressions();
 
-            for leaf in left.leaves().iter().chain(right.leaves().iter()) {
-                if let ArithmeticTreeLeaf::Reference(index) = leaf {
-                    input_column_indices[maximum_reference].insert(*index);
-                }
+            for reference_index in condition.references() {
+                input_column_indices[maximum_reference].insert(reference_index);
             }
 
             input_column_conditions[maximum_reference].push(condition);
@@ -306,13 +303,13 @@ impl<'a> TrieScanRestrictValues<'a> {
                     }
 
                     // Translates DataValueT into $type and the references according to map_index
-                    let translate_type_index = |l: ArithmeticTreeLeaf<DataValueT>| match l {
-                        ArithmeticTreeLeaf::Constant(t) => {
+                    let translate_type_index = |l: &StackValue<DataValueT>| match l {
+                        StackValue::Constant(t) => {
                             if let StorageValueT::$variant(value) = t
                                 .to_storage_value(dict)
                                 .expect("We don't have string operations so this cannot fail.")
                             {
-                                ArithmeticTreeLeaf::Constant(value)
+                                StackValue::Constant(value)
                             } else {
                                 panic!(
                                     "Expected a operation tree value of type {}",
@@ -320,8 +317,8 @@ impl<'a> TrieScanRestrictValues<'a> {
                                 );
                             }
                         }
-                        ArithmeticTreeLeaf::Reference(index) => {
-                            ArithmeticTreeLeaf::Reference(*map_index.get(&index).expect(
+                        StackValue::Reference(index) => {
+                            StackValue::Reference(*map_index.get(&index).expect(
                                 "Every input index should have been recorded while building the hash set.",
                             ))
                         }
@@ -329,7 +326,11 @@ impl<'a> TrieScanRestrictValues<'a> {
 
                     let conditions = input_conditions
                         .into_iter()
-                        .map(|c| c.map(&translate_type_index))
+                        .map(|c| ConditionStatement {
+                            operation: c.operation,
+                            lhs: c.lhs.map_values(&translate_type_index),
+                            rhs: c.rhs.map_values(&translate_type_index),
+                        })
                         .collect();
 
                     let next_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanRestrictValues(
@@ -397,7 +398,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanRestrictValues<'a> {
 #[cfg(test)]
 mod test {
     use super::{TrieScanRestrictValues, TrieScanSelectEqual};
-    use crate::columnar::operations::arithmetic::expression::ArithmeticTree;
+    use crate::columnar::operations::arithmetic::expression::StackValue;
     use crate::columnar::operations::condition::statement::ConditionStatement;
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::DataValueT;
@@ -509,13 +510,13 @@ mod test {
             &dict,
             trie_iter,
             &[
-                ConditionStatement::Equal(
-                    ArithmeticTree::Reference(1),
-                    ArithmeticTree::Constant(DataValueT::U64(4)),
+                ConditionStatement::equal(
+                    StackValue::Reference(1),
+                    StackValue::Constant(DataValueT::U64(4)),
                 ),
-                ConditionStatement::Equal(
-                    ArithmeticTree::Reference(3),
-                    ArithmeticTree::Constant(DataValueT::U64(7)),
+                ConditionStatement::equal(
+                    StackValue::Reference(3),
+                    StackValue::Constant(DataValueT::U64(7)),
                 ),
             ],
         );
@@ -578,9 +579,9 @@ mod test {
         let mut restrict_iter = TrieScanRestrictValues::new(
             &dict,
             trie_iter,
-            &[ConditionStatement::LessThan(
-                ArithmeticTree::Reference(1),
-                ArithmeticTree::Reference(0),
+            &[ConditionStatement::less_than(
+                StackValue::Reference(1),
+                StackValue::Reference(0),
             )],
         );
 
@@ -627,9 +628,9 @@ mod test {
         let mut restrict_iter = TrieScanRestrictValues::new(
             &dict,
             trie_iter,
-            &[ConditionStatement::Unequal(
-                ArithmeticTree::Reference(1),
-                ArithmeticTree::Reference(0),
+            &[ConditionStatement::unequal(
+                StackValue::Reference(1),
+                StackValue::Reference(0),
             )],
         );
 

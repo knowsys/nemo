@@ -24,7 +24,7 @@ use crate::{
     table_manager::TableManager,
 };
 
-use super::arithmetic::termtree_to_arithmetictree;
+use super::arithmetic::compile_termtree;
 
 /// This function replaces each variable in the atom with its position in the variable ordering
 ///
@@ -64,19 +64,21 @@ pub(super) fn compute_constraints(
             .expect("Every variable should have a type.");
 
         let (left, right) = constraint.terms();
-        let left_tree = termtree_to_arithmetictree(left, variable_order, variable_type);
-        let right_tree = termtree_to_arithmetictree(right, variable_order, variable_type);
+        let left_tree = compile_termtree(left, variable_order, variable_type);
+        let right_tree = compile_termtree(right, variable_order, variable_type);
 
         let new_statement = match constraint {
-            Constraint::Equals(_, _) => ConditionStatement::Equal(left_tree, right_tree),
-            Constraint::Unequals(_, _) => ConditionStatement::Unequal(left_tree, right_tree),
-            Constraint::LessThan(_, _) => ConditionStatement::LessThan(left_tree, right_tree),
-            Constraint::GreaterThan(_, _) => ConditionStatement::GreaterThan(left_tree, right_tree),
+            Constraint::Equals(_, _) => ConditionStatement::equal(left_tree, right_tree),
+            Constraint::Unequals(_, _) => ConditionStatement::unequal(left_tree, right_tree),
+            Constraint::LessThan(_, _) => ConditionStatement::less_than(left_tree, right_tree),
+            Constraint::GreaterThan(_, _) => {
+                ConditionStatement::greater_than(left_tree, right_tree)
+            }
             Constraint::LessThanEq(_, _) => {
-                ConditionStatement::LessThanEqual(left_tree, right_tree)
+                ConditionStatement::less_than_equal(left_tree, right_tree)
             }
             Constraint::GreaterThanEq(_, _) => {
-                ConditionStatement::GreaterThanEqual(left_tree, right_tree)
+                ConditionStatement::greater_than_equal(left_tree, right_tree)
             }
         };
 

@@ -3,88 +3,67 @@
 use std::collections::HashMap;
 
 use nemo_physical::{
-    columnar::operations::arithmetic::expression::ArithmeticTree,
+    columnar::operations::arithmetic::expression::{StackOperation, StackProgram, StackValue},
     datatypes::DataValueT,
     management::{execution_plan::ExecutionNodeRef, ExecutionPlan},
     tabular::operations::triescan_append::AppendInstruction,
 };
 
 use crate::{
-    model::{
-        chase_model::Constructor, BinaryOperation, PrimitiveTerm, PrimitiveType, Term,
-        UnaryOperation, Variable,
-    },
+    model::{chase_model::Constructor, PrimitiveTerm, PrimitiveType, Term, Variable},
     program_analysis::variable_order::VariableOrder,
 };
 
-/// Builds an [`ArithmeticTree`] with [`DataValueT`]
+/// Builds a [`StackProgram`] with [`DataValueT`]
 /// from a given [`Term`].
-pub fn termtree_to_arithmetictree(
+pub fn compile_termtree(
     term: &Term,
     order: &VariableOrder,
     logical_type: &PrimitiveType,
-) -> ArithmeticTree<DataValueT> {
-    match term {
-        Term::Primitive(primitive) => match primitive {
-            PrimitiveTerm::Variable(variable) => ArithmeticTree::Reference(
-                *order
-                    .get(variable)
-                    .expect("Variable order must contain an entry for every variable."),
-            ),
-            PrimitiveTerm::Constant(constant) => ArithmeticTree::Constant(
-                logical_type
-                    .ground_term_to_data_value_t(constant.clone())
-                    .expect("Type checker should have caught any errors at this point."),
-            ),
-        },
-        Term::Binary(BinaryOperation::Addition(left, right)) => {
-            let left_tree = termtree_to_arithmetictree(left, order, logical_type);
-            let right_tree = termtree_to_arithmetictree(right, order, logical_type);
+) -> StackProgram<DataValueT> {
+    fn build_operations(
+        term: &Term,
+        operations: &mut Vec<StackOperation<DataValueT>>,
+        order: &VariableOrder,
+        logical_type: &PrimitiveType,
+    ) {
+        match term {
+            Term::Aggregation(_) => unreachable!("Aggregation is not an arithmetic operation"),
+            Term::Function(_, _) => panic!("Functions should not be evaluated"),
 
-            ArithmeticTree::Addition(vec![left_tree, right_tree])
-        }
-        Term::Binary(BinaryOperation::Subtraction(left, right)) => {
-            let left_tree = termtree_to_arithmetictree(left, order, logical_type);
-            let right_tree = termtree_to_arithmetictree(right, order, logical_type);
+            Term::Primitive(primitive) => operations.push(StackOperation::Push(match primitive {
+                PrimitiveTerm::Variable(variable) => StackValue::Reference(
+                    *order
+                        .get(variable)
+                        .expect("Variable order must contain an entry for every variable."),
+                ),
+                PrimitiveTerm::Constant(constant) => StackValue::Constant(
+                    logical_type
+                        .ground_term_to_data_value_t(constant.clone())
+                        .expect("Type checker should have caught any errors at this point."),
+                ),
+            })),
 
-            ArithmeticTree::Subtraction(Box::new(left_tree), Box::new(right_tree))
-        }
-        Term::Binary(BinaryOperation::Multiplication(left, right)) => {
-            let left_tree = termtree_to_arithmetictree(left, order, logical_type);
-            let right_tree = termtree_to_arithmetictree(right, order, logical_type);
+            Term::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => {
+                build_operations(lhs, operations, order, logical_type);
+                build_operations(rhs, operations, order, logical_type);
+                operations.push(StackOperation::BinaryOperation((*operation).into()))
+            }
 
-            ArithmeticTree::Multiplication(vec![left_tree, right_tree])
+            Term::Unary(operation, inner) => {
+                build_operations(inner, operations, order, logical_type);
+                operations.push(StackOperation::UnaryOperation((*operation).into()))
+            }
         }
-        Term::Binary(BinaryOperation::Division(left, right)) => {
-            let left_tree = termtree_to_arithmetictree(left, order, logical_type);
-            let right_tree = termtree_to_arithmetictree(right, order, logical_type);
-
-            ArithmeticTree::Division(Box::new(left_tree), Box::new(right_tree))
-        }
-        Term::Binary(BinaryOperation::Exponent(left, right)) => {
-            let left_tree = termtree_to_arithmetictree(left, order, logical_type);
-            let right_tree = termtree_to_arithmetictree(right, order, logical_type);
-
-            ArithmeticTree::Exponent(Box::new(left_tree), Box::new(right_tree))
-        }
-        Term::Unary(UnaryOperation::SquareRoot(sub)) => {
-            let sub_tree = termtree_to_arithmetictree(sub, order, logical_type);
-
-            ArithmeticTree::SquareRoot(Box::new(sub_tree))
-        }
-        Term::Unary(UnaryOperation::UnaryMinus(sub)) => {
-            let sub_tree = termtree_to_arithmetictree(sub, order, logical_type);
-
-            ArithmeticTree::Negation(Box::new(sub_tree))
-        }
-        Term::Unary(UnaryOperation::Abs(sub)) => {
-            let sub_tree = termtree_to_arithmetictree(sub, order, logical_type);
-
-            ArithmeticTree::Abs(Box::new(sub_tree))
-        }
-        Term::Aggregation(_) => unreachable!("Aggregation is not an arithmetic operation"),
-        Term::Function(_) => panic!("Functions should not be evaluated"),
     }
+
+    let mut term_operations = Vec::new();
+    build_operations(term, &mut term_operations, order, logical_type);
+    StackProgram::new(term_operations).expect("Compilation produces only valid stack programs.")
 }
 
 pub(super) fn generate_node_arithmetic(
@@ -105,7 +84,7 @@ pub(super) fn generate_node_arithmetic(
             constructor.variable().clone(),
             first_unused_index + constructor_index,
         );
-        constructor_instructions.push(AppendInstruction::Arithmetic(termtree_to_arithmetictree(
+        constructor_instructions.push(AppendInstruction::Arithmetic(compile_termtree(
             constructor.term(),
             variable_order,
             types

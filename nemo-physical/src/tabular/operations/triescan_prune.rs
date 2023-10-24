@@ -574,7 +574,7 @@ mod test {
     use super::TrieScanPrune;
 
     use crate::columnar::column_types::interval::ColumnWithIntervalsT;
-    use crate::columnar::operations::arithmetic::expression::ArithmeticTree;
+    use crate::columnar::operations::arithmetic::expression::StackValue;
     use crate::columnar::operations::condition::statement::ConditionStatement;
     use crate::columnar::traits::column::Column;
     use crate::columnar::traits::columnscan::ColumnScanT;
@@ -644,13 +644,13 @@ mod test {
             &dict,
             scan,
             &[
-                ConditionStatement::Equal(
-                    ArithmeticTree::Reference(1),
-                    ArithmeticTree::Constant(DataValueT::U64(layer_1_equality)),
+                ConditionStatement::equal(
+                    StackValue::Reference(1),
+                    StackValue::Constant(DataValueT::U64(layer_1_equality)),
                 ),
-                ConditionStatement::Equal(
-                    ArithmeticTree::Reference(3),
-                    ArithmeticTree::Constant(DataValueT::U64(layer_3_equality)),
+                ConditionStatement::equal(
+                    StackValue::Reference(3),
+                    StackValue::Constant(DataValueT::U64(layer_3_equality)),
                 ),
             ],
         ));

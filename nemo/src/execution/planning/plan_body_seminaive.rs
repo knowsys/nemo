@@ -165,9 +165,8 @@ impl BodyStrategy for SeminaiveStrategy {
                 // This is only required when the operation is not idempotent,
                 // because otherwise the the result would not change by intermediate columns in the variable order
                 if aggregated_column_index != aggregate_group_by_variables.len() {
-                    panic!("aggregated variable {} is at an invalid position in the variable order to allow for aggregation without projection/reorder (index is {aggregated_column_index}, but should equal {}).",
-                           aggregate.variables.first().unwrap(),
-                           aggregate_group_by_variables.len());
+                    panic!("aggregated variable {} is at an invalid position in the variable order to allow for aggregation without projection/reorder (index is {aggregated_column_index}, but should equal {}).", aggregate
+                    .variables.first().unwrap(), aggregate_group_by_variables.len());
                 }
             }
 
