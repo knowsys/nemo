@@ -573,11 +573,11 @@ impl<'a> TrieScan for TrieScanPrune<'a> {
 mod test {
     use super::TrieScanPrune;
 
+    use crate::arithmetic::expression::StackValue;
     use crate::columnar::column_types::interval::ColumnWithIntervalsT;
-    use crate::columnar::operations::arithmetic::expression::StackValue;
-    use crate::columnar::operations::condition::statement::ConditionStatement;
     use crate::columnar::traits::column::Column;
     use crate::columnar::traits::columnscan::ColumnScanT;
+    use crate::condition::statement::ConditionStatement;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;
     use crate::tabular::operations::{

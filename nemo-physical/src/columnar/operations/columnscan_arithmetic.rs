@@ -1,5 +1,8 @@
-use super::{super::traits::columnscan::ColumnScan, arithmetic::expression::StackProgram};
-use crate::{columnar::traits::columnscan::ColumnScanCell, datatypes::ColumnDataType};
+use super::super::traits::columnscan::ColumnScan;
+use crate::{
+    arithmetic::expression::StackProgram, columnar::traits::columnscan::ColumnScanCell,
+    datatypes::ColumnDataType,
+};
 use std::{fmt::Debug, iter::repeat_with, ops::Range};
 
 /// Cursor position of the scan
@@ -122,12 +125,12 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::columnar::{
-        column_types::vector::{ColumnScanVector, ColumnVector},
-        operations::arithmetic::expression::{
-            BinaryOperation, StackOperation, StackProgram, StackValue,
+    use crate::{
+        arithmetic::expression::{BinaryOperation, StackOperation, StackProgram, StackValue},
+        columnar::{
+            column_types::vector::{ColumnScanVector, ColumnVector},
+            traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
         },
-        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 
     use super::ColumnScanArithmetic;

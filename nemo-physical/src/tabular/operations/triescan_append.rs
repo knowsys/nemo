@@ -5,11 +5,11 @@ use std::{
 };
 
 use crate::{
+    arithmetic::expression::{StackOperation, StackProgram, StackValue},
     columnar::{
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         column_types::rle::{ColumnBuilderRle, ColumnRle},
         operations::{
-            arithmetic::expression::{StackOperation, StackProgram, StackValue},
             ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant,
             ColumnScanCopy, ColumnScanPass,
         },
@@ -517,10 +517,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanAppend<'a> {
 #[cfg(test)]
 mod test {
     use crate::{
-        columnar::{
-            operations::arithmetic::expression::{self, StackProgram, StackValue},
-            traits::columnscan::ColumnScanT,
-        },
+        arithmetic::expression::{self, StackProgram, StackValue},
+        columnar::traits::columnscan::ColumnScanT,
         datatypes::{DataValueT, StorageTypeName},
         management::database::Dict,
         tabular::{

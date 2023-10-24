@@ -6,7 +6,7 @@ use std::{
 };
 
 use nemo_physical::{
-    columnar::operations::condition::statement::ConditionStatement,
+    condition::statement::ConditionStatement,
     datatypes::DataValueT,
     management::{
         database::{ColumnOrder, TableId},

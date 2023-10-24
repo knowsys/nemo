@@ -1,12 +1,13 @@
 use crate::{
+    arithmetic::expression::StackValue,
     columnar::{
         operations::{
-            arithmetic::expression::StackValue, columnscan_restrict_values::VALUE_SCAN_INDEX,
-            condition::statement::ConditionStatement, ColumnScanEqualColumn, ColumnScanPass,
+            columnscan_restrict_values::VALUE_SCAN_INDEX, ColumnScanEqualColumn, ColumnScanPass,
             ColumnScanRestrictValues,
         },
         traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
+    condition::statement::ConditionStatement,
     datatypes::{DataValueT, StorageTypeName, StorageValueT},
     management::database::Dict,
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
@@ -398,9 +399,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanRestrictValues<'a> {
 #[cfg(test)]
 mod test {
     use super::{TrieScanRestrictValues, TrieScanSelectEqual};
-    use crate::columnar::operations::arithmetic::expression::StackValue;
-    use crate::columnar::operations::condition::statement::ConditionStatement;
+    use crate::arithmetic::expression::StackValue;
     use crate::columnar::traits::columnscan::ColumnScanT;
+    use crate::condition::statement::ConditionStatement;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};

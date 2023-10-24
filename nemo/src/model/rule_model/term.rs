@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display};
 
 use nemo_physical::{
-    columnar::operations::arithmetic::expression::StackValue,
+    arithmetic::expression::StackValue,
     datatypes::{DataValueT, StorageTypeName, StorageValueT},
     management::database::Dict,
 };
@@ -173,11 +173,9 @@ impl BinaryOperation {
     }
 }
 
-impl From<BinaryOperation>
-    for nemo_physical::columnar::operations::arithmetic::expression::BinaryOperation
-{
+impl From<BinaryOperation> for nemo_physical::arithmetic::expression::BinaryOperation {
     fn from(value: BinaryOperation) -> Self {
-        use nemo_physical::columnar::operations::arithmetic::expression::BinaryOperation::*;
+        use nemo_physical::arithmetic::expression::BinaryOperation::*;
         match value {
             BinaryOperation::Addition => Addition,
             BinaryOperation::Subtraction => Subtraction,
@@ -199,11 +197,9 @@ pub enum UnaryOperation {
     Abs,
 }
 
-impl From<UnaryOperation>
-    for nemo_physical::columnar::operations::arithmetic::expression::UnaryOperation
-{
+impl From<UnaryOperation> for nemo_physical::arithmetic::expression::UnaryOperation {
     fn from(value: UnaryOperation) -> Self {
-        use nemo_physical::columnar::operations::arithmetic::expression::UnaryOperation::*;
+        use nemo_physical::arithmetic::expression::UnaryOperation::*;
         match value {
             UnaryOperation::SquareRoot => SquareRoot,
             UnaryOperation::UnaryMinus => Negation,

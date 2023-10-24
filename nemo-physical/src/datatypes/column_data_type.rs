@@ -1,4 +1,4 @@
-use crate::columnar::operations::arithmetic::traits::ArithmeticOperations;
+use crate::arithmetic::traits::ArithmeticOperations;
 
 use super::{
     casting::{ImplicitCastFrom, ImplicitCastInto},

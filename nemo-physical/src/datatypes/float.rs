@@ -1,6 +1,6 @@
 use super::run_length_encodable::FloatingStep;
 use super::{FloatIsNaN, FloorToUsize, RunLengthEncodable};
-use crate::columnar::operations::arithmetic::traits::{CheckedPow, CheckedSquareRoot};
+use crate::arithmetic::traits::{CheckedPow, CheckedSquareRoot};
 use crate::error::Error;
 use num::traits::CheckedNeg;
 use num::{Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, One, Zero};
