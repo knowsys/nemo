@@ -8,7 +8,7 @@ use std::{
 use ascii_tree::{write_tree, Tree};
 
 use crate::{
-    columnar::operations::condition::statement::ConditionStatement,
+    condition::statement::ConditionStatement,
     datatypes::DataValueT,
     tabular::operations::{
         triescan_aggregate::AggregationInstructions, triescan_append::AppendInstruction,

@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use nemo_physical::{
-    columnar::operations::arithmetic::expression::{StackOperation, StackProgram, StackValue},
+    arithmetic::expression::{StackOperation, StackProgram, StackValue},
     datatypes::DataValueT,
     management::{execution_plan::ExecutionNodeRef, ExecutionPlan},
     tabular::operations::triescan_append::AppendInstruction,

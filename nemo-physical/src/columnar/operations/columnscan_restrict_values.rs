@@ -1,12 +1,12 @@
-use super::{
-    super::traits::columnscan::{ColumnScan, ColumnScanCell},
+use crate::{
     arithmetic::{
         expression::{StackProgram, StackValue},
         traits::ArithmeticOperations,
     },
+    columnar::traits::columnscan::{ColumnScan, ColumnScanCell},
     condition::statement::{ConditionOperator, ConditionStatement},
+    datatypes::ColumnDataType,
 };
-use crate::datatypes::ColumnDataType;
 use std::{fmt::Debug, iter::repeat_with, ops::Range};
 
 #[derive(Debug)]
@@ -399,16 +399,16 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::columnar::{
-        column_types::vector::ColumnVector,
-        operations::{
-            arithmetic::expression::{BinaryOperation, StackOperation, StackProgram, StackValue},
-            condition::statement::{ConditionOperator, ConditionStatement},
+    use crate::{
+        arithmetic::expression::{BinaryOperation, StackOperation, StackProgram, StackValue},
+        columnar::{
+            column_types::vector::ColumnVector,
+            traits::{
+                column::Column,
+                columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
+            },
         },
-        traits::{
-            column::Column,
-            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
-        },
+        condition::statement::{ConditionOperator, ConditionStatement},
     };
 
     use super::ColumnScanRestrictValues;

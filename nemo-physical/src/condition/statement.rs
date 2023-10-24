@@ -1,8 +1,6 @@
 //! Provides data structures and functionality to represent conditional statements
 
-use crate::columnar::operations::arithmetic::{
-    expression::StackProgram, traits::ArithmeticOperations,
-};
+use crate::arithmetic::{expression::StackProgram, traits::ArithmeticOperations};
 
 /// A boolean-valued operation on two values.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
