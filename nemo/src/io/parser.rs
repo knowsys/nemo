@@ -21,14 +21,15 @@ use nom::{
 use macros::traced;
 
 mod types;
-use types::{IntermediateResult, Span};
+
+use types::{ConstraintOperator, IntermediateResult, Span};
 pub(crate) mod iri;
 pub(crate) mod rfc5234;
 pub(crate) mod sparql;
 pub(crate) mod turtle;
 pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
-use self::types::ConstraintOperator;
+use super::formats::types::{Direction, FileFormat, FileFormatError, ImportExportSpec};
 
 /// Parse a program in the given `input`-String and return a [`Program`].
 ///
@@ -326,7 +327,7 @@ impl<'a> RuleParser<'a> {
         traced("parse_comma", space_delimited_token(","))
     }
 
-    /// Parse a colon, optionally surrounded by spaces.
+    /// Parse an equality sign, optionally surrounded by spaces.
     fn parse_equals(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
         traced("parse_equals", space_delimited_token("="))
     }
@@ -656,25 +657,66 @@ impl<'a> RuleParser<'a> {
         )
     }
 
+    /// Parse a file format name.
+    pub fn parse_file_format(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<FileFormat> {
+        traced("parse_file_format", move |input| {
+            let (remainder, format) =
+                map_res(alpha1, |format: Span<'a>| format.parse::<FileFormat>())(input)?;
+
+            Ok((remainder, format))
+        })
+    }
+
+    /// Parse an import/export specification for the given
+    /// [`Direction`].
+    pub fn parse_import_export_spec(
+        &'a self,
+        direction: Direction,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportSpec> {
+        traced("parse_import_export_spec", move |input| {
+            let (remainder, predicate) = self.parse_qualified_predicate_name()(input)?;
+            let (remainder, format) = delimited(
+                space_delimited_token(":"),
+                self.parse_file_format(),
+                multispace_or_comment0,
+            )(remainder)?;
+            let (remainder, meta) = map_res(self.parse_map_literal(), |attributes| {
+                let meta = format.into_meta();
+                meta.validate_attributes(direction, &attributes)?;
+                Ok::<_, FileFormatError>(meta)
+            })(remainder)?;
+
+            Ok((
+                remainder,
+                ImportExportSpec {
+                    direction,
+                    predicate: predicate.0,
+                    constraints: predicate.1,
+                    format: meta,
+                },
+            ))
+        })
+    }
+
     /// Parse an import directive.
-    pub fn parse_import(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    pub fn parse_import(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportSpec> {
         traced(
             "parse_import",
             delimited(
-                terminated(token("@import"), cut(multispace_or_comment1)),
-                cut(token("dummy")),
+                terminated(token("@import"), multispace_or_comment1),
+                cut(self.parse_import_export_spec(Direction::Reading)),
                 cut(self.parse_dot()),
             ),
         )
     }
 
     /// Parse an export directive.
-    pub fn parse_export(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    pub fn parse_export(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportSpec> {
         traced(
             "parse_export",
             delimited(
-                terminated(token("@import"), cut(multispace_or_comment1)),
-                cut(token("dummy")),
+                terminated(token("@export"), multispace_or_comment1),
+                cut(self.parse_import_export_spec(Direction::Writing)),
                 cut(self.parse_dot()),
             ),
         )
@@ -1399,7 +1441,7 @@ mod test {
 
     use nemo_physical::datatypes::Double;
 
-    use crate::model::rule_model::Constraint;
+    use crate::{io::formats::dsv::DSVFormat, model::rule_model::Constraint};
 
     use super::*;
 
@@ -2309,6 +2351,95 @@ mod test {
             parser.parse_map_literal(),
             r#"{foo = 23, "23" = 42}"#,
             pairs.clone().into_iter().collect::<Map>()
+        );
+    }
+
+    fn qualified_predicate_name() {
+        let parser = RuleParser::new();
+        let predicate = Identifier("p".to_string());
+
+        assert_parse!(
+            parser.parse_qualified_predicate_name(),
+            "p[3]",
+            (predicate.clone(), TupleConstraint::from_arity(3))
+        );
+
+        assert_parse!(
+            parser.parse_qualified_predicate_name(),
+            "p[integer, any]",
+            (
+                predicate.clone(),
+                TupleConstraint::from_iter(
+                    vec![PrimitiveType::Integer, PrimitiveType::Any].into_iter()
+                )
+            )
+        );
+
+        assert_parse!(
+            parser.parse_qualified_predicate_name(),
+            "p[float64, any]",
+            (
+                predicate.clone(),
+                TupleConstraint::from_iter(
+                    vec![PrimitiveType::Float64, PrimitiveType::Any].into_iter()
+                )
+            )
+        );
+
+        assert_parse!(
+            parser.parse_qualified_predicate_name(),
+            "p[integer, float64]",
+            (
+                predicate.clone(),
+                TupleConstraint::from_iter(
+                    vec![PrimitiveType::Integer, PrimitiveType::Float64].into_iter()
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn import_export() {
+        let parser = RuleParser::new();
+
+        let direction = Direction::Reading;
+        let name = "p".to_string();
+        let predicate = Identifier(name.clone());
+        let qualified = format!("{name}[integer, float64]");
+        let arguments = r#"{delimiter = ";"}"#;
+        let spec = format!("{qualified}: dsv{arguments}");
+        let directive = format!("@import {spec} .");
+
+        let constraints = TupleConstraint::from_iter(
+            vec![PrimitiveType::Integer, PrimitiveType::Float64].into_iter(),
+        );
+
+        assert_parse!(
+            parser.parse_qualified_predicate_name(),
+            &qualified,
+            (predicate.clone(), constraints.clone())
+        );
+
+        assert_parse!(
+            parser.parse_import_export_spec(direction),
+            &spec,
+            ImportExportSpec {
+                direction,
+                predicate: predicate.clone(),
+                constraints: constraints.clone(),
+                format: Box::<DSVFormat>::default(),
+            }
+        );
+
+        assert_parse!(
+            parser.parse_import(),
+            &directive,
+            ImportExportSpec {
+                direction,
+                predicate: predicate.clone(),
+                constraints: constraints.clone(),
+                format: Box::<DSVFormat>::default(),
+            }
         );
     }
 }

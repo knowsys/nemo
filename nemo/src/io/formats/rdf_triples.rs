@@ -16,9 +16,14 @@ use rio_xml::RdfXmlParser;
 
 use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
+    error::Error,
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
     model::{
-        types::primitive_types::PrimitiveType, Constant, InvalidRdfLiteral, RdfFile, RdfLiteral,
+        types::{
+            primitive_types::PrimitiveType, Direction, FileFormat, FileFormatError, FileFormatMeta,
+            TableWriter,
+        },
+        Constant, InvalidRdfLiteral, Key, RdfFile, RdfLiteral, TupleConstraint,
     },
 };
 
@@ -204,6 +209,53 @@ impl TableReader for RDFTriplesReader {
         } else {
             self.read_with_parser(builder_proxies, || NTriplesParser::new(reader))
         }
+    }
+}
+
+/// File formats for RDF.
+#[derive(Debug, Clone, Copy)]
+pub struct RDFFormat {}
+
+impl FileFormatMeta for RDFFormat {
+    fn file_format(&self) -> FileFormat {
+        todo!()
+    }
+
+    fn reader(
+        &self,
+        resource_providers: ResourceProviders,
+        resource: Resource,
+        logical_types: TupleConstraint,
+    ) -> Result<Box<dyn TableReader>, Error> {
+        if let Some(logical_types) = logical_types.into_flat_primitive() {
+            Ok(Box::new(RDFTriplesReader::new(
+                resource_providers,
+                todo!(),
+                logical_types,
+            )))
+        } else {
+            todo!()
+        }
+    }
+
+    fn writer(&self) -> Result<Box<dyn TableWriter>, Error> {
+        Err(FileFormatError::UnsupportedWrite(FileFormat::RDF).into())
+    }
+
+    fn optional_attributes(&self, direction: Direction) -> std::collections::HashSet<Key> {
+        todo!()
+    }
+
+    fn required_attributes(&self, direction: Direction) -> std::collections::HashSet<Key> {
+        todo!()
+    }
+
+    fn validate_attribute_values(
+        &self,
+        direction: Direction,
+        attributes: &crate::model::Map,
+    ) -> Result<(), FileFormatError> {
+        todo!()
     }
 }
 
