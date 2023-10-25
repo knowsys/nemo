@@ -95,33 +95,34 @@ impl PositionGraph {
                     // Add head position edges
                     {
                         // NOTE: we connect each body position to each head position of the same variable
-                        if let Some(head_positions) = variables_to_head_positions.get(variable) {
-                            for pos in head_positions {
-                                graph.add_edge(
-                                    predicate_position.clone(),
-                                    pos.clone(),
-                                    PositionGraphEdge::BodyToHeadSameVariable,
-                                );
-                            }
+                        for pos in variables_to_head_positions
+                            .get(variable)
+                            .into_iter()
+                            .flatten()
+                        {
+                            graph.add_edge(
+                                predicate_position.clone(),
+                                pos.clone(),
+                                PositionGraphEdge::BodyToHeadSameVariable,
+                            );
                         }
 
                         // NOTE: we connect every aggregate input variable to it's corresponding output variable in the head
-                        if let Some(output_variable_identifiers) =
-                            aggregate_input_to_output_variables.get(variable)
+                        for (output_variable_identifier, edge_label) in
+                            aggregate_input_to_output_variables
+                                .get(variable)
+                                .into_iter()
+                                .flatten()
                         {
-                            for (output_variable_identifier, edge_label) in
-                                output_variable_identifiers.iter()
+                            for pos in variables_to_head_positions
+                                .get(&output_variable_identifier.clone())
+                                .unwrap()
                             {
-                                for pos in variables_to_head_positions
-                                    .get(&output_variable_identifier.clone())
-                                    .unwrap()
-                                {
-                                    graph.add_edge(
-                                        predicate_position.clone(),
-                                        pos.clone(),
-                                        *edge_label,
-                                    );
-                                }
+                                graph.add_edge(
+                                    predicate_position.clone(),
+                                    pos.clone(),
+                                    *edge_label,
+                                );
                             }
                         }
                     }

@@ -394,13 +394,13 @@ impl ChaseProgram {
             .iter()
             .zip(rule_var_types)
             .enumerate()
-            .map(|(i, (r, vt))| {
+            .map(|(idx, (rule, variable_types))| {
                 analyze_rule(
-                    r,
-                    all_variable_orders[i].clone(),
+                    rule,
+                    all_variable_orders[idx].clone(),
                     &all_column_orders,
-                    i,
-                    vt,
+                    idx,
+                    variable_types,
                     &predicate_types,
                 )
             })

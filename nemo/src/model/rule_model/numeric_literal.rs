@@ -20,7 +20,6 @@ impl NumericLiteral {
             Self::Integer(_) => PrimitiveType::Integer,
             Self::Double(_) => PrimitiveType::Float64,
             Self::Decimal(_, 0) => PrimitiveType::Integer,
-            // this is a conservative estimate; if possible we transform decimals into Integers or Float64 but if this does not work, we store it as Any (internally as a String)
             Self::Decimal(_, _) => PrimitiveType::Any,
         }
     }

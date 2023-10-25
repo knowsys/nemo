@@ -210,29 +210,31 @@ pub(super) fn requirements_from_literals_in_rules(
             let reqs_for_atom: Vec<TypeRequirement> = chase_atom
                 .terms()
                 .iter()
-                .map(|t| match t {
+                .map(|term| match term {
                     // TODO: should we respect other things here?
                     // variables nested in terms in constraints in particular?
                     PrimitiveTerm::Variable(v) => constructors
                         .iter()
                         .filter_map(|c| (c.variable() == v).then_some(c.term()))
-                        .chain(constraints.iter().filter_map(|c| match c.left() {
-                            Term::Primitive(PrimitiveTerm::Variable(var)) => {
-                                (*t == PrimitiveTerm::Variable(var.clone())).then_some(c.right())
+                        .chain(constraints.iter().filter_map(|c| {
+                            match c.left() {
+                                Term::Primitive(PrimitiveTerm::Variable(var)) => (*term
+                                    == PrimitiveTerm::Variable(var.clone()))
+                                .then_some(c.right()),
+                                _ => match c.right() {
+                                    Term::Primitive(PrimitiveTerm::Variable(var)) => (*term
+                                        == PrimitiveTerm::Variable(var.clone()))
+                                    .then_some(c.left()),
+                                    _ => None,
+                                },
                             }
-                            _ => match c.right() {
-                                Term::Primitive(PrimitiveTerm::Variable(var)) => {
-                                    (*t == PrimitiveTerm::Variable(var.clone())).then_some(c.left())
-                                }
-                                _ => None,
-                            },
                         }))
                         .fold(None, |acc, t| {
                             let b = t.primitive_type();
                             acc.map(|a: PrimitiveType| b.map(|b| a.max_type(&b)).unwrap_or(a))
                                 .or(b)
                         }),
-                    _ => t.primitive_type(),
+                    _ => term.primitive_type(),
                 })
                 .map(|opt_t| {
                     opt_t
