@@ -160,8 +160,8 @@ impl ChaseProgram {
 
     /// Return parsed predicate declarations
     #[must_use]
-    pub fn parsed_predicate_declarations(&self) -> HashMap<Identifier, Vec<PrimitiveType>> {
-        self.parsed_predicate_declarations.clone()
+    pub fn parsed_predicate_declarations(&self) -> &HashMap<Identifier, Vec<PrimitiveType>> {
+        &self.parsed_predicate_declarations
     }
 
     /// Force the given selection of output predicates.

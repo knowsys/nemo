@@ -130,6 +130,30 @@ impl TryFrom<NestedType> for PrimitiveType {
 }
 
 impl PrimitiveType {
+    // TODO: I think this should be the PartialCmp between types but as long as we do not
+    // have casting we still want to forbid e.g. integer and string merges while reasoning
+    // HOWEVER for data that occurs in facts or sources we can decide for the max type up
+    // front and read them accordingly
+    /// Get the more general type out of two types (not necessarily castable but can be used to
+    /// determine how data should be read)
+    pub fn max_type(&self, other: &PrimitiveType) -> PrimitiveType {
+        match self {
+            PrimitiveType::Any => PrimitiveType::Any,
+            PrimitiveType::String => match other {
+                PrimitiveType::String => PrimitiveType::String,
+                _ => PrimitiveType::Any,
+            },
+            PrimitiveType::Integer => match other {
+                PrimitiveType::Integer => PrimitiveType::Integer,
+                _ => PrimitiveType::Any,
+            },
+            PrimitiveType::Float64 => match other {
+                PrimitiveType::Float64 => PrimitiveType::Float64,
+                _ => PrimitiveType::Any,
+            },
+        }
+    }
+
     /// Convert a given ground term to a DataValueT fitting the current logical type
     pub fn ground_term_to_data_value_t(
         &self,
