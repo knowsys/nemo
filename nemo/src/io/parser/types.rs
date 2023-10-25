@@ -7,9 +7,12 @@ use nom::{
 use nom_locate::LocatedSpan;
 use thiserror::Error;
 
-use crate::model::{
-    rule_model::{Aggregate, Constraint, Literal, Term},
-    PrimitiveType,
+use crate::{
+    io::formats::types::FileFormatError,
+    model::{
+        rule_model::{Aggregate, Constraint, Literal, Term},
+        PrimitiveType,
+    },
 };
 
 /// A [`LocatedSpan`] over the input.
@@ -409,6 +412,12 @@ impl FromExternalError<Span<'_>, crate::error::ReadingError> for LocatedParseErr
         _kind: ErrorKind,
         e: crate::error::ReadingError,
     ) -> Self {
+        ParseError::ExternalError(Box::new(e.into())).at(input)
+    }
+}
+
+impl FromExternalError<Span<'_>, FileFormatError> for LocatedParseError {
+    fn from_external_error(input: Span<'_>, _kind: ErrorKind, e: FileFormatError) -> Self {
         ParseError::ExternalError(Box::new(e.into())).at(input)
     }
 }
