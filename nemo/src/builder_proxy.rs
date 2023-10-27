@@ -653,38 +653,44 @@ mod test {
             unreachable!()
         };
 
-        assert_eq!(any_result, [
-            "STRING:my string",
-            "INTEGER:42",
-            "DOUBLE:3.41",
-            "CONSTANT:my constant",
-            "STRING:string literal",
-            "INTEGER:45",
-            "DECIMAL:4.2",
-            "DOUBLE:2.99",
-            "LANGUAGE_STRING:language string@en",
-            "DATATYPE_VALUE:some random datavalue^^a datatype that I totally did not just make up",
-            "STRING:string datavalue",
-            "INTEGER:73",
-            "DECIMAL:1.23",
-            "DECIMAL:1.23",
-            "DECIMAL:-1.23",
-            "DECIMAL:23.0",
-            "DECIMAL:23.0",
-            "DECIMAL:-23.0",
-            "DOUBLE:3.33",
-            "DATATYPE_VALUE:9950000000000000000^^http://www.w3.org/2001/XMLSchema#integer",
-            "DATATYPE_VALUE:9950000000000000001^^http://www.w3.org/2001/XMLSchema#decimal",
-        ].into_iter().map(String::from).collect::<Vec<_>>());
+        assert_eq!(
+            any_result,
+            [
+                "ST:my string",
+                "IN:42",
+                "DO:3.41",
+                "CO:my constant",
+                "ST:string literal",
+                "IN:45",
+                "DE:4.2",
+                "DO:2.99",
+                "LS:language string@en",
+                "DV:some random datavalue^^a datatype that I totally did not just make up",
+                "ST:string datavalue",
+                "IN:73",
+                "DE:1.23",
+                "DE:1.23",
+                "DE:-1.23",
+                "DE:23.0",
+                "DE:23.0",
+                "DE:-23.0",
+                "DO:3.33",
+                "DV:9950000000000000000^^http://www.w3.org/2001/XMLSchema#integer",
+                "DV:9950000000000000001^^http://www.w3.org/2001/XMLSchema#decimal",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>()
+        );
 
         assert_eq!(
             string_result,
             [
-                "STRING:my string",
-                "STRING:42",
-                "STRING:3.41",
-                "STRING:string literal",
-                "STRING:string datavalue",
+                "ST:my string",
+                "ST:42",
+                "ST:3.41",
+                "ST:string literal",
+                "ST:string datavalue",
             ]
             .into_iter()
             .map(String::from)
