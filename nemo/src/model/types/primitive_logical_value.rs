@@ -15,13 +15,13 @@ use crate::model::{
 
 use super::{error::InvalidRuleTermConversion, primitive_types::PrimitiveType};
 
-const LANGUAGE_STRING_PREFIX: &str = "LANGUAGE_STRING:";
-const STRING_PREFIX: &str = "STRING:";
-const INTEGER_PREFIX: &str = "INTEGER:";
-const DECIMAL_PREFIX: &str = "DECIMAL:";
-const DOUBLE_PREFIX: &str = "DOUBLE:";
-const CONSTANT_PREFIX: &str = "CONSTANT:";
-const DATATYPE_VALUE_PREFIX: &str = "DATATYPE_VALUE:";
+const LANGUAGE_STRING_PREFIX: &str = "LS:";
+const STRING_PREFIX: &str = "ST:";
+const INTEGER_PREFIX: &str = "IN:";
+const DECIMAL_PREFIX: &str = "DE:";
+const DOUBLE_PREFIX: &str = "DO:";
+const CONSTANT_PREFIX: &str = "CO:";
+const DATATYPE_VALUE_PREFIX: &str = "DV:";
 
 /// The prefix used to indicate constants that are Nulls
 pub const LOGICAL_NULL_PREFIX: &str = "__Null#";
