@@ -189,7 +189,7 @@ pub struct TrieScanRestrictValues<'a> {
 impl<'a> TrieScanRestrictValues<'a> {
     /// Construct new TrieScanRestrictValues object.
     pub fn new(
-        dict: &Dict,
+        dict: &mut Dict,
         base_trie: TrieScanEnum<'a>,
         conditions: &[ConditionStatement<DataValueT>],
     ) -> Self {
@@ -304,11 +304,10 @@ impl<'a> TrieScanRestrictValues<'a> {
                     }
 
                     // Translates DataValueT into $type and the references according to map_index
-                    let translate_type_index = |l: &StackValue<DataValueT>| match l {
+                    let mut translate_type_index = |l: &StackValue<DataValueT>| match l {
                         StackValue::Constant(t) => {
                             if let StorageValueT::$variant(value) = t
-                                .to_storage_value(dict)
-                                .expect("We don't have string operations so this cannot fail.")
+                                .to_storage_value_mut(dict)
                             {
                                 StackValue::Constant(value)
                             } else {
@@ -329,8 +328,8 @@ impl<'a> TrieScanRestrictValues<'a> {
                         .into_iter()
                         .map(|c| ConditionStatement {
                             operation: c.operation,
-                            lhs: c.lhs.map_values(&translate_type_index),
-                            rhs: c.rhs.map_values(&translate_type_index),
+                            lhs: c.lhs.map_values(&mut translate_type_index),
+                            rhs: c.rhs.map_values(&mut translate_type_index),
                         })
                         .collect();
 
@@ -506,9 +505,9 @@ mod test {
         let trie = Trie::new(vec![column_fst, column_snd, column_trd, column_fth]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let dict = Dict::default();
+        let mut dict = Dict::default();
         let mut restrict_iter = TrieScanRestrictValues::new(
-            &dict,
+            &mut dict,
             trie_iter,
             &[
                 ConditionStatement::equal(
@@ -576,9 +575,9 @@ mod test {
         let trie = Trie::new(vec![column_fst, column_snd]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let dict = Dict::default();
+        let mut dict = Dict::default();
         let mut restrict_iter = TrieScanRestrictValues::new(
-            &dict,
+            &mut dict,
             trie_iter,
             &[ConditionStatement::less_than(
                 StackValue::Reference(1),
@@ -625,9 +624,9 @@ mod test {
         let trie = Trie::new(vec![column_fst, column_snd]);
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
-        let dict = Dict::default();
+        let mut dict = Dict::default();
         let mut restrict_iter = TrieScanRestrictValues::new(
-            &dict,
+            &mut dict,
             trie_iter,
             &[ConditionStatement::unequal(
                 StackValue::Reference(1),

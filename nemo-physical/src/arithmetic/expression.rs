@@ -180,7 +180,10 @@ impl<T> StackProgram<T> {
     }
 
     /// Creates a new [`StackProgram`], where all [`StackOperation::Push`] operations have been mapped with `f`.
-    pub fn map_values<S>(&self, f: impl Fn(&StackValue<T>) -> StackValue<S>) -> StackProgram<S> {
+    pub fn map_values<S>(
+        &self,
+        mut f: impl FnMut(&StackValue<T>) -> StackValue<S>,
+    ) -> StackProgram<S> {
         let instructions = self
             .instructions
             .iter()

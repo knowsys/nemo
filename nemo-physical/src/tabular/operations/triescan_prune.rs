@@ -639,9 +639,9 @@ mod test {
     ) -> TrieScanPrune {
         let scan = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(input_trie));
 
-        let dict = Dict::default();
+        let mut dict = Dict::default();
         let scan = TrieScanEnum::TrieScanRestrictValues(TrieScanRestrictValues::new(
-            &dict,
+            &mut dict,
             scan,
             &[
                 ConditionStatement::equal(
