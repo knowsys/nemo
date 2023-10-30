@@ -1301,7 +1301,7 @@ impl DatabaseInstance {
 
                 if let Some(subiterator) = subiterator_opt {
                     let restrict_scan = TrieScanRestrictValues::new(
-                        &self.dict_constants.borrow_mut(),
+                        &mut self.dict_constants.borrow_mut(),
                         subiterator,
                         conditions,
                     );

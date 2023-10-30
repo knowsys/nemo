@@ -392,7 +392,7 @@ impl Term {
                     StackValue::Constant(t) => {
                         if let StorageValueT::$variant(value) = t
                             .to_storage_value(dict)
-                            .expect("We don't have string operations so this cannot fail.")
+                            .expect("We expect all strings to be known at this point.")
                         {
                             StackValue::Constant(value)
                         } else {
