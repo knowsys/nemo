@@ -70,7 +70,7 @@
 //! #     ],
 //! # );
 //! # let table_reader:Box<dyn TableReader> = Box::new(csv_reader);
-//! # let mut dict = RefCell::new(nemo_physical::dictionary::PrefixedStringDictionary::default());
+//! # let mut dict = RefCell::new(nemo_physical::management::database::Dict::default());
 //! let mut builder = vec![
 //!     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
 //!     PhysicalBuilderProxyEnum::I64(Default::default()),
@@ -260,7 +260,8 @@ mod test {
             data_value::{DataValueIteratorT, PhysicalString},
             storage_value::VecT,
         },
-        dictionary::{Dictionary, PrefixedStringDictionary},
+        dictionary::Dictionary,
+        management::database::Dict,
     };
 
     #[test]
@@ -274,7 +275,7 @@ Boston;United States;4628910
             .delimiter(b';')
             .from_reader(data.as_bytes());
 
-        let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+        let mut dict = std::cell::RefCell::new(Dict::default());
         let csvreader = DSVReader::dsv(
             ResourceProviders::empty(),
             &DsvFile::csv_file(
@@ -367,7 +368,7 @@ The next 2 columns are empty;;;789
             .delimiter(b';')
             .from_reader(data.as_bytes());
 
-        let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+        let mut dict = std::cell::RefCell::new(Dict::default());
         let csvreader = DSVReader::dsv(
             ResourceProviders::empty(),
             &DsvFile::csv_file(
@@ -474,7 +475,7 @@ node03;123;123;13;55;123;invalid
             .has_headers(false)
             .from_reader(data.as_bytes());
 
-        let dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+        let dict = std::cell::RefCell::new(Dict::default());
         let csvreader: DSVReader = DSVReader::dsv(
             ResourceProviders::empty(),
             &DsvFile::csv_file(

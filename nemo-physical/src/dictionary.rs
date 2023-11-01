@@ -27,11 +27,11 @@ pub mod value_serializer;
 pub use value_serializer::ValueSerializer;
 
 /// Fake id that dictionaries use to indicate that an entry has no id.
-const NONEXISTING_ID_MARK: usize = usize::MAX; 
+const NONEXISTING_ID_MARK: usize = usize::MAX;
 /// Fake id that dictionaries use to indicate that an entry is known
 /// in some other dictionary (indicating that a search across multiple dictionaries
 /// should be continued).
-const KNOWN_ID_MARK: usize = usize::MAX-1;
+const KNOWN_ID_MARK: usize = usize::MAX - 1;
 
 /// Result of adding new values to a dictionary.
 /// It indicates if the operation was successful, and whether the value was previously present or not.

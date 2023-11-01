@@ -394,8 +394,7 @@ where
 #[cfg(test)]
 mod test {
     use nemo_physical::{
-        datatypes::storage_value::VecT,
-        dictionary::{Dictionary, PrefixedStringDictionary},
+        datatypes::storage_value::VecT, dictionary::Dictionary, management::database::Dict,
     };
     use test_log::test;
 
@@ -557,7 +556,7 @@ mod test {
         })
         .unwrap();
 
-        let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+        let mut dict = std::cell::RefCell::new(Dict::default());
 
         let physical_builder_for_any_column = PhysicalStringColumnBuilderProxy::new(&dict);
         let physical_builder_for_string_column = PhysicalStringColumnBuilderProxy::new(&dict);

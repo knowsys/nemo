@@ -4,16 +4,20 @@ pub(crate) const LONG_STRING_THRESHOLD: usize = 1000;
 
 /// Inner struct where keep locations extracted from strings. This is separated
 /// to enable an iner mutability patters.
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug, Clone, Copy)]
 struct DictionaryStringLocations {
     prefix_length: usize,
     infix_length: usize,
     infix_done: bool,
 }
 
-impl DictionaryStringLocations{
+impl DictionaryStringLocations {
     fn new() -> Self {
-        DictionaryStringLocations { prefix_length: 0, infix_length: 0, infix_done: false }
+        DictionaryStringLocations {
+            prefix_length: 0,
+            infix_length: 0,
+            infix_done: false,
+        }
     }
 }
 
@@ -28,7 +32,7 @@ impl DictionaryString {
     pub fn new(s: &str) -> Self {
         DictionaryString {
             string: s.to_string(),
-            positions: UnsafeCell::new(DictionaryStringLocations::new())
+            positions: UnsafeCell::new(DictionaryStringLocations::new()),
         }
     }
 
@@ -36,7 +40,7 @@ impl DictionaryString {
     pub fn from_string(s: String) -> Self {
         DictionaryString {
             string: s,
-            positions: UnsafeCell::new(DictionaryStringLocations::new())
+            positions: UnsafeCell::new(DictionaryStringLocations::new()),
         }
     }
 
@@ -64,8 +68,8 @@ impl DictionaryString {
     pub fn infix(&self) -> &str {
         self.set_pieces();
         unsafe {
-            let prefix_end =  (*self.positions.get()).prefix_length;
-            let infix_end =  prefix_end + (*self.positions.get()).infix_length;
+            let prefix_end = (*self.positions.get()).prefix_length;
+            let infix_end = prefix_end + (*self.positions.get()).infix_length;
             &self.string.as_str().get_unchecked(prefix_end..infix_end)
         }
     }
@@ -74,8 +78,8 @@ impl DictionaryString {
     pub fn suffix(&self) -> &str {
         self.set_pieces();
         unsafe {
-            let prefix_end =  (*self.positions.get()).prefix_length;
-            let infix_end =  prefix_end + (*self.positions.get()).infix_length;
+            let prefix_end = (*self.positions.get()).prefix_length;
+            let infix_end = prefix_end + (*self.positions.get()).infix_length;
             &self.string.as_str().get_unchecked(infix_end..)
         }
     }
@@ -85,22 +89,20 @@ impl DictionaryString {
     /// that the funciton may return `false` even if the string actually starts and ends with the prefix
     /// and suffix given (if these are not the ones detected).
     pub fn has_infix(&self, prefix: &str, suffix: &str) -> bool {
-        self.prefix() == prefix && self.suffix() == suffix 
+        self.prefix() == prefix && self.suffix() == suffix
     }
 
     /// Checks if the string has a non-empty prefix or suffix.
     pub fn infixable(&self) -> bool {
         self.set_pieces();
-        unsafe {
-            (*self.positions.get()).infix_length < self.string.len()
-        }
+        unsafe { (*self.positions.get()).infix_length < self.string.len() }
     }
 
     /// Computes the pieces from the string.
     fn set_pieces(&self) {
         unsafe {
-            if  (*self.positions.get()).infix_done {
-                return
+            if (*self.positions.get()).infix_done {
+                return;
             }
         }
 
@@ -110,15 +112,17 @@ impl DictionaryString {
         let mut infix_length: usize = bytes.len();
 
         //if self.string.ends_with(">") {
-        if infix_length>0 && bytes[infix_length-1]==b'>'  {
-            if bytes[0]==b'<' { // using bytes is safe at pos 0; we know string!="" from above
-                let pos = DictionaryString::rfind_hashslash_plus(bytes); 
+        if infix_length > 0 && bytes[infix_length - 1] == b'>' {
+            if bytes[0] == b'<' {
+                // using bytes is safe at pos 0; we know string!="" from above
+                let pos = DictionaryString::rfind_hashslash_plus(bytes);
                 if pos > 0 {
                     prefix_length = pos; // note that pos is +1 the actual pos
-                    infix_length = bytes.len()-prefix_length-1;
+                    infix_length = bytes.len() - prefix_length - 1;
                 }
-            } else if bytes[0]==b'"' { // using bytes is safe at pos 0; we know string!="" from above
-                let pos = DictionaryString::find_quote_plus(unsafe { bytes.get_unchecked(1..) }); 
+            } else if bytes[0] == b'"' {
+                // using bytes is safe at pos 0; we know string!="" from above
+                let pos = DictionaryString::find_quote_plus(unsafe { bytes.get_unchecked(1..) });
                 if pos > 0 {
                     prefix_length = 1;
                     infix_length = pos - 1; // note that pos is relative to the slice that starts at 1, and that it is +1 the actual position
@@ -126,7 +130,7 @@ impl DictionaryString {
             }
         } // else: use defaults from above
 
-        unsafe{
+        unsafe {
             (*self.positions.get()).prefix_length = prefix_length;
             (*self.positions.get()).infix_length = infix_length;
             (*self.positions.get()).infix_done = true;
@@ -141,7 +145,7 @@ impl DictionaryString {
         let mut pos: usize = s.len();
         let mut iter = s.iter().copied();
         while let Some(ch) = iter.next_back() {
-            if ch==b'/' || ch==b'#' {
+            if ch == b'/' || ch == b'#' {
                 return pos;
             }
             pos -= 1;
@@ -157,14 +161,13 @@ impl DictionaryString {
         let mut pos: usize = 1;
         let mut iter = s.iter().copied();
         while let Some(ch) = iter.next() {
-            if ch==b'"' {
+            if ch == b'"' {
                 return pos;
             }
             pos += 1;
         }
         0
     }
-
 }
 
 #[cfg(test)]
@@ -192,7 +195,10 @@ mod test {
         let ds = DictionaryString::new("\"305\"^^<http://www.w3.org/2001/XMLSchema#integer>");
         assert_eq!(ds.prefix(), "\"");
         assert_eq!(ds.infix(), "305");
-        assert_eq!(ds.suffix(), "\"^^<http://www.w3.org/2001/XMLSchema#integer>");
+        assert_eq!(
+            ds.suffix(),
+            "\"^^<http://www.w3.org/2001/XMLSchema#integer>"
+        );
     }
 
     #[test]
@@ -204,8 +210,8 @@ mod test {
         let pos2 = DictionaryString::rfind_hashslash_plus(s2.as_bytes());
         let pos3 = DictionaryString::rfind_hashslash_plus(s3.as_bytes());
 
-        assert_eq!(pos1, s1.rfind(|c: char| c=='/' || c=='#').unwrap() + 1);
-        assert_eq!(pos2, s2.rfind(|c: char| c=='/' || c=='#').unwrap() + 1);
+        assert_eq!(pos1, s1.rfind(|c: char| c == '/' || c == '#').unwrap() + 1);
+        assert_eq!(pos2, s2.rfind(|c: char| c == '/' || c == '#').unwrap() + 1);
         assert_eq!(pos3, 0);
     }
 

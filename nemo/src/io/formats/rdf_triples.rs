@@ -218,7 +218,8 @@ mod test {
     use nemo_physical::{
         builder_proxy::{PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy},
         datatypes::data_value::{DataValueIteratorT, PhysicalString},
-        dictionary::{Dictionary, PrefixedStringDictionary},
+        dictionary::Dictionary,
+        management::database::Dict,
     };
     use rio_turtle::TurtleParser;
     use test_log::test;
@@ -235,7 +236,7 @@ mod test {
                       _:subject2 <http://an.example/predicate2> "object2" .
                       "#.as_bytes();
 
-                let dict = RefCell::new(PrefixedStringDictionary::default());
+                let dict = RefCell::new(Dict::default());
                 let mut builders = vec![
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
@@ -302,7 +303,7 @@ mod test {
                       "#
         .as_bytes();
 
-        let dict = RefCell::new(PrefixedStringDictionary::default());
+        let dict = RefCell::new(Dict::default());
         let mut builders = vec![
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
