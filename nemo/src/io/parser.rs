@@ -472,7 +472,7 @@ impl<'a> RuleParser<'a> {
                 move |input| {
                     let (remainder, (predicate, tuple_constraint)) = preceded(
                         terminated(token("@source"), cut(multispace_or_comment1)),
-                        cut(self.parse_qualified_predicate_name()),
+                        cut(self.parse_qualified_predicate_name(true)),
                     )(input)?;
 
                     let (remainder, datasource): (_, Result<_, ParseError>) = cut(delimited(
@@ -575,7 +575,7 @@ impl<'a> RuleParser<'a> {
                     terminated(token("@output"), cut(multispace_or_comment0)),
                     cut(alt((
                         map_res::<_, _, _, _, Error, _, _>(
-                            self.parse_qualified_predicate_name(),
+                            self.parse_qualified_predicate_name(false),
                             |(identifier, associated_type)| {
                                 Ok(QualifiedPredicateName::with_constraint(
                                     identifier,
@@ -690,6 +690,7 @@ impl<'a> RuleParser<'a> {
     /// predicate name together with its arity.
     fn parse_qualified_predicate_name(
         &'a self,
+        constraint_is_lower_bound: bool,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, TupleConstraint)> {
         traced(
             "parse_qualified_predicate_name",
@@ -705,7 +706,16 @@ impl<'a> RuleParser<'a> {
                             }),
                             map(
                                 separated_list1(self.parse_comma(), self.parse_type_name()),
-                                |type_names| type_names.into_iter().collect(),
+                                move |type_names| {
+                                    if constraint_is_lower_bound {
+                                        type_names
+                                            .into_iter()
+                                            .map(TypeConstraint::AtLeast)
+                                            .collect()
+                                    } else {
+                                        type_names.into_iter().map(TypeConstraint::Exact).collect()
+                                    }
+                                },
                             ),
                         ))),
                         cut(token("]")),
@@ -1377,9 +1387,12 @@ mod test {
             predicate.clone(),
             NativeDataSource::DsvFile(DsvFile::csv_file(
                 file,
-                [PrimitiveType::Any, PrimitiveType::Integer]
-                    .into_iter()
-                    .collect(),
+                [
+                    TypeConstraint::AtLeast(PrimitiveType::Any),
+                    TypeConstraint::AtLeast(PrimitiveType::Integer),
+                ]
+                .into_iter()
+                .collect(),
             )),
         );
 
@@ -1387,7 +1400,9 @@ mod test {
             predicate,
             NativeDataSource::DsvFile(DsvFile::csv_file(
                 file,
-                [PrimitiveType::String].into_iter().collect(),
+                [TypeConstraint::AtLeast(PrimitiveType::String)]
+                    .into_iter()
+                    .collect(),
             )),
         );
 

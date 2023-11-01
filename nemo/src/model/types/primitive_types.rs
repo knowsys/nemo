@@ -75,13 +75,11 @@ generate_logical_type_enum!(
 impl PartialOrd for PrimitiveType {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self {
-            Self::Any => {
-                if matches!(other, Self::Any) {
-                    Some(std::cmp::Ordering::Equal)
-                } else {
-                    Some(std::cmp::Ordering::Greater)
-                }
-            }
+            Self::Any => match other {
+                Self::Any => Some(std::cmp::Ordering::Equal),
+                Self::String => Some(std::cmp::Ordering::Greater),
+                _ => None, // TODO: should be the following once reasoning supports casting: Some(std::cmp::Ordering::Greater),
+            },
             Self::String => match other {
                 Self::Any => Some(std::cmp::Ordering::Less),
                 Self::String => Some(std::cmp::Ordering::Equal),

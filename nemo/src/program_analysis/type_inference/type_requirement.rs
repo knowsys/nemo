@@ -37,11 +37,19 @@ impl TypeRequirement {
         match self {
             Self::Hard(t1) => match other {
                 Self::Hard(t2) => (t1 == t2).then_some(self),
-                Self::Soft(t2) => (t1 >= t1.max_type(&t2)).then_some(self),
+                Self::Soft(t2) => {
+                    let max = t1.max_type(&t2);
+                    // check if the max type is compatible with both types via partial ord
+                    (t1 >= max && max >= t2).then_some(self)
+                }
                 Self::None => Some(self),
             },
             Self::Soft(t1) => match other {
-                Self::Hard(t2) | Self::Soft(t2) => Some(Self::Soft(t1.max_type(&t2))),
+                Self::Hard(t2) | Self::Soft(t2) => {
+                    let max = t1.max_type(&t2);
+                    // check if the max type is compatible with both types via partial ord
+                    (max >= t1 && max >= t2).then_some(Self::Soft(max))
+                }
                 Self::None => Some(self),
             },
             Self::None => match other {

@@ -133,14 +133,6 @@ impl Deref for TupleConstraint {
     }
 }
 
-impl FromIterator<PrimitiveType> for TupleConstraint {
-    fn from_iter<T: IntoIterator<Item = PrimitiveType>>(iter: T) -> Self {
-        Self {
-            fields: iter.into_iter().map(TypeConstraint::Exact).collect(),
-        }
-    }
-}
-
 impl FromIterator<TypeConstraint> for TupleConstraint {
     fn from_iter<T: IntoIterator<Item = TypeConstraint>>(iter: T) -> Self {
         Self {
