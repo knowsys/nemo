@@ -41,7 +41,3 @@ print(list(engine.result("calculated")))
 output_manager = NemoOutputManager("results", gzip=True)
 engine.write_result("calculated", output_manager)
 ```
-
-## Known limitations
-
-Currently `any` values are not correctly transformed into python types. This will be fixed once a missing feature in nemo (knowsys/nemo#245) is implemented.

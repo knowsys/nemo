@@ -16,7 +16,7 @@
 //! ## Logical layer
 //! ```
 //! # use nemo_physical::table_reader::TableReader;
-//! # use nemo::{model::{DsvFile, PrimitiveType}, io::{resource_providers::ResourceProviders, formats::DSVReader}};
+//! # use nemo::{model::{DsvFile, PrimitiveType, TypeConstraint}, io::{resource_providers::ResourceProviders, formats::DSVReader}};
 //! # let file_path = String::from("../resources/doc/examples/city_population.csv");
 //! let csv_reader = DSVReader::dsv(
 //!     ResourceProviders::default(),
@@ -24,6 +24,7 @@
 //!         &file_path,
 //!         [PrimitiveType::Any, PrimitiveType::Integer]
 //!             .into_iter()
+//!             .map(TypeConstraint::AtLeast)
 //!             .collect(),
 //!     ),
 //!     vec![
@@ -43,7 +44,7 @@
 //! ```
 //! # use nemo_physical::table_reader::TableReader;
 //! #
-//! # use nemo::{model::{DsvFile, PrimitiveType}, io::{resource_providers::ResourceProviders, formats::DSVReader}};
+//! # use nemo::{model::{DsvFile, PrimitiveType, TypeConstraint}, io::{resource_providers::ResourceProviders, formats::DSVReader}};
 //! # use std::cell::RefCell;
 //! # use nemo_physical::builder_proxy::{
 //! #    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
@@ -60,6 +61,7 @@
 //! #         &file_path,
 //! #         [PrimitiveType::Any, PrimitiveType::Integer]
 //! #             .into_iter()
+//! #             .map(TypeConstraint::AtLeast)
 //! #             .collect(),
 //! #     ),
 //! #     vec![
@@ -92,7 +94,7 @@ use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
     error::{Error, ReadingError},
     io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    model::{PrimitiveType, Term},
+    model::{Constant, PrimitiveType},
 };
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
@@ -201,7 +203,7 @@ impl DSVReader {
         macro_rules! into_parser {
             ($it:ident, $lcbp:ident) => {{
                 let boxed: Box<dyn ColumnBuilderProxy<String>> = match $it {
-                    TypeConstraint::Exact(PrimitiveType::Any) | TypeConstraint::AtLeast(PrimitiveType::Any) => Box::new($lcbp.into_parser::<Term>()),
+                    TypeConstraint::Exact(PrimitiveType::Any) | TypeConstraint::AtLeast(PrimitiveType::Any) => Box::new($lcbp.into_parser::<Constant>()),
                     TypeConstraint::Exact(PrimitiveType::String) | TypeConstraint::AtLeast(PrimitiveType::String) => Box::new($lcbp.into_parser::<LogicalString>()),
                     TypeConstraint::Exact(PrimitiveType::Integer) | TypeConstraint::AtLeast(PrimitiveType::Integer) => Box::new($lcbp.into_parser::<LogicalInteger>()),
                     TypeConstraint::Exact(PrimitiveType::Float64) | TypeConstraint::AtLeast(PrimitiveType::Float64) => Box::new($lcbp.into_parser::<LogicalFloat64>()),
@@ -279,6 +281,7 @@ Boston;United States;4628910
                 "test",
                 [PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]
                     .into_iter()
+                    .map(TypeConstraint::AtLeast)
                     .collect(),
             ),
             vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
@@ -376,6 +379,7 @@ The next 2 columns are empty;;;789
                     PrimitiveType::Integer,
                 ]
                 .into_iter()
+                .map(TypeConstraint::AtLeast)
                 .collect(),
             ),
             vec![
@@ -484,6 +488,7 @@ node03;123;123;13;55;123;invalid
                     PrimitiveType::Any,
                 ]
                 .into_iter()
+                .map(TypeConstraint::AtLeast)
                 .collect(),
             ),
             vec![
@@ -564,6 +569,7 @@ node03;123;123;13;55;123;invalid
                     PrimitiveType::Float64,
                 ]
                 .into_iter()
+                .map(TypeConstraint::AtLeast)
                 .collect(),
             ),
             vec![

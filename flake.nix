@@ -3,6 +3,7 @@ rec {
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs = {
@@ -22,13 +23,16 @@ rec {
     utils.lib.mkFlake {
       inherit self inputs;
 
-      channels.nixpkgs.overlaysBuilder = channels: [rust-overlay.overlays.default];
+      channels.nixpkgs.overlaysBuilder = channels: [
+        rust-overlay.overlays.default
+        (final: prev: {inherit (channels.nixpkgs-unstable) wasm-bindgen-cli;})
+      ];
 
       overlays.default = final: prev: let
         pkgs = self.packages."${final.system}";
         lib = self.channels.nixpkgs."${final.system}";
       in {
-        inherit (pkgs) nemo nemo-python nemo-wasm wasm-bindgen-cli;
+        inherit (pkgs) nemo nemo-python nemo-wasm;
 
         nodePackages = lib.makeExtensible (lib.extends pkgs.nodePackages prev.nodePackages);
       };
@@ -40,11 +44,8 @@ rec {
           cargo = toolchain;
           rustc = toolchain;
         };
-        defaultBuildInputs = [pkgs.openssl pkgs.openssl.dev];
-        defaultNativeBuildInputs = [
-          toolchain
-          pkgs.pkg-config
-        ];
+        defaultBuildInputs = [pkgs.openssl pkgs.openssl.dev] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [pkgs.darwin.apple_sdk.frameworks.Security];
+        defaultNativeBuildInputs = [toolchain pkgs.pkg-config];
       in rec {
         packages = let
           cargoMeta = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package;
@@ -74,7 +75,7 @@ rec {
                   cargoSetupHook
                   pkgs.wasm-pack
                   pkgs.nodejs
-                  self.packages."${pkgs.system}".wasm-bindgen-cli
+                  pkgs.wasm-bindgen-cli
                 ]);
               buildInputs = defaultBuildInputs ++ [pkgs.nodejs];
 
@@ -153,24 +154,6 @@ rec {
             NODE_PATH=${nemo-wasm-node}/lib/node_modules''${NODE_PATH:+":$NODE_PATH"} ${pkgs.nodejs}/bin/node $@
           '';
 
-          # wasm-pack expects wasm-bindgen 0.2.87,
-          # but nixpkgs currently only has 0.2.84
-          wasm-bindgen-cli = pkgs.wasm-bindgen-cli.overrideAttrs (old: rec {
-            version = "0.2.87";
-            src = pkgs.fetchCrate {
-              inherit (old) pname;
-              inherit version;
-              sha256 = "sha256-0u9bl+FkXEK2b54n7/l9JOCtKo+pb42GF9E1EnAUQa0=";
-            };
-
-            cargoDeps = platform.fetchCargoTarball {
-              inherit src;
-              hash = "sha256-GncJhqH/ZYFu/NPRpkpcHJiSq6lC5WQXo/Fmy3iyviA=";
-            };
-
-            doCheck = false;
-          });
-
           default = nemo;
         };
 
@@ -186,7 +169,7 @@ rec {
                 pkgs.python3Packages.pycodestyle
                 pkgs.maturin
                 pkgs.wasm-pack
-                self.packages."${pkgs.system}".wasm-bindgen-cli
+                pkgs.wasm-bindgen-cli
               ]
             ];
 
@@ -288,27 +271,21 @@ rec {
             export PATH=''${HOME}/.cargo/bin''${PATH+:''${PATH}}
           '';
 
-          buildInputs = let
-            ifNotOn = systems:
-              pkgs.lib.optionals (!builtins.elem pkgs.system systems);
-          in
-            pkgs.lib.concatLists [
-              defaultBuildInputs
-              defaultNativeBuildInputs
-              [
-                pkgs.cargo-audit
-                pkgs.cargo-license
-                pkgs.cargo-tarpaulin
-                pkgs.gnuplot
-                pkgs.maturin
-                pkgs.python3
-                pkgs.wasm-pack
-                self.packages."${pkgs.system}".wasm-bindgen-cli
-                pkgs.nodejs
-              ]
-              # valgrind is linux-only
-              (ifNotOn ["aarch64-darwin" "x86_64-darwin"] [pkgs.valgrind])
-            ];
+          buildInputs = pkgs.lib.concatLists [
+            defaultBuildInputs
+            defaultNativeBuildInputs
+            [
+              pkgs.cargo-audit
+              pkgs.cargo-license
+              pkgs.cargo-tarpaulin
+              pkgs.gnuplot
+              pkgs.maturin
+              pkgs.python3
+              pkgs.wasm-pack
+              pkgs.wasm-bindgen-cli
+              pkgs.nodejs
+            ]
+          ];
         };
 
         formatter = channels.nixpkgs.alejandra;

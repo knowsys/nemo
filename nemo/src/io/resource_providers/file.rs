@@ -52,7 +52,10 @@ impl ResourceProvider for FileResourceProvider {
     fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn Read>>, ReadingError> {
         // Try to parse as file IRI
         if let Some(path) = self.parse_resource(resource)? {
-            let file = File::open(path)?;
+            let file = File::open(&path).map_err(|e| ReadingError::IOReading {
+                error: e,
+                filename: path.to_string_lossy().to_string(),
+            })?;
             Ok(Some(Box::new(file)))
         } else {
             Ok(None)

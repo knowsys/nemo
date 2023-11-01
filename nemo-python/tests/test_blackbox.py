@@ -30,8 +30,9 @@ def generate_test(file):
         engine.reason()
 
         for relation in program.output_predicates():
-            expected_results_file_name = \
-                    os.path.join(program_name, f"{relation}.csv")
+            expected_results_file_name = os.path.join(
+                program_name, f"{relation}.csv"
+            )
 
             if not exists(expected_results_file_name):
                 continue
@@ -40,12 +41,14 @@ def generate_test(file):
                 output_manager = NemoOutputManager(tmp_dir)
                 engine.write_result(f"{relation}", output_manager)
 
-                with open(os.path.join(tmp_dir, f"{relation}.csv")) \
-                        as results_file:
+                with open(
+                    os.path.join(tmp_dir, f"{relation}.csv")
+                ) as results_file:
                     results = list(csv.reader(results_file))
 
-                    with open(expected_results_file_name) \
-                            as expected_results_file:
+                    with open(
+                        expected_results_file_name
+                    ) as expected_results_file:
                         expected = list(csv.reader(expected_results_file))
 
                         for result in results:

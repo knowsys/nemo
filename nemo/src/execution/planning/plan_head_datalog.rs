@@ -10,7 +10,10 @@ use nemo_physical::{
 
 use crate::{
     execution::execution_engine::RuleInfo,
-    model::{chase_model::ChaseRule, Identifier},
+    model::{
+        chase_model::{ChaseAtom, ChaseRule},
+        Identifier,
+    },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
@@ -38,7 +41,9 @@ impl DatalogStrategy {
             atoms.push(head_instruction_from_atom(head_atom, analysis));
         }
 
-        let num_body_variables = analysis.positive_body_variables.len() + rule.constructors().len();
+        let num_body_variables = analysis.positive_body_variables.len()
+            + rule.constructors().len()
+            + analysis.head_variables.len();
 
         Self {
             predicate_to_atoms,

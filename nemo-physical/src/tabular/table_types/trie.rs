@@ -27,7 +27,7 @@ use crate::management::database::Dict;
 use crate::management::ByteSized;
 use crate::tabular::operations::TrieScanPrune;
 use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
-use crate::tabular::traits::table::Table;
+use crate::tabular::traits::table::{Table, TableRow};
 use crate::tabular::traits::table_schema::TableSchema;
 use crate::tabular::traits::trie_scan::TrieScan;
 
@@ -76,7 +76,7 @@ where
 }
 
 /// Implementation of a trie data structure.
-/// The underlying data is oragnized in IntervalColumns.
+/// The underlying data is organized in IntervalColumns.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Trie {
     types: Vec<StorageTypeName>,
@@ -218,7 +218,7 @@ impl Trie {
     }
 
     /// Returns a [`TrieScan`] over this table.
-    pub fn scan(&self) -> impl TrieScan + '_ {
+    pub fn scan(&self) -> impl TrieScan + PartialTrieScan + '_ {
         TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(self)))
     }
 
@@ -310,7 +310,7 @@ impl Table for Trie {
     fn from_cols(cols: Vec<VecT>) -> Self {
         debug_assert!({
             // assert that columns have the same length
-            cols.get(0)
+            cols.first()
                 .map(|col| {
                     let len = col.len();
                     cols.iter().all(|col| col.len() == len)
@@ -436,7 +436,7 @@ impl Table for Trie {
         )
     }
 
-    fn from_rows(rows: &[Vec<StorageValueT>]) -> Self {
+    fn from_rows(rows: &[TableRow]) -> Self {
         debug_assert!(!rows.is_empty());
 
         let arity = rows[0].len();
@@ -460,6 +460,42 @@ impl Table for Trie {
 
     fn get_types(&self) -> &Vec<StorageTypeName> {
         &self.types
+    }
+
+    fn contains_row(&self, row: TableRow) -> bool {
+        debug_assert!(self.columns.len() == row.len());
+
+        let mut trie_scan = self.scan();
+
+        for entry in row {
+            trie_scan.down();
+
+            macro_rules! seek_for_datatype {
+                ($variant:ident, $entry:ident) => {
+                    if let ColumnScanT::$variant(column_scan) =
+                        trie_scan.current_scan().expect("We called down")
+                    {
+                        if let Some(closest) = column_scan.seek($entry) {
+                            if closest != $entry {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
+                    }
+                };
+            }
+
+            match entry {
+                StorageValueT::U32(entry) => seek_for_datatype!(U32, entry),
+                StorageValueT::U64(entry) => seek_for_datatype!(U64, entry),
+                StorageValueT::I64(entry) => seek_for_datatype!(I64, entry),
+                StorageValueT::Float(entry) => seek_for_datatype!(Float, entry),
+                StorageValueT::Double(entry) => seek_for_datatype!(Double, entry),
+            }
+        }
+
+        true
     }
 }
 
@@ -598,6 +634,7 @@ mod test {
     use super::{StorageValueIteratorT, Trie, TrieScanGeneric};
     use crate::columnar::traits::columnscan::ColumnScanT;
     use crate::datatypes::{storage_value::VecT, StorageValueT};
+    use crate::tabular::traits::table::TableRow;
     use crate::tabular::traits::{partial_trie_scan::PartialTrieScan, table::Table};
     use crate::util::make_column_with_intervals_t;
     use test_log::test;
@@ -637,7 +674,7 @@ mod test {
     /// 2 3 9
     /// 1 2 8
     /// 2 6 9
-    fn get_test_table_as_rows() -> Vec<Vec<StorageValueT>> {
+    fn get_test_table_as_rows() -> Vec<TableRow> {
         vec![
             vec![
                 StorageValueT::U64(1),

@@ -1,6 +1,6 @@
 //! Error-handling module for the crate
 
-use std::{convert::Infallible, fmt::Display, path::PathBuf};
+use std::{convert::Infallible, fmt::Display};
 
 use thiserror::Error;
 
@@ -33,12 +33,8 @@ pub enum ReadingError {
         /// Contains the wrapped error
         error: std::io::Error,
         /// Filename which caused the error
-        filename: PathBuf,
+        filename: String,
     },
-    /// IO Error
-    // TODO: there is currently also an IO Error in nmo_logical. Do we want both?
-    #[error(transparent)]
-    IO(#[from] std::io::Error),
     /// Error when a resource could not be provided by any resource provider
     #[error("Resource at \"{resource}\" was not provided by any resource provider")]
     ResourceNotProvided {
@@ -75,6 +71,9 @@ pub enum ReadingError {
 #[derive(Error, Debug)]
 pub enum Error {
     /// Permutation shall be sorted, but the input data is of different length
+    #[error("An invalid number of aggregated variables was provided: {0}")]
+    InvalidAggregatedVariableCount(usize),
+    /// Permutation shall be sorted, but the input data is of different length
     #[error("The provided data-structures do not have the same length: {0:?}")]
     PermutationSortLen(Vec<usize>),
     /// Permutation shall be applied to a too small amount of data
@@ -92,6 +91,9 @@ pub enum Error {
     /// Error that happened while reading a Table
     #[error(transparent)]
     ReadingError(#[from] ReadingError),
+    /// Error computing the memory requirements for a stack program
+    #[error("The supplied stack program was malformed")]
+    MalformedStackProgram,
 }
 
 impl From<Infallible> for ReadingError {

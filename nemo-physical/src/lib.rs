@@ -21,8 +21,11 @@
 #![feature(macro_metavar_expr)]
 #![feature(is_sorted)]
 
-pub mod builder_proxy;
 pub mod columnar;
+pub mod tabular;
+
+pub mod aggregates;
+pub mod builder_proxy;
 pub mod datatypes;
 pub mod dictionary;
 pub mod error;
@@ -30,5 +33,10 @@ pub mod management;
 pub mod meta;
 pub mod permutator;
 pub mod table_reader;
-pub mod tabular;
 pub mod util;
+
+/// Module defining data structures for working with numeric expressions.
+pub mod arithmetic;
+
+/// Module defining data structures for working with conditions.
+pub mod condition;

@@ -1,0 +1,20 @@
+@declare prime(integer).
+@declare odd(integer).
+
+@declare intInBody(integer,integer).
+
+odd(1).
+odd(3).
+odd(5).
+odd(7).
+odd(9).
+
+prime(2).
+prime(3).
+prime(5).
+prime(7).
+
+intInBody(?a,?b):-
+    odd(?a),
+    prime(?b),
+    ?a = ?b.
