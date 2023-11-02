@@ -107,7 +107,7 @@ pub trait Dictionary: Debug {
 
     /// Marks the given string as being known using the special id [KNOWN_ID_MARK] without
     /// assigning an own id to it. If the entry exists already, the old id will be kept and
-    /// returned. If is possible to return [AddResult::Rejected] to indicate that the dictionary
+    /// returned. It is possible to return [AddResult::Rejected] to indicate that the dictionary
     /// does not support marking of strings.
     fn mark_str(&mut self, _string: &str) -> AddResult {
         AddResult::Rejected
