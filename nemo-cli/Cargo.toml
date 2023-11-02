@@ -9,9 +9,6 @@ license.workspace = true
 readme = "README.md"
 repository.workspace = true
 
-[features]
-no-prefixed-string-dictionary = ["nemo/no-prefixed-string-dictionary"]
-
 [[bin]]
 name = "nmo"
 path = "src/main.rs"

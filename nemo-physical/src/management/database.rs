@@ -43,10 +43,6 @@ use super::{
     ByteSized, ExecutionPlan,
 };
 
-//#[cfg(feature = "no-prefixed-string-dictionary")]
-/// Dictionary Implementation used in the current configuration
-//pub type Dict = crate::dictionary::StringDictionary;
-//#[cfg(not(feature = "no-prefixed-string-dictionary"))]
 /// Dictionary Implementation used in the current configuration
 pub type Dict = crate::dictionary::hash_map_dictionary::HashMapDictionary;
 

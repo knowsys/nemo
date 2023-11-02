@@ -44,6 +44,7 @@ pub enum AddResult {
     /// Element not supported by dictionary.
     Rejected,
 }
+
 impl AddResult {
     /// Returns the actual index.
     /// In case of [AddResult::Rejected], [NONEXISTING_ID_MARK] is returned.
