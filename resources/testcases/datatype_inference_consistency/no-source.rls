@@ -1,0 +1,5 @@
+@declare p(integer, integer) .
+
+a(1). b(2).
+p(?x,?y) :- a(?x), b(?y).
+

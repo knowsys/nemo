@@ -27,7 +27,7 @@ on your browser. Performance will therefore vary depending on your machine and b
 
 ## Installation
 
-The fastest way to run Nemo is to use system-speicifc binaries of our [command-line client](https://github.com/knowsys/nemo/wiki/Nemo-client).
+The fastest way to run Nemo is to use system-specific binaries of our [command-line client](https://github.com/knowsys/nemo/wiki/Nemo-client).
 Archives with pre-compiled binaries for various platforms are available from the
 [Nemo releases page](https://github.com/knowsys/nemo/releases).
 To build your own version from source, you need to have an up-to-date installation of Rust.

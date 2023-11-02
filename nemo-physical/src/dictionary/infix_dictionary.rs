@@ -1,7 +1,7 @@
-use super::Dictionary;
-use super::AddResult;
-use super::DictionaryString;
 use super::hash_map_dictionary::HashMapDictionary;
+use super::AddResult;
+use super::Dictionary;
+use super::DictionaryString;
 
 /// A read-only [Dictionary] to implement a bijection between integer ids and strings that start and end
 /// with a certain fixed prefix and postfix, respectively. Strings that do not have this shape will be
@@ -16,7 +16,11 @@ pub struct InfixDictionary {
 impl InfixDictionary {
     /// Construct a new and empty dictionary for the given prefix and suffix.
     pub fn new(prefix: String, suffix: String) -> Self {
-        InfixDictionary{dict: HashMapDictionary::new(), prefix, suffix}
+        InfixDictionary {
+            dict: HashMapDictionary::new(),
+            prefix,
+            suffix,
+        }
     }
 
     /// Add a given infix string to the internal dictionary
@@ -36,7 +40,7 @@ impl Dictionary for InfixDictionary {
     /// to be in this dictionary. If this check fails, the string is rejected.
     fn add_str(&mut self, string: &str) -> AddResult {
         if string.starts_with(self.prefix.as_str()) && string.ends_with(self.suffix.as_str()) {
-            self.add_infix_str(&string[self.prefix.len()..string.len()-self.suffix.len()])
+            self.add_infix_str(&string[self.prefix.len()..string.len() - self.suffix.len()])
         } else {
             AddResult::Rejected
         }
@@ -52,8 +56,10 @@ impl Dictionary for InfixDictionary {
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
         if string.starts_with(self.prefix.as_str()) && string.ends_with(self.suffix.as_str()) {
-            unsafe{
-                self.dict.fetch_id(&string.get_unchecked(self.prefix.len()..string.len()-self.suffix.len()))
+            unsafe {
+                self.dict.fetch_id(
+                    &string.get_unchecked(self.prefix.len()..string.len() - self.suffix.len()),
+                )
             }
         } else {
             None
@@ -82,9 +88,10 @@ impl Dictionary for InfixDictionary {
 
     /// Marks a string for this dictionary, as described in the documentation of [Dictionary].
     /// The given string must use the dictionary's prefix and suffix: no further checks are
-    /// performed here. 
+    /// performed here.
     fn mark_str(&mut self, string: &str) -> AddResult {
-        self.dict.mark_str(&string[self.prefix.len()..string.len()-self.suffix.len()])
+        self.dict
+            .mark_str(&string[self.prefix.len()..string.len() - self.suffix.len()])
     }
 
     fn has_marked(&self) -> bool {
@@ -105,9 +112,18 @@ mod test {
     fn add_and_get() {
         let mut dict = InfixDictionary::new("<https://example.org/".to_string(), ">".to_string());
 
-        assert_eq!(dict.add_str("<https://example.org/test>"), AddResult::Fresh(0));
-        assert_eq!(dict.add_str("<https://wronginfix.example.org/test>"), AddResult::Rejected);
-        assert_eq!(dict.add_str("<https://example.org/test>wrongsuffix"), AddResult::Rejected);
+        assert_eq!(
+            dict.add_str("<https://example.org/test>"),
+            AddResult::Fresh(0)
+        );
+        assert_eq!(
+            dict.add_str("<https://wronginfix.example.org/test>"),
+            AddResult::Rejected
+        );
+        assert_eq!(
+            dict.add_str("<https://example.org/test>wrongsuffix"),
+            AddResult::Rejected
+        );
         assert_eq!(dict.get(0), Some("<https://example.org/test>".to_string()));
         assert_eq!(dict.fetch_id("<https://example.org/test>"), Some(0));
     }

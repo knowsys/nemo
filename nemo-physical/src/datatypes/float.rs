@@ -1,7 +1,9 @@
 use super::run_length_encodable::FloatingStep;
 use super::{FloatIsNaN, FloorToUsize, RunLengthEncodable};
+use crate::arithmetic::traits::{CheckedPow, CheckedSquareRoot};
 use crate::error::Error;
-use num::{Bounded, CheckedMul, FromPrimitive, One, Zero};
+use num::traits::CheckedNeg;
+use num::{Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, One, Zero};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
@@ -38,6 +40,15 @@ impl Float {
         }
 
         Float(value)
+    }
+
+    /// Returns a [`Float`] if `value` is finite and `None` otherwise.
+    fn finite(value: f32) -> Option<Float> {
+        if !value.is_finite() {
+            return None;
+        }
+
+        Float::new(value).ok()
     }
 }
 
@@ -96,17 +107,6 @@ impl Mul for Float {
 impl MulAssign for Float {
     fn mul_assign(&mut self, rhs: Self) {
         self.0.mul_assign(rhs.0)
-    }
-}
-
-impl CheckedMul for Float {
-    fn checked_mul(&self, rhs: &Self) -> Option<Self> {
-        let prod = self.0 * rhs.0;
-        if prod.is_finite() {
-            Self::new(prod).ok()
-        } else {
-            None
-        }
     }
 }
 
@@ -189,6 +189,48 @@ impl Product for Float {
         I: Iterator<Item = Self>,
     {
         Float::from_number(iter.map(|f| f.0).product())
+    }
+}
+
+impl CheckedAdd for Float {
+    fn checked_add(&self, v: &Self) -> Option<Self> {
+        Float::finite(self.0 + v.0)
+    }
+}
+
+impl CheckedSub for Float {
+    fn checked_sub(&self, v: &Self) -> Option<Self> {
+        Float::finite(self.0 - v.0)
+    }
+}
+
+impl CheckedDiv for Float {
+    fn checked_div(&self, v: &Self) -> Option<Self> {
+        Float::finite(self.0 / v.0)
+    }
+}
+
+impl CheckedMul for Float {
+    fn checked_mul(&self, v: &Self) -> Option<Self> {
+        Float::finite(self.0 * v.0)
+    }
+}
+
+impl CheckedNeg for Float {
+    fn checked_neg(&self) -> Option<Self> {
+        Float::finite(-1.0 * self.0)
+    }
+}
+
+impl CheckedSquareRoot for Float {
+    fn checked_sqrt(self) -> Option<Self> {
+        Float::finite(self.0.checked_sqrt()?)
+    }
+}
+
+impl CheckedPow for Float {
+    fn checked_pow(self, exponent: Self) -> Option<Self> {
+        Float::finite(self.0.checked_pow(exponent.0)?)
     }
 }
 

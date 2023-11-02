@@ -66,7 +66,7 @@ impl RuleExecution {
             table_manager,
             &mut subtable_execution_plan,
             rule_info,
-            best_variable_order,
+            best_variable_order, // Variable order possibly gets updated
             step_number,
         );
 

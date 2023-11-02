@@ -29,6 +29,10 @@ impl LoggingArgs {
     ///  * `Warn` otherwise
     pub fn initialize_logging(&self) {
         let mut builder = env_logger::Builder::new();
+
+        // Default log level
+        builder.filter_level(log::LevelFilter::Warn);
+
         builder.parse_env("NMO_LOG");
         if let Some(ref level) = self.log_level {
             builder.parse_filters(level);
@@ -131,4 +135,7 @@ pub struct CliApp {
     /// Specify directory for input files.
     #[arg(short = 'I', long = "input-dir")]
     pub input_directory: Option<PathBuf>,
+    /// Specify a fact, the origin of which should be explained
+    #[arg(long = "trace")]
+    pub trace_fact: Option<String>,
 }

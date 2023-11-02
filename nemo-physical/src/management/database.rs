@@ -12,13 +12,13 @@ use crate::dictionary::value_serializer::{
     serialize_constant_with_dict, TrieSerializer, ValueSerializer,
 };
 use crate::table_reader::TableReader;
-use crate::tabular::operations::materialize::materialize_up_to;
+use crate::tabular::operations::materialize::{materialize_up_to, scan_first_match};
 use crate::tabular::operations::project_reorder::project_and_reorder;
 use crate::tabular::operations::triescan_minus::TrieScanSubtract;
 use crate::tabular::operations::triescan_project::ProjectReordering;
-use crate::tabular::operations::TrieScanPrune;
+use crate::tabular::operations::{TrieScanAggregate, TrieScanPrune};
 use crate::tabular::table_types::trie::TrieRecords;
-use crate::tabular::traits::table::Table;
+use crate::tabular::traits::table::{Table, TableRow};
 use crate::tabular::traits::trie_scan::TrieScan;
 use crate::util::mapping::permutation::Permutation;
 use crate::util::mapping::traits::NatMapping;
@@ -48,8 +48,7 @@ use super::{
 //pub type Dict = crate::dictionary::StringDictionary;
 //#[cfg(not(feature = "no-prefixed-string-dictionary"))]
 /// Dictionary Implementation used in the current configuration
-//pub type Dict = crate::dictionary::PrefixedStringDictionary;
-pub type Dict = crate::dictionary::MetaDictionary;
+pub type Dict = crate::dictionary::hash_map_dictionary::HashMapDictionary;
 
 /// Type that represents a reordering of the columns of a table.
 /// It is given in form of a permutation which encodes the transformation
@@ -703,11 +702,24 @@ impl DatabaseInstance {
         }
     }
 
-    /// Produces a new [`Trie`] from an [`ExecutionTree`].
+    /// Prunes and materializes a trie scan by
+    /// * either unwrapping an [`TrieScanAggregateWrapper`]
+    /// * or otherwise wrapping the [`TrieScanEnum`] using a [`TrieScanPrune`].
+    fn materialized_trie_scan(trie_scan: TrieScanEnum<'_>, cut_bottom: usize) -> Option<Trie> {
+        match trie_scan {
+            TrieScanEnum::TrieScanAggregateWrapper(mut aggregate_wrapper) => {
+                materialize_up_to(&mut aggregate_wrapper.trie_scan, cut_bottom)
+            }
+            _ => materialize_up_to(&mut TrieScanPrune::new(trie_scan), cut_bottom),
+        }
+    }
+
+    /// Produces a new [`Trie`] by executing a [`ExecutionTree`].
+    ///
     /// # Panics
     /// Panics if the tables that are being loaded by the [`ExecutionTree`] are not available in memory.
     /// Also panics if the [`ExecutionTree`] wants to perform a project/reorder operation on a non-materialized trie.
-    fn produce_new_trie(
+    fn evaluate_execution_tree(
         &self,
         execution_tree: &ExecutionTree,
         type_tree: &TypeTree,
@@ -724,7 +736,7 @@ impl DatabaseInstance {
 
             match subnode_operation {
                 ExecutionOperation::FetchExisting(id, order) => {
-                    let trie_ref = self.get_trie(*id, order);
+                    let trie_ref = self.get_trie_order(*id, order);
                     if trie_ref.row_num() == 0 {
                         return Ok(None);
                     }
@@ -745,7 +757,7 @@ impl DatabaseInstance {
                                 return Ok(None);
                             }
                         }
-                        ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
+                        ComputationResult::Permanent(id, order) => self.get_trie_order(*id, order),
                         ComputationResult::Empty => return Ok(None),
                     };
 
@@ -764,13 +776,42 @@ impl DatabaseInstance {
                 self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
             let cut_bottom = execution_tree.cut_bottom();
 
-            Ok(iter_opt
-                .and_then(|iter| materialize_up_to(&mut TrieScanPrune::new(iter), cut_bottom)))
+            Ok(iter_opt.and_then(|iter| Self::materialized_trie_scan(iter, cut_bottom)))
         }
     }
 
+    /// Evaluates an [`ExecutionTree`] until until it finds the first row in the result and returns it.
+    /// Returns `None` if the tree evaluates to the empty table.
+    ///
+    /// # Panics
+    /// Panics if the tables that are being loaded by the [`ExecutionTree`] are not available in memory.
+    /// Also panics if the [`ExecutionTree`] wants to perform a project/reorder operation on a non-materialized trie.
+    fn evaluate_execution_tree_first_match(
+        &self,
+        execution_tree: &ExecutionTree,
+        type_tree: &TypeTree,
+        computation_results: &HashMap<usize, ComputationResult>,
+    ) -> Result<Option<TableRow>, Error> {
+        let root_rc = execution_tree.root().get_rc();
+        let root_operation = &root_rc.borrow().operation;
+
+        if let ExecutionOperation::Project(_, _) = root_operation {
+            panic!("Project is not supported in this evaluation mode.");
+        }
+
+        let iter_opt =
+            self.get_iterator_node(execution_tree.root(), type_tree, computation_results)?;
+
+        Ok(iter_opt.and_then(|iter| match iter {
+            TrieScanEnum::TrieScanAggregateWrapper(mut aggregate_wrapper) => {
+                scan_first_match(&mut aggregate_wrapper.trie_scan)
+            }
+            _ => scan_first_match(&mut TrieScanPrune::new(iter)),
+        }))
+    }
+
     /// Executes a given [`ExecutionPlan`].
-    /// Returns a map that assigns to each plan id of a permanenet table the [`TableId`] in the [`DatabaseInstance`]
+    /// Returns a map that assigns to each plan id of a permanent table the [`TableId`] in the [`DatabaseInstance`]
     /// This may fail if certain operations are performed on tries with incompatible types
     /// or if the plan references tries that do not exist.
     pub fn execute_plan(&mut self, plan: ExecutionPlan) -> Result<HashMap<usize, TableId>, Error> {
@@ -817,7 +858,7 @@ impl DatabaseInstance {
             let num_null_columns = Self::appends_nulls(execution_tree.root());
 
             let new_trie_opt =
-                self.produce_new_trie(&execution_tree, &type_tree, &computation_results)?;
+                self.evaluate_execution_tree(&execution_tree, &type_tree, &computation_results)?;
             type_trees.insert(tree_id, type_tree);
 
             if let Some(new_trie) = new_trie_opt {
@@ -868,10 +909,78 @@ impl DatabaseInstance {
         Ok(permanent_ids)
     }
 
+    /// Execute a given [`ExecutionPlan`]
+    /// but evaluate it only until the first row of the result table
+    /// or return `None` if it is empty.
+    /// The result table is considered to be the (unique) table marked as permanent output.
+    ///
+    /// Assumes that the given plan has only one output node.
+    /// Further assumes that each input table is already available in memory.
+    /// No tables will be saved in the database.
+    ///
+    /// TODO: This code is very similar to `execute_plan`,
+    /// but hard to abstract because of the timing...
+    pub fn execute_plan_first_match(&self, plan: ExecutionPlan) -> Result<Option<TableRow>, Error> {
+        let execution_trees = plan.split_at_write_nodes();
+
+        // The variables below associate the write node ids of the given plan with some additional information
+        let mut type_trees = HashMap::<usize, TypeTree>::new();
+        let mut computation_results = HashMap::<usize, ComputationResult>::new();
+        let mut removed_temp_ids = HashSet::<usize>::new();
+
+        for (tree_id, mut execution_tree) in execution_trees {
+            execution_tree.satisfy_leapfrog_triejoin();
+
+            if let Some(simplified_tree) = execution_tree.simplify(&removed_temp_ids) {
+                execution_tree = simplified_tree;
+            } else {
+                removed_temp_ids.insert(tree_id);
+
+                continue;
+            }
+
+            let type_tree = TypeTree::from_execution_tree(self, &type_trees, &execution_tree)?;
+
+            match execution_tree.result() {
+                ExecutionResult::Temporary => {
+                    let new_trie_opt = self.evaluate_execution_tree(
+                        &execution_tree,
+                        &type_tree,
+                        &computation_results,
+                    )?;
+
+                    if let Some(new_trie) = new_trie_opt {
+                        if new_trie.row_num() > 0 || new_trie.get_types().is_empty() {
+                            computation_results
+                                .insert(tree_id, ComputationResult::Temporary(Some(new_trie)));
+                        } else {
+                            computation_results.insert(tree_id, ComputationResult::Temporary(None));
+                        }
+                    } else {
+                        computation_results.insert(tree_id, ComputationResult::Temporary(None));
+                    }
+                }
+                ExecutionResult::Permanent(_, _) => {
+                    return self.evaluate_execution_tree_first_match(
+                        &execution_tree,
+                        &type_tree,
+                        &computation_results,
+                    );
+                }
+            }
+
+            type_trees.insert(tree_id, type_tree);
+        }
+
+        Ok(None)
+    }
+
     /// Return a reference to a trie with the given id and order.
+    ///
+    /// # Panics
     /// Panics if no table under the given id and order exists.
     /// Panics if trie is not available in memory.
-    pub fn get_trie<'a>(&'a self, id: TableId, order: &ColumnOrder) -> &'a Trie {
+    pub fn get_trie_order<'a>(&'a self, id: TableId, order: &ColumnOrder) -> &'a Trie {
         let storage = self
             .storage_handler
             .table_storage(id, order)
@@ -880,6 +989,33 @@ impl DatabaseInstance {
         storage
             .get_trie()
             .expect("Function assumes that trie is in memory.")
+    }
+
+    /// Return a reference to a trie corresponding to the given id in arbitrary order.
+    ///
+    /// # Panics
+    /// Panics if no table under the given id exists.
+    /// Panics if trie is not available in memory.
+    pub fn get_trie(&self, id: TableId) -> (&Trie, ColumnOrder) {
+        let order = self
+            .storage_handler
+            .available_orders(id)
+            .expect("Function assumes that there is a table with the given id.")
+            .first()
+            .expect("There should be at least one order")
+            .clone();
+
+        let storage = self
+            .storage_handler
+            .table_storage(id, &order)
+            .expect("Order must be available");
+
+        (
+            storage
+                .get_trie()
+                .expect("Function assumes that trie is in memory."),
+            order,
+        )
     }
 
     /// Return a reference to a trie identified by its id and order.
@@ -905,7 +1041,7 @@ impl DatabaseInstance {
         let dict = self.get_dict_constants();
 
         Ok(self
-            .get_trie(id, &ColumnOrder::default())
+            .get_trie_order(id, &ColumnOrder::default())
             .records(ValueSerializer { schema, dict }))
     }
 
@@ -933,51 +1069,59 @@ impl DatabaseInstance {
         let dict = self.get_dict_constants();
 
         Ok(OwnedRecords(
-            self.get_trie(id, &ColumnOrder::default())
+            self.get_trie_order(id, &ColumnOrder::default())
                 .records(ValueSerializer { schema, dict }),
         ))
     }
 
-    fn get_in_memory_table_column_iterators(&self, id: TableId) -> Vec<DataValueIteratorT> {
-        let trie = self.get_trie(id, &ColumnOrder::default());
-        let schema = self.table_schema(id);
-        let dict = self.get_dict_constants();
-
+    /// Convert a [`StorageValueIteratorT`] into a [`DataValueIteratorT`].
+    pub fn storage_to_data_iterator<'a>(
+        &'a self,
+        name: DataTypeName,
+        iterator: StorageValueIteratorT<'a>,
+    ) -> DataValueIteratorT<'a> {
         macro_rules! to_data_column_iter_no_string {
-            ($variant:ident, $iter:ident, $idx:ident) => {{
-                debug_assert!(schema[$idx] == DataTypeName::$variant);
+            ($variant:ident, $iter:ident, $name:ident) => {{
+                debug_assert!(name == DataTypeName::$variant);
 
                 DataValueIteratorT::$variant($iter)
             }};
         }
         macro_rules! to_data_column_iter {
-            ($variant:ident, $iter:ident, $idx:ident) => {
-                if schema[$idx] == DataTypeName::String {
+            ($variant:ident, $iter:ident, $name:ident) => {
+                if name == DataTypeName::String {
                     // should only clone the ref and not the dict (hopefully)
-                    let dict_ref_clone = Ref::clone(&dict);
+                    let dict_ref_clone = Ref::clone(&self.get_dict_constants());
                     DataValueIteratorT::String(Box::new($iter.map(move |constant| {
                         serialize_constant_with_dict(constant, Ref::clone(&dict_ref_clone))
                     })))
                 } else {
-                    to_data_column_iter_no_string!($variant, $iter, $idx)
+                    to_data_column_iter_no_string!($variant, $iter, $name)
                 }
             };
         }
 
+        match iterator {
+            StorageValueIteratorT::U32(iter) => to_data_column_iter!(U32, iter, name),
+            StorageValueIteratorT::U64(iter) => to_data_column_iter!(U64, iter, name),
+            StorageValueIteratorT::I64(iter) => to_data_column_iter!(I64, iter, name),
+            StorageValueIteratorT::Float(iter) => {
+                to_data_column_iter_no_string!(Float, iter, name)
+            }
+            StorageValueIteratorT::Double(iter) => {
+                to_data_column_iter_no_string!(Double, iter, name)
+            }
+        }
+    }
+
+    fn get_in_memory_table_column_iterators(&self, id: TableId) -> Vec<DataValueIteratorT> {
+        let trie = self.get_trie_order(id, &ColumnOrder::default());
+        let schema = self.table_schema(id);
+
         trie.get_full_column_iterators()
             .into_iter()
             .enumerate()
-            .map(|(idx, fci)| match fci {
-                StorageValueIteratorT::U32(iter) => to_data_column_iter!(U32, iter, idx),
-                StorageValueIteratorT::U64(iter) => to_data_column_iter!(U64, iter, idx),
-                StorageValueIteratorT::I64(iter) => to_data_column_iter!(I64, iter, idx),
-                StorageValueIteratorT::Float(iter) => {
-                    to_data_column_iter_no_string!(Float, iter, idx)
-                }
-                StorageValueIteratorT::Double(iter) => {
-                    to_data_column_iter_no_string!(Double, iter, idx)
-                }
-            })
+            .map(|(idx, fci)| self.storage_to_data_iterator(schema[idx], fci))
             .collect()
     }
 
@@ -1010,7 +1154,7 @@ impl DatabaseInstance {
 
         return match node_operation {
             ExecutionOperation::FetchExisting(id, order) => {
-                let trie_ref = self.get_trie(*id, order);
+                let trie_ref = self.get_trie_order(*id, order);
                 if trie_ref.row_num() == 0 {
                     return Ok(None);
                 }
@@ -1030,7 +1174,7 @@ impl DatabaseInstance {
                             return Ok(None);
                         }
                     }
-                    ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
+                    ComputationResult::Permanent(id, order) => self.get_trie_order(*id, order),
                     ComputationResult::Empty => return Ok(None),
                 };
 
@@ -1120,7 +1264,7 @@ impl DatabaseInstance {
                 let subnode_operation = &subnode_rc.borrow().operation;
 
                 let trie = match subnode_operation {
-                    ExecutionOperation::FetchExisting(id, order) => self.get_trie(*id, order),
+                    ExecutionOperation::FetchExisting(id, order) => self.get_trie_order(*id, order),
                     ExecutionOperation::FetchNew(index) => {
                         let comp_result = computation_results.get(index).unwrap();
                         let trie_ref = match comp_result {
@@ -1131,7 +1275,9 @@ impl DatabaseInstance {
                                     return Ok(None);
                                 }
                             }
-                            ComputationResult::Permanent(id, order) => self.get_trie(*id, order),
+                            ComputationResult::Permanent(id, order) => {
+                                self.get_trie_order(*id, order)
+                            }
                             ComputationResult::Empty => return Ok(None),
                         };
 
@@ -1146,7 +1292,7 @@ impl DatabaseInstance {
 
                 Ok(Some(TrieScanEnum::TrieScanProject(project_scan)))
             }
-            ExecutionOperation::SelectValue(subtable, assignments) => {
+            ExecutionOperation::Filter(subtable, conditions) => {
                 let subiterator_opt = self.get_iterator_node(
                     subtable.clone(),
                     &type_node.subnodes[0],
@@ -1157,7 +1303,7 @@ impl DatabaseInstance {
                     let restrict_scan = TrieScanRestrictValues::new(
                         &mut self.dict_constants.borrow_mut(),
                         subiterator,
-                        assignments,
+                        conditions,
                     );
                     Ok(Some(TrieScanEnum::TrieScanRestrictValues(restrict_scan)))
                 } else {
@@ -1247,10 +1393,35 @@ impl DatabaseInstance {
                     Ok(None)
                 }
             }
+            ExecutionOperation::Aggregate(subtable, aggregation_instructions) => {
+                let subiterator_opt = self.get_iterator_node(
+                    subtable.clone(),
+                    &type_node.subnodes[0],
+                    computation_results,
+                )?;
+
+                if let Some(subiterator) = subiterator_opt {
+                    let prune = TrieScanPrune::new(subiterator);
+
+                    let aggregate = TrieScanAggregate::new(
+                        prune,
+                        *aggregation_instructions,
+                        type_node.subnodes[0].schema.get_storage_types()
+                            [aggregation_instructions.aggregated_column_index],
+                    );
+
+                    // Wrap aggregate full trie scan because execution plan currently only support partial trie scans
+                    Ok(Some(TrieScanEnum::TrieScanAggregateWrapper(
+                        aggregate.into(),
+                    )))
+                } else {
+                    Ok(None)
+                }
+            }
         };
     }
 
-    /// Return the amount of memory cosumed by the table under the given [`TableId`].
+    /// Return the amount of memory consumed by the table under the given [`TableId`].
     /// This also includes additional index structures but excludes tables that are currently stored on disk.
     ///
     /// # Panics
@@ -1312,7 +1483,7 @@ mod test {
         assert_eq!(instance.table_name(trie_a_id), "A");
         assert_eq!(
             instance
-                .get_trie(trie_a_id, &ColumnOrder::default())
+                .get_trie_order(trie_a_id, &ColumnOrder::default())
                 .row_num(),
             3
         );
@@ -1329,7 +1500,7 @@ mod test {
         assert!(instance.size_bytes() > last_size);
         assert_eq!(
             instance
-                .get_trie(trie_b_id, &ColumnOrder::default())
+                .get_trie_order(trie_b_id, &ColumnOrder::default())
                 .row_num(),
             6
         );
@@ -1450,7 +1621,7 @@ mod test {
         assert!(result.is_ok());
 
         let result_id = *result.unwrap().get(&node_id).unwrap();
-        let result_trie = instance.get_trie(result_id, &ColumnOrder::default());
+        let result_trie = instance.get_trie_order(result_id, &ColumnOrder::default());
 
         let result_col_first = result_trie.get_column(0).as_u64().unwrap();
         let result_col_second = result_trie.get_column(1).as_u32().unwrap();

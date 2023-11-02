@@ -1,6 +1,7 @@
 use crate::columnar::traits::columnscan::ColumnScanT;
 use crate::datatypes::StorageTypeName;
 use crate::generate_forwarder;
+use crate::tabular::operations::triescan_aggregate::TrieScanAggregateWrapper;
 use crate::tabular::operations::triescan_append::TrieScanAppend;
 use crate::tabular::operations::triescan_minus::TrieScanSubtract;
 use crate::tabular::operations::{
@@ -61,6 +62,8 @@ pub enum TrieScanEnum<'a> {
     TrieScanNulls(TrieScanNulls<'a>),
     /// Case TrieScanSubtract
     TrieScanSubtract(TrieScanSubtract<'a>),
+    /// Case TrieScanAggregateWrapper
+    TrieScanAggregateWrapper(TrieScanAggregateWrapper<'a>),
 }
 
 generate_forwarder!(forward_to_scan;
@@ -74,7 +77,8 @@ generate_forwarder!(forward_to_scan;
     TrieScanUnion,
     TrieScanAppend,
     TrieScanNulls,
-    TrieScanSubtract
+    TrieScanSubtract,
+    TrieScanAggregateWrapper
 );
 
 impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {

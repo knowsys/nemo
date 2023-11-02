@@ -103,8 +103,10 @@ impl StringBuffer {
     fn get_str(&self, address: usize, length: usize) -> &str {
         let page_num = address >> PAGE_ADDR_BITS;
         let page_addr = address % PAGE_SIZE;
-        unsafe{
-            &self.pages[page_num].1.get_unchecked(page_addr..page_addr + length)
+        unsafe {
+            &self.pages[page_num]
+                .1
+                .get_unchecked(page_addr..page_addr + length)
         }
     }
 
@@ -233,7 +235,7 @@ impl HashMapDictionary {
     /// merely mark a string as known. Other non-consecutive assignments
     /// will generally lead to errors, since the same ID might be assigned
     /// later on again.
-    /// 
+    ///
     /// If the given string is known but not assigned an ID (indicated by
     /// [super::KNOWN_ID_MARK]), then the operation will still not assign an
     /// ID either. In such a case, another dictionary should have that ID.
@@ -248,7 +250,7 @@ impl HashMapDictionary {
                 //     println!("Got KID for {} when attempting to add id {}",string,id);
                 // }
                 AddResult::Known(*idx)
-            },
+            }
             None => unsafe {
                 let sref = BUFFER.push_str(self.buffer, string);
                 if id != super::KNOWN_ID_MARK {

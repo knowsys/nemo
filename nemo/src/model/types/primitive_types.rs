@@ -15,7 +15,7 @@ use super::primitive_logical_value::{
     AnyOutputMapper, DefaultSerializedIterator, Float64OutputMapper, IntegerOutputMapper,
     PrimitiveLogicalValueIteratorT, StringOutputMapper,
 };
-use crate::model::{NestedType, Term};
+use crate::model::{Constant, NestedType};
 
 macro_rules! count {
     () => (0usize);
@@ -75,13 +75,11 @@ generate_logical_type_enum!(
 impl PartialOrd for PrimitiveType {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self {
-            Self::Any => {
-                if matches!(other, Self::Any) {
-                    Some(std::cmp::Ordering::Equal)
-                } else {
-                    Some(std::cmp::Ordering::Greater)
-                }
-            }
+            Self::Any => match other {
+                Self::Any => Some(std::cmp::Ordering::Equal),
+                Self::String => Some(std::cmp::Ordering::Greater),
+                _ => None, // TODO: should be the following once reasoning supports casting: Some(std::cmp::Ordering::Greater),
+            },
             Self::String => match other {
                 Self::Any => Some(std::cmp::Ordering::Less),
                 Self::String => Some(std::cmp::Ordering::Equal),
@@ -130,19 +128,53 @@ impl TryFrom<NestedType> for PrimitiveType {
 }
 
 impl PrimitiveType {
+    // TODO: I think this should be the PartialCmp between types but as long as we do not
+    // have casting we still want to forbid e.g. integer and string merges while reasoning
+    // HOWEVER for data that occurs in facts or sources we can decide for the max type up
+    // front and read them accordingly
+    /// Get the more general type out of two types (not necessarily castable but can be used to
+    /// determine how data should be read)
+    pub fn max_type(&self, other: &PrimitiveType) -> PrimitiveType {
+        match self {
+            PrimitiveType::Any => PrimitiveType::Any,
+            PrimitiveType::String => match other {
+                PrimitiveType::String => PrimitiveType::String,
+                _ => PrimitiveType::Any,
+            },
+            PrimitiveType::Integer => match other {
+                PrimitiveType::Integer => PrimitiveType::Integer,
+                _ => PrimitiveType::Any,
+            },
+            PrimitiveType::Float64 => match other {
+                PrimitiveType::Float64 => PrimitiveType::Float64,
+                _ => PrimitiveType::Any,
+            },
+        }
+    }
+
     /// Convert a given ground term to a DataValueT fitting the current logical type
     pub fn ground_term_to_data_value_t(
         &self,
-        gt: Term,
+        constant: Constant,
     ) -> Result<DataValueT, InvalidRuleTermConversion> {
         let result = match self {
-            Self::Any => DataValueT::String(gt.try_into()?),
-            Self::String => DataValueT::String(gt.try_into()?),
-            Self::Integer => DataValueT::I64(gt.try_into()?),
-            Self::Float64 => DataValueT::Double(gt.try_into()?),
+            Self::Any => DataValueT::String(constant.try_into()?),
+            Self::String => DataValueT::String(constant.try_into()?),
+            Self::Integer => DataValueT::I64(constant.try_into()?),
+            Self::Float64 => DataValueT::Double(constant.try_into()?),
         };
 
         Ok(result)
+    }
+
+    /// Associate a physical data type to this primitive logical type
+    pub fn datatype_name(&self) -> DataTypeName {
+        match self {
+            PrimitiveType::Any => DataTypeName::String,
+            PrimitiveType::String => DataTypeName::String,
+            PrimitiveType::Integer => DataTypeName::I64,
+            PrimitiveType::Float64 => DataTypeName::Double,
+        }
     }
 
     /// Whether this logical type can be used to perform numeric operations.
