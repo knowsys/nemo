@@ -245,8 +245,6 @@ impl NemoTrace {
 fn assignement_to_dict(assignment: &HashMap<Variable, Constant>, py: Python) -> PyResult<PyObject> {
     let dict = PyDict::new(py);
     for (variable, value) in assignment {
-        // TODO: value should be a constant, which can be converted using the
-        // `constant_to_python` function
         dict.set_item(variable.to_string(), constant_to_python(py, value)?)?;
     }
 
