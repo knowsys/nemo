@@ -100,10 +100,8 @@ impl DictionaryString {
 
     /// Computes the pieces from the string.
     fn set_pieces(&self) {
-        unsafe {
-            if (*self.positions.get()).infix_done {
-                return;
-            }
+        if (unsafe { *self.positions.get() }).infix_done {
+            return;
         }
 
         let bytes = self.string.as_bytes();
@@ -111,7 +109,6 @@ impl DictionaryString {
         let mut prefix_length: usize = 0;
         let mut infix_length: usize = bytes.len();
 
-        //if self.string.ends_with(">") {
         if infix_length > 0 && bytes[infix_length - 1] == b'>' {
             if bytes[0] == b'<' {
                 // using bytes is safe at pos 0; we know string!="" from above
@@ -130,11 +127,10 @@ impl DictionaryString {
             }
         } // else: use defaults from above
 
-        unsafe {
-            (*self.positions.get()).prefix_length = prefix_length;
-            (*self.positions.get()).infix_length = infix_length;
-            (*self.positions.get()).infix_done = true;
-        }
+        let positions = unsafe {&mut *self.positions.get()};
+            positions.prefix_length = prefix_length;
+            positions.infix_length = infix_length;
+            positions.infix_done = true;
     }
 
     /// Finds the last position in UTF-8 str slice (given as `&[u8]` bytes) where the characters '/' or '#' occur,
