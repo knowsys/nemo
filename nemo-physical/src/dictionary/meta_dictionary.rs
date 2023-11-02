@@ -280,18 +280,9 @@ impl MetaDictionary {
         };
         self.dicts.push(dr);
     }
-}
 
-impl Dictionary for MetaDictionary {
-    fn add_string(&mut self, string: String) -> AddResult {
-        self.add_dictionary_string(DictionaryString::from_string(string))
-    }
-
-    fn add_str(&mut self, string: &str) -> AddResult {
-        self.add_dictionary_string(DictionaryString::new(string))
-    }
-
-    fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
+    #[inline(always)]
+    fn add_dictionary_string_inline(&mut self, ds: DictionaryString) -> AddResult {
         let mut best_dict_idx = usize::MAX;
 
         // Look up new entry in all applicable dictionaries.
@@ -353,6 +344,20 @@ impl Dictionary for MetaDictionary {
         let local_id = self.dicts[best_dict_idx].dict.add_dictionary_string(ds).value();
         // Compute global id based on block and local id, possibly allocating new block in the process
         AddResult::Fresh(self.local_to_global(best_dict_idx, local_id))
+    }
+}
+
+impl Dictionary for MetaDictionary {
+    fn add_string(&mut self, string: String) -> AddResult {
+        self.add_dictionary_string_inline(DictionaryString::from_string(string))
+    }
+
+    fn add_str(&mut self, string: &str) -> AddResult {
+        self.add_dictionary_string_inline(DictionaryString::new(string))
+    }
+
+    fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
+        self.add_dictionary_string_inline(ds)
     }
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
