@@ -1,8 +1,10 @@
 //! This module contains basic data structures for tracing the origins of derived facts.
 
+use std::collections::HashMap;
+
 use ascii_tree::write_tree;
 
-use crate::model::{chase_model::ChaseFact, Rule, VariableAssignment};
+use crate::model::{chase_model::ChaseFact, Constant, PrimitiveTerm, Rule, Term, Variable};
 
 /// Identifies an atom within the head of a rule
 #[derive(Debug, Clone)]
@@ -10,13 +12,13 @@ pub struct RuleApplication {
     /// The rule, that was applied.
     pub rule: Rule,
     /// The assignement, that was found.
-    pub assignment: VariableAssignment,
+    pub assignment: HashMap<Variable, Constant>,
     _position: usize,
 }
 
 impl RuleApplication {
     /// Create new [`RuleApplication`].
-    pub fn new(rule: Rule, assignment: VariableAssignment, _position: usize) -> Self {
+    pub fn new(rule: Rule, assignment: HashMap<Variable, Constant>, _position: usize) -> Self {
         debug_assert!(_position < rule.head().len());
 
         Self {
@@ -30,7 +32,18 @@ impl RuleApplication {
 impl std::fmt::Display for RuleApplication {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut rule_applied = self.rule.clone();
-        rule_applied.apply_assignment(&self.assignment);
+        rule_applied.apply_assignment(
+            &self
+                .assignment
+                .iter()
+                .map(|(variable, constant)| {
+                    (
+                        variable.clone(),
+                        Term::Primitive(PrimitiveTerm::Constant(constant.clone())),
+                    )
+                })
+                .collect(),
+        );
 
         rule_applied.fmt(f)
     }
@@ -85,119 +98,63 @@ mod test {
 
     use super::{ExecutionTrace, RuleApplication};
 
+    macro_rules! variable_assignment {
+        ($($k:expr => $v:expr),*) => {
+            [$(($k, $v)),*]
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        Variable::Universal(Identifier(k.to_string())),
+                        Constant::Abstract(Identifier(v.to_string())),
+                    )
+                })
+                .collect()
+        };
+    }
+
+    macro_rules! atom_term {
+        (? $var:expr ) => {
+            Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
+                $var.to_string(),
+            ))))
+        };
+    }
+
+    macro_rules! atom {
+        ( $pred:expr; $( $marker:tt $t:tt ),* ) => {
+            Atom::new(Identifier($pred.to_string()), vec![ $( atom_term!( $marker $t ) ),* ])
+        };
+    }
+
     #[test]
     fn print_trace() {
         // P(?x, ?y) :- Q(?y, ?x) .
         let rule_1 = Rule::new(
-            vec![Atom::new(
-                Identifier("P".to_string()),
-                vec![
-                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
-                        "x".to_string(),
-                    )))),
-                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
-                        "y".to_string(),
-                    )))),
-                ],
-            )],
-            vec![Literal::Positive(Atom::new(
-                Identifier("Q".to_string()),
-                vec![
-                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
-                        "y".to_string(),
-                    )))),
-                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
-                        "x".to_string(),
-                    )))),
-                ],
-            ))],
+            vec![atom!("P"; ?"x", ?"y")],
+            vec![Literal::Positive(atom!("Q"; ?"y", ?"x"))],
             vec![],
         );
-        let mut rule_1_assignment = HashMap::default();
-        rule_1_assignment.insert(
-            Variable::Universal(Identifier("x".to_string())),
-            Term::Primitive(PrimitiveTerm::Constant(Constant::Abstract(Identifier(
-                "b".to_string(),
-            )))),
-        );
-        rule_1_assignment.insert(
-            Variable::Universal(Identifier("y".to_string())),
-            Term::Primitive(PrimitiveTerm::Constant(Constant::Abstract(Identifier(
-                "a".to_string(),
-            )))),
-        );
+        let rule_1_assignment = variable_assignment!("x" => "b", "y" => "a");
 
         // S(?x) :- T(?x) .
         let rule_2 = Rule::new(
-            vec![Atom::new(
-                Identifier("S".to_string()),
-                vec![Term::Primitive(PrimitiveTerm::Variable(
-                    Variable::Universal(Identifier("x".to_string())),
-                ))],
-            )],
-            vec![Literal::Positive(Atom::new(
-                Identifier("T".to_string()),
-                vec![Term::Primitive(PrimitiveTerm::Variable(
-                    Variable::Universal(Identifier("x".to_string())),
-                ))],
-            ))],
+            vec![atom!("S"; ?"x")],
+            vec![Literal::Positive(atom!("T"; ?"x"))],
             vec![],
         );
-        let mut rule_2_assignment = HashMap::default();
-        rule_2_assignment.insert(
-            Variable::Universal(Identifier("x".to_string())),
-            Term::Primitive(PrimitiveTerm::Constant(Constant::Abstract(Identifier(
-                "a".to_string(),
-            )))),
-        );
+
+        let rule_2_assignment = variable_assignment!("x" => "a");
 
         // R(?x, ?y) :- P(?x, ?y), S(?y) .
         let rule_3 = Rule::new(
-            vec![Atom::new(
-                Identifier("R".to_string()),
-                vec![
-                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
-                        "x".to_string(),
-                    )))),
-                    Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
-                        "y".to_string(),
-                    )))),
-                ],
-            )],
+            vec![atom!("R"; ?"x", ?"y")],
             vec![
-                Literal::Positive(Atom::new(
-                    Identifier("P".to_string()),
-                    vec![
-                        Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
-                            "x".to_string(),
-                        )))),
-                        Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
-                            "y".to_string(),
-                        )))),
-                    ],
-                )),
-                Literal::Positive(Atom::new(
-                    Identifier("S".to_string()),
-                    vec![Term::Primitive(PrimitiveTerm::Variable(
-                        Variable::Universal(Identifier("y".to_string())),
-                    ))],
-                )),
+                Literal::Positive(atom!("P"; ?"x", ?"y")),
+                Literal::Positive(atom!("S"; ?"y")),
             ],
             vec![],
         );
-        let mut rule_3_assignment = HashMap::default();
-        rule_3_assignment.insert(
-            Variable::Universal(Identifier("x".to_string())),
-            Term::Primitive(PrimitiveTerm::Constant(Constant::Abstract(Identifier(
-                "b".to_string(),
-            )))),
-        );
-        rule_3_assignment.insert(
-            Variable::Universal(Identifier("y".to_string())),
-            Term::Primitive(PrimitiveTerm::Constant(Constant::Abstract(Identifier(
-                "a".to_string(),
-            )))),
-        );
+        let rule_3_assignment: HashMap<_, _> = variable_assignment!("x" => "b", "y" => "a");
 
         let q_ab = ChaseFact::new(
             Identifier("Q".to_string()),
