@@ -86,11 +86,13 @@ class TestExample(unittest.TestCase):
     def test_trace(self):
         trace = self.engine.trace("interesting(circle)")
         expected_trace = {
-            "rule": "interesting(circle) :- data(3.14, circle), interesting(3.14) .",
+            "rule": "interesting(?y) :- data(?x, ?y), interesting(?x) .",
+            "assignment": {"?x": "3.14", "?y": "circle"},
             "subtraces": [
                 {"fact": "data(3.14, circle)"},
                 {
-                    "rule": "interesting(3.14) :- data(py, 3.14), interesting(py) .",
+                    "rule": "interesting(?y) :- data(?x, ?y), interesting(?x) .",
+                    "assignment": {"?x": "py", "?y": "3.14"},
                     "subtraces": [
                         {"fact": "data(py, 3.14)"},
                         {"fact": "interesting(py)"},

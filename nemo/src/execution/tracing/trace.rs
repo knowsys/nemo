@@ -7,8 +7,10 @@ use crate::model::{chase_model::ChaseFact, Rule, VariableAssignment};
 /// Identifies an atom within the head of a rule
 #[derive(Debug, Clone)]
 pub struct RuleApplication {
-    rule: Rule,
-    assignment: VariableAssignment,
+    /// The rule, that was applied.
+    pub rule: Rule,
+    /// The assignement, that was found.
+    pub assignment: VariableAssignment,
     _position: usize,
 }
 
