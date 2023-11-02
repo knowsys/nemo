@@ -1,4 +1,7 @@
-use std::{collections::HashSet, fs::read_to_string};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::read_to_string,
+};
 
 use nemo::{
     datatypes::Double,
@@ -7,7 +10,7 @@ use nemo::{
     model::{
         chase_model::{ChaseAtom, ChaseFact},
         types::primitive_logical_value::PrimitiveLogicalValueT,
-        Constant, NumericLiteral, RdfLiteral, XSD_STRING,
+        Constant, NumericLiteral, RdfLiteral, Term, Variable, XSD_STRING,
     },
 };
 
@@ -221,7 +224,16 @@ impl NemoTrace {
     fn rule(&self) -> Option<String> {
         match &self.0 {
             ExecutionTrace::Fact(_) => None,
-            ExecutionTrace::Rule(rule, _) => Some(rule.to_string()),
+            ExecutionTrace::Rule(application, _) => Some(application.rule.to_string()),
+        }
+    }
+
+    fn assignement(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
+        match &self.0 {
+            ExecutionTrace::Fact(_) => Ok(None),
+            ExecutionTrace::Rule(application, _) => {
+                Ok(Some(assignement_to_dict(&application.assignment, py)?))
+            }
         }
     }
 
@@ -230,12 +242,27 @@ impl NemoTrace {
     }
 }
 
+fn assignement_to_dict(assignment: &HashMap<Variable, Term>, py: Python) -> PyResult<PyObject> {
+    let dict = PyDict::new(py);
+    for (variable, value) in assignment {
+        // TODO: value should be a constant, which can be converted using the
+        // `constant_to_python` function
+        dict.set_item(variable.to_string(), value.to_string())?;
+    }
+
+    Ok(dict.to_object(py))
+}
+
 fn trace_to_dict(trace: &ExecutionTrace, py: Python) -> PyResult<PyObject> {
     let result = PyDict::new(py);
     match &trace {
         ExecutionTrace::Fact(fact) => result.set_item("fact", fact.to_string())?,
-        ExecutionTrace::Rule(rule, subtraces) => {
-            result.set_item("rule", rule.to_string())?;
+        ExecutionTrace::Rule(rule_application, subtraces) => {
+            result.set_item("rule", rule_application.rule.to_string())?;
+            result.set_item(
+                "assignment",
+                assignement_to_dict(&rule_application.assignment, py)?,
+            )?;
             let subtraces: Vec<_> = subtraces
                 .iter()
                 .map(|trace| trace_to_dict(trace, py))
