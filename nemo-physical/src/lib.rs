@@ -40,3 +40,5 @@ pub mod arithmetic;
 
 /// Module defining data structures for working with conditions.
 pub mod condition;
+
+pub mod logical_types;
