@@ -25,7 +25,6 @@ use crate::{
             primitive_types::PrimitiveType,
         },
         Constant, Constraint, Fact, Identifier, PrimitiveTerm, Program, Term, Variable,
-        VariableAssignment,
     },
     program_analysis::analysis::ProgramAnalysis,
     table_manager::{MemoryUsage, SubtableExecutionPlan, SubtableIdentifier, TableManager},
@@ -418,7 +417,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         };
 
         if step == 0 {
-            // If fact has no predecesor rule it must have been given as an EDB fact
+            // If fact has no predecessor rule it must have been given as an EDB fact
 
             return Ok(Some(ExecutionTrace::Fact(ChaseFact::new(
                 fact_predicate,
@@ -639,15 +638,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     })
                     .collect();
 
-                let rule_assignment: VariableAssignment = variable_order
+                let rule_assignment: HashMap<Variable, Constant> = variable_order
                     .as_ordered_list()
                     .into_iter()
-                    .zip(
-                        query_terms
-                            .iter()
-                            .cloned()
-                            .map(|c| Term::Primitive(PrimitiveTerm::Constant(c))),
-                    )
+                    .zip(query_terms.iter().cloned())
                     .collect();
 
                 let mut fully_derived = true;
