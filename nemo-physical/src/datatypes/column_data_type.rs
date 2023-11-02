@@ -1,3 +1,5 @@
+use crate::arithmetic::traits::ArithmeticOperations;
+
 use super::{
     casting::{ImplicitCastFrom, ImplicitCastInto},
     Field, FloorToUsize, RunLengthEncodable,
@@ -22,6 +24,7 @@ pub trait ColumnDataType:
     + ImplicitCastInto<i64>
     + Bounded
     + RunLengthEncodable
+    + ArithmeticOperations
 {
 }
 
@@ -41,5 +44,6 @@ impl<T> ColumnDataType for T where
         + ImplicitCastInto<i64>
         + Bounded
         + RunLengthEncodable
+        + ArithmeticOperations
 {
 }

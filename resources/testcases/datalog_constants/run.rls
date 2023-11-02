@@ -20,3 +20,7 @@ ConstantBodyHead(Q, ?Y, A, B, ?X, Z) :- sourceA("A", ?X, ?Y), sourceB(?X, "D", "
 
 OnlyNewConstants(A, B, C) :- sourceA(?X, ?Y, ?Z) .
 OnlyNewConstantsEmpty(A, B, C) :- sourceA("C", "C", "C") .
+
+sourceC("A", "B", "X").
+
+Unknown(?X) :- sourceC(?X, ?Y, "R") .

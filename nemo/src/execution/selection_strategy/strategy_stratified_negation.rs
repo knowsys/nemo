@@ -40,9 +40,19 @@ impl<SubStrategy: RuleSelectionStrategy> StrategyStratifiedNegation<SubStrategy>
 
         for (rule_index, rule_analysis) in rule_analyses.iter().enumerate() {
             for body_predicate in &rule_analysis.positive_body_predicates {
-                let indices = predicate_to_rules_body_positive
-                    .entry(body_predicate.clone())
-                    .or_default();
+                let indices = if rule_analysis.has_aggregates {
+                    // An aggregate in a head means that the head predicates need to be in a higher stratum than the body predicates
+                    // This is the same as when all body literals are negative
+                    // Therefore, we can easily compute strata for aggregates by acting if all body atoms in the rule were negated
+                    predicate_to_rules_body_negative
+                        .entry(body_predicate.clone())
+                        .or_default()
+                } else {
+                    // No aggregates in the rule
+                    predicate_to_rules_body_positive
+                        .entry(body_predicate.clone())
+                        .or_default()
+                };
 
                 indices.push(rule_index);
             }

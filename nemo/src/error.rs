@@ -6,8 +6,7 @@ use thiserror::Error;
 
 use crate::{
     execution::selection_strategy::strategy::SelectionStrategyError, io::parser::LocatedParseError,
-    model::chase_model::RuleTranslationError, model::types::error::TypeError,
-    program_analysis::analysis::RuleAnalysisError,
+    model::types::error::TypeError, program_analysis::analysis::RuleAnalysisError,
 };
 
 pub use nemo_physical::error::ReadingError;
@@ -16,6 +15,11 @@ pub use nemo_physical::error::ReadingError;
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum Error {
+    /// Currently tracing doesn't work for all language features
+    #[error(
+        "Tracing is currently not supported for some rules with arithmetic operations in the head."
+    )]
+    TraceUnsupportedFeature(),
     /// Error which implies a needed Rollback
     #[error("Rollback due to csv-error")]
     Rollback(usize),
@@ -34,9 +38,6 @@ pub enum Error {
     /// Rule analysis errors
     #[error(transparent)]
     RuleAnalysisError(#[from] RuleAnalysisError),
-    /// Rule translation errors
-    #[error(transparent)]
-    RuleTranslationError(#[from] RuleTranslationError),
     /// Parse errors
     #[error(transparent)]
     ParseError(#[from] LocatedParseError),
@@ -68,6 +69,12 @@ pub enum Error {
     /// Error in the physical layer
     #[error(transparent)]
     PhysicalError(#[from] nemo_physical::error::Error),
+    /// Error when trying to lookup unary operations
+    #[error("The unary operation {operation} is unknown.")]
+    UnknonwUnaryOpertation {
+        /// The operation causing the failure
+        operation: String,
+    },
 }
 
 impl From<ReadingError> for Error {

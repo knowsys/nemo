@@ -2,7 +2,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
+    fmt::{Debug, Display},
     ptr,
 };
 
@@ -94,7 +94,7 @@ impl SortedChoice {
 
     /// Transform the given vector of elements according to this mapping.
     /// This will avoid copying the underlying data.
-    pub fn transform_consumed<T: Default>(&self, mut vec: Vec<T>) -> Vec<T> {
+    pub fn transform_consumed<T: Default + Debug>(&self, mut vec: Vec<T>) -> Vec<T> {
         let mut result = std::iter::repeat_with(|| T::default())
             .take(self.map.len())
             .collect::<Vec<_>>();
@@ -112,7 +112,7 @@ impl SortedChoice {
     }
 
     /// Transform the given slice according to this mapping.
-    pub fn transform<T: Clone>(&self, vec: &[T]) -> Vec<T> {
+    pub fn transform<T: Clone + Debug>(&self, vec: &[T]) -> Vec<T> {
         let mut result: Vec<T> = vec.iter().take(self.map.len()).cloned().collect();
         for (input, value) in self.map.iter() {
             result[*value] = vec[*input].clone();

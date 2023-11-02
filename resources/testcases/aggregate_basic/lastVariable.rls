@@ -1,0 +1,4 @@
+@source sourceA[integer,integer,integer]: load-csv("sources/dataA.csv").
+
+r0(#min(?Z)) :- sourceA(?X, ?Y, ?Z).
+r1(#max(?Z)) :- sourceA(?X, ?Y, ?Z).

@@ -100,4 +100,4 @@ jobs:
     - name: install pycodestyle
       run: pip install pycodestyle
     - name: run pycodestyle
-      run: pycodestyle nemo-python
+      run: pycodestyle nemo-python --max-line-length 90

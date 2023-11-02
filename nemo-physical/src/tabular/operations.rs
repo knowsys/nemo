@@ -4,6 +4,10 @@
 pub mod materialize;
 pub use materialize::materialize;
 
+/// Module for defining [`TrieScanAggregate`]
+pub mod triescan_aggregate;
+pub use triescan_aggregate::TrieScanAggregate;
+
 /// Module for defining [`TrieScanProject`]
 pub mod triescan_project;
 pub use triescan_project::TrieScanProject;
@@ -16,7 +20,6 @@ pub use triescan_prune::TrieScanPrune;
 pub mod triescan_select;
 pub use triescan_select::TrieScanRestrictValues;
 pub use triescan_select::TrieScanSelectEqual;
-pub use triescan_select::ValueAssignment;
 
 /// Module for defining [`TrieScanMinus`]
 pub mod triescan_minus;
@@ -37,10 +40,6 @@ pub mod triescan_append;
 /// Module for defining [`TrieScanNulls`]
 pub mod triescan_nulls;
 pub use triescan_nulls::TrieScanNulls;
-
-// Module for defining [`TrieScanTest`]
-// pub mod triescan_check_empty;
-// pub use triescan_check_empty::TrieScanCheckEmpty;
 
 /// Module implementing functionality for projecting and reordering tries.
 pub mod project_reorder;

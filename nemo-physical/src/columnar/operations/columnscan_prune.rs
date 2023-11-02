@@ -94,7 +94,7 @@ where
     }
 
     fn reset(&mut self) {
-        unimplemented!("The reset function is currently not implemented for ColumnScanPrune. If required, this could probably be implemented in the future. Doing so would require not violating the guarantees of the TrieScanPrune.");
+        // This function is a no-op, because the column scan has no internal state.
     }
 
     fn pos(&self) -> Option<usize> {

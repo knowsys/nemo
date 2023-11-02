@@ -2,7 +2,7 @@
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
-use crate::model::chase_model::{ChaseAtom, ChaseProgram, ChaseRule};
+use crate::model::chase_model::{ChaseAtom, ChaseProgram, ChaseRule, VariableAtom};
 use crate::model::{DataSource, Identifier, Variable};
 use nemo_physical::management::database::ColumnOrder;
 use nemo_physical::permutator::Permutator;
@@ -161,11 +161,12 @@ impl IterationOrder {
     }
 }
 
-fn column_order_for(atom: &ChaseAtom, var_order: &VariableOrder) -> ColumnOrder {
+fn column_order_for(atom: &VariableAtom, var_order: &VariableOrder) -> ColumnOrder {
     let mut partial_col_order: Vec<usize> = var_order
         .iter()
         .flat_map(|var| {
-            atom.variables()
+            atom.terms()
+                .iter()
                 .enumerate()
                 .filter(move |(_, lit_var)| *lit_var == var)
                 .map(|(i, _)| i)
@@ -173,7 +174,8 @@ fn column_order_for(atom: &ChaseAtom, var_order: &VariableOrder) -> ColumnOrder 
         .collect();
 
     let mut remaining_vars: Vec<usize> = atom
-        .variables()
+        .terms()
+        .iter()
         .enumerate()
         .map(|(i, _)| i)
         .filter(|i| !partial_col_order.contains(i))
@@ -210,7 +212,7 @@ impl RuleVariableList for Vec<Variable> {
             .iter()
             .filter(|var| {
                 rule.positive_body().iter().any(|atom| {
-                    let predicate_vars: Vec<Variable> = atom.variables().cloned().collect();
+                    let predicate_vars: Vec<Variable> = atom.terms().clone();
 
                     predicate_vars.iter().any(|pred_var| pred_var == *var)
                         && predicate_vars
@@ -245,7 +247,7 @@ impl RuleVariableList for Vec<Variable> {
                     .positive_body()
                     .iter()
                     .filter(|atom| predicate_filter(&atom.predicate()))
-                    .filter(|atom| atom.variables().any(|atom_var| atom_var == var));
+                    .filter(|atom| atom.terms().iter().any(|atom_var| atom_var == var));
 
                 let (atoms_requiring_new_orders, total_atoms) = atoms.fold((0, 0), |acc, atom| {
                     let fitting_column_order_exists: bool = required_trie_column_orders
@@ -385,7 +387,7 @@ impl VariableOrderBuilder<'_> {
             let remaining_vars_unpermutated: Vec<Variable> = rule
                 .positive_body()
                 .iter()
-                .flat_map(|lit| lit.variables())
+                .flat_map(|lit| lit.terms())
                 .fold(vec![], |mut acc, var| {
                     if !acc.contains(var) {
                         acc.push(var.clone());
@@ -441,7 +443,7 @@ impl VariableOrderBuilder<'_> {
         rule: &ChaseRule,
     ) {
         let atoms = rule.positive_body().iter().filter(|atom| {
-            let vars: Vec<Variable> = atom.variables().cloned().collect();
+            let vars: Vec<Variable> = atom.terms().clone();
             must_contain.iter().all(|var| vars.contains(var))
                 && vars.iter().all(|var| variable_order.contains(var))
         });
@@ -486,7 +488,7 @@ pub(super) fn build_preferable_variable_orders(
         let fact_preds: HashSet<(Identifier, usize)> = program
             .facts()
             .iter()
-            .map(|f| (f.0.predicate(), f.0.term_trees().len()))
+            .map(|f| (f.predicate(), f.terms().len()))
             .collect();
         let source_preds: HashSet<(Identifier, usize)> = program
             .sources()
@@ -536,10 +538,10 @@ pub(super) fn build_preferable_variable_orders(
 mod test {
     use super::{IterationOrder, RuleVariableList, VariableOrder};
 
-    use crate::model::chase_model::{ChaseAtom, ChaseProgram, ChaseRule};
+    use crate::model::chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom};
     use crate::model::{
-        DataSourceDeclaration, DsvFile, Identifier, NativeDataSource, Term, TupleConstraint,
-        Variable,
+        DataSourceDeclaration, DsvFile, Identifier, NativeDataSource, PrimitiveTerm,
+        TupleConstraint, Variable,
     };
     use nemo_physical::management::database::ColumnOrder;
 
@@ -608,17 +610,18 @@ mod test {
         let y = Variable::Universal(Identifier("y".to_string()));
         let z = Variable::Universal(Identifier("z".to_string()));
 
-        let tx = Term::Variable(x.clone());
-        let ty = Term::Variable(y.clone());
-        let tz = Term::Variable(z.clone());
+        let tx = PrimitiveTerm::Variable(x.clone());
+        let _ty = PrimitiveTerm::Variable(y.clone());
+        let tz = PrimitiveTerm::Variable(z.clone());
 
         (
             ChaseRule::new(
-                vec![ChaseAtom::new(c, vec![tx.clone(), tz.clone()])],
-                HashMap::default(),
+                vec![PrimitiveAtom::new(c, vec![tx.clone(), tz.clone()])],
+                vec![],
+                vec![],
                 vec![
-                    ChaseAtom::new(a, vec![tx, ty.clone()]),
-                    ChaseAtom::new(b, vec![ty, tz]),
+                    VariableAtom::new(a, vec![x.clone(), y.clone()]),
+                    VariableAtom::new(b, vec![y.clone(), z.clone()]),
                 ],
                 vec![],
                 vec![],
@@ -635,17 +638,18 @@ mod test {
         let y = Variable::Universal(Identifier("y".to_string()));
         let z = Variable::Universal(Identifier("z".to_string()));
 
-        let tx = Term::Variable(x.clone());
-        let ty = Term::Variable(y.clone());
-        let tz = Term::Variable(z.clone());
+        let tx = PrimitiveTerm::Variable(x.clone());
+        let _ty = PrimitiveTerm::Variable(y.clone());
+        let tz = PrimitiveTerm::Variable(z.clone());
 
         (
             ChaseRule::new(
-                vec![ChaseAtom::new(a.clone(), vec![tx.clone(), tz.clone()])],
-                HashMap::default(),
+                vec![PrimitiveAtom::new(a.clone(), vec![tx.clone(), tz.clone()])],
+                vec![],
+                vec![],
                 vec![
-                    ChaseAtom::new(a.clone(), vec![tx, ty.clone()]),
-                    ChaseAtom::new(a, vec![ty, tz]),
+                    VariableAtom::new(a.clone(), vec![x.clone(), y.clone()]),
+                    VariableAtom::new(a, vec![y.clone(), z.clone()]),
                 ],
                 vec![],
                 vec![],
@@ -869,19 +873,20 @@ mod test {
         let r = Variable::Universal(Identifier("r".to_string()));
         let e = Variable::Universal(Identifier("e".to_string()));
 
-        let tc = Term::Variable(c.clone());
-        let td1 = Term::Variable(d1.clone());
-        let td2 = Term::Variable(d2.clone());
-        let ty = Term::Variable(y.clone());
-        let tr = Term::Variable(r.clone());
-        let te = Term::Variable(e.clone());
+        let tc = PrimitiveTerm::Variable(c.clone());
+        let td1 = PrimitiveTerm::Variable(d1.clone());
+        let td2 = PrimitiveTerm::Variable(d2.clone());
+        let ty = PrimitiveTerm::Variable(y.clone());
+        let tr = PrimitiveTerm::Variable(r.clone());
+        let te = PrimitiveTerm::Variable(e.clone());
 
         let (rules, variables) = [
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(init.clone(), vec![tc.clone()])],
-                    HashMap::default(),
-                    vec![ChaseAtom::new(is_main_class, vec![tc.clone()])],
+                    vec![PrimitiveAtom::new(init.clone(), vec![tc.clone()])],
+                    vec![],
+                    vec![],
+                    vec![VariableAtom::new(is_main_class, vec![c.clone()])],
                     vec![],
                     vec![],
                     vec![],
@@ -890,12 +895,13 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(
+                    vec![PrimitiveAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), tc.clone()],
                     )],
-                    HashMap::default(),
-                    vec![ChaseAtom::new(init, vec![tc.clone()])],
+                    vec![],
+                    vec![],
+                    vec![VariableAtom::new(init, vec![c.clone()])],
                     vec![],
                     vec![],
                     vec![],
@@ -905,13 +911,14 @@ mod test {
             (
                 ChaseRule::new(
                     vec![
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
+                        PrimitiveAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
+                        PrimitiveAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
                     ],
-                    HashMap::default(),
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), ty.clone()]),
-                        ChaseAtom::new(conj.clone(), vec![ty.clone(), td1.clone(), td2.clone()]),
+                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), y.clone()]),
+                        VariableAtom::new(conj.clone(), vec![y.clone(), d1.clone(), d2.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -921,16 +928,17 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(
+                    vec![PrimitiveAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), ty.clone()],
                     )],
-                    HashMap::default(),
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
-                        ChaseAtom::new(conj, vec![ty.clone(), td1, td2]),
-                        ChaseAtom::new(is_sub_class, vec![ty.clone()]),
+                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d1.clone()]),
+                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d2.clone()]),
+                        VariableAtom::new(conj, vec![y.clone(), d1.clone(), d2.clone()]),
+                        VariableAtom::new(is_sub_class, vec![y.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -940,11 +948,15 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(xe, vec![tc.clone(), tr.clone(), te.clone()])],
-                    HashMap::default(),
+                    vec![PrimitiveAtom::new(
+                        xe,
+                        vec![tc.clone(), tr.clone(), te.clone()],
+                    )],
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(sub_class_of, vec![te, ty.clone()]),
-                        ChaseAtom::new(exists, vec![ty, tr, tc]),
+                        VariableAtom::new(sub_class_of, vec![e.clone(), y.clone()]),
+                        VariableAtom::new(exists, vec![y.clone(), r.clone(), c.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -960,6 +972,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn build_preferable_variable_orders_with_galen_el_part_ie_5_rules_without_constant() {
         let (rules, var_lists, predicates) =
             get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant();
@@ -1099,27 +1112,28 @@ mod test {
         let a = Variable::Universal(Identifier("a".to_string()));
         let b = Variable::Universal(Identifier("b".to_string()));
 
-        let tc = Term::Variable(c.clone());
-        let td1 = Term::Variable(d1.clone());
-        let td2 = Term::Variable(d2.clone());
-        let ty = Term::Variable(y.clone());
-        let tr = Term::Variable(r.clone());
-        let te = Term::Variable(e.clone());
-        let ts = Term::Variable(s.clone());
-        let tr1 = Term::Variable(r1.clone());
-        let tr2 = Term::Variable(r2.clone());
-        let ts1 = Term::Variable(s1.clone());
-        let ts2 = Term::Variable(s2.clone());
-        let td = Term::Variable(d.clone());
-        let ta = Term::Variable(a.clone());
-        let tb = Term::Variable(b.clone());
+        let tc = PrimitiveTerm::Variable(c.clone());
+        let td1 = PrimitiveTerm::Variable(d1.clone());
+        let td2 = PrimitiveTerm::Variable(d2.clone());
+        let ty = PrimitiveTerm::Variable(y.clone());
+        let tr = PrimitiveTerm::Variable(r.clone());
+        let te = PrimitiveTerm::Variable(e.clone());
+        let ts = PrimitiveTerm::Variable(s.clone());
+        let _tr1 = PrimitiveTerm::Variable(r1.clone());
+        let _tr2 = PrimitiveTerm::Variable(r2.clone());
+        let _ts1 = PrimitiveTerm::Variable(s1.clone());
+        let _ts2 = PrimitiveTerm::Variable(s2.clone());
+        let td = PrimitiveTerm::Variable(d.clone());
+        let ta = PrimitiveTerm::Variable(a.clone());
+        let tb = PrimitiveTerm::Variable(b.clone());
 
         let (rules, variables) = [
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(init.clone(), vec![tc.clone()])],
-                    HashMap::default(),
-                    vec![ChaseAtom::new(is_main_class.clone(), vec![tc.clone()])],
+                    vec![PrimitiveAtom::new(init.clone(), vec![tc.clone()])],
+                    vec![],
+                    vec![],
+                    vec![VariableAtom::new(is_main_class.clone(), vec![c.clone()])],
                     vec![],
                     vec![],
                     vec![],
@@ -1128,12 +1142,13 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(
+                    vec![PrimitiveAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), tc.clone()],
                     )],
-                    HashMap::default(),
-                    vec![ChaseAtom::new(init.clone(), vec![tc.clone()])],
+                    vec![],
+                    vec![],
+                    vec![VariableAtom::new(init.clone(), vec![c.clone()])],
                     vec![],
                     vec![],
                     vec![],
@@ -1143,13 +1158,14 @@ mod test {
             (
                 ChaseRule::new(
                     vec![
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
+                        PrimitiveAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
+                        PrimitiveAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
                     ],
-                    HashMap::default(),
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), ty.clone()]),
-                        ChaseAtom::new(conj.clone(), vec![ty.clone(), td1.clone(), td2.clone()]),
+                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), y.clone()]),
+                        VariableAtom::new(conj.clone(), vec![y.clone(), d1.clone(), d2.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -1159,16 +1175,17 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(
+                    vec![PrimitiveAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), ty.clone()],
                     )],
-                    HashMap::default(),
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
-                        ChaseAtom::new(conj, vec![ty.clone(), td1, td2]),
-                        ChaseAtom::new(is_sub_class.clone(), vec![ty.clone()]),
+                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d1.clone()]),
+                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d2.clone()]),
+                        VariableAtom::new(conj, vec![y.clone(), d1.clone(), d2.clone()]),
+                        VariableAtom::new(is_sub_class.clone(), vec![y.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -1178,14 +1195,15 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(
+                    vec![PrimitiveAtom::new(
                         xe.clone(),
                         vec![tc.clone(), tr.clone(), te.clone()],
                     )],
-                    HashMap::default(),
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(sub_class_of.clone(), vec![te.clone(), ty.clone()]),
-                        ChaseAtom::new(exists.clone(), vec![ty.clone(), tr.clone(), tc.clone()]),
+                        VariableAtom::new(sub_class_of.clone(), vec![e.clone(), y.clone()]),
+                        VariableAtom::new(exists.clone(), vec![y.clone(), r.clone(), c.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -1195,15 +1213,16 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(
+                    vec![PrimitiveAtom::new(
                         aux_subsub_ext.clone(),
                         vec![td.clone(), tr.clone(), ty.clone()],
                     )],
-                    HashMap::default(),
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(sub_prop.clone(), vec![tr.clone(), ts.clone()]),
-                        ChaseAtom::new(exists, vec![ty.clone(), ts.clone(), td.clone()]),
-                        ChaseAtom::new(is_sub_class, vec![ty.clone()]),
+                        VariableAtom::new(sub_prop.clone(), vec![r.clone(), s.clone()]),
+                        VariableAtom::new(exists, vec![y.clone(), s.clone(), d.clone()]),
+                        VariableAtom::new(is_sub_class, vec![y.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -1213,14 +1232,15 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(
+                    vec![PrimitiveAtom::new(
                         aux.clone(),
                         vec![tc.clone(), tr.clone(), ty.clone()],
                     )],
-                    HashMap::default(),
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td.clone()]),
-                        ChaseAtom::new(aux_subsub_ext, vec![td.clone(), tr.clone(), ty.clone()]),
+                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d.clone()]),
+                        VariableAtom::new(aux_subsub_ext, vec![d.clone(), r.clone(), y.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -1230,14 +1250,15 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(
+                    vec![PrimitiveAtom::new(
                         sub_class_of.clone(),
                         vec![te.clone(), ty.clone()],
                     )],
-                    HashMap::default(),
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(xe.clone(), vec![tc.clone(), tr.clone(), te.clone()]),
-                        ChaseAtom::new(aux, vec![tc.clone(), tr.clone(), ty]),
+                        VariableAtom::new(xe.clone(), vec![c.clone(), r.clone(), e.clone()]),
+                        VariableAtom::new(aux, vec![c.clone(), r.clone(), y.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -1247,14 +1268,15 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(
+                    vec![PrimitiveAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), te.clone()],
                     )],
-                    HashMap::default(),
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(sub_class_of.clone(), vec![tc.clone(), td.clone()]),
-                        ChaseAtom::new(sub_class_of.clone(), vec![td.clone(), te.clone()]),
+                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d.clone()]),
+                        VariableAtom::new(sub_class_of.clone(), vec![d.clone(), e.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -1264,17 +1286,18 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(
+                    vec![PrimitiveAtom::new(
                         xe.clone(),
                         vec![td.clone(), ts.clone(), te.clone()],
                     )],
-                    HashMap::default(),
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(xe.clone(), vec![tc.clone(), tr1.clone(), te.clone()]),
-                        ChaseAtom::new(xe.clone(), vec![td, tr2.clone(), tc.clone()]),
-                        ChaseAtom::new(sub_prop.clone(), vec![tr1, ts1.clone()]),
-                        ChaseAtom::new(sub_prop, vec![tr2, ts2.clone()]),
-                        ChaseAtom::new(sub_prop_chain, vec![ts1, ts2, ts]),
+                        VariableAtom::new(xe.clone(), vec![c.clone(), r1.clone(), e.clone()]),
+                        VariableAtom::new(xe.clone(), vec![d.clone(), r2.clone(), c.clone()]),
+                        VariableAtom::new(sub_prop.clone(), vec![r1.clone(), s1.clone()]),
+                        VariableAtom::new(sub_prop, vec![r2.clone(), s2.clone()]),
+                        VariableAtom::new(sub_prop_chain, vec![s1.clone(), s2.clone(), s.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -1284,9 +1307,10 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(init, vec![tc.clone()])],
-                    HashMap::default(),
-                    vec![ChaseAtom::new(xe, vec![tc, tr, te])],
+                    vec![PrimitiveAtom::new(init, vec![tc.clone()])],
+                    vec![],
+                    vec![],
+                    vec![VariableAtom::new(xe, vec![c.clone(), r.clone(), e.clone()])],
                     vec![],
                     vec![],
                     vec![],
@@ -1295,15 +1319,16 @@ mod test {
             ),
             (
                 ChaseRule::new(
-                    vec![ChaseAtom::new(
+                    vec![PrimitiveAtom::new(
                         main_sub_class_of,
                         vec![ta.clone(), tb.clone()],
                     )],
-                    HashMap::default(),
+                    vec![],
+                    vec![],
                     vec![
-                        ChaseAtom::new(sub_class_of, vec![ta.clone(), tb.clone()]),
-                        ChaseAtom::new(is_main_class.clone(), vec![ta]),
-                        ChaseAtom::new(is_main_class, vec![tb]),
+                        VariableAtom::new(sub_class_of, vec![a.clone(), b.clone()]),
+                        VariableAtom::new(is_main_class.clone(), vec![a.clone()]),
+                        VariableAtom::new(is_main_class, vec![b.clone()]),
                     ],
                     vec![],
                     vec![],
@@ -1319,6 +1344,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn build_preferable_variable_orders_with_el_without_constant() {
         let (rules, var_lists, predicates) = get_el_test_ruleset_without_constants();
 

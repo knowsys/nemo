@@ -1,15 +1,15 @@
 use std::{
     cell::UnsafeCell,
-    collections::{HashMap, VecDeque},
+    collections::{hash_map::Entry, HashMap, VecDeque},
     ops::Range,
 };
 
 use crate::{
+    arithmetic::expression::{StackOperation, StackProgram, StackValue},
     columnar::{
         column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         column_types::rle::{ColumnBuilderRle, ColumnRle},
         operations::{
-            columnscan_arithmetic::{ArithmeticOperation, OperationTree},
             ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant,
             ColumnScanCopy, ColumnScanPass,
         },
@@ -20,7 +20,7 @@ use crate::{
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         },
     },
-    datatypes::{ColumnDataType, DataValueT, StorageTypeName, StorageValueT},
+    datatypes::{DataValueT, StorageTypeName, StorageValueT},
     generate_cast_statements,
     management::database::Dict,
     tabular::{
@@ -52,88 +52,6 @@ fn expand_range(columns: &[ColumnWithIntervalsT], range: Range<usize>) -> Range<
     current_range
 }
 
-/// [`OperationTree`] with [`DataValueT`] constants.
-pub type OperationTreeT = OperationTree<DataValueT>;
-
-impl OperationTreeT {
-    fn translate_recursive<F, T>(tree: OperationTreeT, translate_function: F) -> OperationTree<T>
-    where
-        F: Fn(DataValueT) -> T + Copy,
-        T: ColumnDataType,
-    {
-        match tree.tag {
-            ArithmeticOperation::Constant(constant) => OperationTree::<T>::leaf(
-                ArithmeticOperation::Constant(translate_function(constant)),
-            ),
-            ArithmeticOperation::ColumnScan(index) => {
-                OperationTree::<T>::leaf(ArithmeticOperation::ColumnScan(index))
-            }
-            ArithmeticOperation::Addition => {
-                let subtrees = tree
-                    .subtrees
-                    .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Addition, subtrees)
-            }
-            ArithmeticOperation::Subtraction => {
-                let subtrees = tree
-                    .subtrees
-                    .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Subtraction, subtrees)
-            }
-            ArithmeticOperation::Multiplication => {
-                let subtrees = tree
-                    .subtrees
-                    .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Multiplication, subtrees)
-            }
-            ArithmeticOperation::Division => {
-                let subtrees = tree
-                    .subtrees
-                    .into_iter()
-                    .map(|t| Self::translate_recursive(t, translate_function))
-                    .collect();
-
-                OperationTree::<T>::tree(ArithmeticOperation::Division, subtrees)
-            }
-        }
-    }
-
-    /// Translate the [`DataValueT`] constants into constatns of a certain type.
-    /// The conversion is given by a closure.
-    pub fn translate<F, T>(self, translate_function: F) -> OperationTree<T>
-    where
-        F: Fn(DataValueT) -> T + Copy,
-        T: ColumnDataType,
-    {
-        Self::translate_recursive(self, translate_function)
-    }
-
-    /// Return the [`StorageTypeName`] of the evaluation result of this tree.
-    pub fn storage_type(
-        &self,
-        input_types: &[StorageTypeName],
-        dict: &mut Dict,
-    ) -> StorageTypeName {
-        let first_leaf_node = self.leaves()[0];
-        match first_leaf_node {
-            ArithmeticOperation::Constant(constant) => {
-                constant.to_storage_value_mut(dict).get_type()
-            }
-            ArithmeticOperation::ColumnScan(index) => input_types[*index],
-            _ => unreachable!("Not a leave."),
-        }
-    }
-}
-
 /// Enum which represents an instruction to modify a trie by appending certain columns.
 #[derive(Debug, Clone)]
 pub enum AppendInstruction {
@@ -145,7 +63,7 @@ pub enum AppendInstruction {
     Constant(DataValueT),
     /// Add a column which results from performing a given mathematical operation
     /// based on existing columns.
-    Operation(OperationTreeT),
+    Arithmetic(StackProgram<DataValueT>),
 }
 
 /// Appends columns to an existing trie and returns the modified trie.
@@ -159,29 +77,15 @@ pub enum AppendInstruction {
 pub fn trie_append(
     dict: &mut Dict,
     mut trie: Trie,
-    instructions: &[Vec<AppendInstruction>],
+    instructions: impl IntoIterator<Item = Vec<AppendInstruction>>,
 ) -> Trie {
-    let arity = trie.get_types().len();
-
-    debug_assert!(instructions.len() == arity + 1);
-    debug_assert!(instructions
-        .iter()
-        .enumerate()
-        .all(|(i, v)| v
-            .iter()
-            .all(|a| if let AppendInstruction::RepeatColumn(e) = a {
-                *e <= i
-            } else {
-                true
-            })));
-
     let mut new_columns = VecDeque::<ColumnWithIntervalsT>::new();
 
-    for gap_index in (0..=arity).rev() {
-        for instruction in instructions[gap_index].iter().rev() {
+    for (gap_index, instructions) in instructions.into_iter().enumerate() {
+        for instruction in instructions.into_iter().rev() {
             match instruction {
                 AppendInstruction::RepeatColumn(repeat_index) => {
-                    let referenced_column = trie.get_column(*repeat_index);
+                    let referenced_column = trie.get_column(repeat_index);
                     let prev_column = trie.get_column(gap_index - 1);
 
                     macro_rules! append_column_for_datatype {
@@ -195,7 +99,7 @@ pub fn trie_append(
                                     reference_column_typed.get_data_column().iter().enumerate()
                                 {
                                     let expanded_range = expand_range(
-                                        &trie.columns()[(*repeat_index + 1)..gap_index],
+                                        &trie.columns()[(repeat_index + 1)..gap_index],
                                         value_index..(value_index + 1),
                                     );
 
@@ -221,7 +125,7 @@ pub fn trie_append(
                         }};
                     }
 
-                    match trie.get_types()[*repeat_index] {
+                    match trie.get_types()[repeat_index] {
                         StorageTypeName::U32 => append_column_for_datatype!(U32, u32),
                         StorageTypeName::U64 => append_column_for_datatype!(U64, u64),
                         StorageTypeName::I64 => append_column_for_datatype!(I64, i64),
@@ -268,7 +172,7 @@ pub fn trie_append(
                         }
                     };
                 }
-                AppendInstruction::Operation(_) => todo!(),
+                AppendInstruction::Arithmetic(_) => todo!(),
             }
         }
 
@@ -338,9 +242,7 @@ impl<'a> TrieScanAppend<'a> {
             instructions.iter().map(|i| i.len()).sum::<usize>() + src_arity
         );
 
-        let src_types = trie_scan.get_types().clone();
-
-        let mut res = Self {
+        let mut result = Self {
             trie_scan: Box::new(trie_scan),
             current_layer: None,
             target_types,
@@ -349,84 +251,93 @@ impl<'a> TrieScanAppend<'a> {
             column_scans: Vec::new(),
         };
 
+        let mut target_index = 0;
         for (src_index, insert_instructions) in instructions.iter().enumerate() {
             for instruction in insert_instructions.iter() {
                 match instruction {
                     AppendInstruction::RepeatColumn(repeat_index) => {
-                        res.add_repeat_column(*repeat_index)
+                        result.add_repeat_column(*repeat_index)
                     }
-                    AppendInstruction::Constant(value) => res.add_constant_column(dict, value),
-                    AppendInstruction::Operation(operation_tree) => {
-                        res.add_operation_column(operation_tree.clone(), &src_types, dict)
-                    }
+                    AppendInstruction::Constant(value) => result.add_constant_column(dict, value),
+                    AppendInstruction::Arithmetic(arithmetic_tree) => result.add_arithmetic_column(
+                        arithmetic_tree.clone(),
+                        result.target_types[target_index],
+                        dict,
+                    ),
                 }
+
+                target_index += 1;
             }
 
             if src_index < src_arity {
-                res.add_backed_column(src_index);
+                result.add_backed_column(src_index);
+                target_index += 1;
             }
         }
 
-        res
+        result
     }
 
-    fn add_operation_column(
+    fn add_arithmetic_column(
         &mut self,
-        operation_tree: OperationTreeT,
-        src_types: &[StorageTypeName],
-        dict: &mut Dict,
+        mut arithmetic_expression: StackProgram<DataValueT>,
+        output_type: StorageTypeName,
+        dict: &Dict,
     ) {
-        let src_type = operation_tree.storage_type(src_types, dict);
-        let dst_type = self.target_types[self.column_scans.len()];
-
-        // TODO: Cast the types if there are not equal.
-        assert!(src_type == dst_type);
-
         macro_rules! input_for_datatype {
             ($variant:ident, $type:ty) => {{
                 let mut column_map = HashMap::<usize, usize>::new();
                 let mut input_scans = Vec::new();
 
-                for src_index in operation_tree.input_indices().into_iter() {
-                    if column_map.contains_key(&src_index) {
-                        continue;
-                    }
-
+                for src_index in arithmetic_expression.references_mut() {
                     let base_scan = unsafe { &*self.trie_scan.get_scan(*src_index).unwrap().get() };
+                    let column_map_len = column_map.len();
+
+                    match column_map.entry(*src_index) {
+                        Entry::Occupied(entry) => {
+                            *src_index = *entry.get();
+                            continue;
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(column_map_len);
+                            *src_index = column_map_len;
+                        }
+                    }
 
                     if let ColumnScanT::$variant(base_scan_cell) = base_scan {
                         input_scans.push(base_scan_cell);
                     } else {
                         panic!("Expected a column scan of type {}", stringify!($src_name));
                     }
-
-                    column_map.insert(*src_index, column_map.len());
                 }
 
-                let translate_type = |t: DataValueT| {
-                    if let StorageValueT::$variant(value) = t
-                        .to_storage_value(dict)
-                        .expect("We don't have string operations so this cannot fail.")
-                    {
-                        value
-                    } else {
-                        panic!(
-                            "Expected a operation tree value of type {}",
-                            stringify!($src_name)
-                        );
+                let translate_type = |l: StackOperation<DataValueT>| match l {
+                    StackOperation::Push(StackValue::Constant(t)) => {
+                        if let StorageValueT::$variant(value) = t
+                            .to_storage_value(dict)
+                            .expect("We don't have string operations so this cannot fail.")
+                        {
+                            StackOperation::Push(StackValue::Constant(value))
+                        } else {
+                            panic!(
+                                "Expected a operation tree value of type {}",
+                                stringify!($src_name)
+                            );
+                        }
                     }
+                    StackOperation::Push(StackValue::Reference(r)) => {
+                        StackOperation::Push(StackValue::Reference(r))
+                    }
+                    StackOperation::UnaryOperation(op) => StackOperation::UnaryOperation(op),
+                    StackOperation::BinaryOperation(op) => StackOperation::BinaryOperation(op),
                 };
 
-                let mut operation_tree = operation_tree.translate(translate_type);
-
-                for index in operation_tree.input_indices_mut() {
-                    *index = *column_map
-                        .get(index)
-                        .expect("The construction of this map insures that this value is present.");
-                }
+                let arithmetic_tree_type =
+                    StackProgram::new(arithmetic_expression.into_iter().map(&translate_type))
+                        .expect("Program was valid before");
 
                 let new_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanArithmetic(
-                    ColumnScanArithmetic::new(input_scans, operation_tree),
+                    ColumnScanArithmetic::new(input_scans, arithmetic_tree_type),
                 ));
 
                 self.column_scans
@@ -434,7 +345,7 @@ impl<'a> TrieScanAppend<'a> {
             }};
         }
 
-        match src_type {
+        match output_type {
             StorageTypeName::U32 => input_for_datatype!(U32, u32),
             StorageTypeName::U64 => input_for_datatype!(U64, u64),
             StorageTypeName::I64 => input_for_datatype!(I64, i64),
@@ -606,9 +517,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanAppend<'a> {
 #[cfg(test)]
 mod test {
     use crate::{
-        columnar::{
-            operations::columnscan_arithmetic::ArithmeticOperation, traits::columnscan::ColumnScanT,
-        },
+        arithmetic::expression::{self, StackProgram, StackValue},
+        columnar::traits::columnscan::ColumnScanT,
         datatypes::{DataValueT, StorageTypeName},
         management::database::Dict,
         tabular::{
@@ -618,8 +528,6 @@ mod test {
         },
         util::{make_column_with_intervals_t, test_util::make_column_with_intervals_int_t},
     };
-
-    use super::OperationTreeT;
 
     fn scan_next(int_scan: &mut TrieScanAppend) -> Option<u64> {
         if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
@@ -1220,7 +1128,7 @@ mod test {
     }
 
     #[test]
-    fn arithmetic() {
+    fn triescan_arithmetic() {
         let column_x = make_column_with_intervals_t(&[1, 2], &[0]);
         let column_y = make_column_with_intervals_t(&[3, 4, 5], &[0, 2]);
 
@@ -1228,27 +1136,19 @@ mod test {
         let trie_iter = TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(&trie));
 
         // ((x + 3) * y) / x
-        let operation_tree = OperationTreeT::tree(
-            ArithmeticOperation::Division,
-            vec![
-                OperationTreeT::tree(
-                    ArithmeticOperation::Multiplication,
-                    vec![
-                        OperationTreeT::tree(
-                            ArithmeticOperation::Addition,
-                            vec![
-                                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(0)),
-                                OperationTreeT::leaf(ArithmeticOperation::Constant(
-                                    DataValueT::U64(3),
-                                )),
-                            ],
-                        ),
-                        OperationTreeT::leaf(ArithmeticOperation::ColumnScan(1)),
-                    ],
-                ),
-                OperationTreeT::leaf(ArithmeticOperation::ColumnScan(0)),
-            ],
-        );
+        // in stack notation: ref(0) 3 + ref(1) * ref(0) /
+        use expression::BinaryOperation::*;
+        use expression::StackOperation::*;
+        let expression = StackProgram::new([
+            Push(StackValue::Reference(0)),
+            Push(StackValue::Constant(DataValueT::U64(3))),
+            BinaryOperation(Addition),
+            Push(StackValue::Reference(1)),
+            BinaryOperation(Multiplication),
+            Push(StackValue::Reference(0)),
+            BinaryOperation(Division),
+        ])
+        .unwrap();
 
         let mut dict = Dict::default();
         let mut trie_iter = TrieScanAppend::new(
@@ -1257,7 +1157,7 @@ mod test {
             &[
                 vec![],
                 vec![],
-                vec![AppendInstruction::Operation(operation_tree)],
+                vec![AppendInstruction::Arithmetic(expression)],
             ],
             vec![
                 StorageTypeName::U64,

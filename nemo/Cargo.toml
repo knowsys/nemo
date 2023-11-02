@@ -30,6 +30,8 @@ thiserror = "1.0"
 flate2 = "1"
 sanitise-file-name = "1.0.0"
 nom_locate = { version = "4.1.0", features = [ "runtime-dispatch-simd" ] }
+# Bytecount 0.6.5 is currently broken on WASM, see llogiq/bytecount#89.
+bytecount = "=0.6.4"
 getrandom = { version = "0.2.9", default-features = false }
 path-slash = "0.2.1"
 rio_api = "0.8.4"

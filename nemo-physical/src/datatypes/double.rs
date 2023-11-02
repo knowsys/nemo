@@ -1,7 +1,9 @@
 use super::run_length_encodable::FloatingStep;
 use super::{FloatIsNaN, FloorToUsize, RunLengthEncodable};
+use crate::arithmetic::traits::{CheckedPow, CheckedSquareRoot};
 use crate::error::{Error, ReadingError};
-use num::{Bounded, CheckedMul, FromPrimitive, One, Zero};
+use num::traits::CheckedNeg;
+use num::{Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, One, Zero};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
@@ -38,6 +40,15 @@ impl Double {
         }
 
         Double(value)
+    }
+
+    /// Returns a [`Double`] if `value` is finite and `None` otherwise.
+    fn finite(value: f64) -> Option<Double> {
+        if !value.is_finite() {
+            return None;
+        }
+
+        Double::new(value).ok()
     }
 }
 
@@ -96,17 +107,6 @@ impl Mul for Double {
 impl MulAssign for Double {
     fn mul_assign(&mut self, rhs: Self) {
         self.0.mul_assign(rhs.0)
-    }
-}
-
-impl CheckedMul for Double {
-    fn checked_mul(&self, rhs: &Self) -> Option<Self> {
-        let prod = self.0 * rhs.0;
-        if prod.is_finite() {
-            Self::new(prod).ok()
-        } else {
-            None
-        }
     }
 }
 
@@ -189,6 +189,48 @@ impl Product for Double {
         I: Iterator<Item = Self>,
     {
         Double::from_number(iter.map(|f| f.0).product())
+    }
+}
+
+impl CheckedAdd for Double {
+    fn checked_add(&self, v: &Self) -> Option<Self> {
+        Double::finite(self.0 + v.0)
+    }
+}
+
+impl CheckedSub for Double {
+    fn checked_sub(&self, v: &Self) -> Option<Self> {
+        Double::finite(self.0 - v.0)
+    }
+}
+
+impl CheckedDiv for Double {
+    fn checked_div(&self, v: &Self) -> Option<Self> {
+        Double::finite(self.0 / v.0)
+    }
+}
+
+impl CheckedMul for Double {
+    fn checked_mul(&self, v: &Self) -> Option<Self> {
+        Double::finite(self.0 * v.0)
+    }
+}
+
+impl CheckedSquareRoot for Double {
+    fn checked_sqrt(self) -> Option<Self> {
+        Double::finite(self.0.checked_sqrt()?)
+    }
+}
+
+impl CheckedPow for Double {
+    fn checked_pow(self, exponent: Self) -> Option<Self> {
+        Double::finite(self.0.checked_pow(exponent.0)?)
+    }
+}
+
+impl CheckedNeg for Double {
+    fn checked_neg(&self) -> Option<Self> {
+        Double::finite(-1.0 * self.0)
     }
 }
 

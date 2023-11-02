@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fmt::Debug,
     rc::{Rc, Weak},
 };
@@ -8,10 +8,12 @@ use std::{
 use ascii_tree::{write_tree, Tree};
 
 use crate::{
+    condition::statement::ConditionStatement,
+    datatypes::DataValueT,
     tabular::operations::{
-        triescan_append::AppendInstruction, triescan_join::JoinBindings,
-        triescan_minus::SubtractInfo, triescan_project::ProjectReordering,
-        triescan_select::SelectEqualClasses, ValueAssignment,
+        triescan_aggregate::AggregationInstructions, triescan_append::AppendInstruction,
+        triescan_join::JoinBindings, triescan_minus::SubtractInfo,
+        triescan_project::ProjectReordering, triescan_select::SelectEqualClasses,
     },
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
@@ -91,7 +93,7 @@ impl ExecutionNodeRef {
                 vec![subnode_left.clone(), subnode_right.clone()]
             }
             ExecutionOperation::Project(subnode, _) => vec![subnode.clone()],
-            ExecutionOperation::SelectValue(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::Filter(subnode, _) => vec![subnode.clone()],
             ExecutionOperation::SelectEqual(subnode, _) => vec![subnode.clone()],
             ExecutionOperation::AppendColumns(subnode, _) => vec![subnode.clone()],
             ExecutionOperation::AppendNulls(subnode, _) => vec![subnode.clone()],
@@ -101,6 +103,7 @@ impl ExecutionNodeRef {
 
                 cloned
             }
+            ExecutionOperation::Aggregate(subnode, _) => vec![subnode.clone()],
         }
     }
 }
@@ -130,7 +133,7 @@ pub enum ExecutionOperation {
     /// Table project operation; can only be applied to a `FetchTable` or `FetchTemp` node. TODO: FetchTable/Temp no longer existing in codebase
     Project(ExecutionNodeRef, ProjectReordering),
     /// Only leave entries in that have a certain value.
-    SelectValue(ExecutionNodeRef, HashMap<usize, ValueAssignment>),
+    Filter(ExecutionNodeRef, Vec<ConditionStatement<DataValueT>>),
     /// Only leave entries in that contain equal values in certain columns.
     SelectEqual(ExecutionNodeRef, SelectEqualClasses),
     /// Append certain columns to the trie.
@@ -139,6 +142,8 @@ pub enum ExecutionOperation {
     AppendNulls(ExecutionNodeRef, usize),
     /// Operation wich subtracts multiple tables (potentially of different arities) from another table.
     Subtract(ExecutionNodeRef, Vec<ExecutionNodeRef>, Vec<SubtractInfo>),
+    /// Aggregate operation.
+    Aggregate(ExecutionNodeRef, AggregationInstructions),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently.
@@ -265,12 +270,12 @@ impl ExecutionPlan {
     }
 
     /// Return [`ExecutionNodeRef`] for restricing a column to a certain value.
-    pub fn select_value(
+    pub fn filter_values(
         &mut self,
         subnode: ExecutionNodeRef,
-        assigments: HashMap<usize, ValueAssignment>,
+        conditions: Vec<ConditionStatement<DataValueT>>,
     ) -> ExecutionNodeRef {
-        let new_operation = ExecutionOperation::SelectValue(subnode, assigments);
+        let new_operation = ExecutionOperation::Filter(subnode, conditions);
         self.push_and_return_ref(new_operation)
     }
 
@@ -291,6 +296,16 @@ impl ExecutionPlan {
         instructions: Vec<Vec<AppendInstruction>>,
     ) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::AppendColumns(subnode, instructions);
+        self.push_and_return_ref(new_operation)
+    }
+
+    /// Return [`ExecutionNodeRef`] for aggregating a trie.
+    pub fn aggregate(
+        &mut self,
+        subnode: ExecutionNodeRef,
+        instructions: AggregationInstructions,
+    ) -> ExecutionNodeRef {
+        let new_operation = ExecutionOperation::Aggregate(subnode, instructions);
         self.push_and_return_ref(new_operation)
     }
 
@@ -342,7 +357,7 @@ impl ExecutionPlan {
         self.push_out_node(node, ExecutionResult::Temporary, tree_name, cut)
     }
 
-    /// Designate a [`ExecutionNode`] as an "output" node that will produce a permament table (in its default order).
+    /// Designate a [`ExecutionNode`] as an "output" node that will produce a permanent table (in its default order).
     /// Returns an id which will later be associated with the result of the computation.
     pub fn write_permanent(
         &mut self,
@@ -416,9 +431,9 @@ impl ExecutionPlan {
                 let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
                 new_plan.project(new_subnode, reorder.clone())
             }
-            ExecutionOperation::SelectValue(subnode, assignments) => {
+            ExecutionOperation::Filter(subnode, assignments) => {
                 let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
-                new_plan.select_value(new_subnode, assignments.clone())
+                new_plan.filter_values(new_subnode, assignments.clone())
             }
             ExecutionOperation::SelectEqual(subnode, classes) => {
                 let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
@@ -442,11 +457,20 @@ impl ExecutionPlan {
 
                 new_plan.subtract(new_main, new_subtract, subtract_infos.clone())
             }
+            ExecutionOperation::Aggregate(subnode, instructions) => {
+                let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
+                new_plan.aggregate(new_subnode, *instructions)
+            }
         }
     }
 
+    /// Deletes all information which marks execution nodes as output.
+    pub fn clear_write_nodes(&mut self) {
+        self.out_nodes.clear();
+    }
+
     /// Return a list of [`ExecutionTree`] that are derived taking the subgraph at each write node.
-    /// Each tree will be associated with an id that corrsponds to the id of
+    /// Each tree will be associated with an id that corresponds to the id of
     /// the write node from which the tree is derived.
     pub(super) fn split_at_write_nodes(&self) -> Vec<(usize, ExecutionTree)> {
         let write_node_ids: HashSet<usize> = self.out_nodes.iter().map(|o| o.node.id()).collect();
@@ -554,10 +578,10 @@ impl ExecutionTree {
 
                 Tree::Node(format!("Project {reorder:?}"), vec![subtree])
             }
-            ExecutionOperation::SelectValue(subnode, assignments) => {
+            ExecutionOperation::Filter(subnode, conditions) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
 
-                Tree::Node(format!("Select Value {assignments:?}"), vec![subtree])
+                Tree::Node(format!("Filter {conditions:?}"), vec![subtree])
             }
             ExecutionOperation::SelectEqual(subnode, classes) => {
                 let subtree = Self::ascii_tree_recursive(subnode.clone());
@@ -585,6 +609,11 @@ impl ExecutionTree {
                     format!("Subtract {info:?}"),
                     vec![subtree_main, Tree::Node(String::new(), subtrees_subtract)],
                 )
+            }
+            ExecutionOperation::Aggregate(subnode, instructions) => {
+                let subtree = Self::ascii_tree_recursive(subnode.clone());
+
+                Tree::Node(format!("Aggregate {instructions:?}"), vec![subtree])
             }
         }
     }
@@ -703,14 +732,14 @@ impl ExecutionTree {
                     Some(new_tree.project(simplified, reorder.clone()))
                 }
             }
-            ExecutionOperation::SelectValue(subnode, assignments) => {
+            ExecutionOperation::Filter(subnode, conditions) => {
                 let simplified =
                     Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
 
-                if assignments.is_empty() {
+                if conditions.is_empty() {
                     Some(simplified)
                 } else {
-                    Some(new_tree.select_value(simplified, assignments.clone()))
+                    Some(new_tree.filter_values(simplified, conditions.clone()))
                 }
             }
             ExecutionOperation::SelectEqual(subnode, classes) => {
@@ -772,6 +801,12 @@ impl ExecutionTree {
                     simplified_infos,
                 ))
             }
+            ExecutionOperation::Aggregate(subnode, instructions) => {
+                let simplified =
+                    Self::simplify_recursive(new_tree, subnode.clone(), removed_tables)?;
+
+                Some(new_tree.aggregate(simplified, *instructions))
+            }
         }
     }
 
@@ -814,11 +849,11 @@ impl ExecutionTree {
     /// Alters the given [`ExecutionTree`] in such a way as to comply with the constraints of the leapfrog trie join algorithm.
     /// Specifically, this will reorder tables if necessary
     pub fn satisfy_leapfrog_triejoin(&mut self) {
-        Self::satisfy_leapfrog_recurisve(self.root(), Permutation::default());
+        Self::satisfy_leapfrog_recursive(self.root(), Permutation::default());
     }
 
     /// Implements the functionality of `satisfy_leapfrog_triejoin` by traversing the tree recursively
-    fn satisfy_leapfrog_recurisve(node: ExecutionNodeRef, permutation: Permutation) {
+    fn satisfy_leapfrog_recursive(node: ExecutionNodeRef, permutation: Permutation) {
         let node_rc = node.get_rc();
         let node_operation = &mut node_rc.borrow_mut().operation;
 
@@ -839,7 +874,7 @@ impl ExecutionTree {
             ExecutionOperation::Project(subnode, project_reorder) => {
                 *project_reorder = project_reorder.chain_permutation(&permutation);
 
-                Self::satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
+                Self::satisfy_leapfrog_recursive(subnode.clone(), Permutation::default());
             }
             ExecutionOperation::Join(subnodes, bindings) => {
                 bindings.apply_permutation(&permutation);
@@ -847,56 +882,60 @@ impl ExecutionTree {
                 let subpermutations = bindings.comply_with_leapfrog();
 
                 for (subnode, subpermutation) in subnodes.iter().zip(subpermutations) {
-                    Self::satisfy_leapfrog_recurisve(subnode.clone(), subpermutation)
+                    Self::satisfy_leapfrog_recursive(subnode.clone(), subpermutation)
                 }
             }
             ExecutionOperation::Union(subnodes) => {
                 for subnode in subnodes {
-                    Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
+                    Self::satisfy_leapfrog_recursive(subnode.clone(), permutation.clone());
                 }
             }
             ExecutionOperation::Minus(left, right) => {
-                Self::satisfy_leapfrog_recurisve(left.clone(), permutation.clone());
-                Self::satisfy_leapfrog_recurisve(right.clone(), permutation);
+                Self::satisfy_leapfrog_recursive(left.clone(), permutation.clone());
+                Self::satisfy_leapfrog_recursive(right.clone(), permutation);
             }
-            ExecutionOperation::SelectValue(subnode, _assignments) => {
+            ExecutionOperation::Filter(subnode, _conditions) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
-                // for assigment in assignments {
-                //     assigment.column_idx = reorder.apply_element_reverse(assigment.column_idx);
-                // }
 
-                Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation);
+                Self::satisfy_leapfrog_recursive(subnode.clone(), permutation);
             }
             ExecutionOperation::SelectEqual(subnode, _classes) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
-                Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation);
+                Self::satisfy_leapfrog_recursive(subnode.clone(), permutation);
             }
             ExecutionOperation::AppendColumns(subnode, _instructions) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
 
-                Self::satisfy_leapfrog_recurisve(subnode.clone(), Permutation::default());
+                Self::satisfy_leapfrog_recursive(subnode.clone(), Permutation::default());
             }
             ExecutionOperation::AppendNulls(subnode, _) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
-                Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
+                Self::satisfy_leapfrog_recursive(subnode.clone(), permutation.clone());
             }
             ExecutionOperation::Subtract(subnode_main, subnodes_subtract, _) => {
                 // TODO: A few other changes are needed to make this a bit simpler.
                 // Will update it then
                 assert!(permutation.is_identity());
 
-                Self::satisfy_leapfrog_recurisve(subnode_main.clone(), permutation.clone());
+                Self::satisfy_leapfrog_recursive(subnode_main.clone(), permutation.clone());
                 for subnode in subnodes_subtract {
-                    Self::satisfy_leapfrog_recurisve(subnode.clone(), permutation.clone());
+                    Self::satisfy_leapfrog_recursive(subnode.clone(), permutation.clone());
                 }
+            }
+            ExecutionOperation::Aggregate(subnode, _instructions) => {
+                // TODO: A few other changes are needed to make this a bit simpler.
+                // Will update it then
+                assert!(permutation.is_identity());
+
+                Self::satisfy_leapfrog_recursive(subnode.clone(), Permutation::default());
             }
         }
     }

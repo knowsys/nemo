@@ -1,14 +1,14 @@
+use super::AddResult;
+use super::Dictionary;
 use super::DictionaryString;
 use super::HashMapDictionary;
 use super::InfixDictionary;
-use super::AddResult;
-use super::Dictionary;
 
 use lru::LruCache;
-use std::collections::HashMap;
-use std::hash::{Hash,Hasher};
-use std::num::NonZeroUsize;
 use std::borrow::Borrow;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::num::NonZeroUsize;
 
 /// Number of recent occurrences of a string pattern required for creating a bespoke dictionary
 const DICT_THRESHOLD: u32 = 500;
@@ -29,7 +29,10 @@ struct StringPair {
 }
 impl StringPair {
     fn new(first: impl Into<String>, second: impl Into<String>) -> Self {
-        StringPair { first: first.into(), second: second.into() }
+        StringPair {
+            first: first.into(),
+            second: second.into(),
+        }
     }
 }
 
@@ -91,8 +94,9 @@ impl DictionaryType {
         match self {
             DictionaryType::String => !ds.is_long(),
             DictionaryType::Blob => ds.is_long(),
-            DictionaryType::Infix { prefix, suffix } => !ds.is_long() && ds.has_infix(prefix,suffix),
-            //DictionaryType::NumInfix { prefix, suffix } => false, // TODO
+            DictionaryType::Infix { prefix, suffix } => {
+                !ds.is_long() && ds.has_infix(prefix, suffix)
+            } //DictionaryType::NumInfix { prefix, suffix } => false, // TODO
         }
     }
 }
@@ -129,8 +133,11 @@ impl DictIterator {
         if self.position == 0 {
             self.position = 1;
             if ds.infixable() {
-                 #[allow(trivial_casts)]
-                if let Some(dict_idx) = md.infix_dicts.get( (ds.prefix(),ds.suffix()).borrow() as &dyn StringPairKey ) {
+                #[allow(trivial_casts)]
+                if let Some(dict_idx) = md
+                    .infix_dicts
+                    .get((ds.prefix(), ds.suffix()).borrow() as &dyn StringPairKey)
+                {
                     return *dict_idx;
                 }
             }
@@ -139,14 +146,16 @@ impl DictIterator {
         // Finally, interpret self.position-1 as an index in md.generic_dicts:
         while self.position <= md.generic_dicts.len() {
             self.position += 1;
-            if md.dicts[md.generic_dicts[self.position-2]].dict_type.supports(&ds) {
-                return md.generic_dicts[self.position-2];
+            if md.dicts[md.generic_dicts[self.position - 2]]
+                .dict_type
+                .supports(&ds)
+            {
+                return md.generic_dicts[self.position - 2];
             }
         }
 
         usize::MAX // No further dictionaries left
     }
-
 }
 
 /// A dictionary that combines several other dictionaries.
@@ -158,9 +167,9 @@ pub struct MetaDictionary {
     dicts: Vec<DictRecord>,
     /// Data structure to hold counters for recently encountered dictionary types that we might
     /// want to make a dictionary for.
-    dict_candidates: LruCache<StringPair,u32>,
+    dict_candidates: LruCache<StringPair, u32>,
     /// Auxiliary datastructure for finding fitting infix dictionaries.
-    infix_dicts: HashMap<StringPair,usize>,
+    infix_dicts: HashMap<StringPair, usize>,
     /// Auxiliary datastructure for finding fitting general purpose dictionaries.
     generic_dicts: Vec<usize>,
     /// Keep track of total number of entries for faster checks
@@ -172,8 +181,8 @@ impl Default for MetaDictionary {
     /// Sets up relevant default dictionaries for basic blocks.
     fn default() -> Self {
         let mut result = Self {
-            dictblocks: Vec::new(),//vec![(1, 0)],
-            dicts: Vec::new(), //vec![default_dict_record, blob_dict_record],
+            dictblocks: Vec::new(), //vec![(1, 0)],
+            dicts: Vec::new(),      //vec![default_dict_record, blob_dict_record],
             dict_candidates: LruCache::new(NonZeroUsize::new(150).unwrap()),
             infix_dicts: HashMap::new(),
             generic_dicts: Vec::new(),
@@ -263,15 +272,21 @@ impl MetaDictionary {
             DictionaryType::String => {
                 dict = Box::new(HashMapDictionary::new());
                 self.generic_dicts.push(self.dicts.len());
-            },
+            }
             DictionaryType::Blob => {
                 dict = Box::new(HashMapDictionary::new());
                 self.generic_dicts.push(self.dicts.len());
-            },
-            DictionaryType::Infix { ref prefix, ref suffix } => {
+            }
+            DictionaryType::Infix {
+                ref prefix,
+                ref suffix,
+            } => {
                 dict = Box::new(InfixDictionary::new(prefix.to_string(), suffix.to_string()));
-                self.infix_dicts.insert(StringPair::new(prefix.to_string(),suffix.to_string()), self.dicts.len());
-            },
+                self.infix_dicts.insert(
+                    StringPair::new(prefix.to_string(), suffix.to_string()),
+                    self.dicts.len(),
+                );
+            }
         }
         let dr = DictRecord {
             dict: dict,
@@ -280,49 +295,63 @@ impl MetaDictionary {
         };
         self.dicts.push(dr);
     }
-}
 
-impl Dictionary for MetaDictionary {
-    fn add_string(&mut self, string: String) -> AddResult {
-        self.add_dictionary_string(DictionaryString::from_string(string))
-    }
-
-    fn add_str(&mut self, string: &str) -> AddResult {
-        self.add_dictionary_string(DictionaryString::new(string))
-    }
-
-    fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
+    #[inline(always)]
+    fn add_dictionary_string_inline(&mut self, ds: DictionaryString) -> AddResult {
         let mut best_dict_idx = usize::MAX;
 
         // Look up new entry in all applicable dictionaries.
         let mut d_it = DictIterator::new();
         let mut dict_idx: usize;
-        while {dict_idx=d_it.next(&ds, self); dict_idx} != usize::MAX {
+        while {
+            dict_idx = d_it.next(&ds, self);
+            dict_idx
+        } != usize::MAX
+        {
             if best_dict_idx == usize::MAX {
                 best_dict_idx = dict_idx;
             }
-            if let Some(idx) = self.dicts[dict_idx].dict.fetch_id_for_dictionary_string(&ds) {
+            if let Some(idx) = self.dicts[dict_idx]
+                .dict
+                .fetch_id_for_dictionary_string(&ds)
+            {
                 if idx != super::KNOWN_ID_MARK {
                     return AddResult::Known(self.local_to_global_unchecked(dict_idx, idx));
                 } // else: marked, continue search for real id
-            } else if self.dicts[dict_idx].dict.has_marked() { // neither found nor marked in marked dict -> give up search
+            } else if self.dicts[dict_idx].dict.has_marked() {
+                // neither found nor marked in marked dict -> give up search
                 break;
-            } 
+            }
         }
         // Performance note: The remaining code is only executed once per unique string (i.e., typically much fewer times than the above).
-        assert!(best_dict_idx<self.dicts.len());
+        assert!(best_dict_idx < self.dicts.len());
 
         // Consider creating a new dictionary for the new entry:
         if ds.infixable() {
             if let DictionaryType::String = self.dicts[best_dict_idx].dict_type {
                 #[allow(trivial_casts)]
-                if let Some(count) = self.dict_candidates.get_mut( (ds.prefix(),ds.suffix()).borrow() as &dyn StringPairKey ) {
+                if let Some(count) = self
+                    .dict_candidates
+                    .get_mut((ds.prefix(), ds.suffix()).borrow() as &dyn StringPairKey)
+                {
                     *count += 1;
-                    if *count > DICT_THRESHOLD { // Performance note: The following code is very rarely executed.
-                        self.dict_candidates.pop(&StringPair::new(ds.prefix().to_string(),ds.suffix().to_string() ));
+                    if *count > DICT_THRESHOLD {
+                        // Performance note: The following code is very rarely executed.
+                        self.dict_candidates.pop(&StringPair::new(
+                            ds.prefix().to_string(),
+                            ds.suffix().to_string(),
+                        ));
                         best_dict_idx = self.dicts.len();
-                        self.add_dictionary(DictionaryType::Infix { prefix: ds.prefix().to_string(), suffix: ds.suffix().to_string() });
-                        log::info!("Initialized new infix dictionary (#{}) for '{}...{}'.",best_dict_idx,ds.prefix(),ds.suffix());
+                        self.add_dictionary(DictionaryType::Infix {
+                            prefix: ds.prefix().to_string(),
+                            suffix: ds.suffix().to_string(),
+                        });
+                        log::info!(
+                            "Initialized new infix dictionary (#{}) for '{}...{}'.",
+                            best_dict_idx,
+                            ds.prefix(),
+                            ds.suffix()
+                        );
                         // Mark previously added strings to enable one-shot misses when looking up elements:
                         if self.size < 50000 {
                             let mut i: usize = 0;
@@ -330,9 +359,12 @@ impl Dictionary for MetaDictionary {
                             let min_len = ds.prefix().len() + ds.suffix().len(); // presumably lets us discard many strings more quickly
                             loop {
                                 if let Some(string) = self.dicts[1].dict.get(i) {
-                                    i+=1;
-                                    if string.len()>=min_len && string.starts_with(ds.prefix()) && string.ends_with(ds.suffix()) {
-                                        c+=1;
+                                    i += 1;
+                                    if string.len() >= min_len
+                                        && string.starts_with(ds.prefix())
+                                        && string.ends_with(ds.suffix())
+                                    {
+                                        c += 1;
                                         self.dicts[best_dict_idx].dict.mark_str(string.as_str());
                                     }
                                 } else {
@@ -343,16 +375,36 @@ impl Dictionary for MetaDictionary {
                         }
                     }
                 } else {
-                    self.dict_candidates.put(StringPair::new(ds.prefix().to_string(),ds.suffix().to_string() ), 1);
+                    self.dict_candidates.put(
+                        StringPair::new(ds.prefix().to_string(), ds.suffix().to_string()),
+                        1,
+                    );
                 }
             }
         }
 
         // Add entry to preferred dictionary
         self.size += 1;
-        let local_id = self.dicts[best_dict_idx].dict.add_dictionary_string(ds).value();
+        let local_id = self.dicts[best_dict_idx]
+            .dict
+            .add_dictionary_string(ds)
+            .value();
         // Compute global id based on block and local id, possibly allocating new block in the process
         AddResult::Fresh(self.local_to_global(best_dict_idx, local_id))
+    }
+}
+
+impl Dictionary for MetaDictionary {
+    fn add_string(&mut self, string: String) -> AddResult {
+        self.add_dictionary_string_inline(DictionaryString::from_string(string))
+    }
+
+    fn add_str(&mut self, string: &str) -> AddResult {
+        self.add_dictionary_string_inline(DictionaryString::new(string))
+    }
+
+    fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
+        self.add_dictionary_string_inline(ds)
     }
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
@@ -361,7 +413,11 @@ impl Dictionary for MetaDictionary {
         // Look up new entry in all applicable dictionaries.
         let mut d_it = DictIterator::new();
         let mut dict_idx: usize;
-        while {dict_idx=d_it.next(&ds, self); dict_idx} != usize::MAX {
+        while {
+            dict_idx = d_it.next(&ds, self);
+            dict_idx
+        } != usize::MAX
+        {
             if let Some(idx) = self.dicts[dict_idx].dict.fetch_id(string) {
                 return Some(self.local_to_global_unchecked(dict_idx, idx));
             }
@@ -453,17 +509,25 @@ mod test {
 
         let res1 = dict.add_string("entry0".to_string());
 
-        for i in 0..DICT_THRESHOLD+2 {
-            dict.add_string("<http://www.wikidata.org/entity/Q".to_string() + i.to_string().as_str() + ">");
-            dict.add_string("\"". to_string() + i.to_string().as_str() + "\"^^<http://www.w3.org/2001/XMLSchema#decimal>");
+        for i in 0..DICT_THRESHOLD + 2 {
+            dict.add_string(
+                "<http://www.wikidata.org/entity/Q".to_string() + i.to_string().as_str() + ">",
+            );
+            dict.add_string(
+                "\"".to_string()
+                    + i.to_string().as_str()
+                    + "\"^^<http://www.w3.org/2001/XMLSchema#decimal>",
+            );
         }
 
         let res2 = dict.add_string("<http://www.wikidata.org/entity/Another>".to_string());
-        let res3 = dict.add_string("\"42.3\"^^<http://www.w3.org/2001/XMLSchema#decimal>".to_string());
+        let res3 =
+            dict.add_string("\"42.3\"^^<http://www.w3.org/2001/XMLSchema#decimal>".to_string());
 
         let res1known = dict.add_string("entry0".to_string());
         let res2known = dict.add_string("<http://www.wikidata.org/entity/Another>".to_string());
-        let res3known = dict.add_string("\"42.3\"^^<http://www.w3.org/2001/XMLSchema#decimal>".to_string());
+        let res3known =
+            dict.add_string("\"42.3\"^^<http://www.w3.org/2001/XMLSchema#decimal>".to_string());
 
         assert_eq!(res1, AddResult::Fresh(res1.value()));
         assert_eq!(res2, AddResult::Fresh(res2.value()));

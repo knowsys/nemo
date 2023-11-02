@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=0.15,<0.16"]
+requires = ["maturin>=1,<2"]
 build-backend = "maturin"
 
 [project]
@@ -16,4 +16,4 @@ classifiers = [
 features = ["pyo3/extension-module"]
 
 [tool.black]
-line-length = 79
+line-length = 90

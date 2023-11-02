@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use crate::io::parser::ParseError;
+use crate::{io::parser::ParseError, model::VariableAssignment};
 
-use super::{Atom, Filter, Literal, Term, Variable};
+use super::{Atom, Constraint, Literal, PrimitiveTerm, Term, Variable};
 
 /// A rule.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -11,17 +11,17 @@ pub struct Rule {
     head: Vec<Atom>,
     /// Body literals of the rule
     body: Vec<Literal>,
-    /// Filters applied to the body
-    filters: Vec<Filter>,
+    /// Constraints on the body of the rule
+    constraints: Vec<Constraint>,
 }
 
 impl Rule {
     /// Construct a new rule.
-    pub fn new(head: Vec<Atom>, body: Vec<Literal>, filters: Vec<Filter>) -> Self {
+    pub fn new(head: Vec<Atom>, body: Vec<Literal>, constraints: Vec<Constraint>) -> Self {
         Self {
             head,
             body,
-            filters,
+            constraints,
         }
     }
 
@@ -29,117 +29,183 @@ impl Rule {
     pub(crate) fn new_validated(
         head: Vec<Atom>,
         body: Vec<Literal>,
-        filters: Vec<Filter>,
+        constraints: Vec<Constraint>,
     ) -> Result<Self, ParseError> {
-        // Check if existential variables occur in the body.
-        let existential_variables = body
+        // All the existential variables used in the rule
+        let existential_variable_names = head
             .iter()
-            .flat_map(|literal| literal.existential_variables())
-            .collect::<Vec<_>>();
+            .flat_map(|a| a.existential_variables().map(|v| v.name()))
+            .collect::<HashSet<_>>();
 
-        if !existential_variables.is_empty() {
-            return Err(ParseError::BodyExistential(
-                existential_variables
-                    .first()
-                    .expect("is not empty here")
-                    .name(),
-            ));
+        for variable in body
+            .iter()
+            .flat_map(|l| l.variables())
+            .chain(constraints.iter().flat_map(|c| c.variables()))
+        {
+            // Existential variables may only occur in the head
+            if variable.is_existential() {
+                return Err(ParseError::BodyExistential(variable.name()));
+            }
+
+            // There may not be a universal variable whose name is the same that of an existential
+            if existential_variable_names.contains(&variable.name()) {
+                return Err(ParseError::BothQuantifiers(variable.name()));
+            }
         }
 
-        // Check if some variable in the body occurs only in negative literals.
+        // Divide the literals into a positive and a negative part
         let (positive, negative): (Vec<_>, Vec<_>) = body
             .iter()
             .cloned()
             .partition(|literal| literal.is_positive());
-        let positive_varibales = positive
-            .iter()
-            .flat_map(|literal| literal.universal_variables())
-            .collect::<HashSet<&Variable>>();
 
+        // Safe variables are considered to be all variables occuring as primitive terms in a positive body literal
+        let safe_variables = Self::safe_variables_literals(&positive);
+
+        // A derived variable is a variable which is defined in terms of bound variables
+        // using a simple equality operation
+        let mut derived_variables = HashSet::<&Variable>::new();
+        for constraint in &constraints {
+            if let Some((variable, term)) = constraint.has_form_assignment() {
+                if safe_variables.contains(variable) {
+                    continue;
+                }
+
+                for term_variable in term.variables() {
+                    if !safe_variables.contains(term_variable) {
+                        return Err(ParseError::UnsafeDefinition(variable.name()));
+                    }
+                }
+
+                if !derived_variables.contains(variable) {
+                    derived_variables.insert(variable);
+                } else {
+                    return Err(ParseError::MultipleDefinitions(variable.name()));
+                }
+            }
+        }
+
+        // Each complex term in the body and head must only use safe variables
+        // TODO: Allow the use of derived variables.
+        //       To implement this, the planner has to apply the filters
+        //       after the appends and not right after the join
+        for term in body
+            .iter()
+            .flat_map(|l| l.terms())
+            .chain(head.iter().flat_map(|a| a.terms()))
+        {
+            if term.is_primitive() {
+                continue;
+            }
+
+            for variable in term.variables() {
+                if !safe_variables.contains(variable) {
+                    return Err(ParseError::UnsafeComplexTerm(
+                        term.to_string(),
+                        variable.name(),
+                    ));
+                }
+            }
+        }
+
+        // Every constraint that is not an assignment mus only use derived or safe varaibles
+        for constraint in &constraints {
+            if let Some((variable, _)) = constraint.has_form_assignment() {
+                if derived_variables.contains(variable) {
+                    continue;
+                }
+            }
+
+            for term in [constraint.left(), constraint.right()] {
+                for variable in term.variables() {
+                    if !safe_variables.contains(variable) && !derived_variables.contains(variable) {
+                        return Err(ParseError::UnsafeComplexTerm(
+                            term.to_string(),
+                            variable.name(),
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Head atoms may only use variables that are either bound or derived
+        for variable in head.iter().flat_map(|a| a.variables()) {
+            if variable.is_universal()
+                && !safe_variables.contains(variable)
+                && !derived_variables.contains(variable)
+            {
+                return Err(ParseError::UnsafeHeadVariable(variable.name()));
+            }
+        }
+
+        // Unsafe variables in negative literals may only be used within one atom
         let mut unsafe_negative_variables = HashSet::<Variable>::new();
         for negative_literal in negative {
             let mut current_unsafe = HashSet::<Variable>::new();
 
-            for variable in negative_literal.variables() {
-                if positive_varibales.contains(variable) {
-                    continue;
-                }
+            for primitive_term in negative_literal.primitive_terms() {
+                if let PrimitiveTerm::Variable(variable) = primitive_term {
+                    if derived_variables.contains(&variable) || safe_variables.contains(variable) {
+                        continue;
+                    }
 
-                if unsafe_negative_variables.contains(variable) {
-                    return Err(ParseError::UnsafeVariableInMulltipleNegativeLiterals(
-                        variable.name(),
-                    ));
-                }
+                    if unsafe_negative_variables.contains(variable) {
+                        return Err(ParseError::UnsafeVariableInMultipleNegativeLiterals(
+                            variable.name(),
+                        ));
+                    }
 
-                current_unsafe.insert(variable.clone());
+                    current_unsafe.insert(variable.clone());
+                }
             }
 
             unsafe_negative_variables.extend(current_unsafe)
         }
 
-        // Check if a variable occurs with both existential and universal quantification.
-        let universal_variables = body
-            .iter()
-            .flat_map(|literal| literal.universal_variables())
-            .collect::<HashSet<_>>();
-
-        let existential_variables = head
-            .iter()
-            .flat_map(|atom| atom.existential_variables())
-            .collect();
-
-        let common_variables = universal_variables
-            .intersection(&existential_variables)
-            .take(1)
-            .collect::<Vec<_>>();
-
-        if !common_variables.is_empty() {
-            return Err(ParseError::BothQuantifiers(
-                common_variables.first().expect("is not empty here").name(),
-            ));
-        }
-
-        // Check if there are universal variables in the head which do not occur in a positive body literal
-        let head_universal_variables = head
-            .iter()
-            .flat_map(|atom| atom.universal_variables())
-            .collect::<HashSet<_>>();
-
-        for head_variable in &head_universal_variables {
-            if !positive_varibales.contains(head_variable) {
-                return Err(ParseError::UnsafeHeadVariable(head_variable.name()));
+        // Check for aggregates in the body of a rule
+        for literal in &body {
+            #[allow(clippy::never_loop)]
+            for aggregate in literal.aggregates() {
+                return Err(ParseError::AggregateInBody(aggregate.clone()));
             }
         }
 
-        // Check if filters are correctly formed
-        for filter in &filters {
-            let mut filter_variables = vec![&filter.lhs];
-
-            if let Term::Variable(right_variable) = &filter.rhs {
-                filter_variables.push(right_variable);
-            }
-
-            for variable in filter_variables {
-                match variable {
-                    Variable::Universal(universal_variable) => {
-                        if !positive_varibales.contains(variable) {
-                            return Err(ParseError::UnsafeFilterVariable(
-                                universal_variable.name(),
-                            ));
-                        }
-                    }
-                    Variable::Existential(existential_variable) => {
-                        return Err(ParseError::BodyExistential(existential_variable.name()))
-                    }
-                }
+        // Check if aggregate is used within another complex term
+        for term in head.iter().flat_map(|a| a.terms()) {
+            if term.aggregate_subterm() {
+                return Err(ParseError::AggregateSubterm(term.to_string()));
             }
         }
 
         Ok(Rule {
             head,
             body,
-            filters,
+            constraints,
         })
+    }
+
+    /// Return all variables that are "safe".
+    /// A variable is safe if it occurs in a positive body literal.
+    fn safe_variables_literals(literals: &[Literal]) -> HashSet<Variable> {
+        let mut result = HashSet::new();
+
+        for literal in literals {
+            if let Literal::Positive(atom) = literal {
+                for term in atom.terms() {
+                    if let Term::Primitive(PrimitiveTerm::Variable(variable)) = term {
+                        result.insert(variable.clone());
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Return all variables that are "safe".
+    /// A variable is safe if it occurs in a positive body literal.
+    pub fn safe_variables(&self) -> HashSet<Variable> {
+        Self::safe_variables_literals(&self.body)
     }
 
     /// Return the head atoms of the rule - immutable.
@@ -166,15 +232,64 @@ impl Rule {
         &mut self.body
     }
 
-    /// Return the filters of the rule - immutable.
+    /// Return the constraints of the rule - immutable.
     #[must_use]
-    pub fn filters(&self) -> &Vec<Filter> {
-        &self.filters
+    pub fn constraints(&self) -> &Vec<Constraint> {
+        &self.constraints
     }
 
     /// Return the filters of the rule - mutable.
     #[must_use]
-    pub fn filters_mut(&mut self) -> &mut Vec<Filter> {
-        &mut self.filters
+    pub fn constraints_mut(&mut self) -> &mut Vec<Constraint> {
+        &mut self.constraints
+    }
+
+    /// Replaces [`Variable`]s with [`super::Term`]s according to the provided assignment.
+    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
+        self.body
+            .iter_mut()
+            .for_each(|l| l.apply_assignment(assignment));
+        self.head
+            .iter_mut()
+            .for_each(|a| a.apply_assignment(assignment));
+        self.constraints
+            .iter_mut()
+            .for_each(|f| f.apply_assignment(assignment));
+    }
+}
+
+impl std::fmt::Display for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, atom) in self.head.iter().enumerate() {
+            atom.fmt(f)?;
+
+            if index < self.head.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        f.write_str(" :- ")?;
+
+        for (index, literal) in self.body.iter().enumerate() {
+            literal.fmt(f)?;
+
+            if index < self.body.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        if !self.constraints.is_empty() {
+            f.write_str(", ")?;
+        }
+
+        for (index, constraint) in self.constraints.iter().enumerate() {
+            constraint.fmt(f)?;
+
+            if index < self.constraints.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        f.write_str(" .")
     }
 }

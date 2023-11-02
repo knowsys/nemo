@@ -46,7 +46,7 @@ pub type Engine = DefaultExecutionEngine;
 pub fn load(file: PathBuf) -> Result<Engine, Error> {
     let input = read_to_string(file.clone()).map_err(|err| ReadingError::IOReading {
         error: err,
-        filename: file,
+        filename: file.to_string_lossy().to_string(),
     })?;
     load_string(input)
 }
