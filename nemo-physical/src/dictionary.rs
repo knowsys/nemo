@@ -108,14 +108,14 @@ pub trait Dictionary: Debug {
     /// Marks the given string as being known using the special id [KNOWN_ID_MARK] without
     /// assigning an own id to it. If the entry exists already, the old id will be kept and
     /// returned. It is possible to return [AddResult::Rejected] to indicate that the dictionary
-    /// does not support marking of strings.
+    /// does not support marking of strings. Implementors of [mark_str] must also implement [has_marked].
     fn mark_str(&mut self, _string: &str) -> AddResult {
         AddResult::Rejected
     }
 
-    /// Returns true if the dictionary contains any marked elements. The intention is that code marks all elements
-    /// that are relevant to this dictionary, or none at all, so that a return value of `true` indicates that
-    /// one can rely on unknown and non-marked elements to be missing in all dictionaries.
+    /// Returns true if the dictionary contains any marked elements (See [mark_str]). The intention is that code marks
+    /// all elements that are relevant to this dictionary, or none at all, so that a return value of `true` indicates
+    /// that one can rely on unknown and non-marked elements to be missing in all dictionaries.
     fn has_marked(&self) -> bool {
         false
     }
