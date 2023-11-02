@@ -2,8 +2,8 @@ use std::cell::UnsafeCell;
 
 pub(crate) const LONG_STRING_THRESHOLD: usize = 1000;
 
-/// Inner struct where keep locations extracted from strings. This is separated
-/// to enable an iner mutability patters.
+/// Internal struct where keep locations extracted from strings. This is separated
+/// to enable an iner mutability pattern.
 #[derive(Debug, Clone, Copy)]
 struct DictionaryStringLocations {
     prefix_length: usize,
