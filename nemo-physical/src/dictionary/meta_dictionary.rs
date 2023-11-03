@@ -27,6 +27,7 @@ struct StringPair {
     first: String,
     second: String,
 }
+
 impl StringPair {
     fn new(first: impl Into<String>, second: impl Into<String>) -> Self {
         StringPair {
@@ -39,16 +40,19 @@ impl StringPair {
 trait StringPairKey {
     fn to_key(&self) -> (&str, &str);
 }
+
 impl Hash for dyn StringPairKey + '_ {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.to_key().hash(state)
     }
 }
+
 impl PartialEq for dyn StringPairKey + '_ {
     fn eq(&self, other: &Self) -> bool {
         self.to_key() == other.to_key()
     }
 }
+
 impl Eq for dyn StringPairKey + '_ {}
 
 impl StringPairKey for StringPair {
@@ -56,6 +60,7 @@ impl StringPairKey for StringPair {
         (&self.first, &self.second)
     }
 }
+
 impl<'a> StringPairKey for (&'a str, &'a str) {
     fn to_key(&self) -> (&str, &str) {
         (self.0, self.1)
@@ -88,6 +93,7 @@ enum DictionaryType {
     // /// Dictionary for named (actually: "numbered") nulls
     // NULL,
 }
+
 impl DictionaryType {
     /// Returns true if the given string is supported by a dictinoary of this type.
     fn supports(&self, ds: &DictionaryString) -> bool {
@@ -121,6 +127,7 @@ struct DictIterator {
     /// 1 is the "fitting infix dictionary" (if any)
     position: usize,
 }
+
 impl DictIterator {
     /// Constructor.
     fn new() -> Self {
