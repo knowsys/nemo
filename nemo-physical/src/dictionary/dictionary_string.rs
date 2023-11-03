@@ -127,10 +127,10 @@ impl DictionaryString {
             }
         } // else: use defaults from above
 
-        let positions = unsafe {&mut *self.positions.get()};
-            positions.prefix_length = prefix_length;
-            positions.infix_length = infix_length;
-            positions.infix_done = true;
+        let positions = unsafe { &mut *self.positions.get() };
+        positions.prefix_length = prefix_length;
+        positions.infix_length = infix_length;
+        positions.infix_done = true;
     }
 
     /// Finds the last position in UTF-8 str slice (given as `&[u8]` bytes) where the characters '/' or '#' occur,
