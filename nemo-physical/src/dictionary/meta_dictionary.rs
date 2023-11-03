@@ -140,10 +140,9 @@ impl DictIterator {
         if self.position == 0 {
             self.position = 1;
             if ds.infixable() {
-                #[allow(trivial_casts)]
                 if let Some(dict_idx) = md
                     .infix_dicts
-                    .get((ds.prefix(), ds.suffix()).borrow() as &dyn StringPairKey)
+                    .get::<dyn StringPairKey>(&(ds.prefix(), ds.suffix()))
                 {
                     return *dict_idx;
                 }
@@ -247,14 +246,13 @@ impl MetaDictionary {
                 btl_index -= 1;
             }
 
-            let mut new_block: usize;
-            if btl_index > 0 {
+            let mut new_block = if btl_index > 0 {
                 // extrapolate where global block should be relative to last allocated local block
-                new_block = self.dicts[dict].gblocks[btl_index - 1] + btl_index - 1;
+                self.dicts[dict].gblocks[btl_index - 1] + btl_index - 1
             } else {
                 // TODO determine "good" initial block for this dictionary
-                new_block = 0;
-            }
+                0
+            };
             // Find first empty block right of the chosen new block
             while new_block < self.dictblocks.len() && self.dictblocks[new_block].1 != usize::MAX {
                 new_block += 1;
