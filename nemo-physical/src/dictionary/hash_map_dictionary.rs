@@ -106,7 +106,7 @@ impl StringBuffer {
         let page_num = address >> PAGE_ADDR_BITS;
         let page_addr = address % PAGE_SIZE;
         unsafe {
-            &self.pages[page_num]
+            self.pages[page_num]
                 .1
                 .get_unchecked(page_addr..page_addr + length)
         }

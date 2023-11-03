@@ -60,7 +60,7 @@ impl DictionaryString {
         self.set_pieces();
         unsafe {
             let prefix_length = (*self.positions.get()).prefix_length;
-            &self.string.as_str().get_unchecked(..prefix_length)
+            self.string.as_str().get_unchecked(..prefix_length)
         }
     }
 
@@ -70,7 +70,7 @@ impl DictionaryString {
         unsafe {
             let prefix_end = (*self.positions.get()).prefix_length;
             let infix_end = prefix_end + (*self.positions.get()).infix_length;
-            &self.string.as_str().get_unchecked(prefix_end..infix_end)
+            self.string.as_str().get_unchecked(prefix_end..infix_end)
         }
     }
 
@@ -80,7 +80,7 @@ impl DictionaryString {
         unsafe {
             let prefix_end = (*self.positions.get()).prefix_length;
             let infix_end = prefix_end + (*self.positions.get()).infix_length;
-            &self.string.as_str().get_unchecked(infix_end..)
+            self.string.as_str().get_unchecked(infix_end..)
         }
     }
 
@@ -155,8 +155,7 @@ impl DictionaryString {
     #[inline(always)]
     fn find_quote_plus(s: &[u8]) -> usize {
         let mut pos: usize = 1;
-        let mut iter = s.iter().copied();
-        while let Some(ch) = iter.next() {
+        for ch in s.iter().copied() {
             if ch == b'"' {
                 return pos;
             }

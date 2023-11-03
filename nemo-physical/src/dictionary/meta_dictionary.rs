@@ -154,7 +154,7 @@ impl DictIterator {
             self.position += 1;
             if md.dicts[md.generic_dicts[self.position - 2]]
                 .dict_type
-                .supports(&ds)
+                .supports(ds)
             {
                 return md.generic_dicts[self.position - 2];
             }
@@ -362,18 +362,14 @@ impl MetaDictionary {
                             let mut i: usize = 0;
                             let mut c: usize = 0;
                             let min_len = ds.prefix().len() + ds.suffix().len(); // presumably lets us discard many strings more quickly
-                            loop {
-                                if let Some(string) = self.dicts[1].dict.get(i) {
-                                    i += 1;
-                                    if string.len() >= min_len
-                                        && string.starts_with(ds.prefix())
-                                        && string.ends_with(ds.suffix())
-                                    {
-                                        c += 1;
-                                        self.dicts[best_dict_idx].dict.mark_str(string.as_str());
-                                    }
-                                } else {
-                                    break;
+                            while let Some(string) = self.dicts[1].dict.get(i) {
+                                i += 1;
+                                if string.len() >= min_len
+                                    && string.starts_with(ds.prefix())
+                                    && string.ends_with(ds.suffix())
+                                {
+                                    c += 1;
+                                    self.dicts[best_dict_idx].dict.mark_str(string.as_str());
                                 }
                             }
                             log::info!("Marked {} older strings of that type, iterating {} strings overall.",c,i);
