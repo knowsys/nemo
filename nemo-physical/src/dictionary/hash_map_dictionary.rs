@@ -2,6 +2,7 @@ use super::{AddResult, Dictionary, DictionaryString};
 
 use std::{
     collections::HashMap,
+    fmt::Display,
     hash::{Hash, Hasher},
 };
 
@@ -42,6 +43,7 @@ struct StringBuffer {
     /// Lock to guard page assignment operations when using multiple threads
     lock: AtomicBool,
 }
+
 impl StringBuffer {
     /// Constructor.
     const fn new() -> Self {
@@ -83,7 +85,7 @@ impl StringBuffer {
     /// TODO: Allocation of new pages could re-use freed pages instead of always appending.
     fn push_str(&mut self, buffer: usize, s: &str) -> StringRef {
         let len = s.len();
-        assert!(len < 1 << 25);
+        assert!(len < PAGE_SIZE);
         let mut page_num = self.cur_pages[buffer];
         if self.pages[page_num].1.len() + len > PAGE_SIZE {
             self.acquire_page_lock();
@@ -138,6 +140,11 @@ impl StringBuffer {
     }
 }
 
+const STRINGREF_STRING_LEGHT_BITS: usize = 24;
+const STRINGREF_STARTING_ADDRESS_BITS: usize = 40;
+const MAX_STRINGREF_STRING_LEGHT: usize = 1 << STRINGREF_STRING_LEGHT_BITS;
+const MAX_STRINGREF_STARTING_ADDRESS: usize = 1 << STRINGREF_STARTING_ADDRESS_BITS;
+
 /// Memory-optimized reference to a string in the dictionary.
 #[derive(Clone, Copy, Debug, Default)]
 struct StringRef {
@@ -147,33 +154,36 @@ struct StringRef {
     /// of a single string to 16M bytes.
     reference: u64,
 }
+
 impl StringRef {
     /// Creates an object that refers to the current contents of the
     /// buffer's temporary String.
     fn new_tmp(buffer: usize) -> Self {
-        assert!(buffer < 1 << 24);
+        assert!(buffer < MAX_STRINGREF_STRING_LEGHT);
         let u64buffer: u64 = buffer.try_into().unwrap();
         StringRef {
-            reference: (u64::MAX << 24) + u64buffer,
+            reference: (u64::MAX << STRINGREF_STRING_LEGHT_BITS) + u64buffer,
         }
     }
 
     /// Creates a reference to the specific string slice in the buffer.
     /// It is not checked if that slice is allocated.
     fn new(address: usize, len: usize) -> Self {
-        assert!(len < 1 << 24);
-        assert!(address < 1 << 40);
+        assert!(len < MAX_STRINGREF_STRING_LEGHT);
+        assert!(address < MAX_STRINGREF_STARTING_ADDRESS);
         let u64add: u64 = address.try_into().unwrap();
         let u64len: u64 = len.try_into().unwrap();
         StringRef {
-            reference: (u64add << 24) + u64len,
+            reference: (u64add << STRINGREF_STRING_LEGHT_BITS) + u64len,
         }
     }
 
     /// Returns the stored start address for the string that this refers to.
     /// For temporary references that do not point to the buffer, the result is meaningless.
     fn address(&self) -> usize {
-        (self.reference >> 24).try_into().unwrap()
+        (self.reference >> STRINGREF_STRING_LEGHT_BITS)
+            .try_into()
+            .unwrap()
     }
 
     /// Returns the stored length of the string that this refers to.
@@ -185,16 +195,17 @@ impl StringRef {
     /// Returns a direct string slice reference for this data.
     /// This is a pointer to global mutable data, and cannot be used safely.
     fn as_str(&self) -> &str {
-        if ((!self.reference) >> 24) != 0 {
+        if ((!self.reference) >> STRINGREF_STRING_LEGHT_BITS) != 0 {
             unsafe { BUFFER.get_str(self.address(), self.len()) }
         } else {
             unsafe { BUFFER.get_tmp_string(self.len()) }
         }
     }
+}
 
-    /// Returns a String that contains a copy of the data that this reference points to.
-    fn to_string(&self) -> String {
-        String::from(self.as_str())
+impl Display for StringRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write! {f, "{}", self.as_str()}
     }
 }
 
@@ -206,11 +217,13 @@ impl Hash for StringRef {
         self.as_str().hash(state)
     }
 }
+
 impl PartialEq for StringRef {
     fn eq(&self, other: &StringRef) -> bool {
         self.as_str().eq(other.as_str())
     }
 }
+
 impl Eq for StringRef {}
 
 /// A read-only, hashmap-based [Dictionary] to implement a bijection between strings and integers.  
@@ -251,27 +264,25 @@ impl HashMapDictionary {
                 // }
                 AddResult::Known(*idx)
             }
-            None => unsafe {
-                let sref = BUFFER.push_str(self.buffer, string);
+            None => {
+                let sref = unsafe { BUFFER.push_str(self.buffer, string) };
                 if id != super::KNOWN_ID_MARK {
                     self.store.push(sref);
                 }
                 self.mapping.insert(sref, id);
                 AddResult::Fresh(id)
-            },
+            }
         }
     }
 }
 
 impl Default for HashMapDictionary {
     fn default() -> Self {
-        unsafe {
-            HashMapDictionary {
-                store: Vec::new(),
-                mapping: HashMap::new(),
-                buffer: BUFFER.init_buffer(),
-                has_known_mark: false,
-            }
+        HashMapDictionary {
+            store: Vec::new(),
+            mapping: HashMap::new(),
+            buffer: unsafe { BUFFER.init_buffer() },
+            has_known_mark: false,
         }
     }
 }
@@ -314,7 +325,6 @@ impl Dictionary for HashMapDictionary {
     }
 
     fn mark_str(&mut self, string: &str) -> AddResult {
-        // println!("Marking {} (hashmapdict)", string);
         self.has_known_mark = true;
         self.add_str_with_id(string, super::KNOWN_ID_MARK)
     }
