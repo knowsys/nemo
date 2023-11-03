@@ -115,7 +115,8 @@ pub trait Dictionary: Debug {
 
     /// Returns true if the dictionary contains any marked elements (See [mark_str]). The intention is that code marks
     /// all elements that are relevant to this dictionary, or none at all, so that a return value of `true` indicates
-    /// that one can rely on unknown and non-marked elements to be missing in all dictionaries.
+    /// that one can rely on unknown and non-marked elements to be missing in all dictionaries. Implementors of
+    /// [has_marked] must also implement [mark_str].
     fn has_marked(&self) -> bool {
         false
     }
