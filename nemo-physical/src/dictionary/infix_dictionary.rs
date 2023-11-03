@@ -56,11 +56,9 @@ impl Dictionary for InfixDictionary {
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
         if string.starts_with(self.prefix.as_str()) && string.ends_with(self.suffix.as_str()) {
-            unsafe {
-                self.dict.fetch_id(
-                    &string.get_unchecked(self.prefix.len()..string.len() - self.suffix.len()),
-                )
-            }
+            self.dict.fetch_id(unsafe {
+                &string.get_unchecked(self.prefix.len()..string.len() - self.suffix.len())
+            })
         } else {
             None
         }
