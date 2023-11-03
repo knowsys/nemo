@@ -5,7 +5,7 @@ use crate::error::Error;
 /// Enum of different value domains that are distinguished in this code,
 /// such as "string" or "64bit floating point numbers". Even in an untyped context,
 /// it is often useful to distinguish some basic domains and to treat values accordingly.
-/// 
+///
 /// Note: This is meant as an example now, not as a full list of everything we might need.
 #[derive(Debug, Copy, Clone)]
 pub enum ValueDomain {
@@ -25,6 +25,8 @@ pub enum ValueDomain {
     /// Domain of all signed 32bit integer numbers: -2147483648…+2147483647.
     /// This is a subset of [`ValueDomain::Long`].
     Int,
+    /// Domain of all tuples.
+    Tuple,
     /// Domain of all data values not covered by the remaining domains
     Other,
 }
@@ -58,7 +60,7 @@ pub trait DataValue {
 
     /// Return the pair of string and language tag that this value represents, if it is a value in
     /// the domain [`ValueDomain::LanguageTaggedString`]. Otherwise it panics.
-    fn to_language_tagged_string(&self) -> (String,String) {
+    fn to_language_tagged_string(&self) -> (String, String) {
         panic!("Value is not a language tagged string.");
     }
 
@@ -86,8 +88,12 @@ pub trait DataValue {
         panic!("Value is not an int (32bit signed integer number).");
     }
 
+    /// Return the value of the tuple element at the given index.
+    /// Panics if index is out of bounds or if value is not a tuple.
+    fn tuple_element(&self, index: usize) -> &dyn DataValue {
+        panic!("Value is not a tuple");
+    }
 }
-
 
 /// String value obtained from the physical layer
 // #[derive(Debug)]
@@ -123,7 +129,6 @@ pub trait DataValue {
 pub struct Long(i64);
 
 impl DataValue for Long {
-
     fn datatype_iri(&self) -> String {
         match self.value_domain() {
             ValueDomain::Long => "http://www.w3.org/2001/XMLSchema#long".to_owned(),
@@ -133,12 +138,12 @@ impl DataValue for Long {
     }
 
     fn lexical_value(&self) -> String {
-        self.0.to_string()   
+        self.0.to_string()
     }
 
     /// The function needs to find the tightest domain for the given value.
     fn value_domain(&self) -> ValueDomain {
-        if self.0 <= std::i32::MAX && self.0 >= std::i32::MIN {
+        if self.0 <= std::i32::MAX.into() && self.0 >= std::i32::MIN.into() {
             ValueDomain::Int
         } else {
             ValueDomain::Long
