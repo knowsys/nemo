@@ -9,13 +9,21 @@ license.workspace = true
 readme = "README.md"
 repository.workspace = true
 
+[[bin]]
+name = "dict-bench"
+path = "src/bin/dict-bench.rs"
+
 [dependencies]
 nemo-physical = { path = "../nemo-physical", default-features = false }
 nemo = { path = "../nemo", default-features = false }
 rand = "0.8.5"
+flate2 = "1"
+log = { version = "0.4", features = [ "max_level_trace", "release_max_level_trace" ] }
+clap = { version = "4.0.32", features = [ "derive", "cargo", "env" ] }
+colored = "2"
+env_logger = "*"
 
 [dev-dependencies]
-env_logger = "*"
 criterion = { version = "0.5", features = [ "html_reports" ] }
 rand_pcg = "0.3"
 

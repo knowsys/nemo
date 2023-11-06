@@ -21,7 +21,7 @@ where
 {
     usize::try_from(constant)
         .ok()
-        .and_then(|constant| dict.entry(constant))
+        .and_then(|constant| dict.get(constant))
         .unwrap_or_else(|| format!("{NULL_PREFIX}{constant}"))
         .into()
 }

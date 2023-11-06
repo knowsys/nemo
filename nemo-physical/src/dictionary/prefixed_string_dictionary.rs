@@ -6,7 +6,9 @@ use std::{
     rc::{Rc, Weak},
 };
 
+use super::AddResult;
 use super::Dictionary;
+use super::DictionaryString;
 
 /// Represents a node, which is either a [TrieNode::Root], or some non-special [TrieNode::Node]
 enum TrieNode {
@@ -317,6 +319,13 @@ pub struct PrefixedStringDictionary {
     store: Rc<RefCell<TrieNode>>,
 }
 
+impl PrefixedStringDictionary {
+    /// Construct a new and empty dictionary.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 impl Default for PrefixedStringDictionary {
     /// Initialise a Default Prefixedstringdictionary
     /// It contains the empty string as the first element (position 0)
@@ -335,50 +344,62 @@ impl Default for PrefixedStringDictionary {
 }
 
 impl Dictionary for PrefixedStringDictionary {
-    fn add(&mut self, entry: String) -> usize {
+    fn add_string(&mut self, entry: String) -> AddResult {
         log::trace!("add {entry:?} to {self:?}");
-        *self.mapping.entry(entry.clone()).or_insert_with(|| {
-            let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).collect();
-            log::trace!("prefixes: {prefixes:?}");
-            let (real_prefixes, real_entry) = prefixes.split_at(prefixes.len() - 1);
-            log::trace!("reals: {real_prefixes:?}, {real_entry:?}");
-            let (mut cur_node, remaining_prefixes) =
-                TrieNode::find_last_match(self.store.to_owned(), real_prefixes);
-            log::trace!("cur_node: {cur_node:?}, remaining: {remaining_prefixes:?}");
-            for element in remaining_prefixes {
-                let new_node = Rc::new(RefCell::new(TrieNode::create_node(
+        match self.mapping.get(&entry) {
+            Some(idx) => AddResult::Known(*idx),
+            None => {
+                let prefixes: Vec<&str> = Prefixer::new(entry.as_str()).collect();
+                log::trace!("prefixes: {prefixes:?}");
+                let (real_prefixes, real_entry) = prefixes.split_at(prefixes.len() - 1);
+                log::trace!("reals: {real_prefixes:?}, {real_entry:?}");
+                let (mut cur_node, remaining_prefixes) =
+                    TrieNode::find_last_match(self.store.to_owned(), real_prefixes);
+                log::trace!("cur_node: {cur_node:?}, remaining: {remaining_prefixes:?}");
+                for element in remaining_prefixes {
+                    let new_node = Rc::new(RefCell::new(TrieNode::create_node(
+                        Rc::clone(&cur_node),
+                        element.to_string(),
+                    )));
+                    log::trace!("{element:?} ({remaining_prefixes:?}): new_node: {new_node:?}");
+                    cur_node
+                        .as_ref()
+                        .borrow_mut()
+                        .add_node(Rc::clone(&new_node));
+                    cur_node = Rc::clone(&new_node);
+                    log::trace!("{element:?} ({remaining_prefixes:?}): cur_node: {cur_node:?}");
+                }
+                let entry_string = Rc::new(real_entry[0].to_string());
+                log::trace!("entry_string: {entry_string:?}");
+                log::trace!(
+                    "pair: {:?}",
+                    TrieNodeStringPair(Rc::clone(&cur_node), Rc::clone(&entry_string))
+                );
+                let value = self.ordering.len();
+                self.ordering.push(TrieNodeStringPair(
                     Rc::clone(&cur_node),
-                    element.to_string(),
-                )));
-                log::trace!("{element:?} ({remaining_prefixes:?}): new_node: {new_node:?}");
-                cur_node
-                    .as_ref()
-                    .borrow_mut()
-                    .add_node(Rc::clone(&new_node));
-                cur_node = Rc::clone(&new_node);
-                log::trace!("{element:?} ({remaining_prefixes:?}): cur_node: {cur_node:?}");
+                    Rc::clone(&entry_string),
+                ));
+                log::trace!("ordering: {:?}, value: {value:?}", self.ordering);
+                self.mapping.insert(entry.clone(), value);
+                AddResult::Fresh(value)
             }
-            let entry_string = Rc::new(real_entry[0].to_string());
-            log::trace!("entry_string: {entry_string:?}");
-            log::trace!(
-                "pair: {:?}",
-                TrieNodeStringPair(Rc::clone(&cur_node), Rc::clone(&entry_string))
-            );
-            let value = self.ordering.len();
-            self.ordering.push(TrieNodeStringPair(
-                Rc::clone(&cur_node),
-                Rc::clone(&entry_string),
-            ));
-            log::trace!("ordering: {:?}, value: {value:?}", self.ordering);
-            value
-        })
+        }
     }
 
-    fn index_of(&self, entry: &str) -> Option<usize> {
+    fn add_str(&mut self, string: &str) -> AddResult {
+        self.add_string(string.to_string())
+    }
+
+    fn add_dictionary_string(&mut self, ds: DictionaryString) -> AddResult {
+        self.add_str(ds.as_str())
+    }
+
+    fn fetch_id(&self, entry: &str) -> Option<usize> {
         self.mapping.get(&entry.to_string()).cloned()
     }
 
-    fn entry(&self, index: usize) -> Option<String> {
+    fn get(&self, index: usize) -> Option<String> {
         if index < self.ordering.len() {
             Some(format!(
                 "{}{}",
@@ -392,10 +413,6 @@ impl Dictionary for PrefixedStringDictionary {
 
     fn len(&self) -> usize {
         self.ordering.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 }
 
@@ -436,6 +453,7 @@ impl<'a> Iterator for Prefixer<'a> {
 mod test {
     use std::borrow::Borrow;
 
+    use crate::dictionary::AddResult;
     use crate::dictionary::Dictionary;
 
     use super::PrefixedStringDictionary;
@@ -458,7 +476,7 @@ mod test {
         ];
 
         for i in vec {
-            dict.add(i.to_string());
+            dict.add_string(i.to_string());
         }
         dict
     }
@@ -466,41 +484,51 @@ mod test {
     #[test]
     fn empty_str() {
         let mut dict = PrefixedStringDictionary::default();
-        dict.add("".to_string());
-        assert_eq!(dict.entry(0), Some("".to_string()));
+        dict.add_string("".to_string());
+        assert_eq!(dict.get(0), Some("".to_string()));
 
         let mut dict = create_dict();
-        dict.add("".to_string());
-        assert_eq!(dict.entry(0), Some("".to_string()));
-        assert_eq!(dict.entry(8), None);
+        dict.add_string("".to_string());
+        assert_eq!(dict.get(0), Some("".to_string()));
+        assert_eq!(dict.get(8), None);
     }
 
     #[test]
     fn entry() {
         let dict = create_dict();
-        assert_eq!(dict.entry(1), Some("a".to_string()));
-        assert_eq!(dict.entry(2), Some("b".to_string()));
-        assert_eq!(dict.entry(3), Some("c".to_string()));
-        assert_eq!(dict.entry(4), Some("Position 3".to_string()));
-        assert_eq!(dict.entry(5), Some("Position 4".to_string()));
-        assert_eq!(dict.entry(6), Some("Position 5".to_string()));
-        assert_eq!(dict.entry(7), None);
-        assert_eq!(dict.entry(4), Some("Position 3".to_string()));
+        assert_eq!(dict.get(1), Some("a".to_string()));
+        assert_eq!(dict.get(2), Some("b".to_string()));
+        assert_eq!(dict.get(3), Some("c".to_string()));
+        assert_eq!(dict.get(4), Some("Position 3".to_string()));
+        assert_eq!(dict.get(5), Some("Position 4".to_string()));
+        assert_eq!(dict.get(6), Some("Position 5".to_string()));
+        assert_eq!(dict.get(7), None);
+        assert_eq!(dict.get(4), Some("Position 3".to_string()));
     }
 
     #[test]
     fn index_of() {
         let dict = create_dict();
-        assert_eq!(dict.index_of("a".to_string().borrow()), Some(1));
-        assert_eq!(dict.index_of("b".to_string().borrow()), Some(2));
-        assert_eq!(dict.index_of("c".to_string().borrow()), Some(3));
-        assert_eq!(dict.index_of("Position 3".to_string().borrow()), Some(4));
-        assert_eq!(dict.index_of("Position 4".to_string().borrow()), Some(5));
-        assert_eq!(dict.index_of("Position 5".to_string().borrow()), Some(6));
-        assert_eq!(dict.index_of("d".to_string().borrow()), None);
-        assert_eq!(dict.index_of("Pos".to_string().borrow()), None);
-        assert_eq!(dict.index_of("Pos"), None);
-        assert_eq!(dict.index_of("b"), Some(2));
+        assert_eq!(dict.fetch_id("a".to_string().borrow()), Some(1));
+        assert_eq!(dict.fetch_id("b".to_string().borrow()), Some(2));
+        assert_eq!(dict.fetch_id("c".to_string().borrow()), Some(3));
+        assert_eq!(dict.fetch_id("Position 3".to_string().borrow()), Some(4));
+        assert_eq!(dict.fetch_id("Position 4".to_string().borrow()), Some(5));
+        assert_eq!(dict.fetch_id("Position 5".to_string().borrow()), Some(6));
+        assert_eq!(dict.fetch_id("d".to_string().borrow()), None);
+        assert_eq!(dict.fetch_id("Pos".to_string().borrow()), None);
+        assert_eq!(dict.fetch_id("Pos"), None);
+        assert_eq!(dict.fetch_id("b"), Some(2));
+    }
+
+    #[test]
+    fn add() {
+        let mut dict = create_dict();
+        assert_eq!(dict.add_string("a".to_string()), AddResult::Known(1));
+        assert_eq!(
+            dict.add_string("new value".to_string()),
+            AddResult::Fresh(7)
+        );
     }
 
     #[test]
@@ -508,11 +536,11 @@ mod test {
         let mut dict = create_dict();
         // no prefixes, so no children
         assert!(dict.store.as_ref().borrow().children().is_empty());
-        dict.add("https://wikidata.org/entity/Q42".to_string());
+        dict.add_string("https://wikidata.org/entity/Q42".to_string());
         // now we need some children
         assert!(!dict.store.as_ref().borrow().children().is_empty());
         assert_eq!(
-            dict.entry(7),
+            dict.get(7),
             Some("https://wikidata.org/entity/Q42".to_string())
         );
     }
@@ -522,11 +550,11 @@ mod test {
         let mut dict = create_dict();
         // no prefixes, so no children
         assert!(dict.store.as_ref().borrow().children().is_empty());
-        dict.add("https://wikidata.org/entity/Q42".to_string());
+        dict.add_string("https://wikidata.org/entity/Q42".to_string());
         // now we need some children
         assert!(!dict.store.as_ref().borrow().children().is_empty());
         assert_eq!(
-            dict.entry(7),
+            dict.get(7),
             Some("https://wikidata.org/entity/Q42".to_string())
         );
         drop(dict);
@@ -541,16 +569,16 @@ mod test {
         ];
 
         for (i, str) in vec.iter().enumerate() {
-            assert_eq!(dict.add(str.to_string()), i + 1);
+            assert_eq!(dict.add_string(str.to_string()).value(), i + 1);
         }
         // duplicates
         for (i, str) in vec.iter().enumerate() {
-            assert_eq!(dict.add(str.to_string()), i + 1);
+            assert_eq!(dict.add_string(str.to_string()).value(), i + 1);
         }
 
         for (id, result) in vec.iter().enumerate() {
-            assert_eq!(dict.entry(id + 1).unwrap(), result.to_string());
-            assert_eq!(dict.index_of(result), Some(id + 1));
+            assert_eq!(dict.get(id + 1).unwrap(), result.to_string());
+            assert_eq!(dict.fetch_id(result), Some(id + 1));
         }
     }
 }
