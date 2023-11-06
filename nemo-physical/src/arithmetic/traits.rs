@@ -114,7 +114,7 @@ impl CheckedPow for usize {
 
 impl CheckedPow for u8 {
     fn checked_pow(self, exponent: Self) -> Option<Self> {
-        num::checked_pow(self, exponent.try_into().ok()?)
+        num::checked_pow(self, exponent.into())
     }
 }
 
