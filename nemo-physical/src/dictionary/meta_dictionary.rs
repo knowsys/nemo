@@ -187,8 +187,8 @@ impl Default for MetaDictionary {
     /// Sets up relevant default dictionaries for basic blocks.
     fn default() -> Self {
         let mut result = Self {
-            dictblocks: Vec::new(), //vec![(1, 0)],
-            dicts: Vec::new(),      //vec![default_dict_record, blob_dict_record],
+            dictblocks: Vec::new(),
+            dicts: Vec::new(),
             dict_candidates: LruCache::new(NonZeroUsize::new(150).unwrap()),
             infix_dicts: HashMap::new(),
             generic_dicts: Vec::new(),
