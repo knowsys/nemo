@@ -1,0 +1,4 @@
+[build] 
+# See https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html
+# Required for https://rustwasm.github.io/wasm-bindgen/api/web_sys/struct.FileSystemSyncAccessHandle.html
+rustflags = ["--cfg=web_sys_unstable_apis"]
