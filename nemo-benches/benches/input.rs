@@ -7,7 +7,7 @@ use nemo_physical::{
     builder_proxy::{
         ColumnBuilderProxy, PhysicalBuilderProxyEnum, PhysicalStringColumnBuilderProxy,
     },
-    dictionary::PrefixedStringDictionary,
+    dictionary::HashMapDictionary,
 };
 use rand::{distributions::Alphanumeric, prelude::*};
 use rand_pcg::Pcg64;
@@ -35,7 +35,7 @@ pub fn benchmark_input(c: &mut Criterion) {
     group.bench_function("read_strings", |b| {
         b.iter_batched(
             || {
-                let dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+                let dict = std::cell::RefCell::new(HashMapDictionary::default());
                 (strings.clone(), dict)
             },
             |(input, dict)| {
@@ -53,7 +53,7 @@ pub fn benchmark_input(c: &mut Criterion) {
     group.bench_function("read_terms", |b| {
         b.iter_batched(
             || {
-                let dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+                let dict = std::cell::RefCell::new(HashMapDictionary::default());
                 (terms.clone(), dict)
             },
             |(input, dict)| {
@@ -71,7 +71,7 @@ pub fn benchmark_input(c: &mut Criterion) {
     group.bench_function("read_iris", |b| {
         b.iter_batched(
             || {
-                let dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+                let dict = std::cell::RefCell::new(HashMapDictionary::default());
                 (iris.clone(), dict)
             },
             |(input, dict)| {

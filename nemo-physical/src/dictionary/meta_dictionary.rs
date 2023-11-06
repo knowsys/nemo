@@ -294,7 +294,7 @@ impl MetaDictionary {
             }
         }
         let dr = DictRecord {
-            dict: dict,
+            dict,
             dict_type: dt,
             gblocks: Vec::new(),
         };

@@ -47,7 +47,7 @@ pub enum AddResult {
 
 impl AddResult {
     /// Returns the actual index.
-    /// In case of [AddResult::Rejected], [NONEXISTING_ID_MARK] is returned.
+    /// In case of [AddResult::Rejected], a fake id is returned ([usize::MAX]).
     pub fn value(&self) -> usize {
         match self {
             AddResult::Fresh(value) => *value,
@@ -65,7 +65,7 @@ pub trait Dictionary: Debug {
     /// be assigned a new id. Unsupported strings can also be rejected, which specialized
     /// dictionary implementations might do.
     ///
-    /// The result is an [EntryStatus] that indicates if the string was newly added,
+    /// The result is an [AddResult] that indicates if the string was newly added,
     /// previoulsy present, or rejected. In the first two cases, the result yields
     /// the strings id.
     fn add_string(&mut self, string: String) -> AddResult;
@@ -74,7 +74,7 @@ pub trait Dictionary: Debug {
     /// be assigned a new id. Unsupported strings can also be rejected, which specialized
     /// dictionary implementations might do.
     ///
-    /// The result is an [EntryStatus] that indicates if the string was newly added,
+    /// The result is an [AddResult] that indicates if the string was newly added,
     /// previoulsy present, or rejected. In the first two cases, the result yields
     /// the strings id.
     fn add_str(&mut self, string: &str) -> AddResult;
@@ -110,18 +110,18 @@ pub trait Dictionary: Debug {
         self.len() == 0
     }
 
-    /// Marks the given string as being known using the special id [KNOWN_ID_MARK] without
+    /// Marks the given string as being known ---using the special id [u64::MAX] - 1--- without
     /// assigning an own id to it. If the entry exists already, the old id will be kept and
     /// returned. It is possible to return [AddResult::Rejected] to indicate that the dictionary
-    /// does not support marking of strings. Implementors of [mark_str] must also implement [has_marked].
+    /// does not support marking of strings. Implementors of [Dictionary::mark_str] must also implement [Dictionary::has_marked].
     fn mark_str(&mut self, _string: &str) -> AddResult {
         AddResult::Rejected
     }
 
-    /// Returns true if the dictionary contains any marked elements (See [mark_str]). The intention is that code marks
+    /// Returns true if the dictionary contains any marked elements (See [Dictionary::mark_str]). The intention is that code marks
     /// all elements that are relevant to this dictionary, or none at all, so that a return value of `true` indicates
     /// that one can rely on unknown and non-marked elements to be missing in all dictionaries. Implementors of
-    /// [has_marked] must also implement [mark_str].
+    /// [Dictionary::has_marked] must also implement [Dictionary::mark_str].
     fn has_marked(&self) -> bool {
         false
     }
