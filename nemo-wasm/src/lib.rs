@@ -380,3 +380,8 @@ fn custom_alloc_error_hook(layout: Layout) {
 pub fn set_alloc_error_hook() {
     std::alloc::set_alloc_error_hook(custom_alloc_error_hook);
 }
+
+#[wasm_bindgen(js_name = "getNemoVersion")]
+pub fn nemo_version() -> Option<String> {
+    option_env!("CARGO_PKG_VERSION").map(|version| version.into())
+}
