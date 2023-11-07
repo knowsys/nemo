@@ -1,6 +1,5 @@
-use std::fmt::write;
 
-use crate::error::Error;
+
 
 /// Enum of different value domains that are distinguished in this code,
 /// such as "string" or "64bit floating point numbers". Even in an untyped context,
@@ -90,72 +89,7 @@ pub trait DataValue {
 
     /// Return the value of the tuple element at the given index.
     /// Panics if index is out of bounds or if value is not a tuple.
-    fn tuple_element(&self, index: usize) -> &dyn DataValue {
+    fn tuple_element(&self, _index: usize) -> &dyn DataValue {
         panic!("Value is not a tuple");
-    }
-}
-
-/// String value obtained from the physical layer
-// #[derive(Debug)]
-// pub struct PhysicalString<'a> {
-//     // TODO: Just guessing
-//     prefix: &'a str,
-//     content: &'a str,
-// }
-
-// impl<'a> DataValue for PhysicalString<'a> {
-//     fn data_type(&self) -> ValueDomain {
-//         ValueDomain::String
-//     }
-
-//     fn to_string(&self) -> Option<String> {
-//         let mut string = String::from(self.prefix);
-//         string.push_str(self.content);
-
-//         Some(string)
-//     }
-
-//     fn to_u64(&self) -> Option<u64> {
-//         None
-//     }
-
-//     fn to_u32(&self) -> Option<u32> {
-//         None
-//     }
-// }
-
-/// Physical representation of an integer as an i64.
-#[derive(Debug, Clone, Copy)]
-pub struct Long(i64);
-
-impl DataValue for Long {
-    fn datatype_iri(&self) -> String {
-        match self.value_domain() {
-            ValueDomain::Long => "http://www.w3.org/2001/XMLSchema#long".to_owned(),
-            ValueDomain::Int => "http://www.w3.org/2001/XMLSchema#int".to_owned(),
-            _ => panic!("Unexpected value domain for i64"),
-        }
-    }
-
-    fn lexical_value(&self) -> String {
-        self.0.to_string()
-    }
-
-    /// The function needs to find the tightest domain for the given value.
-    fn value_domain(&self) -> ValueDomain {
-        if self.0 <= std::i32::MAX.into() && self.0 >= std::i32::MIN.into() {
-            ValueDomain::Int
-        } else {
-            ValueDomain::Long
-        }
-    }
-
-    fn to_i64(&self) -> i64 {
-        self.0
-    }
-
-    fn to_i32(&self) -> i32 {
-        // TODO: Maybe give a more informative error message here.
-        self.0.try_into().unwrap()
     }
 }

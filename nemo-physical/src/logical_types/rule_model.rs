@@ -1,4 +1,4 @@
-use super::types::{DataValue, Long, ValueDomain};
+use crate::datavalues::{DataValue, Long, ValueDomain};
 
 #[derive(Debug)]
 pub enum PrimitiveConstant {
