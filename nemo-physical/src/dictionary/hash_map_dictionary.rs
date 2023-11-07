@@ -140,10 +140,10 @@ impl StringBuffer {
     }
 }
 
-const STRINGREF_STRING_LEGHT_BITS: usize = 24;
-const STRINGREF_STARTING_ADDRESS_BITS: usize = 40;
-const MAX_STRINGREF_STRING_LEGHT: usize = 1 << STRINGREF_STRING_LEGHT_BITS;
-const MAX_STRINGREF_STARTING_ADDRESS: usize = 1 << STRINGREF_STARTING_ADDRESS_BITS;
+const STRINGREF_STRING_LEGHT_BITS: u64 = 24;
+const STRINGREF_STARTING_ADDRESS_BITS: u64 = 40;
+const MAX_STRINGREF_STRING_LEGHT: u64 = 1 << STRINGREF_STRING_LEGHT_BITS;
+const MAX_STRINGREF_STARTING_ADDRESS: u64 = 1 << STRINGREF_STARTING_ADDRESS_BITS;
 
 /// Memory-optimized reference to a string in the dictionary.
 #[derive(Clone, Copy, Debug, Default)]
@@ -159,7 +159,7 @@ impl StringRef {
     /// Creates an object that refers to the current contents of the
     /// buffer's temporary String.
     fn new_tmp(buffer: usize) -> Self {
-        assert!(buffer < MAX_STRINGREF_STRING_LEGHT);
+        assert!(u64::try_from(buffer).unwrap() < MAX_STRINGREF_STRING_LEGHT);
         let u64buffer: u64 = buffer.try_into().unwrap();
         StringRef {
             reference: (u64::MAX << STRINGREF_STRING_LEGHT_BITS) + u64buffer,
@@ -169,8 +169,8 @@ impl StringRef {
     /// Creates a reference to the specific string slice in the buffer.
     /// It is not checked if that slice is allocated.
     fn new(address: usize, len: usize) -> Self {
-        assert!(len < MAX_STRINGREF_STRING_LEGHT);
-        assert!(address < MAX_STRINGREF_STARTING_ADDRESS);
+        assert!(u64::try_from(len).unwrap() < MAX_STRINGREF_STRING_LEGHT);
+        assert!(u64::try_from(address).unwrap() < MAX_STRINGREF_STARTING_ADDRESS);
         let u64add: u64 = address.try_into().unwrap();
         let u64len: u64 = len.try_into().unwrap();
         StringRef {
