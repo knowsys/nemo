@@ -173,7 +173,7 @@ pub trait DataValue {
 
     /// Return the length of the tuple element if
     /// if it is a value in the domain [`ValueDomain::Tuple`].
-    fn tuple_len(&self, _index: usize) -> Option<usize> {
+    fn tuple_len(&self) -> Option<usize> {
         match self.value_domain() {
             ValueDomain::Tuple => Some(self.tuple_len_unchecked()),
             _ => None
