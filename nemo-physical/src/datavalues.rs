@@ -7,6 +7,6 @@ pub mod datavalue;
 pub use datavalue::DataValue;
 pub use datavalue::ValueDomain;
 /// Module to define a [DataValue] implementation for values that can be represented as an i64.
-pub mod long_datavalue;
-pub use long_datavalue::Long;
+pub mod integer_datavalues;
+pub use integer_datavalues::Long;
 

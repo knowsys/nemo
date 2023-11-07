@@ -6,7 +6,7 @@
 /// it is often useful to distinguish some basic domains and to treat values accordingly.
 ///
 /// Note: This is meant as an example now, not as a full list of everything we might need.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ValueDomain {
     /// Domain of all strings of Unicode glyphs.
     String,
@@ -52,44 +52,144 @@ pub trait DataValue {
     fn value_domain(&self) -> ValueDomain;
 
     /// Return the string that this value represents, if it is a value in
+    /// the domain [`ValueDomain::String`].
+    fn to_string(&self) -> Option<String> {
+        match self.value_domain() {
+            ValueDomain::String =>  Some(self.to_string_unchecked()),
+            _ => None
+        }
+    }
+
+    /// Return the string that this value represents, if it is a value in
     /// the domain [`ValueDomain::String`]. Otherwise it panics.
-    fn to_string(&self) -> String {
+    fn to_string_unchecked(&self) -> String {
         panic!("Value is not a string.");
     }
 
     /// Return the pair of string and language tag that this value represents, if it is a value in
+    /// the domain [`ValueDomain::LanguageTaggedString`].
+    fn to_language_tagged_string(&self) -> Option<(String, String)> {
+        match self.value_domain() {
+            ValueDomain::LanguageTaggedString =>  Some(self.to_language_tagged_string_unchecked()),
+            _ => None
+        }
+    }
+
+    /// Return the pair of string and language tag that this value represents, if it is a value in
     /// the domain [`ValueDomain::LanguageTaggedString`]. Otherwise it panics.
-    fn to_language_tagged_string(&self) -> (String, String) {
+    fn to_language_tagged_string_unchecked(&self) -> (String, String) {
         panic!("Value is not a language tagged string.");
     }
 
     /// Return the string that this value represents, if it is a value in
+    /// the domain [`ValueDomain::Iri`].
+    fn to_iri(&self) -> Option<String> {
+        match self.value_domain() {
+            ValueDomain::Iri =>  Some(self.to_iri_unchecked()),
+            _ => None
+        }
+    }
+
+    /// Return the string that this value represents, if it is a value in
     /// the domain [`ValueDomain::Iri`]. Otherwise it panics.
-    fn to_iri(&self) -> String {
+    fn to_iri_unchecked(&self) -> String {
         panic!("Value is not an IRI.");
     }
 
     /// Return the f64 that this value represents, if it is a value in
+    /// the domain [`ValueDomain::Double`].
+    fn to_f64(&self) -> Option<f64> {
+        match self.value_domain() {
+            ValueDomain::Double =>  Some(self.to_f64_unchecked()),
+            _ => None
+        }
+    }
+
+    /// Return the f64 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Double`]. Otherwise it panics.
-    fn to_f64(&self) -> f64 {
+    fn to_f64_unchecked(&self) -> f64 {
         panic!("Value is not a double (64bit floating point number).");
     }
 
+    /// Return true if the value is an integer number that lies within the
+    /// range of an i64 number, i.e., in the interval from -9223372036854775808 to +9223372036854775807.
+    fn fits_into_i64(&self) -> bool {
+        false
+    }
+
+    /// Return true if the value is an integer number that lies within the
+    /// range of an i32 number, i.e., in the interval from -2147483648 to +2147483647.
+    fn fits_into_i32(&self) -> bool {
+        false
+    }
+
     /// Return the i64 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Long`] or a subdoman thereof. Otherwise it panics.
-    fn to_i64(&self) -> i64 {
+    /// the domain [`ValueDomain::Long`] or a subdoman thereof.
+    fn to_i64(&self) -> Option<i64> {
+        if self.fits_into_i64() {
+            Some(self.to_i64_unchecked())
+        } else {
+            None
+        }
+    }
+
+    /// Return the i64 that this value represents, if it is a value in
+    /// the domain [`ValueDomain::Long`] or a subdoman thereof. This can also
+    /// be checked by calling [`Self::fits_into_i64()`].
+    /// Otherwise it panics.
+    fn to_i64_unchecked(&self) -> i64 {
         panic!("Value is not a long (64bit signed integer number).");
     }
 
     /// Return the i32 that this value represents, if it is a value in
+    /// the domain [`ValueDomain::Int`] or a subdoman thereof.
+    fn to_i32(&self) -> Option<i32> {
+        if self.fits_into_i32() {
+            Some(self.to_i32_unchecked())
+        } else {
+            None
+        }
+    }
+
+    /// Return the i32 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Int`] or a subdoman thereof. Otherwise it panics.
-    fn to_i32(&self) -> i32 {
+    fn to_i32_unchecked(&self) -> i32 {
         panic!("Value is not an int (32bit signed integer number).");
     }
 
     /// Return the value of the tuple element at the given index.
+    fn tuple_element(&self, index: usize) -> Option<&dyn DataValue> {
+        match self.value_domain() {
+            ValueDomain::Tuple =>  { 
+                if index < self.tuple_len_unchecked() {
+                    Some(self.tuple_element_unchecked(index))
+                } else {
+                    None
+                }
+            },
+            _ => None
+        }
+    }
+
+    /// Return the length of the tuple element if
+    /// if it is a value in the domain [`ValueDomain::Tuple`].
+    fn tuple_len(&self, _index: usize) -> Option<usize> {
+        match self.value_domain() {
+            ValueDomain::Tuple => Some(self.tuple_len_unchecked()),
+            _ => None
+        }
+    }
+
+    /// Return the length of the tuple element if
+    /// if it is a value in the domain [`ValueDomain::Tuple`].
+    /// Otherwise it panics.
+    fn tuple_len_unchecked(&self) -> usize {
+        panic!("Value is not a tuple");
+    }
+
+    /// Return the value of the tuple element at the given index.
     /// Panics if index is out of bounds or if value is not a tuple.
-    fn tuple_element(&self, _index: usize) -> &dyn DataValue {
+    fn tuple_element_unchecked(&self, _index: usize) -> &dyn DataValue {
         panic!("Value is not a tuple");
     }
 }

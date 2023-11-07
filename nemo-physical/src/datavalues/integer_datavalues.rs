@@ -19,18 +19,30 @@ impl DataValue for Long {
 
     /// The function needs to find the tightest domain for the given value.
     fn value_domain(&self) -> ValueDomain {
-        if self.0 <= std::i32::MAX.into() && self.0 >= std::i32::MIN.into() {
+        if self.fits_into_i32() {
             ValueDomain::Int
         } else {
             ValueDomain::Long
         }
     }
 
-    fn to_i64(&self) -> i64 {
+    fn fits_into_i64(&self) -> bool {
+        true
+    }
+
+     fn fits_into_i32(&self) -> bool {
+        self.0 <= std::i32::MAX.into() && self.0 >= std::i32::MIN.into()
+    }
+
+    fn to_i64(&self) -> Option<i64> {
+        Some(self.0)
+    }
+
+    fn to_i64_unchecked(&self) -> i64 {
         self.0
     }
 
-    fn to_i32(&self) -> i32 {
+    fn to_i32_unchecked(&self) -> i32 {
         // TODO: Maybe give a more informative error message here.
         self.0.try_into().unwrap()
     }

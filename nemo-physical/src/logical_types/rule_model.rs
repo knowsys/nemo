@@ -45,7 +45,7 @@ impl DataValue for TupleConstant {
         ValueDomain::Tuple
     }
 
-    fn tuple_element(&self, index: usize) -> &dyn DataValue {
+    fn tuple_element_unchecked(&self, index: usize) -> &dyn DataValue {
         &self.fields[index]
     }
 }
