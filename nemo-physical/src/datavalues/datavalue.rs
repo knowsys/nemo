@@ -26,29 +26,58 @@ pub enum ValueDomain {
     /// This set of values is disjoint from all other numerical domains.
     Double,
     /// Domain of all unsigned 64bit integer numbers: 0…+18446744073709551615, or 0 … +2^64-1.
-    /// This is a superset of [`ValueDomain::PositiveLong`] and its respective subtypes.
+    /// This is a superset of [`ValueDomain::NonNegativeLong`] and its respective subtypes.
     UnsignedLong,
-    /// Domain of all signed 64bit integer numbers that are positive: 0…+9223372036854775807, or 0 … +2^63-1.
+    /// Domain of all signed 64bit integer numbers that are not negative: 0…+9223372036854775807, or 0 … +2^63-1.
     /// This is a superset of [`ValueDomain::Int`].
-    PositiveLong,   
+    NonNegativeLong,   
     /// Domain of all unsigned 32bit integer numbers: 0…+4294967295, or 0 … +2^32-1.
-    /// This is a superset of [`ValueDomain::PositiveInt`].
+    /// This is a superset of [`ValueDomain::NonNegativeInt`].
     UnsignedInt,
-    /// Domain of all signed 32bit integer numbers that are positive: 0…+2147483647, or 0 … +2^31-1.
+    /// Domain of all signed 32bit integer numbers that are not negative: 0…+2147483647, or 0 … +2^31-1.
     /// This is the smallest integer domain we consider, contained in all others.
-    PositiveInt,
+    NonNegativeInt,
     /// Domain of all signed 64bit integer numbers: -9223372036854775808…+9223372036854775807, or
     /// -2^63 … +2^63-1.
-    /// It is a superset of [`ValueDomain::PositiveLong`] and [`ValueDomain::Int`], and their
+    /// It is a superset of [`ValueDomain::NonNegativeLong`] and [`ValueDomain::Int`], and their
     /// respective subdomains.
     Long,
     /// Domain of all signed 32bit integer numbers: -2147483648…+2147483647, or -2^31 … +2^31-1.
-    /// It is a superset of [`ValueDomain::PositiveInt`] and a subset of [`ValueDomain::Long`].
+    /// It is a superset of [`ValueDomain::NonNegativeInt`] and a subset of [`ValueDomain::Long`].
     Int,
     /// Domain of all tuples.
     Tuple,
     /// Domain of all data values not covered by the remaining domains
     Other,
+}
+
+impl ValueDomain {
+    /// Obtain the datatype IRI that we generally use in canonical values
+    /// of a certain domain. In many cases, we use existing identifiers, especially
+    /// the XML Schema datatypes that are also used in RDF.
+    /// 
+    /// The method panics on undefined cases, especially when called for [`ValueDomain::Other`],
+    /// which does not have a canonical type that is determined by the domain.
+    pub(crate) fn type_iri(&self) -> String {
+        match self {
+            ValueDomain::String => "http://www.w3.org/2001/XMLSchema#string".to_string(),
+            ValueDomain::LanguageTaggedString => "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string(),
+            ValueDomain::Iri => "http://www.w3.org/2001/XMLSchema#anyURI".to_string(),
+            ValueDomain::Double => "http://www.w3.org/2001/XMLSchema#double".to_string(),
+            // We prefer long and int for integer types where possible, since they are most widely supported:
+            ValueDomain::UnsignedLong => "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string(),
+            ValueDomain::Long => "http://www.w3.org/2001/XMLSchema#long".to_string(),
+            ValueDomain::NonNegativeLong => "http://www.w3.org/2001/XMLSchema#long".to_string(),
+            ValueDomain::UnsignedInt => "http://www.w3.org/2001/XMLSchema#long".to_string(),
+            ValueDomain::Int => "http://www.w3.org/2001/XMLSchema#int".to_string(),
+            ValueDomain::NonNegativeInt => "http://www.w3.org/2001/XMLSchema#int".to_string(),
+            // Tuples have no type in RDF
+            ValueDomain::Tuple => panic!("There is no canonical datatype for {:?} defined in Nemo yet. We'll need an IRI there.", self),
+            // Other literals cannot have a fixed canonical type by definition
+            ValueDomain::Other => panic!("There is no canonical datatype for {:?}. Use the type of the value directly.", self),
+            _ => panic!("No dataytype IRI defined for value domain {:?}", self),
+        }
+    }
 }
 
 /// Trait for a data value. Implementations of this trait define a single

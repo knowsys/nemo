@@ -26,24 +26,9 @@ const I64MIN_AS_I64: i64 = std::i64::MIN;
 #[derive(Debug, Clone, Copy)]
 pub struct Long(i64);
 
-/// Obtain the RDF datatype IRI that we generally use in canonical integer values
-/// of a certain domain.
-/// TODO: Maybe move this to ValueDomain and define it for all domains there?
-fn rdf_type_for_integer_domain(value_domain: ValueDomain) -> String {
-    match value_domain {
-        ValueDomain::UnsignedLong => "http://www.w3.org/2001/XMLSchema#unsignedLong".to_owned(),
-        ValueDomain::Long => "http://www.w3.org/2001/XMLSchema#long".to_owned(),
-        ValueDomain::PositiveLong => "http://www.w3.org/2001/XMLSchema#long".to_owned(),
-        ValueDomain::UnsignedInt => "http://www.w3.org/2001/XMLSchema#long".to_owned(),
-        ValueDomain::Int => "http://www.w3.org/2001/XMLSchema#int".to_owned(),
-        ValueDomain::PositiveInt => "http://www.w3.org/2001/XMLSchema#int".to_owned(),
-        _ => panic!("Unexpected value domain {:?} for integer", value_domain),
-    }
-}
-
 impl DataValue for Long {
     fn datatype_iri(&self) -> String {
-        rdf_type_for_integer_domain(self.value_domain())
+        self.value_domain().type_iri()
     }
 
     fn lexical_value(&self) -> String {
@@ -54,11 +39,11 @@ impl DataValue for Long {
     fn value_domain(&self) -> ValueDomain {
         if self.0 >= 0 {
             if self.0 <= I32MAX_AS_I64 {
-                return ValueDomain::PositiveInt;
+                return ValueDomain::NonNegativeInt;
             } else if self.0 <= U32MAX_AS_I64 {
                 return ValueDomain::UnsignedInt;
             } else {
-                return ValueDomain::PositiveLong;
+                return ValueDomain::NonNegativeLong;
             }
         } else {
             if self.0 >= I32MIN_AS_I64 {
@@ -97,13 +82,13 @@ mod test {
     use crate::datavalues::{DataValue,ValueDomain};
 
     #[test]
-    fn test_long_positive_long() {
+    fn test_long_nonnegative_long() {
         let long_value: i64 =  U32MAX_AS_I64 + 42;
         let long1 = Long(long_value);
 
         assert_eq!(long1.lexical_value(), long_value.to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#long".to_string());
-        assert_eq!(long1.value_domain(), ValueDomain::PositiveLong);
+        assert_eq!(long1.value_domain(), ValueDomain::NonNegativeLong);
 
         assert_eq!(long1.to_i64(), Some(long_value));
         assert_eq!(long1.to_i64_unchecked(), long_value);
@@ -132,12 +117,12 @@ mod test {
     }
 
     #[test]
-    fn test_long_positive_int() {
+    fn test_long_nonnegative_int() {
         let long1 = Long(42);
 
         assert_eq!(long1.lexical_value(), "42".to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#int".to_string());
-        assert_eq!(long1.value_domain(), ValueDomain::PositiveInt);
+        assert_eq!(long1.value_domain(), ValueDomain::NonNegativeInt);
 
         assert_eq!(long1.to_i64(), Some(42));
         assert_eq!(long1.to_i64_unchecked(), 42);
