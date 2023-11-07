@@ -4,8 +4,15 @@
 /// Enum of different value domains that are distinguished in this code,
 /// such as "string" or "64bit floating point numbers". Even in an untyped context,
 /// it is often useful to distinguish some basic domains and to treat values accordingly.
-///
-/// Note: This is meant as an example now, not as a full list of everything we might need.
+/// 
+/// Most domains are disjoint to other domains. Where this is not the case, we make sure 
+/// that the intersectoin of overlapping domains is also available as a constant.
+/// 
+/// The main case where this is needed are integer numbers, which exist in several ranges
+/// that we need to distinguish to storing them efficiently.
+/// Mainly, we care about signed and unsigned 32bit and 64bit numbers, and we add auxiliary
+/// domains for the integers that are both in i32 and in u64 (i.e., "u31"), and for those that are both
+/// in i64 and in u64 (i.e., "u63").
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ValueDomain {
     /// Domain of all strings of Unicode glyphs.
@@ -18,11 +25,25 @@ pub enum ValueDomain {
     /// Domain of all 64bit floating point numbers incl. ±Inf, ±0, NaN.
     /// This set of values is disjoint from all other numerical domains.
     Double,
-    /// Domain of all signed 64bit integer numbers: -9223372036854775808…+9223372036854775807.
+    /// Domain of all unsigned 64bit integer numbers: 0…+18446744073709551615, or 0 … +2^64-1.
+    /// This is a superset of [`ValueDomain::PositiveLong`] and its respective subtypes.
+    UnsignedLong,
+    /// Domain of all signed 64bit integer numbers that are positive: 0…+9223372036854775807, or 0 … +2^63-1.
     /// This is a superset of [`ValueDomain::Int`].
+    PositiveLong,   
+    /// Domain of all unsigned 32bit integer numbers: 0…+4294967295, or 0 … +2^32-1.
+    /// This is a superset of [`ValueDomain::PositiveInt`].
+    UnsignedInt,
+    /// Domain of all signed 32bit integer numbers that are positive: 0…+2147483647, or 0 … +2^31-1.
+    /// This is the smallest integer domain we consider, contained in all others.
+    PositiveInt,
+    /// Domain of all signed 64bit integer numbers: -9223372036854775808…+9223372036854775807, or
+    /// -2^63 … +2^63-1.
+    /// It is a superset of [`ValueDomain::PositiveLong`] and [`ValueDomain::Int`], and their
+    /// respective subdomains.
     Long,
-    /// Domain of all signed 32bit integer numbers: -2147483648…+2147483647.
-    /// This is a subset of [`ValueDomain::Long`].
+    /// Domain of all signed 32bit integer numbers: -2147483648…+2147483647, or -2^31 … +2^31-1.
+    /// It is a superset of [`ValueDomain::PositiveInt`] and a subset of [`ValueDomain::Long`].
     Int,
     /// Domain of all tuples.
     Tuple,
