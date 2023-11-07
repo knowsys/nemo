@@ -26,16 +26,24 @@ const I64MIN_AS_I64: i64 = std::i64::MIN;
 #[derive(Debug, Clone, Copy)]
 pub struct Long(i64);
 
+/// Obtain the RDF datatype IRI that we generally use in canonical integer values
+/// of a certain domain.
+/// TODO: Maybe move this to ValueDomain and define it for all domains there?
+fn rdf_type_for_integer_domain(value_domain: ValueDomain) -> String {
+    match value_domain {
+        ValueDomain::UnsignedLong => "http://www.w3.org/2001/XMLSchema#unsignedLong".to_owned(),
+        ValueDomain::Long => "http://www.w3.org/2001/XMLSchema#long".to_owned(),
+        ValueDomain::PositiveLong => "http://www.w3.org/2001/XMLSchema#long".to_owned(),
+        ValueDomain::UnsignedInt => "http://www.w3.org/2001/XMLSchema#long".to_owned(),
+        ValueDomain::Int => "http://www.w3.org/2001/XMLSchema#int".to_owned(),
+        ValueDomain::PositiveInt => "http://www.w3.org/2001/XMLSchema#int".to_owned(),
+        _ => panic!("Unexpected value domain {:?} for integer", value_domain),
+    }
+}
+
 impl DataValue for Long {
     fn datatype_iri(&self) -> String {
-        match self.value_domain() {
-            ValueDomain::Long => "http://www.w3.org/2001/XMLSchema#long".to_owned(),
-            ValueDomain::PositiveLong => "http://www.w3.org/2001/XMLSchema#long".to_owned(),
-            ValueDomain::UnsignedInt => "http://www.w3.org/2001/XMLSchema#long".to_owned(),
-            ValueDomain::Int => "http://www.w3.org/2001/XMLSchema#int".to_owned(),
-            ValueDomain::PositiveInt => "http://www.w3.org/2001/XMLSchema#int".to_owned(),
-            _ => panic!("Unexpected value domain {:?} for i64", self.value_domain()),
-        }
+        rdf_type_for_integer_domain(self.value_domain())
     }
 
     fn lexical_value(&self) -> String {
