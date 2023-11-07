@@ -1,7 +1,0 @@
-@source sourceA[3]: load-csv("sources/dataA.csv").
-@source sourceB[3]: load-csv("sources/dataB.csv").
-@source sourceC[3]: load-csv("sources/dataC.csv").
-
-J1(?X, ?Y, ?Z) :- sourceA(?X, ?Z, ?Y), sourceB(?X, ?Y, ?T) .
-J2(?X, ?Y, ?Z) :- sourceA(?Z, ?Y, ?X), sourceC(?X, ?Y, ?T) .
-J3(?X, ?Y, ?W) :- sourceA(?T, ?Y, ?X), sourceB(?T, ?Y, ?X), sourceC(?X, ?Y, ?W) .

@@ -1,3 +1,0 @@
-@source source[3]: load-csv("sources/empty.csv").
-
-out(?X, ?Y, ?Z) :- source(?X, ?Y, ?Z) .

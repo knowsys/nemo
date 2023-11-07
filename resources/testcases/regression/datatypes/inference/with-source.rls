@@ -1,0 +1,6 @@
+@declare a(integer) .
+
+@source a[1]: load-csv("../sources/a.csv") .
+
+c(?X, ?Y) :- b(?X, ?Y) .
+b(?X, ?X) :- a(?X) .
