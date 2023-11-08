@@ -24,7 +24,7 @@ const I32MIN_AS_I64: i64 = -I32MAX_AS_I64 - 1;
 
 /// Physical representation of an integer as an u64.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnsignedLong(u64);
 
 impl DataValue for UnsignedLong {
@@ -85,7 +85,7 @@ impl DataValue for UnsignedLong {
 
 /// Physical representation of an integer as an i64.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Long(i64);
 
 impl DataValue for Long {

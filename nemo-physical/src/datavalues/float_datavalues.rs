@@ -72,6 +72,8 @@ impl DataValue for Double {
     }
 }
 
+impl Eq for Double {} // Possible since we exclude NaNs
+
 #[cfg(test)]
 mod test {
     use super::{Double,NonFiniteFloatError};
