@@ -75,7 +75,6 @@ impl ValueDomain {
             ValueDomain::Tuple => panic!("There is no canonical datatype for {:?} defined in Nemo yet. We'll need an IRI there.", self),
             // Other literals cannot have a fixed canonical type by definition
             ValueDomain::Other => panic!("There is no canonical datatype for {:?}. Use the type of the value directly.", self),
-            _ => panic!("No dataytype IRI defined for value domain {:?}", self),
         }
     }
 }

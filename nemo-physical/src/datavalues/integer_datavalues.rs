@@ -20,7 +20,7 @@ const I32MAX_AS_I64: i64 = U32MAX_AS_I64 >> 1;
 /// Minimal value of an i32, i.e. -2^31.
 const I32MIN_AS_I64: i64 = -I32MAX_AS_I64 - 1;
 /// Minimal value of an i64, i.e. -2^63.
-const I64MIN_AS_I64: i64 = std::i64::MIN;
+//const I64MIN_AS_I64: i64 = std::i64::MIN;
 
 /// Physical representation of an integer as an u64.
 #[repr(transparent)]
