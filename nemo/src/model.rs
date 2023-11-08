@@ -5,7 +5,12 @@ pub mod chase_model;
 
 /// Defines the "official" rule model that we expose to the outside
 /// world. Allows faithful serialisation of parsed rule programs.
+///
+/// TODO: Will this become the AST-Model?
 pub mod rule_model;
+
+/// TODO: Should this be the "official" rule model that we expose to the outside world?
+pub mod object_model;
 
 pub mod types;
 
