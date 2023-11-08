@@ -16,3 +16,6 @@ pub use float_datavalues::Double;
 /// Module to define [DataValue] implementations for values that can be represented as Unicode strings.
 pub mod string_datavalue;
 pub use string_datavalue::StringDataValue;
+/// Module to define [DataValue] implementations for values that correspond to IRIs.
+pub mod iri_datavalue;
+pub use iri_datavalue::IriDataValue;
