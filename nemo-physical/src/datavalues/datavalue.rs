@@ -173,6 +173,18 @@ pub trait DataValue {
         false
     }
 
+    /// Return true if the value is an integer number that lies within the
+    /// range of an u64 number, i.e., in the interval from 0 to +18446744073709551615.
+    fn fits_into_u64(&self) -> bool {
+        false
+    }
+
+    /// Return true if the value is an integer number that lies within the
+    /// range of an u32 number, i.e., in the interval from 0 to +4294967295.
+    fn fits_into_u32(&self) -> bool {
+        false
+    }
+
     /// Return the i64 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Long`] or a subdoman thereof.
     fn to_i64(&self) -> Option<i64> {
@@ -204,6 +216,40 @@ pub trait DataValue {
     /// Return the i32 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Int`] or a subdoman thereof. Otherwise it panics.
     fn to_i32_unchecked(&self) -> i32 {
+        panic!("Value is not an int (32bit signed integer number).");
+    }
+
+    /// Return the u64 that this value represents, if it is a value in
+    /// the domain [`ValueDomain::UnsignedLong`] or a subdoman thereof.
+    fn to_u64(&self) -> Option<u64> {
+        if self.fits_into_u64() {
+            Some(self.to_u64_unchecked())
+        } else {
+            None
+        }
+    }
+
+    /// Return the i64 that this value represents, if it is a value in
+    /// the domain [`ValueDomain::UnsignedLong`] or a subdoman thereof. This can also
+    /// be checked by calling [`Self::fits_into_i64()`].
+    /// Otherwise it panics.
+    fn to_u64_unchecked(&self) -> u64 {
+        panic!("Value is not a long (64bit signed integer number).");
+    }
+
+    /// Return the u32 that this value represents, if it is a value in
+    /// the domain [`ValueDomain::UnsignedInt`] or a subdoman thereof.
+    fn to_u32(&self) -> Option<u32> {
+        if self.fits_into_u32() {
+            Some(self.to_u32_unchecked())
+        } else {
+            None
+        }
+    }
+
+    /// Return the u32 that this value represents, if it is a value in
+    /// the domain [`ValueDomain::UnsignedInt`] or a subdoman thereof. Otherwise it panics.
+    fn to_u32_unchecked(&self) -> u32 {
         panic!("Value is not an int (32bit signed integer number).");
     }
 
