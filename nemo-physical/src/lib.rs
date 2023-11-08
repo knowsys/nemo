@@ -24,10 +24,10 @@
 pub mod columnar;
 pub mod tabular;
 
-pub mod datavalues;
 pub mod aggregates;
 pub mod builder_proxy;
 pub mod datatypes;
+pub mod datavalues;
 pub mod dictionary;
 pub mod error;
 pub mod management;
@@ -41,5 +41,3 @@ pub mod arithmetic;
 
 /// Module defining data structures for working with conditions.
 pub mod condition;
-
-pub mod logical_types;
