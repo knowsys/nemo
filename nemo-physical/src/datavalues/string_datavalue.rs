@@ -33,13 +33,13 @@ mod test {
     #[test]
     fn test_string() {
         let value = "Hello world";
-        let double = StringDataValue(value.to_string());
+        let dv = StringDataValue(value.to_string());
 
-        assert_eq!(double.lexical_value(), value.to_string());
-        assert_eq!(double.datatype_iri(), "http://www.w3.org/2001/XMLSchema#string".to_string());
-        assert_eq!(double.value_domain(), ValueDomain::String);
+        assert_eq!(dv.lexical_value(), value.to_string());
+        assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#string".to_string());
+        assert_eq!(dv.value_domain(), ValueDomain::String);
 
-        assert_eq!(double.to_string(), Some(value.to_string()));
-        assert_eq!(double.to_string_unchecked(), value.to_string());
+        assert_eq!(dv.to_string(), Some(value.to_string()));
+        assert_eq!(dv.to_string_unchecked(), value.to_string());
     }
 }
