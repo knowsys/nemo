@@ -6,7 +6,11 @@
 pub mod datavalue;
 pub use datavalue::DataValue;
 pub use datavalue::ValueDomain;
-/// Module to define a [DataValue] implementation for values that can be represented as an i64.
+/// Module to define [DataValue] implementations for values that can be represented as integers.
 pub mod integer_datavalues;
 pub use integer_datavalues::Long;
+pub use integer_datavalues::UnsignedLong;
+/// Module to define [DataValue] implementations for values that can be represented as floating point numbers.
+pub mod float_datavalues;
+pub use float_datavalues::Double;
 
