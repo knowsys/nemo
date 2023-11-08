@@ -70,7 +70,7 @@ impl PositionGraph {
             let mut aggregate_input_to_output_variables =
                 HashMap::<Variable, Vec<(Variable, PositionGraphEdge)>>::new();
             for aggregate in rule.aggregates() {
-                for input_variable_identifier in &aggregate.variables {
+                for input_variable_identifier in &aggregate.input_variables {
                     let edge_label = if aggregate.aggregate_operation.static_output_type().is_some()
                     {
                         PositionGraphEdge::BodyToHeadAggregateStaticOutputType

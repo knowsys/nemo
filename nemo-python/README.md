@@ -3,7 +3,7 @@
 This crate provide python bindings for the `nemo` crate.
 
 > **Note**
-> These bindings are currently in an experimental state and likely subject to change.
+> These bindings are currently in an experimental state and subject to change.
 
 ## Building
 

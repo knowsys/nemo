@@ -833,20 +833,10 @@ impl<'a> RuleParser<'a> {
                     if let Some(logical_aggregate_operation) =
                         (&aggregate_operation_identifier).into()
                     {
-                        let len_variables = variables.len();
-
                         let aggregate = Aggregate {
                             logical_aggregate_operation,
                             terms: variables.into_iter().map(PrimitiveTerm::Variable).collect(),
                         };
-
-                        // Check that there is exactly one variable used in the aggregate
-                        // This may change when distinct variables are implemented
-                        if len_variables != 1 {
-                            return Err(Err::Failure(
-                                ParseError::InvalidVariableCountInAggregate(aggregate).at(input),
-                            ));
-                        }
 
                         Ok((remainder, Term::Aggregation(aggregate)))
                     } else {

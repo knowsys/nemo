@@ -9,6 +9,7 @@ use super::{
     processor::{AggregateGroupProcessor, AggregateProcessor},
 };
 
+#[derive(Debug)]
 pub(crate) struct MinAggregateProcessor<A>
 where
     A: Aggregate,
@@ -34,6 +35,7 @@ impl<A: Aggregate> AggregateProcessor<A> for MinAggregateProcessor<A> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct MinAggregateGroupProcessor<A>
 where
     A: Aggregate,

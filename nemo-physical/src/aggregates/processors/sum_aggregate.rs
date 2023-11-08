@@ -9,6 +9,7 @@ use super::{
     processor::{AggregateGroupProcessor, AggregateProcessor},
 };
 
+#[derive(Debug)]
 pub(crate) struct SumAggregateProcessor<A>
 where
     A: Aggregate,
@@ -34,6 +35,7 @@ impl<A: Aggregate> AggregateProcessor<A> for SumAggregateProcessor<A> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct SumAggregateGroupProcessor<A>
 where
     A: Aggregate,

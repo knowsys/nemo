@@ -9,6 +9,7 @@ use super::{
     processor::{AggregateGroupProcessor, AggregateProcessor},
 };
 
+#[derive(Debug)]
 pub(crate) struct MaxAggregateProcessor<A>
 where
     A: PartialEq + PartialOrd + 'static,
@@ -34,6 +35,7 @@ impl<A: Aggregate> AggregateProcessor<A> for MaxAggregateProcessor<A> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct MaxAggregateGroupProcessor<A>
 where
     A: Aggregate,

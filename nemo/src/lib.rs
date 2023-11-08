@@ -1,4 +1,4 @@
-//! An experimental project for rule reasoning.
+//! A fast in-memory rule engine
 
 #![deny(
     missing_debug_implementations,
