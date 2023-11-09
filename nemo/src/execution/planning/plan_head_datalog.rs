@@ -59,7 +59,7 @@ impl HeadStrategy for DatalogStrategy {
         current_plan: &mut SubtableExecutionPlan,
         body: ExecutionNodeRef,
         _rule_info: &RuleInfo,
-        variable_order: VariableOrder,
+        variable_order: &VariableOrder,
         step: usize,
     ) {
         for (predicate, head_instructions) in self.predicate_to_atoms.iter() {
