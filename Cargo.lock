@@ -508,6 +508,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "delegate"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ee5df75c70b95bd3aacc8e2fd098797692fb1d54121019c4de481e42f04c8a1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "derive_arbitrary"
 version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1230,6 +1241,7 @@ dependencies = [
  "arbitrary",
  "ascii_tree",
  "bytesize",
+ "delegate",
  "env_logger 0.10.0",
  "howlong",
  "linked-hash-map",

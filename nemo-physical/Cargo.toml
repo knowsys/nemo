@@ -28,6 +28,7 @@ howlong = { version = "0.1", optional = true }
 rio_turtle = "0.8.4"
 rio_xml = "0.8.4"
 reqwest = "0.11.18"
+delegate = "0.10.0"
 
 [dev-dependencies]
 arbitrary = { version = "1", features = ["derive"] }
