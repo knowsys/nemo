@@ -111,9 +111,9 @@ impl RDFTriplesReader {
         }
     }
 
-    fn read_with_buf_reader<'a, Parser>(
+    fn read_with_buf_reader<Parser>(
         &self,
-        physical_builder_proxies: &mut [PhysicalBuilderProxyEnum<'a>],
+        physical_builder_proxies: &mut [PhysicalBuilderProxyEnum<'_>],
         make_parser: impl FnOnce() -> Parser,
     ) -> Result<(), ReadingError>
     where
