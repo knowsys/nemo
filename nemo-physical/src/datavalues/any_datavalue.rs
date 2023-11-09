@@ -3,22 +3,60 @@
 
 use delegate::delegate;
 
-use super::{DataValue,ValueDomain,DoubleDataValue,StringDataValue,IriDataValue,LongDataValue,UnsignedLongDataValue,LangStringDataValue, OtherDataValue};
+use super::{DataValue,ValueDomain,DoubleDataValue,StringDataValue,
+    IriDataValue,LongDataValue,UnsignedLongDataValue,
+    LangStringDataValue, OtherDataValue, NonFiniteFloatError};
 
 /// Enum that can represent arbitrary [`DataValue`]s.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum AnyDataValue {
     String(StringDataValue),
     LanguageTaggedString(LangStringDataValue),
     Iri(IriDataValue),
     Double(DoubleDataValue),
     UnsignedLong(UnsignedLongDataValue),
-    //NonNegativeLong(LongDataValue),
-    //UnsignedInt(LongDataValue),
-    //NonNegativeInt(LongDataValue),
     Long(LongDataValue),
-    //Int(LongDataValue),
     Other(OtherDataValue),
+}
+
+impl AnyDataValue {
+    /// Construct a datavalue that represents the given number.
+    pub fn new_integer_from_i64(value: i64) -> Self {
+        AnyDataValue::Long(LongDataValue::new(value))
+    }
+
+    /// Construct a datavalue that represents the given number.
+    pub fn new_integer_from_u64(value: u64) -> Self {
+        AnyDataValue::UnsignedLong(UnsignedLongDataValue::new(value))
+    }
+
+    /// Construct a datavalue that represents the given number.
+    pub fn new_double_from_f64(value: f64) -> Result<AnyDataValue, NonFiniteFloatError> {
+        match DoubleDataValue::new(value) {
+            Ok(dv) => Ok(AnyDataValue::Double(dv)),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Construct a datavalue in [`ValueDomain::String`] that represents the given string.
+    pub fn new_string(value: String) -> Self {
+        AnyDataValue::String(StringDataValue::new(value))
+    }
+
+    /// Construct a datavalue in [`ValueDomain::IRI`] that represents the given IRI.
+    pub fn new_iri(value: String) -> Self {
+        AnyDataValue::Iri(IriDataValue::new(value))
+    }
+
+    /// Construct a datavalue in [`ValueDomain::LanguageTaggedString`] that represents a string with a language tag.
+    pub fn new_language_tagged_string(value: String,lang_tag: String) -> Self {
+        AnyDataValue::LanguageTaggedString(LangStringDataValue::new(value, lang_tag))
+    }
+
+    /// Construct a datavalue in [`ValueDomain::Other`] specified by the given lexical value and datatype IRI.
+    pub fn new_other(lexical_value: String,datatype_iri: String) -> Self {
+        AnyDataValue::Other(OtherDataValue::new(lexical_value, datatype_iri))
+    }
 }
 
 impl DataValue for AnyDataValue {
@@ -66,12 +104,12 @@ impl DataValue for AnyDataValue {
 #[cfg(test)]
 mod test {
     use super::AnyDataValue;
-    use crate::datavalues::{DataValue,ValueDomain,DoubleDataValue,StringDataValue,IriDataValue,LongDataValue,UnsignedLongDataValue,LangStringDataValue,OtherDataValue};
+    use crate::datavalues::{DataValue,ValueDomain};
 
     #[test]
     fn test_string() {
         let value = "Hello world";
-        let dv = AnyDataValue::String(StringDataValue::new(value.to_string()));
+        let dv = AnyDataValue::new_string(value.to_string());
 
         assert_eq!(dv.lexical_value(), value.to_string());
         assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#string".to_string());
@@ -84,7 +122,7 @@ mod test {
     #[test]
     fn test_iri() {
         let value = "http://example.org/nemo";
-        let dv = AnyDataValue::Iri(IriDataValue::new(value.to_string()));
+        let dv = AnyDataValue::new_iri(value.to_string());
 
         assert_eq!(dv.lexical_value(), value.to_string());
         assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#anyURI".to_string());
@@ -97,7 +135,7 @@ mod test {
     #[test]
     fn test_double() {
         let value: f64 = 2.34e3;
-        let double = AnyDataValue::Double(DoubleDataValue::from_number(value));
+        let double = AnyDataValue::new_double_from_f64(value).unwrap();
 
         assert_eq!(double.lexical_value(), value.to_string());
         assert_eq!(double.datatype_iri(), "http://www.w3.org/2001/XMLSchema#double".to_string());
@@ -109,7 +147,7 @@ mod test {
 
     #[test]
     fn test_long() {
-        let long1 = AnyDataValue::Long(LongDataValue::new(42));
+        let long1 = AnyDataValue::new_integer_from_i64(42);
 
         assert_eq!(long1.lexical_value(), "42".to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#int".to_string());
@@ -133,7 +171,7 @@ mod test {
     #[test]
     fn test_unsigned_long() {
         let value: u64 =  u64::MAX;
-        let long1 = AnyDataValue::UnsignedLong(UnsignedLongDataValue::new(value));
+        let long1 = AnyDataValue::new_integer_from_u64(value);
 
         assert_eq!(long1.lexical_value(), value.to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string());
@@ -155,7 +193,7 @@ mod test {
     fn test_lang_string() {
         let value = "Hello world";
         let lang = "en-GB";
-        let dv = AnyDataValue::LanguageTaggedString(LangStringDataValue::new(value.to_string(), lang.to_string()));
+        let dv = AnyDataValue::new_language_tagged_string(value.to_string(), lang.to_string());
 
         assert_eq!(dv.lexical_value(), "Hello world@en-GB");
         assert_eq!(dv.datatype_iri(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string());
@@ -169,7 +207,7 @@ mod test {
     fn test_other() {
         let value = "0FB7";
         let datatype_iri = "http://www.w3.org/2001/XMLSchema#hexBinary";
-        let dv = AnyDataValue::Other(OtherDataValue::new(value.to_string(), datatype_iri.to_string()));
+        let dv = AnyDataValue::new_other(value.to_string(), datatype_iri.to_string());
 
         assert_eq!(dv.lexical_value(), value);
         assert_eq!(dv.datatype_iri(), datatype_iri);
