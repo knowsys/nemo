@@ -10,9 +10,11 @@ use crate::{
     management::database::Dict,
 };
 
-/// Trait for a Builder Proxy, which translates a value for a generic data type `T` to the corresponding [`StorageType`][crate::datatypes::StorageTypeName] column elements
+/// Trait for a Builder Proxy, which translates a value for a generic data type `T` to the corresponding
+/// [`StorageType`][crate::datatypes::StorageTypeName] column elements
 pub trait ColumnBuilderProxy<T>: std::fmt::Debug {
-    /// Cache a value to be added to the ColumnBuilder. If a value is already cached, the cached value will be added to the ColumnBuilder before the new value is checked.
+    /// Cache a value to be added to the ColumnBuilder. If a value is already cached, the cached value will be
+    /// added to the ColumnBuilder before the new value is checked.
     ///
     /// The add function checks if the given input can be cast or parsed into the ColumnBuilder type.
     /// If this is not possible a corresponding [`ReadingError`] is returned.
