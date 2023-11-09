@@ -302,6 +302,8 @@ pub struct RuleParser<'a> {
     sources: RefCell<Vec<DataSourceDeclaration>>,
     /// Declarations of predicates with their types.
     predicate_declarations: RefCell<HashMap<Identifier, Vec<PrimitiveType>>>,
+    /// Number counting up for generating distinct wildcards.
+    wildcard_generator: RefCell<usize>,
 }
 
 impl<'a> RuleParser<'a> {
@@ -1003,12 +1005,27 @@ impl<'a> RuleParser<'a> {
                             self.parse_parenthesised_term(),
                             self.parse_function_term(),
                             self.parse_aggregate(),
+                            self.parse_wildcard(),
                         )),
                         multispace_or_comment0,
                     )(input)
                 },
                 || ParseError::ExpectedTerm,
             ),
+        )
+    }
+
+    /// Parse a wildcard variable.
+    pub fn parse_wildcard(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+        traced(
+            "parse_wildcard",
+            map_res(space_delimited_token("_"), |_| {
+                let wildcard = format!("__WILDCARD_{}", self.wildcard_generator.borrow());
+                *self.wildcard_generator.borrow_mut() += 1;
+                Ok::<_, ParseError>(Term::Primitive(PrimitiveTerm::Variable(
+                    Variable::Universal(wildcard.into()),
+                )))
+            }),
         )
     }
 
