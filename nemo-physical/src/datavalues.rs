@@ -19,3 +19,9 @@ pub use string_datavalue::StringDataValue;
 /// Module to define [DataValue] implementations for values that correspond to IRIs.
 pub mod iri_datavalue;
 pub use iri_datavalue::IriDataValue;
+/// Module to define [DataValue] implementations for values that correspond to language-tagged Unicode strings.
+pub mod lang_string_datavalue;
+pub use lang_string_datavalue::LangStringDataValue;
+/// Module to define [DataValue] implementations for arbitrary values.
+pub mod any_datavalue;
+pub use any_datavalue::AnyDataValue;
