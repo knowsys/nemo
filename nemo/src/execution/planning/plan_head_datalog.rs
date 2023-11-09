@@ -72,7 +72,7 @@ impl HeadStrategy for DatalogStrategy {
             let mut project_append_nodes =
                 Vec::<ExecutionNodeRef>::with_capacity(head_instructions.len());
             for head_instruction in head_instructions {
-                let head_binding = atom_binding(&head_instruction.reduced_atom, &variable_order);
+                let head_binding = atom_binding(&head_instruction.reduced_atom, variable_order);
                 let head_reordering =
                     ProjectReordering::from_vector(head_binding.clone(), self.num_body_variables);
 
