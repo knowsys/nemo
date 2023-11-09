@@ -81,12 +81,10 @@ pub(super) fn generate_node_aggregate(
         );
 
         // Update variable order after aggregation
-        {
-            // Remove distinct and unused variables of the aggregate
-            variable_order = variable_order.restrict_to(aggregate_group_by_variables);
-            // Add aggregate output variable
-            variable_order.push(aggregate.output_variable.clone());
-        }
+        // Remove distinct and unused variables of the aggregate
+        variable_order = variable_order.restrict_to(aggregate_group_by_variables);
+        // Add aggregate output variable
+        variable_order.push(aggregate.output_variable.clone());
     }
 
     (node, variable_order)
