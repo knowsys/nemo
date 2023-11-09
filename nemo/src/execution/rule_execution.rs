@@ -59,14 +59,14 @@ impl RuleExecution {
             )
         );
         // TODO: Just because its the first doesn't mean its the best
-        let best_variable_order = &mut self.promising_variable_orders[0].clone();
+        let mut best_variable_order = self.promising_variable_orders[0].clone();
 
         let mut subtable_execution_plan = SubtableExecutionPlan::default();
         let body_tree = self.body_strategy.add_plan_body(
             table_manager,
             &mut subtable_execution_plan,
             rule_info,
-            best_variable_order, // Variable order possibly gets updated
+            &mut best_variable_order, // Variable order possibly gets updated
             step_number,
         );
 
@@ -75,7 +75,7 @@ impl RuleExecution {
             &mut subtable_execution_plan,
             body_tree,
             rule_info,
-            best_variable_order.clone(),
+            &best_variable_order,
             step_number,
         );
 
