@@ -8,11 +8,11 @@ pub use datavalue::DataValue;
 pub use datavalue::ValueDomain;
 /// Module to define [DataValue] implementations for values that can be represented as integers.
 pub mod integer_datavalues;
-pub use integer_datavalues::Long;
-pub use integer_datavalues::UnsignedLong;
+pub use integer_datavalues::LongDataValue;
+pub use integer_datavalues::UnsignedLongDataValue;
 /// Module to define [DataValue] implementations for values that can be represented as floating point numbers.
 pub mod float_datavalues;
-pub use float_datavalues::Double;
+pub use float_datavalues::DoubleDataValue;
 /// Module to define [DataValue] implementations for values that can be represented as Unicode strings.
 pub mod string_datavalue;
 pub use string_datavalue::StringDataValue;

@@ -26,35 +26,35 @@ impl  std::error::Error for NonFiniteFloatError {}
 /// Physical representation of a 64bit floating point number as an f64.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Double(f64);
+pub struct DoubleDataValue(f64);
 
-impl Double {
+impl DoubleDataValue {
     /// Wraps the given [`f64`]-`value` as a value over [`Double`].
     ///
     /// # Errors
     /// The given `value` is NaN or an infinity.
-    pub fn new(value: f64) -> Result<Double, NonFiniteFloatError> {
+    pub fn new(value: f64) -> Result<DoubleDataValue, NonFiniteFloatError> {
         if !value.is_finite() {
             return Err(NonFiniteFloatError.into());
         }
 
-        Ok(Double(value))
+        Ok(DoubleDataValue(value))
     }
 
     /// Wraps the given [`f64`]-`value` as a value over [`Double`].
     ///
     /// # Panics
     /// The given `value` is [`f64::NAN`].
-    pub fn from_number(value: f64) -> Double {
+    pub fn from_number(value: f64) -> DoubleDataValue {
         if !value.is_finite() {
             panic!("Floating point number must represent a finite value (neither infinity nor NaN are allowed).");
         }
 
-        Double(value)
+        DoubleDataValue(value)
     }
 }
 
-impl DataValue for Double {
+impl DataValue for DoubleDataValue {
     fn datatype_iri(&self) -> String {
         self.value_domain().type_iri()
     }
@@ -72,17 +72,17 @@ impl DataValue for Double {
     }
 }
 
-impl Eq for Double {} // Possible since we exclude NaNs
+impl Eq for DoubleDataValue {} // Possible since we exclude NaNs
 
 #[cfg(test)]
 mod test {
-    use super::{Double,NonFiniteFloatError};
+    use super::{DoubleDataValue,NonFiniteFloatError};
     use crate::datavalues::{DataValue,ValueDomain};
 
     #[test]
     fn test_double() {
         let value: f64 = 2.34e3;
-        let double = Double::from_number(value);
+        let double = DoubleDataValue::from_number(value);
 
         assert_eq!(double.lexical_value(), value.to_string());
         assert_eq!(double.datatype_iri(), "http://www.w3.org/2001/XMLSchema#double".to_string());
@@ -94,19 +94,19 @@ mod test {
 
     #[test]
     fn test_double_nan() {
-        let result = Double::new(f64::NAN);
+        let result = DoubleDataValue::new(f64::NAN);
         assert_eq!(result.err().unwrap(), NonFiniteFloatError);
     }
 
     #[test]
     fn test_double_pos_inf() {
-        let result = Double::new(f64::INFINITY);
+        let result = DoubleDataValue::new(f64::INFINITY);
         assert_eq!(result.err().unwrap(), NonFiniteFloatError);
     }
 
     #[test]
     fn test_double_neg_inf() {
-        let result = Double::new(f64::NEG_INFINITY);
+        let result = DoubleDataValue::new(f64::NEG_INFINITY);
         assert_eq!(result.err().unwrap(), NonFiniteFloatError);
     }
 }

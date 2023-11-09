@@ -25,9 +25,9 @@ const I32MIN_AS_I64: i64 = -I32MAX_AS_I64 - 1;
 /// Physical representation of an integer as an u64.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct UnsignedLong(u64);
+pub struct UnsignedLongDataValue(u64);
 
-impl DataValue for UnsignedLong {
+impl DataValue for UnsignedLongDataValue {
     fn datatype_iri(&self) -> String {
         self.value_domain().type_iri()
     }
@@ -86,9 +86,9 @@ impl DataValue for UnsignedLong {
 /// Physical representation of an integer as an i64.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Long(i64);
+pub struct LongDataValue(i64);
 
-impl DataValue for Long {
+impl DataValue for LongDataValue {
     fn datatype_iri(&self) -> String {
         self.value_domain().type_iri()
     }
@@ -155,13 +155,13 @@ impl DataValue for Long {
 
 #[cfg(test)]
 mod test {
-    use super::{Long,UnsignedLong,I32MAX_AS_I64,U32MAX_AS_I64,I32MIN_AS_I64,U32MAX_AS_U64, I32MAX_AS_U64, U64MAX_AS_U64};
+    use super::{LongDataValue,UnsignedLongDataValue,I32MAX_AS_I64,U32MAX_AS_I64,I32MIN_AS_I64,U32MAX_AS_U64, I32MAX_AS_U64, U64MAX_AS_U64};
     use crate::datavalues::{DataValue,ValueDomain};
 
     #[test]
     fn test_unsigned_long_unsigned_long() {
         let value: u64 =  U64MAX_AS_U64;
-        let long1 = UnsignedLong(value);
+        let long1 = UnsignedLongDataValue(value);
 
         assert_eq!(long1.lexical_value(), value.to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string());
@@ -182,7 +182,7 @@ mod test {
     #[test]
     fn test_unsigned_long_nonnegative_long() {
         let value: u64 =  U32MAX_AS_U64 + 42;
-        let long1 = UnsignedLong(value);
+        let long1 = UnsignedLongDataValue(value);
 
         assert_eq!(long1.lexical_value(), value.to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#long".to_string());
@@ -204,7 +204,7 @@ mod test {
     #[test]
     fn test_unsigned_long_unsigned_int() {
         let value: u64 =  I32MAX_AS_U64 + 42;
-        let long1 = UnsignedLong(value);
+        let long1 = UnsignedLongDataValue(value);
 
         assert_eq!(long1.lexical_value(), value.to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#long".to_string());
@@ -226,7 +226,7 @@ mod test {
 
     #[test]
     fn test_unsigned_long_nonnegative_int() {
-        let long1 = UnsignedLong(42);
+        let long1 = UnsignedLongDataValue(42);
 
         assert_eq!(long1.lexical_value(), "42".to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#int".to_string());
@@ -250,7 +250,7 @@ mod test {
     #[test]
     fn test_long_nonnegative_long() {
         let long_value: i64 =  U32MAX_AS_I64 + 42;
-        let long1 = Long(long_value);
+        let long1 = LongDataValue(long_value);
 
         assert_eq!(long1.lexical_value(), long_value.to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#long".to_string());
@@ -273,7 +273,7 @@ mod test {
     #[test]
     fn test_long_unsigned_int() {
         let long_value: i64 =  I32MAX_AS_I64 + 42;
-        let long1 = Long(long_value);
+        let long1 = LongDataValue(long_value);
 
         assert_eq!(long1.lexical_value(), long_value.to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#long".to_string());
@@ -295,7 +295,7 @@ mod test {
 
     #[test]
     fn test_long_nonnegative_int() {
-        let long1 = Long(42);
+        let long1 = LongDataValue(42);
 
         assert_eq!(long1.lexical_value(), "42".to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#int".to_string());
@@ -319,7 +319,7 @@ mod test {
     #[test]
     fn test_long_negative_int() {
         let long_value: i64 =  -42;
-        let long1 = Long(long_value);
+        let long1 = LongDataValue(long_value);
 
         assert_eq!(long1.lexical_value(), long_value.to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#int".to_string());
@@ -341,7 +341,7 @@ mod test {
     #[test]
     fn test_long_negative_long() {
         let long_value: i64 = I32MIN_AS_I64 - 42;
-        let long1 = Long(long_value);
+        let long1 = LongDataValue(long_value);
 
         assert_eq!(long1.lexical_value(), long_value.to_string());
         assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#long".to_string());
