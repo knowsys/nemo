@@ -7,6 +7,13 @@ use super::{DataValue,ValueDomain};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringDataValue(String);
 
+impl StringDataValue {
+    /// Constructor.
+    pub fn new(string: String) -> Self {
+        StringDataValue(string)
+    }
+}
+
 impl DataValue for StringDataValue {
     fn datatype_iri(&self) -> String {
         self.value_domain().type_iri()
@@ -33,7 +40,7 @@ mod test {
     #[test]
     fn test_string() {
         let value = "Hello world";
-        let dv = StringDataValue(value.to_string());
+        let dv = StringDataValue::new(value.to_string());
 
         assert_eq!(dv.lexical_value(), value.to_string());
         assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#string".to_string());

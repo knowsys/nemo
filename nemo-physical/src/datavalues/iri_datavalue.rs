@@ -10,6 +10,14 @@ use super::{DataValue,ValueDomain};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IriDataValue(String);
 
+impl IriDataValue {
+    /// Constructor. It is currently not checked whether the IRI is valid according to applicable specifications
+    /// and standards -- we just treat it like a string.
+    pub fn new(iri: String) -> Self {
+        IriDataValue(iri)
+    }
+}
+
 impl DataValue for IriDataValue {
     fn datatype_iri(&self) -> String {
         self.value_domain().type_iri()
@@ -36,7 +44,7 @@ mod test {
     #[test]
     fn test_iri() {
         let value = "http://example.org/nemo";
-        let dv = IriDataValue(value.to_string());
+        let dv = IriDataValue::new(value.to_string());
 
         assert_eq!(dv.lexical_value(), value.to_string());
         assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#anyURI".to_string());
