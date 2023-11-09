@@ -111,7 +111,7 @@ impl RDFTriplesReader {
         }
     }
 
-    fn read_with_buf_reader<Parser>(
+    fn read_with_parser<Parser>(
         &self,
         physical_builder_proxies: &mut [PhysicalBuilderProxyEnum<'_>],
         make_parser: impl FnOnce() -> Parser,
@@ -194,15 +194,15 @@ impl TableReader for RDFTriplesReader {
         let reader = BufReader::new(reader);
 
         if self.resource.ends_with(".ttl.gz") || self.resource.ends_with(".ttl") {
-            self.read_with_buf_reader(builder_proxies, || {
+            self.read_with_parser(builder_proxies, || {
                 TurtleParser::new(reader, self.base.clone())
             })
         } else if self.resource.ends_with(".rdf.gz") || self.resource.ends_with(".rdf") {
-            self.read_with_buf_reader(builder_proxies, || {
+            self.read_with_parser(builder_proxies, || {
                 RdfXmlParser::new(reader, self.base.clone())
             })
         } else {
-            self.read_with_buf_reader(builder_proxies, || NTriplesParser::new(reader))
+            self.read_with_parser(builder_proxies, || NTriplesParser::new(reader))
         }
     }
 }
@@ -240,7 +240,7 @@ mod test {
                 ];
                 let reader = RDFTriplesReader::new(ResourceProviders::empty(), &RdfFile::new("", None), vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
 
-                let result = reader.read_with_buf_reader(&mut builders, $make_parser);
+                let result = reader.read_with_parser(&mut builders, $make_parser);
                 assert!(result.is_ok());
 
                 let columns = builders
@@ -311,7 +311,7 @@ mod test {
             vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
         );
 
-        let result = reader.read_with_buf_reader(&mut builders, || NTriplesParser::new(data));
+        let result = reader.read_with_parser(&mut builders, || NTriplesParser::new(data));
         assert!(result.is_ok());
 
         let columns = builders
