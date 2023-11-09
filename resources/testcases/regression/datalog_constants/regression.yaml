@@ -1,0 +1,4 @@
+issue: 392
+title: Panic when filtering for non-existing constant
+tracker: https://github.com/knowsys/nemo/issues/392
+type: bugfix
