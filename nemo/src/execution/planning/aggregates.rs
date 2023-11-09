@@ -47,7 +47,8 @@ pub(super) fn generate_node_aggregate(
                 .map(|variable| *variable_order.get(variable).unwrap())
                 .collect();
 
-            let reordering = ProjectReordering::from_vector(reordering_column_indices, 3);
+            let reordering =
+                ProjectReordering::from_vector(reordering_column_indices, variable_order.len());
 
             node = current_plan.plan_mut().project(node, reordering);
 
