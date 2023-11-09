@@ -1020,11 +1020,9 @@ impl<'a> RuleParser<'a> {
         traced(
             "parse_wildcard",
             map_res(space_delimited_token("_"), |_| {
-                let wildcard = format!("__WILDCARD_{}", self.wildcard_generator.borrow());
+                let wildcard = Variable::create_wildcard(*self.wildcard_generator.borrow());
                 *self.wildcard_generator.borrow_mut() += 1;
-                Ok::<_, ParseError>(Term::Primitive(PrimitiveTerm::Variable(
-                    Variable::Universal(wildcard.into()),
-                )))
+                Ok::<_, ParseError>(Term::Primitive(PrimitiveTerm::Variable(wildcard)))
             }),
         )
     }

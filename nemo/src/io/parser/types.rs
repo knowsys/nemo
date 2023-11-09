@@ -134,6 +134,9 @@ pub enum ParseError {
     /// An existentially quantified variable occurs in the body of a rule.
     #[error(r#"Variable "{0}" occurs existentially quantified in the rule body."#)]
     BodyExistential(String),
+    /// A wildcard pattern was used inside of the rule head.
+    #[error(r#"The head of a rule must not contain any wildcard patterns."#)]
+    WildcardInHead,
     /// The universal variable does not occur in a positive body literal.
     #[error(r#"The universal variable "{0}" does not occur in a positive body literal."#)]
     UnsafeHeadVariable(String),
