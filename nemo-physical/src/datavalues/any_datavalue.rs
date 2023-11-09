@@ -10,12 +10,23 @@ use super::{DataValue,ValueDomain,DoubleDataValue,StringDataValue,
 /// Enum that can represent arbitrary [`DataValue`]s.
 #[derive(Debug, Clone)]
 pub enum AnyDataValue {
+    /// Variant for representing [`DataValue`]s in [`ValueDomain::String`].
     String(StringDataValue),
+    /// Variant for representing [`DataValue`]s in [`ValueDomain::LanguageTaggedString`].
     LanguageTaggedString(LangStringDataValue),
+    /// Variant for representing [`DataValue`]s in [`ValueDomain::Iri`].
     Iri(IriDataValue),
+    /// Variant for representing [`DataValue`]s in [`ValueDomain::Double`].
     Double(DoubleDataValue),
+    /// Variant for representing [`DataValue`]s that represent numbers in the u64 range.
+    /// Note that this has some overlap with values of [`AnyDataValue::Long`], which is accounted
+    /// for in the [`Eq`] implementation.
     UnsignedLong(UnsignedLongDataValue),
+    /// Variant for representing [`DataValue`]s that represent numbers in the i64 range.
+    /// Note that this has some overlap with values of [`AnyDataValue::UnsignedLong`], which is accounted
+    /// for in the [`Eq`] implementation.
     Long(LongDataValue),
+    /// Variant for representing [`DataValue`]s in [`ValueDomain::Other`].
     Other(OtherDataValue),
 }
 
