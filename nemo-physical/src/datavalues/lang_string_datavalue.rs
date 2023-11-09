@@ -28,7 +28,9 @@ impl DataValue for LangStringDataValue {
     /// there is no standard for this encoding, and the method should not be used for output anyway
     /// for this type. Hence, the only use of this is to provide a bijection from (String,String) to String.
     fn lexical_value(&self) -> String {
-        self.0.to_owned() + "@" + &self.1 //TODO: escape existing @ in self.1 (should not occur, but it is cheaper to escape here than to check all language tags)
+        // We escape any existing @ in self.1 to avoid confusion with the final @ we inserted.
+        // This should not occur, but it is cheaper to escape here than to validate all language tags.
+        self.0.to_owned() + "@" + &self.1.replace("@", "@@")
     }
 
     fn value_domain(&self) -> ValueDomain {
