@@ -3,7 +3,7 @@
 
 use delegate::delegate;
 
-use super::{DataValue,ValueDomain,DoubleDataValue,StringDataValue,IriDataValue,LongDataValue,UnsignedLongDataValue,LangStringDataValue};
+use super::{DataValue,ValueDomain,DoubleDataValue,StringDataValue,IriDataValue,LongDataValue,UnsignedLongDataValue,LangStringDataValue, OtherDataValue};
 
 /// Enum that can represent arbitrary [`DataValue`]s.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,8 +18,7 @@ pub enum AnyDataValue {
     //NonNegativeInt(LongDataValue),
     Long(LongDataValue),
     //Int(LongDataValue),
-//    /// Domain of all data values not covered by the remaining domains
-//    Other,
+    Other(OtherDataValue),
 }
 
 impl DataValue for AnyDataValue {
@@ -31,6 +30,7 @@ impl DataValue for AnyDataValue {
             AnyDataValue::Double(dv) => dv,
             AnyDataValue::UnsignedLong(dv) => dv,
             AnyDataValue::Long(dv) => dv,
+            AnyDataValue::Other(dv) => dv,
         } {
             fn datatype_iri(&self) -> String;
             fn lexical_value(&self) -> String;
@@ -66,7 +66,7 @@ impl DataValue for AnyDataValue {
 #[cfg(test)]
 mod test {
     use super::AnyDataValue;
-    use crate::datavalues::{DataValue,ValueDomain,DoubleDataValue,StringDataValue,IriDataValue,LongDataValue,UnsignedLongDataValue,LangStringDataValue};
+    use crate::datavalues::{DataValue,ValueDomain,DoubleDataValue,StringDataValue,IriDataValue,LongDataValue,UnsignedLongDataValue,LangStringDataValue,OtherDataValue};
 
     #[test]
     fn test_string() {
@@ -163,5 +163,21 @@ mod test {
 
         assert_eq!(dv.to_language_tagged_string(), Some((value.to_string(), lang.to_string())));
         assert_eq!(dv.to_language_tagged_string_unchecked(), (value.to_string(), lang.to_string()));
+    }
+
+    #[test]
+    fn test_other() {
+        let value = "0FB7";
+        let datatype_iri = "http://www.w3.org/2001/XMLSchema#hexBinary";
+        let dv = AnyDataValue::Other(OtherDataValue::new(value.to_string(), datatype_iri.to_string()));
+
+        assert_eq!(dv.lexical_value(), value);
+        assert_eq!(dv.datatype_iri(), datatype_iri);
+        assert_eq!(dv.value_domain(), ValueDomain::Other);
+
+        assert_eq!(dv.to_string(), None);
+        assert_eq!(dv.to_iri(), None);
+        assert_eq!(dv.to_language_tagged_string(), None);
+        // ...
     }
 }
