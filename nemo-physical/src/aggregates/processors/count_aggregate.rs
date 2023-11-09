@@ -9,6 +9,7 @@ use super::{
     processor::{AggregateGroupProcessor, AggregateProcessor},
 };
 
+#[derive(Debug)]
 pub(crate) struct CountAggregateProcessor<A>
 where
     A: Aggregate,
@@ -34,6 +35,7 @@ impl<A: Aggregate> AggregateProcessor<A> for CountAggregateProcessor<A> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct CountAggregateGroupProcessor<A>
 where
     A: Aggregate,

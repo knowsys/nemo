@@ -313,9 +313,6 @@ pub enum ParseError {
     /// An aggregate may not be used within a complex term.
     #[error(r#"A term ("{0}") may not contain an aggregate as a subterm."#)]
     AggregateSubterm(String),
-    /// An aggregate term uses an invalid amount of variables.
-    #[error(r#"An aggregate term ("{0}") uses an invalid amount of variables. Currently only exactly one variable is allowed inside aggregates"#)]
-    InvalidVariableCountInAggregate(Aggregate),
     /// Unknown aggregate operation
     #[error(r#"Aggregate operation "{0}" is not known"#)]
     UnknownAggregateOperation(String),

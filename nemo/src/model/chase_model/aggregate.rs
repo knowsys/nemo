@@ -3,12 +3,18 @@ use nemo_physical::aggregates::operation::AggregateOperation;
 use crate::model::{Aggregate, LogicalAggregateOperation, PrimitiveTerm, Variable};
 
 /// Specifies how the values for a placeholder aggregate variable will get computed.
+///
+/// Terminology:
+/// * `input_variables` are the distinct variables and the aggregated input variable, not including the group-by variables
+/// * `output_variable` is the single aggregated output variable
+///
+/// See [`nemo_physical::tabular::operations::TrieScanAggregate`]
 #[derive(Debug, Clone)]
 pub struct ChaseAggregate {
     pub(crate) aggregate_operation: AggregateOperation,
     pub(crate) logical_aggregate_operation: LogicalAggregateOperation,
 
-    pub(crate) variables: Vec<Variable>,
+    pub(crate) input_variables: Vec<Variable>,
     pub(crate) output_variable: Variable,
 }
 
@@ -39,8 +45,15 @@ impl ChaseAggregate {
         Self {
             aggregate_operation: physical_operation,
             logical_aggregate_operation,
-            variables,
+            input_variables: variables,
             output_variable,
         }
+    }
+
+    /// Return the aggregated input variable, which is the first of the input variables
+    pub fn aggregated_input_variable(&self) -> &Variable {
+        self.input_variables
+            .first()
+            .expect("aggregates require exactly at least one input variable")
     }
 }

@@ -16,6 +16,7 @@ default = ["timing"]
 timing = ["dep:howlong"]
 
 [dependencies]
+enum_dispatch = "0.3.12"
 log = "0.4"
 bytesize = "1.2"
 thiserror = "1.0"

@@ -2,10 +2,7 @@
 
 use std::collections::HashSet;
 
-use nemo_physical::{
-    management::execution_plan::ExecutionNodeRef,
-    tabular::operations::triescan_aggregate::AggregationInstructions,
-};
+use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
     execution::execution_engine::RuleInfo,
@@ -18,8 +15,8 @@ use crate::{
 };
 
 use super::{
-    arithmetic::generate_node_arithmetic, negation::NegationGenerator, plan_util::cut_last_layers,
-    BodyStrategy, SeminaiveJoinGenerator,
+    aggregates::generate_node_aggregate, arithmetic::generate_node_arithmetic,
+    negation::NegationGenerator, plan_util::cut_last_layers, BodyStrategy, SeminaiveJoinGenerator,
 };
 
 /// Implementation of the semi-naive existential rule evaluation strategy.
@@ -68,7 +65,7 @@ impl SeminaiveStrategy {
             None
         } else {
             // Compute group-by variables for all aggregates in the rule
-            // This is the set off all universal variables in the head except for the aggregated variables
+            // This is the set of all universal variables in the head except for the aggregated variables
             Some(analysis.head_variables.iter().filter(|variable| match variable {
                 Variable::Universal(identifier) => !identifier.0.starts_with(AGGREGATE_VARIABLE_PREFIX),
                 Variable::Existential(_) => panic!("existential head variables are currently not supported together with aggregates"),
@@ -131,62 +128,16 @@ impl BodyStrategy for SeminaiveStrategy {
             )
         }
 
-        // Perform aggregate operations
-        assert!(
-            self.aggregates.len() <= 1,
-            "currently only one aggregate term per rule is supported"
-        );
-        for aggregate in &self.aggregates {
-            let aggregate_group_by_variables = self.aggregate_group_by_variables.as_ref().unwrap();
-
-            let aggregated_column_index = *variable_order
-                .get(
-                    &aggregate
-                        .variables
-                        .first()
-                        .expect("min aggregate requires exactly one variable")
-                        .clone(),
-                )
-                .expect("variable that is aggregated has to be in the variable order");
-
-            // Check that the group-by variables are exactly the first variables in the variable order
-            // See [`AggregationInstructions`] and [`TrieScanAggregate`] documentation
-            // Otherwise the columns would need to be reordered, which is not supported yet
-            for group_by_variable in aggregate_group_by_variables {
-                let index = variable_order.get(group_by_variable).expect("aggregate group-by variable is not in variable order, even though it should be a head variable and thus also safe and in the variable order");
-                if index >= &aggregate_group_by_variables.len() {
-                    panic!("aggregate group by variable {group_by_variable} is at an invalid position in the variable order to allow for aggregation without projection/reorder (index is {index}, but should be smaller than {}).", aggregate_group_by_variables.len());
-                }
-            }
-
-            let processor = aggregate.aggregate_operation.create_processor::<u64>();
-            if !processor.idempotent() {
-                // Check that the aggregate variable is directly behind the group-by variables (because there are no distinct variables)
-                // This is only required when the operation is not idempotent,
-                // because otherwise the the result would not change by intermediate columns in the variable order
-                if aggregated_column_index != aggregate_group_by_variables.len() {
-                    panic!("aggregated variable {} is at an invalid position in the variable order to allow for aggregation without projection/reorder (index is {aggregated_column_index}, but should equal {}).", aggregate
-                    .variables.first().unwrap(), aggregate_group_by_variables.len());
-                }
-            }
-
-            node_seminaive = current_plan.plan_mut().aggregate(
+        if let Some(aggregate_group_by_variables) = &self.aggregate_group_by_variables {
+            // Perform aggregate operations
+            // This updates the variable order with the aggregate placeholder variables replacing the aggregate input variables
+            (node_seminaive, *variable_order) = generate_node_aggregate(
+                current_plan,
+                variable_order.clone(),
                 node_seminaive,
-                AggregationInstructions {
-                    aggregate_operation: aggregate.aggregate_operation,
-                    group_by_column_count: aggregate_group_by_variables.len(),
-                    aggregated_column_index,
-                    last_distinct_column_index: aggregated_column_index,
-                },
+                &self.aggregates,
+                aggregate_group_by_variables,
             );
-
-            // Update variable order
-            {
-                // Remove distinct and unused variables of the aggregate
-                *variable_order = variable_order.restrict_to(aggregate_group_by_variables);
-                // Add aggregate output variable
-                variable_order.push(aggregate.output_variable.clone());
-            }
         }
 
         // Cut away layers not used after arithmetic operations

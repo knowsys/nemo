@@ -164,8 +164,8 @@ struct SyncAccessHandleWriter(web_sys::FileSystemSyncAccessHandle);
 #[cfg(web_sys_unstable_apis)]
 impl std::io::Write for SyncAccessHandleWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        let mut buf: Vec<_> = buf.into();
-        let bytes_written = self.0.write_with_u8_array(&mut buf).map_err(|js_value| {
+        let buf: Vec<_> = buf.into();
+        let bytes_written = self.0.write_with_u8_array(&buf).map_err(|js_value| {
             std_io_error_from_js_value(
                 js_value,
                 "Error while writing to FileSystemSyncAccessHandle",
