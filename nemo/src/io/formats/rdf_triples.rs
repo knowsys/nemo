@@ -226,7 +226,7 @@ mod test {
     fn example_1() {
         macro_rules! parse_example_with_rdf_parser {
             ($data:tt, $make_parser:expr) => {
-                let mut $data = r#"<http://one.example/subject1> <http://one.example/predicate1> <http://one.example/object1> . # comments here
+                let $data = r#"<http://one.example/subject1> <http://one.example/predicate1> <http://one.example/object1> . # comments here
                       # or on a line by themselves
                       _:subject1 <http://an.example/predicate1> "object1" .
                       _:subject2 <http://an.example/predicate2> "object2" .
@@ -287,7 +287,7 @@ mod test {
 
     #[test]
     fn rollback() {
-        let mut data = r#"<http://example.org/> <http://example.org/> <http://example.org/> .
+        let data = r#"<http://example.org/> <http://example.org/> <http://example.org/> .
                           malformed <http://example.org/> <http://example.org/>
                           <http://example.org/> malformed <http://example.org/> .
                           <http://example.org/> <http://example.org/> malformed .
