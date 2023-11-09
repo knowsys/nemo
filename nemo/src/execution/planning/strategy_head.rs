@@ -20,7 +20,7 @@ pub trait HeadStrategy: Debug {
         current_plan: &mut SubtableExecutionPlan,
         body: ExecutionNodeRef,
         rule_info: &RuleInfo,
-        variable_order: VariableOrder,
+        variable_order: &VariableOrder,
         step_number: usize,
     );
 }

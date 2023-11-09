@@ -10,7 +10,7 @@ use nemo::{
     model::{
         chase_model::{ChaseAtom, ChaseFact},
         types::primitive_logical_value::PrimitiveLogicalValueT,
-        Constant, NumericLiteral, RdfLiteral, Term, Variable, XSD_STRING,
+        Constant, NumericLiteral, RdfLiteral, Variable, XSD_STRING,
     },
 };
 
@@ -242,12 +242,10 @@ impl NemoTrace {
     }
 }
 
-fn assignement_to_dict(assignment: &HashMap<Variable, Term>, py: Python) -> PyResult<PyObject> {
+fn assignement_to_dict(assignment: &HashMap<Variable, Constant>, py: Python) -> PyResult<PyObject> {
     let dict = PyDict::new(py);
     for (variable, value) in assignment {
-        // TODO: value should be a constant, which can be converted using the
-        // `constant_to_python` function
-        dict.set_item(variable.to_string(), value.to_string())?;
+        dict.set_item(variable.to_string(), constant_to_python(py, value)?)?;
     }
 
     Ok(dict.to_object(py))

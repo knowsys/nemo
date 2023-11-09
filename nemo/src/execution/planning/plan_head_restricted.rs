@@ -111,7 +111,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
         current_plan: &mut SubtableExecutionPlan,
         node_matches: ExecutionNodeRef,
         rule_info: &RuleInfo,
-        body_join_order: VariableOrder,
+        body_join_order: &VariableOrder,
         step: usize,
     ) {
         // High-level description of the strategy:

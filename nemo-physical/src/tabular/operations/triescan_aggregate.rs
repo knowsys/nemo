@@ -1,7 +1,10 @@
 use std::{cell::UnsafeCell, fmt::Debug};
 
 use crate::{
-    aggregates::{operation::AggregateOperation, processors::processor::AggregateGroupProcessor},
+    aggregates::{
+        operation::AggregateOperation,
+        processors::processor::{AggregateGroupProcessor, AggregateProcessor},
+    },
     columnar::traits::columnscan::ColumnScanT,
     datatypes::{Double, Float, StorageTypeName, StorageValueT},
     tabular::traits::{partial_trie_scan::PartialTrieScan, trie_scan::TrieScan},
@@ -22,7 +25,7 @@ enum AggregatedOutputValue {
 /// Describes which columns of the input trie scan will be group-by, distinct and aggregate columns and other information about the aggregation.
 #[derive(Debug, Clone, Copy)]
 pub struct AggregationInstructions {
-    /// Name of the aggregate operation, which determines the [`AggregateGroupProcessor`] that will be used
+    /// Type of the aggregate operation, which determines the aggregate processor that will be used
     pub aggregate_operation: AggregateOperation,
     /// Number of group-by columns
     ///
@@ -74,12 +77,13 @@ impl AggregationInstructions {
 /// [`TrieScan`] which performs an aggregate operation.
 ///
 /// Input columns:
-/// * Possibly group-by columns
-/// * A single aggregated column possibly mixed with additional distinct columns
+/// * Zero or more group-by columns, followed by
+/// * a single aggregated column possibly mixed with additional distinct columns, followed by
+/// * zero or more peripheral columns, that do not impact the result of the aggregate at all and are not used during aggregation.
 ///
 /// Output columns:
-/// * Group-by columns
-/// * Aggregate output column
+/// * Zero or more group-by columns, followed by
+/// * one aggregate output column
 #[derive(Debug)]
 pub struct TrieScanAggregate<T: TrieScan> {
     aggregated_input_column_storage_type: StorageTypeName,

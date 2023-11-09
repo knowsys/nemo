@@ -19,4 +19,6 @@ pub mod plan_util;
 
 pub mod negation;
 
+mod aggregates;
+
 pub mod arithmetic;

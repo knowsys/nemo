@@ -1,0 +1,4 @@
+issue: 341
+title: invariant violation when reading empty file
+tracker: https://github.com/knowsys/nemo/issues/308
+type: bugfix

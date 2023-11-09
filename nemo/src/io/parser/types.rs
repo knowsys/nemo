@@ -134,6 +134,9 @@ pub enum ParseError {
     /// An existentially quantified variable occurs in the body of a rule.
     #[error(r#"Variable "{0}" occurs existentially quantified in the rule body."#)]
     BodyExistential(String),
+    /// A wildcard pattern was used inside of the rule head.
+    #[error(r#"The head of a rule must not contain any wildcard patterns."#)]
+    WildcardInHead,
     /// The universal variable does not occur in a positive body literal.
     #[error(r#"The universal variable "{0}" does not occur in a positive body literal."#)]
     UnsafeHeadVariable(String),
@@ -310,9 +313,6 @@ pub enum ParseError {
     /// An aggregate may not be used within a complex term.
     #[error(r#"A term ("{0}") may not contain an aggregate as a subterm."#)]
     AggregateSubterm(String),
-    /// An aggregate term uses an invalid amount of variables.
-    #[error(r#"An aggregate term ("{0}") uses an invalid amount of variables. Currently only exactly one variable is allowed inside aggregates"#)]
-    InvalidVariableCountInAggregate(Aggregate),
     /// Unknown aggregate operation
     #[error(r#"Aggregate operation "{0}" is not known"#)]
     UnknownAggregateOperation(String),

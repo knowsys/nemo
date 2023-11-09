@@ -209,13 +209,13 @@ fn check_aggregate_types(
 ) -> Result<(), TypeError> {
     for (rule, var_types) in program.rules().iter().zip(rule_var_types) {
         for aggregate in rule.aggregates() {
-            let variable_type = var_types.get(&aggregate.variables[0]).expect(
+            let variable_type = var_types.get(&aggregate.input_variables[0]).expect(
                 "Previous analysis should have assigned a type to each aggregate output variable.",
             );
 
             aggregate
                 .logical_aggregate_operation
-                .check_input_type(&aggregate.variables[0].name(), *variable_type)?;
+                .check_input_type(&aggregate.input_variables[0].name(), *variable_type)?;
         }
     }
 

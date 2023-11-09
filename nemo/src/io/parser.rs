@@ -302,6 +302,8 @@ pub struct RuleParser<'a> {
     sources: RefCell<Vec<DataSourceDeclaration>>,
     /// Declarations of predicates with their types.
     predicate_declarations: RefCell<HashMap<Identifier, Vec<PrimitiveType>>>,
+    /// Number counting up for generating distinct wildcards.
+    wildcard_generator: RefCell<usize>,
 }
 
 impl<'a> RuleParser<'a> {
@@ -833,20 +835,10 @@ impl<'a> RuleParser<'a> {
                     if let Some(logical_aggregate_operation) =
                         (&aggregate_operation_identifier).into()
                     {
-                        let len_variables = variables.len();
-
                         let aggregate = Aggregate {
                             logical_aggregate_operation,
                             terms: variables.into_iter().map(PrimitiveTerm::Variable).collect(),
                         };
-
-                        // Check that there is exactly one variable used in the aggregate
-                        // This may change when distinct variables are implemented
-                        if len_variables != 1 {
-                            return Err(Err::Failure(
-                                ParseError::InvalidVariableCountInAggregate(aggregate).at(input),
-                            ));
-                        }
 
                         Ok((remainder, Term::Aggregation(aggregate)))
                     } else {
@@ -1003,12 +995,25 @@ impl<'a> RuleParser<'a> {
                             self.parse_parenthesised_term(),
                             self.parse_function_term(),
                             self.parse_aggregate(),
+                            self.parse_wildcard(),
                         )),
                         multispace_or_comment0,
                     )(input)
                 },
                 || ParseError::ExpectedTerm,
             ),
+        )
+    }
+
+    /// Parse a wildcard variable.
+    pub fn parse_wildcard(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+        traced(
+            "parse_wildcard",
+            map_res(space_delimited_token("_"), |_| {
+                let wildcard = Variable::create_wildcard(*self.wildcard_generator.borrow());
+                *self.wildcard_generator.borrow_mut() += 1;
+                Ok::<_, ParseError>(Term::Primitive(PrimitiveTerm::Variable(wildcard)))
+            }),
         )
     }
 

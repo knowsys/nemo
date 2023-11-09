@@ -1,0 +1,11 @@
+@declare a(any, integer) .
+@declare c(integer) .
+@declare numeric(integer, float64) .
+
+@source c[1]: load-csv("../sources/c.csv") .
+@source numeric[2]: load-csv("../sources/numeric.csv") .
+
+a(Hello, ?X) :- c(?X) .
+b(?Y, ?X) :- a(?X, ?Y) .
+a(?Y, ?X) :- b(?X, ?Y) .
+r(?Y, ?X) :- numeric(?X, ?Y) . 

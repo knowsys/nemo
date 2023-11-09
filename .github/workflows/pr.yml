@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   RUST_BACKTRACE: 1
 
@@ -101,3 +105,15 @@ jobs:
       run: pip install pycodestyle
     - name: run pycodestyle
       run: pycodestyle nemo-python --max-line-length 90
+
+  wasm-pack:
+    name: Test wasm bindings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - run: wasm-pack test --headless --chrome nemo-wasm
+      - run: wasm-pack test --headless --firefox nemo-wasm

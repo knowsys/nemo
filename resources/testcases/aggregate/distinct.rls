@@ -1,0 +1,7 @@
+@source sourceA[integer,integer,integer]: load-csv("sources/dataA.csv").
+@source sourceB[integer,integer,integer,integer]: load-csv("sources/dataB.csv").
+
+r0(#count(?X, ?Y)) :- sourceA(?X, ?Y, ?Z).
+r1(#count(?X, ?Y, ?Z)) :- sourceA(?X, ?Y, ?Z).
+r2(?X, #count(?Y, ?Z)) :- sourceA(?X, ?Y, ?Z).
+r3(?X1, #sum(?X2, ?X4)) :- sourceB(?X1, ?X2, ?X3, ?X4).

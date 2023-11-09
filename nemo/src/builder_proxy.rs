@@ -394,8 +394,7 @@ where
 #[cfg(test)]
 mod test {
     use nemo_physical::{
-        datatypes::storage_value::VecT,
-        dictionary::{Dictionary, PrefixedStringDictionary},
+        datatypes::storage_value::VecT, dictionary::Dictionary, management::database::Dict,
     };
     use test_log::test;
 
@@ -557,7 +556,7 @@ mod test {
         })
         .unwrap();
 
-        let mut dict = std::cell::RefCell::new(PrefixedStringDictionary::default());
+        let mut dict = std::cell::RefCell::new(Dict::default());
 
         let physical_builder_for_any_column = PhysicalStringColumnBuilderProxy::new(&dict);
         let physical_builder_for_string_column = PhysicalStringColumnBuilderProxy::new(&dict);
@@ -640,11 +639,11 @@ mod test {
 
         let any_result: Vec<String> = any_result_indices
             .into_iter()
-            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+            .map(|idx| dict.get_mut().get(idx.try_into().unwrap()).unwrap())
             .collect();
         let string_result: Vec<String> = string_result_indices
             .into_iter()
-            .map(|idx| dict.get_mut().entry(idx.try_into().unwrap()).unwrap())
+            .map(|idx| dict.get_mut().get(idx.try_into().unwrap()).unwrap())
             .collect();
         let VecT::I64(integer_result) = phys_enum_for_integer.finalize() else {
             unreachable!()

@@ -3,9 +3,12 @@
 use crate::datatypes::DataTypeName;
 
 use super::processors::{
-    aggregate::Aggregate, count_aggregate::CountAggregateProcessor,
-    max_aggregate::MaxAggregateProcessor, min_aggregate::MinAggregateProcessor,
-    processor::AggregateProcessor, sum_aggregate::SumAggregateProcessor,
+    aggregate::Aggregate,
+    count_aggregate::CountAggregateProcessor,
+    max_aggregate::MaxAggregateProcessor,
+    min_aggregate::MinAggregateProcessor,
+    processor::{AggregateProcessor, AggregateProcessorT},
+    sum_aggregate::SumAggregateProcessor,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -23,14 +26,23 @@ pub enum AggregateOperation {
 
 impl AggregateOperation {
     /// Creates a new aggregate processor for the given aggregate operation.
-    /// TODO: This is currently implemented using dynamic dispatch, but this may change in the future.
-    pub fn create_processor<A: Aggregate>(&self) -> Box<dyn AggregateProcessor<A>> {
-        match self {
-            AggregateOperation::Count => Box::new(CountAggregateProcessor::new()),
-            AggregateOperation::Max => Box::new(MaxAggregateProcessor::new()),
-            AggregateOperation::Min => Box::new(MinAggregateProcessor::new()),
-            AggregateOperation::Sum => Box::new(SumAggregateProcessor::new()),
-        }
+    pub(crate) fn create_processor<A: Aggregate>(&self) -> AggregateProcessorT<A> {
+        let aggregate_processor: AggregateProcessorT<A> = match self {
+            AggregateOperation::Count => CountAggregateProcessor::new().into(),
+            AggregateOperation::Max => MaxAggregateProcessor::new().into(),
+            AggregateOperation::Min => MinAggregateProcessor::new().into(),
+            AggregateOperation::Sum => SumAggregateProcessor::new().into(),
+        };
+
+        aggregate_processor
+    }
+
+    /// Returns whether the aggregate processor is invariant to being called with the same aggregated value multiple times in a row.
+    /// This function has to return the same value independent of the aggregated value type.
+    ///
+    /// If `true` is returned this allows for additional optimizations when creating the execution plan. In particular, peripheral variables (not group-by, aggregate or distinct variables) can be converted to distinct variables in an idempotent aggregate processor without changing the semantics of the aggregate.
+    pub fn idempotent<A: Aggregate>(&self) -> bool {
+        self.create_processor::<A>().idempotent()
     }
 
     /// Returns whether the aggregate operation always produces an aggregate output column of the same type.

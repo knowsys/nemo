@@ -1,5 +1,5 @@
 //! Reading of RDF 1.1 triples files (N-Triples, Turtle, RDF/XML)
-use std::io::{BufRead, BufReader};
+use std::io::BufReader;
 
 use nemo_physical::{
     builder_proxy::{ColumnBuilderProxy, PhysicalBuilderProxyEnum},
@@ -111,17 +111,13 @@ impl RDFTriplesReader {
         }
     }
 
-    fn read_with_buf_reader<'a, 'b, Reader, Parser, MakeParser>(
+    fn read_with_parser<Parser>(
         &self,
-        physical_builder_proxies: &'b mut [PhysicalBuilderProxyEnum<'a>],
-        reader: &'b mut Reader,
-        make_parser: MakeParser,
+        physical_builder_proxies: &mut [PhysicalBuilderProxyEnum<'_>],
+        make_parser: impl FnOnce() -> Parser,
     ) -> Result<(), ReadingError>
     where
-        'a: 'b,
-        Reader: BufRead,
         Parser: TriplesParser,
-        MakeParser: FnOnce(&'b mut Reader) -> Parser,
         ReadingError: From<<Parser as TriplesParser>::Error>,
     {
         let mut builders = physical_builder_proxies
@@ -172,7 +168,7 @@ impl RDFTriplesReader {
             Ok::<_, ReadingError>(())
         };
 
-        let mut parser = make_parser(reader);
+        let mut parser = make_parser();
 
         while !parser.is_end() {
             if let Err(e) = parser.parse_step(&mut on_triple) {
@@ -195,18 +191,18 @@ impl TableReader for RDFTriplesReader {
             .resource_providers
             .open_resource(&self.resource, true)?;
 
-        let mut reader = BufReader::new(reader);
+        let reader = BufReader::new(reader);
 
         if self.resource.ends_with(".ttl.gz") || self.resource.ends_with(".ttl") {
-            self.read_with_buf_reader(builder_proxies, &mut reader, |reader| {
+            self.read_with_parser(builder_proxies, || {
                 TurtleParser::new(reader, self.base.clone())
             })
         } else if self.resource.ends_with(".rdf.gz") || self.resource.ends_with(".rdf") {
-            self.read_with_buf_reader(builder_proxies, &mut reader, |reader| {
+            self.read_with_parser(builder_proxies, || {
                 RdfXmlParser::new(reader, self.base.clone())
             })
         } else {
-            self.read_with_buf_reader(builder_proxies, &mut reader, NTriplesParser::new)
+            self.read_with_parser(builder_proxies, || NTriplesParser::new(reader))
         }
     }
 }
@@ -218,7 +214,8 @@ mod test {
     use nemo_physical::{
         builder_proxy::{PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy},
         datatypes::data_value::{DataValueIteratorT, PhysicalString},
-        dictionary::{Dictionary, PrefixedStringDictionary},
+        dictionary::Dictionary,
+        management::database::Dict,
     };
     use rio_turtle::TurtleParser;
     use test_log::test;
@@ -228,14 +225,14 @@ mod test {
     #[test]
     fn example_1() {
         macro_rules! parse_example_with_rdf_parser {
-            ($make_parser:expr) => {
-                let mut data = r#"<http://one.example/subject1> <http://one.example/predicate1> <http://one.example/object1> . # comments here
+            ($data:tt, $make_parser:expr) => {
+                let $data = r#"<http://one.example/subject1> <http://one.example/predicate1> <http://one.example/object1> . # comments here
                       # or on a line by themselves
                       _:subject1 <http://an.example/predicate1> "object1" .
                       _:subject2 <http://an.example/predicate2> "object2" .
                       "#.as_bytes();
 
-                let dict = RefCell::new(PrefixedStringDictionary::default());
+                let dict = RefCell::new(Dict::default());
                 let mut builders = vec![
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
@@ -243,7 +240,7 @@ mod test {
                 ];
                 let reader = RDFTriplesReader::new(ResourceProviders::empty(), &RdfFile::new("", None), vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
 
-                let result = reader.read_with_buf_reader(&mut builders, &mut data, $make_parser);
+                let result = reader.read_with_parser(&mut builders, $make_parser);
                 assert!(result.is_ok());
 
                 let columns = builders
@@ -264,7 +261,7 @@ mod test {
                                     .get(idx)
                                     .and_then(|value| value.try_into().ok())
                                     .and_then(|u64: u64| usize::try_from(u64).ok())
-                                    .and_then(|usize| dict.borrow_mut().entry(usize))
+                                    .and_then(|usize| dict.borrow_mut().get(usize))
                                     .unwrap()
                             })
                             .map(PhysicalString::from)
@@ -284,13 +281,13 @@ mod test {
             };
         }
 
-        parse_example_with_rdf_parser!(NTriplesParser::new);
-        parse_example_with_rdf_parser!(|reader| TurtleParser::new(reader, None));
+        parse_example_with_rdf_parser!(reader, || NTriplesParser::new(reader));
+        parse_example_with_rdf_parser!(reader, || TurtleParser::new(reader, None));
     }
 
     #[test]
     fn rollback() {
-        let mut data = r#"<http://example.org/> <http://example.org/> <http://example.org/> .
+        let data = r#"<http://example.org/> <http://example.org/> <http://example.org/> .
                           malformed <http://example.org/> <http://example.org/>
                           <http://example.org/> malformed <http://example.org/> .
                           <http://example.org/> <http://example.org/> malformed .
@@ -302,7 +299,7 @@ mod test {
                       "#
         .as_bytes();
 
-        let dict = RefCell::new(PrefixedStringDictionary::default());
+        let dict = RefCell::new(Dict::default());
         let mut builders = vec![
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
@@ -314,7 +311,7 @@ mod test {
             vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
         );
 
-        let result = reader.read_with_buf_reader(&mut builders, &mut data, NTriplesParser::new);
+        let result = reader.read_with_parser(&mut builders, || NTriplesParser::new(data));
         assert!(result.is_ok());
 
         let columns = builders
