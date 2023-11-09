@@ -46,7 +46,7 @@ mod test {
     use crate::datavalues::{DataValue,ValueDomain};
 
     #[test]
-    fn test_string() {
+    fn test_lang_string() {
         let value = "Hello world";
         let lang = "en-GB";
         let dv = LangStringDataValue::new(value.to_string(), lang.to_string());
