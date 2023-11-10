@@ -414,19 +414,6 @@ impl Table for Trie {
             condensed_interval_starts_builders.push(current_condensed_interval_starts_builder);
         }
 
-        macro_rules! build_interval_column {
-            ($col_builder:ident, $interval_builder:ident; $($variant:ident);+) => {
-                match $col_builder {
-                    $(ColumnBuilderAdaptiveT::$variant(data_col) => ColumnWithIntervalsT::$variant(
-                        ColumnWithIntervals::new(
-                            data_col.finalize(),
-                            $interval_builder.finalize(),
-                        ),
-                    )),+
-                }
-            }
-        }
-
         Self::new(
             condensed_data_builders
                 .into_iter()
