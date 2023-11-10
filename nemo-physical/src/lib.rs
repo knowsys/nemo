@@ -28,6 +28,7 @@ pub mod aggregates;
 pub mod builder_proxy;
 pub mod datatypes;
 pub mod datavalues;
+pub mod datasources;
 pub mod dictionary;
 pub mod error;
 pub mod management;
