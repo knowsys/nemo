@@ -102,7 +102,7 @@ impl std::fmt::Display for StorageValueT {
     }
 }
 
-/// Enum for vectors of different supported input types
+/// Enum for vectors of different supported [storage types](StorageTypeName).
 #[derive(Debug, PartialEq, Eq)]
 pub enum VecT {
     /// Case `Vec<u32>`
