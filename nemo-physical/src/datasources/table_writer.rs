@@ -270,15 +270,15 @@ pub struct TableWriter<'a> {
 mod test {
     use std::cell::RefCell;
 
-    use crate::{management::database::Dict, tabular::traits::table::Table, datavalues::AnyDataValue};
+    use crate::{management::database::Dict, datavalues::AnyDataValue};
 
     use super::TableWriter;
     //use crate::datavalues::{DataValue,ValueDomain};
 
     #[test]
-    fn test() {
-        let mut dict = Dict::new();
-        let mut dict_ref = RefCell::new(dict);
+    fn test_internal_table_structures() {
+        let dict = Dict::new();
+        let dict_ref = RefCell::new(dict);
         let mut tw = TableWriter::new(&dict_ref, 3);
 
         let v1 = AnyDataValue::new_string("a".to_string());
