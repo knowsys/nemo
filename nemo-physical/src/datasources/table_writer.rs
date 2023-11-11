@@ -61,6 +61,26 @@ pub struct TableWriter<'a> {
  
  impl<'a> TableWriter<'a> {
 
+    pub(crate) fn new(dict: &'a RefCell<Dict>, column_count: usize) -> Self {
+        let mut cur_row = Vec::with_capacity(column_count);
+        let mut cur_row_storage_values = Vec::with_capacity(column_count);
+        let mut table_trie = Vec::with_capacity(column_count * STORAGE_TYPE_COUNT);
+
+        let dummy_value = AnyDataValue::new_integer_from_i64(0);
+        let dummy_storage_value = StorageValueT::I64(0);
+        for _i in 0..column_count {
+            cur_row.push(dummy_value.clone());
+            cur_row_storage_values.push(dummy_storage_value);
+            table_trie.push(0);
+        }
+
+        TableWriter{ dict: dict, col_num: column_count, cur_row: cur_row, 
+            cur_col_idx: 0, cur_row_storage_values: cur_row_storage_values,
+            tables: Vec::with_capacity(10), table_trie: table_trie, 
+            cols_u64: Vec::with_capacity(10), cols_u32: Vec::with_capacity(10),
+            cols_floats: Vec::with_capacity(10), cols_doubles: Vec::with_capacity(10), cols_i64: Vec::with_capacity(10) }
+    }
+
     /// Provide the next value that is to be added to the column.
     /// When the value for the last column was provided, the row is
     /// committed to the table. Alternatively, a partially built row
@@ -120,7 +140,7 @@ pub struct TableWriter<'a> {
     /// and updats this structure to capture the new value, if necessary.
     fn find_current_row_table(&mut self) -> usize {
         let mut table_trie_block: usize = 0;
-        for i in 0..self.col_num-1 {
+        for i in 0..self.col_num {
             let cur_type_id = Self::storage_type_idx(self.cur_row_storage_values[i].get_type());
             let next_block = self.table_trie[table_trie_block + cur_type_id];
             if next_block == 0 { // make new trie nodes and table record below current
@@ -143,7 +163,7 @@ pub struct TableWriter<'a> {
 
         // record path to leaf node:
         let mut cur_block = last_trie_block;
-        for i in last_trie_level..self.col_num-2 {
+        for i in last_trie_level..self.col_num-1 {
             let cur_type_id = Self::storage_type_idx(self.cur_row_storage_values[i].get_type());
             self.table_trie[cur_block + cur_type_id] = child_block;
             cur_block = child_block;
@@ -153,7 +173,7 @@ pub struct TableWriter<'a> {
         // make and store table record and new columns for the table's contents:
         let mut col_ids = Vec::with_capacity(self.col_num);
         let mut col_types = Vec::with_capacity(self.col_num);
-        for i in 0..self.col_num-1 {
+        for i in 0..self.col_num {
             let st = self.cur_row_storage_values[i].get_type();
             col_types.push(st);
             match st {
@@ -246,3 +266,61 @@ pub struct TableWriter<'a> {
 
 }
 
+#[cfg(test)]
+mod test {
+    use std::cell::RefCell;
+
+    use crate::{management::database::Dict, tabular::traits::table::Table, datavalues::AnyDataValue};
+
+    use super::TableWriter;
+    //use crate::datavalues::{DataValue,ValueDomain};
+
+    #[test]
+    fn test() {
+        let mut dict = Dict::new();
+        let mut dict_ref = RefCell::new(dict);
+        let mut tw = TableWriter::new(&dict_ref, 3);
+
+        let v1 = AnyDataValue::new_string("a".to_string());
+        let v2 = AnyDataValue::new_integer_from_i64(42);
+
+        // new table #0, row #0
+        tw.next_value(v1.clone());
+        tw.next_value(v1.clone());
+        tw.next_value(v1.clone());
+        // new table #1, row #0
+        tw.next_value(v1.clone());
+        tw.next_value(v2.clone());
+        tw.next_value(v1.clone());
+        // table #0, row #2
+        tw.next_value(v1.clone());
+        tw.next_value(v1.clone());
+        tw.next_value(v1.clone());
+        // new table #2, row #0
+        tw.next_value(v1.clone());
+        tw.next_value(v1.clone());
+        tw.next_value(v2.clone());
+        // table #2, row #1
+        tw.next_value(v1.clone());
+        tw.next_value(v1.clone());
+        tw.next_value(v2.clone());
+         // table #2, row #2
+        tw.next_value(v1.clone());
+        tw.next_value(v1.clone());
+        tw.next_value(v2.clone());
+
+        assert_eq!(tw.tables.len(),3);
+
+        assert_eq!(tw.cols_u32[tw.tables[0].col_ids[0]].len(), 2);
+        assert_eq!(tw.cols_u32[tw.tables[0].col_ids[1]].len(), 2);
+        assert_eq!(tw.cols_u32[tw.tables[0].col_ids[2]].len(), 2);
+
+        assert_eq!(tw.cols_u32[tw.tables[1].col_ids[0]].len(), 1);
+        assert_eq!(tw.cols_i64[tw.tables[1].col_ids[1]].len(), 1);
+        assert_eq!(tw.cols_u32[tw.tables[1].col_ids[2]].len(), 1);
+
+        assert_eq!(tw.cols_u32[tw.tables[2].col_ids[0]].len(), 3);
+        assert_eq!(tw.cols_u32[tw.tables[2].col_ids[1]].len(), 3);
+        assert_eq!(tw.cols_i64[tw.tables[2].col_ids[2]].len(), 3);
+    }
+}
