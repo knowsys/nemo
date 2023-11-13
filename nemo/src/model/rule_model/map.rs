@@ -21,6 +21,11 @@ impl Key {
     pub fn identifier(i: Identifier) -> Self {
         Self::Identifier(i)
     }
+
+    /// Construct a new [Identifier] [Key] from a [&str].
+    pub(crate) fn identifier_from_str(s: &str) -> Self {
+        Self::Identifier(Identifier(s.into()))
+    }
 }
 
 impl std::fmt::Display for Key {

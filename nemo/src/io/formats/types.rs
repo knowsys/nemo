@@ -1,18 +1,22 @@
 //! Types related to input and output formats.
 
-use std::{collections::HashSet, str::FromStr};
+use std::{collections::HashSet, fs::File, path::PathBuf, str::FromStr};
 
 use thiserror::Error;
 
-use nemo_physical::table_reader::{Resource, TableReader};
+use nemo_physical::table_reader::TableReader;
 
 use crate::{
     error::Error,
     io::resource_providers::ResourceProviders,
-    model::{Identifier, Key, Map, PrimitiveType, Term, TupleConstraint},
+    model::{Constant, Identifier, Key, Map, PrimitiveType, TupleConstraint},
 };
 
 use super::{dsv::DSVFormat, rdf_triples::RDFFormat};
+
+pub(crate) mod attributes {
+    pub(crate) const PATH: &str = "path";
+}
 
 /// A writer for tables that takes iterators over [`PrimitiveType`][PrimitiveType] for each row.
 pub trait TableWriter {
@@ -34,16 +38,30 @@ pub trait FileFormatMeta: std::fmt::Debug {
     /// Return the associated format.
     fn file_format(&self) -> FileFormat;
 
+    /// Verify that the given path is readable.
+    fn verify_path_is_readable(&self, path: &str) -> Result<(), FileFormatError> {
+        let path = PathBuf::from(path);
+
+        if let Err(err) = File::open(path.clone()) {
+            return Err(FileFormatError::IOUnreadable { error: err, path });
+        }
+
+        Ok(())
+    }
+
+    /// Verify that the given path is writable.
+
     /// Obtain a [`TableReader`] for this format, if supported.
     fn reader(
         &self,
+        attributes: &Map,
+        declared_types: &TupleConstraint,
         resource_providers: ResourceProviders,
-        resource: Resource,
-        logical_types: TupleConstraint,
+        inferred_types: &TupleConstraint,
     ) -> Result<Box<dyn TableReader>, Error>;
 
     /// Obtain a [`TableWriter`] for this format, if supported.
-    fn writer(&self) -> Result<Box<dyn TableWriter>, Error>;
+    fn writer(&self, attributes: &Map) -> Result<Box<dyn TableWriter>, Error>;
 
     /// Attributes that are valid for this format, but not required.
     fn optional_attributes(&self, direction: Direction) -> HashSet<Key>;
@@ -102,6 +120,8 @@ pub struct ImportExportSpec {
     pub(crate) constraints: TupleConstraint,
     /// The file format we're using.
     pub(crate) format: Box<dyn FileFormatMeta>,
+    /// The attributes we've been given.
+    pub(crate) attributes: Map,
 }
 
 impl ImportExportSpec {
@@ -109,15 +129,19 @@ impl ImportExportSpec {
     pub fn reader(
         &self,
         resource_providers: ResourceProviders,
-        resource: String,
+        inferred_types: &TupleConstraint,
     ) -> Result<Box<dyn TableReader>, Error> {
-        self.format
-            .reader(resource_providers, resource, self.constraints.clone())
+        self.format.reader(
+            &self.attributes,
+            &self.constraints,
+            resource_providers,
+            inferred_types,
+        )
     }
 
     /// Obtain a [`TableWriter`] for this export specification.
     pub fn writer(&self) -> Result<Box<dyn TableWriter>, Error> {
-        self.format.writer()
+        self.format.writer(&self.attributes)
     }
 }
 
@@ -127,6 +151,7 @@ impl PartialEq for ImportExportSpec {
             && self.predicate == other.predicate
             && self.constraints == other.constraints
             && self.format.file_format() == other.format.file_format()
+            && self.attributes == other.attributes
     }
 }
 
@@ -154,11 +179,19 @@ pub enum FileFormatError {
     #[error(r#"Invalid attribute value "{value}" for attribute "{attribute}": {description}"#)]
     InvalidAttributeValue {
         /// The given value.
-        value: Term,
+        value: Constant,
         /// The attribute the value was given for.
         attribute: Key,
         /// A description of why the value was invalid.
         description: String,
+    },
+    /// File could not be read
+    #[error(r#"File "{path}" could not be read."#)]
+    IOUnreadable {
+        /// Contains the wrapped error
+        error: std::io::Error,
+        /// Path that could not be read
+        path: PathBuf,
     },
 }
 

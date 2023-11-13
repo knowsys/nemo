@@ -305,6 +305,10 @@ pub struct RuleParser<'a> {
     prefixes: RefCell<HashMap<&'a str, &'a str>>,
     /// The external data sources.
     sources: RefCell<Vec<DataSourceDeclaration>>,
+    /// External data sources imported into the program.
+    imports: RefCell<Vec<ImportExportSpec>>,
+    /// Data being exported from the program.
+    exports: RefCell<Vec<ImportExportSpec>>,
     /// Declarations of predicates with their types.
     predicate_declarations: RefCell<HashMap<Identifier, Vec<PrimitiveType>>>,
     /// Number counting up for generating distinct wildcards.
@@ -576,9 +580,6 @@ impl<'a> RuleParser<'a> {
                         datasource.map_err(|e| Err::Failure(e.at(input)))?,
                     );
 
-                    log::trace!("Found external data source {source:?}");
-                    self.sources.borrow_mut().push(source.clone());
-
                     Ok((remainder, source))
                 },
                 || ParseError::ExpectedDataSourceDeclaration,
@@ -674,17 +675,18 @@ impl<'a> RuleParser<'a> {
         direction: Direction,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportSpec> {
         traced("parse_import_export_spec", move |input| {
-            let (remainder, predicate) = self.parse_qualified_predicate_name()(input)?;
+            let (remainder, predicate) = self.parse_qualified_predicate_name(true)(input)?;
             let (remainder, format) = delimited(
                 space_delimited_token(":"),
                 self.parse_file_format(),
                 multispace_or_comment0,
             )(remainder)?;
-            let (remainder, meta) = map_res(self.parse_map_literal(), |attributes| {
-                let meta = format.into_meta();
-                meta.validate_attributes(direction, &attributes)?;
-                Ok::<_, FileFormatError>(meta)
-            })(remainder)?;
+            let (remainder, (meta, attributes)) =
+                map_res(self.parse_map_literal(), |attributes| {
+                    let meta = format.into_meta();
+                    meta.validate_attributes(direction, &attributes)?;
+                    Ok::<_, FileFormatError>((meta, attributes))
+                })(remainder)?;
 
             Ok((
                 remainder,
@@ -693,6 +695,7 @@ impl<'a> RuleParser<'a> {
                     predicate: predicate.0,
                     constraints: predicate.1,
                     format: meta,
+                    attributes,
                 },
             ))
         })
@@ -1358,7 +1361,15 @@ impl<'a> RuleParser<'a> {
 
             let (remainder, _) = many0(alt((
                 map(self.parse_predicate_declaration(), |_| ()),
-                map(self.parse_source(), |_| ()),
+                map(self.parse_source(), |source| {
+                    self.sources.borrow_mut().push(source)
+                }),
+                map(self.parse_import(), |import| {
+                    self.imports.borrow_mut().push(import)
+                }),
+                map(self.parse_export(), |export| {
+                    self.exports.borrow_mut().push(export)
+                }),
                 map(self.parse_statement(), |statement| {
                     statements.push(statement)
                 }),
@@ -2354,45 +2365,52 @@ mod test {
         );
     }
 
+    #[test]
     fn qualified_predicate_name() {
         let parser = RuleParser::new();
         let predicate = Identifier("p".to_string());
 
         assert_parse!(
-            parser.parse_qualified_predicate_name(),
+            parser.parse_qualified_predicate_name(true),
             "p[3]",
             (predicate.clone(), TupleConstraint::from_arity(3))
         );
 
         assert_parse!(
-            parser.parse_qualified_predicate_name(),
+            parser.parse_qualified_predicate_name(true),
             "p[integer, any]",
             (
                 predicate.clone(),
                 TupleConstraint::from_iter(
-                    vec![PrimitiveType::Integer, PrimitiveType::Any].into_iter()
+                    vec![PrimitiveType::Integer, PrimitiveType::Any]
+                        .into_iter()
+                        .map(TypeConstraint::AtLeast)
                 )
             )
         );
 
         assert_parse!(
-            parser.parse_qualified_predicate_name(),
+            parser.parse_qualified_predicate_name(false),
             "p[float64, any]",
             (
                 predicate.clone(),
                 TupleConstraint::from_iter(
-                    vec![PrimitiveType::Float64, PrimitiveType::Any].into_iter()
+                    vec![PrimitiveType::Float64, PrimitiveType::Any]
+                        .into_iter()
+                        .map(TypeConstraint::Exact)
                 )
             )
         );
 
         assert_parse!(
-            parser.parse_qualified_predicate_name(),
+            parser.parse_qualified_predicate_name(false),
             "p[integer, float64]",
             (
                 predicate.clone(),
                 TupleConstraint::from_iter(
-                    vec![PrimitiveType::Integer, PrimitiveType::Float64].into_iter()
+                    vec![PrimitiveType::Integer, PrimitiveType::Float64]
+                        .into_iter()
+                        .map(TypeConstraint::Exact)
                 )
             )
         );
@@ -2406,16 +2424,20 @@ mod test {
         let name = "p".to_string();
         let predicate = Identifier(name.clone());
         let qualified = format!("{name}[integer, float64]");
-        let arguments = r#"{delimiter = ";"}"#;
+        let arguments = r#"{delimiter = ";", path = "path/to/file"}"#;
         let spec = format!("{qualified}: dsv{arguments}");
         let directive = format!("@import {spec} .");
+        let directive_export = format!("@export {spec} .");
+        let attributes = parser.parse_map_literal()(arguments.into()).unwrap().1;
 
         let constraints = TupleConstraint::from_iter(
-            vec![PrimitiveType::Integer, PrimitiveType::Float64].into_iter(),
+            vec![PrimitiveType::Integer, PrimitiveType::Float64]
+                .into_iter()
+                .map(TypeConstraint::AtLeast),
         );
 
         assert_parse!(
-            parser.parse_qualified_predicate_name(),
+            parser.parse_qualified_predicate_name(true),
             &qualified,
             (predicate.clone(), constraints.clone())
         );
@@ -2428,6 +2450,7 @@ mod test {
                 predicate: predicate.clone(),
                 constraints: constraints.clone(),
                 format: Box::<DSVFormat>::default(),
+                attributes: attributes.clone(),
             }
         );
 
@@ -2439,6 +2462,19 @@ mod test {
                 predicate: predicate.clone(),
                 constraints: constraints.clone(),
                 format: Box::<DSVFormat>::default(),
+                attributes: attributes.clone()
+            }
+        );
+
+        assert_parse!(
+            parser.parse_export(),
+            &directive_export,
+            ImportExportSpec {
+                direction: Direction::Writing,
+                predicate: predicate.clone(),
+                constraints: constraints.clone(),
+                format: Box::<DSVFormat>::default(),
+                attributes: attributes.clone()
             }
         );
     }
