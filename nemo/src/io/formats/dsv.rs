@@ -91,7 +91,7 @@ use nemo_physical::table_reader::{Resource, TableReader};
 use thiserror::Error;
 
 use crate::model::types::primitive_logical_value::{LogicalFloat64, LogicalInteger, LogicalString};
-use crate::model::{DataSource, DsvFile, Identifier, Key, TupleConstraint, TypeConstraint};
+use crate::model::{DataSource, DsvFile, Identifier, Key, Map, TupleConstraint, TypeConstraint};
 use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
     error::{Error, ReadingError},
@@ -273,6 +273,7 @@ impl DSVFormat {
     }
 }
 
+use super::types::attributes::PATH;
 const DELIMITER: &str = "delimiter";
 
 /// Errors related to DSV file format specifications.
@@ -281,19 +282,24 @@ pub enum DSVFormatError {
     /// Delimiter should have a string literal as a value, but was
     /// some other term.
     #[error("Delimiter should be a string literal")]
-    InvalidDelimiterType(Term),
+    InvalidDelimiterType(Constant),
     /// Delimiter should consist of exactly one byte, but had a
     /// different length.
     #[error("Delimiter should be exactly one byte")]
-    InvalidDelimiterLength(Term),
+    InvalidDelimiterLength(Constant),
+    /// Path should have a string literal as a value, but was some
+    /// other term.
+    #[error("Path should be a string literal")]
+    InvalidPathType(Constant),
 }
 
 impl From<DSVFormatError> for FileFormatError {
     fn from(error: DSVFormatError) -> Self {
         match &error {
-            DSVFormatError::InvalidDelimiterType(term)
-            | DSVFormatError::InvalidDelimiterLength(term) => Self::InvalidAttributeValue {
-                value: term.clone(),
+            DSVFormatError::InvalidDelimiterType(constant)
+            | DSVFormatError::InvalidDelimiterLength(constant)
+            | DSVFormatError::InvalidPathType(constant) => Self::InvalidAttributeValue {
+                value: constant.clone(),
                 attribute: Key::Identifier(Identifier(DELIMITER.into())),
                 description: error.to_string(),
             },
@@ -312,58 +318,92 @@ impl FileFormatMeta for DSVFormat {
 
     fn reader(
         &self,
+        attributes: &Map,
+        declared_types: &TupleConstraint,
         resource_providers: ResourceProviders,
-        resource: Resource,
-        logical_types: TupleConstraint,
+        inferred_types: &TupleConstraint,
     ) -> Result<Box<dyn TableReader>, Error> {
-        if let Some(logical_types) = logical_types.into_flat_primitive() {
+        let path = attributes
+            .pairs
+            .get(&Key::identifier_from_str(PATH))
+            .expect("is a required attribute")
+            .as_string()
+            .expect("must be a string");
+
+        let delimiter = self.delimiter.unwrap_or(
+            attributes
+                .pairs
+                .get(&Key::identifier_from_str(DELIMITER))
+                .expect("is a required attribute if the format has no default delimiter")
+                .as_string()
+                .expect("must be a string")
+                .as_bytes()[0],
+        );
+
+        if let Some(inferred_types) = inferred_types.into_flat_primitive() {
+            let dsv_file = DsvFile::new(&path, delimiter, declared_types.clone());
+
             Ok(Box::new(DSVReader::dsv(
                 resource_providers,
-                todo!(),
-                logical_types,
+                &dsv_file,
+                inferred_types,
             )))
         } else {
-            todo!()
+            unimplemented!("There is no support for reading complex types from DSV files.")
         }
     }
 
-    fn writer(&self) -> Result<Box<dyn TableWriter>, Error> {
+    fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
         Err(FileFormatError::UnsupportedWrite(FileFormat::DSV).into())
     }
 
-    fn optional_attributes(&self, direction: Direction) -> HashSet<Key> {
+    fn optional_attributes(&self, _direction: Direction) -> HashSet<Key> {
         [].into()
     }
 
-    fn required_attributes(&self, direction: Direction) -> HashSet<Key> {
+    fn required_attributes(&self, _direction: Direction) -> HashSet<Key> {
         let mut attributes = HashSet::new();
 
+        attributes.insert(PATH);
+
         if self.delimiter.is_none() {
-            attributes.insert(Key::Identifier(Identifier(DELIMITER.into())));
+            attributes.insert(DELIMITER);
         }
 
         attributes
+            .into_iter()
+            .map(Key::identifier_from_str)
+            .collect()
     }
 
     fn validate_attribute_values(
         &self,
-        direction: Direction,
-        attributes: &crate::model::Map,
+        _direction: Direction,
+        attributes: &Map,
     ) -> Result<(), FileFormatError> {
         let delimiter = attributes
             .pairs
-            .get(&Key::Identifier(Identifier(DELIMITER.into())))
+            .get(&Key::identifier_from_str(DELIMITER))
             .expect("is a required attribute");
 
         if let Some(delim) = delimiter.as_string() {
             if delim.len() != 1 {
                 return Err(DSVFormatError::InvalidDelimiterLength(delimiter.clone()).into());
             }
-
-            return Ok(());
+        } else {
+            return Err(DSVFormatError::InvalidDelimiterType(delimiter.clone()).into());
         }
 
-        Err(DSVFormatError::InvalidDelimiterType(delimiter.clone()).into())
+        let path = attributes
+            .pairs
+            .get(&Key::identifier_from_str(PATH))
+            .expect("is a required attribute");
+
+        if path.as_string().is_none() {
+            return Err(DSVFormatError::InvalidPathType(path.clone()).into());
+        }
+
+        Ok(())
     }
 }
 

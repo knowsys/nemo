@@ -97,6 +97,22 @@ impl Constant {
             Self::MapLiteral(_) => None,
         }
     }
+
+    /// If this is a string literal, return the string.
+    pub fn as_string(&self) -> Option<&String> {
+        match self {
+            Self::StringLiteral(string) => Some(string),
+            _ => None,
+        }
+    }
+
+    /// If this is a constant, return the [Identifier].
+    pub fn as_abstract(&self) -> Option<Identifier> {
+        match self {
+            Self::Abstract(identifier) => Some(identifier.clone()),
+            _ => None,
+        }
+    }
 }
 
 impl Display for Constant {
@@ -449,36 +465,6 @@ impl From<PrimitiveTerm> for Term {
 
 impl Term {
     fn ascii_tree(&self) -> ascii_tree::Tree {
-    /// Check if the term is ground.
-    pub fn is_ground(&self) -> bool {
-        matches!(
-            self,
-            Self::Constant(_) | Self::NumericLiteral(_) | Self::RdfLiteral(_)
-        )
-    }
-
-    /// If this is a string literal, return the string.
-    pub fn as_string(&self) -> Option<&String> {
-        match self {
-            Self::StringLiteral(string) => Some(string),
-            _ => None,
-        }
-    }
-}
-
-/// A numerical literal.
-#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
-pub enum NumericLiteral {
-    /// An integer literal.
-    Integer(i64),
-    /// A decimal literal.
-    Decimal(i64, u64),
-    /// A double literal.
-    Double(Double),
-}
-
-impl std::fmt::Display for NumericLiteral {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Term::Primitive(primitive) => ascii_tree::Tree::Leaf(vec![format!("{:?}", primitive)]),
             Term::Binary {

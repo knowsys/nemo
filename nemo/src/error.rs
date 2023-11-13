@@ -7,7 +7,6 @@ use thiserror::Error;
 use crate::{
     execution::selection_strategy::strategy::SelectionStrategyError,
     io::{formats::types::FileFormatError, parser::LocatedParseError},
-    model::chase_model::RuleTranslationError,
     model::types::error::TypeError,
     program_analysis::analysis::RuleAnalysisError,
 };
@@ -46,12 +45,12 @@ pub enum Error {
     #[error(transparent)]
     IO(#[from] std::io::Error),
     /// File exists and should not be overwritten
-    #[error("File \"{filename}\" exists and would be overwritten!\nConsider using the `--overwrite-results` option, setting a different `--output` directory, or deleting \"{filename}\".")]
+    #[error(r#"File "{path}" exists and would be overwritten!\nConsider using the `--overwrite-results` option, setting a different `--output` directory, or deleting "{path}"."#)]
     IOExists {
         /// Contains the wrapped error
         error: std::io::Error,
         /// Filename which caused the error
-        filename: PathBuf,
+        path: PathBuf,
     },
     /// Error during a Write operation
     #[error("Failed to write \"{filename}\": {error}")]

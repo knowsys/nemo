@@ -172,8 +172,8 @@ impl OutputFileManager {
         }
 
         for pred in output_predicates {
-            let file = self.get_output_file_name(&pred);
-            let meta_info = file.metadata();
+            let path = self.get_output_file_name(&pred);
+            let meta_info = path.metadata();
             if let Err(err) = meta_info {
                 if err.kind() != ErrorKind::NotFound {
                     return Err(Error::IO(err));
@@ -181,7 +181,7 @@ impl OutputFileManager {
             } else {
                 return Err(Error::IOExists {
                     error: ErrorKind::AlreadyExists.into(),
-                    filename: file,
+                    path,
                 });
             }
         }

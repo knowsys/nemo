@@ -1,5 +1,5 @@
 //! Reading of RDF 1.1 triples files (N-Triples, Turtle, RDF/XML)
-use std::io::BufReader;
+use std::{collections::HashSet, io::BufReader};
 
 use nemo_physical::{
     builder_proxy::{ColumnBuilderProxy, PhysicalBuilderProxyEnum},
@@ -17,13 +17,16 @@ use rio_xml::RdfXmlParser;
 use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
     error::Error,
-    io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    model::{
-        types::{
-            primitive_types::PrimitiveType, Direction, FileFormat, FileFormatError, FileFormatMeta,
-            TableWriter,
+    io::{
+        formats::{
+            types::{Direction, FileFormat, FileFormatError, FileFormatMeta, TableWriter},
+            PROGRESS_NOTIFY_INCREMENT,
         },
-        Constant, InvalidRdfLiteral, Key, RdfFile, RdfLiteral, TupleConstraint,
+        resource_providers::ResourceProviders,
+    },
+    model::{
+        types::primitive_types::PrimitiveType, Constant, InvalidRdfLiteral, Key, Map, RdfFile,
+        RdfLiteral, TupleConstraint,
     },
 };
 
@@ -212,6 +215,9 @@ impl TableReader for RDFTriplesReader {
     }
 }
 
+use super::types::attributes::PATH;
+const BASE: &str = "base";
+
 /// File formats for RDF.
 #[derive(Debug, Clone, Copy)]
 pub struct RDFFormat {}
@@ -223,37 +229,64 @@ impl FileFormatMeta for RDFFormat {
 
     fn reader(
         &self,
+        attributes: &Map,
+        _declared_types: &TupleConstraint,
         resource_providers: ResourceProviders,
-        resource: Resource,
-        logical_types: TupleConstraint,
+        inferred_types: &TupleConstraint,
     ) -> Result<Box<dyn TableReader>, Error> {
-        if let Some(logical_types) = logical_types.into_flat_primitive() {
+        if let Some(inferred_types) = inferred_types.into_flat_primitive() {
+            let path = attributes
+                .pairs
+                .get(&Key::identifier_from_str(PATH))
+                .expect("is a required attribute")
+                .as_string()
+                .expect("must be a string");
+            let base = attributes
+                .pairs
+                .get(&Key::identifier_from_str(BASE))
+                .map(|term| term.as_abstract().expect("must be an identifier").name());
+            let rdf_file = RdfFile::new(path, base);
+
             Ok(Box::new(RDFTriplesReader::new(
                 resource_providers,
-                todo!(),
-                logical_types,
+                &rdf_file,
+                inferred_types,
             )))
         } else {
-            todo!()
+            unimplemented!("There is no support for reading complex types from RDF files.")
         }
     }
 
-    fn writer(&self) -> Result<Box<dyn TableWriter>, Error> {
+    fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
         Err(FileFormatError::UnsupportedWrite(FileFormat::RDF).into())
     }
 
-    fn optional_attributes(&self, direction: Direction) -> std::collections::HashSet<Key> {
-        todo!()
+    fn optional_attributes(&self, _direction: Direction) -> HashSet<Key> {
+        let mut attributes = HashSet::new();
+
+        attributes.insert(BASE);
+
+        attributes
+            .into_iter()
+            .map(Key::identifier_from_str)
+            .collect()
     }
 
-    fn required_attributes(&self, direction: Direction) -> std::collections::HashSet<Key> {
-        todo!()
+    fn required_attributes(&self, _direction: Direction) -> HashSet<Key> {
+        let mut attributes = HashSet::new();
+
+        attributes.insert(PATH);
+
+        attributes
+            .into_iter()
+            .map(Key::identifier_from_str)
+            .collect()
     }
 
     fn validate_attribute_values(
         &self,
         direction: Direction,
-        attributes: &crate::model::Map,
+        attributes: &Map,
     ) -> Result<(), FileFormatError> {
         todo!()
     }
