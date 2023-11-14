@@ -28,7 +28,7 @@ pub struct TableWriter<'a> {
     dict: &'a RefCell<Dict>,
     /// Number of columns in the table.
     col_num: usize,
-    /// State of the current row. This is an internal buffer that will be written only whne all columns have received a value.
+    /// State of the current row. This is an internal buffer that will be written only when all columns have received a value.
     cur_row: Vec<AnyDataValue>,
     /// Current column in the current row that is to be filled next.
     cur_col_idx: usize,
