@@ -167,7 +167,7 @@ pub struct TableWriter<'a> {
     /// Finds a [`TypedTableRecord`] for the types required by the current values of
     /// [TableWriter::cur_row_storage_values], and creates a new one if required.
     /// The function searches for the correct value in a prefix trie for the list of types,
-    /// and updats this structure to capture the new value, if necessary.
+    /// and updates this structure to capture the new value, if necessary.
     fn find_current_row_table(&mut self) -> usize {
         let mut table_trie_block: usize = 0;
         for i in 0..self.col_num {
