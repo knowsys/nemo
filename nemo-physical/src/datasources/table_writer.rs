@@ -38,6 +38,8 @@ pub struct TableWriter<'a> {
 
     /// List of known typed tables
     tables: Vec<TypedTableRecord>,
+    /// Current size of tables (in same order as in [`TableWriter::tables`])
+    table_lengths: Vec<usize>,
     /// A linearlized trie data structure to find the table for a given list of column [`StorageTypeName`]s.
     /// The types correspond to numbers between `0` and [`STORAGE_TYPE_COUNT`]-1. The trie is a tree structure
     /// that has [`STORAGE_TYPE_COUNT`] branching degree but can be partial: a slice of length [`STORAGE_TYPE_COUNT`]
@@ -76,7 +78,8 @@ pub struct TableWriter<'a> {
 
         TableWriter{ dict: dict, col_num: column_count, cur_row: cur_row, 
             cur_col_idx: 0, cur_row_storage_values: cur_row_storage_values,
-            tables: Vec::with_capacity(10), table_trie: table_trie, 
+            tables: Vec::with_capacity(10), table_lengths: Vec::with_capacity(10),
+            table_trie: table_trie, 
             cols_u64: Vec::with_capacity(10), cols_u32: Vec::with_capacity(10),
             cols_floats: Vec::with_capacity(10), cols_doubles: Vec::with_capacity(10), cols_i64: Vec::with_capacity(10) }
     }
@@ -102,6 +105,32 @@ pub struct TableWriter<'a> {
 
     pub(crate) fn finalize(&mut self) {
         // TODO: interface may still change
+    }
+
+    /// Returns the value of the row number `val_index` (according to the internal
+    /// order of rows, not the insertion order) at position number `col_index`.
+    /// None is returned if there are fewer values than `val_index`.
+    pub(crate) fn get_value(&self, val_index: usize, col_index: usize) -> Option<StorageValueT> {
+        let mut table_index = 0;
+        let mut rows_before = 0;
+        while self.tables.len()>table_index && rows_before + self.table_lengths[table_index] <= val_index {
+            rows_before += self.table_lengths[table_index];
+            table_index += 1;
+        }
+
+        if table_index == self.tables.len() {
+            return None;
+        }
+
+        let local_val_index = val_index - rows_before;
+        let idx_in_value_cols = self.tables[table_index].col_ids[col_index];
+        match self.tables[table_index].col_types[col_index] {
+            StorageTypeName::U32 => Some(StorageValueT::U32(self.cols_u32[idx_in_value_cols][local_val_index])),
+            StorageTypeName::U64 => Some(StorageValueT::U64(self.cols_u64[idx_in_value_cols][local_val_index])),
+            StorageTypeName::I64 => Some(StorageValueT::I64(self.cols_i64[idx_in_value_cols][local_val_index])),
+            StorageTypeName::Float => Some(StorageValueT::Float(self.cols_floats[idx_in_value_cols][local_val_index])),
+            StorageTypeName::Double => Some(StorageValueT::Double(self.cols_doubles[idx_in_value_cols][local_val_index])),
+        }
     }
 
     /// Writes the current row to the stored columns.
@@ -132,6 +161,7 @@ pub struct TableWriter<'a> {
                 },
             }
         }
+        self.table_lengths[table_record_id] += 1;
     }
 
     /// Finds a [`TypedTableRecord`] for the types required by the current values of
@@ -203,6 +233,7 @@ pub struct TableWriter<'a> {
         let typed_table_record = TypedTableRecord{col_ids,col_types};
         self.table_trie[cur_block + Self::storage_type_idx(self.cur_row_storage_values[self.col_num-1].get_type())] = new_table_id + 1; // we recerve 0 for "no entry" in the trie
         self.tables.push(typed_table_record);
+        self.table_lengths.push(0);
 
         new_table_id
     }
@@ -270,10 +301,9 @@ pub struct TableWriter<'a> {
 mod test {
     use std::cell::RefCell;
 
-    use crate::{management::database::Dict, datavalues::AnyDataValue};
+    use crate::{management::database::Dict, datavalues::AnyDataValue, datatypes::StorageValueT};
 
     use super::TableWriter;
-    //use crate::datavalues::{DataValue,ValueDomain};
 
     #[test]
     fn test_internal_table_structures() {
@@ -292,7 +322,7 @@ mod test {
         tw.next_value(v1.clone());
         tw.next_value(v2.clone());
         tw.next_value(v1.clone());
-        // table #0, row #2
+        // table #0, row #1
         tw.next_value(v1.clone());
         tw.next_value(v1.clone());
         tw.next_value(v1.clone());
@@ -311,16 +341,23 @@ mod test {
 
         assert_eq!(tw.tables.len(),3);
 
+        assert_eq!(tw.table_lengths[0], 2);
         assert_eq!(tw.cols_u32[tw.tables[0].col_ids[0]].len(), 2);
         assert_eq!(tw.cols_u32[tw.tables[0].col_ids[1]].len(), 2);
         assert_eq!(tw.cols_u32[tw.tables[0].col_ids[2]].len(), 2);
 
+        assert_eq!(tw.table_lengths[1], 1);
         assert_eq!(tw.cols_u32[tw.tables[1].col_ids[0]].len(), 1);
         assert_eq!(tw.cols_i64[tw.tables[1].col_ids[1]].len(), 1);
         assert_eq!(tw.cols_u32[tw.tables[1].col_ids[2]].len(), 1);
 
+        assert_eq!(tw.table_lengths[2], 3);
         assert_eq!(tw.cols_u32[tw.tables[2].col_ids[0]].len(), 3);
         assert_eq!(tw.cols_u32[tw.tables[2].col_ids[1]].len(), 3);
         assert_eq!(tw.cols_i64[tw.tables[2].col_ids[2]].len(), 3);
+
+        assert_eq!(tw.get_value(0,0), tw.get_value(0,1));
+        assert_ne!(tw.get_value(2,1), tw.get_value(0,0));
+        assert_eq!(tw.get_value(2,1), Some(StorageValueT::I64(42)));
     }
 }
