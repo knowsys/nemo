@@ -512,7 +512,7 @@ mod test {
         let rule_2_index = 1;
         let rule_3_index = 2;
 
-        let program = Program::from(rules);
+        let program = Program::builder().rules(rules).build();
 
         let mut predicate_types = HashMap::new();
         predicate_types.insert(Identifier(String::from("S")), vec![PrimitiveType::Any]);

@@ -32,7 +32,7 @@ impl InputManager {
     /// Constructs a [`TableSource`] from the given [import specificiation][ImportExportSpec].
     pub fn import_table(
         &self,
-        import_spec: ImportExportSpec,
+        import_spec: &ImportExportSpec,
         inferred_types: Vec<PrimitiveType>,
     ) -> Result<TableSource, Error> {
         assert_eq!(import_spec.direction, Direction::Reading);

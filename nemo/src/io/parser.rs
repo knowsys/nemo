@@ -305,10 +305,6 @@ pub struct RuleParser<'a> {
     prefixes: RefCell<HashMap<&'a str, &'a str>>,
     /// The external data sources.
     sources: RefCell<Vec<DataSourceDeclaration>>,
-    /// External data sources imported into the program.
-    imports: RefCell<Vec<ImportExportSpec>>,
-    /// Data being exported from the program.
-    exports: RefCell<Vec<ImportExportSpec>>,
     /// Declarations of predicates with their types.
     predicate_declarations: RefCell<HashMap<Identifier, Vec<PrimitiveType>>>,
     /// Number counting up for generating distinct wildcards.
@@ -1358,18 +1354,16 @@ impl<'a> RuleParser<'a> {
 
             let mut statements = Vec::new();
             let mut output_predicates = Vec::new();
+            let mut imports = Vec::new();
+            let mut exports = Vec::new();
 
             let (remainder, _) = many0(alt((
                 map(self.parse_predicate_declaration(), |_| ()),
                 map(self.parse_source(), |source| {
                     self.sources.borrow_mut().push(source)
                 }),
-                map(self.parse_import(), |import| {
-                    self.imports.borrow_mut().push(import)
-                }),
-                map(self.parse_export(), |export| {
-                    self.exports.borrow_mut().push(export)
-                }),
+                map(self.parse_import(), |import| imports.push(import)),
+                map(self.parse_export(), |export| exports.push(export)),
                 map(self.parse_statement(), |statement| {
                     statements.push(statement)
                 }),
@@ -1393,7 +1387,7 @@ impl<'a> RuleParser<'a> {
                 .borrow()
                 .iter()
                 .map(|(&prefix, &iri)| (prefix.to_string(), iri.to_string()))
-                .collect();
+                .collect::<Vec<_>>();
             let mut rules = Vec::new();
             let mut facts = Vec::new();
 
@@ -1402,18 +1396,24 @@ impl<'a> RuleParser<'a> {
                 Statement::Rule(value) => rules.push(value.clone()),
             });
 
-            Ok((
-                remainder,
-                Program::new(
-                    base,
-                    prefixes,
-                    self.sources.borrow().clone(),
-                    rules,
-                    facts,
-                    self.predicate_declarations.borrow().clone(),
-                    output_predicates.into(),
-                ),
-            ))
+            let mut program_builder = Program::builder()
+                .prefixes(prefixes)
+                .sources(self.sources.borrow().clone())
+                .imports(imports)
+                .exports(exports)
+                .rules(rules)
+                .facts(facts)
+                .predicate_declarations(self.predicate_declarations.borrow().clone());
+
+            if let Some(base) = base {
+                program_builder = program_builder.base(base);
+            }
+
+            if !output_predicates.is_empty() {
+                program_builder = program_builder.output_predicates(output_predicates);
+            }
+
+            Ok((remainder, program_builder.build()))
         })
     }
 

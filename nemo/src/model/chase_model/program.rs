@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     error::Error,
+    io::formats::types::{Direction, ImportExportSpec},
     model::{
         DataSourceDeclaration, Identifier, OutputPredicateSelection, PrimitiveType, Program,
         QualifiedPredicateName,
@@ -12,59 +13,203 @@ use crate::{
 
 use super::{ChaseAtom, ChaseFact, ChaseRule};
 
-#[allow(dead_code)]
 /// Representation of a datalog program that is used for generating execution plans for the physical layer.
 #[derive(Debug, Default, Clone)]
 pub struct ChaseProgram {
     base: Option<String>,
     prefixes: HashMap<String, String>,
     sources: Vec<DataSourceDeclaration>,
+    imports: Vec<ImportExportSpec>,
+    exports: Vec<ImportExportSpec>,
     rules: Vec<ChaseRule>,
     facts: Vec<ChaseFact>,
     parsed_predicate_declarations: HashMap<Identifier, Vec<PrimitiveType>>,
     output_predicates: OutputPredicateSelection,
 }
 
-impl From<Vec<ChaseRule>> for ChaseProgram {
-    fn from(rules: Vec<ChaseRule>) -> Self {
-        Self {
-            rules,
-            ..Default::default()
-        }
-    }
+/// A Builder for a [ChaseProgram].
+#[derive(Debug, Default)]
+pub struct ChaseProgramBuilder {
+    program: ChaseProgram,
 }
 
-impl From<(Vec<DataSourceDeclaration>, Vec<ChaseRule>)> for ChaseProgram {
-    fn from((sources, rules): (Vec<DataSourceDeclaration>, Vec<ChaseRule>)) -> Self {
-        Self {
-            sources,
-            rules,
-            ..Default::default()
-        }
+impl ChaseProgramBuilder {
+    /// Construct a new builder.
+    pub fn new() -> Self {
+        Default::default()
     }
-}
 
-#[allow(dead_code)]
-impl ChaseProgram {
-    /// Construct a new program.
-    pub fn new(
-        base: Option<String>,
-        prefixes: HashMap<String, String>,
-        sources: Vec<DataSourceDeclaration>,
-        rules: Vec<ChaseRule>,
-        facts: Vec<ChaseFact>,
-        parsed_predicate_declarations: HashMap<Identifier, Vec<PrimitiveType>>,
-        output_predicates: OutputPredicateSelection,
+    /// Construct a [Program] from this builder.
+    pub fn build(self) -> ChaseProgram {
+        self.program
+    }
+
+    /// Set the base IRI.
+    pub fn base(mut self, base: String) -> Self {
+        self.program.base = Some(base);
+        self
+    }
+
+    /// Add a prefix.
+    pub fn prefix(mut self, prefix: String, iri: String) -> Self {
+        self.program.prefixes.insert(prefix, iri);
+        self
+    }
+
+    /// Add prefixes.
+    pub fn prefixes<T>(mut self, prefixes: T) -> Self
+    where
+        T: IntoIterator<Item = (String, String)>,
+    {
+        self.program.prefixes.extend(prefixes);
+        self
+    }
+
+    /// Add a data source.
+    pub fn source(mut self, source: DataSourceDeclaration) -> Self {
+        self.program.sources.push(source);
+        self
+    }
+
+    /// Add data sources.
+    pub fn sources<T>(mut self, sources: T) -> Self
+    where
+        T: IntoIterator<Item = DataSourceDeclaration>,
+    {
+        self.program.sources.extend(sources);
+        self
+    }
+
+    /// Add an imported table.
+    pub fn import(mut self, import: ImportExportSpec) -> Self {
+        assert_eq!(import.direction, Direction::Reading);
+
+        self.program.imports.push(import);
+        self
+    }
+
+    /// Add imported tables.
+    pub fn imports<T>(mut self, imports: T) -> Self
+    where
+        T: IntoIterator<Item = ImportExportSpec>,
+    {
+        let imports = imports.into_iter().collect::<Vec<_>>();
+        assert!(imports
+            .iter()
+            .all(|import| import.direction == Direction::Reading));
+
+        self.program.imports.extend(imports);
+        self
+    }
+
+    /// Add an exported table.
+    pub fn export(mut self, export: ImportExportSpec) -> Self {
+        assert_eq!(export.direction, Direction::Writing);
+
+        self.program.exports.push(export);
+        self
+    }
+
+    /// Add exported tables.
+    pub fn exports<T>(mut self, exports: T) -> Self
+    where
+        T: IntoIterator<Item = ImportExportSpec>,
+    {
+        let exports = exports.into_iter().collect::<Vec<_>>();
+        assert!(exports
+            .iter()
+            .all(|export| export.direction == Direction::Writing));
+
+        self.program.exports.extend(exports);
+        self
+    }
+
+    /// Add a rule.
+    pub fn rule(mut self, rule: ChaseRule) -> Self {
+        self.program.rules.push(rule);
+        self
+    }
+
+    /// Add rules.
+    pub fn rules<T>(mut self, rules: T) -> Self
+    where
+        T: IntoIterator<Item = ChaseRule>,
+    {
+        self.program.rules.extend(rules);
+        self
+    }
+
+    /// Add a fact.
+    pub fn fact(mut self, fact: ChaseFact) -> Self {
+        self.program.facts.push(fact);
+        self
+    }
+
+    /// Add facts.
+    pub fn facts<T>(mut self, facts: T) -> Self
+    where
+        T: IntoIterator<Item = ChaseFact>,
+    {
+        self.program.facts.extend(facts);
+        self
+    }
+
+    /// Add a predicate declaration.
+    pub fn predicate_declaration(
+        mut self,
+        predicate: Identifier,
+        declared_type: Vec<PrimitiveType>,
     ) -> Self {
-        Self {
-            base,
-            prefixes,
-            sources,
-            rules,
-            facts,
-            parsed_predicate_declarations,
-            output_predicates,
+        self.program
+            .parsed_predicate_declarations
+            .insert(predicate, declared_type);
+        self
+    }
+
+    /// Add predicate declarations.
+    pub fn predicate_declarations<T>(mut self, declarations: T) -> Self
+    where
+        T: IntoIterator<Item = (Identifier, Vec<PrimitiveType>)>,
+    {
+        self.program
+            .parsed_predicate_declarations
+            .extend(declarations);
+        self
+    }
+
+    /// Select all IDB predicates for output.
+    pub fn output_all_idb_predicates(mut self) -> Self {
+        self.program.output_predicates = OutputPredicateSelection::AllIDBPredicates;
+        self
+    }
+
+    /// Select an IDB predicate for output.
+    pub fn output_predicate(self, predicate: QualifiedPredicateName) -> Self {
+        self.output_predicates([predicate])
+    }
+
+    /// Select IDB predicates for output.
+    pub fn output_predicates<T>(mut self, predicates: T) -> Self
+    where
+        T: IntoIterator<Item = QualifiedPredicateName>,
+    {
+        match self.program.output_predicates {
+            OutputPredicateSelection::SelectedPredicates(ref mut selected) => {
+                selected.extend(predicates)
+            }
+            OutputPredicateSelection::AllIDBPredicates => {
+                self.program.output_predicates =
+                    OutputPredicateSelection::SelectedPredicates(Vec::from_iter(predicates))
+            }
         }
+        self
+    }
+}
+
+impl ChaseProgram {
+    /// Return a [builder][ChaseProgramBuilder] for a [ChaseProgram].
+    pub fn builder() -> ChaseProgramBuilder {
+        Default::default()
     }
 
     /// Get the base IRI, if set.
@@ -125,17 +270,31 @@ impl ChaseProgram {
             .collect()
     }
 
+    /// Return all imports in the program.
+    pub fn imports(&self) -> impl Iterator<Item = &ImportExportSpec> {
+        self.imports.iter()
+    }
+
+    /// Return all exports in the program.
+    pub fn exports(&self) -> impl Iterator<Item = &ImportExportSpec> {
+        self.exports.iter()
+    }
+
     /// Return an Iterator over all output predicates
     pub fn output_predicates(&self) -> impl Iterator<Item = Identifier> {
         let result: Vec<_> = match &self.output_predicates {
             OutputPredicateSelection::AllIDBPredicates => {
+                log::debug!("outputting all IDB predicates");
                 self.idb_predicates().iter().cloned().collect()
             }
-            OutputPredicateSelection::SelectedPredicates(predicates) => predicates
-                .iter()
-                .map(|QualifiedPredicateName { identifier, .. }| identifier)
-                .cloned()
-                .collect(),
+            OutputPredicateSelection::SelectedPredicates(predicates) => {
+                log::debug!("outputting predicates {predicates:?}");
+                predicates
+                    .iter()
+                    .map(|QualifiedPredicateName { identifier, .. }| identifier)
+                    .cloned()
+                    .collect()
+            }
         };
 
         result.into_iter()
@@ -177,26 +336,38 @@ impl TryFrom<Program> for ChaseProgram {
     type Error = Error;
 
     fn try_from(program: Program) -> Result<Self, Error> {
-        Ok(Self::new(
-            program.base(),
-            program.prefixes().clone(),
-            program.sources().cloned().collect(),
-            program
-                .rules()
-                .iter()
-                .map(|rule| rule.clone().try_into())
-                .collect::<Result<Vec<ChaseRule>, Error>>()?,
-            program
-                .facts()
-                .iter()
-                .map(|f| ChaseFact::from_flat_atom(&f.0))
-                .collect(),
-            program.parsed_predicate_declarations(),
-            program
-                .output_predicates()
-                .map(QualifiedPredicateName::new)
-                .collect::<Vec<_>>()
-                .into(),
-        ))
+        let mut builder = Self::builder()
+            .prefixes(program.prefixes().clone())
+            .sources(program.sources().cloned())
+            .imports(program.imports().cloned())
+            .exports(program.exports().cloned())
+            .rules(
+                program
+                    .rules()
+                    .iter()
+                    .cloned()
+                    .map(ChaseRule::try_from)
+                    .collect::<Result<Vec<_>, Error>>()?,
+            )
+            .facts(
+                program
+                    .facts()
+                    .iter()
+                    .map(|fact| ChaseFact::from_flat_atom(&fact.0)),
+            )
+            .predicate_declarations(program.parsed_predicate_declarations());
+
+        if let Some(base) = program.base() {
+            builder = builder.base(base);
+        }
+
+        if let OutputPredicateSelection::SelectedPredicates(predicates) =
+            program.output_predicate_selection()
+        {
+            log::debug!("setting output predicates: {predicates:?}");
+            builder = builder.output_predicates(predicates.clone());
+        }
+
+        Ok(builder.build())
     }
 }

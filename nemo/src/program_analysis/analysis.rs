@@ -187,7 +187,7 @@ fn construct_existential_aux_rule(
     };
 
     let variable_order = build_preferable_variable_orders(
-        &vec![temp_rule.clone()].into(),
+        &ChaseProgram::builder().rule(temp_rule.clone()).build(),
         Some(column_orders.clone()),
     )
     .all_variable_orders
