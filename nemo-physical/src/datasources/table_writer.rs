@@ -161,8 +161,8 @@ impl<'a> TableWriter<'a> {
             self.cur_row_storage_values[i] = self.make_storage_value(i);
         }
 
-        let table_record_id = self.find_current_row_table();
-        let table_record = &self.tables[table_record_id];
+        let table_record_id: usize = self.find_current_row_table();
+        let table_record: &TypedTableRecord = &self.tables[table_record_id];
 
         for i in 0..self.col_num {
             match self.cur_row_storage_values[i] {
@@ -190,6 +190,7 @@ impl<'a> TableWriter<'a> {
     /// [TableWriter::cur_row_storage_values], and creates a new one if required.
     /// The function searches for the correct value in a prefix trie for the list of types,
     /// and updates this structure to capture the new value, if necessary.
+    /// Returns an index of [`TableWriter::tables`].
     fn find_current_row_table(&mut self) -> usize {
         let mut table_trie_block: usize = 0;
         for i in 0..self.col_num {
