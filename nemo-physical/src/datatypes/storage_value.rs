@@ -10,7 +10,7 @@ use super::StorageTypeName;
 /// This should not be used to represent large numbers of values,
 /// due to the overhead for each value, but it can be a convenient
 /// option to interface with unknown values.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub enum StorageValueT {
     /// Case u32
     U32(u32),
@@ -266,5 +266,38 @@ impl From<Float> for StorageValueT {
 impl From<Double> for StorageValueT {
     fn from(value: Double) -> Self {
         StorageValueT::Double(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::double::Double;
+    use super::super::float::Float;
+    use super::StorageValueT;
+    #[test]
+    fn storagevaluet_comparison() {
+        assert!(StorageValueT::U32(11) < StorageValueT::U64(10));
+        assert!(StorageValueT::U32(11) < StorageValueT::U64(11));
+        assert!(StorageValueT::U32(11) < StorageValueT::U64(12));
+
+        assert!(StorageValueT::U64(11) < StorageValueT::I64(10));
+        assert!(StorageValueT::U64(11) < StorageValueT::I64(11));
+        assert!(StorageValueT::U64(11) < StorageValueT::I64(12));
+
+        let f10 = Float::new(10.0).unwrap();
+        let f11 = Float::new(11.0).unwrap();
+        let f12 = Float::new(12.0).unwrap();
+
+        assert!(StorageValueT::I64(11) < StorageValueT::Float(f10));
+        assert!(StorageValueT::I64(11) < StorageValueT::Float(f11));
+        assert!(StorageValueT::I64(11) < StorageValueT::Float(f12));
+
+        let d10 = Double::new(10.0).unwrap();
+        let d11 = Double::new(11.0).unwrap();
+        let d12 = Double::new(12.0).unwrap();
+
+        assert!(StorageValueT::Float(f11) < StorageValueT::Double(d10));
+        assert!(StorageValueT::Float(f11) < StorageValueT::Double(d11));
+        assert!(StorageValueT::Float(f11) < StorageValueT::Double(d12));
     }
 }
