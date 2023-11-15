@@ -2,7 +2,7 @@
 //! Integers have a more complex domain hierarchy than most other kinds of data, and the related
 //! logic is collected here as well.
 
-use super::{DataValue,ValueDomain};
+use super::{DataValue, ValueDomain};
 
 /// Maximal value of an u64, i.e. 2^64-1.
 const U64MAX_AS_U64: u64 = std::u64::MAX;
@@ -60,7 +60,7 @@ impl DataValue for UnsignedLongDataValue {
         self.0 <= I64MAX_AS_U64
     }
 
-     fn fits_into_i32(&self) -> bool {
+    fn fits_into_i32(&self) -> bool {
         self.0 <= I32MAX_AS_U64
     }
 
@@ -68,7 +68,7 @@ impl DataValue for UnsignedLongDataValue {
         true
     }
 
-     fn fits_into_u32(&self) -> bool {
+    fn fits_into_u32(&self) -> bool {
         self.0 <= U32MAX_AS_U64
     }
 
@@ -88,7 +88,6 @@ impl DataValue for UnsignedLongDataValue {
         self.0.try_into().unwrap()
     }
 }
-
 
 /// Physical representation of an integer as an i64.
 #[repr(transparent)]
@@ -134,7 +133,7 @@ impl DataValue for LongDataValue {
         true
     }
 
-     fn fits_into_i32(&self) -> bool {
+    fn fits_into_i32(&self) -> bool {
         self.0 <= I32MAX_AS_I64 && self.0 >= I32MIN_AS_I64
     }
 
@@ -142,7 +141,7 @@ impl DataValue for LongDataValue {
         self.0 >= 0
     }
 
-     fn fits_into_u32(&self) -> bool {
+    fn fits_into_u32(&self) -> bool {
         self.0 <= U32MAX_AS_I64 && self.0 >= 0
     }
 
@@ -169,16 +168,22 @@ impl DataValue for LongDataValue {
 
 #[cfg(test)]
 mod test {
-    use super::{LongDataValue,UnsignedLongDataValue,I32MAX_AS_I64,U32MAX_AS_I64,I32MIN_AS_I64,U32MAX_AS_U64, I32MAX_AS_U64, U64MAX_AS_U64};
-    use crate::datavalues::{DataValue,ValueDomain};
+    use super::{
+        LongDataValue, UnsignedLongDataValue, I32MAX_AS_I64, I32MAX_AS_U64, I32MIN_AS_I64,
+        U32MAX_AS_I64, U32MAX_AS_U64, U64MAX_AS_U64,
+    };
+    use crate::datavalues::{DataValue, ValueDomain};
 
     #[test]
     fn test_unsigned_long_unsigned_long() {
-        let value: u64 =  U64MAX_AS_U64;
+        let value: u64 = U64MAX_AS_U64;
         let long1 = UnsignedLongDataValue::new(value);
 
         assert_eq!(long1.lexical_value(), value.to_string());
-        assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string());
+        assert_eq!(
+            long1.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string()
+        );
         assert_eq!(long1.value_domain(), ValueDomain::UnsignedLong);
 
         assert_eq!(long1.fits_into_i32(), false);
@@ -195,11 +200,14 @@ mod test {
 
     #[test]
     fn test_unsigned_long_nonnegative_long() {
-        let value: u64 =  U32MAX_AS_U64 + 42;
+        let value: u64 = U32MAX_AS_U64 + 42;
         let long1 = UnsignedLongDataValue::new(value);
 
         assert_eq!(long1.lexical_value(), value.to_string());
-        assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#long".to_string());
+        assert_eq!(
+            long1.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#long".to_string()
+        );
         assert_eq!(long1.value_domain(), ValueDomain::NonNegativeLong);
 
         assert_eq!(long1.fits_into_i32(), false);
@@ -217,11 +225,14 @@ mod test {
 
     #[test]
     fn test_unsigned_long_unsigned_int() {
-        let value: u64 =  I32MAX_AS_U64 + 42;
+        let value: u64 = I32MAX_AS_U64 + 42;
         let long1 = UnsignedLongDataValue::new(value);
 
         assert_eq!(long1.lexical_value(), value.to_string());
-        assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#long".to_string());
+        assert_eq!(
+            long1.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#long".to_string()
+        );
         assert_eq!(long1.value_domain(), ValueDomain::UnsignedInt);
 
         assert_eq!(long1.fits_into_i32(), false);
@@ -243,7 +254,10 @@ mod test {
         let long1 = UnsignedLongDataValue::new(42);
 
         assert_eq!(long1.lexical_value(), "42".to_string());
-        assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#int".to_string());
+        assert_eq!(
+            long1.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#int".to_string()
+        );
         assert_eq!(long1.value_domain(), ValueDomain::NonNegativeInt);
 
         assert_eq!(long1.fits_into_i32(), true);
@@ -263,11 +277,14 @@ mod test {
 
     #[test]
     fn test_long_nonnegative_long() {
-        let long_value: i64 =  U32MAX_AS_I64 + 42;
+        let long_value: i64 = U32MAX_AS_I64 + 42;
         let long1 = LongDataValue::new(long_value);
 
         assert_eq!(long1.lexical_value(), long_value.to_string());
-        assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#long".to_string());
+        assert_eq!(
+            long1.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#long".to_string()
+        );
         assert_eq!(long1.value_domain(), ValueDomain::NonNegativeLong);
 
         assert_eq!(long1.fits_into_i32(), false);
@@ -283,14 +300,16 @@ mod test {
         assert_eq!(long1.to_u64_unchecked(), long_value as u64);
     }
 
-
     #[test]
     fn test_long_unsigned_int() {
-        let long_value: i64 =  I32MAX_AS_I64 + 42;
+        let long_value: i64 = I32MAX_AS_I64 + 42;
         let long1 = LongDataValue::new(long_value);
 
         assert_eq!(long1.lexical_value(), long_value.to_string());
-        assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#long".to_string());
+        assert_eq!(
+            long1.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#long".to_string()
+        );
         assert_eq!(long1.value_domain(), ValueDomain::UnsignedInt);
 
         assert_eq!(long1.fits_into_i32(), false);
@@ -304,7 +323,7 @@ mod test {
         assert_eq!(long1.to_i64(), Some(long_value));
         assert_eq!(long1.to_i64_unchecked(), long_value);
         assert_eq!(long1.to_u64(), Some(long_value as u64));
-        assert_eq!(long1.to_u64_unchecked(), long_value as u64);       
+        assert_eq!(long1.to_u64_unchecked(), long_value as u64);
     }
 
     #[test]
@@ -312,7 +331,10 @@ mod test {
         let long1 = LongDataValue::new(42);
 
         assert_eq!(long1.lexical_value(), "42".to_string());
-        assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#int".to_string());
+        assert_eq!(
+            long1.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#int".to_string()
+        );
         assert_eq!(long1.value_domain(), ValueDomain::NonNegativeInt);
 
         assert_eq!(long1.fits_into_i32(), true);
@@ -332,11 +354,14 @@ mod test {
 
     #[test]
     fn test_long_negative_int() {
-        let long_value: i64 =  -42;
+        let long_value: i64 = -42;
         let long1 = LongDataValue::new(long_value);
 
         assert_eq!(long1.lexical_value(), long_value.to_string());
-        assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#int".to_string());
+        assert_eq!(
+            long1.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#int".to_string()
+        );
         assert_eq!(long1.value_domain(), ValueDomain::Int);
 
         assert_eq!(long1.fits_into_i32(), true);
@@ -358,7 +383,10 @@ mod test {
         let long1 = LongDataValue::new(long_value);
 
         assert_eq!(long1.lexical_value(), long_value.to_string());
-        assert_eq!(long1.datatype_iri(), "http://www.w3.org/2001/XMLSchema#long".to_string());
+        assert_eq!(
+            long1.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#long".to_string()
+        );
         assert_eq!(long1.value_domain(), ValueDomain::Long);
 
         assert_eq!(long1.fits_into_i32(), false);

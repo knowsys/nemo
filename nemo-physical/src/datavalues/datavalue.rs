@@ -1,13 +1,10 @@
-
-
-
 /// Enum of different value domains that are distinguished in this code,
 /// such as "string" or "64bit floating point numbers". Even in an untyped context,
 /// it is often useful to distinguish some basic domains and to treat values accordingly.
-/// 
-/// Most domains are disjoint to other domains. Where this is not the case, we make sure 
+///
+/// Most domains are disjoint to other domains. Where this is not the case, we make sure
 /// that the intersectoin of overlapping domains is also available as a constant.
-/// 
+///
 /// The main case where this is needed are integer numbers, which exist in several ranges
 /// that we need to distinguish to storing them efficiently.
 /// Mainly, we care about signed and unsigned 32bit and 64bit numbers, and we add auxiliary
@@ -30,7 +27,7 @@ pub enum ValueDomain {
     UnsignedLong,
     /// Domain of all signed 64bit integer numbers that are not negative: 0…+9223372036854775807, or 0 … +2^63-1.
     /// This is a superset of [`ValueDomain::Int`].
-    NonNegativeLong,   
+    NonNegativeLong,
     /// Domain of all unsigned 32bit integer numbers: 0…+4294967295, or 0 … +2^32-1.
     /// This is a superset of [`ValueDomain::NonNegativeInt`].
     UnsignedInt,
@@ -55,7 +52,7 @@ impl ValueDomain {
     /// Obtain the datatype IRI that we generally use in canonical values
     /// of a certain domain. In many cases, we use existing identifiers, especially
     /// the XML Schema datatypes that are also used in RDF.
-    /// 
+    ///
     /// The method panics on undefined cases, especially when called for [`ValueDomain::Other`],
     /// which does not have a canonical type that is determined by the domain.
     pub(crate) fn type_iri(&self) -> String {
@@ -104,8 +101,8 @@ pub trait DataValue {
     /// the domain [`ValueDomain::String`].
     fn to_string(&self) -> Option<String> {
         match self.value_domain() {
-            ValueDomain::String =>  Some(self.to_string_unchecked()),
-            _ => None
+            ValueDomain::String => Some(self.to_string_unchecked()),
+            _ => None,
         }
     }
 
@@ -119,8 +116,8 @@ pub trait DataValue {
     /// the domain [`ValueDomain::LanguageTaggedString`].
     fn to_language_tagged_string(&self) -> Option<(String, String)> {
         match self.value_domain() {
-            ValueDomain::LanguageTaggedString =>  Some(self.to_language_tagged_string_unchecked()),
-            _ => None
+            ValueDomain::LanguageTaggedString => Some(self.to_language_tagged_string_unchecked()),
+            _ => None,
         }
     }
 
@@ -134,8 +131,8 @@ pub trait DataValue {
     /// the domain [`ValueDomain::Iri`].
     fn to_iri(&self) -> Option<String> {
         match self.value_domain() {
-            ValueDomain::Iri =>  Some(self.to_iri_unchecked()),
-            _ => None
+            ValueDomain::Iri => Some(self.to_iri_unchecked()),
+            _ => None,
         }
     }
 
@@ -149,8 +146,8 @@ pub trait DataValue {
     /// the domain [`ValueDomain::Double`].
     fn to_f64(&self) -> Option<f64> {
         match self.value_domain() {
-            ValueDomain::Double =>  Some(self.to_f64_unchecked()),
-            _ => None
+            ValueDomain::Double => Some(self.to_f64_unchecked()),
+            _ => None,
         }
     }
 
@@ -255,14 +252,14 @@ pub trait DataValue {
     /// Return the value of the tuple element at the given index.
     fn tuple_element(&self, index: usize) -> Option<&dyn DataValue> {
         match self.value_domain() {
-            ValueDomain::Tuple =>  { 
+            ValueDomain::Tuple => {
                 if index < self.tuple_len_unchecked() {
                     Some(self.tuple_element_unchecked(index))
                 } else {
                     None
                 }
-            },
-            _ => None
+            }
+            _ => None,
         }
     }
 
@@ -271,7 +268,7 @@ pub trait DataValue {
     fn tuple_len(&self) -> Option<usize> {
         match self.value_domain() {
             ValueDomain::Tuple => Some(self.tuple_len_unchecked()),
-            _ => None
+            _ => None,
         }
     }
 

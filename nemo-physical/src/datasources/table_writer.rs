@@ -1,12 +1,12 @@
 //! Module that allows callers to write data into columns of a database table.
 
-use std::cell::RefCell;
 use crate::{
-    datavalues::{DataValue,AnyDataValue},
-    management::database::Dict,
+    datatypes::{Double, Float, StorageTypeName, StorageValueT},
+    datavalues::{AnyDataValue, DataValue},
     dictionary::Dictionary,
-    datatypes::{StorageTypeName, StorageValueT, Double, Float},
+    management::database::Dict,
 };
+use std::cell::RefCell;
 
 /// Number of supported [`StorageTypeName`]s. See also [TableWriter::storage_type_idx].
 const STORAGE_TYPE_COUNT: usize = 5;
@@ -60,9 +60,8 @@ pub struct TableWriter<'a> {
     /// List of all i64 value columns used across the tables.
     cols_i64: Vec<Vec<i64>>,
 }
- 
- impl<'a> TableWriter<'a> {
 
+impl<'a> TableWriter<'a> {
     pub(crate) fn new(dict: &'a RefCell<Dict>, column_count: usize) -> Self {
         let mut cur_row = Vec::with_capacity(column_count);
         let mut cur_row_storage_values = Vec::with_capacity(column_count);
@@ -76,12 +75,21 @@ pub struct TableWriter<'a> {
             table_trie.push(0);
         }
 
-        TableWriter{ dict: dict, col_num: column_count, cur_row: cur_row, 
-            cur_col_idx: 0, cur_row_storage_values: cur_row_storage_values,
-            tables: Vec::with_capacity(10), table_lengths: Vec::with_capacity(10),
-            table_trie: table_trie, 
-            cols_u64: Vec::with_capacity(10), cols_u32: Vec::with_capacity(10),
-            cols_floats: Vec::with_capacity(10), cols_doubles: Vec::with_capacity(10), cols_i64: Vec::with_capacity(10) }
+        TableWriter {
+            dict: dict,
+            col_num: column_count,
+            cur_row: cur_row,
+            cur_col_idx: 0,
+            cur_row_storage_values: cur_row_storage_values,
+            tables: Vec::with_capacity(10),
+            table_lengths: Vec::with_capacity(10),
+            table_trie: table_trie,
+            cols_u64: Vec::with_capacity(10),
+            cols_u32: Vec::with_capacity(10),
+            cols_floats: Vec::with_capacity(10),
+            cols_doubles: Vec::with_capacity(10),
+            cols_i64: Vec::with_capacity(10),
+        }
     }
 
     /// Provide the next value that is to be added to the column.
@@ -113,7 +121,9 @@ pub struct TableWriter<'a> {
     pub(crate) fn get_value(&self, val_index: usize, col_index: usize) -> Option<StorageValueT> {
         let mut table_index = 0;
         let mut rows_before = 0;
-        while self.tables.len()>table_index && rows_before + self.table_lengths[table_index] <= val_index {
+        while self.tables.len() > table_index
+            && rows_before + self.table_lengths[table_index] <= val_index
+        {
             rows_before += self.table_lengths[table_index];
             table_index += 1;
         }
@@ -125,11 +135,21 @@ pub struct TableWriter<'a> {
         let local_val_index = val_index - rows_before;
         let idx_in_value_cols = self.tables[table_index].col_ids[col_index];
         match self.tables[table_index].col_types[col_index] {
-            StorageTypeName::U32 => Some(StorageValueT::U32(self.cols_u32[idx_in_value_cols][local_val_index])),
-            StorageTypeName::U64 => Some(StorageValueT::U64(self.cols_u64[idx_in_value_cols][local_val_index])),
-            StorageTypeName::I64 => Some(StorageValueT::I64(self.cols_i64[idx_in_value_cols][local_val_index])),
-            StorageTypeName::Float => Some(StorageValueT::Float(self.cols_floats[idx_in_value_cols][local_val_index])),
-            StorageTypeName::Double => Some(StorageValueT::Double(self.cols_doubles[idx_in_value_cols][local_val_index])),
+            StorageTypeName::U32 => Some(StorageValueT::U32(
+                self.cols_u32[idx_in_value_cols][local_val_index],
+            )),
+            StorageTypeName::U64 => Some(StorageValueT::U64(
+                self.cols_u64[idx_in_value_cols][local_val_index],
+            )),
+            StorageTypeName::I64 => Some(StorageValueT::I64(
+                self.cols_i64[idx_in_value_cols][local_val_index],
+            )),
+            StorageTypeName::Float => Some(StorageValueT::Float(
+                self.cols_floats[idx_in_value_cols][local_val_index],
+            )),
+            StorageTypeName::Double => Some(StorageValueT::Double(
+                self.cols_doubles[idx_in_value_cols][local_val_index],
+            )),
         }
     }
 
@@ -146,19 +166,19 @@ pub struct TableWriter<'a> {
             match self.cur_row_storage_values[i] {
                 StorageValueT::U32(v) => {
                     self.cols_u32[table_record.col_ids[i]].push(v);
-                },
+                }
                 StorageValueT::U64(v) => {
                     self.cols_u64[table_record.col_ids[i]].push(v);
-                },
+                }
                 StorageValueT::I64(v) => {
                     self.cols_i64[table_record.col_ids[i]].push(v);
-                },
+                }
                 StorageValueT::Float(v) => {
                     self.cols_floats[table_record.col_ids[i]].push(v);
-                },
+                }
                 StorageValueT::Double(v) => {
                     self.cols_doubles[table_record.col_ids[i]].push(v);
-                },
+                }
             }
         }
         self.table_lengths[table_record_id] += 1;
@@ -173,33 +193,41 @@ pub struct TableWriter<'a> {
         for i in 0..self.col_num {
             let cur_type_id = Self::storage_type_idx(self.cur_row_storage_values[i].get_type());
             let next_block = self.table_trie[table_trie_block + cur_type_id];
-            if next_block == 0 { // make new trie nodes and table record below current
-                return self.add_current_row_table_record(i,table_trie_block);
+            if next_block == 0 {
+                // make new trie nodes and table record below current
+                return self.add_current_row_table_record(i, table_trie_block);
             }
             table_trie_block = next_block;
         }
-        table_trie_block-1
+        table_trie_block - 1
     }
 
     /// Create and insert a new  [`TypedTableRecord`] for the types required by the current values of
     /// [TableWriter::cur_row_storage_values]. The parameters specify the lowest level of the trie and
     /// the location of the corresponding lowest existing trie node on the trie path that would be
     /// required for this record. All trie nodes below are newly initialised to complete the path.
-    fn add_current_row_table_record(&mut self, last_trie_level: usize, last_trie_block: usize) -> usize {
+    fn add_current_row_table_record(
+        &mut self,
+        last_trie_level: usize,
+        last_trie_block: usize,
+    ) -> usize {
         let mut child_block = self.table_trie.len(); // start of the first new trie node block used below
 
         // add empty trie node slots for all remaining levels:
-        self.table_trie.resize(self.table_trie.len() + (self.col_num-1-last_trie_level) * STORAGE_TYPE_COUNT, 0);
+        self.table_trie.resize(
+            self.table_trie.len() + (self.col_num - 1 - last_trie_level) * STORAGE_TYPE_COUNT,
+            0,
+        );
 
         // record path to leaf node:
         let mut cur_block = last_trie_block;
-        for i in last_trie_level..self.col_num-1 {
+        for i in last_trie_level..self.col_num - 1 {
             let cur_type_id = Self::storage_type_idx(self.cur_row_storage_values[i].get_type());
             self.table_trie[cur_block + cur_type_id] = child_block;
             cur_block = child_block;
             child_block += STORAGE_TYPE_COUNT;
         }
-        
+
         // make and store table record and new columns for the table's contents:
         let mut col_ids = Vec::with_capacity(self.col_num);
         let mut col_types = Vec::with_capacity(self.col_num);
@@ -210,28 +238,30 @@ pub struct TableWriter<'a> {
                 StorageTypeName::U32 => {
                     col_ids.push(self.cols_u32.len());
                     self.cols_u32.push(Vec::new());
-                },
+                }
                 StorageTypeName::U64 => {
                     col_ids.push(self.cols_u64.len());
                     self.cols_u64.push(Vec::new());
-                },
+                }
                 StorageTypeName::I64 => {
                     col_ids.push(self.cols_i64.len());
                     self.cols_i64.push(Vec::new());
-                },
+                }
                 StorageTypeName::Float => {
                     col_ids.push(self.cols_floats.len());
                     self.cols_floats.push(Vec::new());
-                },
+                }
                 StorageTypeName::Double => {
                     col_ids.push(self.cols_doubles.len());
                     self.cols_doubles.push(Vec::new());
-                },
+                }
             }
         }
         let new_table_id = self.tables.len();
-        let typed_table_record = TypedTableRecord{col_ids,col_types};
-        self.table_trie[cur_block + Self::storage_type_idx(self.cur_row_storage_values[self.col_num-1].get_type())] = new_table_id + 1; // we recerve 0 for "no entry" in the trie
+        let typed_table_record = TypedTableRecord { col_ids, col_types };
+        self.table_trie[cur_block
+            + Self::storage_type_idx(self.cur_row_storage_values[self.col_num - 1].get_type())] =
+            new_table_id + 1; // we recerve 0 for "no entry" in the trie
         self.tables.push(typed_table_record);
         self.table_lengths.push(0);
 
@@ -246,20 +276,34 @@ pub struct TableWriter<'a> {
             AnyDataValue::String(iv) => {
                 // TODO: the string encoding with surrounding quotes is a cheap way to avoid confusion with IRIs.
                 // Final solution should be a dictionary that accepts and reproduces datavalues.
-                let dict_id = self.dict.borrow_mut().add_string("\"".to_owned() + &iv.to_string_unchecked() + "\"").value();
+                let dict_id = self
+                    .dict
+                    .borrow_mut()
+                    .add_string("\"".to_owned() + &iv.to_string_unchecked() + "\"")
+                    .value();
                 Self::storage_value_for_usize(dict_id)
-            },
-            AnyDataValue::LanguageTaggedString(_) => todo!("We still need the dictionary to support this case properly"),
+            }
+            AnyDataValue::LanguageTaggedString(_) => {
+                todo!("We still need the dictionary to support this case properly")
+            }
             AnyDataValue::Iri(iv) => {
                 // TODO: the string encoding with surrounding quotes is a cheap way to avoid confusion with IRIs.
                 // Final solution should be a dictionary that accepts and reproduces datavalues.
-                let dict_id = self.dict.borrow_mut().add_string("<".to_owned() + &iv.to_string_unchecked() + ">").value();
+                let dict_id = self
+                    .dict
+                    .borrow_mut()
+                    .add_string("<".to_owned() + &iv.to_string_unchecked() + ">")
+                    .value();
                 Self::storage_value_for_usize(dict_id)
-            },
-            AnyDataValue::Double(iv) => StorageValueT::Double(Double::from_number(iv.to_f64_unchecked())),
+            }
+            AnyDataValue::Double(iv) => {
+                StorageValueT::Double(Double::from_number(iv.to_f64_unchecked()))
+            }
             AnyDataValue::UnsignedLong(iv) => Self::storage_value_for_u64(iv.to_u64_unchecked()),
             AnyDataValue::Long(iv) => StorageValueT::I64(iv.to_i64_unchecked()),
-            AnyDataValue::Other(_) => todo!("We still need the dictionary to support this case properly"),
+            AnyDataValue::Other(_) => {
+                todo!("We still need the dictionary to support this case properly")
+            }
         }
     }
 
@@ -294,14 +338,13 @@ pub struct TableWriter<'a> {
             StorageTypeName::Double => 4,
         }
     }
-
 }
 
 #[cfg(test)]
 mod test {
     use std::cell::RefCell;
 
-    use crate::{management::database::Dict, datavalues::AnyDataValue, datatypes::StorageValueT};
+    use crate::{datatypes::StorageValueT, datavalues::AnyDataValue, management::database::Dict};
 
     use super::TableWriter;
 
@@ -334,12 +377,12 @@ mod test {
         tw.next_value(v1.clone());
         tw.next_value(v1.clone());
         tw.next_value(v2.clone());
-         // table #2, row #2
+        // table #2, row #2
         tw.next_value(v1.clone());
         tw.next_value(v1.clone());
         tw.next_value(v2.clone());
 
-        assert_eq!(tw.tables.len(),3);
+        assert_eq!(tw.tables.len(), 3);
 
         assert_eq!(tw.table_lengths[0], 2);
         assert_eq!(tw.cols_u32[tw.tables[0].col_ids[0]].len(), 2);
@@ -356,8 +399,8 @@ mod test {
         assert_eq!(tw.cols_u32[tw.tables[2].col_ids[1]].len(), 3);
         assert_eq!(tw.cols_i64[tw.tables[2].col_ids[2]].len(), 3);
 
-        assert_eq!(tw.get_value(0,0), tw.get_value(0,1));
-        assert_ne!(tw.get_value(2,1), tw.get_value(0,0));
-        assert_eq!(tw.get_value(2,1), Some(StorageValueT::I64(42)));
+        assert_eq!(tw.get_value(0, 0), tw.get_value(0, 1));
+        assert_ne!(tw.get_value(2, 1), tw.get_value(0, 0));
+        assert_eq!(tw.get_value(2, 1), Some(StorageValueT::I64(42)));
     }
 }

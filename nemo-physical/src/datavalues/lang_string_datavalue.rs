@@ -4,11 +4,11 @@
 //! but our implementation does not perform any checks and we consider any pair of Unicode strings to be
 //! a valid string-tag combination.
 
-use super::{DataValue,ValueDomain};
+use super::{DataValue, ValueDomain};
 
 /// Physical representation of a language-tagged string using two Strings.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LangStringDataValue(String,String);
+pub struct LangStringDataValue(String, String);
 
 impl LangStringDataValue {
     /// Constructor. We do not currently perform any checks regarding the structure
@@ -37,15 +37,15 @@ impl DataValue for LangStringDataValue {
         ValueDomain::LanguageTaggedString
     }
 
-    fn to_language_tagged_string_unchecked(&self) -> (String,String) {
-        (self.0.to_owned(),self.1.to_owned())
+    fn to_language_tagged_string_unchecked(&self) -> (String, String) {
+        (self.0.to_owned(), self.1.to_owned())
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::LangStringDataValue;
-    use crate::datavalues::{DataValue,ValueDomain};
+    use crate::datavalues::{DataValue, ValueDomain};
 
     #[test]
     fn test_lang_string() {
@@ -54,10 +54,19 @@ mod test {
         let dv = LangStringDataValue::new(value.to_string(), lang.to_string());
 
         assert_eq!(dv.lexical_value(), "Hello world@en-GB");
-        assert_eq!(dv.datatype_iri(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string());
+        assert_eq!(
+            dv.datatype_iri(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string()
+        );
         assert_eq!(dv.value_domain(), ValueDomain::LanguageTaggedString);
 
-        assert_eq!(dv.to_language_tagged_string(), Some((value.to_string(), lang.to_string())));
-        assert_eq!(dv.to_language_tagged_string_unchecked(), (value.to_string(), lang.to_string()));
+        assert_eq!(
+            dv.to_language_tagged_string(),
+            Some((value.to_string(), lang.to_string()))
+        );
+        assert_eq!(
+            dv.to_language_tagged_string_unchecked(),
+            (value.to_string(), lang.to_string())
+        );
     }
 }

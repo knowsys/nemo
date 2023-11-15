@@ -1,9 +1,9 @@
 //! This module provides implementations [`super::DataValue`]s that represent IRIs.
-//! In essence, IRIs are represented by Unicode strings, but they are considered 
+//! In essence, IRIs are represented by Unicode strings, but they are considered
 //! distinct from elements of ['super::ValueDomain::String']. Moreover, some IRI-specific
 //! requirements and normalizations might apply.
 
-use super::{DataValue,ValueDomain};
+use super::{DataValue, ValueDomain};
 
 /// Physical representation of a Unicode string using String.
 #[repr(transparent)]
@@ -39,7 +39,7 @@ impl DataValue for IriDataValue {
 #[cfg(test)]
 mod test {
     use super::IriDataValue;
-    use crate::datavalues::{DataValue,ValueDomain};
+    use crate::datavalues::{DataValue, ValueDomain};
 
     #[test]
     fn test_iri() {
@@ -47,7 +47,10 @@ mod test {
         let dv = IriDataValue::new(value.to_string());
 
         assert_eq!(dv.lexical_value(), value.to_string());
-        assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#anyURI".to_string());
+        assert_eq!(
+            dv.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#anyURI".to_string()
+        );
         assert_eq!(dv.value_domain(), ValueDomain::Iri);
 
         assert_eq!(dv.to_iri(), Some(value.to_string()));

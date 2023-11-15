@@ -1,12 +1,12 @@
 //! This module provides implementations [`super::DataValue`]s that represent finite-valued floating
 //! point numbers. That means that NaN and positive or negative infinite are not accepted here.
 //! This ensures smooth arithmetic and comparison operations are possible.
-//! 
+//!
 //! By convention (following XML Schema), we consider the value spaces of floats of different precisions
 //! to be disjoint, and also dijoint with any integer domain.
 
-use super::{DataValue,ValueDomain};
-use std::fmt::{Formatter,Display};
+use super::{DataValue, ValueDomain};
+use std::fmt::{Display, Formatter};
 
 /// Error that occurs when trying to use an infinity or NaN for creating a [`Double`].
 #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -21,7 +21,7 @@ impl Display for NonFiniteFloatError {
     }
 }
 
-impl  std::error::Error for NonFiniteFloatError {}
+impl std::error::Error for NonFiniteFloatError {}
 
 /// Physical representation of a 64bit floating point number as an f64.
 #[repr(transparent)]
@@ -76,8 +76,8 @@ impl Eq for DoubleDataValue {} // Possible since we exclude NaNs
 
 #[cfg(test)]
 mod test {
-    use super::{DoubleDataValue,NonFiniteFloatError};
-    use crate::datavalues::{DataValue,ValueDomain};
+    use super::{DoubleDataValue, NonFiniteFloatError};
+    use crate::datavalues::{DataValue, ValueDomain};
 
     #[test]
     fn test_double() {
@@ -85,7 +85,10 @@ mod test {
         let double = DoubleDataValue::from_number(value);
 
         assert_eq!(double.lexical_value(), value.to_string());
-        assert_eq!(double.datatype_iri(), "http://www.w3.org/2001/XMLSchema#double".to_string());
+        assert_eq!(
+            double.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#double".to_string()
+        );
         assert_eq!(double.value_domain(), ValueDomain::Double);
 
         assert_eq!(double.to_f64(), Some(value));

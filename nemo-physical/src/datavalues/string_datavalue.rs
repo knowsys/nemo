@@ -1,6 +1,6 @@
 //! This module provides implementations [`super::DataValue`]s that represent Unicode strings.
 
-use super::{DataValue,ValueDomain};
+use super::{DataValue, ValueDomain};
 
 /// Physical representation of a Unicode string using String.
 #[repr(transparent)]
@@ -35,7 +35,7 @@ impl DataValue for StringDataValue {
 #[cfg(test)]
 mod test {
     use super::StringDataValue;
-    use crate::datavalues::{DataValue,ValueDomain};
+    use crate::datavalues::{DataValue, ValueDomain};
 
     #[test]
     fn test_string() {
@@ -43,7 +43,10 @@ mod test {
         let dv = StringDataValue::new(value.to_string());
 
         assert_eq!(dv.lexical_value(), value.to_string());
-        assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#string".to_string());
+        assert_eq!(
+            dv.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#string".to_string()
+        );
         assert_eq!(dv.value_domain(), ValueDomain::String);
 
         assert_eq!(dv.to_string(), Some(value.to_string()));

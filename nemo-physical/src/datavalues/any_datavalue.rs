@@ -3,9 +3,10 @@
 
 use delegate::delegate;
 
-use super::{DataValue,ValueDomain,DoubleDataValue,StringDataValue,
-    IriDataValue,LongDataValue,UnsignedLongDataValue,
-    LangStringDataValue, OtherDataValue, NonFiniteFloatError};
+use super::{
+    DataValue, DoubleDataValue, IriDataValue, LangStringDataValue, LongDataValue,
+    NonFiniteFloatError, OtherDataValue, StringDataValue, UnsignedLongDataValue, ValueDomain,
+};
 
 /// Enum that can represent arbitrary [`DataValue`]s.
 #[derive(Debug, Clone)]
@@ -60,12 +61,12 @@ impl AnyDataValue {
     }
 
     /// Construct a datavalue in [`ValueDomain::LanguageTaggedString`] that represents a string with a language tag.
-    pub fn new_language_tagged_string(value: String,lang_tag: String) -> Self {
+    pub fn new_language_tagged_string(value: String, lang_tag: String) -> Self {
         AnyDataValue::LanguageTaggedString(LangStringDataValue::new(value, lang_tag))
     }
 
     /// Construct a datavalue in [`ValueDomain::Other`] specified by the given lexical value and datatype IRI.
-    pub fn new_other(lexical_value: String,datatype_iri: String) -> Self {
+    pub fn new_other(lexical_value: String, datatype_iri: String) -> Self {
         AnyDataValue::Other(OtherDataValue::new(lexical_value, datatype_iri))
     }
 }
@@ -117,23 +118,29 @@ impl PartialEq for AnyDataValue {
         match (self, other) {
             (AnyDataValue::String(dv), AnyDataValue::String(dv_other)) => dv == dv_other,
             (AnyDataValue::Iri(dv), AnyDataValue::Iri(dv_other)) => dv == dv_other,
-            (AnyDataValue::LanguageTaggedString(dv), AnyDataValue::LanguageTaggedString(dv_other)) => dv == dv_other,
+            (
+                AnyDataValue::LanguageTaggedString(dv),
+                AnyDataValue::LanguageTaggedString(dv_other),
+            ) => dv == dv_other,
             (AnyDataValue::Double(dv), AnyDataValue::Double(dv_other)) => dv == dv_other,
-            (AnyDataValue::Long(_),_) => other.fits_into_i64() && other.to_i64_unchecked() == self.to_i64_unchecked(),
-            (AnyDataValue::UnsignedLong(_),_) => other.fits_into_u64() && other.to_u64_unchecked() == self.to_u64_unchecked(),
+            (AnyDataValue::Long(_), _) => {
+                other.fits_into_i64() && other.to_i64_unchecked() == self.to_i64_unchecked()
+            }
+            (AnyDataValue::UnsignedLong(_), _) => {
+                other.fits_into_u64() && other.to_u64_unchecked() == self.to_u64_unchecked()
+            }
             (AnyDataValue::Other(dv), AnyDataValue::Other(dv_other)) => dv == dv_other,
             _ => false,
-        } 
+        }
     }
 }
 
 impl Eq for AnyDataValue {}
 
-
 #[cfg(test)]
 mod test {
     use super::AnyDataValue;
-    use crate::datavalues::{DataValue,ValueDomain};
+    use crate::datavalues::{DataValue, ValueDomain};
 
     #[test]
     fn test_string() {
@@ -141,7 +148,10 @@ mod test {
         let dv = AnyDataValue::new_string(value.to_string());
 
         assert_eq!(dv.lexical_value(), value.to_string());
-        assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#string".to_string());
+        assert_eq!(
+            dv.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#string".to_string()
+        );
         assert_eq!(dv.value_domain(), ValueDomain::String);
 
         assert_eq!(dv.to_string(), Some(value.to_string()));
@@ -154,7 +164,10 @@ mod test {
         let dv = AnyDataValue::new_iri(value.to_string());
 
         assert_eq!(dv.lexical_value(), value.to_string());
-        assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#anyURI".to_string());
+        assert_eq!(
+            dv.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#anyURI".to_string()
+        );
         assert_eq!(dv.value_domain(), ValueDomain::Iri);
 
         assert_eq!(dv.to_iri(), Some(value.to_string()));
@@ -167,7 +180,10 @@ mod test {
         let dv = AnyDataValue::new_double_from_f64(value).unwrap();
 
         assert_eq!(dv.lexical_value(), value.to_string());
-        assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#double".to_string());
+        assert_eq!(
+            dv.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#double".to_string()
+        );
         assert_eq!(dv.value_domain(), ValueDomain::Double);
 
         assert_eq!(dv.to_f64(), Some(value));
@@ -179,7 +195,10 @@ mod test {
         let dv = AnyDataValue::new_integer_from_i64(42);
 
         assert_eq!(dv.lexical_value(), "42".to_string());
-        assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#int".to_string());
+        assert_eq!(
+            dv.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#int".to_string()
+        );
         assert_eq!(dv.value_domain(), ValueDomain::NonNegativeInt);
 
         assert_eq!(dv.fits_into_i32(), true);
@@ -199,11 +218,14 @@ mod test {
 
     #[test]
     fn test_unsigned_long() {
-        let value: u64 =  u64::MAX;
+        let value: u64 = u64::MAX;
         let dv = AnyDataValue::new_integer_from_u64(value);
 
         assert_eq!(dv.lexical_value(), value.to_string());
-        assert_eq!(dv.datatype_iri(), "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string());
+        assert_eq!(
+            dv.datatype_iri(),
+            "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string()
+        );
         assert_eq!(dv.value_domain(), ValueDomain::UnsignedLong);
 
         assert_eq!(dv.fits_into_i32(), false);
@@ -225,11 +247,20 @@ mod test {
         let dv = AnyDataValue::new_language_tagged_string(value.to_string(), lang.to_string());
 
         assert_eq!(dv.lexical_value(), "Hello world@en-GB");
-        assert_eq!(dv.datatype_iri(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string());
+        assert_eq!(
+            dv.datatype_iri(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string()
+        );
         assert_eq!(dv.value_domain(), ValueDomain::LanguageTaggedString);
 
-        assert_eq!(dv.to_language_tagged_string(), Some((value.to_string(), lang.to_string())));
-        assert_eq!(dv.to_language_tagged_string_unchecked(), (value.to_string(), lang.to_string()));
+        assert_eq!(
+            dv.to_language_tagged_string(),
+            Some((value.to_string(), lang.to_string()))
+        );
+        assert_eq!(
+            dv.to_language_tagged_string_unchecked(),
+            (value.to_string(), lang.to_string())
+        );
     }
 
     #[test]
@@ -256,70 +287,74 @@ mod test {
         let dv_u64_2 = AnyDataValue::new_integer_from_u64(43);
         let dv_string = AnyDataValue::new_string("42".to_string());
         let dv_iri = AnyDataValue::new_iri("42".to_string());
-        let dv_lang_string = AnyDataValue::new_language_tagged_string("42".to_string(),"en-GB".to_string());
-        let dv_other = AnyDataValue::new_other("42".to_string(), "http://www.w3.org/2001/XMLSchema#hexBinary".to_string());
+        let dv_lang_string =
+            AnyDataValue::new_language_tagged_string("42".to_string(), "en-GB".to_string());
+        let dv_other = AnyDataValue::new_other(
+            "42".to_string(),
+            "http://www.w3.org/2001/XMLSchema#hexBinary".to_string(),
+        );
 
-        assert_eq!(dv_f64,dv_f64);
-        assert_ne!(dv_f64,dv_i64);
-        assert_ne!(dv_f64,dv_u64);
-        assert_ne!(dv_f64,dv_u64_2);
-        assert_ne!(dv_f64,dv_string);
-        assert_ne!(dv_f64,dv_iri);
-        assert_ne!(dv_f64,dv_lang_string);
-        assert_ne!(dv_f64,dv_other);
+        assert_eq!(dv_f64, dv_f64);
+        assert_ne!(dv_f64, dv_i64);
+        assert_ne!(dv_f64, dv_u64);
+        assert_ne!(dv_f64, dv_u64_2);
+        assert_ne!(dv_f64, dv_string);
+        assert_ne!(dv_f64, dv_iri);
+        assert_ne!(dv_f64, dv_lang_string);
+        assert_ne!(dv_f64, dv_other);
 
-        assert_ne!(dv_u64,dv_f64);
-        assert_eq!(dv_u64,dv_i64);
-        assert_eq!(dv_u64,dv_u64);
-        assert_ne!(dv_u64,dv_u64_2);
-        assert_ne!(dv_u64,dv_string);
-        assert_ne!(dv_u64,dv_iri);
-        assert_ne!(dv_u64,dv_lang_string);
-        assert_ne!(dv_u64,dv_other);
+        assert_ne!(dv_u64, dv_f64);
+        assert_eq!(dv_u64, dv_i64);
+        assert_eq!(dv_u64, dv_u64);
+        assert_ne!(dv_u64, dv_u64_2);
+        assert_ne!(dv_u64, dv_string);
+        assert_ne!(dv_u64, dv_iri);
+        assert_ne!(dv_u64, dv_lang_string);
+        assert_ne!(dv_u64, dv_other);
 
-        assert_ne!(dv_i64,dv_f64);
-        assert_eq!(dv_i64,dv_i64);
-        assert_eq!(dv_i64,dv_u64);
-        assert_ne!(dv_i64,dv_u64_2);
-        assert_ne!(dv_i64,dv_string);
-        assert_ne!(dv_i64,dv_iri);
-        assert_ne!(dv_i64,dv_lang_string);
-        assert_ne!(dv_i64,dv_other);
+        assert_ne!(dv_i64, dv_f64);
+        assert_eq!(dv_i64, dv_i64);
+        assert_eq!(dv_i64, dv_u64);
+        assert_ne!(dv_i64, dv_u64_2);
+        assert_ne!(dv_i64, dv_string);
+        assert_ne!(dv_i64, dv_iri);
+        assert_ne!(dv_i64, dv_lang_string);
+        assert_ne!(dv_i64, dv_other);
 
-        assert_ne!(dv_string,dv_f64);
-        assert_ne!(dv_string,dv_i64);
-        assert_ne!(dv_string,dv_u64);
-        assert_ne!(dv_string,dv_u64_2);
-        assert_eq!(dv_string,dv_string);
-        assert_ne!(dv_string,dv_iri);
-        assert_ne!(dv_string,dv_lang_string);
-        assert_ne!(dv_string,dv_other);
+        assert_ne!(dv_string, dv_f64);
+        assert_ne!(dv_string, dv_i64);
+        assert_ne!(dv_string, dv_u64);
+        assert_ne!(dv_string, dv_u64_2);
+        assert_eq!(dv_string, dv_string);
+        assert_ne!(dv_string, dv_iri);
+        assert_ne!(dv_string, dv_lang_string);
+        assert_ne!(dv_string, dv_other);
 
-        assert_ne!(dv_iri,dv_f64);
-        assert_ne!(dv_iri,dv_i64);
-        assert_ne!(dv_iri,dv_u64);
-        assert_ne!(dv_iri,dv_u64_2);
-        assert_ne!(dv_iri,dv_string);
-        assert_eq!(dv_iri,dv_iri);
-        assert_ne!(dv_iri,dv_lang_string);
-        assert_ne!(dv_iri,dv_other);
+        assert_ne!(dv_iri, dv_f64);
+        assert_ne!(dv_iri, dv_i64);
+        assert_ne!(dv_iri, dv_u64);
+        assert_ne!(dv_iri, dv_u64_2);
+        assert_ne!(dv_iri, dv_string);
+        assert_eq!(dv_iri, dv_iri);
+        assert_ne!(dv_iri, dv_lang_string);
+        assert_ne!(dv_iri, dv_other);
 
-        assert_ne!(dv_lang_string,dv_f64);
-        assert_ne!(dv_lang_string,dv_i64);
-        assert_ne!(dv_lang_string,dv_u64);
-        assert_ne!(dv_lang_string,dv_u64_2);
-        assert_ne!(dv_lang_string,dv_string);
-        assert_ne!(dv_lang_string,dv_iri);
-        assert_eq!(dv_lang_string,dv_lang_string);
-        assert_ne!(dv_lang_string,dv_other);
+        assert_ne!(dv_lang_string, dv_f64);
+        assert_ne!(dv_lang_string, dv_i64);
+        assert_ne!(dv_lang_string, dv_u64);
+        assert_ne!(dv_lang_string, dv_u64_2);
+        assert_ne!(dv_lang_string, dv_string);
+        assert_ne!(dv_lang_string, dv_iri);
+        assert_eq!(dv_lang_string, dv_lang_string);
+        assert_ne!(dv_lang_string, dv_other);
 
-        assert_ne!(dv_other,dv_f64);
-        assert_ne!(dv_other,dv_i64);
-        assert_ne!(dv_other,dv_u64);
-        assert_ne!(dv_other,dv_u64_2);
-        assert_ne!(dv_other,dv_string);
-        assert_ne!(dv_other,dv_iri);
-        assert_ne!(dv_other,dv_lang_string);
-        assert_eq!(dv_other,dv_other);
+        assert_ne!(dv_other, dv_f64);
+        assert_ne!(dv_other, dv_i64);
+        assert_ne!(dv_other, dv_u64);
+        assert_ne!(dv_other, dv_u64_2);
+        assert_ne!(dv_other, dv_string);
+        assert_ne!(dv_other, dv_iri);
+        assert_ne!(dv_other, dv_lang_string);
+        assert_eq!(dv_other, dv_other);
     }
 }
