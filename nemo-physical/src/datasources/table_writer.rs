@@ -75,20 +75,22 @@ impl<'a> TableWriter<'a> {
             table_trie.push(0);
         }
 
+        let initial_capacity = 10;
+
         TableWriter {
             dict: dict,
             col_num: column_count,
             cur_row: cur_row,
             cur_col_idx: 0,
             cur_row_storage_values: cur_row_storage_values,
-            tables: Vec::with_capacity(10),
-            table_lengths: Vec::with_capacity(10),
+            tables: Vec::with_capacity(initial_capacity),
+            table_lengths: Vec::with_capacity(initial_capacity),
             table_trie: table_trie,
-            cols_u64: Vec::with_capacity(10),
-            cols_u32: Vec::with_capacity(10),
-            cols_floats: Vec::with_capacity(10),
-            cols_doubles: Vec::with_capacity(10),
-            cols_i64: Vec::with_capacity(10),
+            cols_u64: Vec::with_capacity(initial_capacity),
+            cols_u32: Vec::with_capacity(initial_capacity),
+            cols_floats: Vec::with_capacity(initial_capacity),
+            cols_doubles: Vec::with_capacity(initial_capacity),
+            cols_i64: Vec::with_capacity(initial_capacity),
         }
     }
 
