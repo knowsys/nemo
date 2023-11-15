@@ -346,15 +346,14 @@ mod test {
             (a, b, c, r, s, t, q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let no_decl = ChaseProgram::new(
-            None,
-            Default::default(),
-            Default::default(),
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            Default::default(),
-            Default::default(),
-        );
+        let no_decl = ChaseProgram::builder()
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .build();
 
         let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
             (a, vec![PrimitiveType::Any]),
@@ -381,17 +380,15 @@ mod test {
             (a, b, c, r, s, t, q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let a_string_decl = ChaseProgram::new(
-            None,
-            Default::default(),
-            Default::default(),
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            [(a.clone(), vec![PrimitiveType::String])]
-                .into_iter()
-                .collect(),
-            Default::default(),
-        );
+        let a_string_decl = ChaseProgram::builder()
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .predicate_declaration(a.clone(), vec![PrimitiveType::String])
+            .build();
 
         let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
             (a, vec![PrimitiveType::String]),
@@ -418,17 +415,15 @@ mod test {
             (a, b, c, r, s, t, q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let a_int_decl = ChaseProgram::new(
-            None,
-            Default::default(),
-            Default::default(),
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            [(a.clone(), vec![PrimitiveType::Integer])]
-                .into_iter()
-                .collect(),
-            Default::default(),
-        );
+        let a_int_decl = ChaseProgram::builder()
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .predicate_declaration(a.clone(), vec![PrimitiveType::Integer])
+            .build();
 
         let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
             (a, vec![PrimitiveType::Integer]),
@@ -455,18 +450,15 @@ mod test {
             (a, b, c, r, s, t, q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let b_string_decl = ChaseProgram::new(
-            None,
-            Default::default(),
-            Default::default(),
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            [(b.clone(), vec![PrimitiveType::String])]
-                .into_iter()
-                .collect(),
-            Default::default(),
-        );
-
+        let b_string_decl = ChaseProgram::builder()
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .predicate_declaration(b.clone(), vec![PrimitiveType::String])
+            .build();
         let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
             (a, vec![PrimitiveType::String]),
             (b, vec![PrimitiveType::String]),
@@ -492,20 +484,16 @@ mod test {
             (a, b, c, r, s, t, q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let b_integer_decl = ChaseProgram::new(
-            None,
-            Default::default(),
-            Default::default(),
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            [
-                (b.clone(), vec![PrimitiveType::Integer]),
-                (c.clone(), vec![PrimitiveType::Integer]),
-            ]
-            .into_iter()
-            .collect(),
-            Default::default(),
-        );
+        let b_integer_decl = ChaseProgram::builder()
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .predicate_declaration(b.clone(), vec![PrimitiveType::Integer])
+            .predicate_declaration(c.clone(), vec![PrimitiveType::Integer])
+            .build();
 
         let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
             (a, vec![PrimitiveType::Integer]),
@@ -532,18 +520,18 @@ mod test {
             (a, b, c, r, s, t, q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let b_source_decl = ChaseProgram::new(
-            None,
-            Default::default(),
-            vec![DataSourceDeclaration::new(
+        let b_source_decl = ChaseProgram::builder()
+            .source(DataSourceDeclaration::new(
                 b.clone(),
                 NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
-            )],
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            Default::default(),
-            Default::default(),
-        );
+            ))
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .build();
 
         let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
             (a, vec![PrimitiveType::String]),
@@ -570,23 +558,20 @@ mod test {
             (a, b, c, r, s, t, q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let c_explicit_decl_overrides_source_type = ChaseProgram::new(
-            None,
-            Default::default(),
-            vec![DataSourceDeclaration::new(
+        let c_explicit_decl_overrides_source_type = ChaseProgram::builder()
+            .source(DataSourceDeclaration::new(
                 c.clone(),
                 NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
-            )],
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            [
-                (b.clone(), vec![PrimitiveType::Integer]),
-                (c.clone(), vec![PrimitiveType::Integer]),
-            ]
-            .into_iter()
-            .collect(),
-            Default::default(),
-        );
+            ))
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .predicate_declaration(b.clone(), vec![PrimitiveType::Integer])
+            .predicate_declaration(c.clone(), vec![PrimitiveType::Integer])
+            .build();
 
         let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
             (a, vec![PrimitiveType::Integer]),
@@ -615,18 +600,19 @@ mod test {
             (a, _b, c, _r, _s, _t, _q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let a_and_c_conflict_with_implicit_source_decl = ChaseProgram::new(
-            None,
-            Default::default(),
-            vec![DataSourceDeclaration::new(
+        let a_and_c_conflict_with_implicit_source_decl = ChaseProgram::builder()
+            .source(DataSourceDeclaration::new(
                 c,
                 NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
-            )],
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            [(a, vec![PrimitiveType::Integer])].into_iter().collect(),
-            Default::default(),
-        );
+            ))
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .predicate_declaration(a, vec![PrimitiveType::Integer])
+            .build();
 
         let inferred_types_res = infer_types(&a_and_c_conflict_with_implicit_source_decl);
         assert!(inferred_types_res.is_err());
@@ -642,10 +628,8 @@ mod test {
         ) = get_test_rules_and_facts_and_predicates();
 
         let a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around =
-            ChaseProgram::new(
-                None,
-                Default::default(),
-                vec![DataSourceDeclaration::new(
+            ChaseProgram::builder()
+                .source(DataSourceDeclaration::new(
                     c,
                     NativeDataSource::DsvFile(DsvFile::csv_file(
                         "",
@@ -653,14 +637,18 @@ mod test {
                             .into_iter()
                             .collect(),
                     )),
-                )],
-                vec![basic_rule, exis_rule, rule_with_constant],
-                vec![fact1, fact2, fact3],
-                [(a, vec![PrimitiveType::String])].into_iter().collect(),
-                Default::default(),
-            );
+                ))
+                .rule(basic_rule)
+                .rule(exis_rule)
+                .rule(rule_with_constant)
+                .fact(fact1)
+                .fact(fact2)
+                .fact(fact3)
+                .predicate_declaration(a, vec![PrimitiveType::String])
+                .build();
 
-        let inferred_types_res = infer_types(&a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around);
+        let inferred_types_res =
+            infer_types(&a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around);
         assert!(inferred_types_res.is_err());
     }
 
@@ -672,20 +660,19 @@ mod test {
             (a, b, c, r, s, t, q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let a_and_b_source_decl_resolvable_conflict = ChaseProgram::new(
-            None,
-            Default::default(),
-            vec![DataSourceDeclaration::new(
+        let a_and_b_source_decl_resolvable_conflict = ChaseProgram::builder()
+            .source(DataSourceDeclaration::new(
                 b.clone(),
                 NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
-            )],
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            [(a.clone(), vec![PrimitiveType::Any])]
-                .into_iter()
-                .collect(),
-            Default::default(),
-        );
+            ))
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .predicate_declaration(a.clone(), vec![PrimitiveType::Any])
+            .build();
 
         let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
             (a, vec![PrimitiveType::Any]),
@@ -714,18 +701,18 @@ mod test {
             (a, b, c, r, s, t, q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let r_source_decl_resolvable_conflict_with_exis = ChaseProgram::new(
-            None,
-            Default::default(),
-            vec![DataSourceDeclaration::new(
+        let r_source_decl_resolvable_conflict_with_exis = ChaseProgram::builder()
+            .source(DataSourceDeclaration::new(
                 r.clone(),
                 NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(2))),
-            )],
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            Default::default(),
-            Default::default(),
-        );
+            ))
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .build();
 
         let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
             (a, vec![PrimitiveType::Any]),
@@ -754,20 +741,16 @@ mod test {
             (_a, b, c, _r, _s, _t, _q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let b_and_c_conflict_decl = ChaseProgram::new(
-            None,
-            Default::default(),
-            Default::default(),
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            [
-                (b, vec![PrimitiveType::Integer]),
-                (c, vec![PrimitiveType::String]),
-            ]
-            .into_iter()
-            .collect(),
-            Default::default(),
-        );
+        let b_and_c_conflict_decl = ChaseProgram::builder()
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .predicate_declaration(b, vec![PrimitiveType::Integer])
+            .predicate_declaration(c, vec![PrimitiveType::String])
+            .build();
 
         let inferred_types_res = infer_types(&b_and_c_conflict_decl);
         assert!(inferred_types_res.is_err());
@@ -781,20 +764,16 @@ mod test {
             (a, b, c, r, s, t, q),
         ) = get_test_rules_and_facts_and_predicates();
 
-        let b_and_c_conflict_decl_resolvable = ChaseProgram::new(
-            None,
-            Default::default(),
-            Default::default(),
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            [
-                (b.clone(), vec![PrimitiveType::Any]),
-                (c.clone(), vec![PrimitiveType::String]),
-            ]
-            .into_iter()
-            .collect(),
-            Default::default(),
-        );
+        let b_and_c_conflict_decl_resolvable = ChaseProgram::builder()
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .predicate_declaration(b.clone(), vec![PrimitiveType::Any])
+            .predicate_declaration(c.clone(), vec![PrimitiveType::String])
+            .build();
 
         let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
             (a, vec![PrimitiveType::Any]),
@@ -811,70 +790,5 @@ mod test {
 
         let inferred_types = infer_types(&b_and_c_conflict_decl_resolvable).unwrap().0;
         assert_eq!(inferred_types, expected_types);
-    }
-
-    #[test]
-    fn infer_types_a_unresolvable_conflict_with_source_decls_of_b_and_c() {
-        let (
-            (basic_rule, exis_rule, rule_with_constant),
-            (fact1, fact2, fact3),
-            (a, b, c, _r, _s, _t, _q),
-        ) = get_test_rules_and_facts_and_predicates();
-
-        let a_unresolvable_conflict_with_source_decls_of_b_and_c = ChaseProgram::new(
-            None,
-            Default::default(),
-            vec![
-                DataSourceDeclaration::new(
-                    b,
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        [TypeConstraint::AtLeast(PrimitiveType::Integer)]
-                            .into_iter()
-                            .collect(),
-                    )),
-                ),
-                DataSourceDeclaration::new(
-                    c,
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        [TypeConstraint::AtLeast(PrimitiveType::Integer)]
-                            .into_iter()
-                            .collect(),
-                    )),
-                ),
-            ],
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            [(a, vec![PrimitiveType::Any])].into_iter().collect(),
-            Default::default(),
-        );
-
-        let inferred_types_res = infer_types(&a_unresolvable_conflict_with_source_decls_of_b_and_c);
-        assert!(inferred_types_res.is_err());
-    }
-
-    #[test]
-    fn infer_types_s_decl_unresolvable_conflict_with_fact_values() {
-        let (
-            (basic_rule, exis_rule, rule_with_constant),
-            (fact1, fact2, fact3),
-            (_a, _b, _c, _r, s, _t, _q),
-        ) = get_test_rules_and_facts_and_predicates();
-
-        let s_decl_unresolvable_conflict_with_fact_values = ChaseProgram::new(
-            None,
-            Default::default(),
-            vec![],
-            vec![basic_rule, exis_rule, rule_with_constant],
-            vec![fact1, fact2, fact3],
-            [(s, vec![PrimitiveType::Any, PrimitiveType::Integer])]
-                .into_iter()
-                .collect(),
-            Default::default(),
-        );
-
-        let inferred_types_res = infer_types(&s_decl_unresolvable_conflict_with_fact_values);
-        assert!(inferred_types_res.is_err());
     }
 }

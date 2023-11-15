@@ -758,7 +758,7 @@ mod test {
                 .into_iter()
                 .unzip();
 
-        let program: ChaseProgram = rules.into();
+        let program = ChaseProgram::builder().rules(rules).build();
 
         let rule_vars = &var_lists[0];
         let rule_var_orders: Vec<VariableOrder> = vec![
@@ -787,7 +787,7 @@ mod test {
                 .into_iter()
                 .unzip();
 
-        let program: ChaseProgram = rules.into();
+        let program = ChaseProgram::builder().rules(rules).build();
 
         let rule_vars = &var_lists[0];
         let rule_var_orders: Vec<VariableOrder> = vec![
@@ -818,7 +818,7 @@ mod test {
         .into_iter()
         .unzip();
 
-        let program: ChaseProgram = rules.into();
+        let program = ChaseProgram::builder().rules(rules).build();
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
@@ -977,47 +977,44 @@ mod test {
         let (rules, var_lists, predicates) =
             get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant();
 
-        let program: ChaseProgram = (
-            vec![
-                DataSourceDeclaration::new(
-                    predicates[1].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[1].1),
-                    )),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[2].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[2].1),
-                    )),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[3].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[3].1),
-                    )),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[4].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[4].1),
-                    )),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[6].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[6].1),
-                    )),
-                ),
-            ],
-            rules,
-        )
-            .into();
+        let program = ChaseProgram::builder()
+            .source(DataSourceDeclaration::new(
+                predicates[1].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[1].1),
+                )),
+            ))
+            .source(DataSourceDeclaration::new(
+                predicates[2].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[2].1),
+                )),
+            ))
+            .source(DataSourceDeclaration::new(
+                predicates[3].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[3].1),
+                )),
+            ))
+            .source(DataSourceDeclaration::new(
+                predicates[4].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[4].1),
+                )),
+            ))
+            .source(DataSourceDeclaration::new(
+                predicates[6].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[6].1),
+                )),
+            ))
+            .rules(rules)
+            .build();
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![
@@ -1348,61 +1345,58 @@ mod test {
     fn build_preferable_variable_orders_with_el_without_constant() {
         let (rules, var_lists, predicates) = get_el_test_ruleset_without_constants();
 
-        let program: ChaseProgram = (
-            vec![
-                DataSourceDeclaration::new(
-                    predicates[1].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[1].1),
-                    )),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[2].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[2].1),
-                    )),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[3].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[3].1),
-                    )),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[4].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[4].1),
-                    )),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[6].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[6].1),
-                    )),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[8].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[8].1),
-                    )),
-                ),
-                DataSourceDeclaration::new(
-                    predicates[10].0.clone(),
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        TupleConstraint::from_arity(predicates[10].1),
-                    )),
-                ),
-            ],
-            rules,
-        )
-            .into();
+        let program = ChaseProgram::builder()
+            .source(DataSourceDeclaration::new(
+                predicates[1].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[1].1),
+                )),
+            ))
+            .source(DataSourceDeclaration::new(
+                predicates[2].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[2].1),
+                )),
+            ))
+            .source(DataSourceDeclaration::new(
+                predicates[3].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[3].1),
+                )),
+            ))
+            .source(DataSourceDeclaration::new(
+                predicates[4].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[4].1),
+                )),
+            ))
+            .source(DataSourceDeclaration::new(
+                predicates[6].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[6].1),
+                )),
+            ))
+            .source(DataSourceDeclaration::new(
+                predicates[8].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[8].1),
+                )),
+            ))
+            .source(DataSourceDeclaration::new(
+                predicates[10].0.clone(),
+                NativeDataSource::DsvFile(DsvFile::csv_file(
+                    "",
+                    TupleConstraint::from_arity(predicates[10].1),
+                )),
+            ))
+            .rules(rules)
+            .build();
 
         let rule_1_vars = &var_lists[0];
         let rule_1_var_orders: Vec<VariableOrder> = vec![

@@ -2,6 +2,7 @@
 
 use std::{collections::HashSet, fs::File, path::PathBuf, str::FromStr};
 
+use dyn_clone::DynClone;
 use thiserror::Error;
 
 use nemo_physical::table_reader::TableReader;
@@ -34,7 +35,7 @@ pub enum Direction {
 }
 
 /// A supported file format for I/O.
-pub trait FileFormatMeta: std::fmt::Debug {
+pub trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
     /// Return the associated format.
     fn file_format(&self) -> FileFormat;
 
@@ -109,8 +110,10 @@ pub trait FileFormatMeta: std::fmt::Debug {
     }
 }
 
+dyn_clone::clone_trait_object!(FileFormatMeta);
+
 /// An import/export specification.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ImportExportSpec {
     /// Is this for reading or for writing?
     pub(crate) direction: Direction,
