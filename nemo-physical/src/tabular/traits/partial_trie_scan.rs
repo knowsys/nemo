@@ -1,6 +1,7 @@
 use crate::columnar::traits::columnscan::ColumnScanT;
 use crate::datatypes::StorageTypeName;
 use crate::generate_forwarder;
+use crate::tabular::operations::rainbow_union::TrieScanUnionRainbow;
 use crate::tabular::operations::triescan_aggregate::TrieScanAggregateWrapper;
 use crate::tabular::operations::triescan_append::TrieScanAppend;
 use crate::tabular::operations::triescan_minus::TrieScanSubtract;
@@ -9,6 +10,9 @@ use crate::tabular::operations::{
     TrieScanRestrictValues, TrieScanSelectEqual, TrieScanUnion,
 };
 use crate::tabular::table_types::trie::TrieScanGeneric;
+use crate::tabular::table_types::trie_rainbow::{
+    ColumnScanRainbow, PartialTrieScanRainbow, TrieScanRainbow,
+};
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
@@ -35,6 +39,46 @@ pub trait PartialTrieScan<'a>: Debug {
 
     /// Return the underlying [`StorageTypeName`]s.
     fn get_types(&self) -> &Vec<StorageTypeName>;
+}
+
+/// Enum for TrieScanRainbow variants
+#[derive(Debug)]
+pub enum TrieScanRainbowEnum<'a> {
+    /// Case TrieScanRainbow
+    TrieScanRainbow(TrieScanRainbow<'a>),
+    /// Case Union
+    TrieScanUnion(TrieScanUnionRainbow<'a>),
+}
+
+generate_forwarder!(forward_to_scan_rainbow;
+    TrieScanRainbow,
+    TrieScanUnion
+);
+
+impl<'a> PartialTrieScanRainbow<'a> for TrieScanRainbowEnum<'a> {
+    fn up(&mut self) {
+        forward_to_scan_rainbow!(self, up)
+    }
+
+    fn down(&mut self, storage_type: StorageTypeName) {
+        forward_to_scan_rainbow!(self, down(storage_type))
+    }
+
+    fn current_scan(&mut self) -> Option<&mut ColumnScanRainbow<'a>> {
+        forward_to_scan_rainbow!(self, current_scan)
+    }
+
+    fn scan(&self, index: usize) -> Option<&UnsafeCell<ColumnScanRainbow<'a>>> {
+        forward_to_scan_rainbow!(self, scan(index))
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        forward_to_scan_rainbow!(self, current_layer)
+    }
+
+    fn arity(&self) -> usize {
+        forward_to_scan_rainbow!(self, arity)
+    }
 }
 
 /// Enum for TrieScan Variants

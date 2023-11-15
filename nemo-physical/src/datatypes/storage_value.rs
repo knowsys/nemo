@@ -1,10 +1,13 @@
 use std::cmp::Ordering;
+use std::ops::Mul;
+
+use num::{CheckedAdd, CheckedMul, CheckedSub};
 
 use crate::generate_datatype_forwarder;
 
 use super::double::Double;
 use super::float::Float;
-use super::StorageTypeName;
+use super::{FloorToUsize, StorageTypeName};
 
 /// Enum for values of all supported basic types.
 /// This should not be used to represent large numbers of values,
@@ -22,6 +25,73 @@ pub enum StorageValueT {
     Float(Float),
     /// Case Double
     Double(Double),
+}
+
+// impl FloorToUsize for StorageValueT {
+//     fn floor_to_usize(self) -> Option<usize> {
+//         todo!()
+//     }
+// }
+
+// impl Mul for StorageValueT {
+//     type Output = StorageValueT;
+
+//     fn mul(self, rhs: Self) -> Self::Output {
+//         todo!()
+//     }
+// }
+
+// impl CheckedMul for StorageValueT {
+//     fn checked_mul(&self, v: &Self) -> Option<Self> {
+//         todo!()
+//     }
+// }
+
+// impl CheckedAdd for StorageValueT {
+//     fn checked_add(&self, v: &Self) -> Option<Self> {
+//         todo!()
+//     }
+// }
+
+// impl CheckedSub for StorageValueT {
+//     fn checked_sub(&self, v: &Self) -> Option<Self> {
+//         todo!()
+//     }
+// }
+
+impl PartialOrd for StorageValueT {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for StorageValueT {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let type_comparison = self.get_type().cmp(&other.get_type());
+        if type_comparison == Ordering::Equal {
+            macro_rules! compare_for_type {
+                ($variant:ident, $value:ident) => {{
+                    if let StorageValueT::$variant(value_other) = other {
+                        $value.cmp(value_other)
+                    } else {
+                        unreachable!(
+                            "If compare on type returns Equal then the values have equal type."
+                        );
+                    }
+                }};
+            }
+
+            match self {
+                StorageValueT::U32(value) => compare_for_type!(U32, value),
+                StorageValueT::U64(value) => compare_for_type!(U64, value),
+                StorageValueT::I64(value) => compare_for_type!(I64, value),
+                StorageValueT::Float(value) => compare_for_type!(Float, value),
+                StorageValueT::Double(value) => compare_for_type!(Double, value),
+            }
+        } else {
+            type_comparison
+        }
+    }
 }
 
 impl StorageValueT {

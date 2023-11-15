@@ -8,3 +8,7 @@ pub mod rle;
 
 /// Module for defining [`ColumnWithIntervals`][interval::ColumnWithIntervals]
 pub mod interval;
+
+/// TODO: Adjust description
+/// Experimental module implenenting a column which can hold values of any type
+pub mod rainbow;

@@ -15,6 +15,34 @@ pub enum StorageTypeName {
     Double,
 }
 
+/// Number of available storage types
+const NUM_STORAGE_TYPES: usize = 5;
+
+/// Order of storage types
+const STORAGE_TYPE_ORDER: [StorageTypeName; NUM_STORAGE_TYPES] = [
+    StorageTypeName::U64,
+    StorageTypeName::I64,
+    StorageTypeName::Double,
+    StorageTypeName::U32,
+    StorageTypeName::Float,
+];
+
+impl Ord for StorageTypeName {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let index_self = STORAGE_TYPE_ORDER
+            .iter()
+            .position(|s| self == s)
+            .expect("Array contians every storage type");
+
+        let index_other = STORAGE_TYPE_ORDER
+            .iter()
+            .position(|&s| self == other)
+            .expect("Array contians every storage type");
+
+        index_self.cmp(&index_other)
+    }
+}
+
 impl Display for StorageTypeName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

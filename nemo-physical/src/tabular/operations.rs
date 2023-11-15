@@ -43,3 +43,11 @@ pub use triescan_nulls::TrieScanNulls;
 
 /// Module implementing functionality for projecting and reordering tries.
 pub mod project_reorder;
+
+/// TODO: Description
+/// Experimntal module implementing the union operation for rainbow tries
+pub mod rainbow_union;
+
+/// TODO: Description
+/// Experimntal module implementing the join operation for rainbow tries
+pub mod rainbow_join;
