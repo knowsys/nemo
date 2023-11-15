@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use ascii_tree::write_tree;
+use serde::Serialize;
 
 use crate::model::{chase_model::ChaseFact, Constant, PrimitiveTerm, Rule, Term, Variable};
 
@@ -58,6 +59,36 @@ pub enum ExecutionTrace {
     Rule(RuleApplication, Vec<ExecutionTrace>),
 }
 
+/// Represents an inference in an [`ExecutionTraceJson`]
+#[derive(Debug, Serialize)]
+struct ExecutionTraceJsonInference {
+    #[serde(rename = "ruleName")]
+    rule_name: String,
+
+    conclusions: Vec<String>,
+    premises: Vec<String>,
+}
+
+impl ExecutionTraceJsonInference {
+    /// Create a new [`ExecutionTraceJsonInference`]
+    pub fn new(rule_name: String, conclusions: Vec<String>, premises: Vec<String>) -> Self {
+        Self {
+            rule_name,
+            conclusions,
+            premises,
+        }
+    }
+}
+
+/// Object representing an [`ExecutionTrace`] that can be sertialized into a json format
+#[derive(Debug, Serialize, Default)]
+pub struct ExecutionTraceJson {
+    #[serde(rename = "finalConclusion")]
+    final_conclusions: Vec<String>,
+
+    inferences: Vec<ExecutionTraceJsonInference>,
+}
+
 impl ExecutionTrace {
     /// Create a new leaf node in an [`ExecutionTrace`].
     pub fn leaf(fact: ChaseFact) -> Self {
@@ -77,6 +108,74 @@ impl ExecutionTrace {
                 let subtrees = subtraces.iter().map(|t| t.ascii_tree()).collect();
                 ascii_tree::Tree::Node(rule.to_string(), subtrees)
             }
+        }
+    }
+
+    /// Translate an [`ExecutionTrace`] into an [`ExecutionTraceJsonInference`].
+    fn json_inference(trace: &Self) -> ExecutionTraceJsonInference {
+        const RULE_NAME_FACT: &str = "Asserted";
+
+        match trace {
+            ExecutionTrace::Fact(fact) => ExecutionTraceJsonInference::new(
+                String::from(RULE_NAME_FACT),
+                vec![fact.to_string()],
+                vec![],
+            ),
+            ExecutionTrace::Rule(application, _) => {
+                let mut rule_applied = application.rule.clone();
+                rule_applied.apply_assignment(
+                    &application
+                        .assignment
+                        .iter()
+                        .map(|(variable, constant)| {
+                            (
+                                variable.clone(),
+                                Term::Primitive(PrimitiveTerm::Constant(constant.clone())),
+                            )
+                        })
+                        .collect(),
+                );
+
+                let conclusions = rule_applied.head().iter().map(|a| a.to_string()).collect();
+                let premises = rule_applied
+                    .body()
+                    .iter()
+                    .map(|l| l.to_string())
+                    .chain(rule_applied.constraints().iter().map(|c| c.to_string()))
+                    .collect();
+
+                ExecutionTraceJsonInference::new(
+                    application.rule.to_string(),
+                    conclusions,
+                    premises,
+                )
+            }
+        }
+    }
+
+    /// Create a json representation of the trace.
+    pub fn json(&self) -> ExecutionTraceJson {
+        let mut trace_stack = vec![self];
+        let mut inferences = Vec::<ExecutionTraceJsonInference>::new();
+        let mut final_conclusions = Vec::<String>::new();
+
+        while let Some(current_trace) = trace_stack.pop() {
+            let inference = Self::json_inference(&current_trace);
+
+            if final_conclusions.is_empty() {
+                final_conclusions = inference.conclusions.clone();
+            }
+
+            inferences.push(inference);
+
+            if let ExecutionTrace::Rule(_, subtraces) = current_trace {
+                trace_stack.extend(subtraces);
+            }
+        }
+
+        ExecutionTraceJson {
+            final_conclusions,
+            inferences,
         }
     }
 }

@@ -20,7 +20,10 @@
 
 pub mod cli;
 
-use std::fs::read_to_string;
+use std::{
+    fs::{read_to_string, File},
+    io::Write,
+};
 
 use clap::Parser;
 use cli::CliApp;
@@ -117,7 +120,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     log::info!("Rules parsed");
     log::trace!("{:?}", program);
 
-    let parsed_fact = cli.trace_fact.map(parse_fact).transpose()?;
+    let parsed_fact = cli.tracing.trace_fact.map(parse_fact).transpose()?;
 
     if cli.write_all_idb_predicates {
         program.force_output_predicate_selection(OutputPredicateSelection::AllIDBPredicates)
@@ -194,7 +197,17 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     if let Some(fact) = parsed_fact {
         if let Some(trace) = engine.trace(fact.clone())? {
-            println!("\n{trace}");
+            match cli.tracing.trace_output_file {
+                Some(output_file) => {
+                    let trace_json = trace.json();
+
+                    let mut json_file = File::create(output_file)?;
+                    serde_json::to_writer(&mut json_file, &trace_json);
+                }
+                None => {
+                    println!("\n{trace}");
+                }
+            }
         } else {
             println!("{fact} was not derived");
         }

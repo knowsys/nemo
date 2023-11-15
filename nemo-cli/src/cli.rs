@@ -106,6 +106,18 @@ impl OutputArgs {
     }
 }
 
+/// Cli arguments related to tracing
+#[derive(Debug, clap::Args)]
+pub struct TracingArgs {
+    /// Specify a fact, the origin of which should be explained
+    #[arg(long = "trace")]
+    pub trace_fact: Option<String>,
+    /// Specify a file to save the trace.
+    /// (Only relevant if --trace is set.)
+    #[arg(long = "trace-output", requires = "trace_fact")]
+    pub trace_output_file: Option<PathBuf>,
+}
+
 /// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -135,7 +147,7 @@ pub struct CliApp {
     /// Specify directory for input files.
     #[arg(short = 'I', long = "input-dir")]
     pub input_directory: Option<PathBuf>,
-    /// Specify a fact, the origin of which should be explained
-    #[arg(long = "trace")]
-    pub trace_fact: Option<String>,
+    /// Arguments related to tracing
+    #[command(flatten)]
+    pub tracing: TracingArgs,
 }
