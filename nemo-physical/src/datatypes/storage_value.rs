@@ -10,6 +10,9 @@ use super::StorageTypeName;
 /// This should not be used to represent large numbers of values,
 /// due to the overhead for each value, but it can be a convenient
 /// option to interface with unknown values.
+/// 
+/// Ord and PartialOrd assume U32 < U64 < I64 < Float < Double.
+/// More information at https://doc.rust-lang.org/std/cmp/trait.PartialOrd.html#derivable
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub enum StorageValueT {
     /// Case u32
