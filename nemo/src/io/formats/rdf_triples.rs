@@ -288,7 +288,7 @@ impl FileFormatMeta for RDFFormat {
         direction: Direction,
         attributes: &Map,
     ) -> Result<(), FileFormatError> {
-        todo!()
+        Ok(())
     }
 }
 

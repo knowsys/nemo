@@ -1,0 +1,5 @@
+@declare goal(integer).
+
+@import triples[3]: rdf{path = "sources/example2.nt"} .
+
+goal(42) :- triples(<http://example.org/#spiderman>, <http://www.perceive.net/schemas/relationship/enemyOf>, <http://example.org/#green-goblin>) .

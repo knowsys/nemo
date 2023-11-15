@@ -330,18 +330,18 @@ impl FileFormatMeta for DSVFormat {
             .as_string()
             .expect("must be a string");
 
-        let delimiter = self.delimiter.unwrap_or(
+        let delimiter = self.delimiter.unwrap_or_else(|| {
             attributes
                 .pairs
                 .get(&Key::identifier_from_str(DELIMITER))
                 .expect("is a required attribute if the format has no default delimiter")
                 .as_string()
                 .expect("must be a string")
-                .as_bytes()[0],
-        );
+                .as_bytes()[0]
+        });
 
         if let Some(inferred_types) = inferred_types.into_flat_primitive() {
-            let dsv_file = DsvFile::new(&path, delimiter, declared_types.clone());
+            let dsv_file = DsvFile::new(path, delimiter, declared_types.clone());
 
             Ok(Box::new(DSVReader::dsv(
                 resource_providers,
@@ -381,17 +381,19 @@ impl FileFormatMeta for DSVFormat {
         _direction: Direction,
         attributes: &Map,
     ) -> Result<(), FileFormatError> {
-        let delimiter = attributes
-            .pairs
-            .get(&Key::identifier_from_str(DELIMITER))
-            .expect("is a required attribute");
+        if self.delimiter.is_none() {
+            let delimiter = attributes
+                .pairs
+                .get(&Key::identifier_from_str(DELIMITER))
+                .expect("is a required attribute");
 
-        if let Some(delim) = delimiter.as_string() {
-            if delim.len() != 1 {
-                return Err(DSVFormatError::InvalidDelimiterLength(delimiter.clone()).into());
+            if let Some(delim) = delimiter.as_string() {
+                if delim.len() != 1 {
+                    return Err(DSVFormatError::InvalidDelimiterLength(delimiter.clone()).into());
+                }
+            } else {
+                return Err(DSVFormatError::InvalidDelimiterType(delimiter.clone()).into());
             }
-        } else {
-            return Err(DSVFormatError::InvalidDelimiterType(delimiter.clone()).into());
         }
 
         let path = attributes
