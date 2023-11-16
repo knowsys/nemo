@@ -39,19 +39,6 @@ pub trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
     /// Return the associated format.
     fn file_format(&self) -> FileFormat;
 
-    /// Verify that the given path is readable.
-    fn verify_path_is_readable(&self, path: &str) -> Result<(), FileFormatError> {
-        let path = PathBuf::from(path);
-
-        if let Err(err) = File::open(path.clone()) {
-            return Err(FileFormatError::IOUnreadable { error: err, path });
-        }
-
-        Ok(())
-    }
-
-    /// Verify that the given path is writable.
-
     /// Obtain a [`TableReader`] for this format, if supported.
     fn reader(
         &self,
@@ -115,12 +102,10 @@ dyn_clone::clone_trait_object!(FileFormatMeta);
 /// An import/export specification.
 #[derive(Debug, Clone)]
 pub struct ImportExportSpec {
-    /// Is this for reading or for writing?
-    pub(crate) direction: Direction,
     /// The predicate we're handling.
     pub(crate) predicate: Identifier,
-    /// The type constraints for the predicate.
-    pub(crate) constraints: TupleConstraint,
+    /// The type constraint for the predicate.
+    pub(crate) constraint: TupleConstraint,
     /// The file format we're using.
     pub(crate) format: Box<dyn FileFormatMeta>,
     /// The attributes we've been given.
@@ -136,7 +121,7 @@ impl ImportExportSpec {
     ) -> Result<Box<dyn TableReader>, Error> {
         self.format.reader(
             &self.attributes,
-            &self.constraints,
+            &self.constraint,
             resource_providers,
             inferred_types,
         )
@@ -150,15 +135,92 @@ impl ImportExportSpec {
 
 impl PartialEq for ImportExportSpec {
     fn eq(&self, other: &Self) -> bool {
-        self.direction == other.direction
-            && self.predicate == other.predicate
-            && self.constraints == other.constraints
+        self.predicate == other.predicate
+            && self.constraint == other.constraint
             && self.format.file_format() == other.format.file_format()
             && self.attributes == other.attributes
     }
 }
 
 impl Eq for ImportExportSpec {}
+
+/// An import specification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportSpec(ImportExportSpec);
+
+impl ImportSpec {
+    /// Obtain a [`TableReader`] for this import specification.
+    pub fn reader(
+        &self,
+        resource_providers: ResourceProviders,
+        inferred_types: &TupleConstraint,
+    ) -> Result<Box<dyn TableReader>, Error> {
+        self.0.reader(resource_providers, inferred_types)
+    }
+
+    /// Return the predicate.
+    pub fn predicate(&self) -> &Identifier {
+        &self.0.predicate
+    }
+
+    /// Return the type constraints.
+    pub fn type_constraint(&self) -> &TupleConstraint {
+        &self.0.constraint
+    }
+
+    /// Return the file format.
+    pub fn file_format(&self) -> FileFormat {
+        self.0.format.file_format()
+    }
+
+    /// Return the attributes.
+    pub fn attributes(&self) -> &Map {
+        &self.0.attributes
+    }
+}
+
+impl From<ImportExportSpec> for ImportSpec {
+    fn from(value: ImportExportSpec) -> Self {
+        Self(value)
+    }
+}
+
+/// An export specification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportSpec(ImportExportSpec);
+
+impl ExportSpec {
+    /// Obtain a [`TableWriter`] for this export specification.
+    fn writer(&self) -> Result<Box<dyn TableWriter>, Error> {
+        self.0.writer()
+    }
+
+    /// Return the predicate.
+    pub fn predicate(&self) -> &Identifier {
+        &self.0.predicate
+    }
+
+    /// Return the type constraints.
+    pub fn type_constraint(&self) -> &TupleConstraint {
+        &self.0.constraint
+    }
+
+    /// Return the file format.
+    pub fn file_format(&self) -> FileFormat {
+        self.0.format.file_format()
+    }
+
+    /// Return the attributes.
+    pub fn attributes(&self) -> &Map {
+        &self.0.attributes
+    }
+}
+
+impl From<ImportExportSpec> for ExportSpec {
+    fn from(value: ImportExportSpec) -> Self {
+        Self(value)
+    }
+}
 
 /// Errors related to input and output formats
 #[derive(Debug, Error)]

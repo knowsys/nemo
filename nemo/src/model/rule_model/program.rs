@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    io::formats::types::{Direction, ImportExportSpec},
+    io::formats::types::{ExportSpec, ImportSpec},
     model::PrimitiveType,
 };
 
@@ -64,8 +64,8 @@ pub struct Program {
     base: Option<String>,
     prefixes: HashMap<String, String>,
     sources: Vec<DataSourceDeclaration>,
-    imports: Vec<ImportExportSpec>,
-    exports: Vec<ImportExportSpec>,
+    imports: Vec<ImportSpec>,
+    exports: Vec<ExportSpec>,
     rules: Vec<Rule>,
     facts: Vec<Fact>,
     parsed_predicate_declarations: HashMap<Identifier, Vec<PrimitiveType>>,
@@ -126,9 +126,7 @@ impl ProgramBuilder {
     }
 
     /// Add an imported table.
-    pub fn import(mut self, import: ImportExportSpec) -> Self {
-        assert_eq!(import.direction, Direction::Reading);
-
+    pub fn import(mut self, import: ImportSpec) -> Self {
         self.program.imports.push(import);
         self
     }
@@ -136,21 +134,14 @@ impl ProgramBuilder {
     /// Add imported tables.
     pub fn imports<T>(mut self, imports: T) -> Self
     where
-        T: IntoIterator<Item = ImportExportSpec> + Clone,
+        T: IntoIterator<Item = ImportSpec>,
     {
-        assert!(imports
-            .clone()
-            .into_iter()
-            .all(|import| import.direction == Direction::Reading));
-
         self.program.imports.extend(imports);
         self
     }
 
     /// Add an exported table.
-    pub fn export(mut self, export: ImportExportSpec) -> Self {
-        assert_eq!(export.direction, Direction::Reading);
-
+    pub fn export(mut self, export: ExportSpec) -> Self {
         self.program.exports.push(export);
         self
     }
@@ -158,13 +149,8 @@ impl ProgramBuilder {
     /// Add exported tables.
     pub fn exports<T>(mut self, exports: T) -> Self
     where
-        T: IntoIterator<Item = ImportExportSpec> + Clone,
+        T: IntoIterator<Item = ExportSpec>,
     {
-        assert!(exports
-            .clone()
-            .into_iter()
-            .all(|export| export.direction == Direction::Reading));
-
         self.program.exports.extend(exports);
         self
     }
@@ -347,12 +333,12 @@ impl Program {
     }
 
     /// Return all imports in the program.
-    pub fn imports(&self) -> impl Iterator<Item = &ImportExportSpec> {
+    pub fn imports(&self) -> impl Iterator<Item = &ImportSpec> {
         self.imports.iter()
     }
 
     /// Return all exports in the program.
-    pub fn exports(&self) -> impl Iterator<Item = &ImportExportSpec> {
+    pub fn exports(&self) -> impl Iterator<Item = &ExportSpec> {
         self.exports.iter()
     }
 

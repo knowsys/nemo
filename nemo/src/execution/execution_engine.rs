@@ -190,14 +190,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         for import_spec in program.imports() {
             let inferred_types = analysis
                 .predicate_types
-                .get(&import_spec.predicate)
+                .get(import_spec.predicate())
                 .cloned()
                 .expect("All predicates should have types by now.");
 
             let table_source = input_manager.import_table(import_spec, inferred_types)?;
 
             predicate_to_sources
-                .entry(import_spec.predicate.clone())
+                .entry(import_spec.predicate().clone())
                 .or_default()
                 .push(table_source);
         }
