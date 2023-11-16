@@ -107,9 +107,18 @@ impl Constant {
     }
 
     /// If this is a constant, return the [Identifier].
-    pub fn as_abstract(&self) -> Option<Identifier> {
+    pub fn as_abstract(&self) -> Option<&Identifier> {
         match self {
-            Self::Abstract(identifier) => Some(identifier.clone()),
+            Self::Abstract(identifier) => Some(identifier),
+            _ => None,
+        }
+    }
+
+    /// If this is a resource (either a string literal, or a constant identifier), return it.
+    pub fn as_resource(&self) -> Option<&nemo_physical::table_reader::Resource> {
+        match self {
+            Self::StringLiteral(string) => Some(string),
+            Self::Abstract(identifier) => Some(&identifier.0),
             _ => None,
         }
     }
