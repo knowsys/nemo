@@ -57,6 +57,24 @@ pub trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
     /// Attributes that are required for this format.
     fn required_attributes(&self, direction: Direction) -> HashSet<Key>;
 
+    /// Check whether the given attributes and the declared types are valid
+    fn validated_and_refined_type_declaration(
+        &mut self,
+        direction: Direction,
+        attributes: &Map,
+        declared_types: TupleConstraint,
+    ) -> Result<TupleConstraint, FileFormatError> {
+        self.validate_attributes(direction, attributes)?;
+        self.validate_and_refine_type_declaration(declared_types)
+    }
+
+    /// Check whether the given type declaration is valid for this
+    /// format. Return a refined type declaration.
+    fn validate_and_refine_type_declaration(
+        &mut self,
+        declared_types: TupleConstraint,
+    ) -> Result<TupleConstraint, FileFormatError>;
+
     /// Check whether the given pairs of attributes and values are a
     /// valid combination for this format.
     fn validate_attribute_values(
@@ -247,6 +265,30 @@ pub enum FileFormatError {
         attribute: Key,
         /// A description of why the value was invalid.
         description: String,
+    },
+    /// Arity is unsupported for this format.
+    #[error(r#"Unsupported arity "{arity}" for format {format}"#)]
+    InvalidArity {
+        /// The given arity.
+        arity: usize,
+        /// The file format.
+        format: FileFormat,
+    },
+    /// Arity is unsupported for this format, exact value is required.
+    #[error(r#"Unsupported arity "{arity}" for format {format}, must be {required}"#)]
+    InvalidArityExact {
+        /// The given arity.
+        arity: usize,
+        /// The required arity.
+        required: usize,
+        /// The file format.
+        format: FileFormat,
+    },
+    /// Format does not support complex types
+    #[error(r"Format {format} does not support complex types")]
+    UnsupportedComplexTypes {
+        /// The file format.
+        format: FileFormat,
     },
     /// File could not be read
     #[error(r#"File "{path}" could not be read."#)]

@@ -159,21 +159,34 @@ impl TupleConstraint {
         from_fn(|| Some(TypeConstraint::None)).take(arity).collect()
     }
 
-    /// Returns the underlying [primitive types][PrimitiveType], provided that this is an exact
-    pub fn into_flat_primitive(&self) -> Option<Vec<PrimitiveType>> {
+    /// Returns the underlying [primitive types][PrimitiveType],
+    /// provided that this is a flat tuple of primitive types, with a
+    /// default type for unspecified constraints.
+    pub fn into_flat_primitive_with_default(&self, default_type: PrimitiveType) -> Option<Self> {
         let mut result = Vec::new();
 
         for type_constraint in self.fields.iter() {
             match type_constraint {
-                TypeConstraint::None => {
-                    result.push(PrimitiveType::Any);
-                }
+                TypeConstraint::None => result.push(TypeConstraint::AtLeast(default_type)),
+                TypeConstraint::Exact(inner) => result.push(TypeConstraint::Exact(*inner)),
+                TypeConstraint::AtLeast(inner) => result.push(TypeConstraint::AtLeast(*inner)),
+                TypeConstraint::Tuple(_) => return None,
+            }
+        }
+
+        Some(Self::from_iter(result))
+    }
+
+    pub(crate) fn into_flat_primitive(self) -> Option<Vec<PrimitiveType>> {
+        let mut result = Vec::new();
+
+        for type_constraint in self.fields.iter() {
+            match type_constraint {
+                TypeConstraint::None => (),
                 TypeConstraint::Exact(inner) | TypeConstraint::AtLeast(inner) => {
-                    result.push(*inner);
+                    result.push(*inner)
                 }
-                TypeConstraint::Tuple(_) => {
-                    return None;
-                }
+                TypeConstraint::Tuple(_) => return None,
             }
         }
 

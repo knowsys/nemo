@@ -679,19 +679,23 @@ impl<'a> RuleParser<'a> {
                 self.parse_file_format(),
                 multispace_or_comment0,
             )(remainder)?;
-            let (remainder, (meta, attributes)) =
+            let (remainder, (format, attributes, constraint)) =
                 map_res(self.parse_map_literal(), |attributes| {
                     let mut meta = format.into_meta();
-                    meta.validate_attributes(direction, &attributes)?;
-                    Ok::<_, FileFormatError>((meta, attributes))
+                    let constraint = meta.validated_and_refined_type_declaration(
+                        direction,
+                        &attributes,
+                        predicate.1.clone(),
+                    )?;
+                    Ok::<_, FileFormatError>((meta, attributes, constraint))
                 })(remainder)?;
 
             Ok((
                 remainder,
                 ImportExportSpec {
                     predicate: predicate.0,
-                    constraint: predicate.1,
-                    format: meta,
+                    constraint,
+                    format,
                     attributes,
                 },
             ))

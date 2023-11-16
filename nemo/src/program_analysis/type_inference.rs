@@ -11,8 +11,8 @@ use self::{
     type_requirement::{
         merge_type_requirements, override_type_requirements, requirements_from_aggregates_in_rules,
         requirements_from_existentials_in_rules, requirements_from_facts,
-        requirements_from_literals_in_rules, requirements_from_pred_decls,
-        requirements_from_sources, TypeRequirement,
+        requirements_from_imports, requirements_from_literals_in_rules,
+        requirements_from_pred_decls, requirements_from_sources, TypeRequirement,
     },
 };
 
@@ -29,12 +29,14 @@ type TypeInferenceResult = Result<(PredicateTypes, VariableTypesForRules), TypeE
 pub(super) fn infer_types(program: &ChaseProgram) -> TypeInferenceResult {
     let pred_reqs = requirements_from_pred_decls(program.parsed_predicate_declarations());
     let source_reqs = requirements_from_sources(program.sources());
+    let import_reqs = requirements_from_imports(program.imports());
     let fact_reqs = requirements_from_facts(program.facts());
     let literal_reqs = requirements_from_literals_in_rules(program.rules());
     let aggregate_reqs = requirements_from_aggregates_in_rules(program.rules());
     let existential_reqs = requirements_from_existentials_in_rules(program.rules());
 
     let mut type_requirements = source_reqs;
+    merge_type_requirements(&mut type_requirements, import_reqs)?;
     merge_type_requirements(&mut type_requirements, fact_reqs)?;
     merge_type_requirements(&mut type_requirements, literal_reqs)?;
     override_type_requirements(&mut type_requirements, pred_reqs);
