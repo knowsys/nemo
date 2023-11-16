@@ -113,6 +113,11 @@ impl<'a> TableWriter<'a> {
         self.cur_col_idx = 0;
     }
 
+    /// Returns the number of rows in the [`TableWriter`]
+    pub fn size(&self) -> usize {
+        self.table_lengths.iter().sum()
+    }
+
     pub(crate) fn finalize(&mut self) {
         // TODO: interface may still change
     }
