@@ -1,12 +1,11 @@
-use std::{cell::UnsafeCell, ops::Range};
+use std::cell::UnsafeCell;
 
 use crate::{
     columnar::{
-        column_types::rainbow::{BlockBounds, ColumnRainbow},
-        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
+        column_types::rainbow::{ColumnRainbow, IntervalBounds},
+        traits::columnscan::{ColumnScanCell, ColumnScanEnum},
     },
-    datatypes::{Double, StorageTypeName, StorageValueT},
-    tabular::traits::{partial_trie_scan::PartialTrieScan, table::Table, trie_scan::TrieScan},
+    datatypes::{Double, StorageTypeName},
 };
 
 /// TODO: Adjust description once this replaces [`Trie`]
@@ -104,16 +103,16 @@ impl<'a> ColumnScanRainbow<'a> {
         }
     }
 
-    pub fn narrow(&mut self, bounds: BlockBounds) {
-        if let Some(bound) = bounds.bound_keys {
+    pub fn narrow(&mut self, bounds: IntervalBounds) {
+        if let Some(bound) = bounds.interval_keys {
             self.scan_keys.narrow(bound);
         }
 
-        if let Some(bound) = bounds.bound_integers {
+        if let Some(bound) = bounds.interval_integers {
             self.scan_integers.narrow(bound);
         }
 
-        if let Some(bound) = bounds.bound_doubles {
+        if let Some(bound) = bounds.interval_doubles {
             self.scan_doubles.narrow(bound);
         }
     }
@@ -206,7 +205,7 @@ impl<'a> PartialTrieScanRainbow<'a> for TrieScanRainbow<'a> {
                 let next_layer_blocks = self
                     .trie
                     .column(next_layer)
-                    .block_bounds(current_global_index);
+                    .interval_bounds(current_global_index);
 
                 self.column_scans[next_layer]
                     .get_mut()

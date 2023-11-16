@@ -1,79 +1,62 @@
-use std::ops::{Index, Range};
+use std::ops::Range;
 
 use bytesize::ByteSize;
 
 use crate::{
-    columnar::traits::{
-        column::{Column, ColumnEnum},
-        columnscan::ColumnScanEnum,
+    columnar::{
+        interval_lookup::one_column::IntervalLookupOneColumn,
+        traits::{
+            column::{Column, ColumnEnum},
+            columnscan::ColumnScanEnum,
+            interval::IntervalLookup,
+        },
     },
-    datatypes::{ColumnDataType, Double, StorageTypeName, StorageValueT},
+    datatypes::{ColumnDataType, Double, StorageTypeName},
     management::ByteSized,
 };
 
-/// Value encoding that a an entry in [`ColumnColor`] has no predecessor
-pub const NO_PREDECESSOR: usize = usize::MAX;
-
+/// Note: This is a replacement of the ColumnWithInterval data structure
+///
 /// Subcolumn of a [`ColumnRainbow`] containing values of a particular type
 #[derive(Debug, Clone)]
-pub struct ColumnColor<T>
+pub struct ColumnColor<T, Lookup>
 where
     T: ColumnDataType,
+    Lookup: IntervalLookup,
 {
     /// Contains the actual data for this data type
     data: ColumnEnum<T>,
-    /// Marks the indices of sorted blocks of data within the data column
-    ///
-    /// The length of a block can be obtained
-    /// by subtracting the start index of the next block from the start index of the current block
-    blocks: ColumnEnum<usize>,
-    /// Associates the global index form the previous column with a block index from this column
-    predecessors: ColumnEnum<usize>,
+
+    /// Associates each value node in the previous layer
+    /// with a sorted range of values in the `data` column of this layer
+    interval_lookup: Lookup,
 }
 
-impl<T> ColumnColor<T>
+impl<T, Lookup> ColumnColor<T, Lookup>
 where
     T: ColumnDataType,
+    Lookup: IntervalLookup,
 {
     /// Create a new [`ColumnColor`].
-    pub fn new(
-        data: ColumnEnum<T>,
-        blocks: ColumnEnum<usize>,
-        predecessors: ColumnEnum<usize>,
-    ) -> Self {
+    pub fn new(data: ColumnEnum<T>, interval_lookup: Lookup) -> Self {
         Self {
             data,
-            blocks,
-            predecessors,
+            interval_lookup,
         }
     }
 
-    /// Given the (global) index of the predecessor node,
-    /// return the range of indices of the successor nodes stored in the data column.
+    /// Return the interval containing the successor of the node with the given index.
     ///
-    /// Returns `None` if the node associated with the given index has no successor
-    /// in this column.
-    pub fn block_bounds(&self, global_index: usize) -> Option<Range<usize>> {
-        let block_index = self.predecessors.get(global_index);
-
-        if block_index == NO_PREDECESSOR {
-            return None;
-        }
-
-        let block_start = self.blocks.get(block_index);
-        let block_end = if block_index + 1 < self.blocks.len() {
-            self.blocks.get(block_index + 1)
-        } else {
-            self.data.len()
-        };
-
-        Some(block_start..block_end)
+    /// Returns `None` if the node has no sucessor in this column.
+    pub fn interval_bound(&self, index: usize) -> Option<Range<usize>> {
+        self.interval_lookup.interval_bounds(index)
     }
 }
 
-impl<'a, T> Column<'a, T> for ColumnColor<T>
+impl<'a, T, Lookup> Column<'a, T> for ColumnColor<T, Lookup>
 where
     T: 'a + ColumnDataType,
+    Lookup: IntervalLookup,
 {
     /// TODO: Reconsider this
     type Scan = ColumnScanEnum<'a, T>;
@@ -95,17 +78,21 @@ where
     }
 }
 
-impl<T> ByteSized for ColumnColor<T>
+impl<T, Lookup> ByteSized for ColumnColor<T, Lookup>
 where
     T: ColumnDataType,
+    Lookup: IntervalLookup,
 {
     fn size_bytes(&self) -> ByteSize {
-        self.data.size_bytes() + self.blocks.size_bytes() + self.predecessors.size_bytes()
+        self.data.size_bytes() + self.interval_lookup.size_bytes()
     }
 }
 
 /// Number of distinct data types withing a [`ColumnRainbow`]
 const RAINBOX_NUM_COLORS: usize = 3;
+
+/// TODO: Just use one of them or move to an dynamic approach
+type LookupMethod = IntervalLookupOneColumn;
 
 /// Column structure which can hold arbitrary data types.
 ///
@@ -117,11 +104,11 @@ const RAINBOX_NUM_COLORS: usize = 3;
 #[derive(Debug, Clone)]
 pub struct ColumnRainbow {
     /// Column which contains keys which can be used within a dictionary to access the element
-    column_keys: ColumnColor<u64>,
+    column_keys: ColumnColor<u64, LookupMethod>,
     /// Column containing the integers
-    column_integers: ColumnColor<i64>,
+    column_integers: ColumnColor<i64, LookupMethod>,
     /// Column containing [`Double`]s
-    column_doubles: ColumnColor<Double>,
+    column_doubles: ColumnColor<Double, LookupMethod>,
 
     /// Helper structure storing the starting global indices for values of each type.
     /// The last element in this array stores the number of data entries in this column.
@@ -130,13 +117,13 @@ pub struct ColumnRainbow {
 
 ///
 #[derive(Debug)]
-pub struct BlockBounds {
+pub struct IntervalBounds {
     /// Bound for the keys column
-    pub bound_keys: Option<Range<usize>>,
+    pub interval_keys: Option<Range<usize>>,
     /// Bound for the integer column
-    pub bound_integers: Option<Range<usize>>,
+    pub interval_integers: Option<Range<usize>>,
     /// Bound for the [`Double`] column
-    pub bound_doubles: Option<Range<usize>>,
+    pub interval_doubles: Option<Range<usize>>,
 }
 
 impl ColumnRainbow {
@@ -149,9 +136,9 @@ impl ColumnRainbow {
 
     /// Construct a new [`ColumnRainbow`]
     pub fn new(
-        column_keys: ColumnColor<u64>,
-        column_integers: ColumnColor<i64>,
-        column_doubles: ColumnColor<Double>,
+        column_keys: ColumnColor<u64, LookupMethod>,
+        column_integers: ColumnColor<i64, LookupMethod>,
+        column_doubles: ColumnColor<Double, LookupMethod>,
     ) -> Self {
         let column_starts = [
             0,
@@ -185,12 +172,11 @@ impl ColumnRainbow {
         self.column_starts[Self::type_order(storage_type)] + local_index
     }
 
-    ///
-    pub fn block_bounds(&self, global_index: usize) -> BlockBounds {
-        BlockBounds {
-            bound_keys: self.column_keys.block_bounds(global_index),
-            bound_integers: self.column_integers.block_bounds(global_index),
-            bound_doubles: self.column_doubles.block_bounds(global_index),
+    pub fn interval_bounds(&self, global_index: usize) -> IntervalBounds {
+        IntervalBounds {
+            interval_keys: self.column_keys.interval_bound(global_index),
+            interval_integers: self.column_integers.interval_bound(global_index),
+            interval_doubles: self.column_doubles.interval_bound(global_index),
         }
     }
 }
@@ -216,58 +202,6 @@ impl ByteSized for ColumnRainbow {
     }
 }
 
-// impl<'a> Column<'a, StorageValueT> for ColumnRainbow {
-//     type Scan = ColumnScanEnum<StorageValueT>;
-
-//     fn len(&self) -> usize {
-//         todo!()
-//     }
-
-//     fn get(&self, index: usize) -> StorageValueT {
-//         todo!()
-//     }
-
-//     fn iter(&'a self) -> Self::Scan {
-//         todo!()
-//     }
-
-//     fn is_empty(&self) -> bool {
-//         self.len() == 0
-//     }
-// }
-
-// impl<'a> Column<'a, u64> for ColumnRainbow {
-//     type Scan = ColumnScanEnum<'a, u64>;
-
-//     fn len(&self) -> usize {
-//         self.column_starts[RAINBOX_NUM_COLORS]
-//     }
-
-//     fn get(&self, index: usize) -> u64 {
-//         todo!()
-//     }
-
-//     fn iter(&'_ self) -> Self::Scan {
-//         todo!()
-//     }
-// }
-
-// impl<'a> Column<'a, i64> for ColumnRainbow {
-//     type Scan = ColumnScanEnum<'a, i64>;
-
-//     fn len(&self) -> usize {
-//         todo!()
-//     }
-
-//     fn get(&self, index: usize) -> i64 {
-//         todo!()
-//     }
-
-//     fn iter(&'_ self) -> Self::Scan {
-//         todo!()
-//     }
-// }
-
 #[cfg(test)]
 mod test {
     use crate::{
@@ -277,33 +211,33 @@ mod test {
 
     use super::{ColumnColor, ColumnRainbow};
 
-    fn create_empty_column_enum<T: ColumnDataType>() -> ColumnEnum<T> {
-        ColumnEnum::ColumnVector(ColumnVector::new(vec![]))
-    }
+    // fn create_empty_column_enum<T: ColumnDataType>() -> ColumnEnum<T> {
+    //     ColumnEnum::ColumnVector(ColumnVector::new(vec![]))
+    // }
 
-    fn create_simple_column_enum<T: ColumnDataType>(data: &[T]) -> ColumnEnum<T> {
-        ColumnEnum::ColumnVector(ColumnVector::new(data.to_vec()))
-    }
+    // fn create_simple_column_enum<T: ColumnDataType>(data: &[T]) -> ColumnEnum<T> {
+    //     ColumnEnum::ColumnVector(ColumnVector::new(data.to_vec()))
+    // }
 
-    fn create_example_column() -> ColumnRainbow {
-        let column_keys = ColumnColor::new(
-            create_simple_column_enum(&[2, 4, 5]),
-            create_empty_column_enum(),
-            create_empty_column_enum(),
-        );
-        let column_integers = ColumnColor::new(
-            create_simple_column_enum(&[-3, 1, 3, 7]),
-            create_empty_column_enum(),
-            create_empty_column_enum(),
-        );
-        let column_doubles = ColumnColor::new(
-            create_simple_column_enum(&[Double::new(-10.0).unwrap(), Double::new(10.0).unwrap()]),
-            create_empty_column_enum(),
-            create_empty_column_enum(),
-        );
+    // fn create_example_column() -> ColumnRainbow {
+    //     let column_keys = ColumnColor::new(
+    //         create_simple_column_enum(&[2, 4, 5]),
+    //         create_empty_column_enum(),
+    //         create_empty_column_enum(),
+    //     );
+    //     let column_integers = ColumnColor::new(
+    //         create_simple_column_enum(&[-3, 1, 3, 7]),
+    //         create_empty_column_enum(),
+    //         create_empty_column_enum(),
+    //     );
+    //     let column_doubles = ColumnColor::new(
+    //         create_simple_column_enum(&[Double::new(-10.0).unwrap(), Double::new(10.0).unwrap()]),
+    //         create_empty_column_enum(),
+    //         create_empty_column_enum(),
+    //     );
 
-        ColumnRainbow::new(column_keys, column_integers, column_doubles)
-    }
+    //     ColumnRainbow::new(column_keys, column_integers, column_doubles)
+    // }
 
     #[test]
     fn rainbow_column_access_elements() {}

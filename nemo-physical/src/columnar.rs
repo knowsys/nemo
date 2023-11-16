@@ -4,5 +4,6 @@
 pub mod adaptive_column_builder;
 
 pub mod column_types;
+pub mod interval_lookup;
 pub mod operations;
 pub mod traits;

@@ -8,3 +8,6 @@ pub mod columnscan;
 
 /// Module for defining [`ColumnBuilder`][columnbuilder::ColumnBuilder]
 pub mod columnbuilder;
+
+/// Module for defining [`IntervalLookup`][`interval::IntervalLookup`]
+pub mod interval;
