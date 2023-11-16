@@ -681,7 +681,7 @@ impl<'a> RuleParser<'a> {
             )(remainder)?;
             let (remainder, (meta, attributes)) =
                 map_res(self.parse_map_literal(), |attributes| {
-                    let meta = format.into_meta();
+                    let mut meta = format.into_meta();
                     meta.validate_attributes(direction, &attributes)?;
                     Ok::<_, FileFormatError>((meta, attributes))
                 })(remainder)?;
@@ -2431,7 +2431,7 @@ mod test {
         let name = "p".to_string();
         let predicate = Identifier(name.clone());
         let qualified = format!("{name}[integer, float64]");
-        let arguments = r#"{delimiter = ";", path = "path/to/file"}"#;
+        let arguments = r#"{delimiter = ";", resource = <http://example.org/test.nt>}"#;
         let spec = format!("{qualified}: dsv{arguments}");
         let directive = format!("@import {spec} .");
         let directive_export = format!("@export {spec} .");
@@ -2453,7 +2453,6 @@ mod test {
             parser.parse_import_export_spec(direction),
             &spec,
             ImportExportSpec {
-                direction,
                 predicate: predicate.clone(),
                 constraint: constraints.clone(),
                 format: Box::<DSVFormat>::default(),
@@ -2464,25 +2463,23 @@ mod test {
         assert_parse!(
             parser.parse_import(),
             &directive,
-            ImportExportSpec {
-                direction,
+            ImportSpec::from(ImportExportSpec {
                 predicate: predicate.clone(),
                 constraint: constraints.clone(),
                 format: Box::<DSVFormat>::default(),
                 attributes: attributes.clone()
-            }
+            })
         );
 
         assert_parse!(
             parser.parse_export(),
             &directive_export,
-            ImportExportSpec {
-                direction: Direction::Writing,
+            ExportSpec::from(ImportExportSpec {
                 predicate: predicate.clone(),
                 constraint: constraints.clone(),
                 format: Box::<DSVFormat>::default(),
                 attributes: attributes.clone()
-            }
+            })
         );
     }
 }

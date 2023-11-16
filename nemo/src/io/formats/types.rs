@@ -1,6 +1,6 @@
 //! Types related to input and output formats.
 
-use std::{collections::HashSet, fs::File, path::PathBuf, str::FromStr};
+use std::{collections::HashSet, path::PathBuf, str::FromStr};
 
 use dyn_clone::DynClone;
 use thiserror::Error;
@@ -16,7 +16,7 @@ use crate::{
 use super::{dsv::DSVFormat, rdf_triples::RDFFormat};
 
 pub(crate) mod attributes {
-    pub(crate) const PATH: &str = "path";
+    pub(crate) const RESOURCE: &str = "resource";
 }
 
 /// A writer for tables that takes iterators over [`PrimitiveType`][PrimitiveType] for each row.
@@ -60,20 +60,18 @@ pub trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
     /// Check whether the given pairs of attributes and values are a
     /// valid combination for this format.
     fn validate_attribute_values(
-        &self,
+        &mut self,
         direction: Direction,
         attributes: &Map,
     ) -> Result<(), FileFormatError>;
 
     /// Check whether the given attributes are a valid combination for this format.
     fn validate_attributes(
-        &self,
+        &mut self,
         direction: Direction,
         attributes: &Map,
     ) -> Result<(), FileFormatError> {
         let given = attributes.pairs.keys().cloned().collect();
-
-        log::debug!("given attributes: {given:?}");
 
         if let Some(missing) = self
             .required_attributes(direction)
@@ -288,7 +286,7 @@ impl FileFormat {
             Self::DSV => Box::new(DSVFormat::new()),
             Self::CSV => Box::new(DSVFormat::with_delimiter(b',')),
             Self::TSV => Box::new(DSVFormat::with_delimiter(b'\t')),
-            Self::RDF | Self::NTriples | Self::Turtle | Self::RDFXML => Box::new(RDFFormat {}),
+            Self::RDF | Self::NTriples | Self::Turtle | Self::RDFXML => Box::new(RDFFormat::new()),
             Self::NQuads => todo!(),
         }
     }

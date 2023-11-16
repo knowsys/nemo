@@ -215,12 +215,21 @@ impl TableReader for RDFTriplesReader {
     }
 }
 
-use super::types::attributes::PATH;
+use super::types::attributes::RESOURCE;
 const BASE: &str = "base";
 
 /// File formats for RDF.
-#[derive(Debug, Clone, Copy)]
-pub struct RDFFormat {}
+#[derive(Debug, Default, Clone)]
+pub struct RDFFormat {
+    resource: Option<Resource>,
+}
+
+impl RDFFormat {
+    /// Construct new RDF file format metadata.
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
 
 impl FileFormatMeta for RDFFormat {
     fn file_format(&self) -> FileFormat {
@@ -235,17 +244,14 @@ impl FileFormatMeta for RDFFormat {
         inferred_types: &TupleConstraint,
     ) -> Result<Box<dyn TableReader>, Error> {
         if let Some(inferred_types) = inferred_types.into_flat_primitive() {
-            let path = attributes
-                .pairs
-                .get(&Key::identifier_from_str(PATH))
-                .expect("is a required attribute")
-                .as_string()
-                .expect("must be a string");
             let base = attributes
                 .pairs
                 .get(&Key::identifier_from_str(BASE))
                 .map(|term| term.as_abstract().expect("must be an identifier").name());
-            let rdf_file = RdfFile::new(path, base);
+            let rdf_file = RdfFile::new(
+                self.resource.as_ref().expect("is a required attribute"),
+                base,
+            );
 
             Ok(Box::new(RDFTriplesReader::new(
                 resource_providers,
@@ -275,7 +281,7 @@ impl FileFormatMeta for RDFFormat {
     fn required_attributes(&self, _direction: Direction) -> HashSet<Key> {
         let mut attributes = HashSet::new();
 
-        attributes.insert(PATH);
+        attributes.insert(RESOURCE);
 
         attributes
             .into_iter()
@@ -284,10 +290,27 @@ impl FileFormatMeta for RDFFormat {
     }
 
     fn validate_attribute_values(
-        &self,
+        &mut self,
         _direction: Direction,
-        _attributes: &Map,
+        attributes: &Map,
     ) -> Result<(), FileFormatError> {
+        let resource = attributes
+            .pairs
+            .get(&Key::identifier_from_str(RESOURCE))
+            .expect("is a required attribute");
+        match resource.as_resource() {
+            Some(resource) => {
+                self.resource = Some(resource.clone());
+            }
+            None => {
+                return Err(FileFormatError::InvalidAttributeValue {
+                    value: resource.clone(),
+                    attribute: Key::identifier_from_str(RESOURCE),
+                    description: "Resource should be a string literal or an IRI".to_string(),
+                })
+            }
+        }
+
         Ok(())
     }
 }

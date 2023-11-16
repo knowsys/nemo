@@ -91,7 +91,7 @@ use nemo_physical::table_reader::{Resource, TableReader};
 use thiserror::Error;
 
 use crate::model::types::primitive_logical_value::{LogicalFloat64, LogicalInteger, LogicalString};
-use crate::model::{DataSource, DsvFile, Identifier, Key, Map, TupleConstraint, TypeConstraint};
+use crate::model::{DataSource, DsvFile, Key, Map, TupleConstraint, TypeConstraint};
 use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
     error::{Error, ReadingError},
@@ -273,7 +273,7 @@ impl DSVFormat {
     }
 }
 
-use super::types::attributes::PATH;
+use super::types::attributes::RESOURCE;
 const DELIMITER: &str = "delimiter";
 
 /// Errors related to DSV file format specifications.
@@ -289,18 +289,22 @@ pub enum DSVFormatError {
     InvalidDelimiterLength(Constant),
     /// Path should have a string literal as a value, but was some
     /// other term.
-    #[error("Path should be a string literal")]
-    InvalidPathType(Constant),
+    #[error("Resource should be a string literal or an IRI")]
+    InvalidResourceType(Constant),
 }
 
 impl From<DSVFormatError> for FileFormatError {
     fn from(error: DSVFormatError) -> Self {
         match &error {
             DSVFormatError::InvalidDelimiterType(constant)
-            | DSVFormatError::InvalidDelimiterLength(constant)
-            | DSVFormatError::InvalidPathType(constant) => Self::InvalidAttributeValue {
+            | DSVFormatError::InvalidDelimiterLength(constant) => Self::InvalidAttributeValue {
                 value: constant.clone(),
-                attribute: Key::Identifier(Identifier(DELIMITER.into())),
+                attribute: Key::identifier_from_str(DELIMITER),
+                description: error.to_string(),
+            },
+            DSVFormatError::InvalidResourceType(constant) => Self::InvalidAttributeValue {
+                value: constant.clone(),
+                attribute: Key::identifier_from_str(RESOURCE),
                 description: error.to_string(),
             },
         }
@@ -323,12 +327,12 @@ impl FileFormatMeta for DSVFormat {
         resource_providers: ResourceProviders,
         inferred_types: &TupleConstraint,
     ) -> Result<Box<dyn TableReader>, Error> {
-        let path = attributes
+        let resource = attributes
             .pairs
-            .get(&Key::identifier_from_str(PATH))
+            .get(&Key::identifier_from_str(RESOURCE))
             .expect("is a required attribute")
-            .as_string()
-            .expect("must be a string");
+            .as_resource()
+            .expect("must be a string or an IRI");
 
         let delimiter = self.delimiter.unwrap_or_else(|| {
             attributes
@@ -341,7 +345,7 @@ impl FileFormatMeta for DSVFormat {
         });
 
         if let Some(inferred_types) = inferred_types.into_flat_primitive() {
-            let dsv_file = DsvFile::new(path, delimiter, declared_types.clone());
+            let dsv_file = DsvFile::new(resource, delimiter, declared_types.clone());
 
             Ok(Box::new(DSVReader::dsv(
                 resource_providers,
@@ -364,7 +368,7 @@ impl FileFormatMeta for DSVFormat {
     fn required_attributes(&self, _direction: Direction) -> HashSet<Key> {
         let mut attributes = HashSet::new();
 
-        attributes.insert(PATH);
+        attributes.insert(RESOURCE);
 
         if self.delimiter.is_none() {
             attributes.insert(DELIMITER);
@@ -377,7 +381,7 @@ impl FileFormatMeta for DSVFormat {
     }
 
     fn validate_attribute_values(
-        &self,
+        &mut self,
         _direction: Direction,
         attributes: &Map,
     ) -> Result<(), FileFormatError> {
@@ -396,13 +400,13 @@ impl FileFormatMeta for DSVFormat {
             }
         }
 
-        let path = attributes
+        let resource = attributes
             .pairs
-            .get(&Key::identifier_from_str(PATH))
+            .get(&Key::identifier_from_str(RESOURCE))
             .expect("is a required attribute");
 
-        if path.as_string().is_none() {
-            return Err(DSVFormatError::InvalidPathType(path.clone()).into());
+        if resource.as_resource().is_none() {
+            return Err(DSVFormatError::InvalidResourceType(resource.clone()).into());
         }
 
         Ok(())
