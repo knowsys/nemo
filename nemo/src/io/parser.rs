@@ -29,7 +29,9 @@ pub(crate) mod sparql;
 pub(crate) mod turtle;
 pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
-use super::formats::types::{Direction, FileFormat, FileFormatError, ImportExportSpec};
+use super::formats::types::{
+    Direction, ExportSpec, FileFormat, FileFormatError, ImportExportSpec, ImportSpec,
+};
 
 /// Parse a program in the given `input`-String and return a [`Program`].
 ///
@@ -687,9 +689,8 @@ impl<'a> RuleParser<'a> {
             Ok((
                 remainder,
                 ImportExportSpec {
-                    direction,
                     predicate: predicate.0,
-                    constraints: predicate.1,
+                    constraint: predicate.1,
                     format: meta,
                     attributes,
                 },
@@ -698,24 +699,30 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an import directive.
-    pub fn parse_import(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportSpec> {
+    pub fn parse_import(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportSpec> {
         traced(
             "parse_import",
             delimited(
                 terminated(token("@import"), multispace_or_comment1),
-                cut(self.parse_import_export_spec(Direction::Reading)),
+                cut(map(
+                    self.parse_import_export_spec(Direction::Reading),
+                    ImportSpec::from,
+                )),
                 cut(self.parse_dot()),
             ),
         )
     }
 
     /// Parse an export directive.
-    pub fn parse_export(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportSpec> {
+    pub fn parse_export(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ExportSpec> {
         traced(
             "parse_export",
             delimited(
                 terminated(token("@export"), multispace_or_comment1),
-                cut(self.parse_import_export_spec(Direction::Writing)),
+                cut(map(
+                    self.parse_import_export_spec(Direction::Writing),
+                    ExportSpec::from,
+                )),
                 cut(self.parse_dot()),
             ),
         )
@@ -2448,7 +2455,7 @@ mod test {
             ImportExportSpec {
                 direction,
                 predicate: predicate.clone(),
-                constraints: constraints.clone(),
+                constraint: constraints.clone(),
                 format: Box::<DSVFormat>::default(),
                 attributes: attributes.clone(),
             }
@@ -2460,7 +2467,7 @@ mod test {
             ImportExportSpec {
                 direction,
                 predicate: predicate.clone(),
-                constraints: constraints.clone(),
+                constraint: constraints.clone(),
                 format: Box::<DSVFormat>::default(),
                 attributes: attributes.clone()
             }
@@ -2472,7 +2479,7 @@ mod test {
             ImportExportSpec {
                 direction: Direction::Writing,
                 predicate: predicate.clone(),
-                constraints: constraints.clone(),
+                constraint: constraints.clone(),
                 format: Box::<DSVFormat>::default(),
                 attributes: attributes.clone()
             }

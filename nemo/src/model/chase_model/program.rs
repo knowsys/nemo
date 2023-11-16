@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     error::Error,
-    io::formats::types::{Direction, ImportExportSpec},
+    io::formats::types::{ExportSpec, ImportSpec},
     model::{
         DataSourceDeclaration, Identifier, OutputPredicateSelection, PrimitiveType, Program,
         QualifiedPredicateName,
@@ -19,8 +19,8 @@ pub struct ChaseProgram {
     base: Option<String>,
     prefixes: HashMap<String, String>,
     sources: Vec<DataSourceDeclaration>,
-    imports: Vec<ImportExportSpec>,
-    exports: Vec<ImportExportSpec>,
+    imports: Vec<ImportSpec>,
+    exports: Vec<ExportSpec>,
     rules: Vec<ChaseRule>,
     facts: Vec<ChaseFact>,
     parsed_predicate_declarations: HashMap<Identifier, Vec<PrimitiveType>>,
@@ -29,10 +29,11 @@ pub struct ChaseProgram {
 
 /// A Builder for a [ChaseProgram].
 #[derive(Debug, Default)]
-pub struct ChaseProgramBuilder {
+pub(crate) struct ChaseProgramBuilder {
     program: ChaseProgram,
 }
 
+#[allow(dead_code)]
 impl ChaseProgramBuilder {
     /// Construct a new builder.
     pub fn new() -> Self {
@@ -81,9 +82,7 @@ impl ChaseProgramBuilder {
     }
 
     /// Add an imported table.
-    pub fn import(mut self, import: ImportExportSpec) -> Self {
-        assert_eq!(import.direction, Direction::Reading);
-
+    pub fn import(mut self, import: ImportSpec) -> Self {
         self.program.imports.push(import);
         self
     }
@@ -91,21 +90,14 @@ impl ChaseProgramBuilder {
     /// Add imported tables.
     pub fn imports<T>(mut self, imports: T) -> Self
     where
-        T: IntoIterator<Item = ImportExportSpec>,
+        T: IntoIterator<Item = ImportSpec>,
     {
-        let imports = imports.into_iter().collect::<Vec<_>>();
-        assert!(imports
-            .iter()
-            .all(|import| import.direction == Direction::Reading));
-
         self.program.imports.extend(imports);
         self
     }
 
     /// Add an exported table.
-    pub fn export(mut self, export: ImportExportSpec) -> Self {
-        assert_eq!(export.direction, Direction::Writing);
-
+    pub fn export(mut self, export: ExportSpec) -> Self {
         self.program.exports.push(export);
         self
     }
@@ -113,13 +105,8 @@ impl ChaseProgramBuilder {
     /// Add exported tables.
     pub fn exports<T>(mut self, exports: T) -> Self
     where
-        T: IntoIterator<Item = ImportExportSpec>,
+        T: IntoIterator<Item = ExportSpec>,
     {
-        let exports = exports.into_iter().collect::<Vec<_>>();
-        assert!(exports
-            .iter()
-            .all(|export| export.direction == Direction::Writing));
-
         self.program.exports.extend(exports);
         self
     }
@@ -208,7 +195,7 @@ impl ChaseProgramBuilder {
 
 impl ChaseProgram {
     /// Return a [builder][ChaseProgramBuilder] for a [ChaseProgram].
-    pub fn builder() -> ChaseProgramBuilder {
+    pub(crate) fn builder() -> ChaseProgramBuilder {
         Default::default()
     }
 
@@ -271,12 +258,12 @@ impl ChaseProgram {
     }
 
     /// Return all imports in the program.
-    pub fn imports(&self) -> impl Iterator<Item = &ImportExportSpec> {
+    pub fn imports(&self) -> impl Iterator<Item = &ImportSpec> {
         self.imports.iter()
     }
 
     /// Return all exports in the program.
-    pub fn exports(&self) -> impl Iterator<Item = &ImportExportSpec> {
+    pub fn exports(&self) -> impl Iterator<Item = &ExportSpec> {
         self.exports.iter()
     }
 

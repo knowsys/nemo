@@ -7,13 +7,13 @@ use nemo_physical::{
 use crate::{
     error::Error,
     io::{
-        formats::{types::Direction, DSVReader, RDFTriplesReader},
+        formats::{DSVReader, RDFTriplesReader},
         resource_providers::ResourceProviders,
     },
     model::{NativeDataSource, PrimitiveType, TupleConstraint, TypeConstraint},
 };
 
-use super::formats::types::ImportExportSpec;
+use super::formats::types::ImportSpec;
 
 /// Manages everything related to resolving the inputs of a Nemo program.
 /// Currently, this is only the resource providers.
@@ -32,11 +32,9 @@ impl InputManager {
     /// Constructs a [`TableSource`] from the given [import specificiation][ImportExportSpec].
     pub fn import_table(
         &self,
-        import_spec: &ImportExportSpec,
+        import_spec: &ImportSpec,
         inferred_types: Vec<PrimitiveType>,
     ) -> Result<TableSource, Error> {
-        assert_eq!(import_spec.direction, Direction::Reading);
-
         Ok(TableSource::FileReader(import_spec.reader(
             self.resource_providers.clone(),
             &TupleConstraint::from_iter(inferred_types.into_iter().map(TypeConstraint::Exact)),

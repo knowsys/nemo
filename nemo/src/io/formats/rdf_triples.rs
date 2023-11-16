@@ -285,8 +285,8 @@ impl FileFormatMeta for RDFFormat {
 
     fn validate_attribute_values(
         &self,
-        direction: Direction,
-        attributes: &Map,
+        _direction: Direction,
+        _attributes: &Map,
     ) -> Result<(), FileFormatError> {
         Ok(())
     }
