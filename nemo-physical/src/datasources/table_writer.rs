@@ -7,6 +7,7 @@ use crate::{
     management::database::Dict,
 };
 use std::cell::RefCell;
+use std::cmp::Ordering;
 
 /// Number of supported [`StorageTypeName`]s. See also [TableWriter::storage_type_idx].
 const STORAGE_TYPE_COUNT: usize = 5;
@@ -17,6 +18,56 @@ const STORAGE_TYPE_COUNT: usize = 5;
 struct TypedTableRecord {
     col_ids: Vec<usize>,
     col_types: Vec<StorageTypeName>,
+}
+
+/// Order depends on order of [`StorageValueT`] and [`StorageTypeName`].
+/// TODO add tests!
+fn compare_storage_type_names(first: &StorageTypeName, second: &StorageTypeName) -> Ordering {
+    match (first, second) {
+        (StorageTypeName::U32, StorageTypeName::U32) => Ordering::Equal,
+        (StorageTypeName::U32, StorageTypeName::U64) => Ordering::Less,
+        (StorageTypeName::U32, StorageTypeName::I64) => Ordering::Less,
+        (StorageTypeName::U32, StorageTypeName::Float) => Ordering::Less,
+        (StorageTypeName::U32, StorageTypeName::Double) => Ordering::Less,
+
+        (StorageTypeName::U64, StorageTypeName::U32) => Ordering::Greater,
+        (StorageTypeName::U64, StorageTypeName::U64) => Ordering::Equal,
+        (StorageTypeName::U64, StorageTypeName::I64) => Ordering::Less,
+        (StorageTypeName::U64, StorageTypeName::Float) => Ordering::Less,
+        (StorageTypeName::U64, StorageTypeName::Double) => Ordering::Less,
+
+        (StorageTypeName::I64, StorageTypeName::U32) => Ordering::Greater,
+        (StorageTypeName::I64, StorageTypeName::U64) => Ordering::Greater,
+        (StorageTypeName::I64, StorageTypeName::I64) => Ordering::Equal,
+        (StorageTypeName::I64, StorageTypeName::Float) => Ordering::Less,
+        (StorageTypeName::I64, StorageTypeName::Double) => Ordering::Less,
+
+        (StorageTypeName::Float, StorageTypeName::U32) => Ordering::Greater,
+        (StorageTypeName::Float, StorageTypeName::U64) => Ordering::Greater,
+        (StorageTypeName::Float, StorageTypeName::I64) => Ordering::Greater,
+        (StorageTypeName::Float, StorageTypeName::Float) => Ordering::Equal,
+        (StorageTypeName::Float, StorageTypeName::Double) => Ordering::Less,
+
+        (StorageTypeName::Double, StorageTypeName::U32) => Ordering::Greater,
+        (StorageTypeName::Double, StorageTypeName::U64) => Ordering::Greater,
+        (StorageTypeName::Double, StorageTypeName::I64) => Ordering::Greater,
+        (StorageTypeName::Double, StorageTypeName::Float) => Ordering::Greater,
+        (StorageTypeName::Double, StorageTypeName::Double) => Ordering::Equal,
+    }
+}
+
+/// TODO add tests!
+fn compare_storage_type_name_vectors(
+    first: &Vec<StorageTypeName>,
+    second: &Vec<StorageTypeName>,
+) -> Ordering {
+    for i in 0..first.len() - 1 {
+        let ordering = compare_storage_type_names(&first[i], &second[i]);
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+    }
+    Ordering::Equal
 }
 
 /// The [`ColumnWriter`] is used to send the data of a single table column to the database. The interface
@@ -48,6 +99,11 @@ pub struct TableWriter<'a> {
     /// in [TableWriter::tables]+1. In each case, number `0` indicates that no child node/no table has been alocated yet
     /// for this type combination or partial path.
     table_trie: Vec<usize>,
+
+    /// Sorting indexes for tables in [`TypedTableRecord::tables`] (in the same order as in [`TableWriter::tables`])
+    sorting_indexes: Vec<Vec<usize>>,
+    /// Flag to store which tables in [`TypedTableRecord::tables`] are sorted.
+    is_sorted: Vec<bool>,
 
     /// List of all u64 value columns used across the tables.
     cols_u64: Vec<Vec<u64>>,
@@ -86,6 +142,8 @@ impl<'a> TableWriter<'a> {
             tables: Vec::with_capacity(initial_capacity),
             table_lengths: Vec::with_capacity(initial_capacity),
             table_trie: table_trie,
+            sorting_indexes: Vec::with_capacity(initial_capacity),
+            is_sorted: Vec::with_capacity(initial_capacity),
             cols_u64: Vec::with_capacity(initial_capacity),
             cols_u32: Vec::with_capacity(initial_capacity),
             cols_floats: Vec::with_capacity(initial_capacity),
@@ -111,6 +169,31 @@ impl<'a> TableWriter<'a> {
     /// and start a new row from the beginning.
     pub fn drop_current_row(&mut self) {
         self.cur_col_idx = 0;
+    }
+
+    /* pub fn sort(&mut self) {
+        for typedTableRecord in self.tables {
+        }
+    } */
+
+    /// But this generates a copy of the values
+    /// I would prefer that
+    ///
+    //pub fn get_row(&self, idx:usize) -> Vec<StorageValueT> {
+    //
+    //}
+
+    /// Returns an iterator of the sorted indexes of [`TableWriter::tables`]
+    /// TODO add tests!
+    fn get_tables(&self) -> impl Iterator<Item = usize> {
+        let mut vec = (0..self.tables.len()).collect::<Vec<usize>>();
+        vec.sort_by(|i, j| {
+            compare_storage_type_name_vectors(
+                &self.tables[*i].col_types,
+                &self.tables[*j].col_types,
+            )
+        });
+        vec.into_iter()
     }
 
     /// Returns the number of rows in the [`TableWriter`]
@@ -189,6 +272,7 @@ impl<'a> TableWriter<'a> {
             }
         }
         self.table_lengths[table_record_id] += 1;
+        self.is_sorted[table_record_id] = false;
     }
 
     /// Finds a [`TypedTableRecord`] for the types required by the current values of
@@ -270,8 +354,12 @@ impl<'a> TableWriter<'a> {
         self.table_trie[cur_block
             + Self::storage_type_idx(self.cur_row_storage_values[self.col_num - 1].get_type())] =
             new_table_id + 1; // we recerve 0 for "no entry" in the trie
+                              // storing new table
         self.tables.push(typed_table_record);
         self.table_lengths.push(0);
+        // storing new table sorting indexes
+        self.sorting_indexes.push(Vec::new());
+        self.is_sorted.push(false);
 
         new_table_id
     }
