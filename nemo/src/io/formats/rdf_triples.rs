@@ -243,24 +243,24 @@ impl FileFormatMeta for RDFFormat {
         resource_providers: ResourceProviders,
         inferred_types: &TupleConstraint,
     ) -> Result<Box<dyn TableReader>, Error> {
-        if let Some(inferred_types) = inferred_types.into_flat_primitive() {
-            let base = attributes
-                .pairs
-                .get(&Key::identifier_from_str(BASE))
-                .map(|term| term.as_abstract().expect("must be an identifier").name());
-            let rdf_file = RdfFile::new(
-                self.resource.as_ref().expect("is a required attribute"),
-                base,
-            );
+        let inferred_types = inferred_types
+            .clone()
+            .into_flat_primitive()
+            .expect("must be flat and primitive");
+        let base = attributes
+            .pairs
+            .get(&Key::identifier_from_str(BASE))
+            .map(|term| term.as_abstract().expect("must be an identifier").name());
+        let rdf_file = RdfFile::new(
+            self.resource.as_ref().expect("is a required attribute"),
+            base,
+        );
 
-            Ok(Box::new(RDFTriplesReader::new(
-                resource_providers,
-                &rdf_file,
-                inferred_types,
-            )))
-        } else {
-            unimplemented!("There is no support for reading complex types from RDF files.")
-        }
+        Ok(Box::new(RDFTriplesReader::new(
+            resource_providers,
+            &rdf_file,
+            inferred_types,
+        )))
     }
 
     fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
@@ -312,6 +312,27 @@ impl FileFormatMeta for RDFFormat {
         }
 
         Ok(())
+    }
+
+    fn validate_and_refine_type_declaration(
+        &mut self,
+        declared_types: TupleConstraint,
+    ) -> Result<TupleConstraint, FileFormatError> {
+        if declared_types.arity() != 3 {
+            return Err(FileFormatError::InvalidArityExact {
+                arity: declared_types.arity(),
+                required: 3,
+                format: self.file_format(),
+            });
+        }
+
+        if declared_types.clone().into_flat_primitive().is_none() {
+            return Err(FileFormatError::UnsupportedComplexTypes {
+                format: self.file_format(),
+            });
+        }
+
+        Ok(declared_types)
     }
 }
 

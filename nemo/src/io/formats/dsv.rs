@@ -259,6 +259,8 @@ pub struct DSVFormat {
 }
 
 impl DSVFormat {
+    const DEFAULT_COLUMN_TYPE: PrimitiveType = PrimitiveType::String;
+
     /// Construct a generic DSV file format, with the delimiter not
     /// yet fixed.
     pub fn new() -> Self {
@@ -344,17 +346,17 @@ impl FileFormatMeta for DSVFormat {
                 .as_bytes()[0]
         });
 
-        if let Some(inferred_types) = inferred_types.into_flat_primitive() {
-            let dsv_file = DsvFile::new(resource, delimiter, declared_types.clone());
+        let inferred_types = inferred_types
+            .clone()
+            .into_flat_primitive()
+            .expect("must be flat and primitive");
+        let dsv_file = DsvFile::new(resource, delimiter, declared_types.clone());
 
-            Ok(Box::new(DSVReader::dsv(
-                resource_providers,
-                &dsv_file,
-                inferred_types,
-            )))
-        } else {
-            unimplemented!("There is no support for reading complex types from DSV files.")
-        }
+        Ok(Box::new(DSVReader::dsv(
+            resource_providers,
+            &dsv_file,
+            inferred_types,
+        )))
     }
 
     fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
@@ -410,6 +412,17 @@ impl FileFormatMeta for DSVFormat {
         }
 
         Ok(())
+    }
+
+    fn validate_and_refine_type_declaration(
+        &mut self,
+        declared_types: TupleConstraint,
+    ) -> Result<TupleConstraint, FileFormatError> {
+        declared_types
+            .into_flat_primitive_with_default(Self::DEFAULT_COLUMN_TYPE)
+            .ok_or_else(|| FileFormatError::UnsupportedComplexTypes {
+                format: self.file_format(),
+            })
     }
 }
 

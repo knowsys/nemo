@@ -2,11 +2,14 @@ use std::collections::HashMap;
 
 use nemo_physical::aggregates::operation::AggregateOperation;
 
-use crate::model::{
-    chase_model::{ChaseAtom, ChaseFact, ChaseRule, AGGREGATE_VARIABLE_PREFIX},
-    types::error::TypeError,
-    DataSource, DataSourceDeclaration, Identifier, PrimitiveTerm, PrimitiveType, Term,
-    TypeConstraint, Variable,
+use crate::{
+    io::formats::types::ImportSpec,
+    model::{
+        chase_model::{ChaseAtom, ChaseFact, ChaseRule, AGGREGATE_VARIABLE_PREFIX},
+        types::error::TypeError,
+        DataSource, DataSourceDeclaration, Identifier, PrimitiveTerm, PrimitiveType, Term,
+        TypeConstraint, Variable,
+    },
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -174,6 +177,24 @@ pub(super) fn requirements_from_sources<'a, T: Iterator<Item = &'a DataSourceDec
                 source.predicate.clone(),
                 source
                     .input_types()
+                    .iter()
+                    .cloned()
+                    .map(TypeRequirement::from)
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+pub(super) fn requirements_from_imports<'a, T: Iterator<Item = &'a ImportSpec>>(
+    imports: T,
+) -> PredicateTypeRequirements {
+    imports
+        .map(|import_spec| {
+            (
+                import_spec.predicate().clone(),
+                import_spec
+                    .type_constraint()
                     .iter()
                     .cloned()
                     .map(TypeRequirement::from)

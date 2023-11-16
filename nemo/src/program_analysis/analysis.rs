@@ -290,6 +290,14 @@ impl ChaseProgram {
             result.insert((source.predicate.clone(), source.input_types().arity()));
         }
 
+        // Predicates in import statements
+        for import_spec in self.imports() {
+            result.insert((
+                import_spec.predicate().clone(),
+                import_spec.type_constraint().arity(),
+            ));
+        }
+
         // Predicates in rules
         for rule in self.rules() {
             for atom in rule.head() {
