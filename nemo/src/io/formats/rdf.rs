@@ -1,4 +1,4 @@
-//! Reading of RDF 1.1 triples files (N-Triples, Turtle, RDF/XML)
+//! Reading of RDF 1.1 triples files (N-Triples, Turtle, RDF/XML) and RDF 1.1 N-Quads
 use std::{collections::HashSet, io::BufReader};
 
 use nemo_physical::{
@@ -8,10 +8,10 @@ use nemo_physical::{
 };
 use oxiri::Iri;
 use rio_api::{
-    model::{BlankNode, NamedNode, Subject, Triple},
-    parser::TriplesParser,
+    model::{BlankNode, NamedNode, Quad, Subject, Triple},
+    parser::{QuadsParser, TriplesParser},
 };
-use rio_turtle::{NTriplesParser, TurtleParser};
+use rio_turtle::{NQuadsParser, NTriplesParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 
 use crate::{
@@ -92,6 +92,36 @@ impl TryFrom<rio_api::model::Term<'_>> for Constant {
             rio_api::model::Term::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
         }
     }
+}
+
+const DEFAULT_GRAPH: &str = "__DEFAULT_GRAPH__";
+
+impl TryFrom<Option<rio_api::model::GraphName<'_>>> for Constant {
+    type Error = ReadingError;
+
+    fn try_from(value: Option<rio_api::model::GraphName<'_>>) -> Result<Self, Self::Error> {
+        match value {
+            None => Ok(Self::Abstract(Identifier(DEFAULT_GRAPH.to_string()))),
+            Some(rio_api::model::GraphName::NamedNode(nn)) => Ok(nn.into()),
+            Some(rio_api::model::GraphName::BlankNode(bn)) => Ok(bn.into()),
+        }
+    }
+}
+
+fn is_turtle(resource: &Resource) -> bool {
+    resource.ends_with(".ttl.gz") || resource.ends_with(".ttl")
+}
+
+fn is_rdf_xml(resource: &Resource) -> bool {
+    resource.ends_with(".rdf.gz") || resource.ends_with(".rdf")
+}
+
+fn is_nt(resource: &Resource) -> bool {
+    resource.ends_with(".nt.gz") || resource.ends_with(".nt")
+}
+
+fn is_nq(resource: &Resource) -> bool {
+    resource.ends_with(".nq.gz") || resource.ends_with(".nq")
 }
 
 /// A [`TableReader`] for RDF 1.1 files containing triples.
@@ -188,6 +218,92 @@ impl RDFTriplesReader {
 
         Ok(())
     }
+
+    fn read_quads_with_parser<Parser>(
+        &self,
+        physical_builder_proxies: &mut [PhysicalBuilderProxyEnum<'_>],
+        make_parser: impl FnOnce() -> Parser,
+    ) -> Result<(), ReadingError>
+    where
+        Parser: QuadsParser,
+        ReadingError: From<<Parser as QuadsParser>::Error>,
+    {
+        let mut builders = physical_builder_proxies
+            .iter_mut()
+            .zip(self.logical_types.clone())
+            .map(|(bp, lt)| lt.wrap_physical_column_builder(bp))
+            .collect::<Vec<_>>();
+
+        assert!(builders.len() == 4);
+
+        let mut quads = 0;
+        let mut on_quad = |quad: Quad| {
+            let subject = Constant::try_from(quad.subject)?;
+            let predicate = Constant::try_from(quad.predicate)?;
+            let object = Constant::try_from(quad.object)?;
+            let graph_name = Constant::try_from(quad.graph_name)?;
+
+            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
+                &mut builders[0],
+                subject,
+            )?;
+            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
+                &mut builders[1],
+                predicate,
+            ) {
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
+                    &mut builders[0],
+                );
+                return Err(e);
+            }
+            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
+                &mut builders[2],
+                object,
+            ) {
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
+                    &mut builders[0],
+                );
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
+                    &mut builders[1],
+                );
+                return Err(e);
+            }
+            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
+                &mut builders[3],
+                graph_name,
+            ) {
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
+                    &mut builders[0],
+                );
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
+                    &mut builders[1],
+                );
+                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
+                    &mut builders[2],
+                );
+                return Err(e);
+            }
+
+            quads += 1;
+            if quads % PROGRESS_NOTIFY_INCREMENT == 0 {
+                log::info!("Loading: processed {quads} quads")
+            }
+
+            Ok::<_, ReadingError>(())
+        };
+
+        let mut parser = make_parser();
+
+        while !parser.is_end() {
+            if let Err(e) = parser.parse_step(&mut on_quad) {
+                log::info!("Ignoring malformed quad: {e}");
+            }
+        }
+
+        log::info!("Finished loading: processed {quads} quads");
+
+        Ok(())
+    }
 }
 
 impl TableReader for RDFTriplesReader {
@@ -201,14 +317,16 @@ impl TableReader for RDFTriplesReader {
 
         let reader = BufReader::new(reader);
 
-        if self.resource.ends_with(".ttl.gz") || self.resource.ends_with(".ttl") {
+        if is_turtle(&self.resource) {
             self.read_with_parser(builder_proxies, || {
                 TurtleParser::new(reader, self.base.clone())
             })
-        } else if self.resource.ends_with(".rdf.gz") || self.resource.ends_with(".rdf") {
+        } else if is_rdf_xml(&self.resource) {
             self.read_with_parser(builder_proxies, || {
                 RdfXmlParser::new(reader, self.base.clone())
             })
+        } else if is_nq(&self.resource) {
+            self.read_quads_with_parser(builder_proxies, || NQuadsParser::new(reader))
         } else {
             self.read_with_parser(builder_proxies, || NTriplesParser::new(reader))
         }
@@ -219,11 +337,11 @@ const BASE: &str = "base";
 
 /// File formats for RDF.
 #[derive(Debug, Default, Clone)]
-pub struct RDFTriplesFormat {
+pub struct RDFFormat {
     resource: Option<Resource>,
 }
 
-impl RDFTriplesFormat {
+impl RDFFormat {
     /// Construct new RDF file format metadata.
     pub fn new() -> Self {
         Default::default()
@@ -295,9 +413,15 @@ impl RDFTriplesFormat {
     }
 }
 
-impl FileFormatMeta for RDFTriplesFormat {
+impl FileFormatMeta for RDFFormat {
     fn file_format(&self) -> FileFormat {
-        todo!()
+        match &self.resource {
+            Some(resource) if is_turtle(resource) => FileFormat::Turtle,
+            Some(resource) if is_rdf_xml(resource) => FileFormat::RDFXML,
+            Some(resource) if is_nt(resource) => FileFormat::NTriples,
+            Some(resource) if is_nq(resource) => FileFormat::NQuads,
+            _ => FileFormat::RDF,
+        }
     }
 
     fn reader(
@@ -391,10 +515,15 @@ impl FileFormatMeta for RDFTriplesFormat {
         &mut self,
         declared_types: TupleConstraint,
     ) -> Result<TupleConstraint, FileFormatError> {
-        if declared_types.arity() != 3 {
+        let required = match self.file_format() {
+            FileFormat::NQuads => 4,
+            _ => 3,
+        };
+
+        if declared_types.arity() != required {
             return Err(FileFormatError::InvalidArityExact {
                 arity: declared_types.arity(),
-                required: 3,
+                required,
                 format: self.file_format(),
             });
         }
