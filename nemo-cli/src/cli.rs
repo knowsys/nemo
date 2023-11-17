@@ -109,7 +109,7 @@ impl OutputArgs {
 /// Cli arguments related to tracing
 #[derive(Debug, clap::Args)]
 pub struct TracingArgs {
-    /// Specify a fact, the origin of which should be explained
+    /// Specify a fact or multiple semicolon separated facts, the origin of which should be explained
     #[arg(long = "trace", value_delimiter = ';')]
     pub traced_facts: Option<Vec<String>>,
     /// Specify a file to save the trace.
