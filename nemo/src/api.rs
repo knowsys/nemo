@@ -65,7 +65,9 @@ pub fn load_string(input: String) -> Result<Engine, Error> {
 /// Executes the reasoning process of the [`Engine`].
 ///
 /// # Note
-/// If there are `@source` routines in the parsed rules, all relative paths are resolved with the current working directory
+/// If there are `@source` or `@import` directives in the
+/// parsed rules, all relative paths are resolved with the current
+/// working directory
 pub fn reason(engine: &mut Engine) -> Result<(), Error> {
     engine.execute()
 }
