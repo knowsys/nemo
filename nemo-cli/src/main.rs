@@ -20,7 +20,7 @@
 
 pub mod cli;
 
-use std::fs::read_to_string;
+use std::fs::{read_to_string, File};
 
 use clap::Parser;
 use cli::CliApp;
@@ -125,7 +125,8 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     }
 
     let parsed_facts = cli
-        .trace_facts
+        .tracing
+        .traced_facts
         .map(|f| f.into_iter().map(parse_fact).collect::<Result<Vec<_>, _>>())
         .transpose()?;
 
@@ -205,11 +206,24 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     if let Some(facts) = parsed_facts {
         let (trace, handles) = engine.trace(facts.clone())?;
 
-        for (fact, handle_opt) in facts.into_iter().zip(handles) {
-            if let Some(handle) = handle_opt {
-                println!("\n{}", trace.ascii_tree_string(handle).expect("Every handle returned from trace function should lead to a successful derivation"));
-            } else {
-                println!("{fact} was not derived");
+        match cli.tracing.output_file {
+            Some(output_file) => {
+                let filename = output_file.to_string_lossy().to_string();
+                let trace_json = trace.json(&handles);
+
+                let mut json_file = File::create(output_file)?;
+                if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
+                    return Err(Error::SerializationError { filename });
+                }
+            }
+            None => {
+                for (fact, handle) in facts.into_iter().zip(handles) {
+                    if let Some(tree) = trace.ascii_tree_string(handle) {
+                        println!("\n{}", tree);
+                    } else {
+                        println!("\n{fact} was not derived");
+                    }
+                }
             }
         }
     }

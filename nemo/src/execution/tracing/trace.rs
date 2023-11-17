@@ -1,8 +1,9 @@
 //! This module contains basic data structures for tracing the origins of derived facts.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ascii_tree::write_tree;
+use serde::Serialize;
 
 use crate::model::{
     chase_model::{ChaseAtom, ChaseFact},
@@ -39,7 +40,7 @@ impl RuleApplication {
 }
 
 /// Handle to a traced fact within an [`ExecutionTrace`].
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub struct FactTraceHandle(usize);
 
 /// Encodes the origin of a fact
@@ -60,6 +61,20 @@ pub enum TraceStatus {
     Success(TraceDerivation),
     /// Fact was not derived during the chase
     Fail,
+}
+
+impl TraceStatus {
+    /// Return `true` when fact was successfully derived
+    /// and `false` otherwise.
+    pub fn is_success(&self) -> bool {
+        matches!(self, TraceStatus::Success(_))
+    }
+
+    /// Return `true` if it has already been decided whether
+    /// a given fact has been derived and `false` otherwise.
+    pub fn is_known(&self) -> bool {
+        !matches!(self, TraceStatus::Unknown)
+    }
 }
 
 /// Fact which was considered during the construction of an [`ExecutionTrace`]
@@ -138,6 +153,10 @@ impl ExecutionTrace {
     }
 
     /// Registers a new [`ChaseFact`].
+    ///
+    /// If the fact was not already known then it will return a fresh handle
+    /// with the status `TraceStatus::Known`.
+    /// Otherwise a handle to the existing fact will be returned.
     pub fn register_fact(&mut self, fact: ChaseFact) -> FactTraceHandle {
         if let Some(handle) = self.find_fact(&fact) {
             handle
@@ -164,6 +183,8 @@ impl ExecutionTrace {
 }
 
 impl ExecutionTrace {
+    /// Converts a rule to a string representation
+    /// so it can appear as a node in the ascii representation of the [`ExecutionTrace`].
     fn ascii_format_rule(&self, application: &RuleApplication) -> String {
         let mut rule_applied = self.program.rules()[application.rule_index].clone();
         rule_applied.apply_assignment(
@@ -225,6 +246,108 @@ impl ExecutionTrace {
     }
 }
 
+/// Represents an inference in an [`ExecutionTraceJson`]
+#[derive(Debug, Serialize)]
+struct ExecutionTraceJsonInference {
+    #[serde(rename = "ruleName")]
+    rule_name: String,
+
+    conclusion: String,
+    premises: Vec<String>,
+}
+
+impl ExecutionTraceJsonInference {
+    /// Create a new [`ExecutionTraceJsonInference`]
+    pub fn new(rule_name: String, conclusion: String, premises: Vec<String>) -> Self {
+        Self {
+            rule_name,
+            conclusion,
+            premises,
+        }
+    }
+}
+
+/// Object representing an [`ExecutionTrace`] that can be sertialized into a json format
+#[derive(Debug, Serialize, Default)]
+pub struct ExecutionTraceJson {
+    #[serde(rename = "finalConclusion")]
+    final_conclusions: Vec<String>,
+
+    inferences: Vec<ExecutionTraceJsonInference>,
+}
+
+impl ExecutionTrace {
+    /// Translate an [`TraceDerivation`] into an [`ExecutionTraceJsonInference`].
+    fn json_inference(
+        &self,
+        derivation: &TraceDerivation,
+        conclusion: &ChaseFact,
+    ) -> ExecutionTraceJsonInference {
+        const RULE_NAME_FACT: &str = "Asserted";
+
+        match derivation {
+            TraceDerivation::Input => ExecutionTraceJsonInference::new(
+                String::from(RULE_NAME_FACT),
+                conclusion.to_string(),
+                vec![],
+            ),
+            TraceDerivation::Derived(application, premises_handles) => {
+                let rule = &self.program.rules()[application.rule_index];
+
+                let premises = premises_handles
+                    .iter()
+                    .map(|&handle| self.get_fact(handle).fact.to_string())
+                    .collect();
+
+                ExecutionTraceJsonInference::new(rule.to_string(), conclusion.to_string(), premises)
+            }
+        }
+    }
+
+    /// Create a json representation of the trace.
+    pub fn json(&self, fact_handles: &[FactTraceHandle]) -> ExecutionTraceJson {
+        let mut final_conclusions = Vec::<String>::new();
+        let mut fact_stack = fact_handles.to_vec();
+        let mut inferences = Vec::<ExecutionTraceJsonInference>::new();
+        let mut inferred_conclusions = HashSet::<FactTraceHandle>::new();
+
+        for &final_handle in fact_handles {
+            let mut successful_derivation = true;
+            fact_stack.push(final_handle);
+
+            while let Some(current_fact) = fact_stack.pop() {
+                if inferred_conclusions.contains(&current_fact) {
+                    continue;
+                }
+                inferred_conclusions.insert(current_fact);
+
+                let traced_fact = self.get_fact(current_fact);
+
+                if let TraceStatus::Success(derivation) = &traced_fact.status {
+                    let inference = self.json_inference(derivation, &traced_fact.fact);
+                    inferences.push(inference);
+
+                    if let TraceDerivation::Derived(_, handles_derived) = derivation {
+                        fact_stack.extend(handles_derived);
+                    }
+                } else {
+                    successful_derivation = false;
+                    break;
+                }
+            }
+
+            if successful_derivation {
+                final_conclusions.push(self.get_fact(final_handle).fact.to_string());
+            }
+        }
+
+        ExecutionTraceJson {
+            final_conclusions,
+            inferences,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
@@ -267,8 +390,7 @@ mod test {
         };
     }
 
-    #[test]
-    fn print_trace() {
+    fn test_trace() -> ExecutionTrace {
         // P(?x, ?y) :- Q(?y, ?x) .
         let rule_1 = Rule::new(
             vec![atom!("P"; ?"x", ?"y")],
@@ -386,6 +508,21 @@ mod test {
             )),
         );
 
+        trace
+    }
+
+    #[test]
+    fn trace_ascii() {
+        let trace = test_trace();
+        let r_ba = ChaseFact::new(
+            Identifier("R".to_string()),
+            vec![
+                Constant::Abstract(Identifier("b".to_string())),
+                Constant::Abstract(Identifier("a".to_string())),
+            ],
+        );
+        let trace_r_ba = trace.find_fact(&r_ba).unwrap();
+
         let trace_string = r#" R(b, a) :- P(b, a), S(a) .
  ├─ P(b, a) :- Q(a, b) .
  │  └─ Q(a, b)
@@ -397,5 +534,34 @@ mod test {
             trace.ascii_tree_string(trace_r_ba).unwrap(),
             trace_string.to_string()
         )
+    }
+
+    #[test]
+    fn trace_json() {
+        let trace = test_trace();
+
+        let r_ba = ChaseFact::new(
+            Identifier("R".to_string()),
+            vec![
+                Constant::Abstract(Identifier("b".to_string())),
+                Constant::Abstract(Identifier("a".to_string())),
+            ],
+        );
+        let p_ba = ChaseFact::new(
+            Identifier("P".to_string()),
+            vec![
+                Constant::Abstract(Identifier("b".to_string())),
+                Constant::Abstract(Identifier("a".to_string())),
+            ],
+        );
+
+        let trace_r_ba = trace.find_fact(&r_ba).unwrap();
+        let trace_p_ba = trace.find_fact(&p_ba).unwrap();
+        let trace_handles = vec![trace_r_ba, trace_p_ba];
+
+        let expected_json = r#"{"finalConclusion":["R(b, a)","P(b, a)"],"inferences":[{"ruleName":"R(?x, ?y) :- P(?x, ?y), S(?y) .","conclusion":"R(b, a)","premises":["P(b, a)","S(a)"]},{"ruleName":"S(?x) :- T(?x) .","conclusion":"S(a)","premises":["T(a)"]},{"ruleName":"Asserted","conclusion":"T(a)","premises":[]},{"ruleName":"P(?x, ?y) :- Q(?y, ?x) .","conclusion":"P(b, a)","premises":["Q(a, b)"]},{"ruleName":"Asserted","conclusion":"Q(a, b)","premises":[]}]}"#.to_string();
+        let computed_json = serde_json::to_string(&trace.json(&trace_handles)).unwrap();
+
+        assert_eq!(expected_json, computed_json);
     }
 }

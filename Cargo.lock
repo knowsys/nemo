@@ -1245,6 +1245,8 @@ dependencies = [
  "rio_turtle",
  "rio_xml",
  "sanitise-file-name",
+ "serde",
+ "serde_json",
  "test-log",
  "thiserror",
  "tokio",
@@ -1279,6 +1281,7 @@ dependencies = [
  "log",
  "nemo",
  "predicates",
+ "serde_json",
  "test-log",
 ]
 

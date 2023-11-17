@@ -15,11 +15,6 @@ pub use nemo_physical::error::ReadingError;
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum Error {
-    /// Currently tracing doesn't work for all language features
-    #[error(
-        "Tracing is currently not supported for some rules with arithmetic operations in the head."
-    )]
-    TraceUnsupportedFeature(),
     /// Error which implies a needed Rollback
     #[error("Rollback due to csv-error")]
     Rollback(usize),
@@ -74,6 +69,12 @@ pub enum Error {
     UnknonwUnaryOpertation {
         /// The operation causing the failure
         operation: String,
+    },
+    /// Error while serializing data to a file
+    #[error("Error while serializing data to {filename}.")]
+    SerializationError {
+        /// Name of the file where data could not have been serialized into
+        filename: String,
     },
 }
 
