@@ -357,6 +357,21 @@ impl ChaseProgram {
             }
         }
 
+        for import_spec in self.imports() {
+            match arities.entry(import_spec.predicate().clone()) {
+                std::collections::hash_map::Entry::Occupied(slot) => {
+                    let arity = slot.get();
+
+                    if *arity != import_spec.type_constraint().arity() {
+                        return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(slot) => {
+                    slot.insert(import_spec.type_constraint().arity());
+                }
+            }
+        }
+
         for rule in self.rules() {
             for atom in rule.head() {
                 // check for consistent predicate arities

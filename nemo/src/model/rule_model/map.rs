@@ -50,6 +50,14 @@ impl Map {
         Default::default()
     }
 
+    /// Construct a [Map] containg a single [Key] and [Term].
+    pub fn singleton(key: Key, value: Constant) -> Self {
+        let mut pairs = BTreeMap::new();
+        pairs.insert(key, value);
+
+        Self { pairs }
+    }
+
     /// An iterator over the pairs in the map
     pub fn iter(&self) -> impl Iterator<Item = (&Key, &Constant)> {
         self.pairs.iter()

@@ -91,7 +91,7 @@ use nemo_physical::table_reader::{Resource, TableReader};
 use thiserror::Error;
 
 use crate::model::types::primitive_logical_value::{LogicalFloat64, LogicalInteger, LogicalString};
-use crate::model::{DataSource, DsvFile, Key, Map, TupleConstraint, TypeConstraint};
+use crate::model::{DataSource, DsvFile, Identifier, Key, Map, TupleConstraint, TypeConstraint};
 use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
     error::{Error, ReadingError},
@@ -99,7 +99,10 @@ use crate::{
     model::{Constant, PrimitiveType},
 };
 
-use super::types::{Direction, FileFormat, FileFormatError, FileFormatMeta, TableWriter};
+use super::types::{
+    Direction, ExportSpec, FileFormat, FileFormatError, FileFormatMeta, ImportExportSpec,
+    ImportSpec, TableWriter,
+};
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
 ///
@@ -272,6 +275,68 @@ impl DSVFormat {
         Self {
             delimiter: Some(delimiter),
         }
+    }
+
+    /// Construct a CSV file format.
+    pub fn csv() -> Self {
+        Self::with_delimiter(b',')
+    }
+
+    /// Construct a TSV file format.
+    pub fn tsv() -> Self {
+        Self::with_delimiter(b'\t')
+    }
+
+    fn try_into_import_export(
+        mut self,
+        direction: Direction,
+        resource: Resource,
+        predicate: Identifier,
+        declared_types: TupleConstraint,
+    ) -> Result<ImportExportSpec, FileFormatError> {
+        let attributes = Map::singleton(
+            Key::identifier_from_str(RESOURCE),
+            Constant::StringLiteral(resource),
+        );
+        let constraint =
+            self.validated_and_refined_type_declaration(direction, &attributes, declared_types)?;
+
+        Ok(ImportExportSpec {
+            predicate,
+            constraint,
+            attributes,
+            format: Box::new(self),
+        })
+    }
+
+    /// Obtain an [ImportSpec] for this format.
+    pub fn try_into_import(
+        mut self,
+        resource: Resource,
+        predicate: Identifier,
+        declared_types: TupleConstraint,
+    ) -> Result<ImportSpec, FileFormatError> {
+        Ok(ImportSpec::from(self.try_into_import_export(
+            Direction::Reading,
+            resource,
+            predicate,
+            declared_types,
+        )?))
+    }
+
+    /// Obtain an [ExportSpec] for this format.
+    pub fn try_into_export(
+        self,
+        resource: Resource,
+        predicate: Identifier,
+        declared_types: TupleConstraint,
+    ) -> Result<ExportSpec, FileFormatError> {
+        Ok(ExportSpec::from(self.try_into_import_export(
+            Direction::Writing,
+            resource,
+            predicate,
+            declared_types,
+        )?))
     }
 }
 

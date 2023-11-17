@@ -29,8 +29,10 @@ pub(crate) mod sparql;
 pub(crate) mod turtle;
 pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
-use super::formats::types::{
-    Direction, ExportSpec, FileFormat, FileFormatError, ImportExportSpec, ImportSpec,
+use super::formats::{
+    dsv::DSVFormat,
+    rdf_triples::RDFFormat,
+    types::{Direction, ExportSpec, FileFormat, FileFormatError, ImportExportSpec, ImportSpec},
 };
 
 /// Parse a program in the given `input`-String and return a [`Program`].
@@ -305,8 +307,6 @@ pub struct RuleParser<'a> {
     base: RefCell<Option<&'a str>>,
     /// A map from Prefixes to IRIs.
     prefixes: RefCell<HashMap<&'a str, &'a str>>,
-    /// The external data sources.
-    sources: RefCell<Vec<DataSourceDeclaration>>,
     /// Declarations of predicates with their types.
     predicate_declarations: RefCell<HashMap<Identifier, Vec<PrimitiveType>>>,
     /// Number counting up for generating distinct wildcards.
@@ -487,9 +487,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a data source declaration.
-    pub fn parse_source(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<DataSourceDeclaration> {
+    pub fn parse_source(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportSpec> {
         traced(
             "parse_source",
             map_error(
@@ -509,10 +507,11 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(NativeDataSource::DsvFile(DsvFile::csv_file(
-                                        &filename,
+                                    Ok(DSVFormat::csv().try_into_import(
+                                        filename.to_string(),
+                                        predicate.clone(),
                                         tuple_constraint.clone(),
-                                    )))
+                                    )?)
                                 },
                             ),
                             map(
@@ -522,10 +521,11 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(NativeDataSource::DsvFile(DsvFile::tsv_file(
-                                        &filename,
+                                    Ok(DSVFormat::tsv().try_into_import(
+                                        filename.to_string(),
+                                        predicate.clone(),
                                         tuple_constraint.clone(),
-                                    )))
+                                    )?)
                                 },
                             ),
                             map(
@@ -535,12 +535,12 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(NativeDataSource::RdfFile(RdfFile::new_validated(
-                                        &filename,
-                                        self.base().map(String::from),
-                                        &predicate,
+                                    Ok(RDFFormat::new().try_into_import(
+                                        filename.to_string(),
+                                        predicate.clone(),
                                         tuple_constraint.clone(),
-                                    )?))
+                                        self.base().map(String::from),
+                                    )?)
                                 },
                             ),
                             map(
@@ -557,14 +557,8 @@ impl<'a> RuleParser<'a> {
                                     )),
                                     self.parse_close_parenthesis(),
                                 ),
-                                |(endpoint, projection, query)| {
-                                    Ok(NativeDataSource::SparqlQuery(SparqlQuery::new_validated(
-                                        endpoint.name(),
-                                        projection.to_string(),
-                                        query.to_string(),
-                                        &predicate,
-                                        tuple_constraint.clone(),
-                                    )?))
+                                |(_endpoint, _projection, _query)| {
+                                    Err(ParseError::UnsupportedSparqlSource(predicate.clone().0))
                                 },
                             ),
                         )),
@@ -573,12 +567,9 @@ impl<'a> RuleParser<'a> {
                         remainder
                     )?;
 
-                    let source = DataSourceDeclaration::new(
-                        predicate,
-                        datasource.map_err(|e| Err::Failure(e.at(input)))?,
-                    );
+                    let spec = datasource.map_err(|e| Err::Failure(e.at(input)))?;
 
-                    Ok((remainder, source))
+                    Ok((remainder, spec))
                 },
                 || ParseError::ExpectedDataSourceDeclaration,
             ),
@@ -1365,14 +1356,13 @@ impl<'a> RuleParser<'a> {
 
             let mut statements = Vec::new();
             let mut output_predicates = Vec::new();
+            let mut sources = Vec::new();
             let mut imports = Vec::new();
             let mut exports = Vec::new();
 
             let (remainder, _) = many0(alt((
                 map(self.parse_predicate_declaration(), |_| ()),
-                map(self.parse_source(), |source| {
-                    self.sources.borrow_mut().push(source)
-                }),
+                map(self.parse_source(), |source| sources.push(source)),
                 map(self.parse_import(), |import| imports.push(import)),
                 map(self.parse_export(), |export| exports.push(export)),
                 map(self.parse_statement(), |statement| {
@@ -1409,7 +1399,7 @@ impl<'a> RuleParser<'a> {
 
             let mut program_builder = Program::builder()
                 .prefixes(prefixes)
-                .sources(self.sources.borrow().clone())
+                .imports(sources)
                 .imports(imports)
                 .exports(exports)
                 .rules(rules)
@@ -1531,51 +1521,55 @@ mod test {
         let file = "drinks.csv";
         let predicate_name = "drink";
         let predicate = Identifier(predicate_name.to_string());
-        let default_source = DataSourceDeclaration::new(
-            predicate.clone(),
-            NativeDataSource::DsvFile(DsvFile::csv_file(file, TupleConstraint::from_arity(1))),
-        );
-        let any_and_int_source = DataSourceDeclaration::new(
-            predicate.clone(),
-            NativeDataSource::DsvFile(DsvFile::csv_file(
-                file,
+        let default_import = DSVFormat::csv()
+            .try_into_import(
+                file.to_string(),
+                predicate.clone(),
+                TupleConstraint::from_arity(1),
+            )
+            .unwrap();
+
+        let any_and_int_import = DSVFormat::csv()
+            .try_into_import(
+                file.to_string(),
+                predicate.clone(),
                 [
                     TypeConstraint::AtLeast(PrimitiveType::Any),
                     TypeConstraint::AtLeast(PrimitiveType::Integer),
                 ]
                 .into_iter()
                 .collect(),
-            )),
-        );
+            )
+            .unwrap();
 
-        let single_string_source = DataSourceDeclaration::new(
-            predicate,
-            NativeDataSource::DsvFile(DsvFile::csv_file(
-                file,
+        let single_string_import = DSVFormat::csv()
+            .try_into_import(
+                file.to_string(),
+                predicate,
                 [TypeConstraint::AtLeast(PrimitiveType::String)]
                     .into_iter()
                     .collect(),
-            )),
-        );
+            )
+            .unwrap();
 
         // rulewerk accepts all of these variants
         let input = format!(r#"@source {predicate_name}[1]: load-csv("{file}") ."#);
-        assert_parse!(parser.parse_source(), &input, default_source);
+        assert_parse!(parser.parse_source(), &input, default_import);
         let input = format!(r#"@source {predicate_name}[1] : load-csv("{file}") ."#);
-        assert_parse!(parser.parse_source(), &input, default_source);
+        assert_parse!(parser.parse_source(), &input, default_import);
         let input = format!(r#"@source {predicate_name}[1] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, default_source);
+        assert_parse!(parser.parse_source(), &input, default_import);
         let input = format!(r#"@source {predicate_name} [1] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, default_source);
+        assert_parse!(parser.parse_source(), &input, default_import);
         let input = format!(r#"@source {predicate_name}[string]: load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, single_string_source);
+        assert_parse!(parser.parse_source(), &input, single_string_import);
         let input = format!(r#"@source {predicate_name} [string] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, single_string_source);
+        assert_parse!(parser.parse_source(), &input, single_string_import);
         let input = format!(r#"@source {predicate_name}[any, integer]: load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, any_and_int_source);
+        assert_parse!(parser.parse_source(), &input, any_and_int_import);
         let input =
             format!(r#"@source {predicate_name} [any  ,  integer] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, any_and_int_source);
+        assert_parse!(parser.parse_source(), &input, any_and_int_import);
     }
 
     #[test]

@@ -121,6 +121,9 @@ pub enum ParseError {
     /// An external error during parsing.
     #[error(transparent)]
     ExternalError(#[from] Box<crate::error::Error>),
+    /// An error related to a file format.
+    #[error(transparent)]
+    FileFormatError(#[from] FileFormatError),
     /// A syntax error. Note that we cannot take [&'a str] here, as
     /// bounds on [std::error::Error] require ['static] lifetime.
     #[error("Syntax error: {0}")]
@@ -173,6 +176,9 @@ pub enum ParseError {
         r#"SPARQL data source for predicate "{0}" has arity {1}, but {2} variables are given"#
     )]
     SparqlSourceInvalidArity(String, usize, usize),
+    /// SPARQL query data sources are currently not supported.
+    #[error(r#"SPARQL data source for predicate "{0}" is not yet implemented."#)]
+    UnsupportedSparqlSource(String),
     /// Unknown logical type name in program.
     #[error(
         "A predicate declaration used an unknown type ({0}). The known types are: {}",
