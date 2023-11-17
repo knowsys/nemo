@@ -67,10 +67,14 @@ impl NemoProgram {
     }
 
     #[wasm_bindgen(js_name = "getSourceResources")]
-    pub fn source_resources(&self) -> Set {
+    pub fn imports_resources(&self) -> Set {
         let set = Set::new(&JsValue::undefined());
 
-        for resource in self.0.sources().flat_map(DataSourceDeclaration::resources) {
+        for resource in self
+            .0
+            .imports()
+            .flat_map(nemo::io::formats::types::ImportSpec::resources)
+        {
             set.add(&JsValue::from(resource));
         }
 

@@ -325,7 +325,6 @@ impl TryFrom<Program> for ChaseProgram {
     fn try_from(program: Program) -> Result<Self, Error> {
         let mut builder = Self::builder()
             .prefixes(program.prefixes().clone())
-            .sources(program.sources().cloned())
             .imports(program.imports().cloned())
             .exports(program.exports().cloned())
             .rules(

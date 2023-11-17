@@ -1,14 +1,11 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-};
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     io::formats::types::{ExportSpec, ImportSpec},
     model::PrimitiveType,
 };
 
-use super::{Atom, DataSourceDeclaration, Identifier, QualifiedPredicateName, Rule};
+use super::{Atom, Identifier, QualifiedPredicateName, Rule};
 
 /// A (ground) fact.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -49,21 +46,11 @@ impl From<Vec<QualifiedPredicateName>> for OutputPredicateSelection {
     }
 }
 
-/// A directive that can occur in the program.
-#[derive(Debug)]
-pub enum Directive {
-    /// Import another source file.
-    Import(Box<Path>),
-    /// Import another source file with a relative path.
-    ImportRelative(Box<Path>),
-}
-
 /// A full program.
 #[derive(Debug, Default, Clone)]
 pub struct Program {
     base: Option<String>,
     prefixes: HashMap<String, String>,
-    sources: Vec<DataSourceDeclaration>,
     imports: Vec<ImportSpec>,
     exports: Vec<ExportSpec>,
     rules: Vec<Rule>,
@@ -107,21 +94,6 @@ impl ProgramBuilder {
         T: IntoIterator<Item = (String, String)>,
     {
         self.program.prefixes.extend(prefixes);
-        self
-    }
-
-    /// Add a data source.
-    pub fn source(mut self, source: DataSourceDeclaration) -> Self {
-        self.program.sources.push(source);
-        self
-    }
-
-    /// Add data sources.
-    pub fn sources<T>(mut self, sources: T) -> Self
-    where
-        T: IntoIterator<Item = DataSourceDeclaration>,
-    {
-        self.program.sources.extend(sources);
         self
     }
 
@@ -325,11 +297,6 @@ impl Program {
     #[must_use]
     pub fn prefixes(&self) -> &HashMap<String, String> {
         &self.prefixes
-    }
-
-    /// Return all data sources in the program.
-    pub fn sources(&self) -> impl Iterator<Item = &DataSourceDeclaration> {
-        self.sources.iter()
     }
 
     /// Return all imports in the program.

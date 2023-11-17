@@ -265,7 +265,7 @@ impl RDFFormat {
 
     /// Obtain an [ImportSpec] for this format.
     pub fn try_into_import(
-        mut self,
+        self,
         resource: Resource,
         predicate: Identifier,
         declared_types: TupleConstraint,
@@ -282,7 +282,7 @@ impl RDFFormat {
 
     /// Obtain an [ExportSpec] for this format.
     pub fn try_into_export(
-        mut self,
+        self,
         resource: Resource,
         predicate: Identifier,
         declared_types: TupleConstraint,
@@ -332,6 +332,18 @@ impl FileFormatMeta for RDFFormat {
 
     fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
         Err(FileFormatError::UnsupportedWrite(FileFormat::RDF).into())
+    }
+
+    fn resources(&self, attributes: &Map) -> Vec<Resource> {
+        vec![self.resource.clone().unwrap_or(
+            attributes
+                .pairs
+                .get(&Key::identifier_from_str(RESOURCE))
+                .expect("is a required attribute")
+                .as_resource()
+                .expect("must be a string or an IRI")
+                .to_string(),
+        )]
     }
 
     fn optional_attributes(&self, _direction: Direction) -> HashSet<Key> {

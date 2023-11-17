@@ -311,7 +311,7 @@ impl DSVFormat {
 
     /// Obtain an [ImportSpec] for this format.
     pub fn try_into_import(
-        mut self,
+        self,
         resource: Resource,
         predicate: Identifier,
         declared_types: TupleConstraint,
@@ -426,6 +426,16 @@ impl FileFormatMeta for DSVFormat {
 
     fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
         Err(FileFormatError::UnsupportedWrite(FileFormat::DSV).into())
+    }
+
+    fn resources(&self, attributes: &Map) -> Vec<Resource> {
+        vec![attributes
+            .pairs
+            .get(&Key::identifier_from_str(RESOURCE))
+            .expect("is a required attribute")
+            .as_resource()
+            .expect("must be a string or an IRI")
+            .to_string()]
     }
 
     fn optional_attributes(&self, _direction: Direction) -> HashSet<Key> {
