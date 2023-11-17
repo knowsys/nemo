@@ -8,6 +8,7 @@ homepage.workspace = true
 license.workspace = true
 readme = "README.md"
 repository.workspace = true
+default-run = "nmo"
 
 [[bin]]
 name = "nmo"

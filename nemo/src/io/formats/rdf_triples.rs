@@ -29,7 +29,7 @@ use crate::{
     },
     model::{
         types::primitive_types::PrimitiveType, Constant, Identifier, InvalidRdfLiteral, Key, Map,
-        RdfFile, RdfLiteral, TupleConstraint,
+        RdfLiteral, TupleConstraint,
     },
 };
 
@@ -96,7 +96,7 @@ impl TryFrom<rio_api::model::Term<'_>> for Constant {
 
 /// A [`TableReader`] for RDF 1.1 files containing triples.
 #[derive(Debug, Clone)]
-pub struct RDFTriplesReader {
+pub(crate) struct RDFTriplesReader {
     resource_providers: ResourceProviders,
     resource: Resource,
     base: Option<Iri<String>>,
@@ -107,17 +107,14 @@ impl RDFTriplesReader {
     /// Create a new [`RDFTriplesReader`]
     pub fn new(
         resource_providers: ResourceProviders,
-        rdf_file: &RdfFile,
+        resource: Resource,
+        base: Option<String>,
         logical_types: Vec<PrimitiveType>,
     ) -> Self {
         Self {
             resource_providers,
-            resource: rdf_file.resource.clone(),
-            base: rdf_file
-                .base
-                .as_ref()
-                .cloned()
-                .map(|iri| Iri::parse(iri).expect("should be a valid IRI.")),
+            resource,
+            base: base.map(|iri| Iri::parse(iri).expect("should be a valid IRI.")),
             logical_types,
         }
     }
@@ -222,11 +219,11 @@ const BASE: &str = "base";
 
 /// File formats for RDF.
 #[derive(Debug, Default, Clone)]
-pub struct RDFFormat {
+pub struct RDFTriplesFormat {
     resource: Option<Resource>,
 }
 
-impl RDFFormat {
+impl RDFTriplesFormat {
     /// Construct new RDF file format metadata.
     pub fn new() -> Self {
         Default::default()
@@ -298,7 +295,7 @@ impl RDFFormat {
     }
 }
 
-impl FileFormatMeta for RDFFormat {
+impl FileFormatMeta for RDFTriplesFormat {
     fn file_format(&self) -> FileFormat {
         todo!()
     }
@@ -318,14 +315,11 @@ impl FileFormatMeta for RDFFormat {
             .pairs
             .get(&Key::identifier_from_str(BASE))
             .map(|term| term.as_abstract().expect("must be an identifier").name());
-        let rdf_file = RdfFile::new(
-            self.resource.as_ref().expect("is a required attribute"),
-            base,
-        );
 
         Ok(Box::new(RDFTriplesReader::new(
             resource_providers,
-            &rdf_file,
+            self.resource.clone().expect("is a required attribute"),
+            base,
             inferred_types,
         )))
     }
@@ -446,7 +440,7 @@ mod test {
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                 ];
-                let reader = RDFTriplesReader::new(ResourceProviders::empty(), &RdfFile::new("", None), vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
+                let reader = RDFTriplesReader::new(ResourceProviders::empty(), String::new(), None, vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
 
                 let result = reader.read_with_parser(&mut builders, $make_parser);
                 assert!(result.is_ok());
@@ -515,7 +509,8 @@ mod test {
         ];
         let reader = RDFTriplesReader::new(
             ResourceProviders::empty(),
-            &RdfFile::new("", None),
+            String::new(),
+            None,
             vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
         );
 

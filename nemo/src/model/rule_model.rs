@@ -6,9 +6,6 @@ pub use aggregate::*;
 mod atom;
 pub use atom::*;
 
-mod datasource;
-pub use datasource::*;
-
 mod literal;
 pub use literal::*;
 

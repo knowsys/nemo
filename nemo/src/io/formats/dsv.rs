@@ -1,85 +1,4 @@
 //! Reading of delimiter-separated value files
-//!
-//! This module provides [`DSVReader`], a [`TableReader`] that can parse DSV (delimiter-separated value) files.
-//! It is typically instantiated by the logical layer with the logical types corresponding to each column in the file.
-//! The physical layer then passes in [physical builder proxies][nemo_physical::builder_proxy::PhysicalColumnBuilderProxy]
-//! that convert the read data into the appropriate storage types.
-//!
-//! # Examples
-//! On the logical layer, the [`DSVReader`] is created.
-//! The following examples use this csv-file, which is representing a tuple with one string (logical any) and one number (logical integer) terms.
-//! ```csv
-//! Boston,654776
-//! Dresden,554649
-//! ```
-//! This file can be found in the current repository at `resources/doc/examples/city_population.csv`
-//! ## Logical layer
-//! ```
-//! # use nemo_physical::table_reader::TableReader;
-//! # use nemo::{model::{DsvFile, PrimitiveType, TypeConstraint}, io::{resource_providers::ResourceProviders, formats::DSVReader}};
-//! # let file_path = String::from("../resources/doc/examples/city_population.csv");
-//! let csv_reader = DSVReader::dsv(
-//!     ResourceProviders::default(),
-//!     &DsvFile::csv_file(
-//!         &file_path,
-//!         [PrimitiveType::Any, PrimitiveType::Integer]
-//!             .into_iter()
-//!             .map(TypeConstraint::AtLeast)
-//!             .collect(),
-//!     ),
-//!     vec![
-//!         PrimitiveType::Any,
-//!         PrimitiveType::Integer,
-//!     ],
-//! );
-//! // Pack the csv_reader into a [`TableReader`] trait object for the physical layer
-//! let table_reader: Box<dyn TableReader> = Box::new(csv_reader);
-//! ```
-//!
-//! The example first creates a [`DSVReader`] which uses a comma as its separator.
-//! It passes the reader to the physical layer as a [`TableReader`] object.
-//!
-//! ## Physical layer
-//! The physical layer receives `table_reader`, the [`TableReader`] trait object from the example above.
-//! ```
-//! # use nemo_physical::table_reader::TableReader;
-//! #
-//! # use nemo::{model::{DsvFile, PrimitiveType, TypeConstraint}, io::{resource_providers::ResourceProviders, formats::DSVReader}};
-//! # use std::cell::RefCell;
-//! # use nemo_physical::builder_proxy::{
-//! #    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
-//! # };
-//! # #[cfg(miri)]
-//! # fn main() {}
-//! # #[cfg(not(miri))]
-//! # fn main() {
-//! # let file_path = String::from("resources/doc/examples/city_population.csv");
-//! #
-//! # let csv_reader = DSVReader::dsv(
-//! #     ResourceProviders::default(),
-//! #     &DsvFile::csv_file(
-//! #         &file_path,
-//! #         [PrimitiveType::Any, PrimitiveType::Integer]
-//! #             .into_iter()
-//! #             .map(TypeConstraint::AtLeast)
-//! #             .collect(),
-//! #     ),
-//! #     vec![
-//! #         PrimitiveType::Any,
-//! #         PrimitiveType::Integer,
-//! #     ],
-//! # );
-//! # let table_reader:Box<dyn TableReader> = Box::new(csv_reader);
-//! # let mut dict = RefCell::new(nemo_physical::management::database::Dict::default());
-//! let mut builder = vec![
-//!     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-//!     PhysicalBuilderProxyEnum::I64(Default::default()),
-//! ];
-//! // Read the data into the builder
-//! let result = table_reader.read_into_builder_proxies(&mut builder);
-//! let columns = builder.into_iter().map(|bp| bp.finalize()).collect::<Vec<_>>();
-//! # }
-//! ```
 
 use std::collections::HashSet;
 use std::io::Read;
@@ -91,7 +10,7 @@ use nemo_physical::table_reader::{Resource, TableReader};
 use thiserror::Error;
 
 use crate::model::types::primitive_logical_value::{LogicalFloat64, LogicalInteger, LogicalString};
-use crate::model::{DataSource, DsvFile, Identifier, Key, Map, TupleConstraint, TypeConstraint};
+use crate::model::{Identifier, Key, Map, TupleConstraint, TypeConstraint};
 use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
     error::{Error, ReadingError},
@@ -116,7 +35,7 @@ use super::types::{
 /// with the data from the file.
 /// It combines the logical and physical BuilderProxies to handle the read data according to both datatype models.
 #[derive(Debug)]
-pub struct DSVReader {
+pub(crate) struct DSVReader {
     resource_providers: ResourceProviders,
     resource: Resource,
     delimiter: u8,
@@ -127,18 +46,20 @@ pub struct DSVReader {
 
 impl DSVReader {
     /// Instantiate a [DSVReader] for a given delimiter
-    pub fn dsv(
+    pub fn new(
         resource_providers: ResourceProviders,
-        dsv_file: &DsvFile,
+        resource: Resource,
+        delimiter: u8,
+        input_type_constraint: TupleConstraint,
         logical_types: Vec<PrimitiveType>,
     ) -> Self {
         Self {
             resource_providers,
-            resource: dsv_file.resource.clone(),
-            delimiter: dsv_file.delimiter,
+            resource,
+            delimiter,
             escape: b'\\',
             logical_types,
-            input_type_constraint: dsv_file.input_types(),
+            input_type_constraint,
         }
     }
 
@@ -415,11 +336,12 @@ impl FileFormatMeta for DSVFormat {
             .clone()
             .into_flat_primitive()
             .expect("must be flat and primitive");
-        let dsv_file = DsvFile::new(resource, delimiter, declared_types.clone());
 
-        Ok(Box::new(DSVReader::dsv(
+        Ok(Box::new(DSVReader::new(
             resource_providers,
-            &dsv_file,
+            resource.to_string(),
+            delimiter,
+            declared_types.clone(),
             inferred_types,
         )))
     }
@@ -530,15 +452,11 @@ Boston;United States;4628910
             .from_reader(data.as_bytes());
 
         let mut dict = std::cell::RefCell::new(Dict::default());
-        let csvreader = DSVReader::dsv(
+        let csvreader = DSVReader::new(
             ResourceProviders::empty(),
-            &DsvFile::csv_file(
-                "test",
-                [PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]
-                    .into_iter()
-                    .map(TypeConstraint::AtLeast)
-                    .collect(),
-            ),
+            "test".to_string(),
+            b',',
+            TupleConstraint::at_least([PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]),
             vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
         );
         let mut builder = vec![
@@ -623,20 +541,16 @@ The next 2 columns are empty;;;789
             .from_reader(data.as_bytes());
 
         let mut dict = std::cell::RefCell::new(Dict::default());
-        let csvreader = DSVReader::dsv(
+        let csvreader = DSVReader::new(
             ResourceProviders::empty(),
-            &DsvFile::csv_file(
-                "test",
-                [
-                    PrimitiveType::Any,
-                    PrimitiveType::Any,
-                    PrimitiveType::String,
-                    PrimitiveType::Integer,
-                ]
-                .into_iter()
-                .map(TypeConstraint::AtLeast)
-                .collect(),
-            ),
+            "test".to_string(),
+            b',',
+            TupleConstraint::at_least([
+                PrimitiveType::Any,
+                PrimitiveType::Any,
+                PrimitiveType::String,
+                PrimitiveType::Integer,
+            ]),
             vec![
                 PrimitiveType::Any,
                 PrimitiveType::Any,
@@ -730,22 +644,18 @@ node03;123;123;13;55;123;invalid
             .from_reader(data.as_bytes());
 
         let dict = std::cell::RefCell::new(Dict::default());
-        let csvreader: DSVReader = DSVReader::dsv(
+        let csvreader: DSVReader = DSVReader::new(
             ResourceProviders::empty(),
-            &DsvFile::csv_file(
-                "test",
-                [
-                    PrimitiveType::Any,
-                    PrimitiveType::Integer,
-                    PrimitiveType::Float64,
-                    PrimitiveType::Float64,
-                    PrimitiveType::Integer,
-                    PrimitiveType::Any,
-                ]
-                .into_iter()
-                .map(TypeConstraint::AtLeast)
-                .collect(),
-            ),
+            "test".to_string(),
+            b',',
+            TupleConstraint::at_least([
+                PrimitiveType::Any,
+                PrimitiveType::Integer,
+                PrimitiveType::Float64,
+                PrimitiveType::Float64,
+                PrimitiveType::Integer,
+                PrimitiveType::Any,
+            ]),
             vec![
                 PrimitiveType::Any,
                 PrimitiveType::Integer,
@@ -813,20 +723,16 @@ node03;123;123;13;55;123;invalid
             .delimiter(b',')
             .has_headers(false)
             .from_reader(csv.as_bytes());
-        let csvreader = DSVReader::dsv(
+        let csvreader = DSVReader::new(
             ResourceProviders::empty(),
-            &DsvFile::csv_file(
-                "test",
-                [
-                    PrimitiveType::Integer,
-                    PrimitiveType::Float64,
-                    PrimitiveType::Integer,
-                    PrimitiveType::Float64,
-                ]
-                .into_iter()
-                .map(TypeConstraint::AtLeast)
-                .collect(),
-            ),
+            "test".to_string(),
+            b',',
+            TupleConstraint::at_least([
+                PrimitiveType::Integer,
+                PrimitiveType::Float64,
+                PrimitiveType::Integer,
+                PrimitiveType::Float64,
+            ]),
             vec![
                 PrimitiveType::Integer,
                 PrimitiveType::Float64,
