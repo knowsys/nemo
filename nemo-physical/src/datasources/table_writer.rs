@@ -57,20 +57,6 @@ fn compare_storage_type_names(first: &StorageTypeName, second: &StorageTypeName)
     }
 }
 
-/// TODO add tests!
-fn compare_vectors_of_storage_type_names(
-    first: &Vec<StorageTypeName>,
-    second: &Vec<StorageTypeName>,
-) -> Ordering {
-    for i in 0..first.len() - 1 {
-        let ordering = compare_storage_type_names(&first[i], &second[i]);
-        if ordering != Ordering::Equal {
-            return ordering;
-        }
-    }
-    Ordering::Equal
-}
-
 /// The [`ColumnWriter`] is used to send the data of a single table column to the database. The interface
 /// allows values to be added one by one, and also provides some functionality for rolling back the last value,
 /// which is convenient when writing whole tuples
@@ -181,13 +167,24 @@ impl<'a> TableWriter<'a> {
     /// TODO add tests!
     fn get_tables(&self) -> impl Iterator<Item = usize> {
         let mut table_idxs = (0..self.tables.len()).collect::<Vec<usize>>();
-        table_idxs.sort_by(|i, j| {
-            compare_vectors_of_storage_type_names(
-                &self.tables[*i].col_types,
-                &self.tables[*j].col_types,
-            )
-        });
+        table_idxs.sort_by(|i, j| self.compare_vectors_of_storage_type_names(&i,&j));
         table_idxs.into_iter()
+    }
+
+    /// Given two table idxs, returns how the first compares to the second
+    //TODO add tests!
+    fn compare_vectors_of_storage_type_names(&self, first_table_idx: &usize, second_table_idx: &usize) -> Ordering {
+        let first = &self.tables[*first_table_idx];
+        let second = &self.tables[*second_table_idx];
+        assert_eq!(first.col_types.len(), second.col_types.len());
+
+        for i in 0..first.col_types.len() - 1 {
+            let ordering = compare_storage_type_names(&first.col_types[i],&second.col_types[i]);
+            if ordering != Ordering::Equal {
+                return ordering;
+            }
+        }
+        Ordering::Equal
     }
 
     /// Returns an iterator of the sorted indexes rows within a [`TableWriter::tables`]
@@ -198,6 +195,7 @@ impl<'a> TableWriter<'a> {
         row_idxs.into_iter()
     }
 
+    /// Given a table idx, row ids first and second, returns how first compares to the second row
     fn compare_rows_within_table(
         &self,
         table_idx: usize,
