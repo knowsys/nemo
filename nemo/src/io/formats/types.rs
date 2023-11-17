@@ -5,7 +5,7 @@ use std::{collections::HashSet, path::PathBuf, str::FromStr};
 use dyn_clone::DynClone;
 use thiserror::Error;
 
-use nemo_physical::table_reader::TableReader;
+use nemo_physical::table_reader::{Resource, TableReader};
 
 use crate::{
     error::Error,
@@ -50,6 +50,9 @@ pub trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
 
     /// Obtain a [`TableWriter`] for this format, if supported.
     fn writer(&self, attributes: &Map) -> Result<Box<dyn TableWriter>, Error>;
+
+    /// Obtain all resources used for this format.
+    fn resources(&self, attributes: &Map) -> Vec<Resource>;
 
     /// Attributes that are valid for this format, but not required.
     fn optional_attributes(&self, direction: Direction) -> HashSet<Key>;
@@ -193,6 +196,11 @@ impl ImportSpec {
     pub fn attributes(&self) -> &Map {
         &self.0.attributes
     }
+
+    /// Return the used resources.
+    pub fn resources(&self) -> Vec<Resource> {
+        self.0.format.resources(&self.0.attributes)
+    }
 }
 
 impl From<ImportExportSpec> for ImportSpec {
@@ -229,6 +237,11 @@ impl ExportSpec {
     /// Return the attributes.
     pub fn attributes(&self) -> &Map {
         &self.0.attributes
+    }
+
+    /// Return the used resources.
+    pub fn resources(&self) -> Vec<Resource> {
+        self.0.format.resources(&self.0.attributes)
     }
 }
 
