@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::model::{
     chase_model::{ChaseAtom, ChaseFact},
-    Constant, Identifier, PrimitiveTerm, PrimitiveType, Program, Term, Variable,
+    Constant, Identifier, PrimitiveTerm, PrimitiveType, Program, Rule, Term, Variable,
 };
 
 /// Index of a rule within a [`Program`]
@@ -179,6 +179,60 @@ impl ExecutionTrace {
     /// Update the [`TraceStatus`] of a given fact identified by its [`FactTraceHandle`].
     pub fn update_status(&mut self, handle: FactTraceHandle, status: TraceStatus) {
         self.get_fact_mut(handle).status = status;
+    }
+}
+
+/// Represents the application of a rule to derive a specific fact
+#[derive(Debug, Clone)]
+pub struct ExecutionTraceRuleApplication {
+    /// Rule that was applied
+    pub rule: Rule,
+    /// Variable assignment used during the rule application
+    pub assignment: HashMap<Variable, Constant>,
+    /// Index of the head atom which produced the fact under consideration
+    _position: usize,
+}
+
+/// Tree representation of an [`ExecutionTrace`] from a given start node
+#[derive(Debug, Clone)]
+pub enum ExecutionTraceTree {
+    /// Node represent a fact in the initial data base
+    Fact(ChaseFact),
+    /// Node represents a derived fact
+    Rule(ExecutionTraceRuleApplication, Vec<ExecutionTraceTree>),
+}
+
+impl ExecutionTrace {
+    /// Return a [`ExecutionTraceTree`] representation of an [`ExecutionTrace`]
+    /// starting from a given fact.
+    pub fn tree(&self, fact_handle: FactTraceHandle) -> Option<ExecutionTraceTree> {
+        let traced_fact = self.get_fact(fact_handle);
+
+        if let TraceStatus::Success(derivation) = &traced_fact.status {
+            match derivation {
+                TraceDerivation::Input => Some(ExecutionTraceTree::Fact(traced_fact.fact.clone())),
+                TraceDerivation::Derived(application, subderivations) => {
+                    let mut subtrees = Vec::new();
+                    for &derivation in subderivations {
+                        if let Some(tree) = self.tree(derivation) {
+                            subtrees.push(tree);
+                        } else {
+                            return None;
+                        }
+                    }
+
+                    let tree_application = ExecutionTraceRuleApplication {
+                        rule: self.program.rules()[application.rule_index].clone(),
+                        assignment: application.assignment.clone(),
+                        _position: application._position,
+                    };
+
+                    Some(ExecutionTraceTree::Rule(tree_application, subtrees))
+                }
+            }
+        } else {
+            None
+        }
     }
 }
 

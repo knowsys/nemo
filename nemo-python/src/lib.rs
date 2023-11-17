@@ -5,7 +5,7 @@ use std::{
 
 use nemo::{
     datatypes::Double,
-    execution::{tracing::trace::ExecutionTrace, ExecutionEngine},
+    execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
     io::{resource_providers::ResourceProviders, OutputFileManager, RecordWriter},
     model::{
         chase_model::{ChaseAtom, ChaseFact},
@@ -201,14 +201,14 @@ impl NemoFact {
 }
 
 #[pyclass]
-struct NemoTrace(ExecutionTrace);
+struct NemoTrace(ExecutionTraceTree);
 
 #[pymethods]
 impl NemoTrace {
     fn subtraces(&self) -> Option<Vec<NemoTrace>> {
         match &self.0 {
-            ExecutionTrace::Fact(_) => None,
-            ExecutionTrace::Rule(_, subtraces) => {
+            ExecutionTraceTree::Fact(_) => None,
+            ExecutionTraceTree::Rule(_, subtraces) => {
                 Some(subtraces.iter().map(|t| NemoTrace(t.clone())).collect())
             }
         }
@@ -216,22 +216,22 @@ impl NemoTrace {
 
     fn fact(&self) -> Option<NemoFact> {
         match &self.0 {
-            ExecutionTrace::Fact(f) => Some(NemoFact(f.clone())),
-            ExecutionTrace::Rule(_, _) => None,
+            ExecutionTraceTree::Fact(f) => Some(NemoFact(f.clone())),
+            ExecutionTraceTree::Rule(_, _) => None,
         }
     }
 
     fn rule(&self) -> Option<String> {
         match &self.0 {
-            ExecutionTrace::Fact(_) => None,
-            ExecutionTrace::Rule(application, _) => Some(application.rule.to_string()),
+            ExecutionTraceTree::Fact(_) => None,
+            ExecutionTraceTree::Rule(application, _) => Some(application.rule.to_string()),
         }
     }
 
     fn assignement(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
         match &self.0 {
-            ExecutionTrace::Fact(_) => Ok(None),
-            ExecutionTrace::Rule(application, _) => {
+            ExecutionTraceTree::Fact(_) => Ok(None),
+            ExecutionTraceTree::Rule(application, _) => {
                 Ok(Some(assignement_to_dict(&application.assignment, py)?))
             }
         }
@@ -251,11 +251,11 @@ fn assignement_to_dict(assignment: &HashMap<Variable, Constant>, py: Python) -> 
     Ok(dict.to_object(py))
 }
 
-fn trace_to_dict(trace: &ExecutionTrace, py: Python) -> PyResult<PyObject> {
+fn trace_to_dict(trace: &ExecutionTraceTree, py: Python) -> PyResult<PyObject> {
     let result = PyDict::new(py);
     match &trace {
-        ExecutionTrace::Fact(fact) => result.set_item("fact", fact.to_string())?,
-        ExecutionTrace::Rule(rule_application, subtraces) => {
+        ExecutionTraceTree::Fact(fact) => result.set_item("fact", fact.to_string())?,
+        ExecutionTraceTree::Rule(rule_application, subtraces) => {
             result.set_item("rule", rule_application.rule.to_string())?;
             result.set_item(
                 "assignment",
@@ -309,8 +309,12 @@ impl NemoEngine {
 
     fn trace(&self, fact: String) -> PyResult<Option<NemoTrace>> {
         let parsed_fact = nemo::io::parser::parse_fact(fact).py_res()?;
-        let trace = self.0.trace(parsed_fact).py_res()?;
-        Ok(trace.map(NemoTrace))
+        let (trace, handles) = self.0.trace(vec![parsed_fact]).py_res()?;
+        let handle = *handles
+            .first()
+            .expect("Function trace always returns a handle for each input fact");
+
+        Ok(trace.tree(handle).map(|tree| NemoTrace(tree)))
     }
 
     fn write_result(

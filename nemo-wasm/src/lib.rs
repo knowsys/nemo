@@ -308,14 +308,7 @@ impl NemoEngine {
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
 
-        Ok(handles[0].map(|h| {
-            format!(
-                "{}",
-                trace
-                    .ascii_tree_string(h)
-                    .expect("Returned handle must lead to succesful derivation")
-            )
-        }))
+        Ok(trace.ascii_tree_string(handles[0]))
     }
 }
 

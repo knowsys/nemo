@@ -723,6 +723,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Build an [`ExecutionTrace`] for a list of facts.
+    /// Also returns a list containing a [`FactTraceHandle`] for each fact.
     pub fn trace(&self, facts: Vec<Fact>) -> Result<(ExecutionTrace, Vec<FactTraceHandle>), Error> {
         let mut trace = ExecutionTrace::new(
             self.input_program.clone(),
