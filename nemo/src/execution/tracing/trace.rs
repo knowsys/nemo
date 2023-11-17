@@ -171,12 +171,12 @@ impl ExecutionTrace {
         }
     }
 
-    /// Return the [`TraceStatus`] of a given fact identified by its [`FactTraceHandle`].
+    /// Return the [`TraceStatus`] of a given fact identified by its [`TraceFactHandle`].
     pub(crate) fn status(&self, handle: TraceFactHandle) -> &TraceStatus {
         &self.get_fact(handle).status
     }
 
-    /// Update the [`TraceStatus`] of a given fact identified by its [`FactTraceHandle`].
+    /// Update the [`TraceStatus`] of a given fact identified by its [`TraceFactHandle`].
     pub(crate) fn update_status(&mut self, handle: TraceFactHandle, status: TraceStatus) {
         self.get_fact_mut(handle).status = status;
     }
