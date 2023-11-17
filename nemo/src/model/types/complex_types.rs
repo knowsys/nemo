@@ -159,6 +159,15 @@ impl TupleConstraint {
         from_fn(|| Some(TypeConstraint::None)).take(arity).collect()
     }
 
+    /// Creates a [TupleConstraint] using the [primitive
+    /// types][PrimitiveType] as lower bounds.
+    pub fn at_least<T>(types: T) -> Self
+    where
+        T: IntoIterator<Item = PrimitiveType>,
+    {
+        Self::from_iter(types.into_iter().map(TypeConstraint::AtLeast))
+    }
+
     /// Returns the underlying [primitive types][PrimitiveType],
     /// provided that this is a flat tuple of primitive types, with a
     /// default type for unspecified constraints.

@@ -836,10 +836,7 @@ impl<'a> RuleParser<'a> {
                                 separated_list1(self.parse_comma(), self.parse_type_name()),
                                 move |type_names| {
                                     if constraint_is_lower_bound {
-                                        type_names
-                                            .into_iter()
-                                            .map(TypeConstraint::AtLeast)
-                                            .collect()
+                                        TupleConstraint::at_least(type_names.into_iter())
                                     } else {
                                         type_names.into_iter().map(TypeConstraint::Exact).collect()
                                     }
@@ -2435,16 +2432,16 @@ mod test {
         let directive_export = format!("@export {spec} .");
         let attributes = parser.parse_map_literal()(arguments.into()).unwrap().1;
 
-        let constraints = TupleConstraint::from_iter(
-            vec![PrimitiveType::Integer, PrimitiveType::Float64]
-                .into_iter()
-                .map(TypeConstraint::AtLeast),
-        );
+        let types = [PrimitiveType::Integer, PrimitiveType::Float64];
+        let constraints = TupleConstraint::at_least(types);
 
         assert_parse!(
-            parser.parse_qualified_predicate_name(true),
+            parser.parse_qualified_predicate_name(false),
             &qualified,
-            (predicate.clone(), constraints.clone())
+            (
+                predicate.clone(),
+                TupleConstraint::from_iter(types.into_iter().map(TypeConstraint::Exact))
+            )
         );
 
         assert_parse!(

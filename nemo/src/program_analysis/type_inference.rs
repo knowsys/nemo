@@ -12,7 +12,7 @@ use self::{
         merge_type_requirements, override_type_requirements, requirements_from_aggregates_in_rules,
         requirements_from_existentials_in_rules, requirements_from_facts,
         requirements_from_imports, requirements_from_literals_in_rules,
-        requirements_from_pred_decls, requirements_from_sources, TypeRequirement,
+        requirements_from_pred_decls, TypeRequirement,
     },
 };
 
@@ -28,15 +28,13 @@ type TypeInferenceResult = Result<(PredicateTypes, VariableTypesForRules), TypeE
 
 pub(super) fn infer_types(program: &ChaseProgram) -> TypeInferenceResult {
     let pred_reqs = requirements_from_pred_decls(program.parsed_predicate_declarations());
-    let source_reqs = requirements_from_sources(program.sources());
     let import_reqs = requirements_from_imports(program.imports());
     let fact_reqs = requirements_from_facts(program.facts());
     let literal_reqs = requirements_from_literals_in_rules(program.rules());
     let aggregate_reqs = requirements_from_aggregates_in_rules(program.rules());
     let existential_reqs = requirements_from_existentials_in_rules(program.rules());
 
-    let mut type_requirements = source_reqs;
-    merge_type_requirements(&mut type_requirements, import_reqs)?;
+    let mut type_requirements = import_reqs;
     merge_type_requirements(&mut type_requirements, fact_reqs)?;
     merge_type_requirements(&mut type_requirements, literal_reqs)?;
     override_type_requirements(&mut type_requirements, pred_reqs);
@@ -229,13 +227,13 @@ mod test {
     use std::collections::HashMap;
 
     use crate::{
+        io::formats::dsv::DSVFormat,
         model::{
             chase_model::{
                 ChaseFact, ChaseProgram, ChaseRule, Constructor, PrimitiveAtom, VariableAtom,
             },
-            Constant, Constraint, DataSourceDeclaration, DsvFile, Identifier, NativeDataSource,
-            NumericLiteral, PrimitiveTerm, PrimitiveType, Term, TupleConstraint, TypeConstraint,
-            Variable,
+            Constant, Constraint, Identifier, NumericLiteral, PrimitiveTerm, PrimitiveType, Term,
+            TupleConstraint, Variable,
         },
         program_analysis::{analysis::get_fresh_rule_predicate, type_inference::infer_types},
     };
@@ -523,10 +521,11 @@ mod test {
         ) = get_test_rules_and_facts_and_predicates();
 
         let b_source_decl = ChaseProgram::builder()
-            .source(DataSourceDeclaration::new(
-                b.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
-            ))
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(String::new(), b.clone(), TupleConstraint::from_arity(1))
+                    .unwrap(),
+            )
             .rule(basic_rule)
             .rule(exis_rule)
             .rule(rule_with_constant)
@@ -561,10 +560,11 @@ mod test {
         ) = get_test_rules_and_facts_and_predicates();
 
         let c_explicit_decl_overrides_source_type = ChaseProgram::builder()
-            .source(DataSourceDeclaration::new(
-                c.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
-            ))
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(String::new(), c.clone(), TupleConstraint::from_arity(1))
+                    .unwrap(),
+            )
             .rule(basic_rule)
             .rule(exis_rule)
             .rule(rule_with_constant)
@@ -603,10 +603,11 @@ mod test {
         ) = get_test_rules_and_facts_and_predicates();
 
         let a_and_c_conflict_with_implicit_source_decl = ChaseProgram::builder()
-            .source(DataSourceDeclaration::new(
-                c,
-                NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
-            ))
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(String::new(), c, TupleConstraint::from_arity(1))
+                    .unwrap(),
+            )
             .rule(basic_rule)
             .rule(exis_rule)
             .rule(rule_with_constant)
@@ -631,15 +632,15 @@ mod test {
 
         let a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around =
             ChaseProgram::builder()
-                .source(DataSourceDeclaration::new(
-                    c,
-                    NativeDataSource::DsvFile(DsvFile::csv_file(
-                        "",
-                        [TypeConstraint::AtLeast(PrimitiveType::Any)]
-                            .into_iter()
-                            .collect(),
-                    )),
-                ))
+                .import(
+                    DSVFormat::csv()
+                        .try_into_import(
+                            String::new(),
+                            c,
+                            TupleConstraint::at_least([PrimitiveType::Any]),
+                        )
+                        .unwrap(),
+                )
                 .rule(basic_rule)
                 .rule(exis_rule)
                 .rule(rule_with_constant)
@@ -663,10 +664,11 @@ mod test {
         ) = get_test_rules_and_facts_and_predicates();
 
         let a_and_b_source_decl_resolvable_conflict = ChaseProgram::builder()
-            .source(DataSourceDeclaration::new(
-                b.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(1))),
-            ))
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(String::new(), b.clone(), TupleConstraint::from_arity(1))
+                    .unwrap(),
+            )
             .rule(basic_rule)
             .rule(exis_rule)
             .rule(rule_with_constant)
@@ -704,10 +706,11 @@ mod test {
         ) = get_test_rules_and_facts_and_predicates();
 
         let r_source_decl_resolvable_conflict_with_exis = ChaseProgram::builder()
-            .source(DataSourceDeclaration::new(
-                r.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file("", TupleConstraint::from_arity(2))),
-            ))
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(String::new(), r.clone(), TupleConstraint::from_arity(2))
+                    .unwrap(),
+            )
             .rule(basic_rule)
             .rule(exis_rule)
             .rule(rule_with_constant)

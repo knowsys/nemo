@@ -7,8 +7,7 @@ use crate::{
     model::{
         chase_model::{ChaseAtom, ChaseFact, ChaseRule, AGGREGATE_VARIABLE_PREFIX},
         types::error::TypeError,
-        DataSource, DataSourceDeclaration, Identifier, PrimitiveTerm, PrimitiveType, Term,
-        TypeConstraint, Variable,
+        Identifier, PrimitiveTerm, PrimitiveType, Term, TypeConstraint, Variable,
     },
 };
 
@@ -163,24 +162,6 @@ pub(super) fn requirements_from_pred_decls(
                     .copied()
                     .map(TypeRequirement::Hard)
                     .collect::<Vec<_>>(),
-            )
-        })
-        .collect()
-}
-
-pub(super) fn requirements_from_sources<'a, T: Iterator<Item = &'a DataSourceDeclaration>>(
-    sources: T,
-) -> PredicateTypeRequirements {
-    sources
-        .map(|source| {
-            (
-                source.predicate.clone(),
-                source
-                    .input_types()
-                    .iter()
-                    .cloned()
-                    .map(TypeRequirement::from)
-                    .collect(),
             )
         })
         .collect()

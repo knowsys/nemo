@@ -7,7 +7,7 @@ use crate::{
     model::chase_model::{ChaseProgram, ChaseRule},
     model::{
         chase_model::{ChaseAtom, PrimitiveAtom, VariableAtom},
-        Constraint, DataSource, Identifier, PrimitiveTerm, PrimitiveType, Term, Variable,
+        Constraint, Identifier, PrimitiveTerm, PrimitiveType, Term, Variable,
     },
 };
 
@@ -285,11 +285,6 @@ impl ChaseProgram {
     pub(super) fn get_all_predicates(&self) -> HashSet<(Identifier, usize)> {
         let mut result = HashSet::<(Identifier, usize)>::new();
 
-        // Predicates in source statements
-        for source in self.sources() {
-            result.insert((source.predicate.clone(), source.input_types().arity()));
-        }
-
         // Predicates in import statements
         for import_spec in self.imports() {
             result.insert((
@@ -340,22 +335,6 @@ impl ChaseProgram {
             .iter()
             .map(|(predicate, types)| (predicate.clone(), types.len()))
             .collect::<HashMap<_, _>>();
-
-        for source in self.sources() {
-            match arities.entry(source.predicate.clone()) {
-                std::collections::hash_map::Entry::Occupied(slot) => {
-                    // both declared and in a source
-                    let arity = slot.get();
-
-                    if *arity != source.input_types().arity() {
-                        return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
-                    }
-                }
-                std::collections::hash_map::Entry::Vacant(slot) => {
-                    slot.insert(source.input_types().arity());
-                }
-            }
-        }
 
         for import_spec in self.imports() {
             match arities.entry(import_spec.predicate().clone()) {
