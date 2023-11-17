@@ -19,14 +19,17 @@ use crate::{
     error::Error,
     io::{
         formats::{
-            types::{Direction, FileFormat, FileFormatError, FileFormatMeta, TableWriter},
+            types::{
+                attributes::RESOURCE, Direction, ExportSpec, FileFormat, FileFormatError,
+                FileFormatMeta, ImportExportSpec, ImportSpec, TableWriter,
+            },
             PROGRESS_NOTIFY_INCREMENT,
         },
         resource_providers::ResourceProviders,
     },
     model::{
-        types::primitive_types::PrimitiveType, Constant, InvalidRdfLiteral, Key, Map, RdfFile,
-        RdfLiteral, TupleConstraint,
+        types::primitive_types::PrimitiveType, Constant, Identifier, InvalidRdfLiteral, Key, Map,
+        RdfFile, RdfLiteral, TupleConstraint,
     },
 };
 
@@ -215,7 +218,6 @@ impl TableReader for RDFTriplesReader {
     }
 }
 
-use super::types::attributes::RESOURCE;
 const BASE: &str = "base";
 
 /// File formats for RDF.
@@ -228,6 +230,71 @@ impl RDFFormat {
     /// Construct new RDF file format metadata.
     pub fn new() -> Self {
         Default::default()
+    }
+
+    fn try_into_import_export(
+        mut self,
+        direction: Direction,
+        resource: Resource,
+        base: Option<String>,
+        predicate: Identifier,
+        declared_types: TupleConstraint,
+    ) -> Result<ImportExportSpec, FileFormatError> {
+        let mut attributes = Map::singleton(
+            Key::identifier_from_str(RESOURCE),
+            Constant::StringLiteral(resource),
+        );
+
+        if let Some(base) = base {
+            attributes.pairs.insert(
+                Key::identifier_from_str(BASE),
+                Constant::Abstract(Identifier(base)),
+            );
+        }
+
+        let constraint =
+            self.validated_and_refined_type_declaration(direction, &attributes, declared_types)?;
+
+        Ok(ImportExportSpec {
+            predicate,
+            constraint,
+            attributes,
+            format: Box::new(self),
+        })
+    }
+
+    /// Obtain an [ImportSpec] for this format.
+    pub fn try_into_import(
+        mut self,
+        resource: Resource,
+        predicate: Identifier,
+        declared_types: TupleConstraint,
+        base: Option<String>,
+    ) -> Result<ImportSpec, FileFormatError> {
+        Ok(ImportSpec::from(self.try_into_import_export(
+            Direction::Reading,
+            resource,
+            base,
+            predicate,
+            declared_types,
+        )?))
+    }
+
+    /// Obtain an [ExportSpec] for this format.
+    pub fn try_into_export(
+        mut self,
+        resource: Resource,
+        predicate: Identifier,
+        declared_types: TupleConstraint,
+        base: Option<String>,
+    ) -> Result<ExportSpec, FileFormatError> {
+        Ok(ExportSpec::from(self.try_into_import_export(
+            Direction::Writing,
+            resource,
+            base,
+            predicate,
+            declared_types,
+        )?))
     }
 }
 
