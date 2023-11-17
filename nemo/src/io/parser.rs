@@ -31,7 +31,7 @@ pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
 use super::formats::{
     dsv::DSVFormat,
-    rdf_triples::RDFFormat,
+    rdf_triples::RDFTriplesFormat,
     types::{Direction, ExportSpec, FileFormat, FileFormatError, ImportExportSpec, ImportSpec},
 };
 
@@ -535,7 +535,7 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(RDFFormat::new().try_into_import(
+                                    Ok(RDFTriplesFormat::new().try_into_import(
                                         filename.to_string(),
                                         predicate.clone(),
                                         tuple_constraint.clone(),
@@ -836,9 +836,9 @@ impl<'a> RuleParser<'a> {
                                 separated_list1(self.parse_comma(), self.parse_type_name()),
                                 move |type_names| {
                                     if constraint_is_lower_bound {
-                                        TupleConstraint::at_least(type_names.into_iter())
+                                        TupleConstraint::at_least(type_names)
                                     } else {
-                                        type_names.into_iter().map(TypeConstraint::Exact).collect()
+                                        TupleConstraint::exact(type_names)
                                     }
                                 },
                             ),
@@ -2383,11 +2383,7 @@ mod test {
             "p[integer, any]",
             (
                 predicate.clone(),
-                TupleConstraint::from_iter(
-                    vec![PrimitiveType::Integer, PrimitiveType::Any]
-                        .into_iter()
-                        .map(TypeConstraint::AtLeast)
-                )
+                TupleConstraint::at_least([PrimitiveType::Integer, PrimitiveType::Any])
             )
         );
 
@@ -2396,11 +2392,7 @@ mod test {
             "p[float64, any]",
             (
                 predicate.clone(),
-                TupleConstraint::from_iter(
-                    vec![PrimitiveType::Float64, PrimitiveType::Any]
-                        .into_iter()
-                        .map(TypeConstraint::Exact)
-                )
+                TupleConstraint::exact([PrimitiveType::Float64, PrimitiveType::Any])
             )
         );
 
@@ -2409,11 +2401,7 @@ mod test {
             "p[integer, float64]",
             (
                 predicate.clone(),
-                TupleConstraint::from_iter(
-                    vec![PrimitiveType::Integer, PrimitiveType::Float64]
-                        .into_iter()
-                        .map(TypeConstraint::Exact)
-                )
+                TupleConstraint::exact([PrimitiveType::Integer, PrimitiveType::Float64])
             )
         );
     }
@@ -2438,10 +2426,7 @@ mod test {
         assert_parse!(
             parser.parse_qualified_predicate_name(false),
             &qualified,
-            (
-                predicate.clone(),
-                TupleConstraint::from_iter(types.into_iter().map(TypeConstraint::Exact))
-            )
+            (predicate.clone(), TupleConstraint::exact(types))
         );
 
         assert_parse!(
