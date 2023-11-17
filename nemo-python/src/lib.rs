@@ -314,7 +314,7 @@ impl NemoEngine {
             .first()
             .expect("Function trace always returns a handle for each input fact");
 
-        Ok(trace.tree(handle).map(|tree| NemoTrace(tree)))
+        Ok(trace.tree(handle).map(NemoTrace))
     }
 
     fn write_result(
