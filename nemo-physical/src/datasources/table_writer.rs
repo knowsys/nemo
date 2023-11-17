@@ -20,8 +20,9 @@ struct TypedTableRecord {
     col_types: Vec<StorageTypeName>,
 }
 
-/// Order depends on order of [`StorageValueT`] and [`StorageTypeName`].
-/// TODO add tests!
+/// Compare two [`StorageTypeName`]. Order depends on appearance on [`StorageValueT`] and [`StorageTypeName`].
+/// TODO Maybe move it somewhere else.
+/// TODO add tests
 fn compare_storage_type_names(first: &StorageTypeName, second: &StorageTypeName) -> Ordering {
     match (first, second) {
         (StorageTypeName::U32, StorageTypeName::U32) => Ordering::Equal,
@@ -57,7 +58,7 @@ fn compare_storage_type_names(first: &StorageTypeName, second: &StorageTypeName)
 }
 
 /// TODO add tests!
-fn compare_storage_type_name_vectors(
+fn compare_vectors_of_storage_type_names(
     first: &Vec<StorageTypeName>,
     second: &Vec<StorageTypeName>,
 ) -> Ordering {
@@ -100,11 +101,6 @@ pub struct TableWriter<'a> {
     /// for this type combination or partial path.
     table_trie: Vec<usize>,
 
-    /// Sorting indexes for tables in [`TypedTableRecord::tables`] (in the same order as in [`TableWriter::tables`])
-    sorting_indexes: Vec<Vec<usize>>,
-    /// Flag to store which tables in [`TypedTableRecord::tables`] are sorted.
-    is_sorted: Vec<bool>,
-
     /// List of all u64 value columns used across the tables.
     cols_u64: Vec<Vec<u64>>,
     /// List of all u32 value columns used across the tables.
@@ -142,8 +138,6 @@ impl<'a> TableWriter<'a> {
             tables: Vec::with_capacity(initial_capacity),
             table_lengths: Vec::with_capacity(initial_capacity),
             table_trie: table_trie,
-            sorting_indexes: Vec::with_capacity(initial_capacity),
-            is_sorted: Vec::with_capacity(initial_capacity),
             cols_u64: Vec::with_capacity(initial_capacity),
             cols_u32: Vec::with_capacity(initial_capacity),
             cols_floats: Vec::with_capacity(initial_capacity),
@@ -186,14 +180,71 @@ impl<'a> TableWriter<'a> {
     /// Returns an iterator of the sorted indexes of [`TableWriter::tables`]
     /// TODO add tests!
     fn get_tables(&self) -> impl Iterator<Item = usize> {
-        let mut vec = (0..self.tables.len()).collect::<Vec<usize>>();
-        vec.sort_by(|i, j| {
-            compare_storage_type_name_vectors(
+        let mut table_idxs = (0..self.tables.len()).collect::<Vec<usize>>();
+        table_idxs.sort_by(|i, j| {
+            compare_vectors_of_storage_type_names(
                 &self.tables[*i].col_types,
                 &self.tables[*j].col_types,
             )
         });
-        vec.into_iter()
+        table_idxs.into_iter()
+    }
+
+    /// Returns an iterator of the sorted indexes rows within a [`TableWriter::tables`]
+    /// TODO add tests!
+    fn get_rows_per_tables(&self, table_idx: usize) -> impl Iterator<Item = usize> {
+        let mut row_idxs = (0..self.table_lengths[table_idx]).collect::<Vec<usize>>();
+        row_idxs.sort_by(|i, j| self.compare_rows_within_table(table_idx, *i, *j));
+        row_idxs.into_iter()
+    }
+
+    fn compare_rows_within_table(
+        &self,
+        table_idx: usize,
+        first_row_idx: usize,
+        second_row_idx: usize,
+    ) -> Ordering {
+        let table: &TypedTableRecord = &self.tables[table_idx];
+        for i in 0..table.col_ids.len() {
+            match table.col_types[i] {
+                StorageTypeName::U32 => {
+                    let first = &self.cols_u32[table.col_ids[i]][first_row_idx];
+                    let second = &self.cols_u32[table.col_ids[i]][second_row_idx];
+                    if first.cmp(second) != Ordering::Equal {
+                        return first.cmp(second);
+                    }
+                }
+                StorageTypeName::U64 => {
+                    let first = &self.cols_u64[table.col_ids[i]][first_row_idx];
+                    let second = &self.cols_u64[table.col_ids[i]][second_row_idx];
+                    if first.cmp(second) != Ordering::Equal {
+                        return first.cmp(second);
+                    }
+                }
+                StorageTypeName::I64 => {
+                    let first = &self.cols_i64[table.col_ids[i]][first_row_idx];
+                    let second = &self.cols_i64[table.col_ids[i]][second_row_idx];
+                    if first.cmp(second) != Ordering::Equal {
+                        return first.cmp(second);
+                    }
+                }
+                StorageTypeName::Float => {
+                    let first = &self.cols_floats[table.col_ids[i]][first_row_idx];
+                    let second = &self.cols_floats[table.col_ids[i]][second_row_idx];
+                    if first.cmp(second) != Ordering::Equal {
+                        return first.cmp(second);
+                    }
+                }
+                StorageTypeName::Double => {
+                    let first = &self.cols_doubles[table.col_ids[i]][first_row_idx];
+                    let second = &self.cols_doubles[table.col_ids[i]][second_row_idx];
+                    if first.cmp(second) != Ordering::Equal {
+                        return first.cmp(second);
+                    }
+                }
+            }
+        }
+        Ordering::Equal
     }
 
     /// Returns the number of rows in the [`TableWriter`]
@@ -272,7 +323,6 @@ impl<'a> TableWriter<'a> {
             }
         }
         self.table_lengths[table_record_id] += 1;
-        self.is_sorted[table_record_id] = false;
     }
 
     /// Finds a [`TypedTableRecord`] for the types required by the current values of
@@ -357,9 +407,6 @@ impl<'a> TableWriter<'a> {
                               // storing new table
         self.tables.push(typed_table_record);
         self.table_lengths.push(0);
-        // storing new table sorting indexes
-        self.sorting_indexes.push(Vec::new());
-        self.is_sorted.push(false);
 
         new_table_id
     }
