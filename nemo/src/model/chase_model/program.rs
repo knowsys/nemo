@@ -5,10 +5,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     error::Error,
     io::formats::types::{ExportSpec, ImportSpec},
-    model::{
-        DataSourceDeclaration, Identifier, OutputPredicateSelection, PrimitiveType, Program,
-        QualifiedPredicateName,
-    },
+    model::{Identifier, OutputPredicateSelection, PrimitiveType, Program, QualifiedPredicateName},
 };
 
 use super::{ChaseAtom, ChaseFact, ChaseRule};
@@ -18,7 +15,6 @@ use super::{ChaseAtom, ChaseFact, ChaseRule};
 pub struct ChaseProgram {
     base: Option<String>,
     prefixes: HashMap<String, String>,
-    sources: Vec<DataSourceDeclaration>,
     imports: Vec<ImportSpec>,
     exports: Vec<ExportSpec>,
     rules: Vec<ChaseRule>,
@@ -63,21 +59,6 @@ impl ChaseProgramBuilder {
         T: IntoIterator<Item = (String, String)>,
     {
         self.program.prefixes.extend(prefixes);
-        self
-    }
-
-    /// Add a data source.
-    pub fn source(mut self, source: DataSourceDeclaration) -> Self {
-        self.program.sources.push(source);
-        self
-    }
-
-    /// Add data sources.
-    pub fn sources<T>(mut self, sources: T) -> Self
-    where
-        T: IntoIterator<Item = DataSourceDeclaration>,
-    {
-        self.program.sources.extend(sources);
         self
     }
 
@@ -291,11 +272,6 @@ impl ChaseProgram {
     #[must_use]
     pub fn prefixes(&self) -> &HashMap<String, String> {
         &self.prefixes
-    }
-
-    /// Return all data sources in the program.
-    pub fn sources(&self) -> impl Iterator<Item = &DataSourceDeclaration> {
-        self.sources.iter()
     }
 
     /// Look up a given prefix.

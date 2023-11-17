@@ -2,12 +2,13 @@
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
-use crate::model::chase_model::{ChaseAtom, ChaseProgram, ChaseRule, VariableAtom};
-use crate::model::{DataSource, Identifier, Variable};
-use nemo_physical::management::database::ColumnOrder;
-use nemo_physical::permutator::Permutator;
-
 use std::collections::{BTreeMap, HashMap, HashSet};
+
+use crate::model::{
+    chase_model::{ChaseAtom, ChaseProgram, ChaseRule, VariableAtom},
+    Identifier, Variable,
+};
+use nemo_physical::{management::database::ColumnOrder, permutator::Permutator};
 
 /// Represents an ordering of variables as [`HashMap`].
 #[repr(transparent)]
@@ -490,12 +491,17 @@ pub(super) fn build_preferable_variable_orders(
             .iter()
             .map(|f| (f.predicate(), f.terms().len()))
             .collect();
-        let source_preds: HashSet<(Identifier, usize)> = program
-            .sources()
-            .map(|source| (source.predicate.clone(), source.input_types().arity()))
+        let import_preds: HashSet<(Identifier, usize)> = program
+            .imports()
+            .map(|import_spec| {
+                (
+                    import_spec.predicate().clone(),
+                    import_spec.type_constraint().arity(),
+                )
+            })
             .collect();
 
-        let preds = fact_preds.union(&source_preds);
+        let preds = fact_preds.union(&import_preds);
 
         preds
             .map(|(p, _)| {
@@ -538,10 +544,10 @@ pub(super) fn build_preferable_variable_orders(
 mod test {
     use super::{IterationOrder, RuleVariableList, VariableOrder};
 
-    use crate::model::chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom};
-    use crate::model::{
-        DataSourceDeclaration, DsvFile, Identifier, NativeDataSource, PrimitiveTerm,
-        TupleConstraint, Variable,
+    use crate::model::{Identifier, PrimitiveTerm, TupleConstraint, Variable};
+    use crate::{
+        io::formats::dsv::DSVFormat,
+        model::chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom},
     };
     use nemo_physical::management::database::ColumnOrder;
 
@@ -978,41 +984,51 @@ mod test {
             get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant();
 
         let program = ChaseProgram::builder()
-            .source(DataSourceDeclaration::new(
-                predicates[1].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[1].1),
-                )),
-            ))
-            .source(DataSourceDeclaration::new(
-                predicates[2].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[2].1),
-                )),
-            ))
-            .source(DataSourceDeclaration::new(
-                predicates[3].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[3].1),
-                )),
-            ))
-            .source(DataSourceDeclaration::new(
-                predicates[4].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[4].1),
-                )),
-            ))
-            .source(DataSourceDeclaration::new(
-                predicates[6].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[6].1),
-                )),
-            ))
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[1].0.clone(),
+                        TupleConstraint::from_arity(predicates[1].1),
+                    )
+                    .unwrap(),
+            )
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[2].0.clone(),
+                        TupleConstraint::from_arity(predicates[2].1),
+                    )
+                    .unwrap(),
+            )
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[3].0.clone(),
+                        TupleConstraint::from_arity(predicates[3].1),
+                    )
+                    .unwrap(),
+            )
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[4].0.clone(),
+                        TupleConstraint::from_arity(predicates[4].1),
+                    )
+                    .unwrap(),
+            )
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[6].0.clone(),
+                        TupleConstraint::from_arity(predicates[6].1),
+                    )
+                    .unwrap(),
+            )
             .rules(rules)
             .build();
 
@@ -1346,55 +1362,69 @@ mod test {
         let (rules, var_lists, predicates) = get_el_test_ruleset_without_constants();
 
         let program = ChaseProgram::builder()
-            .source(DataSourceDeclaration::new(
-                predicates[1].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[1].1),
-                )),
-            ))
-            .source(DataSourceDeclaration::new(
-                predicates[2].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[2].1),
-                )),
-            ))
-            .source(DataSourceDeclaration::new(
-                predicates[3].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[3].1),
-                )),
-            ))
-            .source(DataSourceDeclaration::new(
-                predicates[4].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[4].1),
-                )),
-            ))
-            .source(DataSourceDeclaration::new(
-                predicates[6].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[6].1),
-                )),
-            ))
-            .source(DataSourceDeclaration::new(
-                predicates[8].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[8].1),
-                )),
-            ))
-            .source(DataSourceDeclaration::new(
-                predicates[10].0.clone(),
-                NativeDataSource::DsvFile(DsvFile::csv_file(
-                    "",
-                    TupleConstraint::from_arity(predicates[10].1),
-                )),
-            ))
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[1].0.clone(),
+                        TupleConstraint::from_arity(predicates[1].1),
+                    )
+                    .unwrap(),
+            )
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[2].0.clone(),
+                        TupleConstraint::from_arity(predicates[2].1),
+                    )
+                    .unwrap(),
+            )
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[3].0.clone(),
+                        TupleConstraint::from_arity(predicates[3].1),
+                    )
+                    .unwrap(),
+            )
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[4].0.clone(),
+                        TupleConstraint::from_arity(predicates[4].1),
+                    )
+                    .unwrap(),
+            )
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[6].0.clone(),
+                        TupleConstraint::from_arity(predicates[6].1),
+                    )
+                    .unwrap(),
+            )
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[8].0.clone(),
+                        TupleConstraint::from_arity(predicates[8].1),
+                    )
+                    .unwrap(),
+            )
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        "".to_string(),
+                        predicates[10].0.clone(),
+                        TupleConstraint::from_arity(predicates[10].1),
+                    )
+                    .unwrap(),
+            )
             .rules(rules)
             .build();
 

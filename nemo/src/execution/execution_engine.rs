@@ -92,7 +92,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
-        Self::add_sources(
+        Self::add_imports(
             &mut table_manager,
             &input_manager,
             &chase_program,
@@ -161,8 +161,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Add edb tables to the [`TableManager`]
-    /// based on the source declaration of the given progam.
-    fn add_sources(
+    /// based on the import declaration of the given progam.
+    fn add_imports(
         table_manager: &mut TableManager,
         input_manager: &InputManager,
         program: &ChaseProgram,
@@ -170,23 +170,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     ) -> Result<(), Error> {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
-        // Add all the data source declarations
-        for source_declaration in program.sources() {
-            let logical_types = analysis
-                .predicate_types
-                .get(&source_declaration.predicate)
-                .cloned()
-                .expect("All predicates should have types by now.");
-
-            let table_source = input_manager
-                .load_native_table_source(source_declaration.source.clone(), logical_types)?;
-
-            predicate_to_sources
-                .entry(source_declaration.predicate.clone())
-                .or_default()
-                .push(table_source)
-        }
-
+        // Add all the import specifications
         for import_spec in program.imports() {
             let inferred_types = analysis
                 .predicate_types
