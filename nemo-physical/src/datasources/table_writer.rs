@@ -151,35 +151,80 @@ impl<'a> TableWriter<'a> {
         self.cur_col_idx = 0;
     }
 
-    /* pub fn sort(&mut self) {
-        for typedTableRecord in self.tables {
+    /// Returns a sorted iterator of [`Vec<StorageValueT>`] where each
+    /// [`Vec<StorageValueT>`] represent a row in the table.
+    pub fn get_rows(&mut self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
+        let result = std::iter::empty();
+        /* for table_idx in self.get_table_idx() {
+            for row_idx in self.get_row_idxs(&table_idx) {
+                result.chain(std::iter::once(self.get_row(&table_idx, &row_idx)));
+            }
+        } */
+        //self.get_table_idx().map(|table_idx| self.get_row_idxs(&table_idx).map(move |row_idx| self.get_row(&table_idx, &row_idx))).flatten()
+        result
+    }
+
+    ///TODO
+    /*     fn get_rows_per_table(&mut self, table_idx: &usize) -> impl Iterator<Item = Vec<StorageValueT>> {
+           fn update_idx(mut vector: &Vec<usize>, value: usize) {
+               for i in 0..vector.len() {
+               }
+           }
+           let mut row_idxs = self.get_row_idxs(table_idx);
+           .map(|row_idx| self.get_row(table_idx, &row_idx))
+       }
+    */
+
+    /// Returns a [`Vec<StorageValueT>`] correspondint to the table_idx and row_idx.
+    /// It removes the element that form the row.
+    fn get_row(&mut self, table_idx: &usize, row_idx: &usize) -> Vec<StorageValueT> {
+        let mut ret = Vec::<StorageValueT>::new();
+        let table: &TypedTableRecord = &self.tables[*table_idx];
+
+        for col_idx in 0..self.col_num {
+            ret.push(match table.col_types[col_idx] {
+                StorageTypeName::U32 => {
+                    StorageValueT::from(self.cols_u32[table.col_ids[col_idx]].remove(*row_idx))
+                }
+                StorageTypeName::U64 => {
+                    StorageValueT::from(self.cols_u64[table.col_ids[col_idx]].remove(*row_idx))
+                }
+                StorageTypeName::I64 => {
+                    StorageValueT::from(self.cols_i64[table.col_ids[col_idx]].remove(*row_idx))
+                }
+                StorageTypeName::Float => {
+                    StorageValueT::from(self.cols_floats[table.col_ids[col_idx]].remove(*row_idx))
+                }
+                StorageTypeName::Double => {
+                    StorageValueT::from(self.cols_doubles[table.col_ids[col_idx]].remove(*row_idx))
+                }
+            });
         }
-    } */
+        self.table_lengths[*table_idx] -= 1;
+        ret
+    }
 
-    /// But this generates a copy of the values
-    /// I would prefer that
-    ///
-    //pub fn get_row(&self, idx:usize) -> Vec<StorageValueT> {
-    //
-    //}
-
-    /// Returns an iterator of the sorted indexes of [`TableWriter::tables`]
+    /// Returns a vector containing the indexes in creasing order of the [`TableWriter::tables`]
     /// TODO add tests!
-    fn get_tables(&self) -> impl Iterator<Item = usize> {
+    fn get_table_idx(&self) -> Vec<usize> {
         let mut table_idxs = (0..self.tables.len()).collect::<Vec<usize>>();
-        table_idxs.sort_by(|i, j| self.compare_vectors_of_storage_type_names(&i,&j));
-        table_idxs.into_iter()
+        table_idxs.sort_by(|i, j| self.compare_vectors_of_storage_type_names(&i, &j));
+        table_idxs
     }
 
     /// Given two table idxs, returns how the first compares to the second
     //TODO add tests!
-    fn compare_vectors_of_storage_type_names(&self, first_table_idx: &usize, second_table_idx: &usize) -> Ordering {
+    fn compare_vectors_of_storage_type_names(
+        &self,
+        first_table_idx: &usize,
+        second_table_idx: &usize,
+    ) -> Ordering {
         let first = &self.tables[*first_table_idx];
         let second = &self.tables[*second_table_idx];
         assert_eq!(first.col_types.len(), second.col_types.len());
 
         for i in 0..first.col_types.len() - 1 {
-            let ordering = compare_storage_type_names(&first.col_types[i],&second.col_types[i]);
+            let ordering = compare_storage_type_names(&first.col_types[i], &second.col_types[i]);
             if ordering != Ordering::Equal {
                 return ordering;
             }
@@ -187,12 +232,13 @@ impl<'a> TableWriter<'a> {
         Ordering::Equal
     }
 
-    /// Returns an iterator of the sorted indexes rows within a [`TableWriter::tables`]
+    /// Returns a [`Vec<usize>`] representing the sorted row index within a [`TableWriter::tables`].
+    /// E.g., the first element in the vector is the row index of the smallest row.
     /// TODO add tests!
-    fn get_rows_per_tables(&self, table_idx: usize) -> impl Iterator<Item = usize> {
-        let mut row_idxs = (0..self.table_lengths[table_idx]).collect::<Vec<usize>>();
-        row_idxs.sort_by(|i, j| self.compare_rows_within_table(table_idx, *i, *j));
-        row_idxs.into_iter()
+    fn get_row_idxs(&self, table_idx: &usize) -> Vec<usize> {
+        let mut row_idxs = (0..self.table_lengths[*table_idx]).collect::<Vec<usize>>();
+        row_idxs.sort_by(|i, j| self.compare_rows_within_table(*table_idx, *i, *j));
+        row_idxs
     }
 
     /// Given a table idx, row ids first and second, returns how first compares to the second row
@@ -470,6 +516,7 @@ impl<'a> TableWriter<'a> {
 
     /// Assign numbers to [`StorageTypeName`]s in order to use them for addressing
     /// vectors.
+    /// TODO see https://users.rust-lang.org/t/getting-the-position-index-of-an-enum/68311
     fn storage_type_idx(stn: StorageTypeName) -> usize {
         match stn {
             StorageTypeName::U32 => 0,
@@ -480,6 +527,37 @@ impl<'a> TableWriter<'a> {
         }
     }
 }
+
+/* struct TableWriterIterator<'a> {
+    table_writer: &'a mut TableWriter<'a>,
+    table_idxs: Vec<usize>,
+    table_idx: usize
+    //row_idx: Vec<usize>,
+}
+
+impl TableWriterIterator<'_> {
+    fn new<'a>(table_writer: &'a mut TableWriter<'a>) -> TableWriterIterator<'a> {
+        TableWriterIterator {
+            table_writer,
+            table_idxs: table_writer.get_table_idx().collect(),
+            table_idx: 0,
+        }
+    }
+}
+
+impl Iterator for TableWriterIterator<'_> {
+    type Item = Vec<StorageValueT>;
+
+    fn next(&mut self) -> Option<Vec<StorageValueT>> {
+        if self.table_idx >= self.table_writer.tables.len() {
+            None
+        } else {
+            let result = Some(self.table_writer.get_row(&self.table_idx, &0));
+            self.table_idx += 1;
+            result
+        }
+    }
+} */
 
 #[cfg(test)]
 mod test {
