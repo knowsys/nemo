@@ -16,6 +16,11 @@ pub trait ChaseAtom {
     /// Return the terms in the atom - mutable.
     fn terms_mut(&mut self) -> &mut Vec<Self::TypeTerm>;
 
+    /// Return the arity of the atom
+    fn arity(&self) -> usize {
+        self.terms().len()
+    }
+
     /// Return a set of all variables used in this atom
     fn get_variables(&self) -> Vec<Variable>;
 }

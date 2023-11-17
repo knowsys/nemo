@@ -20,7 +20,7 @@
 
 pub mod cli;
 
-use std::fs::read_to_string;
+use std::fs::{read_to_string, File};
 
 use clap::Parser;
 use cli::CliApp;
@@ -117,7 +117,18 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     log::info!("Rules parsed");
     log::trace!("{:?}", program);
 
-    let parsed_fact = cli.trace_fact.map(parse_fact).transpose()?;
+    for atom in program.rules().iter().flat_map(|rule| rule.head()) {
+        if atom.aggregates().next().is_some() {
+            log::warn!("Program is using the experimental aggregates feature and currently depends on the internally chosen variable orders for predicates.",);
+            break;
+        }
+    }
+
+    let parsed_facts = cli
+        .tracing
+        .traced_facts
+        .map(|f| f.into_iter().map(parse_fact).collect::<Result<Vec<_>, _>>())
+        .transpose()?;
 
     if cli.write_all_idb_predicates {
         program.force_output_predicate_selection(OutputPredicateSelection::AllIDBPredicates)
@@ -192,11 +203,28 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         println!("\n{}", engine.memory_usage());
     }
 
-    if let Some(fact) = parsed_fact {
-        if let Some(trace) = engine.trace(fact.clone())? {
-            println!("\n{trace}");
-        } else {
-            println!("{fact} was not derived");
+    if let Some(facts) = parsed_facts {
+        let (trace, handles) = engine.trace(facts.clone())?;
+
+        match cli.tracing.output_file {
+            Some(output_file) => {
+                let filename = output_file.to_string_lossy().to_string();
+                let trace_json = trace.json(&handles);
+
+                let mut json_file = File::create(output_file)?;
+                if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
+                    return Err(Error::SerializationError { filename });
+                }
+            }
+            None => {
+                for (fact, handle) in facts.into_iter().zip(handles) {
+                    if let Some(tree) = trace.ascii_tree_string(handle) {
+                        println!("\n{}", tree);
+                    } else {
+                        println!("\n{fact} was not derived");
+                    }
+                }
+            }
         }
     }
 

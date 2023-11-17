@@ -15,7 +15,7 @@ use crate::{
     error::Error,
     execution::{
         planning::{plan_body_seminaive::SeminaiveStrategy, BodyStrategy},
-        tracing::trace::RuleApplication,
+        tracing::trace::TraceRuleApplication,
     },
     io::{input_manager::InputManager, resource_providers::ResourceProviders},
     model::{
@@ -31,8 +31,9 @@ use crate::{
 };
 
 use super::{
-    rule_execution::RuleExecution, selection_strategy::strategy::RuleSelectionStrategy,
-    tracing::trace::ExecutionTrace,
+    rule_execution::RuleExecution,
+    selection_strategy::strategy::RuleSelectionStrategy,
+    tracing::trace::{ExecutionTrace, TraceDerivation, TraceFactHandle, TraceStatus},
 };
 
 // Number of tables that are periodically combined into one.
@@ -124,6 +125,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         })
     }
 
+    /// Register all predicates found in a rule program to the [`TableManager`].
     fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {
         for (predicate, _) in &analysis.all_predicates {
             table_manager.register_predicate(
@@ -137,7 +139,16 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
     }
 
+    /// Converts a [`ChaseFact`] into a list of [`DataValueT`].
+    /// If the predicate is unknown, then the returned list will be empty.
     fn fact_to_vec(fact: &ChaseFact, analysis: &ProgramAnalysis) -> Vec<DataValueT> {
+        if !analysis
+            .all_predicates
+            .contains(&(fact.predicate(), fact.arity()))
+        {
+            return Vec::default();
+        }
+
         fact
         .terms()
         .iter()
@@ -149,6 +160,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         .collect()
     }
 
+    /// Add edb tables to the [`TableManager`]
+    /// based on the source declaration of the given progam.
     fn add_sources(
         table_manager: &mut TableManager,
         input_manager: &InputManager,
@@ -399,30 +412,48 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Recursive part of the function `trace`.
+    ///
     /// Takes as input the fact of which the trace should be computed.
-    /// The fact is passed as a predicate and its terms given as [`Term`]s and their physical values.
+    /// In addition receives the values of the terms as [`StorageValueT`].
+    ///
+    /// Returns a handle to the derived fact in the given [`ExecutionTrace`] if a valid derivation could be found.
+    /// Returns `None` otherwise.
     fn trace_recursive(
         &self,
-        fact_predicate: Identifier,
-        fact_terms: Vec<Constant>,
+        trace: &mut ExecutionTrace,
+        fact: ChaseFact,
         fact_values: Vec<StorageValueT>,
-    ) -> Result<Option<ExecutionTrace>, Error> {
+    ) -> Result<TraceFactHandle, Error> {
+        let trace_handle = trace.register_fact(fact.clone());
+
+        if fact.arity() != fact_values.len() {
+            // It was not possible to associate each value in the fact with an entry in the table.
+            trace.update_status(trace_handle, TraceStatus::Fail);
+            return Ok(trace_handle);
+        }
+
+        if trace.status(trace_handle).is_known() {
+            return Ok(trace_handle);
+        }
+
         // Find the origin of the given fact
         let step = match self
             .table_manager
-            .find_table_row(&fact_predicate, &fact_values)
+            .find_table_row(&fact.predicate(), &fact_values)
         {
             Some(s) => s,
-            None => return Ok(None),
+            None => {
+                // If the table manager does not know the predicate of the fact
+                // then it could not have been derived
+                trace.update_status(trace_handle, TraceStatus::Fail);
+                return Ok(trace_handle);
+            }
         };
 
         if step == 0 {
-            // If fact has no predecessor rule it must have been given as an EDB fact
-
-            return Ok(Some(ExecutionTrace::Fact(ChaseFact::new(
-                fact_predicate,
-                fact_terms,
-            ))));
+            // If a fact was derived in step 0 it must have been given as an EDB fact
+            trace.update_status(trace_handle, TraceStatus::Success(TraceDerivation::Input));
+            return Ok(trace_handle);
         }
 
         // Rule index of the rule that was applied to derive the given fact
@@ -432,12 +463,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let predicate_types: &Vec<PrimitiveType> = self
             .analysis
             .predicate_types
-            .get(&fact_predicate)
+            .get(&fact.predicate())
             .expect("Every predicate should be associated with a type.");
 
         // Iterate over all head atoms which could have derived the given fact
         for (head_index, head_atom) in rule.head().iter().enumerate() {
-            if head_atom.predicate() != fact_predicate {
+            if head_atom.predicate() != fact.predicate() {
                 continue;
             }
 
@@ -453,7 +484,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
             for (ty, (head_term, fact_term)) in predicate_types
                 .iter()
-                .zip(head_atom.terms().iter().zip(fact_terms.iter()))
+                .zip(head_atom.terms().iter().zip(fact.terms().iter()))
             {
                 match head_term {
                     PrimitiveTerm::Constant(constant) => {
@@ -603,7 +634,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 node,
                 "Tracing Query",
                 "Tracing Query",
-                SubtableIdentifier::new(fact_predicate.clone(), step),
+                SubtableIdentifier::new(fact.predicate(), step),
             );
 
             if let Ok(Some(query_result)) =
@@ -645,7 +676,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .collect();
 
                 let mut fully_derived = true;
-                let mut subtraces = Vec::<ExecutionTrace>::new();
+                let mut subtraces = Vec::<TraceFactHandle>::new();
                 for body_atom in rule.positive_body() {
                     let next_fact_predicate = body_atom.predicate();
                     let mut next_fact_values = Vec::<StorageValueT>::new();
@@ -660,12 +691,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         next_fact_terms.push(query_terms[query_index].clone());
                     }
 
-                    if let Some(trace) = self.trace_recursive(
-                        next_fact_predicate,
-                        next_fact_terms,
-                        next_fact_values,
-                    )? {
-                        subtraces.push(trace);
+                    let next_fact = ChaseFact::new(next_fact_predicate, next_fact_terms);
+                    let next_handle = self.trace_recursive(trace, next_fact, next_fact_values)?;
+
+                    if trace.status(next_handle).is_success() {
+                        subtraces.push(next_handle);
                     } else {
                         fully_derived = false;
                         break;
@@ -676,43 +706,51 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     continue;
                 }
 
-                return Ok(Some(ExecutionTrace::Rule(
-                    RuleApplication::new(
-                        self.input_program.rules()[rule_index].clone(),
-                        rule_assignment,
-                        head_index,
-                    ),
-                    subtraces,
-                )));
+                let rule_application =
+                    TraceRuleApplication::new(rule_index, rule_assignment, head_index);
+
+                let derivation = TraceDerivation::Derived(rule_application, subtraces);
+                trace.update_status(trace_handle, TraceStatus::Success(derivation));
+
+                return Ok(trace_handle);
             } else {
                 continue;
             }
         }
 
-        Ok(None)
+        trace.update_status(trace_handle, TraceStatus::Fail);
+        Ok(trace_handle)
     }
 
-    /// Return a [`ExecutionTrace`] for a given fact
-    pub fn trace(&self, fact: Fact) -> Result<Option<ExecutionTrace>, Error> {
-        let chase_fact = ChaseFact::from_flat_atom(&fact.0);
-        let predicate = fact.0.predicate();
+    /// Build an [`ExecutionTrace`] for a list of facts.
+    /// Also returns a list containing a [`TraceFactHandle`] for each fact.
+    pub fn trace(&self, facts: Vec<Fact>) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
+        let mut trace = ExecutionTrace::new(
+            self.input_program.clone(),
+            self.analysis.predicate_types.clone(),
+        );
 
-        if !self.table_manager.predicate_exists(&predicate) {
-            return Ok(None);
-        }
+        let mut handles = Vec::new();
 
-        // Convert fact into physical representation
-        let mut fact_values = Vec::<StorageValueT>::new();
-        for entry in Self::fact_to_vec(&chase_fact, &self.analysis) {
-            if let Some(value) = entry.to_storage_value(self.table_manager.get_dict().borrow_mut())
-            {
-                fact_values.push(value);
-            } else {
-                // Dictionary does not contain term
-                return Ok(None);
+        for fact in facts {
+            let chase_fact = ChaseFact::from_flat_atom(&fact.0);
+
+            // Convert fact into physical representation
+            let mut fact_values = Vec::<StorageValueT>::new();
+            for entry in Self::fact_to_vec(&chase_fact, &self.analysis) {
+                if let Some(value) =
+                    entry.to_storage_value(self.table_manager.get_dict().borrow_mut())
+                {
+                    fact_values.push(value);
+                } else {
+                    // Dictionary does not contain term
+                    break;
+                }
             }
+
+            handles.push(self.trace_recursive(&mut trace, chase_fact, fact_values)?);
         }
 
-        self.trace_recursive(predicate, chase_fact.terms().clone(), fact_values)
+        Ok((trace, handles))
     }
 }
