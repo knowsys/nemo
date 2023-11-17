@@ -13,7 +13,7 @@ use crate::{
     model::{Constant, Identifier, Key, Map, PrimitiveType, TupleConstraint},
 };
 
-use super::{dsv::DSVFormat, rdf_triples::RDFTriplesFormat};
+use super::{dsv::DSVFormat, rdf::RDFFormat};
 
 pub(crate) mod attributes {
     pub(crate) const RESOURCE: &str = "resource";
@@ -341,10 +341,9 @@ impl FileFormat {
             Self::DSV => Box::new(DSVFormat::new()),
             Self::CSV => Box::new(DSVFormat::with_delimiter(b',')),
             Self::TSV => Box::new(DSVFormat::with_delimiter(b'\t')),
-            Self::RDF | Self::NTriples | Self::Turtle | Self::RDFXML => {
-                Box::new(RDFTriplesFormat::new())
+            Self::RDF | Self::NTriples | Self::Turtle | Self::RDFXML | Self::NQuads => {
+                Box::new(RDFFormat::new())
             }
-            Self::NQuads => todo!(),
         }
     }
 }

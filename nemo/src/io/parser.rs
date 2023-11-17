@@ -31,7 +31,7 @@ pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
 use super::formats::{
     dsv::DSVFormat,
-    rdf_triples::RDFTriplesFormat,
+    rdf::RDFFormat,
     types::{Direction, ExportSpec, FileFormat, FileFormatError, ImportExportSpec, ImportSpec},
 };
 
@@ -535,7 +535,7 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(RDFTriplesFormat::new().try_into_import(
+                                    Ok(RDFFormat::new().try_into_import(
                                         filename.to_string(),
                                         predicate.clone(),
                                         tuple_constraint.clone(),
