@@ -15,7 +15,7 @@ type RuleIndex = usize;
 
 /// Represents the application of a rule to derive a specific fact
 #[derive(Debug)]
-pub struct RuleApplication {
+pub(crate) struct TraceRuleApplication {
     /// Index of the rule that was applied
     rule_index: RuleIndex,
     /// Variable assignment used during the rule application
@@ -24,8 +24,8 @@ pub struct RuleApplication {
     _position: usize,
 }
 
-impl RuleApplication {
-    /// Create new [`RuleApplication`].
+impl TraceRuleApplication {
+    /// Create new [`TraceRuleApplication`].
     pub fn new(
         rule_index: RuleIndex,
         assignment: HashMap<Variable, Constant>,
@@ -41,20 +41,20 @@ impl RuleApplication {
 
 /// Handle to a traced fact within an [`ExecutionTrace`].
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
-pub struct FactTraceHandle(usize);
+pub struct TraceFactHandle(usize);
 
 /// Encodes the origin of a fact
 #[derive(Debug)]
-pub enum TraceDerivation {
+pub(crate) enum TraceDerivation {
     /// Fact was part of the input to the chase
     Input,
     /// Fact was derived during the chase
-    Derived(RuleApplication, Vec<FactTraceHandle>),
+    Derived(TraceRuleApplication, Vec<TraceFactHandle>),
 }
 
 /// Encodes current status of the derivation of a given fact
 #[derive(Debug)]
-pub enum TraceStatus {
+pub(crate) enum TraceStatus {
     /// It is not yet known whether this fact derived during chase
     Unknown,
     /// Fact was derived during the chase with the given [`Derivation`]
@@ -108,17 +108,17 @@ impl ExecutionTrace {
         }
     }
 
-    fn get_fact(&self, handle: FactTraceHandle) -> &TracedFact {
+    fn get_fact(&self, handle: TraceFactHandle) -> &TracedFact {
         &self.facts[handle.0]
     }
 
-    fn get_fact_mut(&mut self, handle: FactTraceHandle) -> &mut TracedFact {
+    fn get_fact_mut(&mut self, handle: TraceFactHandle) -> &mut TracedFact {
         &mut self.facts[handle.0]
     }
 
     /// Search a given [`ChaseFact`] in `self.facts`.
     /// Also takes into account that the interpretation of a constant depends on its type.
-    fn find_fact(&self, fact: &ChaseFact) -> Option<FactTraceHandle> {
+    fn find_fact(&self, fact: &ChaseFact) -> Option<TraceFactHandle> {
         for (fact_index, traced_fact) in self.facts.iter().enumerate() {
             if traced_fact.fact.predicate() != fact.predicate()
                 || traced_fact.fact.arity() != fact.arity()
@@ -145,7 +145,7 @@ impl ExecutionTrace {
             }
 
             if identical {
-                return Some(FactTraceHandle(fact_index));
+                return Some(TraceFactHandle(fact_index));
             }
         }
 
@@ -157,11 +157,11 @@ impl ExecutionTrace {
     /// If the fact was not already known then it will return a fresh handle
     /// with the status `TraceStatus::Known`.
     /// Otherwise a handle to the existing fact will be returned.
-    pub fn register_fact(&mut self, fact: ChaseFact) -> FactTraceHandle {
+    pub fn register_fact(&mut self, fact: ChaseFact) -> TraceFactHandle {
         if let Some(handle) = self.find_fact(&fact) {
             handle
         } else {
-            let handle = FactTraceHandle(self.facts.len());
+            let handle = TraceFactHandle(self.facts.len());
             self.facts.push(TracedFact {
                 fact,
                 status: TraceStatus::Unknown,
@@ -172,19 +172,19 @@ impl ExecutionTrace {
     }
 
     /// Return the [`TraceStatus`] of a given fact identified by its [`FactTraceHandle`].
-    pub fn status(&self, handle: FactTraceHandle) -> &TraceStatus {
+    pub(crate) fn status(&self, handle: TraceFactHandle) -> &TraceStatus {
         &self.get_fact(handle).status
     }
 
     /// Update the [`TraceStatus`] of a given fact identified by its [`FactTraceHandle`].
-    pub fn update_status(&mut self, handle: FactTraceHandle, status: TraceStatus) {
+    pub(crate) fn update_status(&mut self, handle: TraceFactHandle, status: TraceStatus) {
         self.get_fact_mut(handle).status = status;
     }
 }
 
 /// Represents the application of a rule to derive a specific fact
 #[derive(Debug, Clone)]
-pub struct ExecutionTraceRuleApplication {
+pub struct TraceTreeRuleApplication {
     /// Rule that was applied
     pub rule: Rule,
     /// Variable assignment used during the rule application
@@ -199,13 +199,13 @@ pub enum ExecutionTraceTree {
     /// Node represent a fact in the initial data base
     Fact(ChaseFact),
     /// Node represents a derived fact
-    Rule(ExecutionTraceRuleApplication, Vec<ExecutionTraceTree>),
+    Rule(TraceTreeRuleApplication, Vec<ExecutionTraceTree>),
 }
 
 impl ExecutionTrace {
     /// Return a [`ExecutionTraceTree`] representation of an [`ExecutionTrace`]
     /// starting from a given fact.
-    pub fn tree(&self, fact_handle: FactTraceHandle) -> Option<ExecutionTraceTree> {
+    pub fn tree(&self, fact_handle: TraceFactHandle) -> Option<ExecutionTraceTree> {
         let traced_fact = self.get_fact(fact_handle);
 
         if let TraceStatus::Success(derivation) = &traced_fact.status {
@@ -221,7 +221,7 @@ impl ExecutionTrace {
                         }
                     }
 
-                    let tree_application = ExecutionTraceRuleApplication {
+                    let tree_application = TraceTreeRuleApplication {
                         rule: self.program.rules()[application.rule_index].clone(),
                         assignment: application.assignment.clone(),
                         _position: application._position,
@@ -239,7 +239,7 @@ impl ExecutionTrace {
 impl ExecutionTrace {
     /// Converts a rule to a string representation
     /// so it can appear as a node in the ascii representation of the [`ExecutionTrace`].
-    fn ascii_format_rule(&self, application: &RuleApplication) -> String {
+    fn ascii_format_rule(&self, application: &TraceRuleApplication) -> String {
         let mut rule_applied = self.program.rules()[application.rule_index].clone();
         rule_applied.apply_assignment(
             &application
@@ -260,7 +260,7 @@ impl ExecutionTrace {
     /// Create an ascii tree representation starting form a particular node.
     ///
     /// Returns `None` if no successful derivation can be given.
-    pub fn ascii_tree(&self, handle: FactTraceHandle) -> Option<ascii_tree::Tree> {
+    pub fn ascii_tree(&self, handle: TraceFactHandle) -> Option<ascii_tree::Tree> {
         let traced_fact = self.get_fact(handle);
 
         if let TraceStatus::Success(derivation) = &traced_fact.status {
@@ -292,7 +292,7 @@ impl ExecutionTrace {
     /// Create an ascii tree representation starting form a particular node.
     ///
     /// Returns `None` if no successful derivation can be given.
-    pub fn ascii_tree_string(&self, handle: FactTraceHandle) -> Option<String> {
+    pub fn ascii_tree_string(&self, handle: TraceFactHandle) -> Option<String> {
         let mut result = String::new();
         write_tree(&mut result, &self.ascii_tree(handle)?).ok()?;
 
@@ -359,11 +359,11 @@ impl ExecutionTrace {
     }
 
     /// Create a json representation of the trace.
-    pub fn json(&self, fact_handles: &[FactTraceHandle]) -> ExecutionTraceJson {
+    pub fn json(&self, fact_handles: &[TraceFactHandle]) -> ExecutionTraceJson {
         let mut final_conclusions = Vec::<String>::new();
         let mut fact_stack = fact_handles.to_vec();
         let mut inferences = Vec::<ExecutionTraceJsonInference>::new();
-        let mut inferred_conclusions = HashSet::<FactTraceHandle>::new();
+        let mut inferred_conclusions = HashSet::<TraceFactHandle>::new();
 
         for &final_handle in fact_handles {
             let mut successful_derivation = true;
@@ -414,7 +414,7 @@ mod test {
         },
     };
 
-    use super::{ExecutionTrace, RuleApplication};
+    use super::{ExecutionTrace, TraceRuleApplication};
 
     macro_rules! variable_assignment {
         ($($k:expr => $v:expr),*) => {
@@ -542,7 +542,7 @@ mod test {
         trace.update_status(
             trace_s_a,
             TraceStatus::Success(TraceDerivation::Derived(
-                RuleApplication::new(rule_2_index, rule_2_assignment, 0),
+                TraceRuleApplication::new(rule_2_index, rule_2_assignment, 0),
                 vec![trace_t_a],
             )),
         );
@@ -550,14 +550,14 @@ mod test {
         trace.update_status(
             trace_p_ba,
             TraceStatus::Success(TraceDerivation::Derived(
-                RuleApplication::new(rule_1_index, rule_1_assignment, 0),
+                TraceRuleApplication::new(rule_1_index, rule_1_assignment, 0),
                 vec![trace_q_ab],
             )),
         );
         trace.update_status(
             trace_r_ba,
             TraceStatus::Success(TraceDerivation::Derived(
-                RuleApplication::new(rule_3_index, rule_3_assignment, 0),
+                TraceRuleApplication::new(rule_3_index, rule_3_assignment, 0),
                 vec![trace_p_ba, trace_s_a],
             )),
         );

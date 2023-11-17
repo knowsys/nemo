@@ -15,7 +15,7 @@ use crate::{
     error::Error,
     execution::{
         planning::{plan_body_seminaive::SeminaiveStrategy, BodyStrategy},
-        tracing::trace::RuleApplication,
+        tracing::trace::TraceRuleApplication,
     },
     io::{input_manager::InputManager, resource_providers::ResourceProviders},
     model::{
@@ -33,7 +33,7 @@ use crate::{
 use super::{
     rule_execution::RuleExecution,
     selection_strategy::strategy::RuleSelectionStrategy,
-    tracing::trace::{ExecutionTrace, FactTraceHandle, TraceDerivation, TraceStatus},
+    tracing::trace::{ExecutionTrace, TraceDerivation, TraceFactHandle, TraceStatus},
 };
 
 // Number of tables that are periodically combined into one.
@@ -423,7 +423,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         trace: &mut ExecutionTrace,
         fact: ChaseFact,
         fact_values: Vec<StorageValueT>,
-    ) -> Result<FactTraceHandle, Error> {
+    ) -> Result<TraceFactHandle, Error> {
         let trace_handle = trace.register_fact(fact.clone());
 
         if fact.arity() != fact_values.len() {
@@ -676,7 +676,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .collect();
 
                 let mut fully_derived = true;
-                let mut subtraces = Vec::<FactTraceHandle>::new();
+                let mut subtraces = Vec::<TraceFactHandle>::new();
                 for body_atom in rule.positive_body() {
                     let next_fact_predicate = body_atom.predicate();
                     let mut next_fact_values = Vec::<StorageValueT>::new();
@@ -707,7 +707,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 }
 
                 let rule_application =
-                    RuleApplication::new(rule_index, rule_assignment, head_index);
+                    TraceRuleApplication::new(rule_index, rule_assignment, head_index);
 
                 let derivation = TraceDerivation::Derived(rule_application, subtraces);
                 trace.update_status(trace_handle, TraceStatus::Success(derivation));
@@ -724,7 +724,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Build an [`ExecutionTrace`] for a list of facts.
     /// Also returns a list containing a [`FactTraceHandle`] for each fact.
-    pub fn trace(&self, facts: Vec<Fact>) -> Result<(ExecutionTrace, Vec<FactTraceHandle>), Error> {
+    pub fn trace(&self, facts: Vec<Fact>) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
         let mut trace = ExecutionTrace::new(
             self.input_program.clone(),
             self.analysis.predicate_types.clone(),
