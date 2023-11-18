@@ -50,7 +50,7 @@ impl Map {
         Default::default()
     }
 
-    /// Construct a [Map] containg a single [Key] and [Term].
+    /// Construct a [Map] containg a single [Key] and [Constant].
     pub fn singleton(key: Key, value: Constant) -> Self {
         let mut pairs = BTreeMap::new();
         pairs.insert(key, value);

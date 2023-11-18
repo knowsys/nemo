@@ -22,7 +22,7 @@ impl InputManager {
         Self { resource_providers }
     }
 
-    /// Constructs a [`TableSource`] from the given [import specificiation][ImportExportSpec].
+    /// Constructs a [`TableSource`] from the given [import specificiation][ImportSpec].
     pub fn import_table(
         &self,
         import_spec: &ImportSpec,

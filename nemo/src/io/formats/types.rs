@@ -19,7 +19,7 @@ pub(crate) mod attributes {
     pub(crate) const RESOURCE: &str = "resource";
 }
 
-/// A writer for tables that takes iterators over [`PrimitiveType`][PrimitiveType] for each row.
+/// A writer for tables that takes iterators over [`PrimitiveType`] for each row.
 pub trait TableWriter {
     /// Write a record.
     fn write_record(&mut self, record: dyn Iterator<Item = PrimitiveType>) -> Result<(), Error>;
