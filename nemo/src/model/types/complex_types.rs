@@ -63,7 +63,7 @@ impl TupleType {
 
         for field_type in self.field_types.iter() {
             if let Some(primitive_type) = field_type.as_primitive() {
-                result.push(primitive_type.clone())
+                result.push(*primitive_type)
             } else {
                 // found a non-primitive type, so we're not flat.
                 return None;

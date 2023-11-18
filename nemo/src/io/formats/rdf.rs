@@ -239,7 +239,7 @@ impl RDFTriplesReader {
         let mut quads = 0;
         let mut on_quad = |quad: Quad| {
             let subject = Constant::try_from(quad.subject)?;
-            let predicate = Constant::try_from(quad.predicate)?;
+            let predicate = Constant::from(quad.predicate);
             let object = Constant::try_from(quad.object)?;
             let graph_name = Constant::try_from(quad.graph_name)?;
 
