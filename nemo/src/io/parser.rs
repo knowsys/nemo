@@ -273,8 +273,8 @@ fn parse_constant_term<'a>(
     traced(
         "parse_constant_term",
         alt((
-            map(parse_iri_constant(prefixes), |c| Constant::Abstract(c)),
-            map(turtle::numeric_literal, |n| Constant::NumericLiteral(n)),
+            map(parse_iri_constant(prefixes), Constant::Abstract),
+            map(turtle::numeric_literal, Constant::NumericLiteral),
             map_res(turtle::rdf_literal, move |literal| {
                 Constant::try_from(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
                     .map_err(ReadingError::from)
