@@ -3,24 +3,31 @@
 use std::collections::HashSet;
 use std::io::Read;
 
-use csv::{Reader, ReaderBuilder};
-
-use nemo_physical::builder_proxy::{ColumnBuilderProxy, PhysicalBuilderProxyEnum};
-use nemo_physical::table_reader::{Resource, TableReader};
+use csv::{Reader, ReaderBuilder, WriterBuilder};
 use thiserror::Error;
 
-use crate::model::types::primitive_logical_value::{LogicalFloat64, LogicalInteger, LogicalString};
-use crate::model::{Identifier, Key, Map, TupleConstraint, TypeConstraint};
+use nemo_physical::{
+    builder_proxy::{ColumnBuilderProxy, PhysicalBuilderProxyEnum},
+    table_reader::{Resource, TableReader},
+};
+
 use crate::{
     builder_proxy::LogicalColumnBuilderProxyT,
     error::{Error, ReadingError},
-    io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    model::{Constant, PrimitiveType},
-};
-
-use super::types::{
-    Direction, ExportSpec, FileFormat, FileFormatError, FileFormatMeta, ImportExportSpec,
-    ImportSpec, TableWriter,
+    io::{
+        formats::{
+            types::{
+                Direction, ExportSpec, FileFormat, FileFormatError, FileFormatMeta,
+                ImportExportSpec, ImportSpec, TableWriter,
+            },
+            PROGRESS_NOTIFY_INCREMENT,
+        },
+        resource_providers::ResourceProviders,
+    },
+    model::{
+        types::primitive_logical_value::{LogicalFloat64, LogicalInteger, LogicalString},
+        Constant, Identifier, Key, Map, PrimitiveType, TupleConstraint, TypeConstraint,
+    },
 };
 
 /// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
@@ -78,7 +85,7 @@ impl DSVReader {
             .from_reader(reader)
     }
 
-    /// Actually reads the data from the file and distributes the different fields into the corresponding [ProxyColumnBuilder]
+    /// Actually reads the data from the file and distributes the different fields into the corresponding [ColumnBuilderProxy]
     /// If a field cannot be read or parsed, the line will be ignored
     fn read_with_reader<'a, R2>(
         &self,
@@ -172,6 +179,23 @@ impl TableReader for DSVReader {
         let mut dsv_reader = Self::dsv_reader(reader, self.delimiter, Some(self.escape));
 
         self.read_into_builder_proxies_with_reader(physical_builder_proxies, &mut dsv_reader)
+    }
+}
+
+struct DSVWriter {
+    delimiter: u8,
+}
+
+impl TableWriter for DSVWriter {
+    fn write_record(
+        &mut self,
+        record: &[String],
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Error> {
+        Ok(WriterBuilder::new()
+            .delimiter(self.delimiter)
+            .from_writer(writer)
+            .write_record(record)?)
     }
 }
 
@@ -347,7 +371,9 @@ impl FileFormatMeta for DSVFormat {
     }
 
     fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
-        Err(FileFormatError::UnsupportedWrite(FileFormat::DSV).into())
+        Ok(Box::new(DSVWriter {
+            delimiter: self.delimiter.expect("is a required attribute"),
+        }))
     }
 
     fn resources(&self, attributes: &Map) -> Vec<Resource> {
@@ -394,6 +420,8 @@ impl FileFormatMeta for DSVFormat {
                 if delim.len() != 1 {
                     return Err(DSVFormatError::InvalidDelimiterLength(delimiter.clone()).into());
                 }
+
+                self.delimiter = Some(delim.as_bytes()[0]);
             } else {
                 return Err(DSVFormatError::InvalidDelimiterType(delimiter.clone()).into());
             }

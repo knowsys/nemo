@@ -1,7 +1,7 @@
 //! Contains structures and functionality for the binary
 use std::path::PathBuf;
 
-use nemo::{error::Error, io::OutputFileManager};
+use nemo::{error::Error, io::OutputManager};
 
 const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
 
@@ -79,7 +79,7 @@ pub struct OutputArgs {
 
 impl OutputArgs {
     /// Creates an output file manager with the current options
-    pub fn initialize_output_manager(self) -> Result<Option<OutputFileManager>, Error> {
+    pub fn initialize_output_manager(self) -> Result<Option<OutputManager>, Error> {
         if !self.save_results {
             if self.output_directory != PathBuf::from(DEFAULT_OUTPUT_DIRECTORY) {
                 log::warn!(
@@ -98,11 +98,17 @@ impl OutputArgs {
             return Ok(None);
         }
 
-        Ok(Some(OutputFileManager::try_new(
-            self.output_directory,
-            self.overwrite,
-            self.gz,
-        )?))
+        let mut output_manager = OutputManager::builder(self.output_directory)?;
+
+        if self.overwrite {
+            output_manager = output_manager.overwrite();
+        }
+
+        if self.gz {
+            output_manager = output_manager.gzip();
+        }
+
+        Ok(Some(output_manager.build()))
     }
 }
 

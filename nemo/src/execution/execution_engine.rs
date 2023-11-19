@@ -17,14 +17,18 @@ use crate::{
         planning::{plan_body_seminaive::SeminaiveStrategy, BodyStrategy},
         tracing::trace::TraceRuleApplication,
     },
-    io::{input_manager::InputManager, resource_providers::ResourceProviders},
+    io::{
+        formats::types::ExportSpec, input_manager::InputManager,
+        resource_providers::ResourceProviders, OutputManager,
+    },
     model::{
         chase_model::{ChaseAtom, ChaseFact, ChaseProgram},
         types::{
             primitive_logical_value::{PrimitiveLogicalValueIteratorT, PrimitiveLogicalValueT},
             primitive_types::PrimitiveType,
         },
-        Constant, Constraint, Fact, Identifier, PrimitiveTerm, Program, Term, Variable,
+        Constant, Constraint, Fact, Identifier, PrimitiveTerm, Program, Term, TupleConstraint,
+        Variable,
     },
     program_analysis::analysis::ProgramAnalysis,
     table_manager::{MemoryUsage, SubtableExecutionPlan, SubtableIdentifier, TableManager},
@@ -751,5 +755,35 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
 
         Ok((trace, handles))
+    }
+
+    /// Return the logical type for the given [predicate].
+    pub fn predicate_type(&self, predicate: &Identifier) -> Option<TupleConstraint> {
+        self.analysis
+            .predicate_types
+            .get(predicate)
+            .map(|types| TupleConstraint::exact(types.clone()))
+    }
+
+    /// Iterate over all [export specifications][ExportSpec] for output predicates.
+    pub fn output_predicates(&'_ self) -> impl Iterator<Item = ExportSpec> + '_ {
+        let exports = self
+            .program
+            .exports()
+            .cloned()
+            .map(|export_spec| (export_spec.predicate().clone(), export_spec))
+            .collect::<HashMap<_, _>>();
+
+        self.program
+            .output_predicates()
+            .map(move |predicate| match exports.get(&predicate) {
+                Some(export_spec) => export_spec.clone(),
+                None => OutputManager::default_export_spec(
+                    predicate.clone(),
+                    self.predicate_type(&predicate)
+                        .expect("all predicates should have a type by now"),
+                )
+                .expect("default export spec should always be valid"),
+            })
     }
 }

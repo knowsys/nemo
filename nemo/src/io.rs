@@ -2,16 +2,16 @@
 //!
 //! This module acts as a mediation layer between the logical and physical layer and offers traits to allow both layers an abstract view on the io process.
 
-use std::io::Write;
+use std::{io::Write, path::PathBuf};
 
 pub mod formats;
 pub mod input_manager;
-pub mod output_file_manager;
+pub mod output_manager;
 pub mod parser;
 pub mod resource_providers;
 
 pub use input_manager::InputManager;
-pub use output_file_manager::OutputFileManager;
+pub use output_manager::OutputManager;
 
 use nemo_physical::dictionary::value_serializer::TrieSerializer;
 
@@ -45,5 +45,27 @@ impl<W: Write> RecordWriter for csv::Writer<W> {
     {
         self.write_record(record)?;
         Ok(())
+    }
+}
+
+/// A trait for file formats that append a format-specific file extension to a path.
+pub trait PathWithFormatSpecificExtension {
+    /// Returns an appropriate file extension for this format, if
+    /// necessary.
+    fn extension(&self) -> Option<&str>;
+
+    /// Augment the given [path] with an extension corresponding to this
+    /// format.
+    fn path_with_extension(&self, path: PathBuf) -> PathBuf {
+        match self.extension() {
+            Some(new_extension) => path.with_extension(match path.extension() {
+                Some(existing_extension) => format!(
+                    "{}.{new_extension}",
+                    existing_extension.to_str().expect("valid UTF-8")
+                ),
+                None => new_extension.to_string(),
+            }),
+            None => path,
+        }
     }
 }

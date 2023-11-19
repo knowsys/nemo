@@ -449,7 +449,7 @@ impl FileFormatMeta for RDFFormat {
     }
 
     fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
-        Err(FileFormatError::UnsupportedWrite(FileFormat::RDF).into())
+        Err(FileFormatError::UnsupportedWrite(self.file_format()).into())
     }
 
     fn resources(&self, attributes: &Map) -> Vec<Resource> {

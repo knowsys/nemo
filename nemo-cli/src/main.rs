@@ -31,7 +31,6 @@ use nemo::{
     io::{
         parser::{parse_fact, parse_program},
         resource_providers::ResourceProviders,
-        RecordWriter,
     },
     meta::{timing::TimedDisplay, TimedCode},
     model::OutputPredicateSelection,
@@ -136,14 +135,14 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     let output_manager = cli.output.initialize_output_manager()?;
 
-    if let Some(output_manager) = &output_manager {
-        output_manager.prevent_accidental_overwrite(program.output_predicates())?;
-    }
-
     let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(
         program,
         ResourceProviders::with_base_path(cli.input_directory),
     )?;
+
+    if let Some(output_manager) = &output_manager {
+        output_manager.prevent_accidental_overwrite(engine.output_predicates())?;
+    }
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
     TimedCode::instance().sub("Reasoning").start();
@@ -162,15 +161,13 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
             .start();
         log::info!("writing output");
 
-        for predicate in engine.program().output_predicates() {
-            let mut writer = output_manager.create_file_writer(&predicate)?;
+        let export_specs = engine.output_predicates().collect::<Vec<_>>();
 
-            let Some(record_iter) = engine.output_serialization(predicate)? else {
-                continue;
-            };
-            for record in record_iter {
-                writer.write_record(record)?;
-            }
+        for export_spec in export_specs {
+            output_manager.export_table(
+                &export_spec,
+                engine.output_serialization(export_spec.predicate().clone())?,
+            )?;
         }
 
         TimedCode::instance()
