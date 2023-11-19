@@ -6,7 +6,7 @@ use std::{
 use nemo::{
     datatypes::Double,
     execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
-    io::{resource_providers::ResourceProviders, OutputFileManager, RecordWriter},
+    io::{resource_providers::ResourceProviders, OutputManager},
     model::{
         chase_model::{ChaseAtom, ChaseFact},
         types::primitive_logical_value::PrimitiveLogicalValueT,
@@ -67,16 +67,24 @@ impl NemoProgram {
 }
 
 #[pyclass]
-struct NemoOutputManager(nemo::io::OutputFileManager);
+struct NemoOutputManager(nemo::io::OutputManager);
 
 #[pymethods]
 impl NemoOutputManager {
     #[new]
     #[pyo3(signature=(path, overwrite=false, gzip=false))]
     fn py_new(path: String, overwrite: bool, gzip: bool) -> PyResult<Self> {
-        let output_manager = OutputFileManager::try_new(path.into(), overwrite, gzip).py_res()?;
+        let mut output_manager = OutputManager::builder(path.into()).py_res()?;
 
-        Ok(NemoOutputManager(output_manager))
+        if overwrite {
+            output_manager = output_manager.overwrite();
+        }
+
+        if gzip {
+            output_manager = output_manager.gzip();
+        }
+
+        Ok(NemoOutputManager(output_manager.build()))
     }
 }
 
@@ -324,17 +332,19 @@ impl NemoEngine {
         output_manager: &PyCell<NemoOutputManager>,
     ) -> PyResult<()> {
         let identifier = predicate.into();
-        let mut writer = output_manager
+        let types = self
+            .0
+            .predicate_type(&identifier)
+            .expect("predicate should have a type");
+
+        output_manager
             .borrow()
             .0
-            .create_file_writer(&identifier)
+            .export_table(
+                &OutputManager::default_export_spec(identifier.clone(), types).py_res()?,
+                self.0.output_serialization(identifier.clone()).py_res()?,
+            )
             .py_res()?;
-
-        if let Some(record_iter) = self.0.output_serialization(identifier).py_res()? {
-            for record in record_iter {
-                writer.write_record(record).py_res()?;
-            }
-        }
 
         Ok(())
     }

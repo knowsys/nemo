@@ -275,27 +275,33 @@ impl NemoEngine {
         predicate: String,
         sync_access_handle: web_sys::FileSystemSyncAccessHandle,
     ) -> Result<(), NemoError> {
-        use nemo::io::{output_file_manager::FileFormat, RecordWriter};
+        use nemo::{io::OutputManager, model::Identifier};
+
+        let types = self
+            .0
+            .predicate_type(&Identifier::from(predicate.clone()))
+            .expect("predicate should have a type");
 
         let Some(record_iter) = self
             .0
-            .output_serialization(predicate.into())
+            .output_serialization(predicate.clone().into())
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?
         else {
             return Ok(());
         };
 
-        let writer = SyncAccessHandleWriter(sync_access_handle);
+        let mut writer = SyncAccessHandleWriter(sync_access_handle);
 
-        let file_format = FileFormat::DSV(b',');
+        let export_spec =
+            OutputManager::default_export_spec(Identifier::from(predicate.clone()), types)
+                .map_err(WasmOrInternalNemoError::NemoError)
+                .map_err(NemoError)?;
 
-        let mut writer = file_format.create_writer(writer);
-
-        for record in record_iter {
-            writer.write_record(record).unwrap();
-        }
-        Ok(())
+        export_spec
+            .write_table(record_iter, &mut writer)
+            .map_err(WasmOrInternalNemoError::NemoError)
+            .map_err(NemoError)
     }
 
     #[wasm_bindgen(js_name = "parseAndTraceFact")]

@@ -1,6 +1,6 @@
 //! Types related to input and output formats.
 
-use std::{collections::HashSet, path::PathBuf, str::FromStr};
+use std::{collections::HashSet, io::Write, path::PathBuf, str::FromStr};
 
 use dyn_clone::DynClone;
 use thiserror::Error;
@@ -9,20 +9,16 @@ use nemo_physical::table_reader::{Resource, TableReader};
 
 use crate::{
     error::Error,
-    io::resource_providers::ResourceProviders,
-    model::{Constant, Identifier, Key, Map, PrimitiveType, TupleConstraint},
+    io::{
+        formats::{dsv::DSVFormat, rdf::RDFFormat},
+        resource_providers::ResourceProviders,
+        PathWithFormatSpecificExtension,
+    },
+    model::{Constant, Identifier, Key, Map, TupleConstraint},
 };
-
-use super::{dsv::DSVFormat, rdf::RDFFormat};
 
 pub(crate) mod attributes {
     pub(crate) const RESOURCE: &str = "resource";
-}
-
-/// A writer for tables that takes iterators over [`PrimitiveType`] for each row.
-pub trait TableWriter {
-    /// Write a record.
-    fn write_record(&mut self, record: dyn Iterator<Item = PrimitiveType>) -> Result<(), Error>;
 }
 
 /// IO Direction
@@ -32,6 +28,13 @@ pub enum Direction {
     Reading,
     /// Processing output.
     Writing,
+}
+
+/// A trait for writing tables to a [writer][Write], one record at a
+/// time.
+pub trait TableWriter {
+    /// Write a [record] in the table to the given [writer].
+    fn write_record(&mut self, record: &[String], writer: &mut dyn Write) -> Result<(), Error>;
 }
 
 /// A supported file format for I/O.
@@ -115,11 +118,10 @@ pub trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
         self.validate_attribute_values(direction, attributes)
     }
 }
-
 dyn_clone::clone_trait_object!(FileFormatMeta);
 
 /// An import/export specification.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ImportExportSpec {
     /// The predicate we're handling.
     pub(crate) predicate: Identifier,
@@ -146,9 +148,19 @@ impl ImportExportSpec {
         )
     }
 
-    /// Obtain a [`TableWriter`] for this export specification.
-    pub fn writer(&self) -> Result<Box<dyn TableWriter>, Error> {
-        self.format.writer(&self.attributes)
+    /// Write the given [table] to the given [writer], using this export specification.
+    pub fn write_table(
+        &self,
+        table: impl Iterator<Item = Vec<String>>,
+        writer: &mut dyn Write,
+    ) -> Result<(), Error> {
+        let mut table_writer = self.format.writer(&self.attributes)?;
+
+        for record in table {
+            table_writer.write_record(&record, writer)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -214,9 +226,13 @@ impl From<ImportExportSpec> for ImportSpec {
 pub struct ExportSpec(ImportExportSpec);
 
 impl ExportSpec {
-    /// Obtain a [`TableWriter`] for this export specification.
-    fn writer(&self) -> Result<Box<dyn TableWriter>, Error> {
-        self.0.writer()
+    /// Write the given [table] to the given [writer].
+    pub fn write_table(
+        &self,
+        table: impl Iterator<Item = Vec<String>>,
+        writer: &mut dyn Write,
+    ) -> Result<(), Error> {
+        self.0.write_table(table, writer)
     }
 
     /// Return the predicate.
@@ -335,16 +351,34 @@ pub enum FileFormat {
 }
 
 impl FileFormat {
+    const DEFAULT_RDF_EXTENSION: &'static str = "ttl";
+
     /// Return the associated [`FileFormatMeta`] for this format.
     pub fn into_meta(self) -> Box<dyn FileFormatMeta> {
         match self {
             Self::DSV => Box::new(DSVFormat::new()),
-            Self::CSV => Box::new(DSVFormat::with_delimiter(b',')),
-            Self::TSV => Box::new(DSVFormat::with_delimiter(b'\t')),
+            Self::CSV => Box::new(DSVFormat::csv()),
+            Self::TSV => Box::new(DSVFormat::tsv()),
             Self::RDF | Self::NTriples | Self::Turtle | Self::RDFXML | Self::NQuads => {
                 Box::new(RDFFormat::new())
             }
         }
+    }
+}
+
+impl PathWithFormatSpecificExtension for FileFormat {
+    /// Return an appropriate file name extension for this format.
+    fn extension(&self) -> Option<&str> {
+        Some(match self {
+            FileFormat::CSV => "csv",
+            FileFormat::DSV => "dsv",
+            FileFormat::TSV => "tsv",
+            FileFormat::RDF => Self::DEFAULT_RDF_EXTENSION,
+            FileFormat::NTriples => "nt",
+            FileFormat::NQuads => "nq",
+            FileFormat::Turtle => "ttl",
+            FileFormat::RDFXML => "rdf",
+        })
     }
 }
 
