@@ -12,7 +12,6 @@ use crate::{
     io::{
         formats::{dsv::DSVFormat, rdf::RDFFormat},
         resource_providers::ResourceProviders,
-        PathWithFormatSpecificExtension,
     },
     model::{Constant, Identifier, Key, Map, TupleConstraint},
 };
@@ -30,10 +29,32 @@ pub enum Direction {
     Writing,
 }
 
+/// A trait for file formats that append a format-specific file extension to a path.
+pub trait PathWithFormatSpecificExtension {
+    /// Returns an appropriate file extension for this format, if
+    /// necessary.
+    fn extension(&self) -> Option<&str>;
+
+    /// Augment the given [path][PathBuf] with an extension corresponding to this
+    /// format.
+    fn path_with_extension(&self, path: PathBuf) -> PathBuf {
+        match self.extension() {
+            Some(new_extension) => path.with_extension(match path.extension() {
+                Some(existing_extension) => format!(
+                    "{}.{new_extension}",
+                    existing_extension.to_str().expect("valid UTF-8")
+                ),
+                None => new_extension.to_string(),
+            }),
+            None => path,
+        }
+    }
+}
+
 /// A trait for writing tables to a [writer][Write], one record at a
 /// time.
 pub trait TableWriter {
-    /// Write a [record] in the table to the given [writer].
+    /// Write a record in the table to the given [writer][Write].
     fn write_record(&mut self, record: &[String], writer: &mut dyn Write) -> Result<(), Error>;
 }
 
@@ -148,7 +169,7 @@ impl ImportExportSpec {
         )
     }
 
-    /// Write the given [table] to the given [writer], using this export specification.
+    /// Write the given table to the given [writer][Write], using this export specification.
     pub fn write_table(
         &self,
         table: impl Iterator<Item = Vec<String>>,
@@ -226,7 +247,7 @@ impl From<ImportExportSpec> for ImportSpec {
 pub struct ExportSpec(ImportExportSpec);
 
 impl ExportSpec {
-    /// Write the given [table] to the given [writer].
+    /// Write the given table to the given [writer][Write].
     pub fn write_table(
         &self,
         table: impl Iterator<Item = Vec<String>>,

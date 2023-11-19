@@ -1,4 +1,4 @@
-//! This module contains the [OutputManager], which generates [`RecordWriter`] objects
+//! This module contains the [OutputManager], which writes tables to files.
 
 use std::{
     fs::{create_dir_all, OpenOptions},
@@ -10,7 +10,7 @@ use flate2::{write::GzEncoder, Compression};
 
 use crate::{
     error::Error,
-    io::{formats::types::ExportSpec, PathWithFormatSpecificExtension},
+    io::formats::types::{ExportSpec, PathWithFormatSpecificExtension},
     model::{Identifier, TupleConstraint},
 };
 
@@ -73,7 +73,7 @@ pub struct OutputManager {
 
 impl OutputManager {
     /// Create a [builder][OutputManagerBuilder] for an [output
-    /// file manager][OutputManager] with the given [path].
+    /// file manager][OutputManager] with the given [path][PathBuf].
     pub fn builder(path: PathBuf) -> Result<OutputManagerBuilder, Error> {
         create_dir_all(&path)?;
         Ok(OutputManagerBuilder::new(path))
@@ -153,8 +153,8 @@ impl OutputManager {
         Ok(())
     }
 
-    /// Obtain a default export spec (CSV) for the given [predicate]
-    /// and the declared types.
+    /// Obtain a default export spec (CSV) for the given [predicate][Identifier]
+    /// and the [declared types][TupleConstraint].
     pub fn default_export_spec(
         predicate: Identifier,
         declared_types: TupleConstraint,
@@ -170,7 +170,7 @@ pub struct OutputManagerBuilder {
 }
 
 impl OutputManagerBuilder {
-    /// Create a new builder with the given [path].
+    /// Create a new builder with the given [path][PathBuf].
     pub fn new(path: PathBuf) -> Self {
         let manager = OutputManager {
             path,
