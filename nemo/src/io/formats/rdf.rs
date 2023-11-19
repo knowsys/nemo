@@ -126,15 +126,15 @@ fn is_nq(resource: &Resource) -> bool {
 
 /// A [`TableReader`] for RDF 1.1 files containing triples.
 #[derive(Debug, Clone)]
-pub(crate) struct RDFTriplesReader {
+pub(crate) struct RDFReader {
     resource_providers: ResourceProviders,
     resource: Resource,
     base: Option<Iri<String>>,
     logical_types: Vec<PrimitiveType>,
 }
 
-impl RDFTriplesReader {
-    /// Create a new [`RDFTriplesReader`]
+impl RDFReader {
+    /// Create a new [`RDFReader`]
     pub fn new(
         resource_providers: ResourceProviders,
         resource: Resource,
@@ -306,7 +306,7 @@ impl RDFTriplesReader {
     }
 }
 
-impl TableReader for RDFTriplesReader {
+impl TableReader for RDFReader {
     fn read_into_builder_proxies<'a: 'b, 'b>(
         self: Box<Self>,
         builder_proxies: &'b mut Vec<PhysicalBuilderProxyEnum<'a>>,
@@ -440,7 +440,7 @@ impl FileFormatMeta for RDFFormat {
             .get(&Key::identifier_from_str(BASE))
             .map(|term| term.as_abstract().expect("must be an identifier").name());
 
-        Ok(Box::new(RDFTriplesReader::new(
+        Ok(Box::new(RDFReader::new(
             resource_providers,
             self.resource.clone().expect("is a required attribute"),
             base,
@@ -569,7 +569,7 @@ mod test {
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
                 ];
-                let reader = RDFTriplesReader::new(ResourceProviders::empty(), String::new(), None, vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
+                let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None, vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
 
                 let result = reader.read_with_parser(&mut builders, $make_parser);
                 assert!(result.is_ok());
@@ -636,7 +636,7 @@ mod test {
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
         ];
-        let reader = RDFTriplesReader::new(
+        let reader = RDFReader::new(
             ResourceProviders::empty(),
             String::new(),
             None,
