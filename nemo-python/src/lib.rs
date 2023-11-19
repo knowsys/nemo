@@ -10,7 +10,7 @@ use nemo::{
     model::{
         chase_model::{ChaseAtom, ChaseFact},
         types::primitive_logical_value::PrimitiveLogicalValueT,
-        Constant, NumericLiteral, RdfLiteral, Variable, XSD_STRING,
+        Constant, Identifier, NumericLiteral, RdfLiteral, Variable, XSD_STRING,
     },
 };
 
@@ -342,7 +342,7 @@ impl NemoEngine {
             .0
             .export_table(
                 &OutputManager::default_export_spec(identifier.clone(), types).py_res()?,
-                self.0.output_serialization(identifier.clone()).py_res()?,
+                self.0.output_serialization(&identifier).py_res()?,
             )
             .py_res()?;
 
@@ -350,7 +350,7 @@ impl NemoEngine {
     }
 
     fn result(mut slf: PyRefMut<'_, Self>, predicate: String) -> PyResult<Py<NemoResults>> {
-        let iter = slf.0.table_scan(predicate.into()).py_res()?;
+        let iter = slf.0.table_scan(&Identifier::from(predicate)).py_res()?;
         let results = NemoResults(Box::new(
             iter.into_iter().flatten().collect::<Vec<_>>().into_iter(),
         ));

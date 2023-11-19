@@ -16,6 +16,7 @@ use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo::model::types::primitive_logical_value::PrimitiveLogicalValueT;
 use nemo::model::Constant;
+use nemo::model::Identifier;
 use nemo::model::NumericLiteral;
 use nemo_physical::datatypes::Double;
 use nemo_physical::error::ExternalReadingError;
@@ -257,7 +258,7 @@ impl NemoEngine {
     pub fn result(&mut self, predicate: String) -> Result<NemoResults, NemoError> {
         let iter = self
             .0
-            .table_scan(predicate.into())
+            .table_scan(&Identifier::from(predicate))
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
 
@@ -277,14 +278,15 @@ impl NemoEngine {
     ) -> Result<(), NemoError> {
         use nemo::{io::OutputManager, model::Identifier};
 
+        let identifier = Identifier::from(predicate.clone());
         let types = self
             .0
-            .predicate_type(&Identifier::from(predicate.clone()))
+            .predicate_type(&identifier)
             .expect("predicate should have a type");
 
         let Some(record_iter) = self
             .0
-            .output_serialization(predicate.clone().into())
+            .output_serialization(&identifier)
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?
         else {
@@ -293,10 +295,9 @@ impl NemoEngine {
 
         let mut writer = SyncAccessHandleWriter(sync_access_handle);
 
-        let export_spec =
-            OutputManager::default_export_spec(Identifier::from(predicate.clone()), types)
-                .map_err(WasmOrInternalNemoError::NemoError)
-                .map_err(NemoError)?;
+        let export_spec = OutputManager::default_export_spec(identifier, types)
+            .map_err(WasmOrInternalNemoError::NemoError)
+            .map_err(NemoError)?;
 
         export_spec
             .write_table(record_iter, &mut writer)

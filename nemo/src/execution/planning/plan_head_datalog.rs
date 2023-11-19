@@ -66,8 +66,7 @@ impl HeadStrategy for DatalogStrategy {
             // We just pick the default order
             // TODO: Is there a better pick?
             let head_order = ColumnOrder::default();
-            let head_table_name =
-                table_manager.generate_table_name(predicate.clone(), &head_order, step);
+            let head_table_name = table_manager.generate_table_name(predicate, &head_order, step);
 
             let mut project_append_nodes =
                 Vec::<ExecutionNodeRef>::with_capacity(head_instructions.len());
@@ -91,7 +90,7 @@ impl HeadStrategy for DatalogStrategy {
 
             let new_tables_union = current_plan.plan_mut().union(project_append_nodes);
 
-            let old_subtables = table_manager.tables_in_range(predicate.clone(), &(0..step));
+            let old_subtables = table_manager.tables_in_range(predicate, &(0..step));
             let old_table_nodes: Vec<ExecutionNodeRef> = old_subtables
                 .into_iter()
                 .map(|id| current_plan.plan_mut().fetch_existing(id))

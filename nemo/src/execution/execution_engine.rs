@@ -273,8 +273,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                     let range = start..(self.current_step + 1);
 
-                    self.table_manager
-                        .combine_tables(updated_pred.clone(), range)?;
+                    self.table_manager.combine_tables(&updated_pred, range)?;
 
                     self.predicate_last_union
                         .insert(updated_pred, self.current_step);
@@ -299,16 +298,16 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Get a list of column iterators for the predicate
     pub fn get_predicate_column_iterators(
         &mut self,
-        predicate: Identifier,
+        predicate: &Identifier,
     ) -> Result<Option<Vec<PrimitiveLogicalValueIteratorT>>, Error> {
-        let Some(table_id) = self.table_manager.combine_predicate(predicate.clone())? else {
+        let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
             return Ok(None);
         };
 
         let predicate_types: &Vec<PrimitiveType> = self
             .analysis
             .predicate_types
-            .get(&predicate)
+            .get(predicate)
             .expect("All predicates should have types by now.");
 
         let iterators = self.table_manager.table_column_iters(table_id)?;
@@ -326,7 +325,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     // TODO: we probably want to return a list of column iterators over logical values
     pub fn table_scan(
         &mut self,
-        predicate: Identifier,
+        predicate: &Identifier,
     ) -> Result<Option<impl Iterator<Item = Vec<PrimitiveLogicalValueT>> + '_>, Error> {
         let Some(logically_mapped_iters) = self.get_predicate_column_iterators(predicate)? else {
             return Ok(None);
@@ -351,16 +350,16 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Creates an [`Iterator`] over the resulting facts of a predicate.
     pub fn output_serialization(
         &mut self,
-        predicate: Identifier,
+        predicate: &Identifier,
     ) -> Result<Option<impl Iterator<Item = Vec<String>> + '_>, Error> {
-        let Some(table_id) = self.table_manager.combine_predicate(predicate.clone())? else {
+        let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
             return Ok(None);
         };
 
         let predicate_types: &Vec<PrimitiveType> = self
             .analysis
             .predicate_types
-            .get(&predicate)
+            .get(predicate)
             .expect("All predicates should have types by now.");
 
         let iterators = self.table_manager.table_column_iters(table_id)?;

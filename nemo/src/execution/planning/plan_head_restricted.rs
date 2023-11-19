@@ -201,7 +201,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
         let node_old_satisfied_matches_frontier = subplan_union(
             current_plan.plan_mut(),
             table_manager,
-            self.aux_predicate.clone(),
+            &self.aux_predicate,
             &(0..step),
         );
         let node_new_satisfied_matches_frontier = current_plan.plan_mut().minus(
@@ -299,7 +299,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
             // TODO: Is there a better pick?
             let result_order = ColumnOrder::default();
             let result_table_name =
-                table_manager.generate_table_name(predicate.clone(), &result_order, step);
+                table_manager.generate_table_name(predicate, &result_order, step);
             let result_subtable_id = SubtableIdentifier::new(predicate.clone(), step);
 
             if *self.predicate_to_full_existential.get(predicate).unwrap() {
@@ -313,8 +313,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
             } else {
                 // Duplicate elimination for atoms thats do not contain existential variables
                 // Same as in plan_head_datalog
-                let old_tables: Vec<TableId> =
-                    table_manager.tables_in_range(predicate.clone(), &(0..step));
+                let old_tables: Vec<TableId> = table_manager.tables_in_range(predicate, &(0..step));
                 let old_table_nodes: Vec<ExecutionNodeRef> = old_tables
                     .into_iter()
                     .map(|id| current_plan.plan_mut().fetch_existing(id))

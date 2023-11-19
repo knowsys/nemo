@@ -166,7 +166,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         for export_spec in export_specs {
             output_manager.export_table(
                 &export_spec,
-                engine.output_serialization(export_spec.predicate().clone())?,
+                engine.output_serialization(export_spec.predicate())?,
             )?;
         }
 
