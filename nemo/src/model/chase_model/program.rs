@@ -250,7 +250,7 @@ impl ChaseProgram {
 
     /// Return an Iterator over all output predicates
     pub fn output_predicates(&self) -> impl Iterator<Item = Identifier> {
-        let result: Vec<_> = match &self.output_predicates {
+        let mut result: Vec<_> = match &self.output_predicates {
             OutputPredicateSelection::AllIDBPredicates => {
                 log::debug!("outputting all IDB predicates");
                 self.idb_predicates().iter().cloned().collect()
@@ -264,6 +264,13 @@ impl ChaseProgram {
                     .collect()
             }
         };
+
+        let edb_predicates = self.edb_predicates();
+        for export_spec in self.exports() {
+            if edb_predicates.contains(export_spec.predicate()) {
+                result.push(export_spec.predicate().clone());
+            }
+        }
 
         result.into_iter()
     }
@@ -326,7 +333,6 @@ impl TryFrom<Program> for ChaseProgram {
         if let OutputPredicateSelection::SelectedPredicates(predicates) =
             program.output_predicate_selection()
         {
-            log::debug!("setting output predicates: {predicates:?}");
             builder = builder.output_predicates(predicates.clone());
         }
 
