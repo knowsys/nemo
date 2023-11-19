@@ -756,7 +756,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok((trace, handles))
     }
 
-    /// Return the logical type for the given [predicate].
+    /// Return the [logical type][TupleConstraint] for the given [predicate][Identifier].
     pub fn predicate_type(&self, predicate: &Identifier) -> Option<TupleConstraint> {
         self.analysis
             .predicate_types
