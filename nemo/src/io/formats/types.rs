@@ -40,10 +40,14 @@ pub trait PathWithFormatSpecificExtension {
     fn path_with_extension(&self, path: PathBuf) -> PathBuf {
         match self.extension() {
             Some(new_extension) => path.with_extension(match path.extension() {
-                Some(existing_extension) => format!(
-                    "{}.{new_extension}",
-                    existing_extension.to_str().expect("valid UTF-8")
-                ),
+                Some(existing_extension) => {
+                    let existing_extension = existing_extension.to_str().expect("valid UTF-8");
+
+                    if existing_extension == new_extension {
+                        return path;
+                    }
+                    format!("{existing_extension}.{new_extension}")
+                }
                 None => new_extension.to_string(),
             }),
             None => path,
