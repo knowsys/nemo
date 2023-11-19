@@ -23,4 +23,4 @@ wasm-bindgen-futures = "0.4.37"
 web-sys = { version = "0.3.64", features = [ "Blob", "FileReaderSync", "FileSystemSyncAccessHandle" ]}
 
 [dev-dependencies]
-wasm-bindgen-test = "0.2"
+wasm-bindgen-test = "0.3"
