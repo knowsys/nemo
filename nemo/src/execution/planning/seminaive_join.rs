@@ -50,7 +50,7 @@ impl SeminaiveJoinGenerator {
         let mut main_binding = Vec::new();
 
         for atom in &self.atoms {
-            let last_step = if let Some(step) = table_manager.last_step(atom.predicate()) {
+            let last_step = if let Some(step) = table_manager.last_step(&atom.predicate()) {
                 step
             } else {
                 return plan.union_empty();
@@ -81,23 +81,15 @@ impl SeminaiveJoinGenerator {
 
             // For every atom that did not receive any update since the last rule application take all available elements
             for predicate in side_atoms.iter() {
-                let subnode = subplan_union(
-                    plan,
-                    table_manager,
-                    predicate.clone(),
-                    &(0..step_last_applied),
-                );
+                let subnode =
+                    subplan_union(plan, table_manager, predicate, &(0..step_last_applied));
                 seminaive_node.add_subnode(subnode);
             }
 
             // For every atom before the mid point we take all the tables until the current `rule_step`
             for predicate in main_atoms.iter().take(atom_index) {
-                let subnode = subplan_union(
-                    plan,
-                    table_manager,
-                    predicate.clone(),
-                    &(0..current_step_number),
-                );
+                let subnode =
+                    subplan_union(plan, table_manager, predicate, &(0..current_step_number));
                 seminaive_node.add_subnode(subnode);
             }
 
@@ -105,19 +97,15 @@ impl SeminaiveJoinGenerator {
             let midnode = subplan_union(
                 plan,
                 table_manager,
-                main_atoms[atom_index].clone(),
+                &main_atoms[atom_index],
                 &(step_last_applied..current_step_number),
             );
             seminaive_node.add_subnode(midnode);
 
             // For every atom past the mid point we take only the old tables
             for predicate in main_atoms.iter().skip(atom_index + 1) {
-                let subnode = subplan_union(
-                    plan,
-                    table_manager,
-                    predicate.clone(),
-                    &(0..step_last_applied),
-                );
+                let subnode =
+                    subplan_union(plan, table_manager, predicate, &(0..step_last_applied));
                 seminaive_node.add_subnode(subnode);
             }
 

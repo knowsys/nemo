@@ -382,8 +382,8 @@ impl TableManager {
 
     /// Return the step number of the last subtable that was added under a predicate.
     /// Returns `None` if the predicate has no subtables.
-    pub fn last_step(&self, predicate: Identifier) -> Option<usize> {
-        self.predicate_subtables.get(&predicate)?.last_step()
+    pub fn last_step(&self, predicate: &Identifier) -> Option<usize> {
+        self.predicate_subtables.get(predicate)?.last_step()
     }
 
     /// Count all the rows in the table manager that belong to a predicate.
@@ -402,8 +402,8 @@ impl TableManager {
 
     /// Combine all subtables of a predicate into one table
     /// and return the [`TableId`] of that new table.
-    pub fn combine_predicate(&mut self, predicate: Identifier) -> Result<Option<TableId>, Error> {
-        match self.last_step(predicate.clone()) {
+    pub fn combine_predicate(&mut self, predicate: &Identifier) -> Result<Option<TableId>, Error> {
+        match self.last_step(predicate) {
             Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)),
             None => Ok(None),
         }
@@ -412,7 +412,7 @@ impl TableManager {
     /// Generates an appropriate table name for subtable.
     pub fn generate_table_name(
         &self,
-        predicate: Identifier,
+        predicate: &Identifier,
         order: &ColumnOrder,
         step: usize,
     ) -> String {
@@ -425,7 +425,7 @@ impl TableManager {
     /// Generates an appropriate table name for a table that represents multiple subtables.
     fn generate_table_name_combined(
         &self,
-        predicate: Identifier,
+        predicate: &Identifier,
         order: &ColumnOrder,
         steps: &Range<usize>,
     ) -> String {
@@ -441,7 +441,7 @@ impl TableManager {
     /// Generates an appropriate table name for a table that is a reordered version of another.
     fn generate_table_name_reference(
         &self,
-        predicate: Identifier,
+        predicate: &Identifier,
         step: usize,
         referenced_table_id: TableId,
         permutation: &Permutation,
@@ -491,7 +491,7 @@ impl TableManager {
             .expect("Predicate should be registered before calling this function")
             .schema
             .clone();
-        let name = self.generate_table_name(predicate.clone(), &edb_order, EDB_STEP);
+        let name = self.generate_table_name(&predicate, &edb_order, EDB_STEP);
 
         let table_id = self.database.register_table(&name, schema);
         self.database.add_sources(table_id, edb_order, sources);
@@ -514,7 +514,7 @@ impl TableManager {
             .expect("Predicate should be registered before calling this function")
             .schema
             .clone();
-        let name = self.generate_table_name(predicate.clone(), &order, step);
+        let name = self.generate_table_name(&predicate, &order, step);
 
         let table_id = self.database.register_add_trie(&name, schema, order, trie);
         self.add_subtable(SubtableIdentifier::new(predicate, step), table_id);
@@ -539,7 +539,7 @@ impl TableManager {
             .schema
             .clone();
         let name = self.generate_table_name_reference(
-            subtable.predicate.clone(),
+            &subtable.predicate,
             subtable.step,
             referenced_id,
             &permutation,
@@ -553,9 +553,9 @@ impl TableManager {
     }
 
     /// Return the ids of all subtables of a predicate within a certain range of steps.
-    pub fn tables_in_range(&self, predicate: Identifier, range: &Range<usize>) -> Vec<TableId> {
+    pub fn tables_in_range(&self, predicate: &Identifier, range: &Range<usize>) -> Vec<TableId> {
         self.predicate_subtables
-            .get(&predicate)
+            .get(predicate)
             .map(|handler| handler.cover_range(range))
             .unwrap_or_default()
     }
@@ -563,13 +563,13 @@ impl TableManager {
     /// Combine subtables in a certain range into one larger table.
     pub fn combine_tables(
         &mut self,
-        predicate: Identifier,
+        predicate: &Identifier,
         range: Range<usize>,
     ) -> Result<Option<TableId>, Error> {
         let combined_order: ColumnOrder = ColumnOrder::default();
 
-        let name = self.generate_table_name_combined(predicate.clone(), &combined_order, &range);
-        let Some(subtable_handler) = self.predicate_subtables.get_mut(&predicate) else {
+        let name = self.generate_table_name_combined(predicate, &combined_order, &range);
+        let Some(subtable_handler) = self.predicate_subtables.get_mut(predicate) else {
             return Ok(None);
         };
 
