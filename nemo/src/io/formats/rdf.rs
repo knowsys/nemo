@@ -124,6 +124,12 @@ fn is_nq(resource: &Resource) -> bool {
     resource.ends_with(".nq.gz") || resource.ends_with(".nq")
 }
 
+macro_rules! constant_column_builder {
+    (::$method:ident) => {
+        <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::$method
+    };
+}
+
 /// A [`TableReader`] for RDF 1.1 files containing triples.
 #[derive(Debug, Clone)]
 pub(crate) struct RDFReader {
@@ -172,29 +178,14 @@ impl RDFReader {
             let predicate: Constant = triple.predicate.into();
             let object: Constant = triple.object.try_into()?;
 
-            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
-                &mut builders[0],
-                subject,
-            )?;
-            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
-                &mut builders[1],
-                predicate,
-            ) {
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
-                    &mut builders[0],
-                );
+            constant_column_builder!(::add)(&mut builders[0], subject)?;
+            if let Err(e) = constant_column_builder!(::add)(&mut builders[1], predicate) {
+                constant_column_builder!(::forget)(&mut builders[0]);
                 return Err(e);
             }
-            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
-                &mut builders[2],
-                object,
-            ) {
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
-                    &mut builders[0],
-                );
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
-                    &mut builders[1],
-                );
+            if let Err(e) = constant_column_builder!(::add)(&mut builders[2], object) {
+                constant_column_builder!(::forget)(&mut builders[0]);
+                constant_column_builder!(::forget)(&mut builders[1]);
                 return Err(e);
             }
 
@@ -243,44 +234,20 @@ impl RDFReader {
             let object = Constant::try_from(quad.object)?;
             let graph_name = Constant::try_from(quad.graph_name)?;
 
-            <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
-                &mut builders[0],
-                subject,
-            )?;
-            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
-                &mut builders[1],
-                predicate,
-            ) {
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
-                    &mut builders[0],
-                );
+            constant_column_builder!(::add)(&mut builders[0], subject)?;
+            if let Err(e) = constant_column_builder!(::add)(&mut builders[1], predicate) {
+                constant_column_builder!(::forget)(&mut builders[0]);
                 return Err(e);
             }
-            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
-                &mut builders[2],
-                object,
-            ) {
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
-                    &mut builders[0],
-                );
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
-                    &mut builders[1],
-                );
+            if let Err(e) = constant_column_builder!(::add)(&mut builders[2], object) {
+                constant_column_builder!(::forget)(&mut builders[0]);
+                constant_column_builder!(::forget)(&mut builders[1]);
                 return Err(e);
             }
-            if let Err(e) = <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::add(
-                &mut builders[3],
-                graph_name,
-            ) {
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
-                    &mut builders[0],
-                );
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
-                    &mut builders[1],
-                );
-                <LogicalColumnBuilderProxyT as ColumnBuilderProxy<Constant>>::forget(
-                    &mut builders[2],
-                );
+            if let Err(e) = constant_column_builder!(::add)(&mut builders[3], graph_name) {
+                constant_column_builder!(::forget)(&mut builders[0]);
+                constant_column_builder!(::forget)(&mut builders[1]);
+                constant_column_builder!(::forget)(&mut builders[2]);
                 return Err(e);
             }
 
