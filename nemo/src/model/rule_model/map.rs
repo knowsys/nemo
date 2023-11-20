@@ -52,10 +52,7 @@ impl Map {
 
     /// Construct a [Map] containg a single [Key] and [Constant].
     pub fn singleton(key: Key, value: Constant) -> Self {
-        let mut pairs = BTreeMap::new();
-        pairs.insert(key, value);
-
-        Self { pairs }
+        Self::from_iter(Some((key, value)))
     }
 
     /// An iterator over the pairs in the map
