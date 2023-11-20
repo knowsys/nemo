@@ -161,6 +161,9 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
             .start();
         log::info!("writing output");
 
+        // we need to collect here, since this will borrow `engine`,
+        // and `output_serialization` requires a mutable borrow on
+        // `engine`.
         let export_specs = engine.output_predicates().collect::<Vec<_>>();
 
         for export_spec in export_specs {
