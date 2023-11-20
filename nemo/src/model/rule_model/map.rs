@@ -80,9 +80,3 @@ impl FromIterator<(Key, Constant)> for Map {
         }
     }
 }
-
-impl From<Vec<(Key, Constant)>> for Map {
-    fn from(pairs: Vec<(Key, Constant)>) -> Self {
-        pairs.into_iter().collect()
-    }
-}
