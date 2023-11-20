@@ -102,7 +102,9 @@ impl OutputManager {
         options
     }
 
-    /// Export
+    /// Export a (possibly empty) table according to the given [export
+    /// specification][ExportSpec]. If the table is empty (i.e.,
+    /// [Option<_>::None]), an empty output file will be created.
     pub fn export_table(
         &self,
         export_spec: &ExportSpec,
