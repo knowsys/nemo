@@ -177,7 +177,7 @@ impl RDFReader {
         }
     }
 
-    fn read_with_parser<Parser>(
+    fn read_triples_with_parser<Parser>(
         &self,
         physical_builder_proxies: &mut [PhysicalBuilderProxyEnum<'_>],
         make_parser: impl FnOnce() -> Parser,
@@ -308,15 +308,15 @@ impl TableReader for RDFReader {
 
         match self.variant.refine_with_resource(&self.resource) {
             RDFVariant::NTriples => {
-                self.read_with_parser(builder_proxies, || NTriplesParser::new(reader))
+                self.read_triples_with_parser(builder_proxies, || NTriplesParser::new(reader))
             }
             RDFVariant::NQuads => {
                 self.read_quads_with_parser(builder_proxies, || NQuadsParser::new(reader))
             }
-            RDFVariant::Turtle => self.read_with_parser(builder_proxies, || {
+            RDFVariant::Turtle => self.read_triples_with_parser(builder_proxies, || {
                 TurtleParser::new(reader, self.base.clone())
             }),
-            RDFVariant::RDFXML => self.read_with_parser(builder_proxies, || {
+            RDFVariant::RDFXML => self.read_triples_with_parser(builder_proxies, || {
                 RdfXmlParser::new(reader, self.base.clone())
             }),
             RDFVariant::Unspecified => {
@@ -668,7 +668,7 @@ mod test {
                 ];
                 let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None, vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
 
-                let result = reader.read_with_parser(&mut builders, $make_parser);
+                let result = reader.read_triples_with_parser(&mut builders, $make_parser);
                 assert!(result.is_ok());
 
                 let columns = builders
@@ -740,7 +740,7 @@ mod test {
             vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
         );
 
-        let result = reader.read_with_parser(&mut builders, || NTriplesParser::new(data));
+        let result = reader.read_triples_with_parser(&mut builders, || NTriplesParser::new(data));
         assert!(result.is_ok());
 
         let columns = builders
