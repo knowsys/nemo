@@ -138,11 +138,31 @@ pub(crate) struct RDFReader {
     resource: Resource,
     base: Option<Iri<String>>,
     logical_types: Vec<PrimitiveType>,
+    variant: RDFVariant,
 }
 
 impl RDFReader {
     /// Create a new [`RDFReader`]
+    #[allow(dead_code)]
     pub fn new(
+        resource_providers: ResourceProviders,
+        resource: Resource,
+        base: Option<String>,
+        logical_types: Vec<PrimitiveType>,
+    ) -> Self {
+        Self::with_variant(
+            RDFVariant::Unspecified,
+            resource_providers,
+            resource,
+            base,
+            logical_types,
+        )
+    }
+
+    /// Create a new [`RDFReader`] with the given [format
+    /// variant][RDFVariant].
+    pub fn with_variant(
+        variant: RDFVariant,
         resource_providers: ResourceProviders,
         resource: Resource,
         base: Option<String>,
@@ -153,6 +173,7 @@ impl RDFReader {
             resource,
             base: base.map(|iri| Iri::parse(iri).expect("should be a valid IRI.")),
             logical_types,
+            variant,
         }
     }
 
@@ -285,18 +306,22 @@ impl TableReader for RDFReader {
 
         let reader = BufReader::new(reader);
 
-        if is_turtle(&self.resource) {
-            self.read_with_parser(builder_proxies, || {
+        match self.variant.refine_with_resource(&self.resource) {
+            RDFVariant::NTriples => {
+                self.read_with_parser(builder_proxies, || NTriplesParser::new(reader))
+            }
+            RDFVariant::NQuads => {
+                self.read_quads_with_parser(builder_proxies, || NQuadsParser::new(reader))
+            }
+            RDFVariant::Turtle => self.read_with_parser(builder_proxies, || {
                 TurtleParser::new(reader, self.base.clone())
-            })
-        } else if is_rdf_xml(&self.resource) {
-            self.read_with_parser(builder_proxies, || {
+            }),
+            RDFVariant::RDFXML => self.read_with_parser(builder_proxies, || {
                 RdfXmlParser::new(reader, self.base.clone())
-            })
-        } else if is_nq(&self.resource) {
-            self.read_quads_with_parser(builder_proxies, || NQuadsParser::new(reader))
-        } else {
-            self.read_with_parser(builder_proxies, || NTriplesParser::new(reader))
+            }),
+            RDFVariant::Unspecified => {
+                Err(ReadingError::UnknownRDFFormatVariant(self.resource.clone()))
+            }
         }
     }
 }
@@ -320,13 +345,22 @@ pub enum RDFVariant {
 }
 
 impl RDFVariant {
-    fn from_resource(resource: &String) -> RDFVariant {
+    /// Create an appropriate format variant from the given resource,
+    /// based on the file extension.
+    pub fn from_resource(resource: &String) -> RDFVariant {
         match resource {
             resource if is_turtle(resource) => RDFVariant::Turtle,
             resource if is_rdf_xml(resource) => RDFVariant::RDFXML,
             resource if is_nt(resource) => RDFVariant::NTriples,
             resource if is_nq(resource) => RDFVariant::NQuads,
             _ => RDFVariant::Unspecified,
+        }
+    }
+
+    fn refine_with_resource(self, resource: &String) -> RDFVariant {
+        match self {
+            Self::Unspecified => Self::from_resource(resource),
+            _ => self,
         }
     }
 }
@@ -501,7 +535,8 @@ impl FileFormatMeta for RDFFormat {
             .get(&Key::identifier_from_str(BASE))
             .map(|term| term.as_abstract().expect("must be an identifier").name());
 
-        Ok(Box::new(RDFReader::new(
+        Ok(Box::new(RDFReader::with_variant(
+            self.variant,
             resource_providers,
             self.resource.clone().expect("is a required attribute"),
             base,
