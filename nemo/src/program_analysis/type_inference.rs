@@ -796,4 +796,66 @@ mod test {
         let inferred_types = infer_types(&b_and_c_conflict_decl_resolvable).unwrap().0;
         assert_eq!(inferred_types, expected_types);
     }
+
+    #[test]
+    fn infer_types_a_unresolvable_conflict_with_source_decls_of_b_and_c() {
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (a, b, c, _r, _s, _t, _q),
+        ) = get_test_rules_and_facts_and_predicates();
+
+        let a_unresolvable_conflict_with_source_decls_of_b_and_c = ChaseProgram::builder()
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        String::new(),
+                        b,
+                        TupleConstraint::at_least([PrimitiveType::Integer]),
+                    )
+                    .unwrap(),
+            )
+            .import(
+                DSVFormat::csv()
+                    .try_into_import(
+                        String::new(),
+                        c,
+                        TupleConstraint::at_least([PrimitiveType::Integer]),
+                    )
+                    .unwrap(),
+            )
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .predicate_declaration(a, vec![PrimitiveType::Any])
+            .build();
+
+        let inferred_types_res = infer_types(&a_unresolvable_conflict_with_source_decls_of_b_and_c);
+        assert!(inferred_types_res.is_err());
+    }
+
+    #[test]
+    fn infer_types_s_decl_unresolvable_conflict_with_fact_values() {
+        let (
+            (basic_rule, exis_rule, rule_with_constant),
+            (fact1, fact2, fact3),
+            (_a, _b, _c, _r, s, _t, _q),
+        ) = get_test_rules_and_facts_and_predicates();
+
+        let s_decl_unresolvable_conflict_with_fact_values = ChaseProgram::builder()
+            .rule(basic_rule)
+            .rule(exis_rule)
+            .rule(rule_with_constant)
+            .fact(fact1)
+            .fact(fact2)
+            .fact(fact3)
+            .predicate_declaration(s, vec![PrimitiveType::Any, PrimitiveType::Integer])
+            .build();
+
+        let inferred_types_res = infer_types(&s_decl_unresolvable_conflict_with_fact_values);
+        assert!(inferred_types_res.is_err());
+    }
 }
