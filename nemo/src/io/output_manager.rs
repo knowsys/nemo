@@ -127,9 +127,15 @@ impl OutputManager {
         Ok(())
     }
 
-    /// Checks if results shall be saved without allowing to overwrite
-    /// Returns an Error if files are existing without being allowed to overwrite them
-    pub fn prevent_accidental_overwrite(
+    /// If overwriting is not allowed, check if we would try to
+    /// overwrite something when exporting results. Since this is
+    /// inherently racy, we do not actually rely on this to prevent
+    /// overwrites (rather, we prevent overwrites by only allowing
+    /// newly created files to be used, cf. `Self::open_options`).
+    /// Still, this check is useful for showing a clear error message
+    /// _before_ starting the (possibly very expensive) reasoning
+    /// process, only to then fail during export.
+    pub fn check_for_forgotten_overwrite_flag(
         &self,
         output_predicates: impl Iterator<Item = ExportSpec>,
     ) -> Result<(), Error> {

@@ -141,7 +141,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     )?;
 
     if let Some(output_manager) = &output_manager {
-        output_manager.prevent_accidental_overwrite(engine.output_predicates())?;
+        output_manager.check_for_forgotten_overwrite_flag(engine.output_predicates())?;
     }
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
