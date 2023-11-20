@@ -65,19 +65,21 @@ impl NemoProgram {
             .map_err(NemoError)
     }
 
-    #[wasm_bindgen(js_name = "getSourceResources")]
-    pub fn imports_resources(&self) -> Set {
-        let set = Set::new(&JsValue::undefined());
+    /// Get all resources that are referenced in import directives of the program
+    #[wasm_bindgen(js_name = "getResourcesUsedInImports")]
+    pub fn resources_used_in_imports(&self) -> Set {
+        let js_set = Set::new(&JsValue::undefined());
 
         for resource in self
             .0
             .imports()
             .flat_map(nemo::io::formats::types::ImportSpec::resources)
+            .map(JsValue::from)
         {
-            set.add(&JsValue::from(resource));
+            js_set.add(&resource);
         }
 
-        set
+        js_set
     }
 
     #[wasm_bindgen(js_name = "getOutputPredicates")]
@@ -90,13 +92,13 @@ impl NemoProgram {
 
     #[wasm_bindgen(js_name = "getEDBPredicates")]
     pub fn edb_predicates(&self) -> Set {
-        let set = Set::new(&JsValue::undefined());
+        let js_set = Set::new(&JsValue::undefined());
 
         for identifier in self.0.edb_predicates().into_iter() {
-            set.add(&JsValue::from(identifier.name()));
+            js_set.add(&JsValue::from(identifier.name()));
         }
 
-        set
+        js_set
     }
 }
 
