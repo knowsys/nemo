@@ -640,7 +640,7 @@ impl<'a> RuleParser<'a> {
                 self.parse_open_brace(),
                 map(
                     separated_list0(self.parse_comma(), self.parse_map_entry()),
-                    Map::from,
+                    Map::from_iter,
                 ),
                 self.parse_close_brace(),
             ),
