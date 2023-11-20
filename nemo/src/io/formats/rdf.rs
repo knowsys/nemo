@@ -1,4 +1,5 @@
-//! Reading of RDF 1.1 triples files (N-Triples, Turtle, RDF/XML) and RDF 1.1 N-Quads
+//! Reading of RDF 1.1 triples files (N-Triples, Turtle, RDF/XML) and
+//! RDF 1.1 quads files (N-Quads, TriG)
 use std::{collections::HashSet, io::BufReader, str::FromStr};
 
 use nemo_physical::{
@@ -11,7 +12,7 @@ use rio_api::{
     model::{BlankNode, NamedNode, Quad, Subject, Triple},
     parser::{QuadsParser, TriplesParser},
 };
-use rio_turtle::{NQuadsParser, NTriplesParser, TurtleParser};
+use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 
 use crate::{
@@ -123,6 +124,10 @@ fn is_nt(resource: &Resource) -> bool {
 
 fn is_nq(resource: &Resource) -> bool {
     resource.ends_with(".nq.gz") || resource.ends_with(".nq")
+}
+
+fn is_trig(resource: &Resource) -> bool {
+    resource.ends_with(".trig.gz") || resource.ends_with(".trig")
 }
 
 macro_rules! constant_column_builder {
@@ -319,6 +324,9 @@ impl TableReader for RDFReader {
             RDFVariant::RDFXML => self.read_triples_with_parser(builder_proxies, || {
                 RdfXmlParser::new(reader, self.base.clone())
             }),
+            RDFVariant::TriG => self.read_quads_with_parser(builder_proxies, || {
+                TriGParser::new(reader, self.base.clone())
+            }),
             RDFVariant::Unspecified => {
                 Err(ReadingError::UnknownRDFFormatVariant(self.resource.clone()))
             }
@@ -342,6 +350,8 @@ pub enum RDFVariant {
     Turtle,
     /// RDF 1.1 RDF/XML
     RDFXML,
+    /// RDF 1.1 TriG
+    TriG,
 }
 
 impl RDFVariant {
@@ -353,6 +363,7 @@ impl RDFVariant {
             resource if is_rdf_xml(resource) => RDFVariant::RDFXML,
             resource if is_nt(resource) => RDFVariant::NTriples,
             resource if is_nq(resource) => RDFVariant::NQuads,
+            resource if is_trig(resource) => RDFVariant::TriG,
             _ => RDFVariant::Unspecified,
         }
     }
@@ -372,6 +383,7 @@ impl PathWithFormatSpecificExtension for RDFVariant {
             Self::NQuads => Some("nq"),
             Self::Turtle => Some("ttl"),
             Self::RDFXML => Some("rdf"),
+            Self::TriG => Some("trig"),
             Self::Unspecified => None,
         }
     }
@@ -384,6 +396,7 @@ impl std::fmt::Display for RDFVariant {
             Self::NQuads => write!(f, "RDF N-Quads"),
             Self::Turtle => write!(f, "RDF Turtle"),
             Self::RDFXML => write!(f, "RDF/XML"),
+            Self::TriG => write!(f, "RDF TriG"),
             Self::Unspecified => write!(f, "RDF"),
         }
     }
@@ -400,6 +413,7 @@ impl FromStr for RDFVariant {
             "NQUADS" => Ok(Self::NQuads),
             "TURTLE" => Ok(Self::Turtle),
             "RDFXML" => Ok(Self::RDFXML),
+            "TRIG" => Ok(Self::TriG),
             "RDF" => Ok(Self::Unspecified),
             _ => Err(FileFormatError::UnknownFormat(s.to_string())),
         }
@@ -613,7 +627,7 @@ impl FileFormatMeta for RDFFormat {
         declared_types: TupleConstraint,
     ) -> Result<TupleConstraint, FileFormatError> {
         let required = match self.variant {
-            RDFVariant::NQuads => 4,
+            RDFVariant::NQuads | RDFVariant::TriG => 4,
             _ => 3,
         };
 

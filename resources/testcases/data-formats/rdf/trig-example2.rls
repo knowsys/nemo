@@ -1,0 +1,13 @@
+@prefix eg: <http://example.org/>.
+@prefix dc: <http://purl.org/dc/terms/>.
+@prefix foaf: <http://xmlns.com/foaf/0.1/>.
+
+@import quads[4]: rdf{resource = "sources/example2.trig"}.
+
+goal(42) :- quads(eg:bob, dc:publisher, "Bob", ?default_graph),
+            quads(eg:alice, dc:publisher, "Alice", ?default_graph),
+            quads(?a, foaf:name, "Bob", eg:bob),
+            quads(?a, foaf:mbox, <mailto:bob@oldcorp.example.org>, eg:bob),
+            quads(?a, foaf:knows, ?b, eg:bob),
+            quads(?b, foaf:name, "Alice", eg:alice),
+            quads(?b, foaf:mbox, <mailto:alice@work.example.org>, eg:alice).
