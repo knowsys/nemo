@@ -13,12 +13,12 @@ pub enum Key {
 
 impl Key {
     /// Construct a new [Key] from a [String].
-    pub fn string(s: String) -> Self {
+    pub fn from_string(s: String) -> Self {
         Self::String(s)
     }
 
     /// Construct a new [Key] from an [Identifier].
-    pub fn identifier(i: Identifier) -> Self {
+    pub fn from_identifier(i: Identifier) -> Self {
         Self::Identifier(i)
     }
 

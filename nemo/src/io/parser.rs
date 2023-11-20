@@ -2335,7 +2335,7 @@ mod test {
         );
 
         let ident = "foo";
-        let key = Key::identifier(Identifier(ident.to_string()));
+        let key = Key::from_identifier(Identifier(ident.to_string()));
 
         assert_parse!(parser.parse_map_key(), ident, key.clone());
 
@@ -2351,11 +2351,11 @@ mod test {
 
         let pairs = vec![
             (
-                Key::string("23".to_string()),
+                Key::from_string("23".to_string()),
                 Constant::NumericLiteral(NumericLiteral::Integer(42)),
             ),
             (
-                Key::identifier(Identifier("foo".to_string())),
+                Key::from_identifier(Identifier("foo".to_string())),
                 Constant::NumericLiteral(NumericLiteral::Integer(23)),
             ),
         ];
