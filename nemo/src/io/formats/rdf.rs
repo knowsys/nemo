@@ -1,5 +1,5 @@
 //! Reading of RDF 1.1 triples files (N-Triples, Turtle, RDF/XML) and RDF 1.1 N-Quads
-use std::{collections::HashSet, io::BufReader};
+use std::{collections::HashSet, io::BufReader, str::FromStr};
 
 use nemo_physical::{
     builder_proxy::{ColumnBuilderProxy, PhysicalBuilderProxyEnum},
@@ -21,7 +21,8 @@ use crate::{
         formats::{
             types::{
                 attributes::RESOURCE, Direction, ExportSpec, FileFormat, FileFormatError,
-                FileFormatMeta, ImportExportSpec, ImportSpec, TableWriter,
+                FileFormatMeta, ImportExportSpec, ImportSpec, PathWithFormatSpecificExtension,
+                TableWriter,
             },
             PROGRESS_NOTIFY_INCREMENT,
         },
@@ -302,16 +303,115 @@ impl TableReader for RDFReader {
 
 const BASE: &str = "base";
 
+/// The different supported variants of the RDF format.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum RDFVariant {
+    /// An unspecified format, using the resource name as a heuristic.
+    #[default]
+    Unspecified,
+    /// RDF 1.1 N-Triples
+    NTriples,
+    /// RDF 1.1 N-Quads
+    NQuads,
+    /// RDF 1.1 Turtle
+    Turtle,
+    /// RDF 1.1 RDF/XML
+    RDFXML,
+}
+
+impl RDFVariant {
+    fn from_resource(resource: &String) -> RDFVariant {
+        match resource {
+            resource if is_turtle(resource) => RDFVariant::Turtle,
+            resource if is_rdf_xml(resource) => RDFVariant::RDFXML,
+            resource if is_nt(resource) => RDFVariant::NTriples,
+            resource if is_nq(resource) => RDFVariant::NQuads,
+            _ => RDFVariant::Unspecified,
+        }
+    }
+}
+
+impl PathWithFormatSpecificExtension for RDFVariant {
+    fn extension(&self) -> Option<&str> {
+        match self {
+            Self::NTriples => Some("nt"),
+            Self::NQuads => Some("nq"),
+            Self::Turtle => Some("ttl"),
+            Self::RDFXML => Some("rdf"),
+            Self::Unspecified => None,
+        }
+    }
+}
+
+impl std::fmt::Display for RDFVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NTriples => write!(f, "RDF N-Triples"),
+            Self::NQuads => write!(f, "RDF N-Quads"),
+            Self::Turtle => write!(f, "RDF Turtle"),
+            Self::RDFXML => write!(f, "RDF/XML"),
+            Self::Unspecified => write!(f, "RDF"),
+        }
+    }
+}
+
+impl FromStr for RDFVariant {
+    type Err = FileFormatError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let canonicalised = s.to_uppercase();
+
+        match canonicalised.as_str() {
+            "NTRIPLES" => Ok(Self::NTriples),
+            "NQUADS" => Ok(Self::NQuads),
+            "TURTLE" => Ok(Self::Turtle),
+            "RDFXML" => Ok(Self::RDFXML),
+            "RDF" => Ok(Self::Unspecified),
+            _ => Err(FileFormatError::UnknownFormat(s.to_string())),
+        }
+    }
+}
+
 /// File formats for RDF.
 #[derive(Debug, Default, Clone)]
 pub struct RDFFormat {
     resource: Option<Resource>,
+    variant: RDFVariant,
 }
 
 impl RDFFormat {
     /// Construct new RDF file format metadata.
     pub fn new() -> Self {
         Default::default()
+    }
+
+    /// Construct a new RDF file format metadata for the given [format
+    /// variant][RDFVariant].
+    pub fn with_variant(variant: RDFVariant) -> Self {
+        Self {
+            variant,
+            ..Default::default()
+        }
+    }
+
+    /// Construct a new RDF N-Triples file format metadata.
+    pub fn ntriples() -> Self {
+        Self::with_variant(RDFVariant::NTriples)
+    }
+
+    /// Construct a new RDF N-Quads file format metadata.
+    pub fn nquads() -> Self {
+        Self::with_variant(RDFVariant::NQuads)
+    }
+
+    /// Construct a new RDF Turtle file format metadata.
+    pub fn turtle() -> Self {
+        Self::with_variant(RDFVariant::Turtle)
+    }
+
+    /// Construct a new RDF RDF/XML file format metadata.
+    pub fn rdf_xml() -> Self {
+        Self::with_variant(RDFVariant::RDFXML)
     }
 
     fn try_into_import_export(
@@ -382,13 +482,7 @@ impl RDFFormat {
 
 impl FileFormatMeta for RDFFormat {
     fn file_format(&self) -> FileFormat {
-        match &self.resource {
-            Some(resource) if is_turtle(resource) => FileFormat::Turtle,
-            Some(resource) if is_rdf_xml(resource) => FileFormat::RDFXML,
-            Some(resource) if is_nt(resource) => FileFormat::NTriples,
-            Some(resource) if is_nq(resource) => FileFormat::NQuads,
-            _ => FileFormat::RDF,
-        }
+        FileFormat::RDF(self.variant)
     }
 
     fn reader(
@@ -464,6 +558,7 @@ impl FileFormatMeta for RDFFormat {
             .expect("is a required attribute");
         match resource.as_resource() {
             Some(resource) => {
+                self.variant = RDFVariant::from_resource(resource);
                 self.resource = Some(resource.clone());
             }
             None => {
@@ -482,8 +577,8 @@ impl FileFormatMeta for RDFFormat {
         &mut self,
         declared_types: TupleConstraint,
     ) -> Result<TupleConstraint, FileFormatError> {
-        let required = match self.file_format() {
-            FileFormat::NQuads => 4,
+        let required = match self.variant {
+            RDFVariant::NQuads => 4,
             _ => 3,
         };
 

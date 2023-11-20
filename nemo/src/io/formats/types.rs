@@ -10,7 +10,10 @@ use nemo_physical::table_reader::{Resource, TableReader};
 use crate::{
     error::Error,
     io::{
-        formats::{dsv::DSVFormat, rdf::RDFFormat},
+        formats::{
+            dsv::DSVFormat,
+            rdf::{RDFFormat, RDFVariant},
+        },
         resource_providers::ResourceProviders,
     },
     model::{Constant, Identifier, Key, Map, TupleConstraint},
@@ -365,30 +368,18 @@ pub enum FileFormat {
     DSV,
     /// Tab-separated values
     TSV,
-    /// RDF Triples
-    RDF,
-    /// RDF N-Triples
-    NTriples,
-    /// RDF N-Quads
-    NQuads,
-    /// RDF Turtle
-    Turtle,
-    /// RDF/XML
-    RDFXML,
+    /// RDF Triples or Quads, with the given format variant.
+    RDF(RDFVariant),
 }
 
 impl FileFormat {
-    const DEFAULT_RDF_EXTENSION: &'static str = "ttl";
-
     /// Return the associated [`FileFormatMeta`] for this format.
     pub fn into_meta(self) -> Box<dyn FileFormatMeta> {
         match self {
             Self::DSV => Box::new(DSVFormat::new()),
             Self::CSV => Box::new(DSVFormat::csv()),
             Self::TSV => Box::new(DSVFormat::tsv()),
-            Self::RDF | Self::NTriples | Self::Turtle | Self::RDFXML | Self::NQuads => {
-                Box::new(RDFFormat::new())
-            }
+            Self::RDF(variant) => Box::new(RDFFormat::with_variant(variant)),
         }
     }
 }
@@ -396,16 +387,12 @@ impl FileFormat {
 impl PathWithFormatSpecificExtension for FileFormat {
     /// Return an appropriate file name extension for this format.
     fn extension(&self) -> Option<&str> {
-        Some(match self {
-            FileFormat::CSV => "csv",
-            FileFormat::DSV => "dsv",
-            FileFormat::TSV => "tsv",
-            FileFormat::RDF => Self::DEFAULT_RDF_EXTENSION,
-            FileFormat::NTriples => "nt",
-            FileFormat::NQuads => "nq",
-            FileFormat::Turtle => "ttl",
-            FileFormat::RDFXML => "rdf",
-        })
+        match self {
+            FileFormat::CSV => Some("csv"),
+            FileFormat::DSV => Some("dsv"),
+            FileFormat::TSV => Some("tsv"),
+            FileFormat::RDF(variant) => variant.extension(),
+        }
     }
 }
 
@@ -415,11 +402,7 @@ impl std::fmt::Display for FileFormat {
             Self::DSV => write!(f, "DSV"),
             Self::CSV => write!(f, "CSV"),
             Self::TSV => write!(f, "TSV"),
-            Self::RDF => write!(f, "RDF"),
-            Self::NTriples => write!(f, "RDF N-Triples"),
-            Self::NQuads => write!(f, "RDF N-Quads"),
-            Self::Turtle => write!(f, "RDF Turtle"),
-            Self::RDFXML => write!(f, "RDF/XML"),
+            Self::RDF(variant) => write!(f, "{variant}"),
         }
     }
 }
@@ -431,15 +414,17 @@ impl FromStr for FileFormat {
         let canonicalised = s.to_uppercase();
 
         match canonicalised.as_str() {
-            "DSV" => Ok(Self::DSV),
-            "CSV" => Ok(Self::CSV),
-            "TSV" => Ok(Self::TSV),
-            "RDF" => Ok(Self::RDF),
-            "NTRIPLES" => Ok(Self::NTriples),
-            "NQUADS" => Ok(Self::NQuads),
-            "TURTLE" => Ok(Self::Turtle),
-            "RDFXML" => Ok(Self::RDFXML),
-            _ => Err(FileFormatError::UnknownFormat(s.to_string())),
+            "DSV" => return Ok(Self::DSV),
+            "CSV" => return Ok(Self::CSV),
+            "TSV" => return Ok(Self::TSV),
+            "RDF" => return Ok(Self::RDF(RDFVariant::Unspecified)),
+            _ => (),
         }
+
+        if let Ok(variant) = canonicalised.parse::<RDFVariant>() {
+            return Ok(Self::RDF(variant));
+        }
+
+        Err(FileFormatError::UnknownFormat(s.to_string()))
     }
 }
