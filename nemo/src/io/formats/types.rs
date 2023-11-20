@@ -144,6 +144,7 @@ pub trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
         self.validate_attribute_values(direction, attributes)
     }
 }
+
 dyn_clone::clone_trait_object!(FileFormatMeta);
 
 /// An import/export specification.
