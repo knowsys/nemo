@@ -44,9 +44,10 @@ pub trait PathWithFormatSpecificExtension {
                     let existing_extension = existing_extension.to_str().expect("valid UTF-8");
 
                     if existing_extension == new_extension {
-                        return path;
+                        existing_extension.to_string()
+                    } else {
+                        format!("{existing_extension}.{new_extension}")
                     }
-                    format!("{existing_extension}.{new_extension}")
                 }
                 None => new_extension.to_string(),
             }),
