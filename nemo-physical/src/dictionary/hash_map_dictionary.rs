@@ -23,22 +23,36 @@ const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
 /// Bit mask that keeps only the (lower) PAGE_ADDR_BITS-1 bits, for extracting a string's length
 const LENGTH_BITS_MASK: u64 = (1 << (PAGE_ADDR_BITS - 1)) - 1;
 
-/// A buffer for string data using compact memory regions that are managed in pages.
-/// New buffers need to be initialized, upn which they will receive an identifying buffer id
-/// that is used whenever the data accessed.
+/// A manager for buffers for string data, using compact memory regions managed in pages.
+/// New buffers need to be initialized, upon which they will receive an identifying buffer id
+/// that is used whenever the data is accessed. Strings are always added to buffers, possibly
+/// requiring new pages to be started. At each time, there is one (latest) active page per buffer.
+/// Buffers might be dropped, upon which all of its pages will be freed. There is no other way
+/// of removing contents from a buffer.
+/// 
+/// Individual pages have a size of at most [`PAGE_SIZE`] glyphs, so that [`PAGE_ADDR_BITS`]
+/// are needed to specify a position within a page. References to buffered strings are represented
+/// by [`StringRef`], which stores a starting address and length of the string. The `usize` starting
+/// address is global (uniform all buffers), with the lower [`PAGE_ADDR_BITS`] bits encoding a position within a page,
+/// and the remaining higher bits encoding the number of the page (whatever buffer it belongs to).
+/// Since this address must fit into usize, 32bit platforms can only support 2 to the power of
+/// (32-[`PAGE_ADDR_BITS`]) pages. Moreover, since [`StringRef`] combines the address and the string length
+/// into a single `u64` (on all platforms), even 64bit platforms cannot use all 64bits for string addresses.
+/// The number of bits reserved for length is [`STRINGREF_STRING_LENGTH_BITS`], which should always be less
+/// than [`PAGE_ADDR_BITS`] since longer strings would not fit any buffer page anyway.
 ///
 /// The implementaion is not fully thread-safe, but it is thread-safe as long as each buffer
 /// is used in only one thread. That is, parallel threads can safely create buffers (which will
 /// have different ids), as long as all their operations use the buffer id that they were given.
 struct StringBuffer {
-    /// Vector of buffer ids and string buffers
+    /// Vector of all string buffer pages with the id of the buffer they belong to.
     pages: Vec<(usize, String)>,
     /// Single temporary string per buffer. [StringRef] uses this for representing strings that are not in the buffer.
     ///
     /// TODO: It would be possible and more elegant to have a special alternative key implementation for our hashmap,
     /// where the key has the relevant data instead of pointing to a temporary buffer.
     tmp_strings: Vec<String>,
-    /// Currently active page for each buffer
+    /// Currently active page for each buffer. This is always the last page that was allocated for the buffer.
     cur_pages: Vec<usize>,
     /// Lock to guard page assignment operations when using multiple threads
     lock: AtomicBool,
@@ -94,21 +108,21 @@ impl StringBuffer {
             self.cur_pages[buffer] = page_num;
             self.release_page_lock();
         }
-        let page_addr = self.pages[page_num].1.len();
+        let page_inner_addr = self.pages[page_num].1.len();
         self.pages[page_num].1.push_str(s);
 
-        StringRef::new(page_num * PAGE_SIZE + page_addr, s.len())
+        StringRef::new(page_num * PAGE_SIZE + page_inner_addr, s.len())
     }
 
     /// Returns a direct string slice reference for this data.
     /// This is a pointer to global mutable data, and cannot be used safely.
     fn get_str(&self, address: usize, length: usize) -> &str {
         let page_num = address >> PAGE_ADDR_BITS;
-        let page_addr = address % PAGE_SIZE;
+        let page_inner_addr = address % PAGE_SIZE;
         unsafe {
             self.pages[page_num]
                 .1
-                .get_unchecked(page_addr..page_addr + length)
+                .get_unchecked(page_inner_addr..page_inner_addr + length)
         }
     }
 
@@ -140,12 +154,22 @@ impl StringBuffer {
     }
 }
 
-const STRINGREF_STRING_LEGHT_BITS: u64 = 24;
-const STRINGREF_STARTING_ADDRESS_BITS: u64 = 40;
-const MAX_STRINGREF_STRING_LEGHT: u64 = 1 << STRINGREF_STRING_LEGHT_BITS;
-const MAX_STRINGREF_STARTING_ADDRESS: u64 = 1 << STRINGREF_STARTING_ADDRESS_BITS;
+/// Number of bits reserved for encoding the length of referenced strings.
+/// This should be at most [`PAGE_ADDR_BITS`], the maximal length in any page
+/// in the [`StringBuffer`], but it could conceivably also be less.
+const STRINGREF_STRING_LENGTH_BITS: u64 = 24;
+/// Number of bits reserved for the starting address of a string.
+const STRINGREF_STARTING_ADDRESS_BITS: u64 = 64 - STRINGREF_STRING_LENGTH_BITS;
+/// Largest number that can specify the length of a string in a [`StringRef`].
+const MAX_STRINGREF_STRING_LENGTH: u64 = (1 << STRINGREF_STRING_LENGTH_BITS) - 1;
+/// Largest number that can specify the starting address of a string in a [`StringRef`].
+const MAX_STRINGREF_STARTING_ADDRESS: u64 = (1 << STRINGREF_STARTING_ADDRESS_BITS) - 1;
 
 /// Memory-optimized reference to a string in the dictionary.
+/// 
+/// Internally, a single u64 number is used to combine the starting address of a 
+/// string in the [`StringBuffer`] and its length.
+/// See [`StringBuffer`] for a discussion of the resulting constraints.
 #[derive(Clone, Copy, Debug, Default)]
 struct StringRef {
     /// The 64bits reference consists of 40bits that encode a starting address within
@@ -159,29 +183,29 @@ impl StringRef {
     /// Creates an object that refers to the current contents of the
     /// buffer's temporary String.
     fn new_tmp(buffer: usize) -> Self {
-        assert!(u64::try_from(buffer).unwrap() < MAX_STRINGREF_STRING_LEGHT);
+        assert!(u64::try_from(buffer).unwrap() <= MAX_STRINGREF_STRING_LENGTH);
         let u64buffer: u64 = buffer.try_into().unwrap();
         StringRef {
-            reference: (u64::MAX << STRINGREF_STRING_LEGHT_BITS) + u64buffer,
+            reference: (u64::MAX << STRINGREF_STRING_LENGTH_BITS) + u64buffer,
         }
     }
 
     /// Creates a reference to the specific string slice in the buffer.
     /// It is not checked if that slice is allocated.
     fn new(address: usize, len: usize) -> Self {
-        assert!(u64::try_from(len).unwrap() < MAX_STRINGREF_STRING_LEGHT);
-        assert!(u64::try_from(address).unwrap() < MAX_STRINGREF_STARTING_ADDRESS);
+        assert!(u64::try_from(len).unwrap() <= MAX_STRINGREF_STRING_LENGTH);
+        assert!(u64::try_from(address).unwrap() <= MAX_STRINGREF_STARTING_ADDRESS);
         let u64add: u64 = address.try_into().unwrap();
         let u64len: u64 = len.try_into().unwrap();
         StringRef {
-            reference: (u64add << STRINGREF_STRING_LEGHT_BITS) + u64len,
+            reference: (u64add << STRINGREF_STRING_LENGTH_BITS) + u64len,
         }
     }
 
     /// Returns the stored start address for the string that this refers to.
     /// For temporary references that do not point to the buffer, the result is meaningless.
     fn address(&self) -> usize {
-        (self.reference >> STRINGREF_STRING_LEGHT_BITS)
+        (self.reference >> STRINGREF_STRING_LENGTH_BITS)
             .try_into()
             .unwrap()
     }
@@ -195,7 +219,7 @@ impl StringRef {
     /// Returns a direct string slice reference for this data.
     /// This is a pointer to global mutable data, and cannot be used safely.
     fn as_str(&self) -> &str {
-        if ((!self.reference) >> STRINGREF_STRING_LEGHT_BITS) != 0 {
+        if ((!self.reference) >> STRINGREF_STRING_LENGTH_BITS) != 0 {
             unsafe { BUFFER.get_str(self.address(), self.len()) }
         } else {
             unsafe { BUFFER.get_tmp_string(self.len()) }
@@ -420,4 +444,21 @@ mod test {
         assert_eq!(dict.get(0), Some("".to_string()));
         assert_eq!(dict.fetch_id(""), Some(0));
     }
+
+    fn get_test_helper(tag: String) {
+        let mut dict = HashMapDictionary::default();
+        dict.add_string(tag.to_owned() + &"1");
+        dict.add_string(tag.to_owned() + &"2");
+        dict.add_string(tag.to_owned() + &"1");
+
+        assert_eq!(dict.get(0), Some(tag.to_owned() + &"1"));
+        assert_eq!(dict.get(1), Some(tag.to_owned() + &"2"));
+        assert_eq!(dict.get(2), None);
+    }
+
+    #[test]
+    fn get_a() {
+        get_test_helper("a".to_string());
+    }
+
 }
