@@ -1,10 +1,10 @@
 use super::{AddResult, Dictionary, DictionaryString};
 
 use std::{
+    cell::UnsafeCell,
     collections::HashMap,
     fmt::Display,
     hash::{Hash, Hasher},
-    cell::UnsafeCell,
     sync::atomic::{AtomicBool, Ordering},
 };
 
@@ -29,7 +29,7 @@ const LENGTH_BITS_MASK: u64 = (1 << (PAGE_ADDR_BITS - 1)) - 1;
 /// requiring new pages to be started. At each time, there is one (latest) active page per buffer.
 /// Buffers might be dropped, upon which all of its pages will be freed. There is no other way
 /// of removing contents from a buffer.
-/// 
+///
 /// Individual pages have a size of at most [`PAGE_SIZE`] glyphs, so that [`PAGE_ADDR_BITS`]
 /// are needed to specify a position within a page. References to buffered strings are represented
 /// by [`StringRef`], which stores a starting address and length of the string. The `usize` starting
@@ -42,7 +42,7 @@ const LENGTH_BITS_MASK: u64 = (1 << (PAGE_ADDR_BITS - 1)) - 1;
 /// than [`PAGE_ADDR_BITS`] since longer strings would not fit any buffer page anyway.
 ///
 /// The implementaion can be used in multiple parallel threads.
-/// 
+///
 /// Note: The multi-thrading support is based on aggressive locking of all major operations. It might be
 /// possible to reduce the amount of locking by designing more careful data structures. For example, locking
 /// could be limited to the rare page-writing operations if Vectors would not move existing entries on (some)
@@ -126,7 +126,7 @@ impl StringBuffer {
 
         unsafe {
             self.get_page(page_num)
-            .get_unchecked(page_inner_addr..page_inner_addr + length)
+                .get_unchecked(page_inner_addr..page_inner_addr + length)
         }
     }
 
@@ -183,8 +183,8 @@ const MAX_STRINGREF_STRING_LENGTH: u64 = (1 << STRINGREF_STRING_LENGTH_BITS) - 1
 const MAX_STRINGREF_STARTING_ADDRESS: u64 = (1 << STRINGREF_STARTING_ADDRESS_BITS) - 1;
 
 /// Memory-optimized reference to a string in the dictionary.
-/// 
-/// Internally, a single u64 number is used to combine the starting address of a 
+///
+/// Internally, a single u64 number is used to combine the starting address of a
 /// string in the [`StringBuffer`] and its length.
 /// See [`StringBuffer`] for a discussion of the resulting constraints.
 #[derive(Clone, Copy, Debug, Default)]
@@ -461,5 +461,4 @@ mod test {
         assert_eq!(dict.get(0), Some("".to_string()));
         assert_eq!(dict.fetch_id(""), Some(0));
     }
-
 }
