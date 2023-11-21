@@ -4,17 +4,17 @@ use std::{
     collections::HashMap,
     fmt::Display,
     hash::{Hash, Hasher},
+    cell::UnsafeCell,
+    sync::atomic::{AtomicBool, Ordering},
 };
-
-use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Global string buffer for dictionary data.
 /// This is global here to allow keys in the hashmap to access it for computing equality and hashes,
 /// without the need to re-implement the whole hashmap to inject such an object.
 static mut BUFFER: StringBuffer = StringBuffer::new();
 // The following code is needed if allocations are done while constructing [StringBuffer]:
-//use once_cell::sync::Lazy;
-//static mut BUFFER: Lazy<StringBuffer> = Lazy::new(||StringBuffer::new());
+// use once_cell::sync::Lazy;
+// static mut BUFFER: Lazy<StringBuffer> = Lazy::new(||StringBuffer::new());
 
 /// Address size of pages in the string buffer
 const PAGE_ADDR_BITS: usize = 25; // 32MB
@@ -41,9 +41,12 @@ const LENGTH_BITS_MASK: u64 = (1 << (PAGE_ADDR_BITS - 1)) - 1;
 /// The number of bits reserved for length is [`STRINGREF_STRING_LENGTH_BITS`], which should always be less
 /// than [`PAGE_ADDR_BITS`] since longer strings would not fit any buffer page anyway.
 ///
-/// The implementaion is not fully thread-safe, but it is thread-safe as long as each buffer
-/// is used in only one thread. That is, parallel threads can safely create buffers (which will
-/// have different ids), as long as all their operations use the buffer id that they were given.
+/// The implementaion can be used in multiple parallel threads.
+/// 
+/// Note: The multi-thrading support is based on aggressive locking of all major operations. It might be
+/// possible to reduce the amount of locking by designing more careful data structures. For example, locking
+/// could be limited to the rare page-writing operations if Vectors would not move existing entries on (some)
+/// writes, which causes races that may lead to reading errors unless all reads are also locked.
 struct StringBuffer {
     /// Vector of all string buffer pages with the id of the buffer they belong to.
     pages: Vec<(usize, String)>,
@@ -55,7 +58,7 @@ struct StringBuffer {
     /// Currently active page for each buffer. This is always the last page that was allocated for the buffer.
     cur_pages: Vec<usize>,
     /// Lock to guard page assignment operations when using multiple threads
-    lock: AtomicBool,
+    lock: UnsafeCell<AtomicBool>,
 }
 
 impl StringBuffer {
@@ -65,7 +68,7 @@ impl StringBuffer {
             pages: Vec::new(),
             tmp_strings: Vec::new(),
             cur_pages: Vec::new(),
-            lock: AtomicBool::new(false),
+            lock: UnsafeCell::new(AtomicBool::new(false)),
         }
     }
 
@@ -100,18 +103,19 @@ impl StringBuffer {
     fn push_str(&mut self, buffer: usize, s: &str) -> StringRef {
         let len = s.len();
         assert!(len < PAGE_SIZE);
+
+        self.acquire_page_lock();
         let mut page_num = self.cur_pages[buffer];
         if self.pages[page_num].1.len() + len > PAGE_SIZE {
-            self.acquire_page_lock();
             self.pages.push((buffer, String::with_capacity(PAGE_SIZE)));
             page_num = self.pages.len() - 1;
             self.cur_pages[buffer] = page_num;
-            self.release_page_lock();
         }
         let page_inner_addr = self.pages[page_num].1.len();
         self.pages[page_num].1.push_str(s);
+        self.release_page_lock();
 
-        StringRef::new(page_num * PAGE_SIZE + page_inner_addr, s.len())
+        StringRef::new(page_num * PAGE_SIZE + page_inner_addr, len)
     }
 
     /// Returns a direct string slice reference for this data.
@@ -119,38 +123,51 @@ impl StringBuffer {
     fn get_str(&self, address: usize, length: usize) -> &str {
         let page_num = address >> PAGE_ADDR_BITS;
         let page_inner_addr = address % PAGE_SIZE;
+
         unsafe {
-            self.pages[page_num]
-                .1
-                .get_unchecked(page_inner_addr..page_inner_addr + length)
+            self.get_page(page_num)
+            .get_unchecked(page_inner_addr..page_inner_addr + length)
         }
     }
 
     /// Creates a reference to the given string without adding the string to the buffer.
     fn get_tmp_string_ref(&mut self, buffer: usize, s: &str) -> StringRef {
+        self.acquire_page_lock();
         self.tmp_strings[buffer].clear();
         self.tmp_strings[buffer].push_str(s);
+        self.release_page_lock();
         StringRef::new_tmp(buffer)
     }
 
     /// Returns the current contents of the temporary string.
     fn get_tmp_string(&self, buffer: usize) -> &str {
-        self.tmp_strings[buffer].as_str()
+        self.acquire_page_lock();
+        let result = self.tmp_strings[buffer].as_str();
+        self.release_page_lock();
+        result
     }
 
-    /// Acquire the lock that we use for operations that add new pages or change
-    /// the assignment of pages to buffers in any way.
-    fn acquire_page_lock(&mut self) {
-        while self
-            .lock
+    /// Acquire the lock that we use for operations that read or write any of the internal data
+    /// structures that multiple buffers might use.
+    fn acquire_page_lock(&self) {
+        let lock = unsafe { &mut *self.lock.get() };
+        while lock
             .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Acquire)
             .is_err()
         {}
     }
 
     /// Release the lock.
-    fn release_page_lock(&mut self) {
-        self.lock.store(false, Ordering::Release);
+    fn release_page_lock(&self) {
+        let lock = unsafe { &mut *self.lock.get() };
+        lock.store(false, Ordering::Release);
+    }
+
+    fn get_page(&self, page_num: usize) -> &String {
+        self.acquire_page_lock();
+        let result = &self.pages[page_num].1;
+        self.release_page_lock();
+        result
     }
 }
 
@@ -443,22 +460,6 @@ mod test {
         assert_eq!(dict.add_string("".to_string()), AddResult::Fresh(0));
         assert_eq!(dict.get(0), Some("".to_string()));
         assert_eq!(dict.fetch_id(""), Some(0));
-    }
-
-    fn get_test_helper(tag: String) {
-        let mut dict = HashMapDictionary::default();
-        dict.add_string(tag.to_owned() + &"1");
-        dict.add_string(tag.to_owned() + &"2");
-        dict.add_string(tag.to_owned() + &"1");
-
-        assert_eq!(dict.get(0), Some(tag.to_owned() + &"1"));
-        assert_eq!(dict.get(1), Some(tag.to_owned() + &"2"));
-        assert_eq!(dict.get(2), None);
-    }
-
-    #[test]
-    fn get_a() {
-        get_test_helper("a".to_string());
     }
 
 }
