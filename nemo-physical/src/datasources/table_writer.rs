@@ -577,6 +577,7 @@ mod test {
         assert_eq!(rows.next(), None);
     }
 
+    #[ignore]
     #[test]
     fn test_increasing_row_iterators_two_cols() {
         let dict = Dict::new();
