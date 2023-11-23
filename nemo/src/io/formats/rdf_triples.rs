@@ -128,7 +128,6 @@ impl RDFTriplesReader {
 
         assert!(builders.len() == 3);
 
-
         let mut triples = 0;
         let mut on_triple = |triple: Triple| {
             let subject: Constant = Constant::try_from(triple.subject)?;
