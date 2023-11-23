@@ -20,43 +20,6 @@ struct TypedTableRecord {
     col_types: Vec<StorageTypeName>,
 }
 
-/// Compare two [`StorageTypeName`]. Order depends on appearance on [`StorageValueT`] and [`StorageTypeName`].
-/// TODO Maybe move it somewhere else.
-/// TODO add tests
-fn compare_storage_type_names(first: &StorageTypeName, second: &StorageTypeName) -> Ordering {
-    match (first, second) {
-        (StorageTypeName::U32, StorageTypeName::U32) => Ordering::Equal,
-        (StorageTypeName::U32, StorageTypeName::U64) => Ordering::Less,
-        (StorageTypeName::U32, StorageTypeName::I64) => Ordering::Less,
-        (StorageTypeName::U32, StorageTypeName::Float) => Ordering::Less,
-        (StorageTypeName::U32, StorageTypeName::Double) => Ordering::Less,
-
-        (StorageTypeName::U64, StorageTypeName::U32) => Ordering::Greater,
-        (StorageTypeName::U64, StorageTypeName::U64) => Ordering::Equal,
-        (StorageTypeName::U64, StorageTypeName::I64) => Ordering::Less,
-        (StorageTypeName::U64, StorageTypeName::Float) => Ordering::Less,
-        (StorageTypeName::U64, StorageTypeName::Double) => Ordering::Less,
-
-        (StorageTypeName::I64, StorageTypeName::U32) => Ordering::Greater,
-        (StorageTypeName::I64, StorageTypeName::U64) => Ordering::Greater,
-        (StorageTypeName::I64, StorageTypeName::I64) => Ordering::Equal,
-        (StorageTypeName::I64, StorageTypeName::Float) => Ordering::Less,
-        (StorageTypeName::I64, StorageTypeName::Double) => Ordering::Less,
-
-        (StorageTypeName::Float, StorageTypeName::U32) => Ordering::Greater,
-        (StorageTypeName::Float, StorageTypeName::U64) => Ordering::Greater,
-        (StorageTypeName::Float, StorageTypeName::I64) => Ordering::Greater,
-        (StorageTypeName::Float, StorageTypeName::Float) => Ordering::Equal,
-        (StorageTypeName::Float, StorageTypeName::Double) => Ordering::Less,
-
-        (StorageTypeName::Double, StorageTypeName::U32) => Ordering::Greater,
-        (StorageTypeName::Double, StorageTypeName::U64) => Ordering::Greater,
-        (StorageTypeName::Double, StorageTypeName::I64) => Ordering::Greater,
-        (StorageTypeName::Double, StorageTypeName::Float) => Ordering::Greater,
-        (StorageTypeName::Double, StorageTypeName::Double) => Ordering::Equal,
-    }
-}
-
 /// The [`ColumnWriter`] is used to send the data of a single table column to the database. The interface
 /// allows values to be added one by one, and also provides some functionality for rolling back the last value,
 /// which is convenient when writing whole tuples
@@ -151,80 +114,40 @@ impl<'a> TableWriter<'a> {
         self.cur_col_idx = 0;
     }
 
-    /// Returns a sorted iterator of [`Vec<StorageValueT>`] where each
-    /// [`Vec<StorageValueT>`] represent a row in the table.
-    pub fn get_rows(&mut self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
-        let result = std::iter::empty();
-        /* for table_idx in self.get_table_idx() {
-            for row_idx in self.get_row_idxs(&table_idx) {
-                result.chain(std::iter::once(self.get_row(&table_idx, &row_idx)));
-            }
-        } */
-        //self.get_table_idx().map(|table_idx| self.get_row_idxs(&table_idx).map(move |row_idx| self.get_row(&table_idx, &row_idx))).flatten()
-        result
+    /// Returns an iterator of [`Vec<StorageValueT>`] over all the rows in the [TableWriter].
+    pub fn get_rows(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
+        self.get_table_row_idx()
+            .into_iter()
+            .map(|(table_idx, row_idx)| self.get_row(&table_idx, &row_idx))
     }
 
-    ///TODO
-    /*     fn get_rows_per_table(&mut self, table_idx: &usize) -> impl Iterator<Item = Vec<StorageValueT>> {
-           fn update_idx(mut vector: &Vec<usize>, value: usize) {
-               for i in 0..vector.len() {
-               }
-           }
-           let mut row_idxs = self.get_row_idxs(table_idx);
-           .map(|row_idx| self.get_row(table_idx, &row_idx))
-       }
-    */
-
-    /// Returns a [`Vec<StorageValueT>`] correspondint to the table_idx and row_idx.
-    /// It removes the element that form the row.
-    fn get_row(&mut self, table_idx: &usize, row_idx: &usize) -> Vec<StorageValueT> {
-        let mut ret = Vec::<StorageValueT>::new();
-        let table: &TypedTableRecord = &self.tables[*table_idx];
-
-        for col_idx in 0..self.col_num {
-            ret.push(match table.col_types[col_idx] {
-                StorageTypeName::U32 => {
-                    StorageValueT::from(self.cols_u32[table.col_ids[col_idx]].remove(*row_idx))
-                }
-                StorageTypeName::U64 => {
-                    StorageValueT::from(self.cols_u64[table.col_ids[col_idx]].remove(*row_idx))
-                }
-                StorageTypeName::I64 => {
-                    StorageValueT::from(self.cols_i64[table.col_ids[col_idx]].remove(*row_idx))
-                }
-                StorageTypeName::Float => {
-                    StorageValueT::from(self.cols_floats[table.col_ids[col_idx]].remove(*row_idx))
-                }
-                StorageTypeName::Double => {
-                    StorageValueT::from(self.cols_doubles[table.col_ids[col_idx]].remove(*row_idx))
-                }
-            });
+    /// Returns a vector [`Vec<(usize, usize)>`]. Each component represent a table_idx and row_idx in an increasing order
+    /// TODO add tests!
+    fn get_table_row_idx(&self) -> Vec<(usize, usize)> {
+        let mut result = Vec::new();
+        for table_idx in self.get_table_idx() {
+            for row_idx in self.get_row_idxs(&table_idx) {
+                result.push((table_idx, row_idx));
+            }
         }
-        self.table_lengths[*table_idx] -= 1;
-        ret
+        result
     }
 
     /// Returns a vector containing the indexes in creasing order of the [`TableWriter::tables`]
     /// TODO add tests!
     fn get_table_idx(&self) -> Vec<usize> {
         let mut table_idxs = (0..self.tables.len()).collect::<Vec<usize>>();
-        table_idxs.sort_by(|i, j| self.compare_vectors_of_storage_type_names(&i, &j));
+        table_idxs.sort_by(|i, j| self.compare_tables(&i, &j));
         table_idxs
     }
 
-    /// Given two table idxs, returns how the first compares to the second
+    /// Given two table idxs, returns how the first compares to the second regarding types
     //TODO add tests!
-    fn compare_vectors_of_storage_type_names(
-        &self,
-        first_table_idx: &usize,
-        second_table_idx: &usize,
-    ) -> Ordering {
-        let first = &self.tables[*first_table_idx];
-        let second = &self.tables[*second_table_idx];
-        assert_eq!(first.col_types.len(), second.col_types.len());
-
-        for i in 0..first.col_types.len() - 1 {
-            let ordering = compare_storage_type_names(&first.col_types[i], &second.col_types[i]);
+    fn compare_tables(&self, first_table_idx: &usize, second_table_idx: &usize) -> Ordering {
+        for i in 0..self.col_num {
+            let first = Self::storage_type_idx(self.tables[*first_table_idx].col_types[i]);
+            let second = Self::storage_type_idx(self.tables[*second_table_idx].col_types[i]);
+            let ordering = first.cmp(&second);
             if ordering != Ordering::Equal {
                 return ordering;
             }
@@ -241,7 +164,7 @@ impl<'a> TableWriter<'a> {
         row_idxs
     }
 
-    /// Given a table idx, row ids first and second, returns how first compares to the second row
+    /// Given a table idx, row id first, and row idx second, returns how the first row compares to the second
     fn compare_rows_within_table(
         &self,
         table_idx: usize,
@@ -249,20 +172,28 @@ impl<'a> TableWriter<'a> {
         second_row_idx: usize,
     ) -> Ordering {
         let table: &TypedTableRecord = &self.tables[table_idx];
-        for i in 0..table.col_ids.len() {
+        for i in 0..self.col_num {
             match table.col_types[i] {
                 StorageTypeName::U32 => {
-                    let first = &self.cols_u32[table.col_ids[i]][first_row_idx];
-                    let second = &self.cols_u32[table.col_ids[i]][second_row_idx];
-                    if first.cmp(second) != Ordering::Equal {
-                        return first.cmp(second);
+                    let first = self.dict.borrow().get(
+                        usize::try_from(self.cols_u32[table.col_ids[i]][first_row_idx]).unwrap(),
+                    );
+                    let second = self.dict.borrow().get(
+                        usize::try_from(self.cols_u32[table.col_ids[i]][second_row_idx]).unwrap(),
+                    );
+                    if first.cmp(&second) != Ordering::Equal {
+                        return first.cmp(&second);
                     }
                 }
                 StorageTypeName::U64 => {
-                    let first = &self.cols_u64[table.col_ids[i]][first_row_idx];
-                    let second = &self.cols_u64[table.col_ids[i]][second_row_idx];
-                    if first.cmp(second) != Ordering::Equal {
-                        return first.cmp(second);
+                    let first = self.dict.borrow().get(
+                        usize::try_from(self.cols_u64[table.col_ids[i]][first_row_idx]).unwrap(),
+                    );
+                    let second = self.dict.borrow().get(
+                        usize::try_from(self.cols_u64[table.col_ids[i]][second_row_idx]).unwrap(),
+                    );
+                    if first.cmp(&second) != Ordering::Equal {
+                        return first.cmp(&second);
                     }
                 }
                 StorageTypeName::I64 => {
@@ -289,6 +220,33 @@ impl<'a> TableWriter<'a> {
             }
         }
         Ordering::Equal
+    }
+
+    /// Returns an owned [`Vec<StorageValueT>`] corresponding to the table_idx and row_idx.
+    fn get_row(&self, table_idx: &usize, row_idx: &usize) -> Vec<StorageValueT> {
+        let mut ret = Vec::<StorageValueT>::with_capacity(self.col_num);
+        let table: &TypedTableRecord = &self.tables[*table_idx];
+
+        for col_idx in 0..self.col_num {
+            ret.push(match table.col_types[col_idx] {
+                StorageTypeName::U32 => {
+                    StorageValueT::from(self.cols_u32[table.col_ids[col_idx]][*row_idx])
+                }
+                StorageTypeName::U64 => {
+                    StorageValueT::from(self.cols_u64[table.col_ids[col_idx]][*row_idx])
+                }
+                StorageTypeName::I64 => {
+                    StorageValueT::from(self.cols_i64[table.col_ids[col_idx]][*row_idx])
+                }
+                StorageTypeName::Float => {
+                    StorageValueT::from(self.cols_floats[table.col_ids[col_idx]][*row_idx])
+                }
+                StorageTypeName::Double => {
+                    StorageValueT::from(self.cols_doubles[table.col_ids[col_idx]][*row_idx])
+                }
+            });
+        }
+        ret
     }
 
     /// Returns the number of rows in the [`TableWriter`]
@@ -528,37 +486,6 @@ impl<'a> TableWriter<'a> {
     }
 }
 
-/* struct TableWriterIterator<'a> {
-    table_writer: &'a mut TableWriter<'a>,
-    table_idxs: Vec<usize>,
-    table_idx: usize
-    //row_idx: Vec<usize>,
-}
-
-impl TableWriterIterator<'_> {
-    fn new<'a>(table_writer: &'a mut TableWriter<'a>) -> TableWriterIterator<'a> {
-        TableWriterIterator {
-            table_writer,
-            table_idxs: table_writer.get_table_idx().collect(),
-            table_idx: 0,
-        }
-    }
-}
-
-impl Iterator for TableWriterIterator<'_> {
-    type Item = Vec<StorageValueT>;
-
-    fn next(&mut self) -> Option<Vec<StorageValueT>> {
-        if self.table_idx >= self.table_writer.tables.len() {
-            None
-        } else {
-            let result = Some(self.table_writer.get_row(&self.table_idx, &0));
-            self.table_idx += 1;
-            result
-        }
-    }
-} */
-
 #[cfg(test)]
 mod test {
     use std::cell::RefCell;
@@ -621,5 +548,58 @@ mod test {
         assert_eq!(tw.get_value(0, 0), tw.get_value(0, 1));
         assert_ne!(tw.get_value(2, 1), tw.get_value(0, 0));
         assert_eq!(tw.get_value(2, 1), Some(StorageValueT::I64(42)));
+    }
+
+    #[test]
+    fn test_increasing_row_iterators_one_col() {
+        let dict = Dict::new();
+        let dict_ref = RefCell::new(dict);
+        let mut tw = TableWriter::new(&dict_ref, 1);
+
+        let v1 = AnyDataValue::new_string("c".to_string()); // 0
+        let v2 = AnyDataValue::new_string("a".to_string()); // 1
+        let v3 = AnyDataValue::new_string("b".to_string()); // 2
+        let v4 = AnyDataValue::new_string("d".to_string()); // 3
+
+        tw.next_value(v1.clone());
+        tw.next_value(v2.clone());
+        tw.next_value(v3.clone());
+        tw.next_value(v4.clone());
+
+        let mut rows = tw.get_rows();
+        assert_eq!(rows.next(), Some(vec![StorageValueT::U32(1)]));
+        assert_eq!(rows.next(), Some(vec![StorageValueT::U32(2)]));
+        assert_eq!(rows.next(), Some(vec![StorageValueT::U32(0)]));
+        assert_eq!(rows.next(), Some(vec![StorageValueT::U32(3)]));
+        assert_eq!(rows.next(), None);
+    }
+
+    #[test]
+    fn test_increasing_row_iterators_two_cols() {
+        let dict = Dict::new();
+        let dict_ref = RefCell::new(dict);
+        let mut tw = TableWriter::new(&dict_ref, 2);
+
+        let v1 = AnyDataValue::new_string("a".to_string()); // 0
+        let v2 = AnyDataValue::new_integer_from_i64(42);
+
+        tw.next_value(v2.clone());
+        tw.next_value(v2.clone());
+        tw.next_value(v2.clone());
+        tw.next_value(v1.clone());
+        tw.next_value(v1.clone());
+        tw.next_value(v2.clone());
+        tw.next_value(v1.clone());
+        tw.next_value(v1.clone());
+
+        let tv1 = StorageValueT::U32(0);
+        let tv2 = StorageValueT::I64(42);
+
+        let mut rows = tw.get_rows();
+        assert_eq!(rows.next(), Some(vec![tv1, tv1]));
+        assert_eq!(rows.next(), Some(vec![tv1, tv2]));
+        assert_eq!(rows.next(), Some(vec![tv2, tv1]));
+        assert_eq!(rows.next(), Some(vec![tv2, tv2]));
+        assert_eq!(rows.next(), None);
     }
 }
