@@ -1,10 +1,10 @@
 use super::{AddResult, Dictionary, DictionaryString};
 
 use std::{
-    cell::UnsafeCell,
     collections::HashMap,
     fmt::Display,
     hash::{Hash, Hasher},
+    marker::PhantomData,
     sync::atomic::{AtomicBool, Ordering},
 };
 
@@ -58,7 +58,9 @@ struct StringBuffer {
     /// Currently active page for each buffer. This is always the last page that was allocated for the buffer.
     cur_pages: Vec<usize>,
     /// Lock to guard page assignment operations when using multiple threads
-    lock: UnsafeCell<AtomicBool>,
+    lock: AtomicBool,
+    /// Marker, which prevents StringBuffers from being send over thread boundaries
+    _marker: PhantomData<*mut str>,
 }
 
 impl StringBuffer {
@@ -68,7 +70,8 @@ impl StringBuffer {
             pages: Vec::new(),
             tmp_strings: Vec::new(),
             cur_pages: Vec::new(),
-            lock: UnsafeCell::new(AtomicBool::new(false)),
+            lock: AtomicBool::new(false),
+            _marker: PhantomData,
         }
     }
 
@@ -150,8 +153,8 @@ impl StringBuffer {
     /// Acquire the lock that we use for operations that read or write any of the internal data
     /// structures that multiple buffers might use.
     fn acquire_page_lock(&self) {
-        let lock = unsafe { &mut *self.lock.get() };
-        while lock
+        while self
+            .lock
             .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Acquire)
             .is_err()
         {}
@@ -159,8 +162,7 @@ impl StringBuffer {
 
     /// Release the lock.
     fn release_page_lock(&self) {
-        let lock = unsafe { &mut *self.lock.get() };
-        lock.store(false, Ordering::Release);
+        self.lock.store(false, Ordering::Release);
     }
 
     fn get_page(&self, page_num: usize) -> &String {
