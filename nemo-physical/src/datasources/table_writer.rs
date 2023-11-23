@@ -421,6 +421,7 @@ impl<'a> TableWriter<'a> {
             AnyDataValue::String(iv) => {
                 // TODO: the string encoding with surrounding quotes is a cheap way to avoid confusion with IRIs.
                 // Final solution should be a dictionary that accepts and reproduces datavalues.
+                // TODO: A better approach would consume the dv to move the string instead of cloning it.
                 let dict_id = self
                     .dict
                     .borrow_mut()
@@ -432,8 +433,9 @@ impl<'a> TableWriter<'a> {
                 todo!("We still need the dictionary to support this case properly")
             }
             AnyDataValue::Iri(iv) => {
-                // TODO: the string encoding with surrounding quotes is a cheap way to avoid confusion with IRIs.
+                // TODO: the string encoding with surrounding brackets is a cheap way to avoid confusion with IRIs.
                 // Final solution should be a dictionary that accepts and reproduces datavalues.
+                // TODO: A better approach would consume the dv to move the string instead of cloning it.
                 let dict_id = self
                     .dict
                     .borrow_mut()
