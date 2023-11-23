@@ -70,9 +70,9 @@ impl<'a> TrieScanSelectEqual<'a> {
             }
 
             match col_type {
-                StorageTypeName::U32 => init_scans_for_datatype!(U32),
-                StorageTypeName::U64 => init_scans_for_datatype!(U64),
-                StorageTypeName::I64 => init_scans_for_datatype!(I64),
+                StorageTypeName::Id32 => init_scans_for_datatype!(Id32),
+                StorageTypeName::Id64 => init_scans_for_datatype!(Id64),
+                StorageTypeName::Int64 => init_scans_for_datatype!(Int64),
                 StorageTypeName::Float => init_scans_for_datatype!(Float),
                 StorageTypeName::Double => init_scans_for_datatype!(Double),
             };
@@ -117,9 +117,9 @@ impl<'a> TrieScanSelectEqual<'a> {
                 }
 
                 match column_types[current_member_idx] {
-                    StorageTypeName::U32 => init_scans_for_datatype!(U32),
-                    StorageTypeName::U64 => init_scans_for_datatype!(U64),
-                    StorageTypeName::I64 => init_scans_for_datatype!(I64),
+                    StorageTypeName::Id32 => init_scans_for_datatype!(Id32),
+                    StorageTypeName::Id64 => init_scans_for_datatype!(Id64),
+                    StorageTypeName::Int64 => init_scans_for_datatype!(Int64),
                     StorageTypeName::Float => init_scans_for_datatype!(Float),
                     StorageTypeName::Double => init_scans_for_datatype!(Double),
                 }
@@ -220,9 +220,9 @@ impl<'a> TrieScanRestrictValues<'a> {
             }
 
             match col_type {
-                StorageTypeName::U32 => init_scans_for_datatype!(U32),
-                StorageTypeName::U64 => init_scans_for_datatype!(U64),
-                StorageTypeName::I64 => init_scans_for_datatype!(I64),
+                StorageTypeName::Id32 => init_scans_for_datatype!(Id32),
+                StorageTypeName::Id64 => init_scans_for_datatype!(Id64),
+                StorageTypeName::Int64 => init_scans_for_datatype!(Int64),
                 StorageTypeName::Float => init_scans_for_datatype!(Float),
                 StorageTypeName::Double => init_scans_for_datatype!(Double),
             }
@@ -342,9 +342,9 @@ impl<'a> TrieScanRestrictValues<'a> {
             }
 
             match column_types[column_index] {
-                StorageTypeName::U32 => build_scans_for_datatype!(U32),
-                StorageTypeName::U64 => build_scans_for_datatype!(U64),
-                StorageTypeName::I64 => build_scans_for_datatype!(I64),
+                StorageTypeName::Id32 => build_scans_for_datatype!(Id32),
+                StorageTypeName::Id64 => build_scans_for_datatype!(Id64),
+                StorageTypeName::Int64 => build_scans_for_datatype!(Int64),
                 StorageTypeName::Float => build_scans_for_datatype!(Float),
                 StorageTypeName::Double => build_scans_for_datatype!(Double),
             }
@@ -409,7 +409,7 @@ mod test {
     use test_log::test;
 
     fn select_eq_next(scan: &mut TrieScanSelectEqual) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = scan.current_scan()? {
             rcs.next()
         } else {
             panic!("Type should be u64");
@@ -417,7 +417,7 @@ mod test {
     }
 
     fn select_eq_current(scan: &mut TrieScanSelectEqual) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = scan.current_scan()? {
             rcs.current()
         } else {
             panic!("Type should be u64");
@@ -425,7 +425,7 @@ mod test {
     }
 
     fn restrict_val_next(scan: &mut TrieScanRestrictValues) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = scan.current_scan()? {
             rcs.next()
         } else {
             panic!("Type should be u64");
@@ -433,7 +433,7 @@ mod test {
     }
 
     fn restrict_val_current(scan: &mut TrieScanRestrictValues) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = scan.current_scan()? {
             rcs.current()
         } else {
             panic!("Type should be u64");

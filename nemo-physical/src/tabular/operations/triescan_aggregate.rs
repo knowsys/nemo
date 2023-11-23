@@ -264,9 +264,9 @@ impl<T: TrieScan> TrieScan for TrieScanAggregate<T> {
                     }
 
                     match self.aggregated_input_column_storage_type {
-                        StorageTypeName::U32 => aggregate_for_storage_type!(U32, u32),
-                        StorageTypeName::U64 => aggregate_for_storage_type!(U64, u64),
-                        StorageTypeName::I64 => aggregate_for_storage_type!(I64, i64),
+                        StorageTypeName::Id32 => aggregate_for_storage_type!(Id32, u32),
+                        StorageTypeName::Id64 => aggregate_for_storage_type!(Id64, u64),
+                        StorageTypeName::Int64 => aggregate_for_storage_type!(Int64, i64),
                         StorageTypeName::Float => {
                             aggregate_for_storage_type!(Float, Float)
                         }
@@ -380,9 +380,9 @@ mod test {
     #[test]
     fn test_aggregate_i64() {
         let input_trie = Trie::from_cols(vec![
-            VecT::I64(vec![i64::MIN, 1, 3, 3, 3, 5, 5, i64::MAX]),
-            VecT::I64(vec![i64::MIN, 3, 2, 5, 11, 0, 0, i64::MAX]),
-            VecT::I64(vec![i64::MIN, 8, 9, 7, 4, i64::MIN, i64::MAX, i64::MAX]),
+            VecT::Int64(vec![i64::MIN, 1, 3, 3, 3, 5, 5, i64::MAX]),
+            VecT::Int64(vec![i64::MIN, 3, 2, 5, 11, 0, 0, i64::MAX]),
+            VecT::Int64(vec![i64::MIN, 8, 9, 7, 4, i64::MIN, i64::MAX, i64::MAX]),
         ]);
 
         // Max, No group-by columns
@@ -395,9 +395,9 @@ mod test {
                     aggregated_column_index: 2,
                     last_distinct_column_index: 2,
                 },
-                StorageTypeName::I64
+                StorageTypeName::Int64
             ),
-            Some(Trie::from_cols(vec![VecT::I64(vec![i64::MAX]),]))
+            Some(Trie::from_cols(vec![VecT::Int64(vec![i64::MAX]),]))
         );
         // Max, one group-by column
         assert_eq!(
@@ -409,11 +409,11 @@ mod test {
                     aggregated_column_index: 2,
                     last_distinct_column_index: 2,
                 },
-                StorageTypeName::I64
+                StorageTypeName::Int64
             ),
             Some(Trie::from_cols(vec![
-                VecT::I64(vec![i64::MIN, 1, 3, 5, i64::MAX]),
-                VecT::I64(vec![i64::MIN, 8, 9, i64::MAX, i64::MAX]),
+                VecT::Int64(vec![i64::MIN, 1, 3, 5, i64::MAX]),
+                VecT::Int64(vec![i64::MIN, 8, 9, i64::MAX, i64::MAX]),
             ]))
         );
         // Max, two group-by columns
@@ -426,12 +426,12 @@ mod test {
                     aggregated_column_index: 2,
                     last_distinct_column_index: 2,
                 },
-                StorageTypeName::I64
+                StorageTypeName::Int64
             ),
             Some(Trie::from_cols(vec![
-                VecT::I64(vec![i64::MIN, 1, 3, 3, 3, 5, i64::MAX]),
-                VecT::I64(vec![i64::MIN, 3, 2, 5, 11, 0, i64::MAX]),
-                VecT::I64(vec![i64::MIN, 8, 9, 7, 4, i64::MAX, i64::MAX]),
+                VecT::Int64(vec![i64::MIN, 1, 3, 3, 3, 5, i64::MAX]),
+                VecT::Int64(vec![i64::MIN, 3, 2, 5, 11, 0, i64::MAX]),
+                VecT::Int64(vec![i64::MIN, 8, 9, 7, 4, i64::MAX, i64::MAX]),
             ]))
         );
         // Count
@@ -444,9 +444,9 @@ mod test {
                     aggregated_column_index: 0,
                     last_distinct_column_index: 0,
                 },
-                StorageTypeName::I64
+                StorageTypeName::Int64
             ),
-            Some(Trie::from_cols(vec![VecT::I64(vec![5])]))
+            Some(Trie::from_cols(vec![VecT::Int64(vec![5])]))
         );
         // Sum
         assert_eq!(
@@ -458,11 +458,11 @@ mod test {
                     aggregated_column_index: 1,
                     last_distinct_column_index: 1,
                 },
-                StorageTypeName::I64
+                StorageTypeName::Int64
             ),
             Some(Trie::from_cols(vec![
-                VecT::I64(vec![i64::MIN, 1, 3, 5, i64::MAX]),
-                VecT::I64(vec![i64::MIN, 3, 18, 0, i64::MAX]),
+                VecT::Int64(vec![i64::MIN, 1, 3, 5, i64::MAX]),
+                VecT::Int64(vec![i64::MIN, 3, 18, 0, i64::MAX]),
             ]))
         );
     }

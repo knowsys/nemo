@@ -73,16 +73,16 @@ impl DataValueT {
         match self {
             Self::String(val) => {
                 // dictionary indices
-                StorageValueT::U64(
+                StorageValueT::Id64(
                     dict.add_string(val.clone().into())
                         .value()
                         .try_into()
                         .unwrap(),
                 )
             }
-            Self::U32(val) => StorageValueT::U32(*val),
-            Self::U64(val) => StorageValueT::U64(*val),
-            Self::I64(val) => StorageValueT::I64(*val),
+            Self::U32(val) => StorageValueT::Id32(*val),
+            Self::U64(val) => StorageValueT::Id64(*val),
+            Self::I64(val) => StorageValueT::Int64(*val),
             Self::Float(val) => StorageValueT::Float(*val),
             Self::Double(val) => StorageValueT::Double(*val),
         }
@@ -91,13 +91,13 @@ impl DataValueT {
     /// Get the appropriate [`StorageValueT`]` for the given [`DataValueT`]
     pub fn to_storage_value(&self, dict: &Dict) -> Option<StorageValueT> {
         match self {
-            Self::String(val) => Some(StorageValueT::U64(
+            Self::String(val) => Some(StorageValueT::Id64(
                 // dictionary indices
                 dict.fetch_id(val.into())?.try_into().unwrap(),
             )),
-            Self::U32(val) => Some(StorageValueT::U32(*val)),
-            Self::U64(val) => Some(StorageValueT::U64(*val)),
-            Self::I64(val) => Some(StorageValueT::I64(*val)),
+            Self::U32(val) => Some(StorageValueT::Id32(*val)),
+            Self::U64(val) => Some(StorageValueT::Id64(*val)),
+            Self::I64(val) => Some(StorageValueT::Int64(*val)),
             Self::Float(val) => Some(StorageValueT::Float(*val)),
             Self::Double(val) => Some(StorageValueT::Double(*val)),
         }

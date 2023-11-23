@@ -428,9 +428,9 @@ impl Term {
         }
 
         match storage_type {
-            StorageTypeName::U32 => translate_data_type!(U32, u32),
-            StorageTypeName::U64 => translate_data_type!(U64, u64),
-            StorageTypeName::I64 => translate_data_type!(I64, i64),
+            StorageTypeName::Id32 => translate_data_type!(Id32, u32),
+            StorageTypeName::Id64 => translate_data_type!(Id64, u64),
+            StorageTypeName::Int64 => translate_data_type!(Int64, i64),
             StorageTypeName::Float => translate_data_type!(Float, f32),
             StorageTypeName::Double => translate_data_type!(Double, f64),
         }

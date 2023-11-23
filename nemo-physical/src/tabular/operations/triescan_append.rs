@@ -90,7 +90,7 @@ pub fn trie_append(
 
                     macro_rules! append_column_for_datatype {
                         ($variant:ident, $type:ty) => {{
-                            if let ColumnWithIntervalsT::U64(reference_column_typed) =
+                            if let ColumnWithIntervalsT::Id64(reference_column_typed) =
                                 referenced_column
                             {
                                 let mut new_data_column = ColumnBuilderRle::<u64>::new();
@@ -113,7 +113,7 @@ pub fn trie_append(
                                         .expect("Tried to construct empty rle column."),
                                 );
 
-                                new_columns.push_front(ColumnWithIntervalsT::U64(
+                                new_columns.push_front(ColumnWithIntervalsT::Id64(
                                     ColumnWithIntervals::new(
                                         ColumnEnum::ColumnRle(new_data_column.finalize()),
                                         ColumnEnum::ColumnRle(new_interval_column),
@@ -126,9 +126,9 @@ pub fn trie_append(
                     }
 
                     match trie.get_types()[repeat_index] {
-                        StorageTypeName::U32 => append_column_for_datatype!(U32, u32),
-                        StorageTypeName::U64 => append_column_for_datatype!(U64, u64),
-                        StorageTypeName::I64 => append_column_for_datatype!(I64, i64),
+                        StorageTypeName::Id32 => append_column_for_datatype!(Id32, u32),
+                        StorageTypeName::Id64 => append_column_for_datatype!(Id64, u64),
+                        StorageTypeName::Int64 => append_column_for_datatype!(Int64, i64),
                         StorageTypeName::Float => {
                             append_column_for_datatype!(Float, Float)
                         }
@@ -161,9 +161,9 @@ pub fn trie_append(
                     }
 
                     match value.to_storage_value_mut(dict) {
-                        StorageValueT::U32(value) => append_columns_for_datatype!(value, U32, u32),
-                        StorageValueT::U64(value) => append_columns_for_datatype!(value, U64, u64),
-                        StorageValueT::I64(value) => append_columns_for_datatype!(value, I64, i64),
+                        StorageValueT::Id32(value) => append_columns_for_datatype!(value, Id32, u32),
+                        StorageValueT::Id64(value) => append_columns_for_datatype!(value, Id64, u64),
+                        StorageValueT::Int64(value) => append_columns_for_datatype!(value, Int64, i64),
                         StorageValueT::Float(value) => {
                             append_columns_for_datatype!(value, Float, Float)
                         }
@@ -346,9 +346,9 @@ impl<'a> TrieScanAppend<'a> {
         }
 
         match output_type {
-            StorageTypeName::U32 => input_for_datatype!(U32, u32),
-            StorageTypeName::U64 => input_for_datatype!(U64, u64),
-            StorageTypeName::I64 => input_for_datatype!(I64, i64),
+            StorageTypeName::Id32 => input_for_datatype!(Id32, u32),
+            StorageTypeName::Id64 => input_for_datatype!(Id64, u64),
+            StorageTypeName::Int64 => input_for_datatype!(Int64, i64),
             StorageTypeName::Float => input_for_datatype!(Float, f32),
             StorageTypeName::Double => input_for_datatype!(Double, f64),
         }
@@ -374,9 +374,9 @@ impl<'a> TrieScanAppend<'a> {
         }
 
         let reference_scan = match self.trie_scan.get_types()[src_index] {
-            StorageTypeName::U32 => append_pass_for_datatype!(U32),
-            StorageTypeName::U64 => append_pass_for_datatype!(U64),
-            StorageTypeName::I64 => append_pass_for_datatype!(I64),
+            StorageTypeName::Id32 => append_pass_for_datatype!(Id32),
+            StorageTypeName::Id64 => append_pass_for_datatype!(Id64),
+            StorageTypeName::Int64 => append_pass_for_datatype!(Int64),
             StorageTypeName::Float => append_pass_for_datatype!(Float),
             StorageTypeName::Double => append_pass_for_datatype!(Double),
         };
@@ -424,9 +424,9 @@ impl<'a> TrieScanAppend<'a> {
         }
 
         match self.trie_scan.get_types()[repeat_index] {
-            StorageTypeName::U32 => append_repeat_for_datatype!(U32),
-            StorageTypeName::U64 => append_repeat_for_datatype!(U64),
-            StorageTypeName::I64 => append_repeat_for_datatype!(I64),
+            StorageTypeName::Id32 => append_repeat_for_datatype!(Id32),
+            StorageTypeName::Id64 => append_repeat_for_datatype!(Id64),
+            StorageTypeName::Int64 => append_repeat_for_datatype!(Int64),
             StorageTypeName::Float => append_repeat_for_datatype!(Float),
             StorageTypeName::Double => append_repeat_for_datatype!(Double),
         }
@@ -443,9 +443,9 @@ impl<'a> TrieScanAppend<'a> {
         }
 
         match value.to_storage_value_mut(dict) {
-            StorageValueT::U32(value) => append_constant_for_datatype!(U32, value),
-            StorageValueT::U64(value) => append_constant_for_datatype!(U64, value),
-            StorageValueT::I64(value) => append_constant_for_datatype!(I64, value),
+            StorageValueT::Id32(value) => append_constant_for_datatype!(Id32, value),
+            StorageValueT::Id64(value) => append_constant_for_datatype!(Id64, value),
+            StorageValueT::Int64(value) => append_constant_for_datatype!(Int64, value),
             StorageValueT::Float(value) => {
                 append_constant_for_datatype!(Float, value)
             }
@@ -530,7 +530,7 @@ mod test {
     };
 
     fn scan_next(int_scan: &mut TrieScanAppend) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = int_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -538,7 +538,7 @@ mod test {
     }
 
     fn scan_current(int_scan: &mut TrieScanAppend) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = int_scan.current_scan()? {
             rcs.current()
         } else {
             panic!("type should be u64");
@@ -563,19 +563,19 @@ mod test {
                 ))],
                 vec![],
             ],
-            vec![StorageTypeName::U64, StorageTypeName::I64],
+            vec![StorageTypeName::Id64, StorageTypeName::Int64],
         );
 
         trie_append_scan.down();
         let column_scan = trie_append_scan.current_scan().unwrap();
-        let ColumnScanT::U64(_) = column_scan else {
+        let ColumnScanT::Id64(_) = column_scan else {
             panic!("wrong column type");
         };
         column_scan.next().unwrap();
 
         trie_append_scan.down();
         let column_scan = trie_append_scan.current_scan().unwrap();
-        let ColumnScanT::I64(_) = column_scan else {
+        let ColumnScanT::Int64(_) = column_scan else {
             panic!("wrong column type");
         };
     }
@@ -603,13 +603,13 @@ mod test {
                 vec![AppendInstruction::Constant(DataValueT::U64(1))],
             ],
             vec![
-                StorageTypeName::U64,
-                StorageTypeName::U64,
-                StorageTypeName::U64,
-                StorageTypeName::U64,
-                StorageTypeName::U64,
-                StorageTypeName::U64,
-                StorageTypeName::U64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
             ],
         );
 
@@ -914,13 +914,13 @@ mod test {
                 vec![],
             ],
             vec![
-                StorageTypeName::U64,
-                StorageTypeName::U64,
-                StorageTypeName::U64,
-                StorageTypeName::U64,
-                StorageTypeName::U64,
-                StorageTypeName::U64,
-                StorageTypeName::U64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
             ],
         );
 
@@ -1160,9 +1160,9 @@ mod test {
                 vec![AppendInstruction::Arithmetic(expression)],
             ],
             vec![
-                StorageTypeName::U64,
-                StorageTypeName::U64,
-                StorageTypeName::U64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
+                StorageTypeName::Id64,
             ],
         );
 

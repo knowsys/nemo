@@ -151,9 +151,9 @@ impl<'a> TrieScanSubtract<'a> {
             let output_type = trie_main.get_types()[layer];
 
             match output_type {
-                StorageTypeName::U32 => subtract_for_datatype!(U32, u32),
-                StorageTypeName::U64 => subtract_for_datatype!(U64, u64),
-                StorageTypeName::I64 => subtract_for_datatype!(I64, i64),
+                StorageTypeName::Id32 => subtract_for_datatype!(Id32, u32),
+                StorageTypeName::Id64 => subtract_for_datatype!(Id64, u64),
+                StorageTypeName::Int64 => subtract_for_datatype!(Int64, i64),
                 StorageTypeName::Float => subtract_for_datatype!(Float, Float),
                 StorageTypeName::Double => subtract_for_datatype!(Double, Double),
             }
@@ -327,9 +327,9 @@ impl<'a> TrieScanMinus<'a> {
             }
 
             match target_type {
-                StorageTypeName::U32 => init_scans_for_datatype!(U32),
-                StorageTypeName::U64 => init_scans_for_datatype!(U64),
-                StorageTypeName::I64 => init_scans_for_datatype!(I64),
+                StorageTypeName::Id32 => init_scans_for_datatype!(Id32),
+                StorageTypeName::Id64 => init_scans_for_datatype!(Id64),
+                StorageTypeName::Int64 => init_scans_for_datatype!(Int64),
                 StorageTypeName::Float => init_scans_for_datatype!(Float),
                 StorageTypeName::Double => init_scans_for_datatype!(Double),
             };
@@ -426,7 +426,7 @@ mod test {
     use test_log::test;
 
     fn diff_next(diff_scan: &mut TrieScanMinus) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = diff_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = diff_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -434,7 +434,7 @@ mod test {
     }
 
     fn diff_current(diff_scan: &mut TrieScanMinus) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = diff_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = diff_scan.current_scan()? {
             rcs.current()
         } else {
             panic!("type should be u64");
@@ -442,7 +442,7 @@ mod test {
     }
 
     fn sub_next(sub_scan: &mut TrieScanSubtract) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = sub_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = sub_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -450,7 +450,7 @@ mod test {
     }
 
     fn sub_current(sub_scan: &mut TrieScanSubtract) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = sub_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = sub_scan.current_scan()? {
             rcs.current()
         } else {
             panic!("type should be u64");

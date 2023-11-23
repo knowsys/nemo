@@ -84,9 +84,9 @@ macro_rules! generate_forwarder {
 macro_rules! generate_datatype_forwarder {
     ($name:ident) => {
         $crate::generate_forwarder!($name;
-                                    U32,
-                                    U64,
-                                    I64,
+                                    Id32,
+                                    Id64,
+                                    Int64,
                                     Float,
                                     Double);
     }

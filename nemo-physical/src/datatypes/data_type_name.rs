@@ -26,10 +26,10 @@ impl DataTypeName {
     /// Get the appropriate [`StorageTypeName`]` for the given [`DataTypeName`]
     pub fn to_storage_type_name(&self) -> StorageTypeName {
         match self {
-            Self::String => StorageTypeName::U64, // dictionary indices
-            Self::U32 => StorageTypeName::U32,
-            Self::U64 => StorageTypeName::U64,
-            Self::I64 => StorageTypeName::I64,
+            Self::String => StorageTypeName::Id64, // dictionary indices
+            Self::U32 => StorageTypeName::Id32,
+            Self::U64 => StorageTypeName::Id64,
+            Self::I64 => StorageTypeName::Int64,
             Self::Float => StorageTypeName::Float,
             Self::Double => StorageTypeName::Double,
         }

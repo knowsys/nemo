@@ -866,9 +866,9 @@ mod test {
 
     #[test]
     fn test_from_execution_plan() {
-        let trie_a = Trie::from_rows(&[vec![StorageValueT::U64(1), StorageValueT::U32(2)]]);
-        let trie_b = Trie::from_rows(&[vec![StorageValueT::U32(1), StorageValueT::U32(2)]]);
-        let trie_c = Trie::from_rows(&[vec![StorageValueT::U32(1), StorageValueT::U64(2)]]);
+        let trie_a = Trie::from_rows(&[vec![StorageValueT::Id64(1), StorageValueT::Id32(2)]]);
+        let trie_b = Trie::from_rows(&[vec![StorageValueT::Id32(1), StorageValueT::Id32(2)]]);
+        let trie_c = Trie::from_rows(&[vec![StorageValueT::Id32(1), StorageValueT::Id64(2)]]);
 
         let schema_a = TableSchema::from_vec(vec![DataTypeName::U64, DataTypeName::U32]);
         let schema_b = TableSchema::from_vec(vec![DataTypeName::U32, DataTypeName::U32]);
@@ -906,8 +906,8 @@ mod test {
 
     #[test]
     fn test_append() {
-        let trie_a = Trie::from_rows(&[vec![StorageValueT::U32(1)]]);
-        let trie_b = Trie::from_rows(&[vec![StorageValueT::U64(1 << 35), StorageValueT::U32(2)]]);
+        let trie_a = Trie::from_rows(&[vec![StorageValueT::Id32(1)]]);
+        let trie_b = Trie::from_rows(&[vec![StorageValueT::Id64(1 << 35), StorageValueT::Id32(2)]]);
 
         let schema_a = TableSchema::from_vec(vec![DataTypeName::U32]);
         let schema_b = TableSchema::from_vec(vec![DataTypeName::U64, DataTypeName::U32]);
@@ -951,10 +951,10 @@ mod test {
 
     #[test]
     fn test_equal_col() {
-        let trie_a = Trie::from_rows(&[vec![StorageValueT::U32(1), StorageValueT::U64(1 << 34)]]);
+        let trie_a = Trie::from_rows(&[vec![StorageValueT::Id32(1), StorageValueT::Id64(1 << 34)]]);
         let trie_b = Trie::from_rows(&[vec![
-            StorageValueT::U64(1 << 35),
-            StorageValueT::U64(1 << 36),
+            StorageValueT::Id64(1 << 35),
+            StorageValueT::Id64(1 << 36),
         ]]);
 
         let schema_a = TableSchema::from_vec(vec![DataTypeName::U32, DataTypeName::U64]);

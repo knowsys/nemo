@@ -99,11 +99,11 @@ impl<T: ColumnDataType> ByteSized for ColumnWithIntervals<T> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColumnWithIntervalsT {
     /// Case u32
-    U32(ColumnWithIntervals<u32>),
+    Id32(ColumnWithIntervals<u32>),
     /// Case u64
-    U64(ColumnWithIntervals<u64>),
+    Id64(ColumnWithIntervals<u64>),
     /// Case i64
-    I64(ColumnWithIntervals<i64>),
+    Int64(ColumnWithIntervals<i64>),
     /// Case Float
     Float(ColumnWithIntervals<Float>),
     /// Case Double
@@ -130,24 +130,24 @@ impl ColumnWithIntervalsT {
     /// Destructure into a pair of data column scan and interval column
     pub fn as_parts(&self) -> (ColumnScanT<'_>, ColumnScanEnum<'_, usize>) {
         match self {
-            Self::U32(this) => {
+            Self::Id32(this) => {
                 let (data, intervals) = this.as_parts();
                 (
-                    ColumnScanT::U32(ColumnScanCell::new(data.iter())),
+                    ColumnScanT::Id32(ColumnScanCell::new(data.iter())),
                     intervals.iter(),
                 )
             }
-            Self::U64(this) => {
+            Self::Id64(this) => {
                 let (data, intervals) = this.as_parts();
                 (
-                    ColumnScanT::U64(ColumnScanCell::new(data.iter())),
+                    ColumnScanT::Id64(ColumnScanCell::new(data.iter())),
                     intervals.iter(),
                 )
             }
-            Self::I64(this) => {
+            Self::Int64(this) => {
                 let (data, intervals) = this.as_parts();
                 (
-                    ColumnScanT::I64(ColumnScanCell::new(data.iter())),
+                    ColumnScanT::Int64(ColumnScanCell::new(data.iter())),
                     intervals.iter(),
                 )
             }
@@ -171,9 +171,9 @@ impl ColumnWithIntervalsT {
     /// Return the data type name of the column.
     pub fn get_type(&self) -> StorageTypeName {
         match self {
-            Self::U32(_) => StorageTypeName::U32,
-            Self::U64(_) => StorageTypeName::U64,
-            Self::I64(_) => StorageTypeName::I64,
+            Self::Id32(_) => StorageTypeName::Id32,
+            Self::Id64(_) => StorageTypeName::Id64,
+            Self::Int64(_) => StorageTypeName::Int64,
             Self::Float(_) => StorageTypeName::Float,
             Self::Double(_) => StorageTypeName::Double,
         }
@@ -181,7 +181,7 @@ impl ColumnWithIntervalsT {
 
     /// Return the u64 version of the column
     pub fn as_u64(&self) -> Option<&ColumnWithIntervals<u64>> {
-        if let Self::U64(col) = self {
+        if let Self::Id64(col) = self {
             return Some(col);
         }
         None
@@ -189,7 +189,7 @@ impl ColumnWithIntervalsT {
 
     /// Return the u32 version of the column
     pub fn as_u32(&self) -> Option<&ColumnWithIntervals<u32>> {
-        if let Self::U32(col) = self {
+        if let Self::Id32(col) = self {
             return Some(col);
         }
         None

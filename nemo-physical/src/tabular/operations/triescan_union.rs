@@ -63,9 +63,9 @@ impl<'a> TrieScanUnion<'a> {
             }
 
             match column_types[layer_index] {
-                StorageTypeName::U32 => init_scans_for_datatype!(U32, u32),
-                StorageTypeName::U64 => init_scans_for_datatype!(U64, u64),
-                StorageTypeName::I64 => init_scans_for_datatype!(I64, i64),
+                StorageTypeName::Id32 => init_scans_for_datatype!(Id32, u32),
+                StorageTypeName::Id64 => init_scans_for_datatype!(Id64, u64),
+                StorageTypeName::Int64 => init_scans_for_datatype!(Int64, i64),
                 StorageTypeName::Float => init_scans_for_datatype!(Float, Float),
                 StorageTypeName::Double => init_scans_for_datatype!(Double, Double),
             };
@@ -153,7 +153,7 @@ mod test {
     use test_log::test;
 
     fn union_next(union_scan: &mut TrieScanUnion) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = union_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = union_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -161,7 +161,7 @@ mod test {
     }
 
     fn union_current(union_scan: &mut TrieScanUnion) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = union_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = union_scan.current_scan()? {
             rcs.current()
         } else {
             panic!("type should be u64");

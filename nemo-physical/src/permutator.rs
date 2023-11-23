@@ -439,7 +439,7 @@ mod test {
         let checker = vec![10, 5, 1, 9, 2, 3, 5, 4, 7, 8, 6, 0];
 
         let permutator = Permutator::sort_from_multiple_vec_with_offset(
-            &[VecT::U64(vec1), VecT::Double(vec2), VecT::U64(vec3)],
+            &[VecT::Id64(vec1), VecT::Double(vec2), VecT::Id64(vec3)],
             0,
         )
         .expect("Sort should work in this test case");
@@ -537,7 +537,7 @@ mod test {
         vec3.iter().for_each(|elem| acb.add(*elem));
         let column3 = acb.finalize();
 
-        let columnset: Vec<ColumnT> = vec![ColumnT::U64(column1), ColumnT::Float(column2)];
+        let columnset: Vec<ColumnT> = vec![ColumnT::Id64(column1), ColumnT::Float(column2)];
         let permutator = Permutator::sort_from_columns(&columnset).expect("Sorting should work");
         let column_sort = permutator
             .apply_column(&column3, ColumnBuilderAdaptive::default())

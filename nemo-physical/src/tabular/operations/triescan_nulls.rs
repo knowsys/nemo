@@ -54,9 +54,9 @@ impl<'a> TrieScanNulls<'a> {
                 }
 
                 match trie_scan.get_types()[scan_index] {
-                    StorageTypeName::U32 => add_scan_for_datatype!(U32, u32),
-                    StorageTypeName::U64 => add_scan_for_datatype!(U64, u64),
-                    StorageTypeName::I64 => add_scan_for_datatype!(I64, i64),
+                    StorageTypeName::Id32 => add_scan_for_datatype!(Id32, u32),
+                    StorageTypeName::Id64 => add_scan_for_datatype!(Id64, u64),
+                    StorageTypeName::Int64 => add_scan_for_datatype!(Int64, i64),
                     StorageTypeName::Float => add_scan_for_datatype!(Float, Float),
                     StorageTypeName::Double => add_scan_for_datatype!(Double, Double),
                 }
@@ -65,11 +65,11 @@ impl<'a> TrieScanNulls<'a> {
 
         // TODO: We do not have access to the logical types here; how should we handle nulls?
         for null_index in 0..num_nulls {
-            target_types.push(StorageTypeName::U64);
+            target_types.push(StorageTypeName::Id64);
 
             // To prevent different [`ColumnScanNulls`] from producing the same null
             // we offset the starting point an increment the null value by the amount of null columns
-            column_scans.push(UnsafeCell::new(ColumnScanT::U64(ColumnScanCell::new(
+            column_scans.push(UnsafeCell::new(ColumnScanT::Id64(ColumnScanCell::new(
                 ColumnScanEnum::ColumnScanNulls(ColumnScanNulls::new(
                     nulls_start + null_index as u64,
                     num_nulls as u64,
@@ -145,7 +145,7 @@ mod test {
     use super::TrieScanNulls;
 
     fn scan_next(int_scan: &mut TrieScanNulls) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = int_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -153,7 +153,7 @@ mod test {
     }
 
     fn scan_current(int_scan: &mut TrieScanNulls) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = int_scan.current_scan()? {
             rcs.current()
         } else {
             panic!("type should be u64");

@@ -50,25 +50,25 @@ where
     fn map(&self, value: StorageValueT, layer: usize) -> DataValueT {
         match self.schema[layer] {
             DataTypeName::String => {
-                let StorageValueT::U64(constant) = value else {
+                let StorageValueT::Id64(constant) = value else {
                     unreachable!("strings are always encoded as U64 constants")
                 };
                 DataValueT::String(serialize_constant_with_dict(constant, self.dict.deref()))
             }
             DataTypeName::I64 => match value {
-                StorageValueT::I64(val) => DataValueT::I64(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?
+                StorageValueT::Int64(val) => DataValueT::I64(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),
             },
             DataTypeName::U64 => match value {
-                StorageValueT::U64(val) => DataValueT::U64(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?
+                StorageValueT::Id64(val) => DataValueT::U64(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),
             },
             DataTypeName::U32 => match value {
-                StorageValueT::U32(val) => DataValueT::U32(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?
+                StorageValueT::Id32(val) => DataValueT::U32(val), // TODO: do we allow nulls here? if yes, how do we distinguish them?
                 _ => unreachable!(
                     "DataType and Storage Type are incompatible. This should never happen!"
                 ),

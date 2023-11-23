@@ -45,9 +45,9 @@ fn shrink_position(column: &ColumnWithIntervalsT, pos: usize) -> usize {
     }
 
     match column {
-        ColumnWithIntervalsT::U32(col) => shrink_position_t(col, pos),
-        ColumnWithIntervalsT::U64(col) => shrink_position_t(col, pos),
-        ColumnWithIntervalsT::I64(col) => shrink_position_t(col, pos),
+        ColumnWithIntervalsT::Id32(col) => shrink_position_t(col, pos),
+        ColumnWithIntervalsT::Id64(col) => shrink_position_t(col, pos),
+        ColumnWithIntervalsT::Int64(col) => shrink_position_t(col, pos),
         ColumnWithIntervalsT::Float(col) => shrink_position_t(col, pos),
         ColumnWithIntervalsT::Double(col) => shrink_position_t(col, pos),
     }
@@ -112,9 +112,9 @@ impl<'a> TrieScanProject<'a> {
             }
 
             match current_datatype {
-                StorageTypeName::U32 => init_scans_for_datatype!(U32),
-                StorageTypeName::U64 => init_scans_for_datatype!(U64),
-                StorageTypeName::I64 => init_scans_for_datatype!(I64),
+                StorageTypeName::Id32 => init_scans_for_datatype!(Id32),
+                StorageTypeName::Id64 => init_scans_for_datatype!(Id64),
+                StorageTypeName::Int64 => init_scans_for_datatype!(Int64),
                 StorageTypeName::Float => init_scans_for_datatype!(Float),
                 StorageTypeName::Double => init_scans_for_datatype!(Double),
             }
@@ -257,9 +257,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanProject<'a> {
         }
 
         match next_column {
-            ColumnWithIntervalsT::U32(_) => down_for_datatype!(U32),
-            ColumnWithIntervalsT::U64(_) => down_for_datatype!(U64),
-            ColumnWithIntervalsT::I64(_) => down_for_datatype!(I64),
+            ColumnWithIntervalsT::Id32(_) => down_for_datatype!(Id32),
+            ColumnWithIntervalsT::Id64(_) => down_for_datatype!(Id64),
+            ColumnWithIntervalsT::Int64(_) => down_for_datatype!(Int64),
             ColumnWithIntervalsT::Float(_) => down_for_datatype!(Float),
             ColumnWithIntervalsT::Double(_) => down_for_datatype!(Double),
         }
@@ -848,7 +848,7 @@ mod test {
     fn spurious_tuples_in_reorder_mk2_bug() {
         let mut dict = Dict::default();
         let mut intern = |term: &str| {
-            StorageValueT::U64(dict.add_string(term.to_owned()).value().try_into().unwrap())
+            StorageValueT::Id64(dict.add_string(term.to_owned()).value().try_into().unwrap())
         };
 
         let a = intern("genid:cc18ce3a-be8a-3445-8b68-2027a2e1b1be");
@@ -894,7 +894,7 @@ mod test {
     fn spurious_tuples_in_reorder_mk2_minimised_bug() {
         let mut dict = Dict::default();
         let mut intern = |term: &str| {
-            StorageValueT::U64(dict.add_string(term.to_owned()).value().try_into().unwrap())
+            StorageValueT::Id64(dict.add_string(term.to_owned()).value().try_into().unwrap())
         };
 
         let a = intern("genid:cc18ce3a-be8a-3445-8b68-2027a2e1b1be");

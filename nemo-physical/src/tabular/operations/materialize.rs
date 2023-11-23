@@ -31,9 +31,9 @@ pub fn materialize_up_to(trie_scan: &mut impl TrieScan, cut: usize) -> Option<Tr
             }
 
             match column_type {
-                StorageTypeName::U32 => init_builder_for_datatype!(U32),
-                StorageTypeName::U64 => init_builder_for_datatype!(U64),
-                StorageTypeName::I64 => init_builder_for_datatype!(I64),
+                StorageTypeName::Id32 => init_builder_for_datatype!(Id32),
+                StorageTypeName::Id64 => init_builder_for_datatype!(Id64),
+                StorageTypeName::Int64 => init_builder_for_datatype!(Int64),
                 StorageTypeName::Float => init_builder_for_datatype!(Float),
                 StorageTypeName::Double => init_builder_for_datatype!(Double),
             }
@@ -265,9 +265,9 @@ mod test {
         .unwrap();
 
         let expected_result = vec![
-            StorageValueT::U64(1),
-            StorageValueT::U64(2),
-            StorageValueT::U64(8),
+            StorageValueT::Id64(1),
+            StorageValueT::Id64(2),
+            StorageValueT::Id64(8),
         ];
 
         assert_eq!(first_result, expected_result);

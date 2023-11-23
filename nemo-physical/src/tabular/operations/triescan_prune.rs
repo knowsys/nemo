@@ -452,9 +452,9 @@ impl<'a> TrieScanPrune<'a> {
             }
 
             match target_type {
-                StorageTypeName::U32 => create_column_scan_for_storage_type!(U32, u32),
-                StorageTypeName::U64 => create_column_scan_for_storage_type!(U64, u64),
-                StorageTypeName::I64 => create_column_scan_for_storage_type!(I64, i64),
+                StorageTypeName::Id32 => create_column_scan_for_storage_type!(Id32, u32),
+                StorageTypeName::Id64 => create_column_scan_for_storage_type!(Id64, u64),
+                StorageTypeName::Int64 => create_column_scan_for_storage_type!(Int64, i64),
                 StorageTypeName::Float => create_column_scan_for_storage_type!(Float, Float),
                 StorageTypeName::Double => create_column_scan_for_storage_type!(Double, Double),
             };
@@ -590,7 +590,7 @@ mod test {
     use test_log::test;
 
     fn get_next_scan_item(scan: &mut TrieScanPrune) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = scan.current_scan().unwrap() {
+        if let ColumnScanT::Id64(rcs) = scan.current_scan().unwrap() {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -598,7 +598,7 @@ mod test {
     }
 
     fn get_seek_scan_item(scan: &mut TrieScanPrune, seek_value: u64) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = scan.current_scan().unwrap() {
+        if let ColumnScanT::Id64(rcs) = scan.current_scan().unwrap() {
             rcs.seek(seek_value)
         } else {
             panic!("type should be u64");
@@ -606,7 +606,7 @@ mod test {
     }
 
     fn get_current_scan_item(scan: &mut TrieScanPrune) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = scan.current_scan().unwrap() {
+        if let ColumnScanT::Id64(rcs) = scan.current_scan().unwrap() {
             rcs.current()
         } else {
             panic!("type should be u64");
@@ -614,7 +614,7 @@ mod test {
     }
 
     fn get_current_scan_item_at_layer(scan: &mut TrieScanPrune, layer_index: usize) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = unsafe { &*scan.get_scan(layer_index).unwrap().get() } {
+        if let ColumnScanT::Id64(rcs) = unsafe { &*scan.get_scan(layer_index).unwrap().get() } {
             rcs.current()
         } else {
             panic!("type should be u64");
@@ -1046,7 +1046,7 @@ mod test {
         let expected_data = vec![0u64, 4, 4];
         let expected_interval = vec![0usize, 2];
 
-        let (data, interval) = if let ColumnWithIntervalsT::U64(column) = result.get_column(1) {
+        let (data, interval) = if let ColumnWithIntervalsT::Id64(column) = result.get_column(1) {
             (
                 column.get_data_column().iter().collect::<Vec<u64>>(),
                 column.get_int_column().iter().collect::<Vec<usize>>(),

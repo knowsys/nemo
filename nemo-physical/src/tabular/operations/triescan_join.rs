@@ -252,9 +252,9 @@ impl<'a> TrieScanJoin<'a> {
             }
 
             match output_type {
-                StorageTypeName::U32 => merge_join_for_datatype!(U32, u32),
-                StorageTypeName::U64 => merge_join_for_datatype!(U64, u64),
-                StorageTypeName::I64 => merge_join_for_datatype!(I64, i64),
+                StorageTypeName::Id32 => merge_join_for_datatype!(Id32, u32),
+                StorageTypeName::Id64 => merge_join_for_datatype!(Id64, u64),
+                StorageTypeName::Int64 => merge_join_for_datatype!(Int64, i64),
                 StorageTypeName::Float => merge_join_for_datatype!(Float, Float),
                 StorageTypeName::Double => merge_join_for_datatype!(Double, Double),
             }
@@ -347,7 +347,7 @@ mod test {
     use test_log::test;
 
     fn join_next(join_scan: &mut TrieScanJoin) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = join_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = join_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -355,7 +355,7 @@ mod test {
     }
 
     fn join_current(join_scan: &mut TrieScanJoin) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = join_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = join_scan.current_scan()? {
             rcs.current()
         } else {
             panic!("type should be u64");
@@ -757,7 +757,7 @@ mod test {
             ColumnEnum::ColumnVector(ColumnVector::new(vec![0])),
         );
 
-        let my_trie = Trie::new(vec![ColumnWithIntervalsT::U64(built_interval_col)]);
+        let my_trie = Trie::new(vec![ColumnWithIntervalsT::Id64(built_interval_col)]);
 
         let mut my_join_iter = TrieScanJoin::new(
             vec![TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(

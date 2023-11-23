@@ -165,11 +165,11 @@ where
 #[derive(Debug)]
 pub enum ColumnBuilderAdaptiveT {
     /// Case u64
-    U32(ColumnBuilderAdaptive<u32>),
+    Id32(ColumnBuilderAdaptive<u32>),
     /// Case u64
-    U64(ColumnBuilderAdaptive<u64>),
+    Id64(ColumnBuilderAdaptive<u64>),
     /// Case i64
-    I64(ColumnBuilderAdaptive<i64>),
+    Int64(ColumnBuilderAdaptive<i64>),
     /// Case Float
     Float(ColumnBuilderAdaptive<Float>),
     /// Case Double
@@ -184,15 +184,15 @@ impl ColumnBuilderAdaptiveT {
         target_min_length_for_rle_elements: TargetMinLengthForRleElements,
     ) -> Self {
         match dtn {
-            StorageTypeName::U32 => Self::U32(ColumnBuilderAdaptive::new(
+            StorageTypeName::Id32 => Self::Id32(ColumnBuilderAdaptive::new(
                 decision_threshold,
                 target_min_length_for_rle_elements,
             )),
-            StorageTypeName::U64 => Self::U64(ColumnBuilderAdaptive::new(
+            StorageTypeName::Id64 => Self::Id64(ColumnBuilderAdaptive::new(
                 decision_threshold,
                 target_min_length_for_rle_elements,
             )),
-            StorageTypeName::I64 => Self::I64(ColumnBuilderAdaptive::new(
+            StorageTypeName::Int64 => Self::Int64(ColumnBuilderAdaptive::new(
                 decision_threshold,
                 target_min_length_for_rle_elements,
             )),
@@ -210,8 +210,8 @@ impl ColumnBuilderAdaptiveT {
     /// Adds value of arbitrary type to the column builder
     pub fn add(&mut self, value: StorageValueT) {
         match self {
-            Self::U32(cb) => {
-                if let StorageValueT::U32(v) = value {
+            Self::Id32(cb) => {
+                if let StorageValueT::Id32(v) = value {
                     cb.add(v);
                 } else {
                     panic!(
@@ -220,8 +220,8 @@ impl ColumnBuilderAdaptiveT {
                     );
                 }
             }
-            Self::U64(cb) => {
-                if let StorageValueT::U64(v) = value {
+            Self::Id64(cb) => {
+                if let StorageValueT::Id64(v) = value {
                     cb.add(v);
                 } else {
                     panic!(
@@ -230,8 +230,8 @@ impl ColumnBuilderAdaptiveT {
                     );
                 }
             }
-            Self::I64(cb) => {
-                if let StorageValueT::I64(v) = value {
+            Self::Int64(cb) => {
+                if let StorageValueT::Int64(v) = value {
                     cb.add(v);
                 } else {
                     panic!(
@@ -266,9 +266,9 @@ impl ColumnBuilderAdaptiveT {
     /// Return the number of elements that were already added.
     pub fn count(&self) -> usize {
         match self {
-            Self::U32(cb) => cb.count(),
-            Self::U64(cb) => cb.count(),
-            Self::I64(cb) => cb.count(),
+            Self::Id32(cb) => cb.count(),
+            Self::Id64(cb) => cb.count(),
+            Self::Int64(cb) => cb.count(),
             Self::Float(cb) => cb.count(),
             Self::Double(cb) => cb.count(),
         }
@@ -277,15 +277,15 @@ impl ColumnBuilderAdaptiveT {
     /// Turn the column builder into the finalized Column
     pub fn finalize(self, interval_column: ColumnBuilderAdaptive<usize>) -> ColumnWithIntervalsT {
         match self {
-            ColumnBuilderAdaptiveT::U32(c) => ColumnWithIntervalsT::U32(ColumnWithIntervals::new(
+            ColumnBuilderAdaptiveT::Id32(c) => ColumnWithIntervalsT::Id32(ColumnWithIntervals::new(
                 c.finalize(),
                 interval_column.finalize(),
             )),
-            ColumnBuilderAdaptiveT::U64(c) => ColumnWithIntervalsT::U64(ColumnWithIntervals::new(
+            ColumnBuilderAdaptiveT::Id64(c) => ColumnWithIntervalsT::Id64(ColumnWithIntervals::new(
                 c.finalize(),
                 interval_column.finalize(),
             )),
-            ColumnBuilderAdaptiveT::I64(c) => ColumnWithIntervalsT::I64(ColumnWithIntervals::new(
+            ColumnBuilderAdaptiveT::Int64(c) => ColumnWithIntervalsT::Int64(ColumnWithIntervals::new(
                 c.finalize(),
                 interval_column.finalize(),
             )),
@@ -309,7 +309,7 @@ impl FromIterator<StorageValueT> for ColumnBuilderAdaptiveT {
             peekable
                 .peek()
                 .map(|dv| dv.get_type())
-                .unwrap_or(StorageTypeName::U64),
+                .unwrap_or(StorageTypeName::Id64),
             Default::default(),
             Default::default(),
         );

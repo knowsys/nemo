@@ -33,7 +33,7 @@ pub fn make_column_with_intervals_t<'a>(
     values: &'a [u64],
     ints: &'a [usize],
 ) -> ColumnWithIntervalsT {
-    ColumnWithIntervalsT::U64(make_column_with_intervals(values, ints))
+    ColumnWithIntervalsT::Id64(make_column_with_intervals(values, ints))
 }
 
 /// Constructs ColumnWithIntervalsT (of I64 type) from Slice
@@ -41,7 +41,7 @@ pub fn make_column_with_intervals_int_t<'a>(
     values: &'a [i64],
     ints: &'a [usize],
 ) -> ColumnWithIntervalsT {
-    ColumnWithIntervalsT::I64(make_column_with_intervals(values, ints))
+    ColumnWithIntervalsT::Int64(make_column_with_intervals(values, ints))
 }
 
 /// Helper function which, given a slice of sorted values,
@@ -139,7 +139,7 @@ impl<'a> Arbitrary<'a> for Trie {
                 columns[depth_index - 1].len()
             };
 
-            columns.push(ColumnWithIntervalsT::U64(arbitrary_column_with_intervals(
+            columns.push(ColumnWithIntervalsT::Id64(arbitrary_column_with_intervals(
                 u,
                 section_count,
                 AVG_BRANCHING,

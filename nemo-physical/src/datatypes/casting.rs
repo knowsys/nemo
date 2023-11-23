@@ -282,24 +282,24 @@ implicit_cast_incompatible!(Float, Double);
 impl PartialOrd for StorageTypeName {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match self {
-            Self::U32 => match other {
-                Self::U32 => Some(Ordering::Equal),
-                Self::U64 => Some(Ordering::Less),
-                Self::I64 => Some(Ordering::Less),
+            Self::Id32 => match other {
+                Self::Id32 => Some(Ordering::Equal),
+                Self::Id64 => Some(Ordering::Less),
+                Self::Int64 => Some(Ordering::Less),
                 Self::Float => None,
                 Self::Double => None,
             },
-            Self::U64 => match other {
-                Self::U32 => Some(Ordering::Greater),
-                Self::U64 => Some(Ordering::Equal),
-                Self::I64 => None,
+            Self::Id64 => match other {
+                Self::Id32 => Some(Ordering::Greater),
+                Self::Id64 => Some(Ordering::Equal),
+                Self::Int64 => None,
                 Self::Float => None,
                 Self::Double => None,
             },
-            Self::I64 => match other {
-                Self::U32 => Some(Ordering::Greater),
-                Self::U64 => None,
-                Self::I64 => Some(Ordering::Equal),
+            Self::Int64 => match other {
+                Self::Id32 => Some(Ordering::Greater),
+                Self::Id64 => None,
+                Self::Int64 => Some(Ordering::Equal),
                 Self::Float => None,
                 Self::Double => None,
             },
@@ -396,21 +396,15 @@ impl PartialUpperBound for DataTypeName {
 macro_rules! generate_cast_statements {
     ($cast_macro:ident; $src_type:expr, $dst_type:expr) => {
         match $src_type {
-            StorageTypeName::U32 => match $dst_type {
-                StorageTypeName::U64 => $cast_macro!(U32, U64, u32, u64),
-                StorageTypeName::I64 => $cast_macro!(U32, I64, u32, i64),
+            StorageTypeName::Id32 => match $dst_type {
+                StorageTypeName::Id64 => $cast_macro!(Id32, Id64, u32, u64),
                 _ => panic!("Unsupported cast."),
             },
-            StorageTypeName::U64 => match $dst_type {
-                StorageTypeName::U32 => $cast_macro!(U64, U32, u64, u32),
-                StorageTypeName::I64 => $cast_macro!(U64, I64, u64, i64),
+            StorageTypeName::Id64 => match $dst_type {
+                StorageTypeName::Id32 => $cast_macro!(Id64, Id32, u64, u32),
                 _ => panic!("Unsupported cast."),
             },
-            StorageTypeName::I64 => match $dst_type {
-                StorageTypeName::U32 => $cast_macro!(I64, U32, i64, u32),
-                StorageTypeName::U64 => $cast_macro!(I64, U64, i64, u64),
-                _ => panic!("Unsupported cast."),
-            },
+            StorageTypeName::Int64 => panic!("Unsupported cast."),
             StorageTypeName::Float => panic!("Unsupported cast."),
             StorageTypeName::Double => panic!("Unsupported cast."),
         }

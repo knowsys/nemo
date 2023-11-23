@@ -155,9 +155,9 @@ impl Trie {
             .last()
             .expect("we return early if columns are empty")
         {
-            StorageTypeName::U32 => last_column_for_datatype!(U32),
-            StorageTypeName::U64 => last_column_for_datatype!(U64),
-            StorageTypeName::I64 => last_column_for_datatype!(I64),
+            StorageTypeName::Id32 => last_column_for_datatype!(Id32),
+            StorageTypeName::Id64 => last_column_for_datatype!(Id64),
+            StorageTypeName::Int64 => last_column_for_datatype!(Int64),
             StorageTypeName::Float => last_column_for_datatype!(Float),
             StorageTypeName::Double => last_column_for_datatype!(Double),
         };
@@ -203,9 +203,9 @@ impl Trie {
             }
 
             match current_type {
-                StorageTypeName::U32 => push_column_for_datatype!(U32),
-                StorageTypeName::U64 => push_column_for_datatype!(U64),
-                StorageTypeName::I64 => push_column_for_datatype!(I64),
+                StorageTypeName::Id32 => push_column_for_datatype!(Id32),
+                StorageTypeName::Id64 => push_column_for_datatype!(Id64),
+                StorageTypeName::Int64 => push_column_for_datatype!(Int64),
                 StorageTypeName::Float => push_column_for_datatype!(Float),
                 StorageTypeName::Double => push_column_for_datatype!(Double),
             };
@@ -277,9 +277,9 @@ impl Trie {
         }
 
         match col {
-            ColumnWithIntervalsT::U32(c) => build_iter!(U32, c),
-            ColumnWithIntervalsT::U64(c) => build_iter!(U64, c),
-            ColumnWithIntervalsT::I64(c) => build_iter!(I64, c),
+            ColumnWithIntervalsT::Id32(c) => build_iter!(Id32, c),
+            ColumnWithIntervalsT::Id64(c) => build_iter!(Id64, c),
+            ColumnWithIntervalsT::Int64(c) => build_iter!(Int64, c),
             ColumnWithIntervalsT::Float(c) => build_iter!(Float, c),
             ColumnWithIntervalsT::Double(c) => build_iter!(Double, c),
         }
@@ -344,7 +344,7 @@ impl Table for Trie {
                     .map(|v| {
                         let empty_data_col = ColumnBuilderAdaptiveT::new(v.get_type(), Default::default(), Default::default());
                         let empty_interval_col = ColumnBuilderAdaptive::<usize>::default();
-                        build_interval_column!(empty_data_col, empty_interval_col; U32; U64; I64; Float; Double)
+                        build_interval_column!(empty_data_col, empty_interval_col; Id32; Id64; Int64; Float; Double)
                     })
                     .collect(),
             );
@@ -418,7 +418,7 @@ impl Table for Trie {
             condensed_data_builders
                 .into_iter()
                 .zip(condensed_interval_starts_builders)
-                .map(|(col, iv)| build_interval_column!(col, iv; U32; U64; I64; Float; Double))
+                .map(|(col, iv)| build_interval_column!(col, iv; Id32; Id64; Int64; Float; Double))
                 .collect(),
         )
     }
@@ -474,9 +474,9 @@ impl Table for Trie {
             }
 
             match entry {
-                StorageValueT::U32(entry) => seek_for_datatype!(U32, entry),
-                StorageValueT::U64(entry) => seek_for_datatype!(U64, entry),
-                StorageValueT::I64(entry) => seek_for_datatype!(I64, entry),
+                StorageValueT::Id32(entry) => seek_for_datatype!(Id32, entry),
+                StorageValueT::Id64(entry) => seek_for_datatype!(Id64, entry),
+                StorageValueT::Int64(entry) => seek_for_datatype!(Int64, entry),
                 StorageValueT::Float(entry) => seek_for_datatype!(Float, entry),
                 StorageValueT::Double(entry) => seek_for_datatype!(Double, entry),
             }
@@ -649,9 +649,9 @@ mod test {
     /// 2 6 9
     fn get_test_table_as_cols() -> Vec<VecT> {
         vec![
-            VecT::U64(vec![1, 1, 2, 1, 2]),
-            VecT::U64(vec![3, 2, 3, 2, 6]),
-            VecT::U64(vec![8, 7, 9, 8, 9]),
+            VecT::Id64(vec![1, 1, 2, 1, 2]),
+            VecT::Id64(vec![3, 2, 3, 2, 6]),
+            VecT::Id64(vec![8, 7, 9, 8, 9]),
         ]
     }
 
@@ -664,29 +664,29 @@ mod test {
     fn get_test_table_as_rows() -> Vec<TableRow> {
         vec![
             vec![
-                StorageValueT::U64(1),
-                StorageValueT::U64(3),
-                StorageValueT::U64(8),
+                StorageValueT::Id64(1),
+                StorageValueT::Id64(3),
+                StorageValueT::Id64(8),
             ],
             vec![
-                StorageValueT::U64(1),
-                StorageValueT::U64(2),
-                StorageValueT::U64(7),
+                StorageValueT::Id64(1),
+                StorageValueT::Id64(2),
+                StorageValueT::Id64(7),
             ],
             vec![
-                StorageValueT::U64(2),
-                StorageValueT::U64(3),
-                StorageValueT::U64(9),
+                StorageValueT::Id64(2),
+                StorageValueT::Id64(3),
+                StorageValueT::Id64(9),
             ],
             vec![
-                StorageValueT::U64(1),
-                StorageValueT::U64(2),
-                StorageValueT::U64(8),
+                StorageValueT::Id64(1),
+                StorageValueT::Id64(2),
+                StorageValueT::Id64(8),
             ],
             vec![
-                StorageValueT::U64(2),
-                StorageValueT::U64(6),
-                StorageValueT::U64(9),
+                StorageValueT::Id64(2),
+                StorageValueT::Id64(6),
+                StorageValueT::Id64(9),
             ],
         ]
     }
@@ -728,7 +728,7 @@ mod test {
     }
 
     fn scan_seek(int_scan: &mut TrieScanGeneric, value: u64) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = int_scan.current_scan()? {
             rcs.seek(value)
         } else {
             panic!("type should be u64");
@@ -736,7 +736,7 @@ mod test {
     }
 
     fn scan_next(int_scan: &mut TrieScanGeneric) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = int_scan.current_scan()? {
             rcs.next()
         } else {
             panic!("type should be u64");
@@ -744,7 +744,7 @@ mod test {
     }
 
     fn scan_current(int_scan: &mut TrieScanGeneric) -> Option<u64> {
-        if let ColumnScanT::U64(rcs) = int_scan.current_scan()? {
+        if let ColumnScanT::Id64(rcs) = int_scan.current_scan()? {
             rcs.current()
         } else {
             panic!("type should be u64");
@@ -857,9 +857,9 @@ mod test {
 
     fn collect_full_col_iterator(iter: StorageValueIteratorT) -> VecT {
         match iter {
-            StorageValueIteratorT::U32(i) => VecT::U32(i.collect()),
-            StorageValueIteratorT::U64(i) => VecT::U64(i.collect()),
-            StorageValueIteratorT::I64(i) => VecT::I64(i.collect()),
+            StorageValueIteratorT::Id32(i) => VecT::Id32(i.collect()),
+            StorageValueIteratorT::Id64(i) => VecT::Id64(i.collect()),
+            StorageValueIteratorT::Int64(i) => VecT::Int64(i.collect()),
             StorageValueIteratorT::Float(i) => VecT::Float(i.collect()),
             StorageValueIteratorT::Double(i) => VecT::Double(i.collect()),
         }
@@ -877,15 +877,15 @@ mod test {
 
         assert_eq!(
             collect_full_col_iterator(trie.get_full_iterator_for_col_idx(0)),
-            VecT::U64(vec![1, 1, 1, 1, 1, 2, 3, 3])
+            VecT::Id64(vec![1, 1, 1, 1, 1, 2, 3, 3])
         );
         assert_eq!(
             collect_full_col_iterator(trie.get_full_iterator_for_col_idx(1)),
-            VecT::U64(vec![2, 2, 3, 3, 3, 4, 1, 2])
+            VecT::Id64(vec![2, 2, 3, 3, 3, 4, 1, 2])
         );
         assert_eq!(
             collect_full_col_iterator(trie.get_full_iterator_for_col_idx(2)),
-            VecT::U64(vec![3, 4, 5, 7, 8, 7, 2, 1])
+            VecT::Id64(vec![3, 4, 5, 7, 8, 7, 2, 1])
         );
     }
 }

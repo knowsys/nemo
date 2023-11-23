@@ -630,10 +630,10 @@ mod test {
         any_lbp.add(large_integer_literal).unwrap();
         any_lbp.add(large_decimal_literal).unwrap();
 
-        let VecT::U64(any_result_indices) = phys_enum_for_any.finalize() else {
+        let VecT::Id64(any_result_indices) = phys_enum_for_any.finalize() else {
             unreachable!()
         };
-        let VecT::U64(string_result_indices) = phys_enum_for_string.finalize() else {
+        let VecT::Id64(string_result_indices) = phys_enum_for_string.finalize() else {
             unreachable!()
         };
 
@@ -645,7 +645,7 @@ mod test {
             .into_iter()
             .map(|idx| dict.get_mut().get(idx.try_into().unwrap()).unwrap())
             .collect();
-        let VecT::I64(integer_result) = phys_enum_for_integer.finalize() else {
+        let VecT::Int64(integer_result) = phys_enum_for_integer.finalize() else {
             unreachable!()
         };
         let VecT::Double(double_result) = phys_enum_for_double.finalize() else {

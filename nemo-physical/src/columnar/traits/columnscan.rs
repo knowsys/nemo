@@ -454,11 +454,11 @@ where
 #[derive(Debug)]
 pub enum ColumnScanT<'a> {
     /// Case u32
-    U32(ColumnScanCell<'a, u32>),
+    Id32(ColumnScanCell<'a, u32>),
     /// Case u64
-    U64(ColumnScanCell<'a, u64>),
+    Id64(ColumnScanCell<'a, u64>),
     /// Case i64
-    I64(ColumnScanCell<'a, i64>),
+    Int64(ColumnScanCell<'a, i64>),
     /// Case Float
     Float(ColumnScanCell<'a, Float>),
     /// Case Double
@@ -530,16 +530,16 @@ impl<'a> Iterator for ColumnScanT<'a> {
 impl<'a> ColumnScan for ColumnScanT<'a> {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
         match self {
-            Self::U32(cs) => match value {
-                Self::Item::U32(val) => cs.seek(val).map(StorageValueT::U32),
+            Self::Id32(cs) => match value {
+                Self::Item::Id32(val) => cs.seek(val).map(StorageValueT::Id32),
                 _ => None,
             },
-            Self::U64(cs) => match value {
-                Self::Item::U64(val) => cs.seek(val).map(StorageValueT::U64),
+            Self::Id64(cs) => match value {
+                Self::Item::Id64(val) => cs.seek(val).map(StorageValueT::Id64),
                 _ => None,
             },
-            Self::I64(cs) => match value {
-                Self::Item::I64(val) => cs.seek(val).map(StorageValueT::I64),
+            Self::Int64(cs) => match value {
+                Self::Item::Int64(val) => cs.seek(val).map(StorageValueT::Int64),
                 _ => None,
             },
             Self::Float(cs) => match value {

@@ -69,7 +69,7 @@ impl<'a> TableWriter<'a> {
         let mut table_trie = Vec::with_capacity(column_count * STORAGE_TYPE_COUNT);
 
         let dummy_value = AnyDataValue::new_integer_from_i64(0);
-        let dummy_storage_value = StorageValueT::I64(0);
+        let dummy_storage_value = StorageValueT::Int64(0);
         for _i in 0..column_count {
             cur_row.push(dummy_value.clone());
             cur_row_storage_values.push(dummy_storage_value);
@@ -174,7 +174,7 @@ impl<'a> TableWriter<'a> {
         let table: &TypedTableRecord = &self.tables[table_idx];
         for i in 0..self.col_num {
             match table.col_types[i] {
-                StorageTypeName::U32 => {
+                StorageTypeName::Id32 => {
                     let first = self.dict.borrow().get(
                         usize::try_from(self.cols_u32[table.col_ids[i]][first_row_idx]).unwrap(),
                     );
@@ -185,7 +185,7 @@ impl<'a> TableWriter<'a> {
                         return first.cmp(&second);
                     }
                 }
-                StorageTypeName::U64 => {
+                StorageTypeName::Id64 => {
                     let first = self.dict.borrow().get(
                         usize::try_from(self.cols_u64[table.col_ids[i]][first_row_idx]).unwrap(),
                     );
@@ -196,7 +196,7 @@ impl<'a> TableWriter<'a> {
                         return first.cmp(&second);
                     }
                 }
-                StorageTypeName::I64 => {
+                StorageTypeName::Int64 => {
                     let first = &self.cols_i64[table.col_ids[i]][first_row_idx];
                     let second = &self.cols_i64[table.col_ids[i]][second_row_idx];
                     if first.cmp(second) != Ordering::Equal {
@@ -229,13 +229,13 @@ impl<'a> TableWriter<'a> {
 
         for col_idx in 0..self.col_num {
             ret.push(match table.col_types[col_idx] {
-                StorageTypeName::U32 => {
+                StorageTypeName::Id32 => {
                     StorageValueT::from(self.cols_u32[table.col_ids[col_idx]][*row_idx])
                 }
-                StorageTypeName::U64 => {
+                StorageTypeName::Id64 => {
                     StorageValueT::from(self.cols_u64[table.col_ids[col_idx]][*row_idx])
                 }
-                StorageTypeName::I64 => {
+                StorageTypeName::Int64 => {
                     StorageValueT::from(self.cols_i64[table.col_ids[col_idx]][*row_idx])
                 }
                 StorageTypeName::Float => {
@@ -278,13 +278,13 @@ impl<'a> TableWriter<'a> {
         let local_val_index = val_index - rows_before;
         let idx_in_value_cols = self.tables[table_index].col_ids[col_index];
         match self.tables[table_index].col_types[col_index] {
-            StorageTypeName::U32 => Some(StorageValueT::U32(
+            StorageTypeName::Id32 => Some(StorageValueT::Id32(
                 self.cols_u32[idx_in_value_cols][local_val_index],
             )),
-            StorageTypeName::U64 => Some(StorageValueT::U64(
+            StorageTypeName::Id64 => Some(StorageValueT::Id64(
                 self.cols_u64[idx_in_value_cols][local_val_index],
             )),
-            StorageTypeName::I64 => Some(StorageValueT::I64(
+            StorageTypeName::Int64 => Some(StorageValueT::Int64(
                 self.cols_i64[idx_in_value_cols][local_val_index],
             )),
             StorageTypeName::Float => Some(StorageValueT::Float(
@@ -307,13 +307,13 @@ impl<'a> TableWriter<'a> {
 
         for i in 0..self.col_num {
             match self.cur_row_storage_values[i] {
-                StorageValueT::U32(v) => {
+                StorageValueT::Id32(v) => {
                     self.cols_u32[table_record.col_ids[i]].push(v);
                 }
-                StorageValueT::U64(v) => {
+                StorageValueT::Id64(v) => {
                     self.cols_u64[table_record.col_ids[i]].push(v);
                 }
-                StorageValueT::I64(v) => {
+                StorageValueT::Int64(v) => {
                     self.cols_i64[table_record.col_ids[i]].push(v);
                 }
                 StorageValueT::Float(v) => {
@@ -379,15 +379,15 @@ impl<'a> TableWriter<'a> {
             let st = self.cur_row_storage_values[i].get_type();
             col_types.push(st);
             match st {
-                StorageTypeName::U32 => {
+                StorageTypeName::Id32 => {
                     col_ids.push(self.cols_u32.len());
                     self.cols_u32.push(Vec::new());
                 }
-                StorageTypeName::U64 => {
+                StorageTypeName::Id64 => {
                     col_ids.push(self.cols_u64.len());
                     self.cols_u64.push(Vec::new());
                 }
-                StorageTypeName::I64 => {
+                StorageTypeName::Int64 => {
                     col_ids.push(self.cols_i64.len());
                     self.cols_i64.push(Vec::new());
                 }
@@ -445,20 +445,23 @@ impl<'a> TableWriter<'a> {
                 StorageValueT::Double(Double::from_number(iv.to_f64_unchecked()))
             }
             AnyDataValue::UnsignedLong(iv) => Self::storage_value_for_u64(iv.to_u64_unchecked()),
-            AnyDataValue::Long(iv) => StorageValueT::I64(iv.to_i64_unchecked()),
+            AnyDataValue::Long(iv) => StorageValueT::Int64(iv.to_i64_unchecked()),
             AnyDataValue::Other(_) => {
                 todo!("We still need the dictionary to support this case properly")
             }
         }
     }
 
-    /// Find a good [`StorageValueT`] for a u64 number. The method uses [`StorageValueT::U32`]
-    /// if possible to safe memory.
+    /// Find a good [`StorageValueT`] for a u64 number, considered as an actual integer (not as a dictionary id).
+    ///
+    /// TODO: Open design issue: Should we even support such values in [`DataValue`], since the internal types do not cover
+    /// them in all cases, and moreover since there are always integers outside any i64 or u64 range that we have to handle
+    /// separately anyway?
     fn storage_value_for_u64(value: u64) -> StorageValueT {
-        if let Ok(u32value) = value.try_into() {
-            StorageValueT::U32(u32value)
+        if let Ok(i64value) = value.try_into() {
+            StorageValueT::Int64(i64value)
         } else {
-            StorageValueT::U64(value)
+            todo!("Integers that are outside of the i64 range need some fallback representation, probably using the dictionary.")
         }
     }
 
@@ -466,9 +469,9 @@ impl<'a> TableWriter<'a> {
     /// if possible to safe memory.
     fn storage_value_for_usize(value: usize) -> StorageValueT {
         if let Ok(u32value) = value.try_into() {
-            StorageValueT::U32(u32value)
+            StorageValueT::Id32(u32value)
         } else {
-            StorageValueT::U64(value.try_into().unwrap())
+            StorageValueT::Id64(value.try_into().unwrap())
         }
     }
 
@@ -477,9 +480,9 @@ impl<'a> TableWriter<'a> {
     /// TODO see https://users.rust-lang.org/t/getting-the-position-index-of-an-enum/68311
     fn storage_type_idx(stn: StorageTypeName) -> usize {
         match stn {
-            StorageTypeName::U32 => 0,
-            StorageTypeName::U64 => 1,
-            StorageTypeName::I64 => 2,
+            StorageTypeName::Id32 => 0,
+            StorageTypeName::Id64 => 1,
+            StorageTypeName::Int64 => 2,
             StorageTypeName::Float => 3,
             StorageTypeName::Double => 4,
         }
@@ -547,7 +550,7 @@ mod test {
 
         assert_eq!(tw.get_value(0, 0), tw.get_value(0, 1));
         assert_ne!(tw.get_value(2, 1), tw.get_value(0, 0));
-        assert_eq!(tw.get_value(2, 1), Some(StorageValueT::I64(42)));
+        assert_eq!(tw.get_value(2, 1), Some(StorageValueT::Int64(42)));
     }
 
     #[test]
@@ -567,10 +570,10 @@ mod test {
         tw.next_value(v4.clone());
 
         let mut rows = tw.get_rows();
-        assert_eq!(rows.next(), Some(vec![StorageValueT::U32(1)]));
-        assert_eq!(rows.next(), Some(vec![StorageValueT::U32(2)]));
-        assert_eq!(rows.next(), Some(vec![StorageValueT::U32(0)]));
-        assert_eq!(rows.next(), Some(vec![StorageValueT::U32(3)]));
+        assert_eq!(rows.next(), Some(vec![StorageValueT::Id32(1)]));
+        assert_eq!(rows.next(), Some(vec![StorageValueT::Id32(2)]));
+        assert_eq!(rows.next(), Some(vec![StorageValueT::Id32(0)]));
+        assert_eq!(rows.next(), Some(vec![StorageValueT::Id32(3)]));
         assert_eq!(rows.next(), None);
     }
 
@@ -592,8 +595,8 @@ mod test {
         tw.next_value(v1.clone());
         tw.next_value(v1.clone());
 
-        let tv1 = StorageValueT::U32(0);
-        let tv2 = StorageValueT::I64(42);
+        let tv1 = StorageValueT::Id32(0);
+        let tv2 = StorageValueT::Int64(42);
 
         let mut rows = tw.get_rows();
         assert_eq!(rows.next(), Some(vec![tv1, tv1]));

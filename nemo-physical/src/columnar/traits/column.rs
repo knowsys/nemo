@@ -83,11 +83,11 @@ impl<T: RunLengthEncodable> ByteSized for ColumnEnum<T> {
 #[derive(Debug, Clone)]
 pub enum ColumnT {
     /// Case `ColumnEnum<u64>`
-    U32(ColumnEnum<u32>),
+    Id32(ColumnEnum<u32>),
     /// Case `ColumnEnum<u64>`
-    U64(ColumnEnum<u64>),
+    Id64(ColumnEnum<u64>),
     /// Case `ColumnEnum<i64>`
-    I64(ColumnEnum<i64>),
+    Int64(ColumnEnum<i64>),
     /// Case `ColumnEnum<Float>`
     Float(ColumnEnum<Float>),
     /// Case `ColumnEnum<Double>`

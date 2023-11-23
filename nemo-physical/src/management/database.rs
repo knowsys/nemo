@@ -1098,9 +1098,9 @@ impl DatabaseInstance {
         }
 
         match iterator {
-            StorageValueIteratorT::U32(iter) => to_data_column_iter!(U32, iter, name),
-            StorageValueIteratorT::U64(iter) => to_data_column_iter!(U64, iter, name),
-            StorageValueIteratorT::I64(iter) => to_data_column_iter!(I64, iter, name),
+            StorageValueIteratorT::Id32(iter) => to_data_column_iter!(U32, iter, name),
+            StorageValueIteratorT::Id64(iter) => to_data_column_iter!(U64, iter, name),
+            StorageValueIteratorT::Int64(iter) => to_data_column_iter!(I64, iter, name),
             StorageValueIteratorT::Float(iter) => {
                 to_data_column_iter_no_string!(Float, iter, name)
             }
@@ -1555,39 +1555,39 @@ mod test {
 
     #[test]
     fn test_casting() {
-        let trie_a = Trie::from_rows(&[vec![StorageValueT::U32(1), StorageValueT::U32(2)]]);
+        let trie_a = Trie::from_rows(&[vec![StorageValueT::Id32(1), StorageValueT::Id32(2)]]);
         let trie_b = Trie::from_rows(&[
-            vec![StorageValueT::U32(2), StorageValueT::U64(1 << 35)],
-            vec![StorageValueT::U32(3), StorageValueT::U64(2)],
+            vec![StorageValueT::Id32(2), StorageValueT::Id64(1 << 35)],
+            vec![StorageValueT::Id32(3), StorageValueT::Id64(2)],
         ]);
-        let trie_c = Trie::from_rows(&[vec![StorageValueT::U32(2), StorageValueT::U64(4)]]);
+        let trie_c = Trie::from_rows(&[vec![StorageValueT::Id32(2), StorageValueT::Id64(4)]]);
         let trie_x = Trie::from_rows(&[
             vec![
-                StorageValueT::U64(1),
-                StorageValueT::U32(2),
-                StorageValueT::U64(4),
+                StorageValueT::Id64(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id64(4),
             ],
             vec![
-                StorageValueT::U64(3),
-                StorageValueT::U32(2),
-                StorageValueT::U64(4),
+                StorageValueT::Id64(3),
+                StorageValueT::Id32(2),
+                StorageValueT::Id64(4),
             ],
             vec![
-                StorageValueT::U64(1 << 36),
-                StorageValueT::U32(6),
-                StorageValueT::U64(12),
+                StorageValueT::Id64(1 << 36),
+                StorageValueT::Id32(6),
+                StorageValueT::Id64(12),
             ],
         ]);
         let trie_y = Trie::from_rows(&[
             vec![
-                StorageValueT::U32(1),
-                StorageValueT::U64(2),
-                StorageValueT::U32(4),
+                StorageValueT::Id32(1),
+                StorageValueT::Id64(2),
+                StorageValueT::Id32(4),
             ],
             vec![
-                StorageValueT::U32(2),
-                StorageValueT::U64(1 << 37),
-                StorageValueT::U32(7),
+                StorageValueT::Id32(2),
+                StorageValueT::Id64(1 << 37),
+                StorageValueT::Id32(7),
             ],
         ]);
 
