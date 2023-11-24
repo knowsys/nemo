@@ -11,7 +11,7 @@ use super::{
 };
 
 // Initial part of IRI in all XML Schema types:
-pub const XSD_PREFIX: &str = "http://www.w3.org/2001/XMLSchema#";
+const XSD_PREFIX: &str = "http://www.w3.org/2001/XMLSchema#";
 
 /// Enum that can represent arbitrary [`DataValue`]s.
 #[derive(Debug, Clone)]

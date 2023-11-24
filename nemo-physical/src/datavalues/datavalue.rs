@@ -20,15 +20,21 @@ pub enum DataValueCreationError {
     /// Error for problems with integer ranges
     #[error("integer number {value} is not in supported range [{min},{max}] for datatype {datatype_name}")]
     IntegerRange {
+        /// Smallest value that would have been allowed
         min: i64,
+        /// Largest value that would have been allowed
         max: i64,
+        /// Actually given value
         value: i64,
+        /// String that hints at the datatype that was used, the source of the range constraints
         datatype_name: String,
     },
     /// Generic error for incorrect values
     #[error("lexical value '{lexical_value}' is not valid for datatype '{datatype_iri}'")]
     InvalidLexicalValue {
+        /// Lexical value that failed to parse
         lexical_value: String,
+        /// Datatype IRI for which parsing failed
         datatype_iri: String,
     },
 }
