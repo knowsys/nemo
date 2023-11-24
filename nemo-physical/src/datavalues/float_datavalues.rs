@@ -5,23 +5,7 @@
 //! By convention (following XML Schema), we consider the value spaces of floats of different precisions
 //! to be disjoint, and also dijoint with any integer domain.
 
-use super::{DataValue, ValueDomain};
-use std::fmt::{Display, Formatter};
-
-/// Error that occurs when trying to use an infinity or NaN for creating a [`Double`].
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct NonFiniteFloatError;
-
-impl Display for NonFiniteFloatError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "floating point number must represent a finite value (no infiniy, no NaN)"
-        )
-    }
-}
-
-impl std::error::Error for NonFiniteFloatError {}
+use super::{DataValue, DataValueCreationError, ValueDomain};
 
 /// Physical representation of a 64bit floating point number as an f64.
 #[repr(transparent)]
@@ -33,9 +17,9 @@ impl DoubleDataValue {
     ///
     /// # Errors
     /// The given `value` is NaN or an infinity.
-    pub fn new(value: f64) -> Result<DoubleDataValue, NonFiniteFloatError> {
+    pub fn new(value: f64) -> Result<DoubleDataValue, DataValueCreationError> {
         if !value.is_finite() {
-            return Err(NonFiniteFloatError.into());
+            return Err(DataValueCreationError::NonFiniteFloat {});
         }
 
         Ok(DoubleDataValue(value))
@@ -76,8 +60,8 @@ impl Eq for DoubleDataValue {} // Possible since we exclude NaNs
 
 #[cfg(test)]
 mod test {
-    use super::{DoubleDataValue, NonFiniteFloatError};
-    use crate::datavalues::{DataValue, ValueDomain};
+    use super::DoubleDataValue;
+    use crate::datavalues::{DataValue, DataValueCreationError, ValueDomain};
 
     #[test]
     fn test_double() {
@@ -98,18 +82,27 @@ mod test {
     #[test]
     fn test_double_nan() {
         let result = DoubleDataValue::new(f64::NAN);
-        assert_eq!(result.err().unwrap(), NonFiniteFloatError);
+        assert_eq!(
+            result.err().unwrap(),
+            DataValueCreationError::NonFiniteFloat {}
+        );
     }
 
     #[test]
     fn test_double_pos_inf() {
         let result = DoubleDataValue::new(f64::INFINITY);
-        assert_eq!(result.err().unwrap(), NonFiniteFloatError);
+        assert_eq!(
+            result.err().unwrap(),
+            DataValueCreationError::NonFiniteFloat {}
+        );
     }
 
     #[test]
     fn test_double_neg_inf() {
         let result = DoubleDataValue::new(f64::NEG_INFINITY);
-        assert_eq!(result.err().unwrap(), NonFiniteFloatError);
+        assert_eq!(
+            result.err().unwrap(),
+            DataValueCreationError::NonFiniteFloat {}
+        );
     }
 }

@@ -1,12 +1,17 @@
 //! This module provides implementations [`super::DataValue`]s that can represent any
 //! datavalue that we support.
 
+use std::str::FromStr;
+
 use delegate::delegate;
 
 use super::{
-    DataValue, DoubleDataValue, IriDataValue, LangStringDataValue, LongDataValue,
-    NonFiniteFloatError, OtherDataValue, StringDataValue, UnsignedLongDataValue, ValueDomain,
+    DataValue, DataValueCreationError, DoubleDataValue, IriDataValue, LangStringDataValue,
+    LongDataValue, OtherDataValue, StringDataValue, UnsignedLongDataValue, ValueDomain,
 };
+
+// Initial part of IRI in all XML Schema types:
+pub const XSD_PREFIX: &str = "http://www.w3.org/2001/XMLSchema#";
 
 /// Enum that can represent arbitrary [`DataValue`]s.
 #[derive(Debug, Clone)]
@@ -43,7 +48,7 @@ impl AnyDataValue {
     }
 
     /// Construct a datavalue that represents the given number.
-    pub fn new_double_from_f64(value: f64) -> Result<AnyDataValue, NonFiniteFloatError> {
+    pub fn new_double_from_f64(value: f64) -> Result<AnyDataValue, DataValueCreationError> {
         match DoubleDataValue::new(value) {
             Ok(dv) => Ok(AnyDataValue::Double(dv)),
             Err(e) => Err(e),
@@ -68,6 +73,61 @@ impl AnyDataValue {
     /// Construct a datavalue in [`ValueDomain::Other`] specified by the given lexical value and datatype IRI.
     pub fn new_other(lexical_value: String, datatype_iri: String) -> Self {
         AnyDataValue::Other(OtherDataValue::new(lexical_value, datatype_iri))
+    }
+
+    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given lexical value and datatype IRI.
+    /// Known RDF and XML Schema datatypes are taken into account.
+    pub fn new_from_typed_literal(
+        lexical_value: String,
+        datatype_iri: String,
+    ) -> Result<AnyDataValue, DataValueCreationError> {
+        // Macro for parsing strings as i64 and checking bounds of specific integer types
+        macro_rules! parse_integer {
+            ($lexical_value:expr$(;$min:expr;$max:expr;$typename:expr)?) => {
+                match i64::from_str(&$lexical_value) {
+                    Ok(value) => {
+                        $(if value < $min || value > $max {
+                            return Err(DataValueCreationError::IntegerRange{min: $min, max: $max, value: value, datatype_name: $typename.to_string()})
+                        })?
+                        Ok(Self::new_integer_from_i64(value))
+                    },
+                    Err(e) => Err(DataValueCreationError::from(e)),
+                }
+            }
+        }
+
+        if let Some(xsd_type) = datatype_iri.strip_prefix(XSD_PREFIX) {
+            match xsd_type {
+                "string" => Ok(Self::new_string(lexical_value)),
+                "long" => parse_integer!(lexical_value),
+                "int" => parse_integer!(lexical_value; i32::MIN as i64; i32::MAX as i64; "xsd:int"),
+                "short" => parse_integer!(lexical_value; -32768; 32767; "xsd:short"),
+                "byte" => parse_integer!(lexical_value; -128; 127; "xsd:byte"),
+                "unsignedInt" => parse_integer!(lexical_value; 0; 4294967295; "xsd:unsignedInt"),
+                "unsignedShort" => parse_integer!(lexical_value; 0; 65535; "xsd:unsignedShort"),
+                "unsignedByte" => parse_integer!(lexical_value; 0; 255; "xsd:unsignedByte"),
+                "unsignedLong" => {
+                    // We still prefer to use i64 if possible:
+                    match u64::from_str(&lexical_value) {
+                        Ok(value) => {
+                            if let Ok(i64value) = i64::try_from(value) {
+                                Ok(Self::new_integer_from_i64(i64value))
+                            } else {
+                                Ok(Self::new_integer_from_u64(value))
+                            }
+                        }
+                        Err(e) => Err(DataValueCreationError::from(e)),
+                    }
+                }
+                "double" => match f64::from_str(&lexical_value) {
+                    Ok(value) => Self::new_double_from_f64(value),
+                    Err(e) => Err(DataValueCreationError::from(e)),
+                },
+                _ => Ok(Self::new_other(lexical_value, datatype_iri)),
+            }
+        } else {
+            Ok(Self::new_other(lexical_value, datatype_iri))
+        }
     }
 }
 
@@ -139,8 +199,8 @@ impl Eq for AnyDataValue {}
 
 #[cfg(test)]
 mod test {
-    use super::AnyDataValue;
-    use crate::datavalues::{DataValue, ValueDomain};
+    use super::{AnyDataValue, XSD_PREFIX};
+    use crate::datavalues::{DataValue, DataValueCreationError, ValueDomain};
 
     #[test]
     fn test_string() {
@@ -356,5 +416,203 @@ mod test {
         assert_ne!(dv_other, dv_iri);
         assert_ne!(dv_other, dv_lang_string);
         assert_eq!(dv_other, dv_other);
+    }
+
+    #[test]
+    fn test_new_from_string_literal() {
+        let string_res = AnyDataValue::new_from_typed_literal(
+            "Hello World.".to_string(),
+            XSD_PREFIX.to_owned() + "string",
+        );
+
+        assert_eq!(
+            string_res,
+            Ok(AnyDataValue::new_string("Hello World.".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_new_from_long_literal() {
+        let long_res1 = AnyDataValue::new_from_typed_literal(
+            "+4398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "long",
+        );
+        let long_res2 = AnyDataValue::new_from_typed_literal(
+            "invalid".to_string(),
+            XSD_PREFIX.to_owned() + "long",
+        );
+        let long_res3 = AnyDataValue::new_from_typed_literal(
+            "999999999999999999999999999999999".to_string(),
+            XSD_PREFIX.to_owned() + "long",
+        );
+
+        assert_eq!(
+            long_res1,
+            Ok(AnyDataValue::new_integer_from_i64(4398046511104))
+        );
+        assert!(matches!(
+            long_res2,
+            Err(DataValueCreationError::IntegerNotParsed { .. })
+        ));
+        assert!(matches!(
+            long_res3,
+            Err(DataValueCreationError::IntegerNotParsed { .. })
+        ));
+    }
+
+    #[test]
+    fn test_new_from_int_literal() {
+        let int_res1 = AnyDataValue::new_from_typed_literal(
+            "016777216".to_string(),
+            XSD_PREFIX.to_owned() + "int",
+        );
+        let int_res2 = AnyDataValue::new_from_typed_literal(
+            "+4398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "int",
+        );
+
+        assert_eq!(int_res1, Ok(AnyDataValue::new_integer_from_i64(16777216)));
+        assert!(matches!(
+            int_res2,
+            Err(DataValueCreationError::IntegerRange { .. })
+        ));
+    }
+
+    #[test]
+    fn test_new_from_short_literal() {
+        let short_res1 = AnyDataValue::new_from_typed_literal(
+            "-2345".to_string(),
+            XSD_PREFIX.to_owned() + "short",
+        );
+        let short_res2 = AnyDataValue::new_from_typed_literal(
+            "16777216".to_string(),
+            XSD_PREFIX.to_owned() + "short",
+        );
+
+        assert_eq!(short_res1, Ok(AnyDataValue::new_integer_from_i64(-2345)));
+        assert!(matches!(
+            short_res2,
+            Err(DataValueCreationError::IntegerRange { .. })
+        ));
+    }
+
+    #[test]
+    fn test_new_from_byte_literal() {
+        let byte_res1 =
+            AnyDataValue::new_from_typed_literal("-35".to_string(), XSD_PREFIX.to_owned() + "byte");
+        let byte_res2 = AnyDataValue::new_from_typed_literal(
+            "-200".to_string(),
+            XSD_PREFIX.to_owned() + "byte",
+        );
+
+        assert_eq!(byte_res1, Ok(AnyDataValue::new_integer_from_i64(-35)));
+        assert!(matches!(
+            byte_res2,
+            Err(DataValueCreationError::IntegerRange { .. })
+        ));
+    }
+
+    #[test]
+    fn test_new_from_ulong_literal() {
+        let ulong_res1 = AnyDataValue::new_from_typed_literal(
+            "+018446744073709551574".to_string(),
+            XSD_PREFIX.to_owned() + "unsignedLong",
+        );
+        let ulong_res2 = AnyDataValue::new_from_typed_literal(
+            "-4".to_string(),
+            XSD_PREFIX.to_owned() + "unsignedLong",
+        );
+        let ulong_res3 = AnyDataValue::new_from_typed_literal(
+            "36893488147419103232".to_string(),
+            XSD_PREFIX.to_owned() + "unsignedLong",
+        );
+
+        assert_eq!(
+            ulong_res1,
+            Ok(AnyDataValue::new_integer_from_u64(18446744073709551574))
+        );
+        assert!(matches!(
+            ulong_res2,
+            Err(DataValueCreationError::IntegerNotParsed { .. })
+        ));
+        assert!(matches!(
+            ulong_res3,
+            Err(DataValueCreationError::IntegerNotParsed { .. })
+        ));
+    }
+
+    #[test]
+    fn test_new_from_uint_literal() {
+        let uint_res1 = AnyDataValue::new_from_typed_literal(
+            "0004294967254".to_string(),
+            XSD_PREFIX.to_owned() + "unsignedInt",
+        );
+        let uint_res2 = AnyDataValue::new_from_typed_literal(
+            "-4".to_string(),
+            XSD_PREFIX.to_owned() + "unsignedInt",
+        );
+
+        assert_eq!(
+            uint_res1,
+            Ok(AnyDataValue::new_integer_from_i64(4294967254))
+        );
+        assert!(matches!(
+            uint_res2,
+            Err(DataValueCreationError::IntegerRange { .. })
+        ));
+    }
+
+    #[test]
+    fn test_new_from_ushort_literal() {
+        let ushort_res1 = AnyDataValue::new_from_typed_literal(
+            "2345".to_string(),
+            XSD_PREFIX.to_owned() + "unsignedShort",
+        );
+        let ushort_res2 = AnyDataValue::new_from_typed_literal(
+            "-4".to_string(),
+            XSD_PREFIX.to_owned() + "unsignedShort",
+        );
+
+        assert_eq!(ushort_res1, Ok(AnyDataValue::new_integer_from_i64(2345)));
+        assert!(matches!(
+            ushort_res2,
+            Err(DataValueCreationError::IntegerRange { .. })
+        ));
+    }
+
+    #[test]
+    fn test_new_from_ubyte_literal() {
+        let ubyte_res1 = AnyDataValue::new_from_typed_literal(
+            "255".to_string(),
+            XSD_PREFIX.to_owned() + "unsignedByte",
+        );
+        let ubyte_res2 = AnyDataValue::new_from_typed_literal(
+            "-4".to_string(),
+            XSD_PREFIX.to_owned() + "unsignedByte",
+        );
+
+        assert_eq!(ubyte_res1, Ok(AnyDataValue::new_integer_from_i64(255)));
+        assert!(matches!(
+            ubyte_res2,
+            Err(DataValueCreationError::IntegerRange { .. })
+        ));
+    }
+
+    #[test]
+    fn test_new_from_double_literal() {
+        let double_res1 = AnyDataValue::new_from_typed_literal(
+            "-223.56".to_string(),
+            XSD_PREFIX.to_owned() + "double",
+        );
+        let double_res2 = AnyDataValue::new_from_typed_literal(
+            "invalid".to_string(),
+            XSD_PREFIX.to_owned() + "double",
+        );
+
+        assert_eq!(double_res1, AnyDataValue::new_double_from_f64(-223.56));
+        assert!(matches!(
+            double_res2,
+            Err(DataValueCreationError::FloatNotParsed { .. })
+        ));
     }
 }

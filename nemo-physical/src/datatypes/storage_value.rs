@@ -36,7 +36,9 @@ impl StorageValueT {
         match self {
             StorageValueT::Id32(val) => (*other).try_into().map(|otherval| val.cmp(&otherval)).ok(),
             StorageValueT::Id64(val) => (*other).try_into().map(|otherval| val.cmp(&otherval)).ok(),
-            StorageValueT::Int64(val) => (*other).try_into().map(|otherval| val.cmp(&otherval)).ok(),
+            StorageValueT::Int64(val) => {
+                (*other).try_into().map(|otherval| val.cmp(&otherval)).ok()
+            }
             StorageValueT::Float(val) => {
                 (*other).try_into().map(|otherval| val.cmp(&otherval)).ok()
             }

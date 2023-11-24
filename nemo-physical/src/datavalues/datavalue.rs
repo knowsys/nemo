@@ -1,3 +1,38 @@
+//! This module provides the general trait for representing a [`DataValue`], its relevant
+//! [`ValueDomain`]s, and possible errors that occur when dealing with them.
+
+use std::num::{ParseFloatError, ParseIntError};
+
+use thiserror::Error;
+
+/// Potential errors encountered when trying to construct [`DataValue`]s.
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum DataValueCreationError {
+    /// Error for floating point numbers that are not finite
+    #[error("floating point number must represent a finite value (no infinity, no NaN)")]
+    NonFiniteFloat,
+    /// Error for problems with parsing floating point numbers
+    #[error("floating point number could not be parsed")]
+    FloatNotParsed(#[from] ParseFloatError),
+    /// Error for problems with parsing integer numbers
+    #[error("integer number could not be parsed")]
+    IntegerNotParsed(#[from] ParseIntError),
+    /// Error for problems with integer ranges
+    #[error("integer number {value} is not in supported range [{min},{max}] for datatype {datatype_name}")]
+    IntegerRange {
+        min: i64,
+        max: i64,
+        value: i64,
+        datatype_name: String,
+    },
+    /// Generic error for incorrect values
+    #[error("lexical value '{lexical_value}' is not valid for datatype '{datatype_iri}'")]
+    InvalidLexicalValue {
+        lexical_value: String,
+        datatype_iri: String,
+    },
+}
+
 /// Enum of different value domains that are distinguished in this code,
 /// such as "string" or "64bit floating point numbers". Even in an untyped context,
 /// it is often useful to distinguish some basic domains and to treat values accordingly.
