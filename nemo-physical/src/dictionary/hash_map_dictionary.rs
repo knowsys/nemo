@@ -1,12 +1,13 @@
 use super::{AddResult, Dictionary, DictionaryString};
 
 use std::{
-    collections::HashMap,
     fmt::Display,
     hash::{Hash, Hasher},
     marker::PhantomData,
     sync::atomic::{AtomicBool, Ordering},
 };
+
+use hashbrown::HashMap;
 
 /// Global string buffer for dictionary data.
 /// This is global here to allow keys in the hashmap to access it for computing equality and hashes,
@@ -50,11 +51,6 @@ const LENGTH_BITS_MASK: u64 = (1 << (PAGE_ADDR_BITS - 1)) - 1;
 struct StringBuffer {
     /// Vector of all string buffer pages with the id of the buffer they belong to.
     pages: Vec<(usize, String)>,
-    /// Single temporary string per buffer. [StringRef] uses this for representing strings that are not in the buffer.
-    ///
-    /// TODO: It would be possible and more elegant to have a special alternative key implementation for our hashmap,
-    /// where the key has the relevant data instead of pointing to a temporary buffer.
-    tmp_strings: Vec<String>,
     /// Currently active page for each buffer. This is always the last page that was allocated for the buffer.
     cur_pages: Vec<usize>,
     /// Lock to guard page assignment operations when using multiple threads
@@ -68,7 +64,6 @@ impl StringBuffer {
     const fn new() -> Self {
         StringBuffer {
             pages: Vec::new(),
-            tmp_strings: Vec::new(),
             cur_pages: Vec::new(),
             lock: AtomicBool::new(false),
             _marker: PhantomData,
@@ -81,7 +76,6 @@ impl StringBuffer {
         let buf_id = self.cur_pages.len();
         self.pages.push((buf_id, String::with_capacity(PAGE_SIZE)));
         self.cur_pages.push(self.pages.len() - 1);
-        self.tmp_strings.push(String::new());
         self.release_page_lock();
         buf_id
     }
@@ -133,23 +127,6 @@ impl StringBuffer {
         }
     }
 
-    /// Creates a reference to the given string without adding the string to the buffer.
-    fn get_tmp_string_ref(&mut self, buffer: usize, s: &str) -> StringRef {
-        self.acquire_page_lock();
-        self.tmp_strings[buffer].clear();
-        self.tmp_strings[buffer].push_str(s);
-        self.release_page_lock();
-        StringRef::new_tmp(buffer)
-    }
-
-    /// Returns the current contents of the temporary string.
-    fn get_tmp_string(&self, buffer: usize) -> &str {
-        self.acquire_page_lock();
-        let result = self.tmp_strings[buffer].as_str();
-        self.release_page_lock();
-        result
-    }
-
     /// Acquire the lock that we use for operations that read or write any of the internal data
     /// structures that multiple buffers might use.
     fn acquire_page_lock(&self) {
@@ -199,16 +176,6 @@ struct StringRef {
 }
 
 impl StringRef {
-    /// Creates an object that refers to the current contents of the
-    /// buffer's temporary String.
-    fn new_tmp(buffer: usize) -> Self {
-        assert!(u64::try_from(buffer).unwrap() <= MAX_STRINGREF_STRING_LENGTH);
-        let u64buffer: u64 = buffer.try_into().unwrap();
-        StringRef {
-            reference: (u64::MAX << STRINGREF_STRING_LENGTH_BITS) + u64buffer,
-        }
-    }
-
     /// Creates a reference to the specific string slice in the buffer.
     /// It is not checked if that slice is allocated.
     fn new(address: usize, len: usize) -> Self {
@@ -238,11 +205,8 @@ impl StringRef {
     /// Returns a direct string slice reference for this data.
     /// This is a pointer to global mutable data, and cannot be used safely.
     fn as_str(&self) -> &str {
-        if ((!self.reference) >> STRINGREF_STRING_LENGTH_BITS) != 0 {
-            unsafe { BUFFER.get_str(self.address(), self.len()) }
-        } else {
-            unsafe { BUFFER.get_tmp_string(self.len()) }
-        }
+        debug_assert!(((!self.reference) >> STRINGREF_STRING_LENGTH_BITS) != 0);
+        unsafe { BUFFER.get_str(self.address(), self.len()) }
     }
 }
 
@@ -258,6 +222,12 @@ impl Hash for StringRef {
         H: Hasher,
     {
         self.as_str().hash(state)
+    }
+}
+
+impl hashbrown::Equivalent<StringRef> for str {
+    fn equivalent(&self, key: &StringRef) -> bool {
+        key.as_str().eq(self)
     }
 }
 
@@ -297,10 +267,7 @@ impl HashMapDictionary {
     /// ID either. In such a case, another dictionary should have that ID.
     #[inline(always)]
     fn add_str_with_id(&mut self, string: &str, id: usize) -> AddResult {
-        match self
-            .mapping
-            .get(unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string) })
-        {
+        match self.mapping.get(string) {
             Some(idx) => {
                 // if *idx == super::KNOWN_ID_MARK {
                 //     println!("Got KID for {} when attempting to add id {}",string,id);
@@ -352,9 +319,7 @@ impl Dictionary for HashMapDictionary {
     }
 
     fn fetch_id(&self, string: &str) -> Option<usize> {
-        self.mapping
-            .get(unsafe { &BUFFER.get_tmp_string_ref(self.buffer, string) })
-            .copied()
+        self.mapping.get(string).copied()
     }
 
     fn get(&self, id: usize) -> Option<String> {
