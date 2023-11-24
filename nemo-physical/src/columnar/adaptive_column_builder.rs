@@ -277,18 +277,15 @@ impl ColumnBuilderAdaptiveT {
     /// Turn the column builder into the finalized Column
     pub fn finalize(self, interval_column: ColumnBuilderAdaptive<usize>) -> ColumnWithIntervalsT {
         match self {
-            ColumnBuilderAdaptiveT::Id32(c) => ColumnWithIntervalsT::Id32(ColumnWithIntervals::new(
-                c.finalize(),
-                interval_column.finalize(),
-            )),
-            ColumnBuilderAdaptiveT::Id64(c) => ColumnWithIntervalsT::Id64(ColumnWithIntervals::new(
-                c.finalize(),
-                interval_column.finalize(),
-            )),
-            ColumnBuilderAdaptiveT::Int64(c) => ColumnWithIntervalsT::Int64(ColumnWithIntervals::new(
-                c.finalize(),
-                interval_column.finalize(),
-            )),
+            ColumnBuilderAdaptiveT::Id32(c) => ColumnWithIntervalsT::Id32(
+                ColumnWithIntervals::new(c.finalize(), interval_column.finalize()),
+            ),
+            ColumnBuilderAdaptiveT::Id64(c) => ColumnWithIntervalsT::Id64(
+                ColumnWithIntervals::new(c.finalize(), interval_column.finalize()),
+            ),
+            ColumnBuilderAdaptiveT::Int64(c) => ColumnWithIntervalsT::Int64(
+                ColumnWithIntervals::new(c.finalize(), interval_column.finalize()),
+            ),
             ColumnBuilderAdaptiveT::Float(c) => ColumnWithIntervalsT::Float(
                 ColumnWithIntervals::new(c.finalize(), interval_column.finalize()),
             ),

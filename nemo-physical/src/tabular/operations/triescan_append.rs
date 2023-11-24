@@ -161,9 +161,15 @@ pub fn trie_append(
                     }
 
                     match value.to_storage_value_mut(dict) {
-                        StorageValueT::Id32(value) => append_columns_for_datatype!(value, Id32, u32),
-                        StorageValueT::Id64(value) => append_columns_for_datatype!(value, Id64, u64),
-                        StorageValueT::Int64(value) => append_columns_for_datatype!(value, Int64, i64),
+                        StorageValueT::Id32(value) => {
+                            append_columns_for_datatype!(value, Id32, u32)
+                        }
+                        StorageValueT::Id64(value) => {
+                            append_columns_for_datatype!(value, Id64, u64)
+                        }
+                        StorageValueT::Int64(value) => {
+                            append_columns_for_datatype!(value, Int64, i64)
+                        }
                         StorageValueT::Float(value) => {
                             append_columns_for_datatype!(value, Float, Float)
                         }
