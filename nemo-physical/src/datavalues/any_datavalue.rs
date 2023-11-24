@@ -1,7 +1,7 @@
 //! This module provides implementations [`super::DataValue`]s that can represent any
 //! datavalue that we support.
 
-use std::str::FromStr;
+use std::{num::IntErrorKind, str::FromStr};
 
 use delegate::delegate;
 
@@ -12,6 +12,32 @@ use super::{
 
 // Initial part of IRI in all XML Schema types:
 const XSD_PREFIX: &str = "http://www.w3.org/2001/XMLSchema#";
+
+/// Supported kinds of arbitrary size numbers.
+/// The variants we consider are taken from the XML Schema
+/// datatypes. Fixed-size integer types, such as long, are
+/// supported too, but don't need this enum.
+#[derive(Debug, Clone, Copy)]
+enum DecimalType {
+    Decimal,
+    Integer,
+    NonNegativeInteger,
+    PositiveInteger,
+    NonPositiveInteger,
+    NegativeInteger,
+}
+impl DecimalType {
+    fn datatype_iri(&self) -> String {
+        match self {
+            DecimalType::Decimal => XSD_PREFIX.to_owned() + "decimal",
+            DecimalType::Integer => XSD_PREFIX.to_owned() + "integer",
+            DecimalType::NonNegativeInteger => XSD_PREFIX.to_owned() + "nonNegativeInteger",
+            DecimalType::PositiveInteger => XSD_PREFIX.to_owned() + "positiveInteger",
+            DecimalType::NonPositiveInteger => XSD_PREFIX.to_owned() + "nonPositiveInteger",
+            DecimalType::NegativeInteger => XSD_PREFIX.to_owned() + "negativeInteger",
+        }
+    }
+}
 
 /// Enum that can represent arbitrary [`DataValue`]s.
 #[derive(Debug, Clone)]
@@ -119,6 +145,20 @@ impl AnyDataValue {
                         Err(e) => Err(DataValueCreationError::from(e)),
                     }
                 }
+                "decimal" => Self::new_from_decimal_literal(lexical_value, DecimalType::Decimal),
+                "integer" => Self::new_from_decimal_literal(lexical_value, DecimalType::Integer),
+                "positiveInteger" => {
+                    Self::new_from_decimal_literal(lexical_value, DecimalType::PositiveInteger)
+                }
+                "nonNegativeInteger" => {
+                    Self::new_from_decimal_literal(lexical_value, DecimalType::NonNegativeInteger)
+                }
+                "negativeInteger" => {
+                    Self::new_from_decimal_literal(lexical_value, DecimalType::NegativeInteger)
+                }
+                "nonPositiveInteger" => {
+                    Self::new_from_decimal_literal(lexical_value, DecimalType::NonPositiveInteger)
+                }
                 "double" => match f64::from_str(&lexical_value) {
                     Ok(value) => Self::new_double_from_f64(value),
                     Err(e) => Err(DataValueCreationError::from(e)),
@@ -128,6 +168,183 @@ impl AnyDataValue {
         } else {
             Ok(Self::new_other(lexical_value, datatype_iri))
         }
+    }
+
+    fn new_from_decimal_literal(
+        lexical_value: String,
+        decimal_type: DecimalType,
+    ) -> Result<AnyDataValue, DataValueCreationError> {
+        match i64::from_str(&lexical_value) {
+            Ok(value) => Self::from_decimal_typed_long(value, lexical_value, decimal_type),
+            Err(e) => {
+                match e.kind() {
+                    IntErrorKind::Empty => Err(DataValueCreationError::from(e)),
+                    IntErrorKind::InvalidDigit => {
+                        if let DecimalType::Decimal = decimal_type {
+                            // the invalid digit might have been '.'
+                            Self::parse_large_decimal_literal(lexical_value, decimal_type)
+                        } else {
+                            Err(DataValueCreationError::from(e))
+                        }
+                    }
+                    IntErrorKind::PosOverflow | IntErrorKind::NegOverflow | IntErrorKind::Zero => {
+                        Self::parse_large_decimal_literal(lexical_value, decimal_type)
+                    }
+                    _ => Err(DataValueCreationError::from(e)),
+                }
+            }
+        }
+    }
+
+    /// Create [`AnyDataValue`] for the given i64 number after checking possible range
+    /// constraints of the given [`DecimalType`].
+    fn from_decimal_typed_long(
+        value: i64,
+        lexical_value: String,
+        decimal_type: DecimalType,
+    ) -> Result<AnyDataValue, DataValueCreationError> {
+        match (decimal_type, value) {
+            (DecimalType::PositiveInteger, v) if v <= 0 => {
+                Self::decimal_parse_error(lexical_value, decimal_type)
+            }
+            (DecimalType::NonNegativeInteger, v) if v < 0 => {
+                return Self::decimal_parse_error(lexical_value, decimal_type)
+            }
+            (DecimalType::NegativeInteger, v) if v >= 0 => {
+                return Self::decimal_parse_error(lexical_value, decimal_type)
+            }
+            (DecimalType::NonPositiveInteger, v) if v > 0 => {
+                return Self::decimal_parse_error(lexical_value, decimal_type)
+            }
+            _ => return Ok(Self::new_integer_from_i64(value)),
+        }
+    }
+
+    fn parse_large_decimal_literal(
+        lexical_value: String,
+        decimal_type: DecimalType,
+    ) -> Result<AnyDataValue, DataValueCreationError> {
+        // We transscribe the lexical_value into a canonical form,
+        // and record some basic numeric properties in the process.
+        let mut trimmed_value = String::with_capacity(lexical_value.len());
+
+        let mut before_sign = true;
+        let mut in_leading_zeros = true;
+        let mut in_fraction = false;
+        let mut len_at_trailing_zeros: usize = 0;
+
+        let mut sign_plus = true;
+        let mut is_zero = true;
+        let mut has_nonzero_fraction = false;
+        for char in lexical_value.bytes() {
+            match char {
+                b'-' => {
+                    if trimmed_value.len() == 0 && before_sign {
+                        before_sign = false;
+                        sign_plus = false;
+                        trimmed_value.push('-');
+                    } else {
+                        return Self::decimal_parse_error(lexical_value, decimal_type);
+                    }
+                }
+                b'+' => {
+                    if trimmed_value.len() == 0 && before_sign {
+                        before_sign = false;
+                    } else {
+                        return Self::decimal_parse_error(lexical_value, decimal_type);
+                    }
+                }
+                b'1'..=b'9' => {
+                    trimmed_value.push(char::from(char));
+                    in_leading_zeros = false;
+                    is_zero = false;
+                    if in_fraction {
+                        has_nonzero_fraction = true;
+                        len_at_trailing_zeros = trimmed_value.len();
+                    }
+                }
+                b'0' => {
+                    before_sign = false;
+                    if !in_leading_zeros {
+                        trimmed_value.push('0');
+                    }
+                }
+                b'.' => {
+                    if in_fraction {
+                        return Self::decimal_parse_error(lexical_value, decimal_type);
+                    }
+                    if in_leading_zeros {
+                        trimmed_value.push('0');
+                        in_leading_zeros = false;
+                    }
+                    in_fraction = true;
+                    len_at_trailing_zeros = trimmed_value.len();
+                    trimmed_value.push('.');
+                }
+                _ => {
+                    return Self::decimal_parse_error(lexical_value, decimal_type);
+                }
+            }
+        }
+        // finally remove trailing zeros, and possibly also "."
+        if in_fraction {
+            trimmed_value.truncate(len_at_trailing_zeros);
+        }
+
+        if !in_fraction {
+            // Even a zero fraction is not allowed in integer types
+            assert_eq!(is_zero, false); // this case would parse as i64 earlier ...
+            match (decimal_type, sign_plus) {
+                (DecimalType::PositiveInteger, p) if !p => {
+                    return Self::decimal_parse_error(lexical_value, decimal_type);
+                }
+                (DecimalType::NonNegativeInteger, p) if !p => {
+                    return Self::decimal_parse_error(lexical_value, decimal_type);
+                }
+                (DecimalType::NegativeInteger, p) if p => {
+                    return Self::decimal_parse_error(lexical_value, decimal_type);
+                }
+                (DecimalType::NonPositiveInteger, p) if p => {
+                    return Self::decimal_parse_error(lexical_value, decimal_type);
+                }
+                _ => {
+                    return Ok(AnyDataValue::new_other(
+                        trimmed_value,
+                        XSD_PREFIX.to_owned() + "integer",
+                    ));
+                }
+            }
+        } else if let DecimalType::Decimal = decimal_type {
+            if has_nonzero_fraction {
+                return Ok(AnyDataValue::new_other(
+                    trimmed_value,
+                    XSD_PREFIX.to_owned() + "decimal",
+                ));
+            } else {
+                if let Ok(value) = i64::from_str(&trimmed_value) {
+                    return Ok(AnyDataValue::new_integer_from_i64(value));
+                } else if let Ok(value) = u64::from_str(&trimmed_value) {
+                    return Ok(AnyDataValue::new_integer_from_u64(value));
+                } else {
+                    return Ok(AnyDataValue::new_other(
+                        trimmed_value,
+                        XSD_PREFIX.to_owned() + "integer",
+                    ));
+                }
+            }
+        } else {
+            return Self::decimal_parse_error(lexical_value, decimal_type);
+        }
+    }
+
+    fn decimal_parse_error(
+        lexical_value: String,
+        decimal_type: DecimalType,
+    ) -> Result<AnyDataValue, DataValueCreationError> {
+        Err(DataValueCreationError::InvalidLexicalValue {
+            lexical_value: lexical_value,
+            datatype_iri: decimal_type.datatype_iri(),
+        })
     }
 }
 
@@ -429,6 +646,351 @@ mod test {
             string_res,
             Ok(AnyDataValue::new_string("Hello World.".to_string()))
         );
+    }
+
+    #[test]
+    fn test_new_from_decimal_literal() {
+        let res1 = AnyDataValue::new_from_typed_literal(
+            "+004398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res2 = AnyDataValue::new_from_typed_literal(
+            "+0043980465111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res2a = AnyDataValue::new_from_typed_literal(
+            "-3.14".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res2b = AnyDataValue::new_from_typed_literal(
+            "-.123".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res2c = AnyDataValue::new_from_typed_literal(
+            ".123".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res3 = AnyDataValue::new_from_typed_literal(
+            "+0043980465oo111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res4 = AnyDataValue::new_from_typed_literal(
+            "+000".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res5 = AnyDataValue::new_from_typed_literal(
+            "-000".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res6 = AnyDataValue::new_from_typed_literal(
+            "+000.00".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res6a = AnyDataValue::new_from_typed_literal(
+            "18446744073709551574.00".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res6b = AnyDataValue::new_from_typed_literal(
+            "+1844674407370955157418446744073709551574.0000".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res7a = AnyDataValue::new_from_typed_literal(
+            "00+03".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res7b = AnyDataValue::new_from_typed_literal(
+            ".+03".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+        let res7c = AnyDataValue::new_from_typed_literal(
+            "0.0.1".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+
+        assert_eq!(res1, Ok(AnyDataValue::new_integer_from_i64(4398046511104)));
+        assert_eq!(
+            res2,
+            Ok(AnyDataValue::new_other(
+                "43980465111044398046511104".to_string(),
+                XSD_PREFIX.to_owned() + "integer"
+            ))
+        );
+        assert_eq!(
+            res2a,
+            Ok(AnyDataValue::new_other(
+                "-3.14".to_string(),
+                XSD_PREFIX.to_owned() + "decimal"
+            ))
+        );
+        assert_eq!(
+            res2b,
+            Ok(AnyDataValue::new_other(
+                "-0.123".to_string(),
+                XSD_PREFIX.to_owned() + "decimal"
+            ))
+        );
+        assert_eq!(
+            res2c,
+            Ok(AnyDataValue::new_other(
+                "0.123".to_string(),
+                XSD_PREFIX.to_owned() + "decimal"
+            ))
+        );
+        assert!(matches!(
+            res3,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+        assert_eq!(res4, Ok(AnyDataValue::new_integer_from_i64(0)));
+        assert_eq!(res5, Ok(AnyDataValue::new_integer_from_i64(0)));
+        assert_eq!(res6, Ok(AnyDataValue::new_integer_from_i64(0)));
+        assert_eq!(
+            res6a,
+            Ok(AnyDataValue::new_integer_from_u64(18446744073709551574))
+        );
+        assert_eq!(
+            res6b,
+            Ok(AnyDataValue::new_other(
+                "1844674407370955157418446744073709551574".to_string(),
+                XSD_PREFIX.to_owned() + "integer"
+            ))
+        );
+        assert!(matches!(
+            res7a,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+        assert!(matches!(
+            res7b,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+        assert!(matches!(
+            res7c,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+    }
+
+    #[test]
+    fn test_new_from_integer_literal() {
+        let res1 = AnyDataValue::new_from_typed_literal(
+            "+004398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "integer",
+        );
+        let res2 = AnyDataValue::new_from_typed_literal(
+            "+0043980465111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "integer",
+        );
+        let res3 = AnyDataValue::new_from_typed_literal(
+            "+0043980465oo111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "integer",
+        );
+        let res4 = AnyDataValue::new_from_typed_literal(
+            "+000".to_string(),
+            XSD_PREFIX.to_owned() + "integer",
+        );
+        let res5 = AnyDataValue::new_from_typed_literal(
+            "-000".to_string(),
+            XSD_PREFIX.to_owned() + "integer",
+        );
+        let res6 = AnyDataValue::new_from_typed_literal(
+            "+000.00".to_string(),
+            XSD_PREFIX.to_owned() + "integer",
+        );
+
+        assert_eq!(res1, Ok(AnyDataValue::new_integer_from_i64(4398046511104)));
+        assert_eq!(
+            res2,
+            Ok(AnyDataValue::new_other(
+                "43980465111044398046511104".to_string(),
+                XSD_PREFIX.to_owned() + "integer"
+            ))
+        );
+        assert!(matches!(
+            res3,
+            Err(DataValueCreationError::IntegerNotParsed { .. })
+        ));
+        assert_eq!(res4, Ok(AnyDataValue::new_integer_from_i64(0)));
+        assert_eq!(res5, Ok(AnyDataValue::new_integer_from_i64(0)));
+        assert!(matches!(
+            res6,
+            Err(DataValueCreationError::IntegerNotParsed { .. })
+        ));
+    }
+
+    #[test]
+    fn test_new_from_non_negative_integer_literal() {
+        let res_minus = AnyDataValue::new_from_typed_literal(
+            "-10".to_string(),
+            XSD_PREFIX.to_owned() + "nonNegativeInteger",
+        );
+        let res_zero = AnyDataValue::new_from_typed_literal(
+            "0".to_string(),
+            XSD_PREFIX.to_owned() + "nonNegativeInteger",
+        );
+        let res_plus = AnyDataValue::new_from_typed_literal(
+            "10".to_string(),
+            XSD_PREFIX.to_owned() + "nonNegativeInteger",
+        );
+
+        let res_minus2 = AnyDataValue::new_from_typed_literal(
+            "-43980465111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "nonNegativeInteger",
+        );
+        let res_plus2 = AnyDataValue::new_from_typed_literal(
+            "43980465111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "nonNegativeInteger",
+        );
+
+        assert!(matches!(
+            res_minus,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+        assert_eq!(res_zero, Ok(AnyDataValue::new_integer_from_i64(0)));
+        assert_eq!(res_plus, Ok(AnyDataValue::new_integer_from_i64(10)));
+        assert!(matches!(
+            res_minus2,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+        assert_eq!(
+            res_plus2,
+            Ok(AnyDataValue::new_other(
+                "43980465111044398046511104".to_string(),
+                XSD_PREFIX.to_owned() + "integer"
+            ))
+        );
+    }
+
+    #[test]
+    fn test_new_from_positive_integer_literal() {
+        let res_minus = AnyDataValue::new_from_typed_literal(
+            "-10".to_string(),
+            XSD_PREFIX.to_owned() + "positiveInteger",
+        );
+        let res_zero = AnyDataValue::new_from_typed_literal(
+            "0".to_string(),
+            XSD_PREFIX.to_owned() + "positiveInteger",
+        );
+        let res_plus = AnyDataValue::new_from_typed_literal(
+            "10".to_string(),
+            XSD_PREFIX.to_owned() + "positiveInteger",
+        );
+
+        let res_minus2 = AnyDataValue::new_from_typed_literal(
+            "-43980465111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "positiveInteger",
+        );
+        let res_plus2 = AnyDataValue::new_from_typed_literal(
+            "43980465111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "positiveInteger",
+        );
+
+        assert!(matches!(
+            res_minus,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+        assert!(matches!(
+            res_zero,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+        assert_eq!(res_plus, Ok(AnyDataValue::new_integer_from_i64(10)));
+        assert!(matches!(
+            res_minus2,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+        assert_eq!(
+            res_plus2,
+            Ok(AnyDataValue::new_other(
+                "43980465111044398046511104".to_string(),
+                XSD_PREFIX.to_owned() + "integer"
+            ))
+        );
+    }
+
+    #[test]
+    fn test_new_from_non_positive_integer_literal() {
+        let res_minus = AnyDataValue::new_from_typed_literal(
+            "-10".to_string(),
+            XSD_PREFIX.to_owned() + "nonPositiveInteger",
+        );
+        let res_zero = AnyDataValue::new_from_typed_literal(
+            "0".to_string(),
+            XSD_PREFIX.to_owned() + "nonPositiveInteger",
+        );
+        let res_plus = AnyDataValue::new_from_typed_literal(
+            "10".to_string(),
+            XSD_PREFIX.to_owned() + "nonPositiveInteger",
+        );
+
+        let res_minus2 = AnyDataValue::new_from_typed_literal(
+            "-43980465111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "nonPositiveInteger",
+        );
+        let res_plus2 = AnyDataValue::new_from_typed_literal(
+            "43980465111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "nonPositiveInteger",
+        );
+
+        assert_eq!(res_minus, Ok(AnyDataValue::new_integer_from_i64(-10)));
+        assert_eq!(res_zero, Ok(AnyDataValue::new_integer_from_i64(0)));
+        assert!(matches!(
+            res_plus,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+        assert_eq!(
+            res_minus2,
+            Ok(AnyDataValue::new_other(
+                "-43980465111044398046511104".to_string(),
+                XSD_PREFIX.to_owned() + "integer"
+            ))
+        );
+        assert!(matches!(
+            res_plus2,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+    }
+
+    #[test]
+    fn test_new_from_negative_integer_literal() {
+        let res_minus = AnyDataValue::new_from_typed_literal(
+            "-10".to_string(),
+            XSD_PREFIX.to_owned() + "negativeInteger",
+        );
+        let res_zero = AnyDataValue::new_from_typed_literal(
+            "0".to_string(),
+            XSD_PREFIX.to_owned() + "negativeInteger",
+        );
+        let res_plus = AnyDataValue::new_from_typed_literal(
+            "10".to_string(),
+            XSD_PREFIX.to_owned() + "negativeInteger",
+        );
+
+        let res_minus2 = AnyDataValue::new_from_typed_literal(
+            "-43980465111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "negativeInteger",
+        );
+        let res_plus2 = AnyDataValue::new_from_typed_literal(
+            "43980465111044398046511104".to_string(),
+            XSD_PREFIX.to_owned() + "negativeInteger",
+        );
+
+        assert_eq!(res_minus, Ok(AnyDataValue::new_integer_from_i64(-10)));
+        assert!(matches!(
+            res_zero,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+        assert!(matches!(
+            res_plus,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
+        assert_eq!(
+            res_minus2,
+            Ok(AnyDataValue::new_other(
+                "-43980465111044398046511104".to_string(),
+                XSD_PREFIX.to_owned() + "integer"
+            ))
+        );
+        assert!(matches!(
+            res_plus2,
+            Err(DataValueCreationError::InvalidLexicalValue { .. })
+        ));
     }
 
     #[test]
