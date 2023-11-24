@@ -1273,6 +1273,7 @@ dependencies = [
  "bytesize",
  "enum_dispatch",
  "env_logger 0.10.1",
+ "hashbrown",
  "howlong",
  "linked-hash-map",
  "log",
