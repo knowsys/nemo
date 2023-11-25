@@ -170,6 +170,8 @@ impl AnyDataValue {
         }
     }
 
+    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] for a "big decimal"
+    /// or "big integer" [`DecimalType`].
     fn new_from_decimal_literal(
         lexical_value: String,
         decimal_type: DecimalType,
@@ -220,6 +222,8 @@ impl AnyDataValue {
         }
     }
 
+    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] for a "big decimal"
+    /// or "big integer" [`DecimalType`] by manually parsing the string.
     fn parse_large_decimal_literal(
         lexical_value: String,
         decimal_type: DecimalType,
@@ -295,16 +299,10 @@ impl AnyDataValue {
             // Even a zero fraction is not allowed in integer types
             assert_eq!(is_zero, false); // this case would parse as i64 earlier ...
             match (decimal_type, sign_plus) {
-                (DecimalType::PositiveInteger, p) if !p => {
+                (DecimalType::PositiveInteger, p) | (DecimalType::NonNegativeInteger, p) if !p => {
                     return Self::decimal_parse_error(lexical_value, decimal_type);
                 }
-                (DecimalType::NonNegativeInteger, p) if !p => {
-                    return Self::decimal_parse_error(lexical_value, decimal_type);
-                }
-                (DecimalType::NegativeInteger, p) if p => {
-                    return Self::decimal_parse_error(lexical_value, decimal_type);
-                }
-                (DecimalType::NonPositiveInteger, p) if p => {
+                (DecimalType::NegativeInteger, p) | (DecimalType::NonPositiveInteger, p) if p => {
                     return Self::decimal_parse_error(lexical_value, decimal_type);
                 }
                 _ => {
@@ -337,6 +335,8 @@ impl AnyDataValue {
         }
     }
 
+    /// Returns a [`Result`] to indicate a [`DataValueCreationError`] in processing
+    /// the given literal.
     fn decimal_parse_error(
         lexical_value: String,
         decimal_type: DecimalType,
