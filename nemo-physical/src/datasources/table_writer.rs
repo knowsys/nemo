@@ -95,6 +95,12 @@ impl<'a> TableWriter<'a> {
         }
     }
 
+    /// Returns the number of columns on the table, i.e., the
+    /// number of values that need to be written to make one row.
+    pub fn column_number(&self) -> usize {
+        self.col_num
+    }
+
     /// Provide the next value that is to be added to the column.
     /// When the value for the last column was provided, the row is
     /// committed to the table. Alternatively, a partially built row
