@@ -6,6 +6,7 @@ use std::num::{ParseFloatError, ParseIntError};
 use thiserror::Error;
 
 /// Potential errors encountered when trying to construct [`DataValue`]s.
+#[allow(variant_size_differences)]
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum DataValueCreationError {
     /// Error for floating point numbers that are not finite
