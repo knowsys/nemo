@@ -1,14 +1,18 @@
 //! Reading of RDF 1.1 triples files (N-Triples, Turtle, RDF/XML)
 use std::io::BufReader;
 
+use thiserror::Error;
+
 use nemo_physical::{
     builder_proxy::{ColumnBuilderProxy, PhysicalBuilderProxyEnum},
+    datasources::{TableProvider, TableWriter},
+    datavalues::{AnyDataValue, DataValueCreationError},
     error::ReadingError,
     table_reader::{Resource, TableReader},
 };
 use oxiri::Iri;
 use rio_api::{
-    model::{BlankNode, NamedNode, Subject, Triple},
+    model::{BlankNode, Literal, NamedNode, Subject, Term, Triple},
     parser::TriplesParser,
 };
 use rio_turtle::{NTriplesParser, TurtleParser};
@@ -22,6 +26,25 @@ use crate::{
     },
 };
 
+/// Errors that can occur when reading RDF resources and converting them
+/// to [`AnyDataValue`]s.
+#[allow(variant_size_differences)]
+#[derive(Error, Debug)]
+pub enum RdfReadingError {
+    /// A problem occurred in converting an RDF term to a data value.
+    #[error(transparent)]
+    DataValueConversion(#[from] DataValueCreationError),
+    /// Error of encountering RDF* features in data
+    #[error("RDF* terms are not supported")]
+    RdfStarUnsupported,
+    /// Error in Rio's Turtle parser
+    #[error(transparent)]
+    RioTurtle(#[from] rio_turtle::TurtleError),
+    /// Error in Rio's RDF/XML parser
+    #[error(transparent)]
+    RioXML(#[from] rio_xml::RdfXmlError),
+}
+
 impl From<NamedNode<'_>> for Constant {
     fn from(value: NamedNode) -> Self {
         Constant::Abstract(value.iri.to_string().into())
@@ -34,26 +57,22 @@ impl From<BlankNode<'_>> for Constant {
     }
 }
 
-impl TryFrom<rio_api::model::Literal<'_>> for Constant {
+impl TryFrom<Literal<'_>> for Constant {
     type Error = InvalidRdfLiteral;
 
-    fn try_from(value: rio_api::model::Literal<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: Literal<'_>) -> Result<Self, Self::Error> {
         match value {
-            rio_api::model::Literal::Simple { value } => {
-                Ok(Constant::StringLiteral(value.to_string()))
-            }
-            rio_api::model::Literal::LanguageTaggedString { value, language } => {
+            Literal::Simple { value } => Ok(Constant::StringLiteral(value.to_string())),
+            Literal::LanguageTaggedString { value, language } => {
                 Constant::try_from(RdfLiteral::LanguageString {
                     value: value.to_string(),
                     tag: language.to_string(),
                 })
             }
-            rio_api::model::Literal::Typed { value, datatype } => {
-                Constant::try_from(RdfLiteral::DatatypeValue {
-                    value: value.to_string(),
-                    datatype: datatype.iri.to_string(),
-                })
-            }
+            Literal::Typed { value, datatype } => Constant::try_from(RdfLiteral::DatatypeValue {
+                value: value.to_string(),
+                datatype: datatype.iri.to_string(),
+            }),
         }
     }
 }
@@ -70,15 +89,15 @@ impl TryFrom<Subject<'_>> for Constant {
     }
 }
 
-impl TryFrom<rio_api::model::Term<'_>> for Constant {
+impl TryFrom<Term<'_>> for Constant {
     type Error = ReadingError;
 
-    fn try_from(value: rio_api::model::Term<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: Term<'_>) -> Result<Self, Self::Error> {
         match value {
-            rio_api::model::Term::NamedNode(nn) => Ok(nn.into()),
-            rio_api::model::Term::BlankNode(bn) => Ok(bn.into()),
-            rio_api::model::Term::Literal(lit) => lit.try_into().map_err(Into::into),
-            rio_api::model::Term::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
+            Term::NamedNode(nn) => Ok(nn.into()),
+            Term::BlankNode(bn) => Ok(bn.into()),
+            Term::Literal(lit) => lit.try_into().map_err(Into::into),
+            Term::Triple(_t) => Err(ReadingError::RdfStarUnsupported),
         }
     }
 }
@@ -111,6 +130,89 @@ impl RDFTriplesReader {
         }
     }
 
+    fn datavalue_from_named_node(value: NamedNode) -> AnyDataValue {
+        AnyDataValue::new_iri(value.iri.to_string())
+    }
+
+    /// FIXME: BNode handling must be most sophisticated to be correct.
+    fn datavalue_from_blank_node(value: BlankNode) -> AnyDataValue {
+        AnyDataValue::new_iri(value.to_string())
+    }
+
+    fn datavalue_from_literal(value: Literal<'_>) -> Result<AnyDataValue, RdfReadingError> {
+        match value {
+            Literal::Simple { value } => Ok(AnyDataValue::new_string(value.to_string())),
+            Literal::LanguageTaggedString { value, language } => Ok(
+                AnyDataValue::new_language_tagged_string(value.to_string(), language.to_string()),
+            ),
+            Literal::Typed { value, datatype } => Ok(AnyDataValue::new_from_typed_literal(
+                value.to_string(),
+                datatype.iri.to_string(),
+            )?),
+        }
+    }
+
+    fn datavalue_from_subject(value: Subject<'_>) -> Result<AnyDataValue, RdfReadingError> {
+        match value {
+            Subject::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
+            Subject::BlankNode(bn) => Ok(Self::datavalue_from_blank_node(bn)),
+            Subject::Triple(_t) => Err(RdfReadingError::RdfStarUnsupported),
+        }
+    }
+
+    fn datavalue_from_term(value: Term<'_>) -> Result<AnyDataValue, RdfReadingError> {
+        match value {
+            Term::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
+            Term::BlankNode(bn) => Ok(Self::datavalue_from_blank_node(bn)),
+            Term::Literal(lit) => Self::datavalue_from_literal(lit),
+            Term::Triple(_t) => Err(RdfReadingError::RdfStarUnsupported),
+        }
+    }
+
+    /// Read the RDF triples from a parser.
+    fn read_with_parser_new<Parser>(
+        &self,
+        table_writer: &mut TableWriter,
+        make_parser: impl FnOnce() -> Parser,
+    ) -> Result<(), Box<dyn std::error::Error>>
+    where
+        Parser: TriplesParser,
+    {
+        assert_eq!(table_writer.column_number(), 3);
+
+        let mut triple_count = 0;
+
+        let mut on_triple = |triple: Triple| {
+            let subject = Self::datavalue_from_subject(triple.subject)?;
+            let predicate = Self::datavalue_from_named_node(triple.predicate);
+            let object = Self::datavalue_from_term(triple.object)?;
+
+            table_writer.next_value(subject);
+            table_writer.next_value(predicate);
+            table_writer.next_value(object);
+
+            triple_count += 1;
+            if triple_count % PROGRESS_NOTIFY_INCREMENT == 0 {
+                log::info!("Loading: processed {triple_count} triples")
+            }
+
+            Ok::<_, Box<dyn std::error::Error>>(())
+        };
+
+        let mut parser = make_parser();
+
+        while !parser.is_end() {
+            if let Err(e) = parser.parse_step(&mut on_triple) {
+                log::info!("Ignoring malformed triple: {e}");
+            }
+        }
+
+        log::info!("Finished loading: processed {triple_count} triples");
+
+        Ok(())
+    }
+
+    /// Read the RDF triples from a parser.
     fn read_with_parser<Parser>(
         &self,
         physical_builder_proxies: &mut [PhysicalBuilderProxyEnum<'_>],
@@ -203,6 +305,31 @@ impl TableReader for RDFTriplesReader {
             })
         } else {
             self.read_with_parser(builder_proxies, || NTriplesParser::new(reader))
+        }
+    }
+}
+
+impl TableProvider for RDFTriplesReader {
+    fn provide_table_data(
+        self: Box<Self>,
+        table_writer: &mut TableWriter,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let reader = self
+            .resource_providers
+            .open_resource(&self.resource, true)?;
+
+        let reader = BufReader::new(reader);
+
+        if self.resource.ends_with(".ttl.gz") || self.resource.ends_with(".ttl") {
+            self.read_with_parser_new(table_writer, || {
+                TurtleParser::new(reader, self.base.clone())
+            })
+        } else if self.resource.ends_with(".rdf.gz") || self.resource.ends_with(".rdf") {
+            self.read_with_parser_new(table_writer, || {
+                RdfXmlParser::new(reader, self.base.clone())
+            })
+        } else {
+            self.read_with_parser_new(table_writer, || NTriplesParser::new(reader))
         }
     }
 }
