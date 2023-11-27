@@ -27,12 +27,12 @@ type VariableTypesForRules = Vec<HashMap<Variable, PrimitiveType>>;
 type TypeInferenceResult = Result<(PredicateTypes, VariableTypesForRules), TypeError>;
 
 pub(super) fn infer_types(program: &ChaseProgram) -> TypeInferenceResult {
-    let pred_reqs = requirements_from_pred_decls(program.parsed_predicate_declarations());
-    let import_reqs = requirements_from_imports(program.imports());
-    let fact_reqs = requirements_from_facts(program.facts());
-    let literal_reqs = requirements_from_literals_in_rules(program.rules());
-    let aggregate_reqs = requirements_from_aggregates_in_rules(program.rules());
-    let existential_reqs = requirements_from_existentials_in_rules(program.rules());
+    let pred_reqs = requirements_from_pred_decls(program.parsed_predicate_declarations())?;
+    let import_reqs = requirements_from_imports(program.imports())?;
+    let fact_reqs = requirements_from_facts(program.facts())?;
+    let literal_reqs = requirements_from_literals_in_rules(program.rules())?;
+    let aggregate_reqs = requirements_from_aggregates_in_rules(program.rules())?;
+    let existential_reqs = requirements_from_existentials_in_rules(program.rules())?;
 
     let mut type_requirements = import_reqs;
     merge_type_requirements(&mut type_requirements, fact_reqs)?;
@@ -857,5 +857,53 @@ mod test {
 
         let inferred_types_res = infer_types(&s_decl_unresolvable_conflict_with_fact_values);
         assert!(inferred_types_res.is_err());
+    }
+
+    #[test]
+    fn infer_types_two_times_same_head_predicate() {
+        let (
+            (_basic_rule, exis_rule, _rule_with_constant),
+            (_fact1, _fact2, _fact3),
+            (a, _b, _c, r, _s, _t, _q),
+        ) = get_test_rules_and_facts_and_predicates();
+
+        let x = Variable::Universal(Identifier("x".to_string()));
+        let y = Variable::Existential(Identifier("y".to_string()));
+        let z = Variable::Existential(Identifier("z".to_string()));
+
+        let ty = PrimitiveTerm::Variable(y);
+        let tz = PrimitiveTerm::Variable(z);
+
+        // R(!y, !z) :- A(x).
+        let exis_rule_2 = ChaseRule::new(
+            vec![PrimitiveAtom::new(r.clone(), vec![ty, tz])],
+            vec![],
+            vec![],
+            vec![VariableAtom::new(a.clone(), vec![x])],
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        let two_times_same_head_predicate = ChaseProgram::builder()
+            .rule(exis_rule_2)
+            .rule(exis_rule)
+            .predicate_declaration(a.clone(), vec![PrimitiveType::String])
+            .build();
+
+        let expected_types: HashMap<Identifier, Vec<PrimitiveType>> = [
+            (a, vec![PrimitiveType::String]),
+            (r, vec![PrimitiveType::Any, PrimitiveType::Any]),
+            (
+                get_fresh_rule_predicate(0),
+                vec![PrimitiveType::Any, PrimitiveType::Any],
+            ),
+            (get_fresh_rule_predicate(1), vec![PrimitiveType::Any]),
+        ]
+        .into_iter()
+        .collect();
+
+        let inferred_types = infer_types(&two_times_same_head_predicate).unwrap().0;
+        assert_eq!(inferred_types, expected_types);
     }
 }
