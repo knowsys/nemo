@@ -76,6 +76,9 @@ impl<'a> TableWriter<'a> {
         for _i in 0..column_count {
             cur_row.push(dummy_value.clone());
             cur_row_storage_values.push(dummy_storage_value);
+        }
+
+        for _i in 0..STORAGE_TYPE_COUNT {
             table_trie.push(0);
         }
 
@@ -124,7 +127,7 @@ impl<'a> TableWriter<'a> {
     }
 
     /// Returns an iterator of [`Vec<StorageValueT>`] over all the rows in the [TableWriter].
-    pub fn get_rows(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
+    pub(crate) fn get_rows(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
         self.get_table_row_idx()
             .into_iter()
             .map(|(table_idx, row_idx)| self.get_row(&table_idx, &row_idx))
@@ -184,23 +187,15 @@ impl<'a> TableWriter<'a> {
         for i in 0..self.col_num {
             match table.col_types[i] {
                 StorageTypeName::Id32 => {
-                    let first = self.dict.borrow().get(
-                        usize::try_from(self.cols_u32[table.col_ids[i]][first_row_idx]).unwrap(),
-                    );
-                    let second = self.dict.borrow().get(
-                        usize::try_from(self.cols_u32[table.col_ids[i]][second_row_idx]).unwrap(),
-                    );
+                    let first = &self.cols_u32[table.col_ids[i]][first_row_idx];
+                    let second = &self.cols_u32[table.col_ids[i]][second_row_idx];
                     if first.cmp(&second) != Ordering::Equal {
                         return first.cmp(&second);
                     }
                 }
                 StorageTypeName::Id64 => {
-                    let first = self.dict.borrow().get(
-                        usize::try_from(self.cols_u64[table.col_ids[i]][first_row_idx]).unwrap(),
-                    );
-                    let second = self.dict.borrow().get(
-                        usize::try_from(self.cols_u64[table.col_ids[i]][second_row_idx]).unwrap(),
-                    );
+                    let first = &self.cols_u64[table.col_ids[i]][first_row_idx];
+                    let second = &self.cols_u64[table.col_ids[i]][second_row_idx];
                     if first.cmp(&second) != Ordering::Equal {
                         return first.cmp(&second);
                     }
@@ -588,7 +583,6 @@ mod test {
         assert_eq!(rows.next(), None);
     }
 
-    #[ignore]
     #[test]
     fn test_increasing_row_iterators_two_cols() {
         let dict = Dict::new();
