@@ -248,7 +248,7 @@ impl<'a> TableWriter<'a> {
     }
 
     /// Returns the number of rows in the [`TableWriter`]
-    pub(crate) fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.table_lengths.iter().sum()
     }
 
