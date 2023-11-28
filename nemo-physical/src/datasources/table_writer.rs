@@ -73,6 +73,9 @@ impl<'a> TableWriter<'a> {
         for _i in 0..column_count {
             cur_row.push(dummy_value.clone());
             cur_row_storage_values.push(dummy_storage_value);
+        }
+
+        for _i in 0..STORAGE_TYPE_COUNT {
             table_trie.push(0);
         }
 
@@ -585,7 +588,6 @@ mod test {
         assert_eq!(rows.next(), None);
     }
 
-    #[ignore]
     #[test]
     fn test_increasing_row_iterators_two_cols() {
         let dict = Dict::new();
