@@ -19,6 +19,11 @@ pub fn materialize_up_to(trie_scan: &mut impl TrieScan, cut: usize) -> Option<Tr
 
     let num_columns = trie_scan.column_types().len() - cut;
 
+    if num_columns == 0 {
+        scan_first_match(trie_scan)?;
+        return Some([].into_iter().collect());
+    }
+
     let mut data_column_builders: Vec<_> = trie_scan
         .column_types()
         .iter()
