@@ -217,29 +217,33 @@ impl<'a> TableWriter<'a> {
 
     /// Returns the values on the nth column in the [`TableWriter`] represented by an iterator of
     /// [`StorageValueT`]s.
-    pub(crate) fn get_column<'b>(&'b self, column_idx: &'b usize) -> impl Iterator<Item = StorageValueT> + 'b {
-        self.order.iter().map(|(table_idx, row_idx)| self.get_storage_value(table_idx, column_idx, row_idx))
+    pub(crate) fn get_column<'b>(
+        &'b self,
+        column_idx: &'b usize,
+    ) -> impl Iterator<Item = StorageValueT> + 'b {
+        self.order
+            .iter()
+            .map(|(table_idx, row_idx)| self.get_storage_value(table_idx, column_idx, row_idx))
     }
 
     /// Return the [`StorageValueT`] corresponding to the [`table_idx`], [`column_idx`], and [`row_idx`].
-    fn get_storage_value(&self, table_idx: &usize, column_idx: &usize, row_idx: &usize) -> StorageValueT {
+    fn get_storage_value(
+        &self,
+        table_idx: &usize,
+        column_idx: &usize,
+        row_idx: &usize,
+    ) -> StorageValueT {
         let deref_col_idx = self.tables[*table_idx].col_ids[*column_idx];
         match self.tables[*table_idx].col_types[*column_idx] {
-            StorageTypeName::Id32 => StorageValueT::Id32(
-                self.cols_u32[deref_col_idx][*row_idx],
-            ),
-            StorageTypeName::Id64 => StorageValueT::Id64(
-                self.cols_u64[deref_col_idx][*row_idx],
-            ),
-            StorageTypeName::Int64 => StorageValueT::Int64(
-                self.cols_i64[deref_col_idx][*row_idx],
-            ),
-            StorageTypeName::Float => StorageValueT::Float(
-                self.cols_floats[deref_col_idx][*row_idx],
-            ),
-            StorageTypeName::Double => StorageValueT::Double(
-                self.cols_doubles[deref_col_idx][*row_idx],
-            ),
+            StorageTypeName::Id32 => StorageValueT::Id32(self.cols_u32[deref_col_idx][*row_idx]),
+            StorageTypeName::Id64 => StorageValueT::Id64(self.cols_u64[deref_col_idx][*row_idx]),
+            StorageTypeName::Int64 => StorageValueT::Int64(self.cols_i64[deref_col_idx][*row_idx]),
+            StorageTypeName::Float => {
+                StorageValueT::Float(self.cols_floats[deref_col_idx][*row_idx])
+            }
+            StorageTypeName::Double => {
+                StorageValueT::Double(self.cols_doubles[deref_col_idx][*row_idx])
+            }
         }
     }
 
