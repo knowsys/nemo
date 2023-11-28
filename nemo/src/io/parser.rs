@@ -319,6 +319,18 @@ impl<'a> RuleParser<'a> {
         Default::default()
     }
 
+    fn parse_complex_constant_term(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Constant> {
+        traced(
+            "parse_complex_constant_term",
+            alt((
+                parse_constant_term(&self.prefixes),
+                map(self.parse_map_literal(), Constant::MapLiteral),
+            )),
+        )
+    }
+
     /// Parse the dot that ends declarations, optionally surrounded by spaces.
     fn parse_dot(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
         traced("parse_dot", space_delimited_token("."))
@@ -619,17 +631,15 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an entry in a [Map], i.e., a [Key]--[Term] pair.
-    pub fn parse_map_entry(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Key, Constant)> {
+    pub fn parse_map_entry(&'a self, s: Span<'a>) -> IntermediateResult<(Key, Constant)> {
         traced(
             "parse_map_entry",
             separated_pair(
                 self.parse_map_key(),
                 self.parse_equals(),
-                map(parse_constant_term(&self.prefixes), |term| term),
+                map(self.parse_complex_constant_term(), |term| term),
             ),
-        )
+        )(s)
     }
 
     /// Parse an object literal.
@@ -639,7 +649,7 @@ impl<'a> RuleParser<'a> {
             delimited(
                 self.parse_open_brace(),
                 map(
-                    separated_list0(self.parse_comma(), self.parse_map_entry()),
+                    separated_list0(self.parse_comma(), |s| self.parse_map_entry(s)),
                     Map::from_iter,
                 ),
                 self.parse_close_brace(),
@@ -2341,7 +2351,7 @@ mod test {
 
         let entry = format!("{ident}=23");
         assert_parse!(
-            parser.parse_map_entry(),
+            |s| parser.parse_map_entry(s),
             &entry,
             (
                 key.clone(),
@@ -2363,6 +2373,22 @@ mod test {
         assert_parse!(
             parser.parse_map_literal(),
             r#"{foo = 23, "23" = 42}"#,
+            pairs.clone().into_iter().collect::<Map>()
+        );
+    }
+
+    #[test]
+    fn nested_map_literal() {
+        let parser = RuleParser::new();
+
+        let pairs = vec![(
+            Key::from_identifier(Identifier("inner".to_string())),
+            Constant::MapLiteral(Default::default()),
+        )];
+
+        assert_parse!(
+            parser.parse_map_literal(),
+            r#"{inner = {}}"#,
             pairs.clone().into_iter().collect::<Map>()
         );
     }
