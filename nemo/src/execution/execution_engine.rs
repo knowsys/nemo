@@ -159,14 +159,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Add all the data source declarations
         for source_declaration in program.sources() {
-            let logical_types = analysis
-                .predicate_types
-                .get(&source_declaration.predicate)
-                .cloned()
-                .expect("All predicates should have types by now.");
-
-            let table_source = input_manager
-                .load_native_table_source(source_declaration.source.clone(), logical_types)?;
+            let table_source =
+                input_manager.load_native_table_source(source_declaration.source.clone())?;
 
             predicate_to_sources
                 .entry(source_declaration.predicate.clone())

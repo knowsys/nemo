@@ -1,12 +1,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use crate::builder_proxy::{
-    LogicalAnyColumnBuilderProxy, LogicalColumnBuilderProxyT, LogicalFloat64ColumnBuilderProxy,
-    LogicalIntegerColumnBuilderProxy, LogicalStringColumnBuilderProxy,
-};
 use crate::io::parser::ParseError;
-use nemo_physical::builder_proxy::PhysicalBuilderProxyEnum;
 use nemo_physical::datatypes::data_value::DataValueIteratorT;
 use nemo_physical::datatypes::{DataTypeName, DataValueT};
 
@@ -184,27 +179,6 @@ impl PrimitiveType {
             Self::String => false,
             Self::Integer => true,
             Self::Float64 => true,
-        }
-    }
-
-    /// Wrap physical builder proxy into logical equivalent
-    pub fn wrap_physical_column_builder<'a: 'b, 'b>(
-        self,
-        physical: &'b mut PhysicalBuilderProxyEnum<'a>,
-    ) -> LogicalColumnBuilderProxyT<'a, 'b> {
-        match self {
-            Self::Any => {
-                LogicalColumnBuilderProxyT::Any(LogicalAnyColumnBuilderProxy::new(physical))
-            }
-            Self::String => {
-                LogicalColumnBuilderProxyT::String(LogicalStringColumnBuilderProxy::new(physical))
-            }
-            Self::Integer => {
-                LogicalColumnBuilderProxyT::Integer(LogicalIntegerColumnBuilderProxy::new(physical))
-            }
-            Self::Float64 => {
-                LogicalColumnBuilderProxyT::Float64(LogicalFloat64ColumnBuilderProxy::new(physical))
-            }
         }
     }
 

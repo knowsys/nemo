@@ -145,24 +145,27 @@ impl AnyDataValue {
                         Err(e) => Err(DataValueCreationError::from(e)),
                     }
                 }
-                "decimal" => Self::new_from_decimal_literal(lexical_value, DecimalType::Decimal),
-                "integer" => Self::new_from_decimal_literal(lexical_value, DecimalType::Integer),
+                "decimal" => {
+                    Self::new_from_decimal_type_literal(lexical_value, DecimalType::Decimal)
+                }
+                "integer" => {
+                    Self::new_from_decimal_type_literal(lexical_value, DecimalType::Integer)
+                }
                 "positiveInteger" => {
-                    Self::new_from_decimal_literal(lexical_value, DecimalType::PositiveInteger)
+                    Self::new_from_decimal_type_literal(lexical_value, DecimalType::PositiveInteger)
                 }
-                "nonNegativeInteger" => {
-                    Self::new_from_decimal_literal(lexical_value, DecimalType::NonNegativeInteger)
-                }
+                "nonNegativeInteger" => Self::new_from_decimal_type_literal(
+                    lexical_value,
+                    DecimalType::NonNegativeInteger,
+                ),
                 "negativeInteger" => {
-                    Self::new_from_decimal_literal(lexical_value, DecimalType::NegativeInteger)
+                    Self::new_from_decimal_type_literal(lexical_value, DecimalType::NegativeInteger)
                 }
-                "nonPositiveInteger" => {
-                    Self::new_from_decimal_literal(lexical_value, DecimalType::NonPositiveInteger)
-                }
-                "double" => match f64::from_str(&lexical_value) {
-                    Ok(value) => Self::new_double_from_f64(value),
-                    Err(e) => Err(DataValueCreationError::from(e)),
-                },
+                "nonPositiveInteger" => Self::new_from_decimal_type_literal(
+                    lexical_value,
+                    DecimalType::NonPositiveInteger,
+                ),
+                "double" => Self::new_from_double_literal(lexical_value),
                 _ => Ok(Self::new_other(lexical_value, datatype_iri)),
             }
         } else {
@@ -170,9 +173,28 @@ impl AnyDataValue {
         }
     }
 
+    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given string representation
+    /// of a (arbitrarily large) integer.
+    pub fn new_from_integer_literal(
+        lexical_value: String,
+    ) -> Result<AnyDataValue, DataValueCreationError> {
+        Self::new_from_decimal_type_literal(lexical_value, DecimalType::Integer)
+    }
+
+    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given string representation
+    /// of a double precision floating-point number.
+    pub fn new_from_double_literal(
+        lexical_value: String,
+    ) -> Result<AnyDataValue, DataValueCreationError> {
+        match f64::from_str(&lexical_value) {
+            Ok(value) => Self::new_double_from_f64(value),
+            Err(e) => Err(DataValueCreationError::from(e)),
+        }
+    }
+
     /// Construct a normalized datavalue in an appropriate [`ValueDomain`] for a "big decimal"
     /// or "big integer" [`DecimalType`].
-    fn new_from_decimal_literal(
+    fn new_from_decimal_type_literal(
         lexical_value: String,
         decimal_type: DecimalType,
     ) -> Result<AnyDataValue, DataValueCreationError> {

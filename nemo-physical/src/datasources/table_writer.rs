@@ -66,7 +66,10 @@ pub struct TableWriter<'a> {
 }
 
 impl<'a> TableWriter<'a> {
-    pub(crate) fn new(dict: &'a RefCell<Dict>, column_count: usize) -> Self {
+    /// Construct a new [`TableWriter`]. This is public to allow
+    /// downstream implementations of [`crate::datasources::TableProvider`] to
+    /// test their code.
+    pub fn new(dict: &'a RefCell<Dict>, column_count: usize) -> Self {
         let mut cur_row = Vec::with_capacity(column_count);
         let mut cur_row_storage_values = Vec::with_capacity(column_count);
         let mut table_trie = Vec::with_capacity(column_count * STORAGE_TYPE_COUNT);
@@ -430,7 +433,7 @@ impl<'a> TableWriter<'a> {
                 let dict_id = self
                     .dict
                     .borrow_mut()
-                    .add_string("<".to_owned() + &iv.to_string_unchecked() + ">")
+                    .add_string("<".to_owned() + &iv.to_iri_unchecked() + ">")
                     .value();
                 Self::storage_value_for_usize(dict_id)
             }
@@ -439,8 +442,8 @@ impl<'a> TableWriter<'a> {
             }
             AnyDataValue::UnsignedLong(iv) => Self::storage_value_for_u64(iv.to_u64_unchecked()),
             AnyDataValue::Long(iv) => StorageValueT::Int64(iv.to_i64_unchecked()),
-            AnyDataValue::Other(_) => {
-                todo!("We still need the dictionary to support this case properly")
+            AnyDataValue::Other(odv) => {
+                todo!("Other datavalue {:?} not supported in dictionary yet.", odv)
             }
         }
     }
