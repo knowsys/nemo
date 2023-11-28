@@ -5,7 +5,10 @@ use nemo_physical::aggregates::operation::AggregateOperation;
 use crate::{
     io::formats::types::ImportSpec,
     model::{
-        chase_model::{ChaseAtom, ChaseFact, ChaseRule, AGGREGATE_VARIABLE_PREFIX},
+        chase_model::{
+            ChaseAtom, ChaseFact, ChaseRule, Constructor, AGGREGATE_VARIABLE_PREFIX,
+            CONSTRUCT_VARIABLE_PREFIX,
+        },
         types::error::TypeError,
         Identifier, PrimitiveTerm, PrimitiveType, Term, TypeConstraint, Variable,
     },
@@ -264,6 +267,25 @@ pub(super) fn requirements_from_literals_in_rules(
     Ok(literal_decls)
 }
 
+pub(super) fn aggregate_output_variables_in_constructor(
+    constructor: &Constructor,
+) -> impl Iterator<Item = &Identifier> {
+    constructor
+        .term()
+        .primitive_terms()
+        .into_iter()
+        .filter_map(|term| match term {
+            PrimitiveTerm::Variable(Variable::Universal(identifier)) => {
+                if identifier.0.starts_with(AGGREGATE_VARIABLE_PREFIX) {
+                    Some(identifier)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        })
+}
+
 pub(super) fn requirements_from_aggregates_in_rules(
     rules: &[ChaseRule],
 ) -> Result<PredicateTypeRequirements, TypeError> {
@@ -280,16 +302,35 @@ pub(super) fn requirements_from_aggregates_in_rules(
                 .iter()
                 .map(|term| {
                     if let PrimitiveTerm::Variable(Variable::Universal(identifier)) = term {
-                        if identifier.name().starts_with(AGGREGATE_VARIABLE_PREFIX) {
+                        // Add static output type to aggregate output variables and constructors using them
+
+                        let aggregate_output_variables_used = if identifier.name().starts_with(AGGREGATE_VARIABLE_PREFIX) {
+                            // If the term is a aggregate variable it self, add it
+                            vec![identifier]
+                        } else if identifier.name().starts_with(CONSTRUCT_VARIABLE_PREFIX) {
+                            let constructor = rule
+                                .constructors()
+                                .iter()
+                                .find(|constructor| constructor.variable().name() == *identifier.0).expect("variable with constructor prefix is missing an associated constructor");
+
+                            // Add aggregate variables contained in this constructor
+                            aggregate_output_variables_in_constructor(constructor).collect()
+                        } else {
+                            vec![]
+                        };
+
+                        for aggregate_output_variable in aggregate_output_variables_used {
                             let aggregate = rule
                                 .aggregates()
                                 .iter()
-                                .find(|aggregate| aggregate.output_variable.name() == *identifier.0).expect("variable with aggregate prefix is missing an associated aggregate");
+                                .find(|aggregate| aggregate.output_variable.name() == *aggregate_output_variable.0).expect("variable with aggregate prefix is missing an associated aggregate");
                             if
                                 aggregate.aggregate_operation ==
                                 AggregateOperation::Count
                             {
                                 return TypeRequirement::Hard(PrimitiveType::Integer)
+                            } else {
+                                debug_assert_eq!(aggregate.aggregate_operation.static_output_type(), None)
                             }
                         }
                     }

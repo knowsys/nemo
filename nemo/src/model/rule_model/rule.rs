@@ -174,13 +174,6 @@ impl Rule {
             }
         }
 
-        // Check if aggregate is used within another complex term
-        for term in head.iter().flat_map(|a| a.terms()) {
-            if term.aggregate_subterm() {
-                return Err(ParseError::AggregateSubterm(term.to_string()));
-            }
-        }
-
         Ok(Rule {
             head,
             body,

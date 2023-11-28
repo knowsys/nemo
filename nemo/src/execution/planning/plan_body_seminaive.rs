@@ -65,8 +65,8 @@ impl SeminaiveStrategy {
             None
         } else {
             // Compute group-by variables for all aggregates in the rule
-            // This is the set of all universal variables in the head except for the aggregated variables
-            Some(analysis.head_variables.iter().filter(|variable| match variable {
+            // This is the set of all universal variables in the head (before any arithmetic operations) except for the aggregated variables
+            Some(used_variables_before_arithmetic_operations.iter().filter(|variable| match variable {
                 Variable::Universal(identifier) => !identifier.0.starts_with(AGGREGATE_VARIABLE_PREFIX),
                 Variable::Existential(_) => panic!("existential head variables are currently not supported together with aggregates"),
             }).cloned().collect())
@@ -138,6 +138,13 @@ impl BodyStrategy for SeminaiveStrategy {
                 &self.aggregates,
                 aggregate_group_by_variables,
             );
+
+            // This check can be removed when [`nemo_physical::tabular::operations::triescan_aggregate::TrieScanAggregateWrapper`] is removed
+            // Currently, this wrapper can only be turned into a partial trie scan using materialization
+            if !self.constructors.is_empty() {
+                current_plan
+                    .add_temporary_table(node_seminaive.clone(), "Subtable Aggregate Arithmetics");
+            }
         }
 
         // Cut away layers not used after arithmetic operations

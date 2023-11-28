@@ -156,8 +156,14 @@ impl ChaseRule {
 }
 
 impl ChaseRule {
-    fn generate_variable_name(prefix: &str, counter: usize) -> Identifier {
-        Identifier(format!("{}{}", prefix, counter))
+    /// Increments `next_variable_id`, but returns it's old value with a prefix.
+    fn generate_incrementing_variable_name(
+        prefix: &str,
+        next_variable_id: &mut usize,
+    ) -> Identifier {
+        let i = Identifier(format!("{}{}", prefix, next_variable_id));
+        *next_variable_id += 1;
+        i
     }
 
     // Remove constraints of the form ?X = ?Y from the rule
@@ -202,39 +208,48 @@ impl ChaseRule {
         // New constraints that will be introduced due to the flattening of the atom
         let mut positive_constraints = Vec::<Constraint>::new();
 
-        let mut global_term_index: usize = 0;
+        let mut rule_next_variable_id: usize = 0;
 
         // Head atoms may only contain primitive terms
         for atom in rule.head_mut() {
             for term in atom.terms_mut() {
-                if !term.is_primitive() {
-                    let new_variable = if let Term::Aggregation(aggregate) = term {
-                        let new_variable = Variable::Universal(Self::generate_variable_name(
-                            AGGREGATE_VARIABLE_PREFIX,
-                            global_term_index,
-                        ));
+                // Replace aggregate terms or aggregates inside of arithmetic expressions with placeholder variables
+                term.update_subterms_recursively(&mut |subterm| match subterm {
+                    Term::Aggregation(aggregate) => {
+                        let new_variable =
+                            Variable::Universal(Self::generate_incrementing_variable_name(
+                                AGGREGATE_VARIABLE_PREFIX,
+                                &mut rule_next_variable_id,
+                            ));
 
                         aggregates.push(ChaseAggregate::from_aggregate(
                             aggregate.clone(),
                             new_variable.clone(),
                         ));
 
-                        new_variable
-                    } else {
-                        let new_variable = Variable::Universal(Self::generate_variable_name(
+                        *subterm = Term::Primitive(PrimitiveTerm::Variable(new_variable));
+
+                        false
+                    }
+                    _ => true,
+                });
+
+                debug_assert!(
+                    !matches!(term, Term::Aggregation(_)),
+                    "Aggregate terms should have been replaced with placeholder variables"
+                );
+
+                if !term.is_primitive() {
+                    let new_variable =
+                        Variable::Universal(Self::generate_incrementing_variable_name(
                             CONSTRUCT_VARIABLE_PREFIX,
-                            global_term_index,
+                            &mut rule_next_variable_id,
                         ));
 
-                        constructors.push(Constructor::new(new_variable.clone(), term.clone()));
-
-                        new_variable
-                    };
+                    constructors.push(Constructor::new(new_variable.clone(), term.clone()));
 
                     *term = Term::Primitive(PrimitiveTerm::Variable(new_variable));
                 }
-
-                global_term_index += 1;
             }
         }
 
@@ -247,7 +262,10 @@ impl ChaseRule {
 
             for term in atom.terms_mut() {
                 let new_variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
-                    Self::generate_variable_name(EQUALITY_VARIABLE_PREFIX, global_term_index),
+                    Self::generate_incrementing_variable_name(
+                        EQUALITY_VARIABLE_PREFIX,
+                        &mut rule_next_variable_id,
+                    ),
                 )));
 
                 if let Term::Primitive(PrimitiveTerm::Variable(variable)) = term.clone() {
@@ -267,7 +285,7 @@ impl ChaseRule {
 
                 *term = new_variable;
 
-                global_term_index += 1;
+                rule_next_variable_id += 1;
             }
         }
 

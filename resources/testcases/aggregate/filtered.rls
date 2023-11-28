@@ -1,0 +1,5 @@
+@source sourceA[integer,integer,integer]: load-csv("sources/dataA.csv").
+
+r0(?X, #count(?Y)) :- sourceA(?X, _, _), sourceA(?Y, _, _), ?X > ?Y.
+
+@output r0.
