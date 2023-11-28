@@ -15,7 +15,7 @@ use crate::{
     program_analysis::variable_order::VariableOrder,
 };
 
-use super::{Aggregate, Identifier, Map, NumericLiteral, RdfLiteral};
+use super::{Aggregate, Identifier, Map, NumericLiteral, RdfLiteral, Tuple};
 
 /// Variable that can be bound to a specific value
 #[derive(Debug, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
@@ -84,6 +84,8 @@ pub enum Constant {
     RdfLiteral(RdfLiteral),
     /// A map literal.
     MapLiteral(Map),
+    /// A tuple literal
+    TupleLiteral(Tuple),
 }
 
 impl Constant {
@@ -95,6 +97,7 @@ impl Constant {
             Self::StringLiteral(_) => Some(PrimitiveType::String),
             Self::NumericLiteral(nl) => Some(nl.primitive_type()),
             Self::MapLiteral(_) => None,
+            Self::TupleLiteral(_) => None,
         }
     }
 
@@ -145,6 +148,7 @@ impl Display for Constant {
             Constant::StringLiteral(literal) => write!(f, "\"{}\"", literal),
             Constant::RdfLiteral(literal) => write!(f, "{}", literal),
             Constant::MapLiteral(term) => write!(f, "{term}"),
+            Constant::TupleLiteral(tuple) => write!(f, "{tuple}"),
         }
     }
 }

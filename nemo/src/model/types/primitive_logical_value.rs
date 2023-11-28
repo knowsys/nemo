@@ -10,7 +10,8 @@ use nemo_physical::{
 };
 
 use crate::model::{
-    Constant, Identifier, Map, NumericLiteral, RdfLiteral, XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER,
+    Constant, Identifier, Map, NumericLiteral, RdfLiteral, Tuple, XSD_DECIMAL, XSD_DOUBLE,
+    XSD_INTEGER,
 };
 
 use super::{error::InvalidRuleTermConversion, primitive_types::PrimitiveType};
@@ -23,6 +24,7 @@ const DOUBLE_PREFIX: &str = "DO:";
 const CONSTANT_PREFIX: &str = "CO:";
 const DATATYPE_VALUE_PREFIX: &str = "DV:";
 const MAP_VALUE_PREFIX: &str = "MP:";
+const TUPLE_VALUE_PREFIX: &str = "TP:";
 
 /// The prefix used to indicate constants that are Nulls
 pub const LOGICAL_NULL_PREFIX: &str = "__Null#";
@@ -188,6 +190,12 @@ impl From<Map> for PhysicalString {
     }
 }
 
+impl From<Tuple> for PhysicalString {
+    fn from(value: Tuple) -> Self {
+        format!("{TUPLE_VALUE_PREFIX}{value}").into()
+    }
+}
+
 impl From<LogicalInteger> for LogicalString {
     fn from(value: LogicalInteger) -> Self {
         value.0.to_string().into()
@@ -330,7 +338,8 @@ impl TryFrom<Constant> for PhysicalString {
             Constant::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
                 Ok(DatatypeValue(value, datatype).into())
             }
-            Constant::MapLiteral(value) => Ok(value.into()),
+            Constant::MapLiteral(value) => Ok(PhysicalString::from(value)),
+            Constant::TupleLiteral(tuple) => Ok(PhysicalString::from(tuple)),
         }
     }
 }
