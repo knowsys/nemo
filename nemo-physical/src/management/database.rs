@@ -5,13 +5,13 @@ use std::fmt::{Debug, Display};
 use bytesize::ByteSize;
 
 use crate::builder_proxy::{PhysicalBuilderProxyEnum, PhysicalStringColumnBuilderProxy};
+use crate::datasources::{TableProvider, TableWriter};
 use crate::datatypes::data_value::DataValueIteratorT;
 use crate::datatypes::storage_value::{StorageValueIteratorT, VecT};
 use crate::datatypes::{DataTypeName, DataValueT, StorageValueT};
 use crate::dictionary::value_serializer::{
     serialize_constant_with_dict, TrieSerializer, ValueSerializer,
 };
-use crate::table_reader::TableReader;
 use crate::tabular::operations::materialize::{materialize_up_to, scan_first_match};
 use crate::tabular::operations::project_reorder::project_and_reorder;
 use crate::tabular::operations::triescan_minus::TrieScanSubtract;
@@ -80,7 +80,7 @@ impl TableId {
 #[derive(Debug)]
 pub enum TableSource {
     /// Table read by any reader implementation
-    FileReader(Box<dyn TableReader>),
+    FileReader(Box<dyn TableProvider>),
     /// Table is stored as facts in an rls file
     /// TODO: To not invoke the parser twice I just put the parsed "row-table" here.
     /// Does not seem quite right
@@ -118,6 +118,7 @@ impl TableStorage {
 
             let trie = match source {
                 TableSource::FileReader(reader) => {
+                    // TODO: Code partly disabled, test will fail; this is in transition to the new loading mode ...
                     let mut builder_proxies: Vec<PhysicalBuilderProxyEnum> = schema
                         .iter()
                         .map(|data_type| match data_type {
@@ -135,8 +136,12 @@ impl TableStorage {
                             }
                         })
                         .collect();
+                    // The following line was disabled to avoid consuming reader here
+                    // reader.read_into_builder_proxies(&mut builder_proxies)?;
 
-                    reader.read_into_builder_proxies(&mut builder_proxies)?;
+                    let mut table_writer = TableWriter::new(dict, schema.arity());
+                    // TODO: handle error intead of doing the let _
+                    let _ = reader.provide_table_data(&mut table_writer);
 
                     let col_table: Vec<VecT> = builder_proxies
                         .into_iter()

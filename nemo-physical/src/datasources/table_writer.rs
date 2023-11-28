@@ -457,8 +457,8 @@ impl<'a> TableWriter<'a> {
             }
             AnyDataValue::UnsignedLong(iv) => Self::storage_value_for_u64(iv.to_u64_unchecked()),
             AnyDataValue::Long(iv) => StorageValueT::Int64(iv.to_i64_unchecked()),
-            AnyDataValue::Other(_) => {
-                todo!("We still need the dictionary to support this case properly")
+            AnyDataValue::Other(odv) => {
+                todo!("Other datavalue {:?} not supported in dictionary yet.", odv)
             }
         }
     }

@@ -6,7 +6,7 @@ use std::error::Error;
 use super::TableWriter;
 
 /// TODO: this is the new TableReader, and the interface will be similar but using ColumnWriters
-pub trait TableProvider : std::fmt::Debug {
+pub trait TableProvider: std::fmt::Debug {
     /// Provide table data by adding values to a [`TableWriter`].
     fn provide_table_data(
         self: Box<Self>,
