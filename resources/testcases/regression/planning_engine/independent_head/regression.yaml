@@ -1,0 +1,4 @@
+issue: 431
+title: Off-by-one error in plan_util
+tracker: https://github.com/knowsys/nemo/issues/431
+type: bugfix
