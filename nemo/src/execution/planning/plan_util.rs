@@ -196,8 +196,8 @@ pub(super) fn head_instruction_from_atom(
     }
 }
 
-/// Calculates at which the trie can be cut, because the lower layers won't be used.
-/// Returns pair of index of the first unused layer and the number of unused layers.
+/// Calculates at which layer the trie can be cut, because the lower layers won't be used.
+/// Returns pair of the first unused layer and the number of unused layers.
 pub(super) fn cut_last_layers(
     variable_order: &VariableOrder,
     used_variables: &HashSet<Variable>,
