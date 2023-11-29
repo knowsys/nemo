@@ -5,7 +5,6 @@ use std::{collections::HashSet, io::BufReader, str::FromStr};
 use nemo_physical::{
     datasources::{TableProvider, TupleBuffer},
     datavalues::{AnyDataValue, DataValueCreationError},
-    error::ReadingError,
     resource::Resource,
 };
 
@@ -51,7 +50,10 @@ pub enum RdfReadingError {
     RioTurtle(#[from] rio_turtle::TurtleError),
     /// Error in Rio's RDF/XML parser
     #[error(transparent)]
-    RioXML(#[from] rio_xml::RdfXmlError),
+    RioXml(#[from] rio_xml::RdfXmlError),
+    /// Unable to determine RDF format.
+    #[error("Could not determine which RDF parser to use for resource {0}")]
+    UnknownRdfFormat(Resource),
 }
 
 const DEFAULT_GRAPH: &str = "__DEFAULT_GRAPH__";
@@ -287,8 +289,7 @@ impl TableProvider for RDFReader {
                 TriGParser::new(reader, self.base.clone())
             }),
             RDFVariant::Unspecified => {
-                // TODO Return a better error. Should not come from physical layer!
-                Err(Box::new(ReadingError::UnknownRDFFormatVariant(
+                Err(Box::new(RdfReadingError::UnknownRdfFormat(
                     self.resource.clone(),
                 )))
             }
