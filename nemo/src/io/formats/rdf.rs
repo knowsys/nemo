@@ -173,7 +173,7 @@ impl RDFReader {
     /// Read the RDF triples from a parser.
     fn read_triples_with_parser<Parser>(
         &self,
-        table_writer: &mut nemo_physical::datasources::TableWriter,
+        table_writer: &mut nemo_physical::datasources::TupleBuffer,
         make_parser: impl FnOnce() -> Parser,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
@@ -216,7 +216,7 @@ impl RDFReader {
     /// Read the RDF quads from a parser.
     fn read_quads_with_parser<Parser>(
         &self,
-        table_writer: &mut nemo_physical::datasources::TableWriter,
+        table_writer: &mut nemo_physical::datasources::TupleBuffer,
         make_parser: impl FnOnce() -> Parser,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
@@ -262,7 +262,7 @@ impl RDFReader {
 impl TableProvider for RDFReader {
     fn provide_table_data(
         self: Box<Self>,
-        table_writer: &mut nemo_physical::datasources::TableWriter,
+        table_writer: &mut nemo_physical::datasources::TupleBuffer,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let reader = self
             .resource_providers
@@ -627,7 +627,7 @@ mod test {
 
         let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
-        let mut table_writer = nemo_physical::datasources::TableWriter::new(&dict, 3);
+        let mut table_writer = nemo_physical::datasources::TupleBuffer::new(&dict, 3);
         let result =
             reader.read_triples_with_parser(&mut table_writer, || NTriplesParser::new(data));
         assert!(result.is_ok());
@@ -643,7 +643,7 @@ mod test {
 
         let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
-        let mut table_writer = nemo_physical::datasources::TableWriter::new(&dict, 3);
+        let mut table_writer = nemo_physical::datasources::TupleBuffer::new(&dict, 3);
         let result =
             reader.read_triples_with_parser(&mut table_writer, || TurtleParser::new(data, None));
         assert!(result.is_ok());
@@ -660,7 +660,7 @@ mod test {
 
         let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
-        let mut table_writer = nemo_physical::datasources::TableWriter::new(&dict, 3);
+        let mut table_writer = nemo_physical::datasources::TupleBuffer::new(&dict, 3);
         let result =
             reader.read_triples_with_parser(&mut table_writer, || NTriplesParser::new(data));
         assert!(result.is_ok());

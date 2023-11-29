@@ -133,7 +133,7 @@ impl DSVReader {
     /// If a field cannot be read or parsed, the line will be ignored
     fn read<R>(
         &self,
-        table_writer: &mut nemo_physical::datasources::TableWriter,
+        table_writer: &mut nemo_physical::datasources::TupleBuffer,
         dsv_reader: &mut Reader<R>,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
@@ -150,7 +150,7 @@ impl DSVReader {
                     table_writer.next_value(dv);
                 } else {
                     drop_count += 1;
-                    table_writer.drop_current_row();
+                    table_writer.drop_current_tuple();
                     break;
                 }
             }
@@ -243,7 +243,7 @@ impl DSVReader {
 impl TableProvider for DSVReader {
     fn provide_table_data(
         self: Box<Self>,
-        table_writer: &mut nemo_physical::datasources::TableWriter,
+        table_writer: &mut nemo_physical::datasources::TupleBuffer,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let reader = self
             .resource_providers
@@ -556,7 +556,7 @@ mod test {
             ]),
         );
         let dict = RefCell::new(Dict::default());
-        let mut table_writer = nemo_physical::datasources::TableWriter::new(&dict, 4);
+        let mut table_writer = nemo_physical::datasources::TupleBuffer::new(&dict, 4);
         let result = reader.read(&mut table_writer, &mut rdr);
         assert!(result.is_ok());
         assert_eq!(table_writer.size(), 2);

@@ -1,7 +1,7 @@
 //! Module that allows callers to write data into columns of a database table.
 
 use crate::{
-    datasources::TableWriter, datatypes::StorageValueT, datavalues::AnyDataValue,
+    datasources::TupleBuffer, datatypes::StorageValueT, datavalues::AnyDataValue,
     management::database::Dict,
 };
 use std::cell::RefCell;
@@ -12,7 +12,7 @@ use std::cell::RefCell;
 /// complete, it is commited to the table. Buffered uncompleted rows can be discarded if necessary.
 #[derive(Debug)]
 pub struct SortedTableBuffer<'a> {
-    table_buffer: TableWriter<'a>,
+    table_buffer: TupleBuffer<'a>,
     is_finalized: bool,
 }
 
@@ -20,7 +20,7 @@ impl SortedTableBuffer<'_> {
     /// Construct a new [`SortedTableBuffer`].
     pub fn new(dict: &RefCell<Dict>, column_count: usize) -> SortedTableBuffer {
         SortedTableBuffer {
-            table_buffer: TableWriter::new(dict, column_count),
+            table_buffer: TupleBuffer::new(dict, column_count),
             is_finalized: false,
         }
     }
@@ -47,7 +47,7 @@ impl SortedTableBuffer<'_> {
 
     /// Forget current buffered added values.
     pub fn drop_current_row(&mut self) {
-        self.table_buffer.drop_current_row();
+        self.table_buffer.drop_current_tuple();
     }
 
     /// Indicates that the data loading process has ended. Calling this function will sort the data.
