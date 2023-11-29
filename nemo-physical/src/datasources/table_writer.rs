@@ -69,6 +69,7 @@ impl<'a> TableWriter<'a> {
     /// Construct a new [`TableWriter`]. This is public to allow
     /// downstream implementations of [`crate::datasources::TableProvider`] to
     /// test their code.
+    /// TODO make this pub(super)
     pub fn new(dict: &'a RefCell<Dict>, column_count: usize) -> Self {
         let mut cur_row = Vec::with_capacity(column_count);
         let mut cur_row_storage_values = Vec::with_capacity(column_count);
@@ -107,14 +108,16 @@ impl<'a> TableWriter<'a> {
 
     /// Returns the number of columns on the table, i.e., the
     /// number of values that need to be written to make one row.
+    /// TODO make this pub(super)
     pub fn column_number(&self) -> usize {
         self.col_num
     }
 
-    /// Provide the next value that is to be added to the column.
-    /// When the value for the last column was provided, the row is
-    /// committed to the table. Alternatively, a partially built row
-    /// can be abandonded by calling [`drop_current_row`](Column_Writer::drop_current_row).
+    /// Provide the next value that is to be added to the table. Values are added in a row based
+    /// fashion. When the value for the last column was provided, the row is committed to the
+    /// table. Alternatively, a partially built row can be abandonded by calling
+    /// [`drop_current_row`](Column_Writer::drop_current_row).
+    /// TODO make this pub(super)
     pub fn next_value(&mut self, value: AnyDataValue) {
         self.cur_row[self.cur_col_idx] = value;
         self.cur_col_idx += 1;
@@ -130,7 +133,7 @@ impl<'a> TableWriter<'a> {
         self.cur_col_idx = 0;
     }
 
-    pub(crate) fn sort(&mut self) {
+    pub(super) fn sort(&mut self) {
         // initialize
         let mut order: Vec<(usize, usize)> = Vec::with_capacity(self.size());
         // populate self.order
@@ -217,7 +220,7 @@ impl<'a> TableWriter<'a> {
 
     /// Returns the values on the nth column in the [`TableWriter`] represented by an iterator of
     /// [`StorageValueT`]s.
-    pub(crate) fn get_column<'b>(
+    pub(super) fn get_column<'b>(
         &'b self,
         column_idx: &'b usize,
     ) -> impl Iterator<Item = StorageValueT> + 'b {
@@ -248,12 +251,8 @@ impl<'a> TableWriter<'a> {
     }
 
     /// Returns the number of rows in the [`TableWriter`]
-    pub fn size(&self) -> usize {
+    pub(super) fn size(&self) -> usize {
         self.table_lengths.iter().sum()
-    }
-
-    pub(crate) fn finalize(&mut self) {
-        // TODO: interface may still change
     }
 
     /// Returns the value of the row number `val_index` (according to the internal
