@@ -1,14 +1,10 @@
 //! Module that allows callers to write data into columns of a database table.
 
-use crate::datasources::TableWriter;
 use crate::{
-    datatypes::{Double, Float, StorageTypeName, StorageValueT},
-    datavalues::{AnyDataValue, DataValue},
-    dictionary::Dictionary,
+    datasources::TableWriter, datatypes::StorageValueT, datavalues::AnyDataValue,
     management::database::Dict,
 };
 use std::cell::RefCell;
-use std::cmp::Ordering;
 
 /// The [`ColumnWriter`] is used to send the data of a single table column to the database. The interface
 /// allows values to be added one by one, and also provides some functionality for rolling back the last value,
