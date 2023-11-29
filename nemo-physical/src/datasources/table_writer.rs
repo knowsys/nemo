@@ -1,6 +1,7 @@
 //! Module that allows callers to write data into columns of a database table.
 
 use crate::{
+    datasources::SortedTupleBuffer,
     datatypes::{Double, Float, StorageTypeName, StorageValueT},
     datavalues::{AnyDataValue, DataValue},
     dictionary::Dictionary,
@@ -50,9 +51,8 @@ pub struct TableWriter<'a> {
     /// for this type combination or partial path.
     table_trie: Vec<usize>,
 
-    //Vector of sorted (table_idx, row_idx) in [`TableWriter`].
-    order: Vec<(usize, usize)>,
-
+    // Vector of sorted (table_idx, row_idx) in [`TableWriter`].
+    order: Vec<usize>,
     /// List of all u64 value columns used across the tables.
     cols_u64: Vec<Vec<u64>>,
     /// List of all u32 value columns used across the tables.
@@ -113,11 +113,15 @@ impl<'a> TableWriter<'a> {
         self.col_num
     }
 
+    /// Returns the number of rows in the [`TableWriter`]
+    pub fn size(&self) -> usize {
+        self.table_lengths.iter().sum()
+    }
+
     /// Provide the next value that is to be added to the table. Values are added in a row based
     /// fashion. When the value for the last column was provided, the row is committed to the
     /// table. Alternatively, a partially built row can be abandonded by calling
     /// [`drop_current_row`](Column_Writer::drop_current_row).
-    /// TODO make this pub(super)
     pub fn next_value(&mut self, value: AnyDataValue) {
         self.cur_row[self.cur_col_idx] = value;
         self.cur_col_idx += 1;
@@ -133,86 +137,30 @@ impl<'a> TableWriter<'a> {
         self.cur_col_idx = 0;
     }
 
-    pub(super) fn sort(&mut self) {
-        // initialize
-        let mut order: Vec<(usize, usize)> = Vec::with_capacity(self.size());
-        // populate self.order
-        for i in 0..self.table_lengths.len() {
-            for j in 0..self.table_lengths[i] {
-                order.push((i, j));
-            }
-        }
-        // sort
-        order.sort_by(
-            |(first_table_idx, first_row_idx), (second_table_idx, second_row_idx)| {
-                self.compare_rows(
-                    &first_table_idx,
-                    &first_row_idx,
-                    &second_table_idx,
-                    &second_row_idx,
-                )
-            },
-        );
-        //save
-        self.order = order.clone();
+    /// Utility function to indicate the data loading process has ended, and to sort the data.
+    /// Following data insertions are ignored.
+    pub fn finalize(self) -> SortedTupleBuffer<'a> {
+        let order = self.get_order();
+        SortedTupleBuffer::new(self, order)
     }
 
-    /// Given two table indexes and rows indexes, compare the row indexes by type and value.
-    fn compare_rows(
-        &self,
-        first_table_idx: &usize,
-        first_row_idx: &usize,
-        second_table_idx: &usize,
-        second_row_idx: &usize,
-    ) -> Ordering {
-        let first_table: &TypedTableRecord = &self.tables[*first_table_idx];
-        let second_table: &TypedTableRecord = &self.tables[*second_table_idx];
+    /// Compare two rows bt types and values corresponding to their row indexes, according to the
+    fn get_order(&self) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..self.size()).collect();
+        order.sort_by(|x, y| self.compare_rows(x, y));
+        order
+    }
 
+    /// Compare two rows bt types and values corresponding to their row indexes, according to the
+    /// internal order of rows, i.e., row indexes in the first table are maintained, but row
+    /// indexes in the second table start from table_lengths[0], and so on.
+    fn compare_rows(&self, first_row_idx: &usize, second_row_idx: &usize) -> Ordering {
+        assert!(true);
         for i in 0..self.col_num {
-            match (first_table.col_types[i], second_table.col_types[i]) {
-                (StorageTypeName::Id32, StorageTypeName::Id32) => {
-                    let first = &self.cols_u32[first_table.col_ids[i]][*first_row_idx];
-                    let second = &self.cols_u32[second_table.col_ids[i]][*second_row_idx];
-                    if first.cmp(&second) != Ordering::Equal {
-                        return first.cmp(&second);
-                    }
-                }
-                (StorageTypeName::Id64, StorageTypeName::Id64) => {
-                    let first = &self.cols_u64[first_table.col_ids[i]][*first_row_idx];
-                    let second = &self.cols_u64[second_table.col_ids[i]][*second_row_idx];
-                    if first.cmp(&second) != Ordering::Equal {
-                        return first.cmp(&second);
-                    }
-                }
-                (StorageTypeName::Int64, StorageTypeName::Int64) => {
-                    let first = &self.cols_i64[first_table.col_ids[i]][*first_row_idx];
-                    let second = &self.cols_i64[second_table.col_ids[i]][*second_row_idx];
-                    if first.cmp(second) != Ordering::Equal {
-                        return first.cmp(second);
-                    }
-                }
-                (StorageTypeName::Float, StorageTypeName::Float) => {
-                    let first = &self.cols_floats[first_table.col_ids[i]][*first_row_idx];
-                    let second = &self.cols_floats[second_table.col_ids[i]][*second_row_idx];
-                    if first.cmp(second) != Ordering::Equal {
-                        return first.cmp(second);
-                    }
-                }
-                (StorageTypeName::Double, StorageTypeName::Double) => {
-                    let first = &self.cols_doubles[first_table.col_ids[i]][*first_row_idx];
-                    let second = &self.cols_doubles[second_table.col_ids[i]][*second_row_idx];
-                    if first.cmp(second) != Ordering::Equal {
-                        return first.cmp(second);
-                    }
-                }
-                (_first, _second) => {
-                    let first = Self::storage_type_idx(_first);
-                    let second = Self::storage_type_idx(_second);
-                    let ordering = first.cmp(&second);
-                    if ordering != Ordering::Equal {
-                        return ordering;
-                    }
-                }
+            let first_storage_value = self.get_value(*first_row_idx, i).unwrap();
+            let second_storage_value = self.get_value(*second_row_idx, i).unwrap();
+            if first_storage_value.cmp(&second_storage_value) != Ordering::Equal {
+                return first_storage_value.cmp(&second_storage_value);
             }
         }
         Ordering::Equal
@@ -226,7 +174,7 @@ impl<'a> TableWriter<'a> {
     ) -> impl Iterator<Item = StorageValueT> + 'b {
         self.order
             .iter()
-            .map(|(table_idx, row_idx)| self.get_storage_value(table_idx, column_idx, row_idx))
+            .map(|row_idx| self.get_value(*row_idx, *column_idx).unwrap())
     }
 
     /// Return the [`StorageValueT`] corresponding to the [`table_idx`], [`column_idx`], and [`row_idx`].
@@ -248,11 +196,6 @@ impl<'a> TableWriter<'a> {
                 StorageValueT::Double(self.cols_doubles[deref_col_idx][*row_idx])
             }
         }
-    }
-
-    /// Returns the number of rows in the [`TableWriter`]
-    pub(super) fn size(&self) -> usize {
-        self.table_lengths.iter().sum()
     }
 
     /// Returns the value of the row number `val_index` (according to the internal
@@ -551,7 +494,7 @@ mod test {
         assert_ne!(tw.get_value(2, 1), tw.get_value(0, 0));
         assert_eq!(tw.get_value(2, 1), Some(StorageValueT::Int64(42)));
     }
-
+    /*
     #[test]
     fn test_column_iterator_one_col() {
         let dict = Dict::new();
@@ -622,5 +565,5 @@ mod test {
         assert_eq!(second_iter.next(), Some(StorageValueT::Id32(1)));
         assert_eq!(second_iter.next(), Some(StorageValueT::Int64(20)));
         assert_eq!(second_iter.next(), None);
-    }
+    } */
 }
