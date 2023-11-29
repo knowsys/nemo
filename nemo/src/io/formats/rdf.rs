@@ -3,7 +3,7 @@
 use std::{collections::HashSet, io::BufReader, str::FromStr};
 
 use nemo_physical::{
-    datasources::{TableProvider,TupleBuffer},
+    datasources::{TableProvider, TupleBuffer},
     datavalues::{AnyDataValue, DataValueCreationError},
     error::ReadingError,
     table_reader::Resource,
@@ -610,7 +610,7 @@ mod test {
     use super::RDFReader;
     use std::cell::RefCell;
 
-    use nemo_physical::{management::database::Dict, datasources::TupleBuffer};
+    use nemo_physical::{datasources::TupleBuffer, management::database::Dict};
     use rio_turtle::{NTriplesParser, TurtleParser};
     use test_log::test;
 
