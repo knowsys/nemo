@@ -1,0 +1,5 @@
+@declare goal(integer).
+
+@import quads[4]: rdf{resource = "sources/example2.nq"} .
+
+goal(42) :- quads(<http://example.org/#spiderman>, <http://www.perceive.net/schemas/relationship/enemyOf>, <http://example.org/#green-goblin>, <http://example.org/graphs/spiderman>) .

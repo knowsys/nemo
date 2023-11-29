@@ -7,7 +7,7 @@ use crate::{
     model::chase_model::{ChaseProgram, ChaseRule},
     model::{
         chase_model::{ChaseAtom, PrimitiveAtom, VariableAtom},
-        Constraint, DataSource, Identifier, PrimitiveTerm, PrimitiveType, Term, Variable,
+        Constraint, Identifier, PrimitiveTerm, PrimitiveType, Term, Variable,
     },
 };
 
@@ -187,7 +187,7 @@ fn construct_existential_aux_rule(
     };
 
     let variable_order = build_preferable_variable_orders(
-        &vec![temp_rule.clone()].into(),
+        &ChaseProgram::builder().rule(temp_rule.clone()).build(),
         Some(column_orders.clone()),
     )
     .all_variable_orders
@@ -285,9 +285,12 @@ impl ChaseProgram {
     pub(super) fn get_all_predicates(&self) -> HashSet<(Identifier, usize)> {
         let mut result = HashSet::<(Identifier, usize)>::new();
 
-        // Predicates in source statements
-        for source in self.sources() {
-            result.insert((source.predicate.clone(), source.input_types().arity()));
+        // Predicates in import statements
+        for import_spec in self.imports() {
+            result.insert((
+                import_spec.predicate().clone(),
+                import_spec.type_constraint().arity(),
+            ));
         }
 
         // Predicates in rules
@@ -333,18 +336,17 @@ impl ChaseProgram {
             .map(|(predicate, types)| (predicate.clone(), types.len()))
             .collect::<HashMap<_, _>>();
 
-        for source in self.sources() {
-            match arities.entry(source.predicate.clone()) {
+        for import_spec in self.imports() {
+            match arities.entry(import_spec.predicate().clone()) {
                 std::collections::hash_map::Entry::Occupied(slot) => {
-                    // both declared and in a source
                     let arity = slot.get();
 
-                    if *arity != source.input_types().arity() {
+                    if *arity != import_spec.type_constraint().arity() {
                         return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
                     }
                 }
                 std::collections::hash_map::Entry::Vacant(slot) => {
-                    slot.insert(source.input_types().arity());
+                    slot.insert(import_spec.type_constraint().arity());
                 }
             }
         }

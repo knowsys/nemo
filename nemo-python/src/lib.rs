@@ -5,12 +5,12 @@ use std::{
 
 use nemo::{
     datatypes::Double,
-    execution::{tracing::trace::ExecutionTrace, ExecutionEngine},
-    io::{resource_providers::ResourceProviders, OutputFileManager, RecordWriter},
+    execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
+    io::{resource_providers::ResourceProviders, OutputManager},
     model::{
         chase_model::{ChaseAtom, ChaseFact},
         types::primitive_logical_value::PrimitiveLogicalValueT,
-        Constant, NumericLiteral, RdfLiteral, Variable, XSD_STRING,
+        Constant, Identifier, NumericLiteral, RdfLiteral, Variable, XSD_STRING,
     },
 };
 
@@ -67,16 +67,24 @@ impl NemoProgram {
 }
 
 #[pyclass]
-struct NemoOutputManager(nemo::io::OutputFileManager);
+struct NemoOutputManager(nemo::io::OutputManager);
 
 #[pymethods]
 impl NemoOutputManager {
     #[new]
     #[pyo3(signature=(path, overwrite=false, gzip=false))]
     fn py_new(path: String, overwrite: bool, gzip: bool) -> PyResult<Self> {
-        let output_manager = OutputFileManager::try_new(path.into(), overwrite, gzip).py_res()?;
+        let mut output_manager = OutputManager::builder(path.into()).py_res()?;
 
-        Ok(NemoOutputManager(output_manager))
+        if overwrite {
+            output_manager = output_manager.overwrite();
+        }
+
+        if gzip {
+            output_manager = output_manager.gzip();
+        }
+
+        Ok(NemoOutputManager(output_manager.build()))
     }
 }
 
@@ -164,6 +172,7 @@ fn constant_to_python<'a>(py: Python<'a>, v: &Constant) -> PyResult<&'a PyAny> {
             };
             Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
         })(),
+        Constant::MapLiteral(_map) => todo!("maps are not yet supported"),
     }
 }
 
@@ -201,14 +210,14 @@ impl NemoFact {
 }
 
 #[pyclass]
-struct NemoTrace(ExecutionTrace);
+struct NemoTrace(ExecutionTraceTree);
 
 #[pymethods]
 impl NemoTrace {
     fn subtraces(&self) -> Option<Vec<NemoTrace>> {
         match &self.0 {
-            ExecutionTrace::Fact(_) => None,
-            ExecutionTrace::Rule(_, subtraces) => {
+            ExecutionTraceTree::Fact(_) => None,
+            ExecutionTraceTree::Rule(_, subtraces) => {
                 Some(subtraces.iter().map(|t| NemoTrace(t.clone())).collect())
             }
         }
@@ -216,22 +225,22 @@ impl NemoTrace {
 
     fn fact(&self) -> Option<NemoFact> {
         match &self.0 {
-            ExecutionTrace::Fact(f) => Some(NemoFact(f.clone())),
-            ExecutionTrace::Rule(_, _) => None,
+            ExecutionTraceTree::Fact(f) => Some(NemoFact(f.clone())),
+            ExecutionTraceTree::Rule(_, _) => None,
         }
     }
 
     fn rule(&self) -> Option<String> {
         match &self.0 {
-            ExecutionTrace::Fact(_) => None,
-            ExecutionTrace::Rule(application, _) => Some(application.rule.to_string()),
+            ExecutionTraceTree::Fact(_) => None,
+            ExecutionTraceTree::Rule(application, _) => Some(application.rule.to_string()),
         }
     }
 
     fn assignement(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
         match &self.0 {
-            ExecutionTrace::Fact(_) => Ok(None),
-            ExecutionTrace::Rule(application, _) => {
+            ExecutionTraceTree::Fact(_) => Ok(None),
+            ExecutionTraceTree::Rule(application, _) => {
                 Ok(Some(assignement_to_dict(&application.assignment, py)?))
             }
         }
@@ -251,11 +260,11 @@ fn assignement_to_dict(assignment: &HashMap<Variable, Constant>, py: Python) -> 
     Ok(dict.to_object(py))
 }
 
-fn trace_to_dict(trace: &ExecutionTrace, py: Python) -> PyResult<PyObject> {
+fn trace_to_dict(trace: &ExecutionTraceTree, py: Python) -> PyResult<PyObject> {
     let result = PyDict::new(py);
     match &trace {
-        ExecutionTrace::Fact(fact) => result.set_item("fact", fact.to_string())?,
-        ExecutionTrace::Rule(rule_application, subtraces) => {
+        ExecutionTraceTree::Fact(fact) => result.set_item("fact", fact.to_string())?,
+        ExecutionTraceTree::Rule(rule_application, subtraces) => {
             result.set_item("rule", rule_application.rule.to_string())?;
             result.set_item(
                 "assignment",
@@ -309,8 +318,12 @@ impl NemoEngine {
 
     fn trace(&self, fact: String) -> PyResult<Option<NemoTrace>> {
         let parsed_fact = nemo::io::parser::parse_fact(fact).py_res()?;
-        let trace = self.0.trace(parsed_fact).py_res()?;
-        Ok(trace.map(NemoTrace))
+        let (trace, handles) = self.0.trace(vec![parsed_fact]).py_res()?;
+        let handle = *handles
+            .first()
+            .expect("Function trace always returns a handle for each input fact");
+
+        Ok(trace.tree(handle).map(NemoTrace))
     }
 
     fn write_result(
@@ -319,23 +332,25 @@ impl NemoEngine {
         output_manager: &PyCell<NemoOutputManager>,
     ) -> PyResult<()> {
         let identifier = predicate.into();
-        let mut writer = output_manager
+        let types = self
+            .0
+            .predicate_type(&identifier)
+            .expect("predicate should have a type");
+
+        output_manager
             .borrow()
             .0
-            .create_file_writer(&identifier)
+            .export_table(
+                &OutputManager::default_export_spec(identifier.clone(), types).py_res()?,
+                self.0.output_serialization(&identifier).py_res()?,
+            )
             .py_res()?;
-
-        if let Some(record_iter) = self.0.output_serialization(identifier).py_res()? {
-            for record in record_iter {
-                writer.write_record(record).py_res()?;
-            }
-        }
 
         Ok(())
     }
 
     fn result(mut slf: PyRefMut<'_, Self>, predicate: String) -> PyResult<Py<NemoResults>> {
-        let iter = slf.0.table_scan(predicate.into()).py_res()?;
+        let iter = slf.0.table_scan(&Identifier::from(predicate)).py_res()?;
         let results = NemoResults(Box::new(
             iter.into_iter().flatten().collect::<Vec<_>>().into_iter(),
         ));

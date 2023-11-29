@@ -14,21 +14,26 @@ use nom::{
     character::complete::{alpha1, digit1, multispace1, none_of, satisfy},
     combinator::{all_consuming, cut, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list0, separated_list1},
-    sequence::{delimited, pair, preceded, terminated, tuple},
+    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
     Err,
 };
 
 use macros::traced;
 
 mod types;
-use types::{IntermediateResult, Span};
+
+use types::{ConstraintOperator, IntermediateResult, Span};
 pub(crate) mod iri;
 pub(crate) mod rfc5234;
 pub(crate) mod sparql;
 pub(crate) mod turtle;
 pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
-use self::types::ConstraintOperator;
+use super::formats::{
+    dsv::DSVFormat,
+    rdf::RDFFormat,
+    types::{Direction, ExportSpec, FileFormat, FileFormatError, ImportExportSpec, ImportSpec},
+};
 
 /// Parse a program in the given `input`-String and return a [`Program`].
 ///
@@ -262,6 +267,25 @@ fn parse_iri_constant<'a>(
     )
 }
 
+fn parse_constant_term<'a>(
+    prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Constant> {
+    traced(
+        "parse_constant_term",
+        alt((
+            map(parse_iri_constant(prefixes), Constant::Abstract),
+            map(turtle::numeric_literal, Constant::NumericLiteral),
+            map_res(turtle::rdf_literal, move |literal| {
+                Constant::try_from(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
+                    .map_err(ReadingError::from)
+            }),
+            map(turtle::string, move |literal| {
+                Constant::StringLiteral(literal.to_string())
+            }),
+        )),
+    )
+}
+
 /// Parse a ground term.
 pub fn parse_ground_term<'a>(
     prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
@@ -269,22 +293,7 @@ pub fn parse_ground_term<'a>(
     traced(
         "parse_ground_term",
         map_error(
-            alt((
-                map(parse_iri_constant(prefixes), |c| {
-                    PrimitiveTerm::Constant(Constant::Abstract(c))
-                }),
-                map(turtle::numeric_literal, |n| {
-                    PrimitiveTerm::Constant(Constant::NumericLiteral(n))
-                }),
-                map_res(turtle::rdf_literal, move |literal| {
-                    Constant::try_from(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
-                        .map_err(ReadingError::from)
-                        .map(PrimitiveTerm::Constant)
-                }),
-                map(turtle::string, move |literal| {
-                    PrimitiveTerm::Constant(Constant::StringLiteral(literal.to_string()))
-                }),
-            )),
+            map(parse_constant_term(prefixes), PrimitiveTerm::Constant),
             || ParseError::ExpectedGroundTerm,
         ),
     )
@@ -298,8 +307,6 @@ pub struct RuleParser<'a> {
     base: RefCell<Option<&'a str>>,
     /// A map from Prefixes to IRIs.
     prefixes: RefCell<HashMap<&'a str, &'a str>>,
-    /// The external data sources.
-    sources: RefCell<Vec<DataSourceDeclaration>>,
     /// Declarations of predicates with their types.
     predicate_declarations: RefCell<HashMap<Identifier, Vec<PrimitiveType>>>,
     /// Number counting up for generating distinct wildcards.
@@ -320,6 +327,11 @@ impl<'a> RuleParser<'a> {
     /// Parse a comma, optionally surrounded by spaces.
     fn parse_comma(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
         traced("parse_comma", space_delimited_token(","))
+    }
+
+    /// Parse an equality sign, optionally surrounded by spaces.
+    fn parse_equals(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_equals", space_delimited_token("="))
     }
 
     /// Parse a negation sign (`~`), optionally surrounded by spaces.
@@ -364,6 +376,16 @@ impl<'a> RuleParser<'a> {
                 || ParseError::ExpectedParenthesisedExpression,
             ),
         )
+    }
+
+    /// Parse an opening brace, optionally surrounded by spaces.
+    fn parse_open_brace(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_open_brace", space_delimited_token("{"))
+    }
+
+    /// Parse a closing brace, optionally surrounded by spaces.
+    fn parse_close_brace(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+        traced("parse_close_brace", space_delimited_token("}"))
     }
 
     /// Parse a base declaration.
@@ -464,10 +486,8 @@ impl<'a> RuleParser<'a> {
         })
     }
 
-    /// Parses a data source declaration.
-    pub fn parse_source(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<DataSourceDeclaration> {
+    /// Parse a data source declaration.
+    pub fn parse_source(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportSpec> {
         traced(
             "parse_source",
             map_error(
@@ -487,10 +507,11 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(NativeDataSource::DsvFile(DsvFile::csv_file(
-                                        &filename,
+                                    Ok(DSVFormat::csv().try_into_import(
+                                        filename.to_string(),
+                                        predicate.clone(),
                                         tuple_constraint.clone(),
-                                    )))
+                                    )?)
                                 },
                             ),
                             map(
@@ -500,10 +521,11 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(NativeDataSource::DsvFile(DsvFile::tsv_file(
-                                        &filename,
+                                    Ok(DSVFormat::tsv().try_into_import(
+                                        filename.to_string(),
+                                        predicate.clone(),
                                         tuple_constraint.clone(),
-                                    )))
+                                    )?)
                                 },
                             ),
                             map(
@@ -513,12 +535,12 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(NativeDataSource::RdfFile(RdfFile::new_validated(
-                                        &filename,
-                                        self.base().map(String::from),
-                                        &predicate,
+                                    Ok(RDFFormat::new().try_into_import(
+                                        filename.to_string(),
+                                        predicate.clone(),
                                         tuple_constraint.clone(),
-                                    )?))
+                                        self.base().map(String::from),
+                                    )?)
                                 },
                             ),
                             map(
@@ -535,14 +557,8 @@ impl<'a> RuleParser<'a> {
                                     )),
                                     self.parse_close_parenthesis(),
                                 ),
-                                |(endpoint, projection, query)| {
-                                    Ok(NativeDataSource::SparqlQuery(SparqlQuery::new_validated(
-                                        endpoint.name(),
-                                        projection.to_string(),
-                                        query.to_string(),
-                                        &predicate,
-                                        tuple_constraint.clone(),
-                                    )?))
+                                |(_endpoint, _projection, _query)| {
+                                    Err(ParseError::UnsupportedSparqlSource(predicate.clone().0))
                                 },
                             ),
                         )),
@@ -551,22 +567,16 @@ impl<'a> RuleParser<'a> {
                         remainder
                     )?;
 
-                    let source = DataSourceDeclaration::new(
-                        predicate,
-                        datasource.map_err(|e| Err::Failure(e.at(input)))?,
-                    );
+                    let spec = datasource.map_err(|e| Err::Failure(e.at(input)))?;
 
-                    log::trace!("Found external data source {source:?}");
-                    self.sources.borrow_mut().push(source.clone());
-
-                    Ok((remainder, source))
+                    Ok((remainder, spec))
                 },
                 || ParseError::ExpectedDataSourceDeclaration,
             ),
         )
     }
 
-    /// Parses an output directive.
+    /// Parse an output directive.
     pub fn parse_output(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<QualifiedPredicateName> {
@@ -574,7 +584,7 @@ impl<'a> RuleParser<'a> {
             "parse_output",
             map_error(
                 delimited(
-                    terminated(token("@output"), cut(multispace_or_comment0)),
+                    terminated(token("@output"), cut(multispace_or_comment1)),
                     cut(alt((
                         map_res::<_, _, _, _, Error, _, _>(
                             self.parse_qualified_predicate_name(false),
@@ -597,7 +607,123 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parses a statement.
+    /// Parse the [Key] of a [Map], i.e., a predicate name or a string.
+    pub fn parse_map_key(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Key> {
+        traced(
+            "parse_map_key",
+            alt((
+                map(self.parse_iri_like_identifier(), Key::Identifier),
+                map(turtle::string, |s| Key::String(s.to_string())),
+            )),
+        )
+    }
+
+    /// Parse an entry in a [Map], i.e., a [Key]--[Term] pair.
+    pub fn parse_map_entry(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Key, Constant)> {
+        traced(
+            "parse_map_entry",
+            separated_pair(
+                self.parse_map_key(),
+                self.parse_equals(),
+                map(parse_constant_term(&self.prefixes), |term| term),
+            ),
+        )
+    }
+
+    /// Parse an object literal.
+    pub fn parse_map_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Map> {
+        traced(
+            "parse_map_literal",
+            delimited(
+                self.parse_open_brace(),
+                map(
+                    separated_list0(self.parse_comma(), self.parse_map_entry()),
+                    Map::from_iter,
+                ),
+                self.parse_close_brace(),
+            ),
+        )
+    }
+
+    /// Parse a file format name.
+    pub fn parse_file_format(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<FileFormat> {
+        traced("parse_file_format", move |input| {
+            let (remainder, format) =
+                map_res(alpha1, |format: Span<'a>| format.parse::<FileFormat>())(input)?;
+
+            Ok((remainder, format))
+        })
+    }
+
+    /// Parse an import/export specification for the given
+    /// [`Direction`].
+    pub fn parse_import_export_spec(
+        &'a self,
+        direction: Direction,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportSpec> {
+        traced("parse_import_export_spec", move |input| {
+            let (remainder, predicate) = self.parse_qualified_predicate_name(true)(input)?;
+            let (remainder, format) = delimited(
+                space_delimited_token(":"),
+                self.parse_file_format(),
+                multispace_or_comment0,
+            )(remainder)?;
+            let (remainder, (format, attributes, constraint)) =
+                map_res(self.parse_map_literal(), |attributes| {
+                    let mut meta = format.into_meta();
+                    let constraint = meta.validated_and_refined_type_declaration(
+                        direction,
+                        &attributes,
+                        predicate.1.clone(),
+                    )?;
+                    Ok::<_, FileFormatError>((meta, attributes, constraint))
+                })(remainder)?;
+
+            Ok((
+                remainder,
+                ImportExportSpec {
+                    predicate: predicate.0,
+                    constraint,
+                    format,
+                    attributes,
+                },
+            ))
+        })
+    }
+
+    /// Parse an import directive.
+    pub fn parse_import(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportSpec> {
+        traced(
+            "parse_import",
+            delimited(
+                terminated(token("@import"), multispace_or_comment1),
+                cut(map(
+                    self.parse_import_export_spec(Direction::Reading),
+                    ImportSpec::from,
+                )),
+                cut(self.parse_dot()),
+            ),
+        )
+    }
+
+    /// Parse an export directive.
+    pub fn parse_export(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ExportSpec> {
+        traced(
+            "parse_export",
+            delimited(
+                terminated(token("@export"), multispace_or_comment1),
+                cut(map(
+                    self.parse_import_export_spec(Direction::Writing),
+                    ExportSpec::from,
+                )),
+                cut(self.parse_dot()),
+            ),
+        )
+    }
+
+    /// Parse a statement.
     pub fn parse_statement(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Statement> {
         traced(
             "parse_statement",
@@ -710,12 +836,9 @@ impl<'a> RuleParser<'a> {
                                 separated_list1(self.parse_comma(), self.parse_type_name()),
                                 move |type_names| {
                                     if constraint_is_lower_bound {
-                                        type_names
-                                            .into_iter()
-                                            .map(TypeConstraint::AtLeast)
-                                            .collect()
+                                        TupleConstraint::at_least(type_names)
                                     } else {
-                                        type_names.into_iter().map(TypeConstraint::Exact).collect()
+                                        TupleConstraint::exact(type_names)
                                     }
                                 },
                             ),
@@ -1192,7 +1315,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parses a program in the rules language.
+    /// Parse a program in the rules language.
     pub fn parse_program(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Program> {
         fn check_for_invalid_statement<'a, F>(
             parser: &mut F,
@@ -1230,10 +1353,15 @@ impl<'a> RuleParser<'a> {
 
             let mut statements = Vec::new();
             let mut output_predicates = Vec::new();
+            let mut sources = Vec::new();
+            let mut imports = Vec::new();
+            let mut exports = Vec::new();
 
             let (remainder, _) = many0(alt((
                 map(self.parse_predicate_declaration(), |_| ()),
-                map(self.parse_source(), |_| ()),
+                map(self.parse_source(), |source| sources.push(source)),
+                map(self.parse_import(), |import| imports.push(import)),
+                map(self.parse_export(), |export| exports.push(export)),
                 map(self.parse_statement(), |statement| {
                     statements.push(statement)
                 }),
@@ -1257,7 +1385,7 @@ impl<'a> RuleParser<'a> {
                 .borrow()
                 .iter()
                 .map(|(&prefix, &iri)| (prefix.to_string(), iri.to_string()))
-                .collect();
+                .collect::<Vec<_>>();
             let mut rules = Vec::new();
             let mut facts = Vec::new();
 
@@ -1266,18 +1394,24 @@ impl<'a> RuleParser<'a> {
                 Statement::Rule(value) => rules.push(value.clone()),
             });
 
-            Ok((
-                remainder,
-                Program::new(
-                    base,
-                    prefixes,
-                    self.sources.borrow().clone(),
-                    rules,
-                    facts,
-                    self.predicate_declarations.borrow().clone(),
-                    output_predicates.into(),
-                ),
-            ))
+            let mut program_builder = Program::builder()
+                .prefixes(prefixes)
+                .imports(sources)
+                .imports(imports)
+                .exports(exports)
+                .rules(rules)
+                .facts(facts)
+                .predicate_declarations(self.predicate_declarations.borrow().clone());
+
+            if let Some(base) = base {
+                program_builder = program_builder.base(base);
+            }
+
+            if !output_predicates.is_empty() {
+                program_builder = program_builder.output_predicates(output_predicates);
+            }
+
+            Ok((remainder, program_builder.build()))
         })
     }
 
@@ -1316,7 +1450,7 @@ mod test {
 
     use nemo_physical::datatypes::Double;
 
-    use crate::model::rule_model::Constraint;
+    use crate::{io::formats::dsv::DSVFormat, model::rule_model::Constraint};
 
     use super::*;
 
@@ -1384,51 +1518,55 @@ mod test {
         let file = "drinks.csv";
         let predicate_name = "drink";
         let predicate = Identifier(predicate_name.to_string());
-        let default_source = DataSourceDeclaration::new(
-            predicate.clone(),
-            NativeDataSource::DsvFile(DsvFile::csv_file(file, TupleConstraint::from_arity(1))),
-        );
-        let any_and_int_source = DataSourceDeclaration::new(
-            predicate.clone(),
-            NativeDataSource::DsvFile(DsvFile::csv_file(
-                file,
+        let default_import = DSVFormat::csv()
+            .try_into_import(
+                file.to_string(),
+                predicate.clone(),
+                TupleConstraint::from_arity(1),
+            )
+            .unwrap();
+
+        let any_and_int_import = DSVFormat::csv()
+            .try_into_import(
+                file.to_string(),
+                predicate.clone(),
                 [
                     TypeConstraint::AtLeast(PrimitiveType::Any),
                     TypeConstraint::AtLeast(PrimitiveType::Integer),
                 ]
                 .into_iter()
                 .collect(),
-            )),
-        );
+            )
+            .unwrap();
 
-        let single_string_source = DataSourceDeclaration::new(
-            predicate,
-            NativeDataSource::DsvFile(DsvFile::csv_file(
-                file,
+        let single_string_import = DSVFormat::csv()
+            .try_into_import(
+                file.to_string(),
+                predicate,
                 [TypeConstraint::AtLeast(PrimitiveType::String)]
                     .into_iter()
                     .collect(),
-            )),
-        );
+            )
+            .unwrap();
 
         // rulewerk accepts all of these variants
         let input = format!(r#"@source {predicate_name}[1]: load-csv("{file}") ."#);
-        assert_parse!(parser.parse_source(), &input, default_source);
+        assert_parse!(parser.parse_source(), &input, default_import);
         let input = format!(r#"@source {predicate_name}[1] : load-csv("{file}") ."#);
-        assert_parse!(parser.parse_source(), &input, default_source);
+        assert_parse!(parser.parse_source(), &input, default_import);
         let input = format!(r#"@source {predicate_name}[1] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, default_source);
+        assert_parse!(parser.parse_source(), &input, default_import);
         let input = format!(r#"@source {predicate_name} [1] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, default_source);
+        assert_parse!(parser.parse_source(), &input, default_import);
         let input = format!(r#"@source {predicate_name}[string]: load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, single_string_source);
+        assert_parse!(parser.parse_source(), &input, single_string_import);
         let input = format!(r#"@source {predicate_name} [string] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, single_string_source);
+        assert_parse!(parser.parse_source(), &input, single_string_import);
         let input = format!(r#"@source {predicate_name}[any, integer]: load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, any_and_int_source);
+        assert_parse!(parser.parse_source(), &input, any_and_int_import);
         let input =
             format!(r#"@source {predicate_name} [any  ,  integer] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, any_and_int_source);
+        assert_parse!(parser.parse_source(), &input, any_and_int_import);
     }
 
     #[test]
@@ -1917,7 +2055,6 @@ mod test {
             ParseError::LatePrefixDeclaration
         );
     }
-
     #[test]
     #[cfg_attr(miri, ignore)]
     fn parse_function_terms() {
@@ -2186,5 +2323,143 @@ mod test {
         let expected = Constraint::LessThanEq(left_term, right_term);
 
         assert_parse!(parser.parse_constraint(), expression, expected);
+    }
+
+    #[test]
+    fn map_literal() {
+        let parser = RuleParser::new();
+        assert_parse!(
+            parser.parse_map_literal(),
+            r#"{}"#,
+            <Map as Default>::default()
+        );
+
+        let ident = "foo";
+        let key = Key::from_identifier(Identifier(ident.to_string()));
+
+        assert_parse!(parser.parse_map_key(), ident, key.clone());
+
+        let entry = format!("{ident}=23");
+        assert_parse!(
+            parser.parse_map_entry(),
+            &entry,
+            (
+                key.clone(),
+                Constant::NumericLiteral(NumericLiteral::Integer(23))
+            )
+        );
+
+        let pairs = vec![
+            (
+                Key::from_string("23".to_string()),
+                Constant::NumericLiteral(NumericLiteral::Integer(42)),
+            ),
+            (
+                Key::from_identifier(Identifier("foo".to_string())),
+                Constant::NumericLiteral(NumericLiteral::Integer(23)),
+            ),
+        ];
+
+        assert_parse!(
+            parser.parse_map_literal(),
+            r#"{foo = 23, "23" = 42}"#,
+            pairs.clone().into_iter().collect::<Map>()
+        );
+    }
+
+    #[test]
+    fn qualified_predicate_name() {
+        let parser = RuleParser::new();
+        let predicate = Identifier("p".to_string());
+
+        assert_parse!(
+            parser.parse_qualified_predicate_name(true),
+            "p[3]",
+            (predicate.clone(), TupleConstraint::from_arity(3))
+        );
+
+        assert_parse!(
+            parser.parse_qualified_predicate_name(true),
+            "p[integer, any]",
+            (
+                predicate.clone(),
+                TupleConstraint::at_least([PrimitiveType::Integer, PrimitiveType::Any])
+            )
+        );
+
+        assert_parse!(
+            parser.parse_qualified_predicate_name(false),
+            "p[float64, any]",
+            (
+                predicate.clone(),
+                TupleConstraint::exact([PrimitiveType::Float64, PrimitiveType::Any])
+            )
+        );
+
+        assert_parse!(
+            parser.parse_qualified_predicate_name(false),
+            "p[integer, float64]",
+            (
+                predicate.clone(),
+                TupleConstraint::exact([PrimitiveType::Integer, PrimitiveType::Float64])
+            )
+        );
+    }
+
+    #[test]
+    fn import_export() {
+        let parser = RuleParser::new();
+
+        let direction = Direction::Reading;
+        let name = "p".to_string();
+        let predicate = Identifier(name.clone());
+        let qualified = format!("{name}[integer, float64]");
+        let arguments = r#"{delimiter = ";", resource = <http://example.org/test.nt>}"#;
+        let spec = format!("{qualified}: dsv{arguments}");
+        let directive = format!("@import {spec} .");
+        let directive_export = format!("@export {spec} .");
+        let attributes = parser.parse_map_literal()(arguments.into()).unwrap().1;
+
+        let types = [PrimitiveType::Integer, PrimitiveType::Float64];
+        let constraints = TupleConstraint::at_least(types);
+
+        assert_parse!(
+            parser.parse_qualified_predicate_name(false),
+            &qualified,
+            (predicate.clone(), TupleConstraint::exact(types))
+        );
+
+        assert_parse!(
+            parser.parse_import_export_spec(direction),
+            &spec,
+            ImportExportSpec {
+                predicate: predicate.clone(),
+                constraint: constraints.clone(),
+                format: Box::<DSVFormat>::default(),
+                attributes: attributes.clone(),
+            }
+        );
+
+        assert_parse!(
+            parser.parse_import(),
+            &directive,
+            ImportSpec::from(ImportExportSpec {
+                predicate: predicate.clone(),
+                constraint: constraints.clone(),
+                format: Box::<DSVFormat>::default(),
+                attributes: attributes.clone()
+            })
+        );
+
+        assert_parse!(
+            parser.parse_export(),
+            &directive_export,
+            ExportSpec::from(ImportExportSpec {
+                predicate: predicate.clone(),
+                constraint: constraints.clone(),
+                format: Box::<DSVFormat>::default(),
+                attributes: attributes.clone()
+            })
+        );
     }
 }

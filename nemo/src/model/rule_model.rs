@@ -6,9 +6,6 @@ pub use aggregate::*;
 mod atom;
 pub use atom::*;
 
-mod datasource;
-pub use datasource::*;
-
 mod literal;
 pub use literal::*;
 
@@ -32,3 +29,6 @@ pub use numeric_literal::*;
 
 mod constraint;
 pub use constraint::*;
+
+mod map;
+pub use map::*;

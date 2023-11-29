@@ -24,7 +24,7 @@
 //! # }
 //! ```
 
-use std::{fs::read_to_string, path::PathBuf};
+use std::{collections::HashMap, fs::read_to_string, path::PathBuf};
 
 use crate::{
     error::{Error, ReadingError},
@@ -32,7 +32,7 @@ use crate::{
     io::{
         parser::{all_input_consumed, RuleParser},
         resource_providers::ResourceProviders,
-        OutputFileManager, RecordWriter,
+        OutputManager,
     },
     model::Identifier,
 };
@@ -65,7 +65,9 @@ pub fn load_string(input: String) -> Result<Engine, Error> {
 /// Executes the reasoning process of the [`Engine`].
 ///
 /// # Note
-/// If there are `@source` routines in the parsed rules, all relative paths are resolved with the current working directory
+/// If there are `@source` or `@import` directives in the
+/// parsed rules, all relative paths are resolved with the current
+/// working directory
 pub fn reason(engine: &mut Engine) -> Result<(), Error> {
     engine.execute()
 }
@@ -78,16 +80,23 @@ pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
 /// Writes all result [`predicates`][Identifier] in the vector `predicates` into the directory specified in `path`.
 pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> Result<(), Error> {
     let output_dir = PathBuf::from(path);
-    let file_manager = OutputFileManager::try_new(output_dir, true, false)?;
+    let output_manager = OutputManager::builder(output_dir.clone())?
+        .overwrite()
+        .do_not_compress()
+        .build();
 
-    for predicate in predicates {
-        let mut writer = file_manager.create_file_writer(&predicate)?;
-        let Some(record_iter) = engine.output_serialization(predicate)? else {
-            continue;
-        };
-        for record in record_iter {
-            writer.write_record(record)?;
-        }
+    let output_predicates = engine
+        .output_predicates()
+        .map(|export_spec| (export_spec.predicate().clone(), export_spec))
+        .collect::<HashMap<_, _>>();
+
+    for predicate in &predicates {
+        output_manager.export_table(
+            output_predicates
+                .get(predicate)
+                .expect("export spec should be present"),
+            engine.output_serialization(predicate)?,
+        )?;
     }
 
     Ok(())

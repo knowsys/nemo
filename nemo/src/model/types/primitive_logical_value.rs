@@ -10,7 +10,7 @@ use nemo_physical::{
 };
 
 use crate::model::{
-    Constant, Identifier, NumericLiteral, RdfLiteral, XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER,
+    Constant, Identifier, Map, NumericLiteral, RdfLiteral, XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER,
 };
 
 use super::{error::InvalidRuleTermConversion, primitive_types::PrimitiveType};
@@ -22,6 +22,7 @@ const DECIMAL_PREFIX: &str = "DE:";
 const DOUBLE_PREFIX: &str = "DO:";
 const CONSTANT_PREFIX: &str = "CO:";
 const DATATYPE_VALUE_PREFIX: &str = "DV:";
+const MAP_VALUE_PREFIX: &str = "MP:";
 
 /// The prefix used to indicate constants that are Nulls
 pub const LOGICAL_NULL_PREFIX: &str = "__Null#";
@@ -181,6 +182,12 @@ impl From<DatatypeValue> for PhysicalString {
     }
 }
 
+impl From<Map> for PhysicalString {
+    fn from(value: Map) -> Self {
+        format!("{MAP_VALUE_PREFIX}{value}").into()
+    }
+}
+
 impl From<LogicalInteger> for LogicalString {
     fn from(value: LogicalInteger) -> Self {
         value.0.to_string().into()
@@ -323,6 +330,7 @@ impl TryFrom<Constant> for PhysicalString {
             Constant::RdfLiteral(RdfLiteral::DatatypeValue { value, datatype }) => {
                 Ok(DatatypeValue(value, datatype).into())
             }
+            Constant::MapLiteral(value) => Ok(value.into()),
         }
     }
 }

@@ -1,11 +1,11 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
+use std::collections::{HashMap, HashSet};
+
+use crate::{
+    io::formats::types::{ExportSpec, ImportSpec},
+    model::PrimitiveType,
 };
 
-use crate::model::PrimitiveType;
-
-use super::{Atom, DataSourceDeclaration, Identifier, QualifiedPredicateName, Rule};
+use super::{Atom, Identifier, QualifiedPredicateName, Rule};
 
 /// A (ground) fact.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -46,66 +46,173 @@ impl From<Vec<QualifiedPredicateName>> for OutputPredicateSelection {
     }
 }
 
-/// A directive that can occur in the program.
-#[derive(Debug)]
-pub enum Directive {
-    /// Import another source file.
-    Import(Box<Path>),
-    /// Import another source file with a relative path.
-    ImportRelative(Box<Path>),
-}
-
 /// A full program.
 #[derive(Debug, Default, Clone)]
 pub struct Program {
     base: Option<String>,
     prefixes: HashMap<String, String>,
-    sources: Vec<DataSourceDeclaration>,
+    imports: Vec<ImportSpec>,
+    exports: Vec<ExportSpec>,
     rules: Vec<Rule>,
     facts: Vec<Fact>,
     parsed_predicate_declarations: HashMap<Identifier, Vec<PrimitiveType>>,
     output_predicates: OutputPredicateSelection,
 }
 
-impl From<Vec<Rule>> for Program {
-    fn from(rules: Vec<Rule>) -> Self {
-        Self {
-            rules,
-            ..Default::default()
-        }
-    }
+/// A Builder for a program.
+#[derive(Debug, Default)]
+pub struct ProgramBuilder {
+    program: Program,
 }
 
-impl From<(Vec<DataSourceDeclaration>, Vec<Rule>)> for Program {
-    fn from((sources, rules): (Vec<DataSourceDeclaration>, Vec<Rule>)) -> Self {
-        Self {
-            sources,
-            rules,
-            ..Default::default()
+impl ProgramBuilder {
+    /// Construct a new builder.
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Construct a [Program] from this builder.
+    pub fn build(self) -> Program {
+        self.program
+    }
+
+    /// Set the base IRI.
+    pub fn base(mut self, base: String) -> Self {
+        self.program.base = Some(base);
+        self
+    }
+
+    /// Add a prefix.
+    pub fn prefix(mut self, prefix: String, iri: String) -> Self {
+        self.program.prefixes.insert(prefix, iri);
+        self
+    }
+
+    /// Add prefixes.
+    pub fn prefixes<T>(mut self, prefixes: T) -> Self
+    where
+        T: IntoIterator<Item = (String, String)>,
+    {
+        self.program.prefixes.extend(prefixes);
+        self
+    }
+
+    /// Add an imported table.
+    pub fn import(mut self, import: ImportSpec) -> Self {
+        self.program.imports.push(import);
+        self
+    }
+
+    /// Add imported tables.
+    pub fn imports<T>(mut self, imports: T) -> Self
+    where
+        T: IntoIterator<Item = ImportSpec>,
+    {
+        self.program.imports.extend(imports);
+        self
+    }
+
+    /// Add an exported table.
+    pub fn export(mut self, export: ExportSpec) -> Self {
+        self.program.exports.push(export);
+        self
+    }
+
+    /// Add exported tables.
+    pub fn exports<T>(mut self, exports: T) -> Self
+    where
+        T: IntoIterator<Item = ExportSpec>,
+    {
+        self.program.exports.extend(exports);
+        self
+    }
+
+    /// Add a rule.
+    pub fn rule(mut self, rule: Rule) -> Self {
+        self.program.rules.push(rule);
+        self
+    }
+
+    /// Add rules.
+    pub fn rules<T>(mut self, rules: T) -> Self
+    where
+        T: IntoIterator<Item = Rule>,
+    {
+        self.program.rules.extend(rules);
+        self
+    }
+
+    /// Add a fact.
+    pub fn fact(mut self, fact: Fact) -> Self {
+        self.program.facts.push(fact);
+        self
+    }
+
+    /// Add facts.
+    pub fn facts<T>(mut self, facts: T) -> Self
+    where
+        T: IntoIterator<Item = Fact>,
+    {
+        self.program.facts.extend(facts);
+        self
+    }
+
+    /// Add a predicate declaration.
+    pub fn predicate_declaration(
+        mut self,
+        predicate: Identifier,
+        declared_type: Vec<PrimitiveType>,
+    ) -> Self {
+        self.program
+            .parsed_predicate_declarations
+            .insert(predicate, declared_type);
+        self
+    }
+
+    /// Add predicate declarations.
+    pub fn predicate_declarations<T>(mut self, declarations: T) -> Self
+    where
+        T: IntoIterator<Item = (Identifier, Vec<PrimitiveType>)>,
+    {
+        self.program
+            .parsed_predicate_declarations
+            .extend(declarations);
+        self
+    }
+
+    /// Select all IDB predicates for output.
+    pub fn output_all_idb_predicates(mut self) -> Self {
+        self.program.output_predicates = OutputPredicateSelection::AllIDBPredicates;
+        self
+    }
+
+    /// Select an IDB predicate for output.
+    pub fn output_predicate(self, predicate: QualifiedPredicateName) -> Self {
+        self.output_predicates([predicate])
+    }
+
+    /// Select IDB predicates for output.
+    pub fn output_predicates<T>(mut self, predicates: T) -> Self
+    where
+        T: IntoIterator<Item = QualifiedPredicateName>,
+    {
+        match self.program.output_predicates {
+            OutputPredicateSelection::SelectedPredicates(ref mut selected) => {
+                selected.extend(predicates)
+            }
+            OutputPredicateSelection::AllIDBPredicates => {
+                self.program.output_predicates =
+                    OutputPredicateSelection::SelectedPredicates(Vec::from_iter(predicates))
+            }
         }
+        self
     }
 }
 
 impl Program {
-    /// Construct a new program.
-    pub fn new(
-        base: Option<String>,
-        prefixes: HashMap<String, String>,
-        sources: Vec<DataSourceDeclaration>,
-        rules: Vec<Rule>,
-        facts: Vec<Fact>,
-        parsed_predicate_declarations: HashMap<Identifier, Vec<PrimitiveType>>,
-        output_predicates: OutputPredicateSelection,
-    ) -> Self {
-        Self {
-            base,
-            prefixes,
-            sources,
-            rules,
-            facts,
-            parsed_predicate_declarations,
-            output_predicates,
-        }
+    /// Return a [builder][ProgramBuilder] for the [Program].
+    pub fn builder() -> ProgramBuilder {
+        Default::default()
     }
 
     /// Get the base IRI, if set.
@@ -182,15 +289,24 @@ impl Program {
         result.into_iter()
     }
 
+    pub(crate) fn output_predicate_selection(&self) -> &OutputPredicateSelection {
+        &self.output_predicates
+    }
+
     /// Return all prefixes in the program.
     #[must_use]
     pub fn prefixes(&self) -> &HashMap<String, String> {
         &self.prefixes
     }
 
-    /// Return all data sources in the program.
-    pub fn sources(&self) -> impl Iterator<Item = &DataSourceDeclaration> {
-        self.sources.iter()
+    /// Return all imports in the program.
+    pub fn imports(&self) -> impl Iterator<Item = &ImportSpec> {
+        self.imports.iter()
+    }
+
+    /// Return all exports in the program.
+    pub fn exports(&self) -> impl Iterator<Item = &ExportSpec> {
+        self.exports.iter()
     }
 
     /// Look up a given prefix.
