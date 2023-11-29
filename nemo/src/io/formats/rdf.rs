@@ -288,11 +288,9 @@ impl TableProvider for RDFReader {
             RDFVariant::TriG => self.read_quads_with_parser(tuple_buffer, || {
                 TriGParser::new(reader, self.base.clone())
             }),
-            RDFVariant::Unspecified => {
-                Err(Box::new(RdfReadingError::UnknownRdfFormat(
-                    self.resource.clone(),
-                )))
-            }
+            RDFVariant::Unspecified => Err(Box::new(RdfReadingError::UnknownRdfFormat(
+                self.resource.clone(),
+            ))),
         }
     }
 }
