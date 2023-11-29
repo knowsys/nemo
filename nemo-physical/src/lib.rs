@@ -25,7 +25,6 @@ pub mod columnar;
 pub mod tabular;
 
 pub mod aggregates;
-pub mod builder_proxy;
 pub mod datasources;
 pub mod datatypes;
 pub mod datavalues;
