@@ -12,7 +12,7 @@ use rio_api::parser::TriplesParser;
 use rio_turtle::TurtleParser;
 
 use nemo_physical::{
-    datasources::TableProvider,
+    datasources::{TableProvider, TupleBuffer},
     datavalues::{AnyDataValue, DataValueCreationError},
     table_reader::Resource,
 };
@@ -133,7 +133,7 @@ impl DSVReader {
     /// If a field cannot be read or parsed, the line will be ignored
     fn read<R>(
         &self,
-        table_writer: &mut nemo_physical::datasources::TupleBuffer,
+        tuple_buffer: &mut TupleBuffer,
         dsv_reader: &mut Reader<R>,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
@@ -147,10 +147,10 @@ impl DSVReader {
         for row in dsv_reader.records().flatten() {
             for idx_field in row.iter().enumerate() {
                 if let Ok(dv) = parsers[idx_field.0](idx_field.1.to_string()) {
-                    table_writer.next_value(dv);
+                    tuple_buffer.next_value(dv);
                 } else {
                     drop_count += 1;
-                    table_writer.drop_current_tuple();
+                    tuple_buffer.drop_current_tuple();
                     break;
                 }
             }
@@ -243,7 +243,7 @@ impl DSVReader {
 impl TableProvider for DSVReader {
     fn provide_table_data(
         self: Box<Self>,
-        table_writer: &mut nemo_physical::datasources::TupleBuffer,
+        tuple_buffer: &mut TupleBuffer,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let reader = self
             .resource_providers
@@ -251,7 +251,7 @@ impl TableProvider for DSVReader {
 
         let mut dsv_reader = Self::dsv_reader(reader, self.delimiter, Some(self.escape));
 
-        self.read(table_writer, &mut dsv_reader)
+        self.read(tuple_buffer, &mut dsv_reader)
     }
 }
 
@@ -556,10 +556,10 @@ mod test {
             ]),
         );
         let dict = RefCell::new(Dict::default());
-        let mut table_writer = nemo_physical::datasources::TupleBuffer::new(&dict, 4);
-        let result = reader.read(&mut table_writer, &mut rdr);
+        let mut tuple_buffer = TupleBuffer::new(&dict, 4);
+        let result = reader.read(&mut tuple_buffer, &mut rdr);
         assert!(result.is_ok());
-        assert_eq!(table_writer.size(), 2);
+        assert_eq!(tuple_buffer.size(), 2);
     }
 
     //     #[test]

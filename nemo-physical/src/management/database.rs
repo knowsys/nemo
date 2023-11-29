@@ -139,9 +139,9 @@ impl TableStorage {
                     // The following line was disabled to avoid consuming reader here
                     // reader.read_into_builder_proxies(&mut builder_proxies)?;
 
-                    let mut table_writer = TupleBuffer::new(dict, schema.arity());
+                    let mut tuple_buffer = TupleBuffer::new(dict, schema.arity());
                     // TODO: handle error intead of doing the let _
-                    let _ = reader.provide_table_data(&mut table_writer);
+                    let _ = reader.provide_table_data(&mut tuple_buffer);
 
                     let col_table: Vec<VecT> = builder_proxies
                         .into_iter()
