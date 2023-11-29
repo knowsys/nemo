@@ -4,7 +4,6 @@ use std::{collections::HashSet, io::Write, path::PathBuf, str::FromStr};
 
 use dyn_clone::DynClone;
 use thiserror::Error;
-
 use nemo_physical::{datasources::TableProvider, resource::Resource};
 
 use crate::{
@@ -168,7 +167,7 @@ pub struct ImportExportSpec {
 }
 
 impl ImportExportSpec {
-    /// Obtain a [`TableReader`] for this import specification.
+    /// Obtain a [`TableProvider`] for this import specification.
     pub fn reader(
         &self,
         resource_providers: ResourceProviders,
@@ -208,9 +207,8 @@ impl Eq for ImportExportSpec {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportSpec(ImportExportSpec);
 
-// TODO Use delegate!
 impl ImportSpec {
-    /// Obtain a [`TableReader`] for this import specification.
+    /// Obtain a [`TableProvider`] for this import specification.
     pub fn reader(
         &self,
         resource_providers: ResourceProviders,
@@ -254,7 +252,6 @@ impl From<ImportExportSpec> for ImportSpec {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportSpec(ImportExportSpec);
 
-// TODO Use delegate!
 impl ExportSpec {
     /// Write the given table to the given [writer][Write].
     pub fn write_table(
