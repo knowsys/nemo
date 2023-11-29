@@ -10,8 +10,6 @@ use crate::{datatypes::FloatIsNaN, resource::Resource};
 pub trait ExternalReadingError: Display + std::fmt::Debug {}
 
 /// Error-Collection for errors related to reading input tables.
-/// Used in the [`TableReader`][crate::table_reader::TableReader] and
-/// [`ColumnBuilderProxy`][crate::builder_proxy::ColumnBuilderProxy] interfaces.
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum ReadingError {
