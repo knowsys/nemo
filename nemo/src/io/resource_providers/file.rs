@@ -1,6 +1,6 @@
 use std::{fs::File, io::Read, path::PathBuf};
 
-use nemo_physical::{error::ReadingError, table_reader::Resource};
+use nemo_physical::{error::ReadingError, resource::Resource};
 use path_slash::PathBufExt;
 
 use super::{is_iri, ResourceProvider};

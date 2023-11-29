@@ -14,7 +14,7 @@ use rio_turtle::TurtleParser;
 use nemo_physical::{
     datasources::{TableProvider, TupleBuffer},
     datavalues::{AnyDataValue, DataValueCreationError},
-    table_reader::Resource,
+    resource::Resource,
 };
 
 use crate::{

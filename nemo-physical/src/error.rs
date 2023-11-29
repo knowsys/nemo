@@ -4,7 +4,7 @@ use std::{convert::Infallible, fmt::Display};
 
 use thiserror::Error;
 
-use crate::{datatypes::FloatIsNaN, table_reader::Resource};
+use crate::{datatypes::FloatIsNaN, resource::Resource};
 
 /// Trait that can be used by external libraries extending Nemo to communicate a error during reading
 pub trait ExternalReadingError: Display + std::fmt::Debug {}

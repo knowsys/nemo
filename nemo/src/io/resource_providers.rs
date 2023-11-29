@@ -5,7 +5,7 @@ use std::{io::Read, path::PathBuf, rc::Rc};
 use flate2::read::MultiGzDecoder;
 
 use crate::io::parser::{all_input_consumed, iri::iri};
-use nemo_physical::{error::ReadingError, table_reader::Resource};
+use nemo_physical::{error::ReadingError, resource::Resource};
 
 /// A resource provider for files.
 pub mod file;

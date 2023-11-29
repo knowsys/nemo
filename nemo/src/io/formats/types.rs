@@ -5,7 +5,7 @@ use std::{collections::HashSet, io::Write, path::PathBuf, str::FromStr};
 use dyn_clone::DynClone;
 use thiserror::Error;
 
-use nemo_physical::{datasources::TableProvider, table_reader::Resource};
+use nemo_physical::{datasources::TableProvider, resource::Resource};
 
 use crate::{
     error::Error,

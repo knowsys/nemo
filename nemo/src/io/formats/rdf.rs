@@ -6,7 +6,7 @@ use nemo_physical::{
     datasources::{TableProvider, TupleBuffer},
     datavalues::{AnyDataValue, DataValueCreationError},
     error::ReadingError,
-    table_reader::Resource,
+    resource::Resource,
 };
 
 use oxiri::Iri;

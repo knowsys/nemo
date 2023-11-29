@@ -21,7 +21,7 @@ use nemo::model::NumericLiteral;
 use nemo_physical::datatypes::Double;
 use nemo_physical::error::ExternalReadingError;
 use nemo_physical::error::ReadingError;
-use nemo_physical::table_reader::Resource;
+use nemo_physical::resource::Resource;
 use thiserror::Error;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsCast;
