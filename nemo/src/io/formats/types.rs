@@ -11,7 +11,7 @@ use crate::{
     error::Error,
     io::{
         formats::{
-            dsv::DSVFormat,
+            dsv::DsvFormat,
             rdf::{RDFFormat, RDFVariant},
         },
         resource_providers::ResourceProviders,
@@ -376,9 +376,9 @@ impl FileFormat {
     /// Return the associated [`FileFormatMeta`] for this format.
     pub fn into_meta(self) -> Box<dyn FileFormatMeta> {
         match self {
-            Self::DSV => Box::new(DSVFormat::new()),
-            Self::CSV => Box::new(DSVFormat::csv()),
-            Self::TSV => Box::new(DSVFormat::tsv()),
+            Self::DSV => Box::new(DsvFormat::new()),
+            Self::CSV => Box::new(DsvFormat::csv()),
+            Self::TSV => Box::new(DsvFormat::tsv()),
             Self::RDF(variant) => Box::new(RDFFormat::with_variant(variant)),
         }
     }

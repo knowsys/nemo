@@ -14,7 +14,7 @@ use crate::{
     model::{Identifier, TupleConstraint},
 };
 
-use super::formats::DSVFormat;
+use super::formats::DsvFormat;
 
 /// Compression level for gzip output, cf. gzip(1):
 ///
@@ -167,7 +167,7 @@ impl OutputManager {
         predicate: Identifier,
         declared_types: TupleConstraint,
     ) -> Result<ExportSpec, Error> {
-        Ok(DSVFormat::csv().try_into_export(predicate.name(), predicate, declared_types)?)
+        Ok(DsvFormat::csv().try_into_export(predicate.name(), predicate, declared_types)?)
     }
 }
 
