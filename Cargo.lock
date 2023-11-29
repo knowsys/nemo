@@ -1297,8 +1297,6 @@ dependencies = [
  "rand",
  "regex",
  "reqwest",
- "rio_turtle",
- "rio_xml",
  "test-log",
  "thiserror",
 ]
