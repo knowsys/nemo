@@ -6,9 +6,10 @@ use crate::{
 };
 use std::cell::RefCell;
 
-/// The [`ColumnWriter`] is used to send the data of a single table column to the database. The interface
-/// allows values to be added one by one, and also provides some functionality for rolling back the last value,
-/// which is convenient when writing whole tuples
+/// The [`SortedTableBuffer`] has three main functions (1) to receive data from a reader, (2) to
+/// sort the data once loading is completed, and (3) to provide access to its columns. One data
+/// value can be added at a time. Data values are expected to be added in a row wise. Once a row is
+/// complete, it is commited to the table. Buffered uncompleted rows can be discarded if necessary.
 #[derive(Debug)]
 pub struct SortedTableBuffer<'a> {
     table_buffer: TableWriter<'a>,
