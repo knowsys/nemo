@@ -46,7 +46,7 @@ pub enum ReadingError {
     #[error("failed to convert value {0} to type {1}.")]
     TypeConversionError(String, String), // Note we cannot access logical types in physical layer
     /// Invalid RdfLiteral
-    #[error("invalid Rdf Literal: {0}")]
+    #[error("invalid RDF Literal: {0}")]
     InvalidRdfLiteral(String), // Note we cannot access rdf literals in physical layer
     /// Reading error caused by a library which extends nemo
     #[error("reading error caused by a external library extending Nemo: {0}")]
