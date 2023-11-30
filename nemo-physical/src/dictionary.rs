@@ -4,6 +4,10 @@
 
 use std::fmt::Debug;
 
+/// Module to define the [StringDictionary] and basic string management
+/// code.
+pub mod string_dictionary;
+pub(crate) use string_dictionary::StringDictionary;
 /// Module to define the [DictionaryString]
 pub mod dictionary_string;
 pub use dictionary_string::DictionaryString;
