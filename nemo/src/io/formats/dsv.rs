@@ -41,7 +41,7 @@ type DataValueParserFunction = fn(String) -> Result<AnyDataValue, DataValueCreat
 /// By default the reader will assume the following for the input file:
 /// - no headers are given,
 /// - double quotes are allowed for string escaping
-/// 
+///
 /// Parsing of individual values can be done in several ways (DSV does not specify a data model at this level),
 /// which can be set for each column separately.
 #[derive(Debug)]

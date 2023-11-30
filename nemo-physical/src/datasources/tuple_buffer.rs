@@ -406,127 +406,55 @@ mod test {
     fn test_internal_table_structures() {
         let dict = Dict::new();
         let dict_ref = RefCell::new(dict);
-        let mut tw = TupleBuffer::new(&dict_ref, 3);
+        let mut tb = TupleBuffer::new(&dict_ref, 3);
 
         let v1 = AnyDataValue::new_string("a".to_string());
         let v2 = AnyDataValue::new_integer_from_i64(42);
 
         // new table #0, row #0
-        tw.next_value(v1.clone());
-        tw.next_value(v1.clone());
-        tw.next_value(v1.clone());
+        tb.next_value(v1.clone());
+        tb.next_value(v1.clone());
+        tb.next_value(v1.clone());
         // new table #1, row #0
-        tw.next_value(v1.clone());
-        tw.next_value(v2.clone());
-        tw.next_value(v1.clone());
+        tb.next_value(v1.clone());
+        tb.next_value(v2.clone());
+        tb.next_value(v1.clone());
         // table #0, row #1
-        tw.next_value(v1.clone());
-        tw.next_value(v1.clone());
-        tw.next_value(v1.clone());
+        tb.next_value(v1.clone());
+        tb.next_value(v1.clone());
+        tb.next_value(v1.clone());
         // new table #2, row #0
-        tw.next_value(v1.clone());
-        tw.next_value(v1.clone());
-        tw.next_value(v2.clone());
+        tb.next_value(v1.clone());
+        tb.next_value(v1.clone());
+        tb.next_value(v2.clone());
         // table #2, row #1
-        tw.next_value(v1.clone());
-        tw.next_value(v1.clone());
-        tw.next_value(v2.clone());
+        tb.next_value(v1.clone());
+        tb.next_value(v1.clone());
+        tb.next_value(v2.clone());
         // table #2, row #2
-        tw.next_value(v1.clone());
-        tw.next_value(v1.clone());
-        tw.next_value(v2.clone());
+        tb.next_value(v1.clone());
+        tb.next_value(v1.clone());
+        tb.next_value(v2.clone());
 
-        assert_eq!(tw.tables.len(), 3);
+        assert_eq!(tb.tables.len(), 3);
 
-        assert_eq!(tw.table_lengths[0], 2);
-        assert_eq!(tw.cols_u32[tw.tables[0].col_ids[0]].len(), 2);
-        assert_eq!(tw.cols_u32[tw.tables[0].col_ids[1]].len(), 2);
-        assert_eq!(tw.cols_u32[tw.tables[0].col_ids[2]].len(), 2);
+        assert_eq!(tb.table_lengths[0], 2);
+        assert_eq!(tb.cols_u32[tb.tables[0].col_ids[0]].len(), 2);
+        assert_eq!(tb.cols_u32[tb.tables[0].col_ids[1]].len(), 2);
+        assert_eq!(tb.cols_u32[tb.tables[0].col_ids[2]].len(), 2);
 
-        assert_eq!(tw.table_lengths[1], 1);
-        assert_eq!(tw.cols_u32[tw.tables[1].col_ids[0]].len(), 1);
-        assert_eq!(tw.cols_i64[tw.tables[1].col_ids[1]].len(), 1);
-        assert_eq!(tw.cols_u32[tw.tables[1].col_ids[2]].len(), 1);
+        assert_eq!(tb.table_lengths[1], 1);
+        assert_eq!(tb.cols_u32[tb.tables[1].col_ids[0]].len(), 1);
+        assert_eq!(tb.cols_i64[tb.tables[1].col_ids[1]].len(), 1);
+        assert_eq!(tb.cols_u32[tb.tables[1].col_ids[2]].len(), 1);
 
-        assert_eq!(tw.table_lengths[2], 3);
-        assert_eq!(tw.cols_u32[tw.tables[2].col_ids[0]].len(), 3);
-        assert_eq!(tw.cols_u32[tw.tables[2].col_ids[1]].len(), 3);
-        assert_eq!(tw.cols_i64[tw.tables[2].col_ids[2]].len(), 3);
+        assert_eq!(tb.table_lengths[2], 3);
+        assert_eq!(tb.cols_u32[tb.tables[2].col_ids[0]].len(), 3);
+        assert_eq!(tb.cols_u32[tb.tables[2].col_ids[1]].len(), 3);
+        assert_eq!(tb.cols_i64[tb.tables[2].col_ids[2]].len(), 3);
 
-        assert_eq!(tw.get_value(0, 0), tw.get_value(0, 1));
-        assert_ne!(tw.get_value(2, 1), tw.get_value(0, 0));
-        assert_eq!(tw.get_value(2, 1), Some(StorageValueT::Int64(42)));
+        assert_eq!(tb.get_value(0, 0), tb.get_value(0, 1));
+        assert_ne!(tb.get_value(2, 1), tb.get_value(0, 0));
+        assert_eq!(tb.get_value(2, 1), Some(StorageValueT::Int64(42)));
     }
-    /*
-    #[test]
-    fn test_column_iterator_one_col() {
-        let dict = Dict::new();
-        let dict_ref = RefCell::new(dict);
-        let mut tw = TupleBuffer::new(&dict_ref, 1);
-
-        let v1 = AnyDataValue::new_string("c".to_string()); // 0
-        let v2 = AnyDataValue::new_string("a".to_string()); // 1
-        let v3 = AnyDataValue::new_string("b".to_string()); // 2
-        let v4 = AnyDataValue::new_string("d".to_string()); // 3
-
-        tw.next_value(v1.clone());
-        tw.next_value(v2.clone());
-        tw.next_value(v3.clone());
-        tw.next_value(v4.clone());
-
-        tw.sort();
-
-        let mut iter = tw.get_column(&0);
-        assert_eq!(iter.next(), Some(StorageValueT::Id32(0)));
-        assert_eq!(iter.next(), Some(StorageValueT::Id32(1)));
-        assert_eq!(iter.next(), Some(StorageValueT::Id32(2)));
-        assert_eq!(iter.next(), Some(StorageValueT::Id32(3)));
-        assert_eq!(iter.next(), None);
-    }
-
-    #[test]
-    fn test_column_iterator_two_cols() {
-        let dict = Dict::new();
-        let dict_ref = RefCell::new(dict);
-        let mut tw = TupleBuffer::new(&dict_ref, 2);
-
-        let v1 = AnyDataValue::new_integer_from_i64(1);
-        let v2 = AnyDataValue::new_integer_from_i64(2);
-        let v3 = AnyDataValue::new_integer_from_i64(3);
-        let v4 = AnyDataValue::new_integer_from_i64(4);
-        let v10 = AnyDataValue::new_integer_from_i64(10);
-        let v20 = AnyDataValue::new_integer_from_i64(20);
-
-        let va = AnyDataValue::new_string("a".to_string()); // 0
-        let vb = AnyDataValue::new_string("b".to_string()); // 1
-
-        // 1 "a"
-        tw.next_value(v1.clone());
-        tw.next_value(va.clone());
-        // 2 10
-        tw.next_value(v2.clone());
-        tw.next_value(v10.clone());
-        // 3 "b"
-        tw.next_value(v3.clone());
-        tw.next_value(vb.clone());
-        // 4 20
-        tw.next_value(v4.clone());
-        tw.next_value(v20.clone());
-
-        tw.sort();
-
-        let mut first_iter = tw.get_column(&0);
-        assert_eq!(first_iter.next(), Some(StorageValueT::Int64(1)));
-        assert_eq!(first_iter.next(), Some(StorageValueT::Int64(2)));
-        assert_eq!(first_iter.next(), Some(StorageValueT::Int64(3)));
-        assert_eq!(first_iter.next(), Some(StorageValueT::Int64(4)));
-        assert_eq!(first_iter.next(), None);
-
-        let mut second_iter = tw.get_column(&1);
-        assert_eq!(second_iter.next(), Some(StorageValueT::Id32(0)));
-        assert_eq!(second_iter.next(), Some(StorageValueT::Int64(10)));
-        assert_eq!(second_iter.next(), Some(StorageValueT::Id32(1)));
-        assert_eq!(second_iter.next(), Some(StorageValueT::Int64(20)));
-        assert_eq!(second_iter.next(), None);
-    } */
 }
