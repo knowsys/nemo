@@ -372,11 +372,9 @@ impl<'a> TupleBuffer<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::cell::RefCell;
-
-    use crate::{datatypes::StorageValueT, datavalues::AnyDataValue, management::database::Dict};
-
     use super::TupleBuffer;
+    use crate::{datatypes::StorageValueT, datavalues::AnyDataValue, management::database::Dict};
+    use std::cell::RefCell;
 
     #[test]
     fn test_internal_table_structures() {
