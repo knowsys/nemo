@@ -7,24 +7,14 @@ use std::io::BufReader;
 
 use nemo::meta::{timing::TimedDisplay, TimedCode};
 use nemo_physical::dictionary::{
-    hash_map_dictionary::HashMapDictionary, meta_dictionary::MetaDictionary,
-    prefixed_string_dictionary::PrefixedStringDictionary, string_dictionary::StringDictionary,
-    AddResult, Dictionary,
+    hash_map_dictionary::HashMapDictionary, meta_dictionary::MetaDictionary, AddResult, Dictionary,
 };
 
 fn create_dictionary(dict_type: &str) -> Box<dyn Dictionary> {
     match dict_type {
-        "hash" => {
-            println!("Using StringDictionary.");
-            Box::new(StringDictionary::new())
-        }
         "hashmap" => {
             println!("Using HashMapDictionary.");
             Box::new(HashMapDictionary::new())
-        }
-        "prefix" => {
-            println!("Using PrefixedStringDictionary.");
-            Box::new(PrefixedStringDictionary::new())
         }
         "meta" => {
             println!("Using MetaDictionary.");

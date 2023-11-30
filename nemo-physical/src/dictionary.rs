@@ -7,12 +7,6 @@ use std::fmt::Debug;
 /// Module to define the [DictionaryString]
 pub mod dictionary_string;
 pub use dictionary_string::DictionaryString;
-/// Module to define the [PrefixedStringDictionary]
-pub mod prefixed_string_dictionary;
-pub use prefixed_string_dictionary::PrefixedStringDictionary;
-/// Module to define a simple [StringDictionary]
-pub mod string_dictionary;
-pub use string_dictionary::StringDictionary;
 /// Module to define [HashMapDictionary]
 pub mod hash_map_dictionary;
 pub use hash_map_dictionary::HashMapDictionary;
