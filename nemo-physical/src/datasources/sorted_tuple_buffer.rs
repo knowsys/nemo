@@ -1,6 +1,7 @@
 //! Module that allows callers to write data into columns of a database table.
 
 use crate::{datasources::TupleBuffer, datatypes::StorageValueT};
+use std::cmp::Ordering;
 
 /// The [`SortedTableBuffer`] is a wrapper for [`TableBuffer`] that stores a tuple order.
 #[derive(Debug)]
@@ -13,7 +14,8 @@ impl<'a> SortedTupleBuffer<'_> {
     /// Constructor for [`SortedTupleBuffer`]. It takes a [`TupleBuffer`] and a tuple_order as
     /// parameters. The tuple order indicates the indexes of the tuples ordered by increasing
     /// [`StorageValueT`]s.
-    pub fn new<'b>(tuple_buffer: TupleBuffer<'b>, tuple_order: Vec<usize>) -> SortedTupleBuffer {
+    pub fn new<'b>(tuple_buffer: TupleBuffer<'b>) -> SortedTupleBuffer {
+        let tuple_order = SortedTupleBuffer::get_order(&tuple_buffer);
         SortedTupleBuffer {
             tuple_buffer,
             tuple_order,
@@ -37,6 +39,32 @@ impl<'a> SortedTupleBuffer<'_> {
                 .get_value(tuple_idx, column_idx)
                 .expect("only existing tuples have been sorted in the first place")
         })
+    }
+
+    /// Returns the order of tuples in the TupleBuffer
+    fn get_order(tuple_buffer: &TupleBuffer) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..tuple_buffer.size()).collect();
+        order.sort_by(|x, y| SortedTupleBuffer::compare_rows(tuple_buffer, x, y));
+        order
+    }
+
+    /// Compare two tuples by types and values corresponding to their tuple indexes, according to
+    /// the internal order of tuples, i.e., tuple indexes in the first inner table are maintained,
+    /// and row indexes in the second table start from table_lengths[0], and so on.
+    fn compare_rows(
+        tuple_buffer: &TupleBuffer,
+        first_tuple_idx: &usize,
+        second_tuple_idx: &usize,
+    ) -> Ordering {
+        assert!(true);
+        for i in 0..tuple_buffer.column_number() {
+            let first_storage_value = tuple_buffer.get_value(*first_tuple_idx, i).unwrap();
+            let second_storage_value = tuple_buffer.get_value(*second_tuple_idx, i).unwrap();
+            if first_storage_value.cmp(&second_storage_value) != Ordering::Equal {
+                return first_storage_value.cmp(&second_storage_value);
+            }
+        }
+        Ordering::Equal
     }
 }
 

@@ -9,7 +9,6 @@ use crate::{
     management::database::Dict,
 };
 use std::cell::RefCell;
-use std::cmp::Ordering;
 
 /// Number of supported [`StorageTypeName`]s. See also [`TupleBuffer::storage_type_idx`].
 const STORAGE_TYPE_COUNT: usize = 5;
@@ -135,30 +134,7 @@ impl<'a> TupleBuffer<'a> {
 
     /// Function to indicate the data loading process has ended, and to sort the data.
     pub fn finalize(self) -> SortedTupleBuffer<'a> {
-        let order = self.get_order();
-        SortedTupleBuffer::new(self, order)
-    }
-
-    /// Returns the order of tuples in the TupleBuffer
-    fn get_order(&self) -> Vec<usize> {
-        let mut order: Vec<usize> = (0..self.size()).collect();
-        order.sort_by(|x, y| self.compare_rows(x, y));
-        order
-    }
-
-    /// Compare two tuples by types and values corresponding to their tuple indexes, according to
-    /// the internal order of tuples, i.e., tuple indexes in the first inner table are maintained,
-    /// and row indexes in the second table start from table_lengths[0], and so on.
-    fn compare_rows(&self, first_tuple_idx: &usize, second_tuple_idx: &usize) -> Ordering {
-        assert!(true);
-        for i in 0..self.col_num {
-            let first_storage_value = self.get_value(*first_tuple_idx, i).unwrap();
-            let second_storage_value = self.get_value(*second_tuple_idx, i).unwrap();
-            if first_storage_value.cmp(&second_storage_value) != Ordering::Equal {
-                return first_storage_value.cmp(&second_storage_value);
-            }
-        }
-        Ordering::Equal
+        SortedTupleBuffer::new(self)
     }
 
     /// Returns the value of the tuple number `val_index` (according to the internal
