@@ -161,27 +161,6 @@ impl<'a> TupleBuffer<'a> {
         Ordering::Equal
     }
 
-    /// Return the [`StorageValueT`] corresponding to the [`table_idx`], [`column_idx`], and [`row_idx`].
-    fn get_storage_value(
-        &self,
-        table_idx: &usize,
-        column_idx: &usize,
-        row_idx: &usize,
-    ) -> StorageValueT {
-        let deref_col_idx = self.tables[*table_idx].col_ids[*column_idx];
-        match self.tables[*table_idx].col_types[*column_idx] {
-            StorageTypeName::Id32 => StorageValueT::Id32(self.cols_u32[deref_col_idx][*row_idx]),
-            StorageTypeName::Id64 => StorageValueT::Id64(self.cols_u64[deref_col_idx][*row_idx]),
-            StorageTypeName::Int64 => StorageValueT::Int64(self.cols_i64[deref_col_idx][*row_idx]),
-            StorageTypeName::Float => {
-                StorageValueT::Float(self.cols_floats[deref_col_idx][*row_idx])
-            }
-            StorageTypeName::Double => {
-                StorageValueT::Double(self.cols_doubles[deref_col_idx][*row_idx])
-            }
-        }
-    }
-
     /// Returns the value of the tuple number `val_index` (according to the internal
     /// order of tuples, not the insertion order) at position number `col_index`.
     /// None is returned if there are fewer values than `val_index`.
