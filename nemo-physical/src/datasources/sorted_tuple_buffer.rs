@@ -33,12 +33,12 @@ impl<'a> SortedTupleBuffer<'_> {
     /// Returns an iterator of the sorted [`StorageValueT`] values of the n-th column in the [`SortedTableBuffer`]
     pub fn get_column<'b>(
         &'b self,
-        column_idx: &'b usize,
+        column_idx: usize,
     ) -> impl Iterator<Item = StorageValueT> + 'b {
-        self.tuple_order.iter().map(|tuple_idx| {
+        self.tuple_order.iter().map(move |&tuple_idx| {
             self.tuple_buffer
-                .get_value(*tuple_idx, *column_idx)
-                .unwrap()
+                .get_value(tuple_idx, column_idx)
+                .expect("only existing tuples have been sorted in the first place")
         })
     }
 }
@@ -70,7 +70,7 @@ mod test {
 
         let stb = tb.finalize();
 
-        let mut iter = stb.get_column(&0);
+        let mut iter = stb.get_column(0);
         assert_eq!(iter.next(), Some(StorageValueT::Id32(0)));
         assert_eq!(iter.next(), Some(StorageValueT::Id32(1)));
         assert_eq!(iter.next(), Some(StorageValueT::Id32(2)));
@@ -109,14 +109,14 @@ mod test {
 
         let stb = tb.finalize();
 
-        let mut first_iter = stb.get_column(&0);
+        let mut first_iter = stb.get_column(0);
         assert_eq!(first_iter.next(), Some(StorageValueT::Int64(1)));
         assert_eq!(first_iter.next(), Some(StorageValueT::Int64(2)));
         assert_eq!(first_iter.next(), Some(StorageValueT::Int64(3)));
         assert_eq!(first_iter.next(), Some(StorageValueT::Int64(4)));
         assert_eq!(first_iter.next(), None);
 
-        let mut second_iter = stb.get_column(&1);
+        let mut second_iter = stb.get_column(1);
         assert_eq!(second_iter.next(), Some(StorageValueT::Id32(0)));
         assert_eq!(second_iter.next(), Some(StorageValueT::Int64(10)));
         assert_eq!(second_iter.next(), Some(StorageValueT::Id32(1)));
