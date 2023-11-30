@@ -4,6 +4,7 @@ use super::super::operations::{
     ColumnScanPass, ColumnScanPrune, ColumnScanReorder, ColumnScanRestrictValues, ColumnScanUnion,
 };
 
+use crate::columnar::operations::columnscan_empty::ColumnScanEmpty;
 use crate::columnar::operations::{
     ColumnScanArithmetic, ColumnScanConstant, ColumnScanCopy, ColumnScanNulls, ColumnScanSubtract,
 };
@@ -82,6 +83,8 @@ where
     ColumnScanSubtract(ColumnScanSubtract<'a, T>),
     /// Case ColumnScanArithmetic
     ColumnScanArithmetic(ColumnScanArithmetic<'a, T>),
+    /// Case ColumnScanEmpty
+    ColumnScanEmpty(ColumnScanEmpty<T>),
 }
 
 /// The following impl statements allow converting from a specific [`ColumnScan`] into a gerneral [`ColumnScanEnum`]
@@ -293,7 +296,8 @@ generate_forwarder!(forward_to_columnscan;
     ColumnScanCopy,
     ColumnScanNulls,
     ColumnScanSubtract,
-    ColumnScanArithmetic
+    ColumnScanArithmetic,
+    ColumnScanEmpty
 );
 
 impl<'a, T> Iterator for ColumnScanEnum<'a, T>

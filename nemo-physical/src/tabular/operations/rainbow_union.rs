@@ -12,6 +12,7 @@ use crate::{
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 
+/// TODO: Description
 /// [`PartialTrieScan`] representing a union of other trie iterators
 #[derive(Debug)]
 pub struct TrieScanUnionRainbow<'a> {
@@ -27,6 +28,7 @@ pub struct TrieScanUnionRainbow<'a> {
 }
 
 impl<'a> TrieScanUnionRainbow<'a> {
+    /// TODO: Description
     /// Construct new [`TrieScanUnion`] object.
     pub fn new(trie_scans: Vec<TrieScanRainbowEnum<'a>>) -> Self {
         debug_assert!(trie_scans

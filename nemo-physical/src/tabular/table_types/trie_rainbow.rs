@@ -136,6 +136,26 @@ impl<'a> ColumnScanRainbow<'a> {
             StorageTypeName::Float => todo!(),
         }
     }
+
+    pub fn equal_values(&mut self, storage_type: StorageTypeName) -> &Vec<bool> {
+        match storage_type {
+            StorageTypeName::U64 => self.scan_keys.equal_values(),
+            StorageTypeName::I64 => self.scan_integers.equal_values(),
+            StorageTypeName::Double => self.scan_doubles.equal_values(),
+            StorageTypeName::U32 => todo!(),
+            StorageTypeName::Float => todo!(),
+        }
+    }
+
+    pub fn subtract_enable(&mut self, storage_type: StorageTypeName, enabled: &[bool]) {
+        match storage_type {
+            StorageTypeName::U64 => self.scan_keys.subtract_enable(enabled),
+            StorageTypeName::I64 => self.scan_integers.subtract_enable(enabled),
+            StorageTypeName::Double => self.scan_doubles.subtract_enable(enabled),
+            StorageTypeName::U32 => todo!(),
+            StorageTypeName::Float => todo!(),
+        }
+    }
 }
 
 /// TODO: Adjust description once this replaces [`Trie`]

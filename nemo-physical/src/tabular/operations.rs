@@ -51,3 +51,11 @@ pub mod rainbow_union;
 /// TODO: Description
 /// Experimntal module implementing the join operation for rainbow tries
 pub mod rainbow_join;
+
+/// TODO: Description
+/// Experimntal module implementing the subtract/minus operation for rainbow tries
+pub mod rainbow_minus;
+
+/// TODO: Description
+/// Experimntal module implementing the append operation for rainbow tries
+pub mod rainbow_append;
