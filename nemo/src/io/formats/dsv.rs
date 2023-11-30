@@ -12,9 +12,9 @@ use rio_api::parser::TriplesParser;
 use rio_turtle::TurtleParser;
 
 use nemo_physical::{
-    datasources::TableProvider,
+    datasources::{TableProvider, TupleBuffer},
     datavalues::{AnyDataValue, DataValueCreationError},
-    table_reader::Resource,
+    resource::Resource,
 };
 
 use crate::{
@@ -41,15 +41,11 @@ type DataValueParserFunction = fn(String) -> Result<AnyDataValue, DataValueCreat
 /// By default the reader will assume the following for the input file:
 /// - no headers are given,
 /// - double quotes are allowed for string escaping
-///
-/// The reader object relates a given [resource][Resource] in DSV format to a tuple of [logical types][PrimitiveType].
-/// It accesses the resource through the given [resource_providers][ResourceProviders].
-/// Via the implementation of [`TableReader`] it fills the corresponding [`PhysicalBuilderProxys`][nemo_physical::builder_proxy::PhysicalBuilderProxyEnum]
-/// with the data from the file.
-/// It combines the logical and physical BuilderProxies to handle the read data according to both datatype models.
-/// TODO: Update documentation.
+/// 
+/// Parsing of individual values can be done in several ways (DSV does not specify a data model at this level),
+/// which can be set for each column separately.
 #[derive(Debug)]
-pub(crate) struct DSVReader {
+pub(crate) struct DsvReader {
     resource_providers: ResourceProviders,
     resource: Resource,
     delimiter: u8,
@@ -57,8 +53,8 @@ pub(crate) struct DSVReader {
     input_type_constraint: TupleConstraint,
 }
 
-impl DSVReader {
-    /// Instantiate a [DSVReader] for a given delimiter
+impl DsvReader {
+    /// Instantiate a [`DsvReader`] for a given delimiter
     pub fn new(
         resource_providers: ResourceProviders,
         resource: Resource,
@@ -133,7 +129,7 @@ impl DSVReader {
     /// If a field cannot be read or parsed, the line will be ignored
     fn read<R>(
         &self,
-        table_writer: &mut nemo_physical::datasources::TupleBuffer,
+        tuple_buffer: &mut TupleBuffer,
         dsv_reader: &mut Reader<R>,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
@@ -147,10 +143,10 @@ impl DSVReader {
         for row in dsv_reader.records().flatten() {
             for idx_field in row.iter().enumerate() {
                 if let Ok(dv) = parsers[idx_field.0](idx_field.1.to_string()) {
-                    table_writer.next_value(dv);
+                    tuple_buffer.next_value(dv);
                 } else {
                     drop_count += 1;
-                    table_writer.drop_current_tuple();
+                    tuple_buffer.drop_current_tuple();
                     break;
                 }
             }
@@ -240,10 +236,10 @@ impl DSVReader {
     }
 }
 
-impl TableProvider for DSVReader {
+impl TableProvider for DsvReader {
     fn provide_table_data(
         self: Box<Self>,
-        table_writer: &mut nemo_physical::datasources::TupleBuffer,
+        tuple_buffer: &mut TupleBuffer,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let reader = self
             .resource_providers
@@ -251,15 +247,15 @@ impl TableProvider for DSVReader {
 
         let mut dsv_reader = Self::dsv_reader(reader, self.delimiter, Some(self.escape));
 
-        self.read(table_writer, &mut dsv_reader)
+        self.read(tuple_buffer, &mut dsv_reader)
     }
 }
 
-struct DSVWriter {
+struct DsvWriter {
     delimiter: u8,
 }
 
-impl TableWriter for DSVWriter {
+impl TableWriter for DsvWriter {
     fn write_record(
         &mut self,
         record: &[String],
@@ -274,12 +270,12 @@ impl TableWriter for DSVWriter {
 
 /// A file format for delimiter-separated values.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct DSVFormat {
+pub struct DsvFormat {
     /// A concrete delimiter for this format.
     delimiter: Option<u8>,
 }
 
-impl DSVFormat {
+impl DsvFormat {
     const DEFAULT_COLUMN_TYPE: PrimitiveType = PrimitiveType::String;
 
     /// Construct a generic DSV file format, with the delimiter not
@@ -363,7 +359,7 @@ const DELIMITER: &str = "delimiter";
 
 /// Errors related to DSV file format specifications.
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
-pub enum DSVFormatError {
+pub enum DsvFormatError {
     /// Delimiter should have a string literal as a value, but was
     /// some other term.
     #[error("Delimiter should be a string literal")]
@@ -378,16 +374,16 @@ pub enum DSVFormatError {
     InvalidResourceType(Constant),
 }
 
-impl From<DSVFormatError> for FileFormatError {
-    fn from(error: DSVFormatError) -> Self {
+impl From<DsvFormatError> for FileFormatError {
+    fn from(error: DsvFormatError) -> Self {
         match &error {
-            DSVFormatError::InvalidDelimiterType(constant)
-            | DSVFormatError::InvalidDelimiterLength(constant) => Self::InvalidAttributeValue {
+            DsvFormatError::InvalidDelimiterType(constant)
+            | DsvFormatError::InvalidDelimiterLength(constant) => Self::InvalidAttributeValue {
                 value: constant.clone(),
                 attribute: Key::identifier_from_str(DELIMITER),
                 description: error.to_string(),
             },
-            DSVFormatError::InvalidResourceType(constant) => Self::InvalidAttributeValue {
+            DsvFormatError::InvalidResourceType(constant) => Self::InvalidAttributeValue {
                 value: constant.clone(),
                 attribute: Key::identifier_from_str(RESOURCE),
                 description: error.to_string(),
@@ -396,7 +392,7 @@ impl From<DSVFormatError> for FileFormatError {
     }
 }
 
-impl FileFormatMeta for DSVFormat {
+impl FileFormatMeta for DsvFormat {
     fn file_format(&self) -> FileFormat {
         match self.delimiter {
             Some(b',') => FileFormat::CSV,
@@ -428,7 +424,7 @@ impl FileFormatMeta for DSVFormat {
                 .as_bytes()[0]
         });
 
-        Ok(Box::new(DSVReader::new(
+        Ok(Box::new(DsvReader::new(
             resource_providers,
             resource.to_string(),
             delimiter,
@@ -437,7 +433,7 @@ impl FileFormatMeta for DSVFormat {
     }
 
     fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
-        Ok(Box::new(DSVWriter {
+        Ok(Box::new(DsvWriter {
             delimiter: self.delimiter.expect("is a required attribute"),
         }))
     }
@@ -484,12 +480,12 @@ impl FileFormatMeta for DSVFormat {
 
             if let Some(delim) = delimiter.as_string() {
                 if delim.len() != 1 {
-                    return Err(DSVFormatError::InvalidDelimiterLength(delimiter.clone()).into());
+                    return Err(DsvFormatError::InvalidDelimiterLength(delimiter.clone()).into());
                 }
 
                 self.delimiter = Some(delim.as_bytes()[0]);
             } else {
-                return Err(DSVFormatError::InvalidDelimiterType(delimiter.clone()).into());
+                return Err(DsvFormatError::InvalidDelimiterType(delimiter.clone()).into());
             }
         }
 
@@ -499,7 +495,7 @@ impl FileFormatMeta for DSVFormat {
             .expect("is a required attribute");
 
         if resource.as_resource().is_none() {
-            return Err(DSVFormatError::InvalidResourceType(resource.clone()).into());
+            return Err(DsvFormatError::InvalidResourceType(resource.clone()).into());
         }
 
         Ok(())
@@ -544,7 +540,7 @@ mod test {
             .delimiter(b';')
             .from_reader(data.as_bytes());
 
-        let reader = DSVReader::new(
+        let reader = DsvReader::new(
             ResourceProviders::empty(),
             "test".to_string(),
             b',',
@@ -556,10 +552,10 @@ mod test {
             ]),
         );
         let dict = RefCell::new(Dict::default());
-        let mut table_writer = nemo_physical::datasources::TupleBuffer::new(&dict, 4);
-        let result = reader.read(&mut table_writer, &mut rdr);
+        let mut tuple_buffer = TupleBuffer::new(&dict, 4);
+        let result = reader.read(&mut tuple_buffer, &mut rdr);
         assert!(result.is_ok());
-        assert_eq!(table_writer.size(), 2);
+        assert_eq!(tuple_buffer.size(), 2);
     }
 
     //     #[test]

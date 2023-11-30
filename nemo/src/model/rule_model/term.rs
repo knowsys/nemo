@@ -115,7 +115,7 @@ impl Constant {
     }
 
     /// If this is a resource (either a string literal, or a constant identifier), return it.
-    pub fn as_resource(&self) -> Option<&nemo_physical::table_reader::Resource> {
+    pub fn as_resource(&self) -> Option<&nemo_physical::resource::Resource> {
         match self {
             Self::StringLiteral(string) => Some(string),
             Self::Abstract(identifier) => Some(&identifier.0),

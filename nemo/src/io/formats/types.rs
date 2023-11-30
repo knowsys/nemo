@@ -4,14 +4,13 @@ use std::{collections::HashSet, io::Write, path::PathBuf, str::FromStr};
 
 use dyn_clone::DynClone;
 use thiserror::Error;
-
-use nemo_physical::{datasources::TableProvider, table_reader::Resource};
+use nemo_physical::{datasources::TableProvider, resource::Resource};
 
 use crate::{
     error::Error,
     io::{
         formats::{
-            dsv::DSVFormat,
+            dsv::DsvFormat,
             rdf::{RDFFormat, RDFVariant},
         },
         resource_providers::ResourceProviders,
@@ -168,7 +167,7 @@ pub struct ImportExportSpec {
 }
 
 impl ImportExportSpec {
-    /// Obtain a [`TableReader`] for this import specification.
+    /// Obtain a [`TableProvider`] for this import specification.
     pub fn reader(
         &self,
         resource_providers: ResourceProviders,
@@ -208,9 +207,8 @@ impl Eq for ImportExportSpec {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportSpec(ImportExportSpec);
 
-// TODO Use delegate!
 impl ImportSpec {
-    /// Obtain a [`TableReader`] for this import specification.
+    /// Obtain a [`TableProvider`] for this import specification.
     pub fn reader(
         &self,
         resource_providers: ResourceProviders,
@@ -254,7 +252,6 @@ impl From<ImportExportSpec> for ImportSpec {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportSpec(ImportExportSpec);
 
-// TODO Use delegate!
 impl ExportSpec {
     /// Write the given table to the given [writer][Write].
     pub fn write_table(
@@ -376,9 +373,9 @@ impl FileFormat {
     /// Return the associated [`FileFormatMeta`] for this format.
     pub fn into_meta(self) -> Box<dyn FileFormatMeta> {
         match self {
-            Self::DSV => Box::new(DSVFormat::new()),
-            Self::CSV => Box::new(DSVFormat::csv()),
-            Self::TSV => Box::new(DSVFormat::tsv()),
+            Self::DSV => Box::new(DsvFormat::new()),
+            Self::CSV => Box::new(DsvFormat::csv()),
+            Self::TSV => Box::new(DsvFormat::tsv()),
             Self::RDF(variant) => Box::new(RDFFormat::with_variant(variant)),
         }
     }

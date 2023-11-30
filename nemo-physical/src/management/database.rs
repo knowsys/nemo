@@ -4,7 +4,6 @@ use std::fmt::{Debug, Display};
 
 use bytesize::ByteSize;
 
-use crate::builder_proxy::{PhysicalBuilderProxyEnum, PhysicalStringColumnBuilderProxy};
 use crate::datasources::{TableProvider, TupleBuffer};
 use crate::datatypes::data_value::DataValueIteratorT;
 use crate::datatypes::storage_value::{StorageValueIteratorT, VecT};
@@ -119,33 +118,21 @@ impl TableStorage {
             let trie = match source {
                 TableSource::FileReader(reader) => {
                     // TODO: Code partly disabled, test will fail; this is in transition to the new loading mode ...
-                    let mut builder_proxies: Vec<PhysicalBuilderProxyEnum> = schema
+
+                    let mut tuple_buffer = TupleBuffer::new(dict, schema.arity());
+                    // TODO: handle error intead of doing the let _
+                    let _ = reader.provide_table_data(&mut tuple_buffer);
+
+                    let col_table: Vec<VecT> = schema
                         .iter()
                         .map(|data_type| match data_type {
-                            DataTypeName::String => PhysicalBuilderProxyEnum::String(
-                                PhysicalStringColumnBuilderProxy::new(dict),
-                            ),
-                            DataTypeName::I64 => PhysicalBuilderProxyEnum::I64(Default::default()),
-                            DataTypeName::U64 => PhysicalBuilderProxyEnum::U64(Default::default()),
-                            DataTypeName::U32 => PhysicalBuilderProxyEnum::U32(Default::default()),
-                            DataTypeName::Float => {
-                                PhysicalBuilderProxyEnum::Float(Default::default())
-                            }
-                            DataTypeName::Double => {
-                                PhysicalBuilderProxyEnum::Double(Default::default())
-                            }
+                            DataTypeName::String => VecT::Id64(Vec::default()),
+                            DataTypeName::I64 => VecT::Int64(Vec::default()),
+                            DataTypeName::U64 => VecT::Id64(Vec::default()),
+                            DataTypeName::U32 => VecT::Id32(Vec::default()),
+                            DataTypeName::Float => VecT::Float(Vec::default()),
+                            DataTypeName::Double => VecT::Double(Vec::default()),
                         })
-                        .collect();
-                    // The following line was disabled to avoid consuming reader here
-                    // reader.read_into_builder_proxies(&mut builder_proxies)?;
-
-                    let mut table_writer = TupleBuffer::new(dict, schema.arity());
-                    // TODO: handle error intead of doing the let _
-                    let _ = reader.provide_table_data(&mut table_writer);
-
-                    let col_table: Vec<VecT> = builder_proxies
-                        .into_iter()
-                        .map(|bp| bp.finalize())
                         .collect();
                     Trie::from_cols(col_table)
                 }

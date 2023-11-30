@@ -30,7 +30,7 @@ pub(crate) mod turtle;
 pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
 use super::formats::{
-    dsv::DSVFormat,
+    dsv::DsvFormat,
     rdf::RDFFormat,
     types::{Direction, ExportSpec, FileFormat, FileFormatError, ImportExportSpec, ImportSpec},
 };
@@ -507,7 +507,7 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(DSVFormat::csv().try_into_import(
+                                    Ok(DsvFormat::csv().try_into_import(
                                         filename.to_string(),
                                         predicate.clone(),
                                         tuple_constraint.clone(),
@@ -521,7 +521,7 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(DSVFormat::tsv().try_into_import(
+                                    Ok(DsvFormat::tsv().try_into_import(
                                         filename.to_string(),
                                         predicate.clone(),
                                         tuple_constraint.clone(),
@@ -1450,7 +1450,7 @@ mod test {
 
     use nemo_physical::datatypes::Double;
 
-    use crate::{io::formats::dsv::DSVFormat, model::rule_model::Constraint};
+    use crate::{io::formats::dsv::DsvFormat, model::rule_model::Constraint};
 
     use super::*;
 
@@ -1518,7 +1518,7 @@ mod test {
         let file = "drinks.csv";
         let predicate_name = "drink";
         let predicate = Identifier(predicate_name.to_string());
-        let default_import = DSVFormat::csv()
+        let default_import = DsvFormat::csv()
             .try_into_import(
                 file.to_string(),
                 predicate.clone(),
@@ -1526,7 +1526,7 @@ mod test {
             )
             .unwrap();
 
-        let any_and_int_import = DSVFormat::csv()
+        let any_and_int_import = DsvFormat::csv()
             .try_into_import(
                 file.to_string(),
                 predicate.clone(),
@@ -1539,7 +1539,7 @@ mod test {
             )
             .unwrap();
 
-        let single_string_import = DSVFormat::csv()
+        let single_string_import = DsvFormat::csv()
             .try_into_import(
                 file.to_string(),
                 predicate,
@@ -2435,7 +2435,7 @@ mod test {
             ImportExportSpec {
                 predicate: predicate.clone(),
                 constraint: constraints.clone(),
-                format: Box::<DSVFormat>::default(),
+                format: Box::<DsvFormat>::default(),
                 attributes: attributes.clone(),
             }
         );
@@ -2446,7 +2446,7 @@ mod test {
             ImportSpec::from(ImportExportSpec {
                 predicate: predicate.clone(),
                 constraint: constraints.clone(),
-                format: Box::<DSVFormat>::default(),
+                format: Box::<DsvFormat>::default(),
                 attributes: attributes.clone()
             })
         );
@@ -2457,7 +2457,7 @@ mod test {
             ExportSpec::from(ImportExportSpec {
                 predicate: predicate.clone(),
                 constraint: constraints.clone(),
-                format: Box::<DSVFormat>::default(),
+                format: Box::<DsvFormat>::default(),
                 attributes: attributes.clone()
             })
         );

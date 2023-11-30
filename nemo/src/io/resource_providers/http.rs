@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use nemo_physical::{error::ReadingError, table_reader::Resource};
+use nemo_physical::{error::ReadingError, resource::Resource};
 
 use super::{is_iri, ResourceProvider};
 

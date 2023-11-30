@@ -546,7 +546,7 @@ mod test {
 
     use crate::model::{Identifier, PrimitiveTerm, TupleConstraint, Variable};
     use crate::{
-        io::formats::dsv::DSVFormat,
+        io::formats::dsv::DsvFormat,
         model::chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom},
     };
     use nemo_physical::management::database::ColumnOrder;
@@ -985,7 +985,7 @@ mod test {
 
         let program = ChaseProgram::builder()
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[1].0.clone(),
@@ -994,7 +994,7 @@ mod test {
                     .unwrap(),
             )
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[2].0.clone(),
@@ -1003,7 +1003,7 @@ mod test {
                     .unwrap(),
             )
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[3].0.clone(),
@@ -1012,7 +1012,7 @@ mod test {
                     .unwrap(),
             )
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[4].0.clone(),
@@ -1021,7 +1021,7 @@ mod test {
                     .unwrap(),
             )
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[6].0.clone(),
@@ -1363,7 +1363,7 @@ mod test {
 
         let program = ChaseProgram::builder()
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[1].0.clone(),
@@ -1372,7 +1372,7 @@ mod test {
                     .unwrap(),
             )
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[2].0.clone(),
@@ -1381,7 +1381,7 @@ mod test {
                     .unwrap(),
             )
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[3].0.clone(),
@@ -1390,7 +1390,7 @@ mod test {
                     .unwrap(),
             )
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[4].0.clone(),
@@ -1399,7 +1399,7 @@ mod test {
                     .unwrap(),
             )
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[6].0.clone(),
@@ -1408,7 +1408,7 @@ mod test {
                     .unwrap(),
             )
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[8].0.clone(),
@@ -1417,7 +1417,7 @@ mod test {
                     .unwrap(),
             )
             .import(
-                DSVFormat::csv()
+                DsvFormat::csv()
                     .try_into_import(
                         "".to_string(),
                         predicates[10].0.clone(),
