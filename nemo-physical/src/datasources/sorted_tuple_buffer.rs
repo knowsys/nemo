@@ -31,10 +31,7 @@ impl<'a> SortedTupleBuffer<'_> {
     }
 
     /// Returns an iterator of the sorted [`StorageValueT`] values of the n-th column in the [`SortedTableBuffer`]
-    pub fn get_column<'b>(
-        &'b self,
-        column_idx: usize,
-    ) -> impl Iterator<Item = StorageValueT> + 'b {
+    pub fn get_column<'b>(&'b self, column_idx: usize) -> impl Iterator<Item = StorageValueT> + 'b {
         self.tuple_order.iter().map(move |&tuple_idx| {
             self.tuple_buffer
                 .get_value(tuple_idx, column_idx)
