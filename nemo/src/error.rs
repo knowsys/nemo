@@ -5,8 +5,10 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::{
-    execution::selection_strategy::strategy::SelectionStrategyError, io::parser::LocatedParseError,
-    model::types::error::TypeError, program_analysis::analysis::RuleAnalysisError,
+    execution::selection_strategy::strategy::SelectionStrategyError,
+    io::{formats::types::FileFormatError, parser::LocatedParseError},
+    model::types::error::TypeError,
+    program_analysis::analysis::RuleAnalysisError,
 };
 
 pub use nemo_physical::error::ReadingError;
@@ -15,11 +17,6 @@ pub use nemo_physical::error::ReadingError;
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum Error {
-    /// Currently tracing doesn't work for all language features
-    #[error(
-        "Tracing is currently not supported for some rules with arithmetic operations in the head."
-    )]
-    TraceUnsupportedFeature(),
     /// Error which implies a needed Rollback
     #[error("Rollback due to csv-error")]
     Rollback(usize),
@@ -48,12 +45,12 @@ pub enum Error {
     #[error(transparent)]
     IO(#[from] std::io::Error),
     /// File exists and should not be overwritten
-    #[error("File \"{filename}\" exists and would be overwritten!\nConsider using the `--overwrite-results` option, setting a different `--output` directory, or deleting \"{filename}\".")]
+    #[error(r#"File "{path}" exists and would be overwritten!\nConsider using the `--overwrite-results` option, setting a different `--output` directory, or deleting "{path}"."#)]
     IOExists {
         /// Contains the wrapped error
         error: std::io::Error,
         /// Filename which caused the error
-        filename: PathBuf,
+        path: PathBuf,
     },
     /// Error during a Write operation
     #[error("Failed to write \"{filename}\": {error}")]
@@ -75,6 +72,15 @@ pub enum Error {
         /// The operation causing the failure
         operation: String,
     },
+    /// Error while serializing data to a file
+    #[error("Error while serializing data to {filename}.")]
+    SerializationError {
+        /// Name of the file where data could not have been serialized into
+        filename: String,
+    },
+    /// Error related to handling of file formats
+    #[error(transparent)]
+    FileFormatError(#[from] FileFormatError),
 }
 
 impl From<ReadingError> for Error {

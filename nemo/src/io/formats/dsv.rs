@@ -1,106 +1,37 @@
 //! Reading of delimiter-separated value files
-//!
-//! This module provides [`DSVReader`], a [`TableProvider`] that can parse DSV (delimiter-separated value) files.
-//! CSV does not specify how individual values are to be interpreted, and it has no type system, so we have to make
-//! some choices here. Our most general approach is to first try and process string values as RDF terms (written as
-//! in RDF formats like Turtle), and then to fall back to IRIs and (finally) strings. More specific approaches exist,
-//! e.g., for integers, doubles, and strings (which will use values verbatim as string contents, even when an RDF-like
-//! syntax was used).
-//!
-//! # Examples
-//! On the logical layer, the [`DSVReader`] is created.
-//! The following examples use this csv-file, which is representing a tuple with one string (logical any) and one number (logical integer) terms.
-//! ```csv
-//! Boston,654776
-//! Dresden,554649
-//! ```
-//! This file can be found in the current repository at `resources/doc/examples/city_population.csv`
-//! ## Logical layer
-//! ```
-//! # use nemo_physical::table_reader::TableReader;
-//! # use nemo::{model::{DsvFile, PrimitiveType, TypeConstraint}, io::{resource_providers::ResourceProviders, formats::DSVReader}};
-//! # let file_path = String::from("../resources/doc/examples/city_population.csv");
-//! let csv_reader = DSVReader::dsv(
-//!     ResourceProviders::default(),
-//!     &DsvFile::csv_file(
-//!         &file_path,
-//!         [PrimitiveType::Any, PrimitiveType::Integer]
-//!             .into_iter()
-//!             .map(TypeConstraint::AtLeast)
-//!             .collect(),
-//!     ),
-//!     vec![
-//!         PrimitiveType::Any,
-//!         PrimitiveType::Integer,
-//!     ],
-//! );
-//! // Pack the csv_reader into a [`TableReader`] trait object for the physical layer
-//! let table_reader: Box<dyn TableReader> = Box::new(csv_reader);
-//! ```
-//!
-//! The example first creates a [`DSVReader`] which uses a comma as its separator.
-//! It passes the reader to the physical layer as a [`TableReader`] object.
-//!
-//! ## Physical layer
-//! The physical layer receives `table_reader`, the [`TableReader`] trait object from the example above.
-//! ```
-//! # use nemo_physical::table_reader::TableReader;
-//! #
-//! # use nemo::{model::{DsvFile, PrimitiveType, TypeConstraint}, io::{resource_providers::ResourceProviders, formats::DSVReader}};
-//! # use std::cell::RefCell;
-//! # use nemo_physical::builder_proxy::{
-//! #    PhysicalBuilderProxyEnum, PhysicalColumnBuilderProxy, PhysicalStringColumnBuilderProxy
-//! # };
-//! # #[cfg(miri)]
-//! # fn main() {}
-//! # #[cfg(not(miri))]
-//! # fn main() {
-//! # let file_path = String::from("resources/doc/examples/city_population.csv");
-//! #
-//! # let csv_reader = DSVReader::dsv(
-//! #     ResourceProviders::default(),
-//! #     &DsvFile::csv_file(
-//! #         &file_path,
-//! #         [PrimitiveType::Any, PrimitiveType::Integer]
-//! #             .into_iter()
-//! #             .map(TypeConstraint::AtLeast)
-//! #             .collect(),
-//! #     ),
-//! #     vec![
-//! #         PrimitiveType::Any,
-//! #         PrimitiveType::Integer,
-//! #     ],
-//! # );
-//! # let table_reader:Box<dyn TableReader> = Box::new(csv_reader);
-//! # let mut dict = RefCell::new(nemo_physical::management::database::Dict::default());
-//! let mut builder = vec![
-//!     PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-//!     PhysicalBuilderProxyEnum::I64(Default::default()),
-//! ];
-//! // Read the data into the builder
-//! let result = table_reader.read_into_builder_proxies(&mut builder);
-//! let columns = builder.into_iter().map(|bp| bp.finalize()).collect::<Vec<_>>();
-//! # }
-//! ```
 
+use std::collections::HashSet;
 use std::io::{BufReader, Read};
 
-use csv::{Reader, ReaderBuilder};
+use csv::{Reader, ReaderBuilder, WriterBuilder};
+use thiserror::Error;
 
-use nemo_physical::datasources::{TableProvider, TableWriter};
-use nemo_physical::datavalues::{AnyDataValue, DataValueCreationError};
-use nemo_physical::table_reader::Resource;
 use oxiri::Iri;
 use rio_api::model::{Term, Triple};
 use rio_api::parser::TriplesParser;
 use rio_turtle::TurtleParser;
 
-use crate::io::formats::RDFTriplesReader;
-use crate::model::{DataSource, DsvFile, TupleConstraint, TypeConstraint};
+use nemo_physical::{
+    datasources::TableProvider,
+    datavalues::{AnyDataValue, DataValueCreationError},
+    table_reader::Resource,
+};
+
 use crate::{
-    io::parser::{parse_bare_name, span_from_str},
-    io::{formats::PROGRESS_NOTIFY_INCREMENT, resource_providers::ResourceProviders},
-    model::PrimitiveType,
+    error::Error,
+    io::{
+        formats::{
+            rdf::RDFReader,
+            types::{
+                Direction, ExportSpec, FileFormat, FileFormatError, FileFormatMeta,
+                ImportExportSpec, ImportSpec, TableWriter,
+            },
+            PROGRESS_NOTIFY_INCREMENT,
+        },
+        parser::{parse_bare_name, span_from_str},
+        resource_providers::ResourceProviders,
+    },
+    model::{Constant, Identifier, Key, Map, PrimitiveType, TupleConstraint, TypeConstraint},
 };
 
 type DataValueParserFunction = fn(String) -> Result<AnyDataValue, DataValueCreationError>;
@@ -116,8 +47,9 @@ type DataValueParserFunction = fn(String) -> Result<AnyDataValue, DataValueCreat
 /// Via the implementation of [`TableReader`] it fills the corresponding [`PhysicalBuilderProxys`][nemo_physical::builder_proxy::PhysicalBuilderProxyEnum]
 /// with the data from the file.
 /// It combines the logical and physical BuilderProxies to handle the read data according to both datatype models.
+/// TODO: Update documentation.
 #[derive(Debug)]
-pub struct DSVReader {
+pub(crate) struct DSVReader {
     resource_providers: ResourceProviders,
     resource: Resource,
     delimiter: u8,
@@ -127,13 +59,18 @@ pub struct DSVReader {
 
 impl DSVReader {
     /// Instantiate a [DSVReader] for a given delimiter
-    pub fn dsv(resource_providers: ResourceProviders, dsv_file: &DsvFile) -> Self {
+    pub fn new(
+        resource_providers: ResourceProviders,
+        resource: Resource,
+        delimiter: u8,
+        input_type_constraint: TupleConstraint,
+    ) -> Self {
         Self {
             resource_providers,
-            resource: dsv_file.resource.clone(),
-            delimiter: dsv_file.delimiter,
+            resource,
+            delimiter,
             escape: b'\\',
-            input_type_constraint: dsv_file.input_types(),
+            input_type_constraint,
         }
     }
 
@@ -196,7 +133,7 @@ impl DSVReader {
     /// If a field cannot be read or parsed, the line will be ignored
     fn read<R>(
         &self,
-        table_writer: &mut TableWriter,
+        table_writer: &mut nemo_physical::datasources::TupleBuffer,
         dsv_reader: &mut Reader<R>,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
@@ -213,7 +150,7 @@ impl DSVReader {
                     table_writer.next_value(dv);
                 } else {
                     drop_count += 1;
-                    table_writer.drop_current_row();
+                    table_writer.drop_current_tuple();
                     break;
                 }
             }
@@ -269,7 +206,7 @@ impl DSVReader {
                     // do not support blank nodes in CSV (continue processing)
                 }
                 Term::Literal(lit) => {
-                    result = Some(RDFTriplesReader::datavalue_from_literal(lit));
+                    result = Some(RDFReader::datavalue_from_literal(lit));
                 }
                 Term::Triple(_) => {
                     // do not support RDF* syntax in CSV (continue processing)
@@ -306,7 +243,7 @@ impl DSVReader {
 impl TableProvider for DSVReader {
     fn provide_table_data(
         self: Box<Self>,
-        table_writer: &mut TableWriter,
+        table_writer: &mut nemo_physical::datasources::TupleBuffer,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let reader = self
             .resource_providers
@@ -315,6 +252,268 @@ impl TableProvider for DSVReader {
         let mut dsv_reader = Self::dsv_reader(reader, self.delimiter, Some(self.escape));
 
         self.read(table_writer, &mut dsv_reader)
+    }
+}
+
+struct DSVWriter {
+    delimiter: u8,
+}
+
+impl TableWriter for DSVWriter {
+    fn write_record(
+        &mut self,
+        record: &[String],
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Error> {
+        Ok(WriterBuilder::new()
+            .delimiter(self.delimiter)
+            .from_writer(writer)
+            .write_record(record)?)
+    }
+}
+
+/// A file format for delimiter-separated values.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DSVFormat {
+    /// A concrete delimiter for this format.
+    delimiter: Option<u8>,
+}
+
+impl DSVFormat {
+    const DEFAULT_COLUMN_TYPE: PrimitiveType = PrimitiveType::String;
+
+    /// Construct a generic DSV file format, with the delimiter not
+    /// yet fixed.
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Construct a DSV file format with a fixed delimiter.
+    pub fn with_delimiter(delimiter: u8) -> Self {
+        Self {
+            delimiter: Some(delimiter),
+        }
+    }
+
+    /// Construct a CSV file format.
+    pub fn csv() -> Self {
+        Self::with_delimiter(b',')
+    }
+
+    /// Construct a TSV file format.
+    pub fn tsv() -> Self {
+        Self::with_delimiter(b'\t')
+    }
+
+    fn try_into_import_export(
+        mut self,
+        direction: Direction,
+        resource: Resource,
+        predicate: Identifier,
+        declared_types: TupleConstraint,
+    ) -> Result<ImportExportSpec, FileFormatError> {
+        let attributes = Map::singleton(
+            Key::identifier_from_str(RESOURCE),
+            Constant::StringLiteral(resource),
+        );
+        let constraint =
+            self.validated_and_refined_type_declaration(direction, &attributes, declared_types)?;
+
+        Ok(ImportExportSpec {
+            predicate,
+            constraint,
+            attributes,
+            format: Box::new(self),
+        })
+    }
+
+    /// Obtain an [ImportSpec] for this format.
+    pub fn try_into_import(
+        self,
+        resource: Resource,
+        predicate: Identifier,
+        declared_types: TupleConstraint,
+    ) -> Result<ImportSpec, FileFormatError> {
+        Ok(ImportSpec::from(self.try_into_import_export(
+            Direction::Reading,
+            resource,
+            predicate,
+            declared_types,
+        )?))
+    }
+
+    /// Obtain an [ExportSpec] for this format.
+    pub fn try_into_export(
+        self,
+        resource: Resource,
+        predicate: Identifier,
+        declared_types: TupleConstraint,
+    ) -> Result<ExportSpec, FileFormatError> {
+        Ok(ExportSpec::from(self.try_into_import_export(
+            Direction::Writing,
+            resource,
+            predicate,
+            declared_types,
+        )?))
+    }
+}
+
+use super::types::attributes::RESOURCE;
+const DELIMITER: &str = "delimiter";
+
+/// Errors related to DSV file format specifications.
+#[derive(Debug, Clone, Eq, PartialEq, Error)]
+pub enum DSVFormatError {
+    /// Delimiter should have a string literal as a value, but was
+    /// some other term.
+    #[error("Delimiter should be a string literal")]
+    InvalidDelimiterType(Constant),
+    /// Delimiter should consist of exactly one byte, but had a
+    /// different length.
+    #[error("Delimiter should be exactly one byte")]
+    InvalidDelimiterLength(Constant),
+    /// Path should have a string literal as a value, but was some
+    /// other term.
+    #[error("Resource should be a string literal or an IRI")]
+    InvalidResourceType(Constant),
+}
+
+impl From<DSVFormatError> for FileFormatError {
+    fn from(error: DSVFormatError) -> Self {
+        match &error {
+            DSVFormatError::InvalidDelimiterType(constant)
+            | DSVFormatError::InvalidDelimiterLength(constant) => Self::InvalidAttributeValue {
+                value: constant.clone(),
+                attribute: Key::identifier_from_str(DELIMITER),
+                description: error.to_string(),
+            },
+            DSVFormatError::InvalidResourceType(constant) => Self::InvalidAttributeValue {
+                value: constant.clone(),
+                attribute: Key::identifier_from_str(RESOURCE),
+                description: error.to_string(),
+            },
+        }
+    }
+}
+
+impl FileFormatMeta for DSVFormat {
+    fn file_format(&self) -> FileFormat {
+        match self.delimiter {
+            Some(b',') => FileFormat::CSV,
+            Some(b'\t') => FileFormat::TSV,
+            _ => FileFormat::DSV,
+        }
+    }
+
+    fn reader(
+        &self,
+        attributes: &Map,
+        declared_types: &TupleConstraint,
+        resource_providers: ResourceProviders,
+    ) -> Result<Box<dyn TableProvider>, Error> {
+        let resource = attributes
+            .pairs
+            .get(&Key::identifier_from_str(RESOURCE))
+            .expect("is a required attribute")
+            .as_resource()
+            .expect("must be a string or an IRI");
+
+        let delimiter = self.delimiter.unwrap_or_else(|| {
+            attributes
+                .pairs
+                .get(&Key::identifier_from_str(DELIMITER))
+                .expect("is a required attribute if the format has no default delimiter")
+                .as_string()
+                .expect("must be a string")
+                .as_bytes()[0]
+        });
+
+        Ok(Box::new(DSVReader::new(
+            resource_providers,
+            resource.to_string(),
+            delimiter,
+            declared_types.clone(),
+        )))
+    }
+
+    fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
+        Ok(Box::new(DSVWriter {
+            delimiter: self.delimiter.expect("is a required attribute"),
+        }))
+    }
+
+    fn resources(&self, attributes: &Map) -> Vec<Resource> {
+        vec![attributes
+            .pairs
+            .get(&Key::identifier_from_str(RESOURCE))
+            .expect("is a required attribute")
+            .as_resource()
+            .expect("must be a string or an IRI")
+            .to_string()]
+    }
+
+    fn optional_attributes(&self, _direction: Direction) -> HashSet<Key> {
+        [].into()
+    }
+
+    fn required_attributes(&self, _direction: Direction) -> HashSet<Key> {
+        let mut attributes = HashSet::new();
+
+        attributes.insert(RESOURCE);
+
+        if self.delimiter.is_none() {
+            attributes.insert(DELIMITER);
+        }
+
+        attributes
+            .into_iter()
+            .map(Key::identifier_from_str)
+            .collect()
+    }
+
+    fn validate_attribute_values(
+        &mut self,
+        _direction: Direction,
+        attributes: &Map,
+    ) -> Result<(), FileFormatError> {
+        if self.delimiter.is_none() {
+            let delimiter = attributes
+                .pairs
+                .get(&Key::identifier_from_str(DELIMITER))
+                .expect("is a required attribute");
+
+            if let Some(delim) = delimiter.as_string() {
+                if delim.len() != 1 {
+                    return Err(DSVFormatError::InvalidDelimiterLength(delimiter.clone()).into());
+                }
+
+                self.delimiter = Some(delim.as_bytes()[0]);
+            } else {
+                return Err(DSVFormatError::InvalidDelimiterType(delimiter.clone()).into());
+            }
+        }
+
+        let resource = attributes
+            .pairs
+            .get(&Key::identifier_from_str(RESOURCE))
+            .expect("is a required attribute");
+
+        if resource.as_resource().is_none() {
+            return Err(DSVFormatError::InvalidResourceType(resource.clone()).into());
+        }
+
+        Ok(())
+    }
+
+    fn validate_and_refine_type_declaration(
+        &mut self,
+        declared_types: TupleConstraint,
+    ) -> Result<TupleConstraint, FileFormatError> {
+        declared_types
+            .into_flat_primitive_with_default(Self::DEFAULT_COLUMN_TYPE)
+            .ok_or_else(|| FileFormatError::UnsupportedComplexTypes {
+                format: self.file_format(),
+            })
     }
 }
 
@@ -345,23 +544,19 @@ mod test {
             .delimiter(b';')
             .from_reader(data.as_bytes());
 
-        let reader = DSVReader::dsv(
+        let reader = DSVReader::new(
             ResourceProviders::empty(),
-            &DsvFile::csv_file(
-                "test",
-                [
-                    PrimitiveType::Any,
-                    PrimitiveType::String,
-                    PrimitiveType::Integer,
-                    PrimitiveType::Float64,
-                ]
-                .into_iter()
-                .map(TypeConstraint::AtLeast)
-                .collect(),
-            ),
+            "test".to_string(),
+            b',',
+            TupleConstraint::at_least([
+                PrimitiveType::Any,
+                PrimitiveType::String,
+                PrimitiveType::Integer,
+                PrimitiveType::Float64,
+            ]),
         );
         let dict = RefCell::new(Dict::default());
-        let mut table_writer = TableWriter::new(&dict, 4);
+        let mut table_writer = nemo_physical::datasources::TupleBuffer::new(&dict, 4);
         let result = reader.read(&mut table_writer, &mut rdr);
         assert!(result.is_ok());
         assert_eq!(table_writer.size(), 2);

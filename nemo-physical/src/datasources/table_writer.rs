@@ -1,4 +1,5 @@
-//! Module that allows callers to write data into columns of a database table.
+//! Module that allows callers to write tuples of data values into a buffer, which
+//! can later be turned into a database table.
 
 use crate::{
     datasources::SortedTupleBuffer,
@@ -10,49 +11,47 @@ use crate::{
 use std::cell::RefCell;
 use std::cmp::Ordering;
 
-/// Number of supported [`StorageTypeName`]s. See also [TableWriter::storage_type_idx].
+/// Number of supported [`StorageTypeName`]s. See also [`TupleBuffer::storage_type_idx`].
 const STORAGE_TYPE_COUNT: usize = 5;
 
 /// Record that stores column ids and [`StorageTypeName`]s for each
-/// colun in a table. This is used internally in [`TableWriter`].
+/// colun in a table. This is used internally in [`TupleBuffer`].
 #[derive(Debug)]
 struct TypedTableRecord {
     col_ids: Vec<usize>,
     col_types: Vec<StorageTypeName>,
 }
 
-/// The [`ColumnWriter`] is used to send the data of a single table column to the database. The interface
-/// allows values to be added one by one, and also provides some functionality for rolling back the last value,
-/// which is convenient when writing whole tuples
+/// The [`TupleBuffer`] is used to send the tuples of [`AnyDataValue`]s to the database, so that they
+/// can be turned into a table. The interface allows values to be added one by one, and also provides
+/// some roll-back functionality for dropping a previously started tuple in case of errors.
 #[derive(Debug)]
-pub struct TableWriter<'a> {
+pub struct TupleBuffer<'a> {
     /// Dictionary that will be used in encoding some kinds of values for which we have no native representation.
     dict: &'a RefCell<Dict>,
     /// Number of columns in the table.
     col_num: usize,
-    /// State of the current row. This is an internal buffer that will be written only when all columns have received a value.
+    /// State of the current tuple. This is an internal buffer that will be written only when all columns have received a value.
     cur_row: Vec<AnyDataValue>,
-    /// Current column in the current row that is to be filled next.
+    /// Current column in the current tuple that is to be filled next.
     cur_col_idx: usize,
-    /// Representation of the internal values of the current row, filled only on commit.
-    /// In particular, we do not make dictionary ids before really committing to a row.
+    /// Representation of the internal values of the current tuple, filled only on commit.
+    /// In particular, we do not make dictionary ids before really committing to a tuple.
     cur_row_storage_values: Vec<StorageValueT>,
 
     /// List of known typed tables
     tables: Vec<TypedTableRecord>,
-    /// Current size of tables (in same order as in [`TableWriter::tables`])
+    /// Current size of tables (in same order as in [`TupleBuffer::tables`])
     table_lengths: Vec<usize>,
     /// A linearlized trie data structure to find the table for a given list of column [`StorageTypeName`]s.
     /// The types correspond to numbers between `0` and [`STORAGE_TYPE_COUNT`]-1. The trie is a tree structure
     /// that has [`STORAGE_TYPE_COUNT`] branching degree but can be partial: a slice of length [`STORAGE_TYPE_COUNT`]
     /// can encode one inner node in the tree, where the usizes refer to the offset of the child node of the tree
     /// for each [`StorageTypeName`], or (on the last level) to the index of the respective [`TypedTableRecord`]
-    /// in [TableWriter::tables]+1. In each case, number `0` indicates that no child node/no table has been alocated yet
+    /// in [TupleBuffer::tables]+1. In each case, number `0` indicates that no child node/no table has been alocated yet
     /// for this type combination or partial path.
     table_trie: Vec<usize>,
 
-    // Vector of sorted (table_idx, row_idx) in [`TableWriter`].
-    order: Vec<usize>,
     /// List of all u64 value columns used across the tables.
     cols_u64: Vec<Vec<u64>>,
     /// List of all u32 value columns used across the tables.
@@ -65,11 +64,10 @@ pub struct TableWriter<'a> {
     cols_i64: Vec<Vec<i64>>,
 }
 
-impl<'a> TableWriter<'a> {
-    /// Construct a new [`TableWriter`]. This is public to allow
+impl<'a> TupleBuffer<'a> {
+    /// Construct a new [`TupleBuffer`]. This is public to allow
     /// downstream implementations of [`crate::datasources::TableProvider`] to
-    /// test their code.
-    /// TODO make this pub(super)
+    /// test their code. In normal operation, it will be provided by the database.
     pub fn new(dict: &'a RefCell<Dict>, column_count: usize) -> Self {
         let mut cur_row = Vec::with_capacity(column_count);
         let mut cur_row_storage_values = Vec::with_capacity(column_count);
@@ -88,7 +86,7 @@ impl<'a> TableWriter<'a> {
 
         let initial_capacity = 10;
 
-        TableWriter {
+        TupleBuffer {
             dict: dict,
             col_num: column_count,
             cur_row: cur_row,
@@ -97,7 +95,6 @@ impl<'a> TableWriter<'a> {
             tables: Vec::with_capacity(initial_capacity),
             table_lengths: Vec::with_capacity(initial_capacity),
             table_trie: table_trie,
-            order: Vec::new(),
             cols_u64: Vec::with_capacity(initial_capacity),
             cols_u32: Vec::with_capacity(initial_capacity),
             cols_floats: Vec::with_capacity(initial_capacity),
@@ -107,8 +104,7 @@ impl<'a> TableWriter<'a> {
     }
 
     /// Returns the number of columns on the table, i.e., the
-    /// number of values that need to be written to make one row.
-    /// TODO make this pub(super)
+    /// number of values that need to be written to make one tuple.
     pub fn column_number(&self) -> usize {
         self.col_num
     }
@@ -118,63 +114,51 @@ impl<'a> TableWriter<'a> {
         self.table_lengths.iter().sum()
     }
 
-    /// Provide the next value that is to be added to the table. Values are added in a row based
-    /// fashion. When the value for the last column was provided, the row is committed to the
-    /// table. Alternatively, a partially built row can be abandonded by calling
-    /// [`drop_current_row`](Column_Writer::drop_current_row).
+    /// Provide the next value for the current tuple. Values are added in in order.
+    /// When the value for the last column was provided, the tuple is committed to the
+    /// buffer. Alternatively, a partially built tuple can be abandonded by calling
+    /// [`drop_current_tuple`](TupleBuffer::drop_current_tuple).
     pub fn next_value(&mut self, value: AnyDataValue) {
         self.cur_row[self.cur_col_idx] = value;
         self.cur_col_idx += 1;
         if self.cur_col_idx >= self.col_num {
             self.cur_col_idx = 0;
-            self.write_row();
+            self.write_tuple();
         }
     }
 
-    /// Forget about any previously added values that have not formed a complete row yet,
-    /// and start a new row from the beginning.
-    pub fn drop_current_row(&mut self) {
+    /// Forget about any previously added values that have not formed a complete tuple yet,
+    /// and start a new tuple from the beginning.
+    pub fn drop_current_tuple(&mut self) {
         self.cur_col_idx = 0;
     }
 
-    /// Utility function to indicate the data loading process has ended, and to sort the data.
-    /// Following data insertions are ignored.
+    /// Function to indicate the data loading process has ended, and to sort the data.
     pub fn finalize(self) -> SortedTupleBuffer<'a> {
         let order = self.get_order();
         SortedTupleBuffer::new(self, order)
     }
 
-    /// Compare two rows bt types and values corresponding to their row indexes, according to the
+    /// Returns the order of tuples in the TupleBuffer
     fn get_order(&self) -> Vec<usize> {
         let mut order: Vec<usize> = (0..self.size()).collect();
         order.sort_by(|x, y| self.compare_rows(x, y));
         order
     }
 
-    /// Compare two rows bt types and values corresponding to their row indexes, according to the
-    /// internal order of rows, i.e., row indexes in the first table are maintained, but row
-    /// indexes in the second table start from table_lengths[0], and so on.
-    fn compare_rows(&self, first_row_idx: &usize, second_row_idx: &usize) -> Ordering {
+    /// Compare two tuples by types and values corresponding to their tuple indexes, according to
+    /// the internal order of tuples, i.e., tuple indexes in the first inner table are maintained,
+    /// and row indexes in the second table start from table_lengths[0], and so on.
+    fn compare_rows(&self, first_tuple_idx: &usize, second_tuple_idx: &usize) -> Ordering {
         assert!(true);
         for i in 0..self.col_num {
-            let first_storage_value = self.get_value(*first_row_idx, i).unwrap();
-            let second_storage_value = self.get_value(*second_row_idx, i).unwrap();
+            let first_storage_value = self.get_value(*first_tuple_idx, i).unwrap();
+            let second_storage_value = self.get_value(*second_tuple_idx, i).unwrap();
             if first_storage_value.cmp(&second_storage_value) != Ordering::Equal {
                 return first_storage_value.cmp(&second_storage_value);
             }
         }
         Ordering::Equal
-    }
-
-    /// Returns the values on the nth column in the [`TableWriter`] represented by an iterator of
-    /// [`StorageValueT`]s.
-    pub(super) fn get_column<'b>(
-        &'b self,
-        column_idx: &'b usize,
-    ) -> impl Iterator<Item = StorageValueT> + 'b {
-        self.order
-            .iter()
-            .map(|row_idx| self.get_value(*row_idx, *column_idx).unwrap())
     }
 
     /// Return the [`StorageValueT`] corresponding to the [`table_idx`], [`column_idx`], and [`row_idx`].
@@ -198,8 +182,8 @@ impl<'a> TableWriter<'a> {
         }
     }
 
-    /// Returns the value of the row number `val_index` (according to the internal
-    /// order of rows, not the insertion order) at position number `col_index`.
+    /// Returns the value of the tuple number `val_index` (according to the internal
+    /// order of tuples, not the insertion order) at position number `col_index`.
     /// None is returned if there are fewer values than `val_index`.
     pub(crate) fn get_value(&self, val_index: usize, col_index: usize) -> Option<StorageValueT> {
         let mut table_index = 0;
@@ -236,13 +220,13 @@ impl<'a> TableWriter<'a> {
         }
     }
 
-    /// Writes the current row to the stored columns.
-    fn write_row(&mut self) {
+    /// Writes the current tuple to the buffer.
+    fn write_tuple(&mut self) {
         for i in 0..self.col_num {
             self.cur_row_storage_values[i] = self.make_storage_value(i);
         }
 
-        let table_record_id: usize = self.find_current_row_table();
+        let table_record_id: usize = self.find_current_tuple_table();
         let table_record: &TypedTableRecord = &self.tables[table_record_id];
 
         for i in 0..self.col_num {
@@ -268,18 +252,18 @@ impl<'a> TableWriter<'a> {
     }
 
     /// Finds a [`TypedTableRecord`] for the types required by the current values of
-    /// [TableWriter::cur_row_storage_values], and creates a new one if required.
+    /// [`TupleBuffer::cur_row_storage_values`], and creates a new one if required.
     /// The function searches for the correct value in a prefix trie for the list of types,
     /// and updates this structure to capture the new value, if necessary.
-    /// Returns an index of [`TableWriter::tables`].
-    fn find_current_row_table(&mut self) -> usize {
+    /// Returns an index of [`TupleBuffer::tables`].
+    fn find_current_tuple_table(&mut self) -> usize {
         let mut table_trie_block: usize = 0;
         for i in 0..self.col_num {
             let cur_type_id = Self::storage_type_idx(self.cur_row_storage_values[i].get_type());
             let next_block = self.table_trie[table_trie_block + cur_type_id];
             if next_block == 0 {
                 // make new trie nodes and table record below current
-                return self.add_current_row_table_record(i, table_trie_block);
+                return self.add_current_tuple_table_record(i, table_trie_block);
             }
             table_trie_block = next_block;
         }
@@ -287,10 +271,10 @@ impl<'a> TableWriter<'a> {
     }
 
     /// Create and insert a new  [`TypedTableRecord`] for the types required by the current values of
-    /// [TableWriter::cur_row_storage_values]. The parameters specify the lowest level of the trie and
+    /// [`TupleBuffer::cur_row_storage_values`]. The parameters specify the lowest level of the trie and
     /// the location of the corresponding lowest existing trie node on the trie path that would be
     /// required for this record. All trie nodes below are newly initialised to complete the path.
-    fn add_current_row_table_record(
+    fn add_current_tuple_table_record(
         &mut self,
         last_trie_level: usize,
         last_trie_block: usize,
@@ -437,13 +421,13 @@ mod test {
 
     use crate::{datatypes::StorageValueT, datavalues::AnyDataValue, management::database::Dict};
 
-    use super::TableWriter;
+    use super::TupleBuffer;
 
     #[test]
     fn test_internal_table_structures() {
         let dict = Dict::new();
         let dict_ref = RefCell::new(dict);
-        let mut tw = TableWriter::new(&dict_ref, 3);
+        let mut tw = TupleBuffer::new(&dict_ref, 3);
 
         let v1 = AnyDataValue::new_string("a".to_string());
         let v2 = AnyDataValue::new_integer_from_i64(42);
@@ -499,7 +483,7 @@ mod test {
     fn test_column_iterator_one_col() {
         let dict = Dict::new();
         let dict_ref = RefCell::new(dict);
-        let mut tw = TableWriter::new(&dict_ref, 1);
+        let mut tw = TupleBuffer::new(&dict_ref, 1);
 
         let v1 = AnyDataValue::new_string("c".to_string()); // 0
         let v2 = AnyDataValue::new_string("a".to_string()); // 1
@@ -525,7 +509,7 @@ mod test {
     fn test_column_iterator_two_cols() {
         let dict = Dict::new();
         let dict_ref = RefCell::new(dict);
-        let mut tw = TableWriter::new(&dict_ref, 2);
+        let mut tw = TupleBuffer::new(&dict_ref, 2);
 
         let v1 = AnyDataValue::new_integer_from_i64(1);
         let v2 = AnyDataValue::new_integer_from_i64(2);

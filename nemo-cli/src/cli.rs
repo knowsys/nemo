@@ -1,7 +1,7 @@
 //! Contains structures and functionality for the binary
 use std::path::PathBuf;
 
-use nemo::{error::Error, io::OutputFileManager};
+use nemo::{error::Error, io::OutputManager};
 
 const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
 
@@ -79,7 +79,7 @@ pub struct OutputArgs {
 
 impl OutputArgs {
     /// Creates an output file manager with the current options
-    pub fn initialize_output_manager(self) -> Result<Option<OutputFileManager>, Error> {
+    pub fn initialize_output_manager(self) -> Result<Option<OutputManager>, Error> {
         if !self.save_results {
             if self.output_directory != PathBuf::from(DEFAULT_OUTPUT_DIRECTORY) {
                 log::warn!(
@@ -98,12 +98,30 @@ impl OutputArgs {
             return Ok(None);
         }
 
-        Ok(Some(OutputFileManager::try_new(
-            self.output_directory,
-            self.overwrite,
-            self.gz,
-        )?))
+        let mut output_manager = OutputManager::builder(self.output_directory)?;
+
+        if self.overwrite {
+            output_manager = output_manager.overwrite();
+        }
+
+        if self.gz {
+            output_manager = output_manager.gzip();
+        }
+
+        Ok(Some(output_manager.build()))
     }
+}
+
+/// Cli arguments related to tracing
+#[derive(Debug, clap::Args)]
+pub struct TracingArgs {
+    /// Specify a fact or multiple semicolon separated facts, the origin of which should be explained
+    #[arg(long = "trace", value_delimiter = ';')]
+    pub traced_facts: Option<Vec<String>>,
+    /// Specify a file to save the trace.
+    /// (Only relevant if --trace is set.)
+    #[arg(long = "trace-output", requires = "traced_facts")]
+    pub output_file: Option<PathBuf>,
 }
 
 /// Nemo CLI
@@ -135,7 +153,7 @@ pub struct CliApp {
     /// Specify directory for input files.
     #[arg(short = 'I', long = "input-dir")]
     pub input_directory: Option<PathBuf>,
-    /// Specify a fact, the origin of which should be explained
-    #[arg(long = "trace")]
-    pub trace_fact: Option<String>,
+    /// Arguments related to tracing
+    #[command(flatten)]
+    pub tracing: TracingArgs,
 }

@@ -92,7 +92,7 @@ pub(super) fn compute_constraints(
 pub(super) fn subplan_union(
     plan: &mut ExecutionPlan,
     manager: &TableManager,
-    predicate: Identifier,
+    predicate: &Identifier,
     steps: &Range<usize>,
 ) -> ExecutionNodeRef {
     let base_tables: Vec<TableId> = manager.tables_in_range(predicate, steps);
@@ -110,7 +110,7 @@ pub(super) fn subplan_union(
 pub(super) fn subplan_union_reordered(
     plan: &mut ExecutionPlan,
     manager: &TableManager,
-    predicate: Identifier,
+    predicate: &Identifier,
     steps: &Range<usize>,
     column_order: ColumnOrder,
 ) -> ExecutionNodeRef {

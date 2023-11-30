@@ -105,7 +105,7 @@ impl NegationGenerator {
                 let node_union = subplan_union_reordered(
                     plan.plan_mut(),
                     table_manager,
-                    a.predicate(),
+                    &a.predicate(),
                     &(0..current_step_number),
                     info.reorder,
                 );

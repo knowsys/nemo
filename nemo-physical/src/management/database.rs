@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display};
 use bytesize::ByteSize;
 
 use crate::builder_proxy::{PhysicalBuilderProxyEnum, PhysicalStringColumnBuilderProxy};
-use crate::datasources::{TableProvider, TableWriter};
+use crate::datasources::{TableProvider, TupleBuffer};
 use crate::datatypes::data_value::DataValueIteratorT;
 use crate::datatypes::storage_value::{StorageValueIteratorT, VecT};
 use crate::datatypes::{DataTypeName, DataValueT, StorageValueT};
@@ -139,7 +139,7 @@ impl TableStorage {
                     // The following line was disabled to avoid consuming reader here
                     // reader.read_into_builder_proxies(&mut builder_proxies)?;
 
-                    let mut table_writer = TableWriter::new(dict, schema.arity());
+                    let mut table_writer = TupleBuffer::new(dict, schema.arity());
                     // TODO: handle error intead of doing the let _
                     let _ = reader.provide_table_data(&mut table_writer);
 

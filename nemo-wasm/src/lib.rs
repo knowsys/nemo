@@ -16,8 +16,7 @@ use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo::model::types::primitive_logical_value::PrimitiveLogicalValueT;
 use nemo::model::Constant;
-use nemo::model::DataSource;
-use nemo::model::DataSourceDeclaration;
+use nemo::model::Identifier;
 use nemo::model::NumericLiteral;
 use nemo_physical::datatypes::Double;
 use nemo_physical::error::ExternalReadingError;
@@ -66,15 +65,21 @@ impl NemoProgram {
             .map_err(NemoError)
     }
 
-    #[wasm_bindgen(js_name = "getSourceResources")]
-    pub fn source_resources(&self) -> Set {
-        let set = Set::new(&JsValue::undefined());
+    /// Get all resources that are referenced in import directives of the program
+    #[wasm_bindgen(js_name = "getResourcesUsedInImports")]
+    pub fn resources_used_in_imports(&self) -> Set {
+        let js_set = Set::new(&JsValue::undefined());
 
-        for resource in self.0.sources().flat_map(DataSourceDeclaration::resources) {
-            set.add(&JsValue::from(resource));
+        for resource in self
+            .0
+            .imports()
+            .flat_map(nemo::io::formats::types::ImportSpec::resources)
+            .map(JsValue::from)
+        {
+            js_set.add(&resource);
         }
 
-        set
+        js_set
     }
 
     #[wasm_bindgen(js_name = "getOutputPredicates")]
@@ -87,13 +92,13 @@ impl NemoProgram {
 
     #[wasm_bindgen(js_name = "getEDBPredicates")]
     pub fn edb_predicates(&self) -> Set {
-        let set = Set::new(&JsValue::undefined());
+        let js_set = Set::new(&JsValue::undefined());
 
         for identifier in self.0.edb_predicates().into_iter() {
-            set.add(&JsValue::from(identifier.name()));
+            js_set.add(&JsValue::from(identifier.name()));
         }
 
-        set
+        js_set
     }
 }
 
@@ -255,7 +260,7 @@ impl NemoEngine {
     pub fn result(&mut self, predicate: String) -> Result<NemoResults, NemoError> {
         let iter = self
             .0
-            .table_scan(predicate.into())
+            .table_scan(&Identifier::from(predicate))
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
 
@@ -273,27 +278,33 @@ impl NemoEngine {
         predicate: String,
         sync_access_handle: web_sys::FileSystemSyncAccessHandle,
     ) -> Result<(), NemoError> {
-        use nemo::io::{output_file_manager::FileFormat, RecordWriter};
+        use nemo::{io::OutputManager, model::Identifier};
+
+        let identifier = Identifier::from(predicate.clone());
+        let types = self
+            .0
+            .predicate_type(&identifier)
+            .expect("predicate should have a type");
 
         let Some(record_iter) = self
             .0
-            .output_serialization(predicate.into())
+            .output_serialization(&identifier)
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?
         else {
             return Ok(());
         };
 
-        let writer = SyncAccessHandleWriter(sync_access_handle);
+        let mut writer = SyncAccessHandleWriter(sync_access_handle);
 
-        let file_format = FileFormat::DSV(b',');
+        let export_spec = OutputManager::default_export_spec(identifier, types)
+            .map_err(WasmOrInternalNemoError::NemoError)
+            .map_err(NemoError)?;
 
-        let mut writer = file_format.create_writer(writer);
-
-        for record in record_iter {
-            writer.write_record(record).unwrap();
-        }
-        Ok(())
+        export_spec
+            .write_table(record_iter, &mut writer)
+            .map_err(WasmOrInternalNemoError::NemoError)
+            .map_err(NemoError)
     }
 
     #[wasm_bindgen(js_name = "parseAndTraceFact")]
@@ -302,13 +313,13 @@ impl NemoEngine {
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
 
-        let trace = self
+        let (trace, handles) = self
             .0
-            .trace(parsed_fact)
+            .trace(vec![parsed_fact])
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
 
-        Ok(trace.map(|t| format!("{t}")))
+        Ok(trace.ascii_tree_string(handles[0]))
     }
 }
 
@@ -343,6 +354,7 @@ impl NemoResults {
                         Constant::NumericLiteral(_) => JsValue::from(rdf.to_string()),
                         Constant::StringLiteral(s) => JsValue::from(s),
                         Constant::RdfLiteral(lit) => JsValue::from(lit.to_string()),
+                        Constant::MapLiteral(_map) => todo!("maps are not yet supported"),
                     },
                     PrimitiveLogicalValueT::String(s) => JsValue::from(String::from(s)),
                     PrimitiveLogicalValueT::Integer(i) => JsValue::from(i64::from(i)),

@@ -19,11 +19,11 @@ pub fn benchmark_output(c: &mut Criterion) {
 
     let physical_strings = strings
         .iter()
-        .map(|s| PhysicalString::from(format!("STRING:{s}")))
+        .map(|s| PhysicalString::from(format!("ST:{s}")))
         .collect::<Vec<_>>();
     let physical_constants = strings
         .iter()
-        .map(|s| PhysicalString::from(format!("CONSTANT:{s}")))
+        .map(|s| PhysicalString::from(format!("CO:{s}")))
         .collect::<Vec<_>>();
 
     let mut physical_output = c.benchmark_group("output_physical_values");

@@ -20,7 +20,7 @@
 
 pub mod cli;
 
-use std::fs::read_to_string;
+use std::fs::{read_to_string, File};
 
 use clap::Parser;
 use cli::CliApp;
@@ -31,7 +31,6 @@ use nemo::{
     io::{
         parser::{parse_fact, parse_program},
         resource_providers::ResourceProviders,
-        RecordWriter,
     },
     meta::{timing::TimedDisplay, TimedCode},
     model::OutputPredicateSelection,
@@ -117,7 +116,18 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     log::info!("Rules parsed");
     log::trace!("{:?}", program);
 
-    let parsed_fact = cli.trace_fact.map(parse_fact).transpose()?;
+    for atom in program.rules().iter().flat_map(|rule| rule.head()) {
+        if atom.aggregates().next().is_some() {
+            log::warn!("Program is using the experimental aggregates feature and currently depends on the internally chosen variable orders for predicates.",);
+            break;
+        }
+    }
+
+    let parsed_facts = cli
+        .tracing
+        .traced_facts
+        .map(|f| f.into_iter().map(parse_fact).collect::<Result<Vec<_>, _>>())
+        .transpose()?;
 
     if cli.write_all_idb_predicates {
         program.force_output_predicate_selection(OutputPredicateSelection::AllIDBPredicates)
@@ -125,14 +135,14 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     let output_manager = cli.output.initialize_output_manager()?;
 
-    if let Some(output_manager) = &output_manager {
-        output_manager.prevent_accidental_overwrite(program.output_predicates())?;
-    }
-
     let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(
         program,
         ResourceProviders::with_base_path(cli.input_directory),
     )?;
+
+    if let Some(output_manager) = &output_manager {
+        output_manager.check_for_forgotten_overwrite_flag(engine.output_predicates())?;
+    }
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
     TimedCode::instance().sub("Reasoning").start();
@@ -151,15 +161,16 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
             .start();
         log::info!("writing output");
 
-        for predicate in engine.program().output_predicates() {
-            let mut writer = output_manager.create_file_writer(&predicate)?;
+        // we need to collect here, since this will borrow `engine`,
+        // and `output_serialization` requires a mutable borrow on
+        // `engine`.
+        let export_specs = engine.output_predicates().collect::<Vec<_>>();
 
-            let Some(record_iter) = engine.output_serialization(predicate)? else {
-                continue;
-            };
-            for record in record_iter {
-                writer.write_record(record)?;
-            }
+        for export_spec in export_specs {
+            output_manager.export_table(
+                &export_spec,
+                engine.output_serialization(export_spec.predicate())?,
+            )?;
         }
 
         TimedCode::instance()
@@ -192,11 +203,28 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         println!("\n{}", engine.memory_usage());
     }
 
-    if let Some(fact) = parsed_fact {
-        if let Some(trace) = engine.trace(fact.clone())? {
-            println!("\n{trace}");
-        } else {
-            println!("{fact} was not derived");
+    if let Some(facts) = parsed_facts {
+        let (trace, handles) = engine.trace(facts.clone())?;
+
+        match cli.tracing.output_file {
+            Some(output_file) => {
+                let filename = output_file.to_string_lossy().to_string();
+                let trace_json = trace.json(&handles);
+
+                let mut json_file = File::create(output_file)?;
+                if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
+                    return Err(Error::SerializationError { filename });
+                }
+            }
+            None => {
+                for (fact, handle) in facts.into_iter().zip(handles) {
+                    if let Some(tree) = trace.ascii_tree_string(handle) {
+                        println!("\n{}", tree);
+                    } else {
+                        println!("\n{fact} was not derived");
+                    }
+                }
+            }
         }
     }
 

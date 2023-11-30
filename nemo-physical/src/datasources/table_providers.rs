@@ -3,13 +3,14 @@
 
 use std::error::Error;
 
-use super::TableWriter;
+use super::TupleBuffer;
 
-/// TODO: this is the new TableReader, and the interface will be similar but using ColumnWriters
+/// This trait is implemented by code that can provide data in the form of a list of tuples, 
+/// which are unordered and possibly contain duplicates.
 pub trait TableProvider: std::fmt::Debug {
     /// Provide table data by adding values to a [`TableWriter`].
     fn provide_table_data(
         self: Box<Self>,
-        table_writer: &mut TableWriter,
+        tuple_buffer: &mut TupleBuffer,
     ) -> Result<(), Box<dyn Error>>;
 }

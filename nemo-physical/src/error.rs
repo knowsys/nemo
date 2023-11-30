@@ -65,6 +65,9 @@ pub enum ReadingError {
     /// Reading error caused by a library which extends nemo
     #[error("Reading error caused by a external library extending Nemo: {0}")]
     ExternalReadingError(Box<dyn ExternalReadingError>),
+    /// Unable to determine RDF format.
+    #[error("Could not determine which RDF parser to use for resource {0}")]
+    UnknownRDFFormatVariant(Resource),
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate
