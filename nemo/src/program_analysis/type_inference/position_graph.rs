@@ -151,23 +151,22 @@ impl PositionGraph {
             }
 
             for constructor in rule.constructors() {
-                // Note that the head variable for constructors is unique so we can get the first entry of this vector
                 for head_position in variables_to_head_positions
                     .get(constructor.variable())
-                    .expect("The loop at the top went through all head atoms")
+                    .unwrap_or(&vec![])
                 {
                     for term in constructor.term().primitive_terms() {
                         if let PrimitiveTerm::Variable(body_variable) = term {
-                            let body_position = variables_to_last_node
-                                .get(body_variable)
-                                .expect("The iteration above went through all body atoms")
-                                .clone();
+                            let body_position_opt =
+                                variables_to_last_node.get(body_variable).cloned();
 
-                            graph.add_edge(
-                                body_position,
-                                head_position.clone(),
-                                PositionGraphEdge::BodyToHeadSameVariable,
-                            );
+                            if let Some(body_position) = body_position_opt {
+                                graph.add_edge(
+                                    body_position,
+                                    head_position.clone(),
+                                    PositionGraphEdge::BodyToHeadSameVariable,
+                                );
+                            }
                         }
                     }
                 }
