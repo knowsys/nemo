@@ -5,18 +5,20 @@ use std::{debug_assert, iter};
 
 use bytesize::ByteSize;
 
+use crate::columnar::column_builders::columnbuilder::ColumnBuilder;
+use crate::columnar::column_builders::columnbuilder_adaptive::{
+    ColumnBuilderAdaptive, ColumnBuilderAdaptiveT,
+};
 use crate::columnar::column_operations::{ColumnScanCast, ColumnScanCastEnum};
 use crate::columnar::column_storage::column::Column;
 use crate::columnar::column_storage::columnscan::{
     ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT,
 };
 use crate::columnar::column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
-use crate::columnar::traits::columnbuilder::ColumnBuilder;
 use crate::datatypes::storage_value::StorageValueIteratorT;
 use crate::generate_cast_statements;
 use crate::permutator::Permutator;
 
-use crate::columnar::adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT};
 use crate::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
 use crate::dictionary::value_serializer::{StorageValueMapping, TrieSerializer};
 use crate::dictionary::ValueSerializer;

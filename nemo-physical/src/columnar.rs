@@ -1,8 +1,7 @@
-//! This module collects data structures and operations on individual columns.
+//! This module defines the main column data structures
+//! and operations to construct and iterate over columns,
+//! as well as perform computations on single columns.
 
-/// Module for defining various column builders and adaptive variants.
-pub mod adaptive_column_builder;
-
+pub mod column_builders;
 pub mod column_operations;
 pub mod column_storage;
-pub mod traits;

@@ -1,8 +1,10 @@
+//! This module defines the [ColumnBuilder] trait.
+
 use std::fmt::Debug;
 
 use crate::columnar::column_storage::column::Column;
 
-/// Type for constructing columns.
+/// Trait for builders of columns.
 pub trait ColumnBuilder<'a, T>: Debug {
     /// Column Type that is produced by builder
     type Col: Column<'a, T>;

@@ -328,18 +328,26 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanJoin;
-    use crate::columnar::adaptive_column_builder::ColumnBuilderAdaptive;
-    use crate::columnar::column_storage::column::{Column, ColumnEnum};
-    use crate::columnar::column_storage::column_vector::ColumnVector;
-    use crate::columnar::column_storage::columnscan::ColumnScanT;
-    use crate::columnar::column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
-    use crate::columnar::traits::columnbuilder::ColumnBuilder;
-    use crate::tabular::operations::triescan_join::JoinBindings;
-    use crate::tabular::operations::{materialize, TrieScanPrune};
-    use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
-    use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};
 
-    use crate::util::test_util::make_column_with_intervals_t;
+    use crate::{
+        columnar::{
+            column_builders::{
+                columnbuilder::ColumnBuilder, columnbuilder_adaptive::ColumnBuilderAdaptive,
+            },
+            column_storage::{
+                column::{Column, ColumnEnum},
+                column_vector::ColumnVector,
+                columnscan::ColumnScanT,
+                interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+            },
+        },
+        tabular::{
+            operations::{materialize, JoinBindings, TrieScanPrune},
+            table_types::trie::{Trie, TrieScanGeneric},
+            traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
+        },
+        util::test_util::make_column_with_intervals_t,
+    };
     use test_log::test;
 
     fn join_next(join_scan: &mut TrieScanJoin) -> Option<u64> {

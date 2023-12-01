@@ -2,8 +2,8 @@
 
 use crate::{
     columnar::{
+        column_builders::columnbuilder::ColumnBuilder,
         column_storage::column::{Column, ColumnEnum, ColumnT},
-        traits::columnbuilder::ColumnBuilder,
     },
     datatypes::{ColumnDataType, StorageTypeName, StorageValueT},
 };
@@ -281,7 +281,7 @@ mod test {
     use super::*;
     use crate::{
         columnar::{
-            adaptive_column_builder::ColumnBuilderAdaptive,
+            column_builders::columnbuilder_adaptive::ColumnBuilderAdaptive,
             column_storage::column_vector::ColumnVector,
         },
         datatypes::{Double, Float},

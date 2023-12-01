@@ -1,7 +1,7 @@
 use crate::{
-    columnar::{
-        adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
-        traits::columnbuilder::ColumnBuilder,
+    columnar::column_builders::{
+        columnbuilder::ColumnBuilder,
+        columnbuilder_adaptive::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
     },
     datatypes::{StorageTypeName, StorageValueT},
     tabular::{

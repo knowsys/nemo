@@ -1,13 +1,20 @@
-use crate::datatypes::{
-    ColumnDataType, Double, Float, RunLengthEncodable, StorageTypeName, StorageValueT,
+//! This module defines an adaptive column builder,
+//! which dynamically chooses the most efficient representation
+//! for the constructed column.
+
+use crate::{
+    columnar::column_storage::{
+        column::{Column, ColumnEnum},
+        column_vector::ColumnVector,
+        interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+    },
+    datatypes::{
+        ColumnDataType, Double, Float, RunLengthEncodable, StorageTypeName, StorageValueT,
+    },
 };
 use std::fmt::Debug;
 
-use super::column_storage::column::{Column, ColumnEnum};
-use super::column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
-use super::column_storage::{column_rle::ColumnBuilderRle, column_vector::ColumnVector};
-
-use super::traits::columnbuilder::ColumnBuilder;
+use super::{columnbuilder::ColumnBuilder, columnbuilder_rle::ColumnBuilderRle};
 
 /// Number of rle elements in rle column builder after which to decide which column type to use.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -320,8 +327,8 @@ mod test {
     use super::ColumnBuilderAdaptive;
     use crate::{
         columnar::{
+            column_builders::columnbuilder::ColumnBuilder,
             column_storage::column::{Column, ColumnEnum},
-            traits::columnbuilder::ColumnBuilder,
         },
         datatypes::{Double, Float},
     };
