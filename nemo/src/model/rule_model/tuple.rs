@@ -45,7 +45,7 @@ impl std::fmt::Display for Tuple {
         f.write_str(
             &self
                 .iter()
-                .map(|x| ToString::to_string(x))
+                .map(ToString::to_string)
                 .by_ref()
                 .intersperse(", ".into())
                 .collect::<String>(),
