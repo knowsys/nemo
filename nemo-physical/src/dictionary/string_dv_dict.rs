@@ -152,18 +152,17 @@ impl DvConverter for LangStringDvConverter {
     fn dict_string(dv: &AnyDataValue) -> Option<String> {
         match dv {
             AnyDataValue::LanguageTaggedString(lsdv) => {
-                let (string,lang) = lsdv.to_language_tagged_string_unchecked();
+                let (string, lang) = lsdv.to_language_tagged_string_unchecked();
                 Some(two_strings_to_one(string.as_str(), lang.as_str()))
-            },
+            }
             _ => None,
         }
     }
 
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
-        one_string_to_two(string).map(|(value, language)| {
-            AnyDataValue::new_language_tagged_string(value, language)
-        })
+        one_string_to_two(string)
+            .map(|(value, language)| AnyDataValue::new_language_tagged_string(value, language))
     }
 }
 
@@ -242,7 +241,7 @@ mod test {
         dictionary::{AddResult, DvDict, KNOWN_ID_MARK},
     };
 
-    use super::{IriDvDictionary, OtherDvDictionary, StringDvDictionary, LangStringDvDictionary};
+    use super::{IriDvDictionary, LangStringDvDictionary, OtherDvDictionary, StringDvDictionary};
 
     #[test]
     fn string_dict_add_and_mark() {
@@ -347,7 +346,6 @@ mod test {
         assert_eq!(dict.len(), 2);
     }
 
-
     #[test]
     fn langstring_dict_add_and_mark() {
         let mut dict = LangStringDvDictionary::new();
@@ -361,14 +359,9 @@ mod test {
             result
         }
 
-        let dv1 = AnyDataValue::new_language_tagged_string(
-            "Hallo".to_string(),
-            "de".to_string(),
-        );
-        let dv2 = AnyDataValue::new_language_tagged_string(
-            "hello".to_string(),
-            "en-GB".to_string(),
-        );
+        let dv1 = AnyDataValue::new_language_tagged_string("Hallo".to_string(), "de".to_string());
+        let dv2 =
+            AnyDataValue::new_language_tagged_string("hello".to_string(), "en-GB".to_string());
         let dv3 = AnyDataValue::new_language_tagged_string(
             "string witt < and > and \\".to_string(),
             "verylonglanguage-".to_string() + long_string().as_str(),

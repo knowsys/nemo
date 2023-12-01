@@ -16,10 +16,10 @@ pub mod string_dictionary;
 pub(crate) use string_dictionary::StringDictionary;
 /// Module to define string-based datavalue dictionaries.
 pub mod string_dv_dict;
-pub(crate) use string_dv_dict::StringDvDictionary;
 pub(crate) use string_dv_dict::IriDvDictionary;
-pub(crate) use string_dv_dict::OtherDvDictionary;
 pub(crate) use string_dv_dict::LangStringDvDictionary;
+pub(crate) use string_dv_dict::OtherDvDictionary;
+pub(crate) use string_dv_dict::StringDvDictionary;
 /// Module to define a general-purpose datavalue dictionary.
 pub mod meta_dv_dict;
 

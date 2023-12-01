@@ -1,5 +1,5 @@
 use crate::datavalues::ValueDomain;
-use crate::datavalues::{DataValue,AnyDataValue};
+use crate::datavalues::{AnyDataValue, DataValue};
 
 use super::AddResult;
 use super::DvDict;
@@ -107,7 +107,7 @@ enum DictionaryType {
 impl DictionaryType {
     /// Returns true if the given value is supported by a dictionary of this type.
     fn supports(&self, dv: &AnyDataValue) -> bool {
-        match (self,dv.value_domain()) {
+        match (self, dv.value_domain()) {
             (DictionaryType::IriDv, ValueDomain::Iri) => true,
             (DictionaryType::StringDv, ValueDomain::String) => true,
             (DictionaryType::LangStringDv, ValueDomain::LanguageTaggedString) => true,
@@ -131,16 +131,16 @@ pub struct DictRecord {
 /// Iterator-like struct for cycling over suitable dictionaries for some datavalue.
 /// This defines the preferred order in which dictionaries are considered in cases
 /// where multiple sub-dictionaries could be used for a value.
-/// 
+///
 /// TODO: This iterator might also become the place where we cache information about possible
 /// prefix/infix/suffix splits for further processing.
 struct DictIterator {
     /// Internal encoding of a "position" in a single value.
-    /// 
+    ///
     /// It is interpreted as follows: 0 is the initial state ("before" any value),
     /// 1 is the "fitting infix dictionary" (if any, only relevant for IRIs),
     /// 2 is the "default dictionary" (if any, only relevant for some types),
-    /// numbers from 2 on refer to generic dictionaries in their order (i.e., the index is number-3). 
+    /// numbers from 2 on refer to generic dictionaries in their order (i.e., the index is number-3).
     position: usize,
 }
 
@@ -151,20 +151,20 @@ impl DictIterator {
     }
 
     /// Advance iterator, and return the id of the next dictionary, or
-    /// [`NO_DICT`] if no further matching dictionaries exist. 
+    /// [`NO_DICT`] if no further matching dictionaries exist.
     fn next(&mut self, dv: &AnyDataValue, md: &MetaDictionary) -> usize {
         // First look for infix dictionary:
         if self.position == 0 {
             self.position = 1; // move on, whatever happens
-            // TODO: disabled, currently no infix dictionary support
-            // if ds.infixable() {
-            //     if let Some(dict_idx) = md
-            //         .infix_dicts
-            //         .get::<dyn StringPairKey>(&(ds.prefix(), ds.suffix()))
-            //     {
-            //         return *dict_idx;
-            //     }
-            // }
+                               // TODO: disabled, currently no infix dictionary support
+                               // if ds.infixable() {
+                               //     if let Some(dict_idx) = md
+                               //         .infix_dicts
+                               //         .get::<dyn StringPairKey>(&(ds.prefix(), ds.suffix()))
+                               //     {
+                               //         return *dict_idx;
+                               //     }
+                               // }
         }
 
         if self.position == 1 {
@@ -329,35 +329,42 @@ impl MetaDictionary {
         let dict: Box<dyn DvDict>;
         match dt {
             DictionaryType::StringDv => {
-                if self.string_dict != NO_DICT { return; }
+                if self.string_dict != NO_DICT {
+                    return;
+                }
                 dict = Box::new(StringDvDictionary::new());
                 self.string_dict = self.dicts.len();
             }
             DictionaryType::LangStringDv => {
-                if self.langstring_dict != NO_DICT { return; }
+                if self.langstring_dict != NO_DICT {
+                    return;
+                }
                 dict = Box::new(LangStringDvDictionary::new());
                 self.langstring_dict = self.dicts.len();
             }
             DictionaryType::IriDv => {
-                if self.iri_dict != NO_DICT { return; }
+                if self.iri_dict != NO_DICT {
+                    return;
+                }
                 dict = Box::new(IriDvDictionary::new());
                 self.iri_dict = self.dicts.len();
             }
             DictionaryType::OtherDv => {
-                if self.other_dict != NO_DICT { return; }
+                if self.other_dict != NO_DICT {
+                    return;
+                }
                 dict = Box::new(OtherDvDictionary::new());
                 self.other_dict = self.dicts.len();
-            }
-            // DictionaryType::Infix {
-            //     ref prefix,
-            //     ref suffix,
-            // } => {
-            //     dict = Box::new(InfixDictionary::new(prefix.to_string(), suffix.to_string()));
-            //     self.infix_dicts.insert(
-            //         StringPair::new(prefix.to_string(), suffix.to_string()),
-            //         self.dicts.len(),
-            //     );
-            // }
+            } // DictionaryType::Infix {
+              //     ref prefix,
+              //     ref suffix,
+              // } => {
+              //     dict = Box::new(InfixDictionary::new(prefix.to_string(), suffix.to_string()));
+              //     self.infix_dicts.insert(
+              //         StringPair::new(prefix.to_string(), suffix.to_string()),
+              //         self.dicts.len(),
+              //     );
+              // }
         }
         let dr = DictRecord {
             dict,
@@ -382,10 +389,7 @@ impl MetaDictionary {
             if best_dict_idx == usize::MAX {
                 best_dict_idx = dict_idx;
             }
-            if let Some(idx) = self.dicts[dict_idx]
-                .dict
-                .datavalue_to_id(&dv)
-            {
+            if let Some(idx) = self.dicts[dict_idx].dict.datavalue_to_id(&dv) {
                 if idx != super::KNOWN_ID_MARK {
                     return AddResult::Known(self.local_to_global_unchecked(dict_idx, idx));
                 } // else: marked, continue search for real id
@@ -452,10 +456,7 @@ impl MetaDictionary {
 
         // Add entry to preferred dictionary
         self.size += 1;
-        let local_id = self.dicts[best_dict_idx]
-            .dict
-            .add_datavalue(dv)
-            .value();
+        let local_id = self.dicts[best_dict_idx].dict.add_datavalue(dv).value();
         // Compute global id based on block and local id, possibly allocating new block in the process
         AddResult::Fresh(self.local_to_global(best_dict_idx, local_id))
     }
@@ -490,7 +491,9 @@ impl DvDict for MetaDictionary {
         }
         let (dict_id, lblock) = self.dictblocks[gblock];
 
-        self.dicts[dict_id].dict.id_to_datavalue((lblock >> BLOCKSIZE) + offset)
+        self.dicts[dict_id]
+            .dict
+            .id_to_datavalue((lblock >> BLOCKSIZE) + offset)
     }
 
     fn len(&self) -> usize {
@@ -515,7 +518,10 @@ impl DvDict for MetaDictionary {
 
 #[cfg(test)]
 mod test {
-    use crate::{datavalues::AnyDataValue, dictionary::{DvDict, AddResult}};
+    use crate::{
+        datavalues::AnyDataValue,
+        dictionary::{AddResult, DvDict},
+    };
 
     use super::MetaDictionary;
 
@@ -538,7 +544,9 @@ mod test {
 
         let mut ids = Vec::new();
         for dv in &dvs {
-            let AddResult::Fresh(dv_id) = dict.add_datavalue(dv.clone()) else { panic!("add failed") };
+            let AddResult::Fresh(dv_id) = dict.add_datavalue(dv.clone()) else {
+                panic!("add failed")
+            };
             ids.push(dv_id);
         }
 
