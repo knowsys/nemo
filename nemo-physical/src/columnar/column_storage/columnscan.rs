@@ -1,11 +1,11 @@
-use super::super::operations::{
+use super::super::column_operations::{
     ColumnScanCastEnum, ColumnScanEqualColumn, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus,
     ColumnScanPass, ColumnScanPrune, ColumnScanReorder, ColumnScanRestrictValues, ColumnScanUnion,
 };
 use super::column_rle::ColumnScanRle;
 use super::column_vector::ColumnScanVector;
 
-use crate::columnar::operations::{
+use crate::columnar::column_operations::{
     ColumnScanArithmetic, ColumnScanConstant, ColumnScanCopy, ColumnScanNulls, ColumnScanSubtract,
 };
 use crate::{

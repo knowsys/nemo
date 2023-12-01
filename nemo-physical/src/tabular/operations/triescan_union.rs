@@ -1,7 +1,7 @@
 use crate::{
     columnar::{
+        column_operations::ColumnScanUnion,
         column_storage::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
-        operations::ColumnScanUnion,
     },
     datatypes::{Double, Float, StorageTypeName},
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},

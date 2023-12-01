@@ -388,17 +388,13 @@ where
 
 #[cfg(test)]
 mod test {
-
-    use crate::columnar::{
-        column_storage::{
-            column::Column,
-            column_vector::ColumnVector,
-            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
-        },
-        operations::ColumnScanSubtract,
+    use crate::columnar::column_storage::{
+        column::Column,
+        column_vector::ColumnVector,
+        columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 
-    use super::{ColumnScanFollow, ColumnScanMinus};
+    use super::{ColumnScanFollow, ColumnScanMinus, ColumnScanSubtract};
 
     use test_log::test;
 

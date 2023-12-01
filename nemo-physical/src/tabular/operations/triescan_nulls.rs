@@ -2,8 +2,8 @@ use std::cell::UnsafeCell;
 
 use crate::{
     columnar::{
+        column_operations::{ColumnScanNulls, ColumnScanPass},
         column_storage::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
-        operations::{ColumnScanNulls, ColumnScanPass},
     },
     datatypes::StorageTypeName,
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},

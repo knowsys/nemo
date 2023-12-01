@@ -1,11 +1,11 @@
 use crate::{
     columnar::{
+        column_operations::columnscan_reorder::ColumnScanReorder,
         column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         column_storage::{
             column::Column,
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         },
-        operations::columnscan_reorder::ColumnScanReorder,
     },
     datatypes::{ColumnDataType, StorageTypeName},
     tabular::table_types::trie::Trie,

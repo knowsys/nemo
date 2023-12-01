@@ -1,11 +1,11 @@
 use crate::{
     arithmetic::expression::StackValue,
     columnar::{
-        column_storage::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
-        operations::{
+        column_operations::{
             columnscan_restrict_values::VALUE_SCAN_INDEX, ColumnScanEqualColumn, ColumnScanPass,
             ColumnScanRestrictValues,
         },
+        column_storage::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     condition::statement::ConditionStatement,
     datatypes::{DataValueT, StorageTypeName, StorageValueT},

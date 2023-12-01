@@ -5,12 +5,12 @@ use std::{debug_assert, iter};
 
 use bytesize::ByteSize;
 
+use crate::columnar::column_operations::{ColumnScanCast, ColumnScanCastEnum};
 use crate::columnar::column_storage::column::Column;
 use crate::columnar::column_storage::columnscan::{
     ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT,
 };
 use crate::columnar::column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
-use crate::columnar::operations::{ColumnScanCast, ColumnScanCastEnum};
 use crate::columnar::traits::columnbuilder::ColumnBuilder;
 use crate::datatypes::storage_value::StorageValueIteratorT;
 use crate::generate_cast_statements;

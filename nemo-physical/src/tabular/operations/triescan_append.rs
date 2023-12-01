@@ -7,15 +7,15 @@ use std::{
 use crate::{
     arithmetic::expression::{StackOperation, StackProgram, StackValue},
     columnar::{
+        column_operations::{
+            ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant,
+            ColumnScanCopy, ColumnScanPass,
+        },
         column_storage::{
             column::{Column, ColumnEnum},
             column_rle::{ColumnBuilderRle, ColumnRle},
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
             interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-        },
-        operations::{
-            ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant,
-            ColumnScanCopy, ColumnScanPass,
         },
         traits::columnbuilder::ColumnBuilder,
     },

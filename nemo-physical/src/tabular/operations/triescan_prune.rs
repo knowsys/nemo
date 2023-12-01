@@ -1,5 +1,5 @@
+use crate::columnar::column_operations::ColumnScanPrune;
 use crate::columnar::column_storage::columnscan::ColumnScan;
-use crate::columnar::operations::ColumnScanPrune;
 use crate::datatypes::{ColumnDataType, StorageValueT};
 use crate::tabular::traits::trie_scan::TrieScan;
 use crate::{
