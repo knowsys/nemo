@@ -3,6 +3,6 @@
 /// Module for defining various column builders and adaptive variants.
 pub mod adaptive_column_builder;
 
-pub mod column_types;
+pub mod column_storage;
 pub mod operations;
 pub mod traits;

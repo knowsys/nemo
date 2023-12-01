@@ -1,9 +1,8 @@
+use crate::columnar::column_storage::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::ColumnDataType;
 
 use std::fmt::Debug;
 use std::ops::Range;
-
-use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
 
 /// Implementation of [`ColumnScan`] for the result of joining a list of [`ColumnScan`] objects.
 #[derive(Debug)]
@@ -127,11 +126,12 @@ where
 mod test {
     use test_log::test;
 
-    use super::ColumnScanJoin;
-    use crate::columnar::{
-        column_types::vector::{ColumnScanVector, ColumnVector},
-        traits::columnscan::{ColumnScan, ColumnScanEnum},
+    use crate::columnar::column_storage::{
+        column_vector::{ColumnScanVector, ColumnVector},
+        columnscan::{ColumnScan, ColumnScanEnum},
     };
+
+    use super::ColumnScanJoin;
 
     #[test]
     fn test_u64_simple_join<'a>() {

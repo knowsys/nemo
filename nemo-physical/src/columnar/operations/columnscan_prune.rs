@@ -1,10 +1,8 @@
-use crate::columnar::traits::columnscan::ColumnScanCell;
+use crate::columnar::column_storage::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::ColumnDataType;
 use crate::tabular::operations::triescan_prune::{SharedTrieScanPruneState, TrieScanPruneState};
 use std::fmt::Debug;
 use std::ops::Range;
-
-use super::super::traits::columnscan::ColumnScan;
 
 /// Forwards calls to this column though it's [`SharedTrieScanPruneState`] to the input trie.
 /// See `TrieScanPrune` for more information.

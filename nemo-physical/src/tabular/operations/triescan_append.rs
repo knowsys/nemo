@@ -7,18 +7,17 @@ use std::{
 use crate::{
     arithmetic::expression::{StackOperation, StackProgram, StackValue},
     columnar::{
-        column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-        column_types::rle::{ColumnBuilderRle, ColumnRle},
+        column_storage::{
+            column::{Column, ColumnEnum},
+            column_rle::{ColumnBuilderRle, ColumnRle},
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+            interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+        },
         operations::{
             ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant,
             ColumnScanCopy, ColumnScanPass,
         },
-        traits::{
-            column::Column,
-            column::ColumnEnum,
-            columnbuilder::ColumnBuilder,
-            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
-        },
+        traits::columnbuilder::ColumnBuilder,
     },
     datatypes::{DataValueT, StorageTypeName, StorageValueT},
     generate_cast_statements,
@@ -524,7 +523,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanAppend<'a> {
 mod test {
     use crate::{
         arithmetic::expression::{self, StackProgram, StackValue},
-        columnar::traits::columnscan::ColumnScanT,
+        columnar::column_storage::columnscan::ColumnScanT,
         datatypes::{DataValueT, StorageTypeName},
         management::database::Dict,
         tabular::{

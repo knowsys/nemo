@@ -7,10 +7,13 @@ use crate::{
 };
 use std::{fmt::Debug, mem::size_of};
 
-use super::super::column_types::{rle::ColumnRle, vector::ColumnVector};
-use super::columnscan::{ColumnScan, ColumnScanEnum};
+use super::{
+    column_rle::ColumnRle,
+    column_vector::ColumnVector,
+    columnscan::{ColumnScan, ColumnScanEnum},
+};
 
-/// Column of ordered values.
+/// A trait representing a column of data, where each entry is of type `T`.
 pub trait Column<'a, T>: Debug + Clone + ByteSized {
     /// ColumnScan associated with the Column
     type Scan: 'a + ColumnScan<Item = T>;

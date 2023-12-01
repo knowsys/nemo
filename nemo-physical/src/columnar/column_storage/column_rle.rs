@@ -1,10 +1,12 @@
 use crate::{
-    columnar::traits::{column::Column, columnbuilder::ColumnBuilder, columnscan::ColumnScan},
+    columnar::traits::columnbuilder::ColumnBuilder,
     datatypes::{ColumnDataType, RunLengthEncodable},
     management::ByteSized,
 };
 use bytesize::ByteSize;
 use std::{fmt::Debug, mem::size_of, num::NonZeroUsize, ops::Range};
+
+use super::{column::Column, columnscan::ColumnScan};
 
 #[derive(Debug, PartialEq)]
 struct RleElement<T: RunLengthEncodable> {
@@ -562,10 +564,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        columnar::traits::{column::Column, columnscan::ColumnScan},
-        datatypes::{Double, Float, RunLengthEncodable},
-    };
+    use crate::columnar::column_storage::column::Column;
+    use crate::columnar::column_storage::columnscan::ColumnScan;
+    use crate::datatypes::{Double, Float, RunLengthEncodable};
     use quickcheck_macros::quickcheck;
     use std::iter::repeat;
     use std::num::NonZeroUsize;

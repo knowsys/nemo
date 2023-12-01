@@ -1,7 +1,5 @@
-use super::super::traits::{
-    column::{Column, ColumnEnum},
-    columnscan::ColumnScan,
-};
+use crate::columnar::column_storage::column::{Column, ColumnEnum};
+use crate::columnar::column_storage::columnscan::ColumnScan;
 use crate::datatypes::ColumnDataType;
 use crate::{datatypes::RunLengthEncodable, permutator::Permutator};
 use std::fmt::Debug;
@@ -130,9 +128,8 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::columnar::{
-        column_types::vector::ColumnVector,
-        traits::{column::ColumnEnum, columnscan::ColumnScan},
+    use crate::columnar::column_storage::{
+        column::ColumnEnum, column_vector::ColumnVector, columnscan::ColumnScan,
     };
 
     use super::ColumnScanReorder;

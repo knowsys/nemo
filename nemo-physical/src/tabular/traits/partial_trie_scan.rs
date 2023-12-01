@@ -1,4 +1,4 @@
-use crate::columnar::traits::columnscan::ColumnScanT;
+use crate::columnar::column_storage::columnscan::ColumnScanT;
 use crate::datatypes::StorageTypeName;
 use crate::generate_forwarder;
 use crate::tabular::operations::triescan_aggregate::TrieScanAggregateWrapper;

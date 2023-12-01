@@ -3,7 +3,7 @@ use crate::{
         expression::{StackProgram, StackValue},
         traits::ArithmeticOperations,
     },
-    columnar::traits::columnscan::{ColumnScan, ColumnScanCell},
+    columnar::column_storage::columnscan::{ColumnScan, ColumnScanCell},
     condition::statement::{ConditionOperator, ConditionStatement},
     datatypes::ColumnDataType,
 };
@@ -401,12 +401,10 @@ where
 mod test {
     use crate::{
         arithmetic::expression::{BinaryOperation, StackOperation, StackProgram, StackValue},
-        columnar::{
-            column_types::vector::ColumnVector,
-            traits::{
-                column::Column,
-                columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
-            },
+        columnar::column_storage::{
+            column::Column,
+            column_vector::ColumnVector,
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
         },
         condition::statement::{ConditionOperator, ConditionStatement},
     };

@@ -1,7 +1,7 @@
 use crate::{
     columnar::{
+        column_storage::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::{ColumnScanJoin, ColumnScanPass},
-        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{Double, Float, StorageTypeName},
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
@@ -329,15 +329,11 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
 mod test {
     use super::TrieScanJoin;
     use crate::columnar::adaptive_column_builder::ColumnBuilderAdaptive;
-    use crate::columnar::column_types::{
-        interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-        vector::ColumnVector,
-    };
-    use crate::columnar::traits::{
-        column::{Column, ColumnEnum},
-        columnbuilder::ColumnBuilder,
-        columnscan::ColumnScanT,
-    };
+    use crate::columnar::column_storage::column::{Column, ColumnEnum};
+    use crate::columnar::column_storage::column_vector::ColumnVector;
+    use crate::columnar::column_storage::columnscan::ColumnScanT;
+    use crate::columnar::column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
+    use crate::columnar::traits::columnbuilder::ColumnBuilder;
     use crate::tabular::operations::triescan_join::JoinBindings;
     use crate::tabular::operations::{materialize, TrieScanPrune};
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};

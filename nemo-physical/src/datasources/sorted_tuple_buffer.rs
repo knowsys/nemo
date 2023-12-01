@@ -3,18 +3,18 @@
 use crate::{datasources::TupleBuffer, datatypes::StorageValueT};
 use std::cmp::Ordering;
 
-/// The [`SortedTableBuffer`] is a wrapper for [`TableBuffer`] that stores a tuple order.
+/// The [`SortedTupleBuffer`] is a wrapper for [`TableBuffer`] that stores a tuple order.
 #[derive(Debug)]
 pub struct SortedTupleBuffer<'a> {
     tuple_buffer: TupleBuffer<'a>,
     tuple_order: Vec<usize>,
 }
 
-impl<'a> SortedTupleBuffer<'_> {
+impl<'a> SortedTupleBuffer<'a> {
     /// Constructor for [`SortedTupleBuffer`]. It takes a [`TupleBuffer`] and a tuple_order as
     /// parameters. The tuple order indicates the indexes of the tuples ordered by increasing
     /// [`StorageValueT`]s.
-    pub fn new<'b>(tuple_buffer: TupleBuffer<'b>) -> SortedTupleBuffer {
+    pub fn new(tuple_buffer: TupleBuffer<'a>) -> SortedTupleBuffer {
         let tuple_order = SortedTupleBuffer::get_order(&tuple_buffer);
         SortedTupleBuffer {
             tuple_buffer,
@@ -22,12 +22,12 @@ impl<'a> SortedTupleBuffer<'_> {
         }
     }
 
-    /// Returns the number of columns in the [`SortedTableBuffer`]
+    /// Returns the number of columns in the [`SortedTupleBuffer`]
     pub fn column_number(&self) -> usize {
         self.tuple_buffer.column_number()
     }
 
-    /// Returns the total number of tuples in the [`SortedTableBuffer`]
+    /// Returns the total number of tuples in the [`SortedTupleBuffer`]
     pub fn size(&self) -> usize {
         self.tuple_buffer.size()
     }

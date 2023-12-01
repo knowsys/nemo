@@ -1,8 +1,9 @@
-use super::super::column_types::{rle::ColumnScanRle, vector::ColumnScanVector};
 use super::super::operations::{
     ColumnScanCastEnum, ColumnScanEqualColumn, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus,
     ColumnScanPass, ColumnScanPrune, ColumnScanReorder, ColumnScanRestrictValues, ColumnScanUnion,
 };
+use super::column_rle::ColumnScanRle;
+use super::column_vector::ColumnScanVector;
 
 use crate::columnar::operations::{
     ColumnScanArithmetic, ColumnScanConstant, ColumnScanCopy, ColumnScanNulls, ColumnScanSubtract,

@@ -1434,7 +1434,7 @@ impl ByteSized for DatabaseInstance {
 #[cfg(test)]
 mod test {
     use crate::{
-        columnar::traits::column::Column,
+        columnar::column_storage::column::Column,
         datatypes::{DataTypeName, StorageValueT},
         management::{
             database::{ColumnOrder, TableId},

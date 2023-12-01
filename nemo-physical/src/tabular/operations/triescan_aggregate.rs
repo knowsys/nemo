@@ -5,7 +5,7 @@ use crate::{
         operation::AggregateOperation,
         processors::processor::{AggregateGroupProcessor, AggregateProcessor},
     },
-    columnar::traits::columnscan::ColumnScanT,
+    columnar::column_storage::columnscan::ColumnScanT,
     datatypes::{Double, Float, StorageTypeName, StorageValueT},
     tabular::traits::{partial_trie_scan::PartialTrieScan, trie_scan::TrieScan},
 };

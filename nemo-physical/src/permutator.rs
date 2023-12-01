@@ -1,9 +1,9 @@
 //! Holds the [Permutator] struct, which allows one to define a logical permutation of the content of index-based data structures
 
 use crate::{
-    columnar::traits::{
-        column::{Column, ColumnEnum, ColumnT},
-        columnbuilder::ColumnBuilder,
+    columnar::{
+        column_storage::column::{Column, ColumnEnum, ColumnT},
+        traits::columnbuilder::ColumnBuilder,
     },
     datatypes::{ColumnDataType, StorageTypeName, StorageValueT},
 };
@@ -281,7 +281,8 @@ mod test {
     use super::*;
     use crate::{
         columnar::{
-            adaptive_column_builder::ColumnBuilderAdaptive, column_types::vector::ColumnVector,
+            adaptive_column_builder::ColumnBuilderAdaptive,
+            column_storage::column_vector::ColumnVector,
         },
         datatypes::{Double, Float},
     };

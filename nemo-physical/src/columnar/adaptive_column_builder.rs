@@ -3,13 +3,11 @@ use crate::datatypes::{
 };
 use std::fmt::Debug;
 
-use super::column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
-use super::column_types::{rle::ColumnBuilderRle, vector::ColumnVector};
+use super::column_storage::column::{Column, ColumnEnum};
+use super::column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
+use super::column_storage::{column_rle::ColumnBuilderRle, column_vector::ColumnVector};
 
-use super::traits::{
-    column::{Column, ColumnEnum},
-    columnbuilder::ColumnBuilder,
-};
+use super::traits::columnbuilder::ColumnBuilder;
 
 /// Number of rle elements in rle column builder after which to decide which column type to use.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -321,9 +319,9 @@ impl FromIterator<StorageValueT> for ColumnBuilderAdaptiveT {
 mod test {
     use super::ColumnBuilderAdaptive;
     use crate::{
-        columnar::traits::{
-            column::{Column, ColumnEnum},
-            columnbuilder::ColumnBuilder,
+        columnar::{
+            column_storage::column::{Column, ColumnEnum},
+            traits::columnbuilder::ColumnBuilder,
         },
         datatypes::{Double, Float},
     };

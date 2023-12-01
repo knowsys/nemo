@@ -1,11 +1,11 @@
 use crate::{
     arithmetic::expression::StackValue,
     columnar::{
+        column_storage::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::{
             columnscan_restrict_values::VALUE_SCAN_INDEX, ColumnScanEqualColumn, ColumnScanPass,
             ColumnScanRestrictValues,
         },
-        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     condition::statement::ConditionStatement,
     datatypes::{DataValueT, StorageTypeName, StorageValueT},
@@ -399,7 +399,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanRestrictValues<'a> {
 mod test {
     use super::{TrieScanRestrictValues, TrieScanSelectEqual};
     use crate::arithmetic::expression::StackValue;
-    use crate::columnar::traits::columnscan::ColumnScanT;
+    use crate::columnar::column_storage::columnscan::ColumnScanT;
     use crate::condition::statement::ConditionStatement;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;

@@ -5,21 +5,18 @@ use std::{debug_assert, iter};
 
 use bytesize::ByteSize;
 
+use crate::columnar::column_storage::column::Column;
+use crate::columnar::column_storage::columnscan::{
+    ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT,
+};
+use crate::columnar::column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
 use crate::columnar::operations::{ColumnScanCast, ColumnScanCastEnum};
+use crate::columnar::traits::columnbuilder::ColumnBuilder;
 use crate::datatypes::storage_value::StorageValueIteratorT;
 use crate::generate_cast_statements;
 use crate::permutator::Permutator;
 
-use crate::columnar::traits::columnscan::{ColumnScanCell, ColumnScanEnum};
-use crate::columnar::{
-    adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
-    column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-    traits::{
-        column::Column,
-        columnbuilder::ColumnBuilder,
-        columnscan::{ColumnScan, ColumnScanT},
-    },
-};
+use crate::columnar::adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT};
 use crate::datatypes::{storage_value::VecT, StorageTypeName, StorageValueT};
 use crate::dictionary::value_serializer::{StorageValueMapping, TrieSerializer};
 use crate::dictionary::ValueSerializer;
@@ -619,7 +616,7 @@ mod test {
     use std::assert_eq;
 
     use super::{StorageValueIteratorT, Trie, TrieScanGeneric};
-    use crate::columnar::traits::columnscan::ColumnScanT;
+    use crate::columnar::column_storage::columnscan::ColumnScanT;
     use crate::datatypes::{storage_value::VecT, StorageValueT};
     use crate::tabular::traits::table::TableRow;
     use crate::tabular::traits::{partial_trie_scan::PartialTrieScan, table::Table};

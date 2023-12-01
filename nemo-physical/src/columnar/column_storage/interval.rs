@@ -1,17 +1,14 @@
 use bytesize::ByteSize;
 
+use crate::datatypes::{ColumnDataType, Double, Float, StorageValueT};
 use crate::datatypes::{RunLengthEncodable, StorageTypeName};
 use crate::generate_datatype_forwarder;
 use crate::management::ByteSized;
-use crate::{
-    columnar::traits::{
-        column::{Column, ColumnEnum},
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
-    },
-    datatypes::{ColumnDataType, Double, Float, StorageValueT},
-};
 use std::mem::size_of;
 use std::{fmt::Debug, ops::Range};
+
+use super::column::{Column, ColumnEnum};
+use super::columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT};
 
 /// Simple implementation of a [`Column`] that uses a second column to manage interval bounds.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -226,9 +223,11 @@ impl ByteSized for ColumnWithIntervalsT {
 
 #[cfg(test)]
 mod test {
-    use super::super::vector::ColumnVector;
     use super::ColumnWithIntervals;
-    use crate::columnar::traits::column::{Column, ColumnEnum};
+    use crate::columnar::column_storage::{
+        column::{Column, ColumnEnum},
+        column_vector::ColumnVector,
+    };
     use test_log::test;
 
     #[test]

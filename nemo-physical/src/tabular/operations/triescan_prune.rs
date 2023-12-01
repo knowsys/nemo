@@ -1,9 +1,9 @@
+use crate::columnar::column_storage::columnscan::ColumnScan;
 use crate::columnar::operations::ColumnScanPrune;
-use crate::columnar::traits::columnscan::ColumnScan;
 use crate::datatypes::{ColumnDataType, StorageValueT};
 use crate::tabular::traits::trie_scan::TrieScan;
 use crate::{
-    columnar::traits::columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
+    columnar::column_storage::columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
     datatypes::StorageTypeName,
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
 };
@@ -574,9 +574,9 @@ mod test {
     use super::TrieScanPrune;
 
     use crate::arithmetic::expression::StackValue;
-    use crate::columnar::column_types::interval::ColumnWithIntervalsT;
-    use crate::columnar::traits::column::Column;
-    use crate::columnar::traits::columnscan::ColumnScanT;
+    use crate::columnar::column_storage::column::Column;
+    use crate::columnar::column_storage::columnscan::ColumnScanT;
+    use crate::columnar::column_storage::interval::ColumnWithIntervalsT;
     use crate::condition::statement::ConditionStatement;
     use crate::datatypes::DataValueT;
     use crate::management::database::Dict;

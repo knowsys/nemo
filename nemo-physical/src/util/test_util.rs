@@ -1,12 +1,8 @@
+use crate::columnar::column_storage::column_vector::ColumnVector;
+use crate::columnar::column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
 use crate::tabular::table_types::trie::Trie;
 use crate::{
-    columnar::{
-        column_types::{
-            interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-            vector::ColumnVector,
-        },
-        traits::column::{Column, ColumnEnum},
-    },
+    columnar::column_storage::column::{Column, ColumnEnum},
     datatypes::ColumnDataType,
 };
 use arbitrary::{Arbitrary, Result, Unstructured};

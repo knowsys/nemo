@@ -1,11 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use nemo_physical::columnar::column_storage::{
+    column::Column, column_rle::ColumnRle, column_vector::ColumnVector, columnscan::ColumnScan,
+};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
-
-use nemo_physical::columnar::{
-    column_types::{rle::ColumnRle, vector::ColumnVector},
-    traits::{column::Column, columnscan::ColumnScan},
-};
 
 pub fn benchmark_seek(c: &mut Criterion) {
     let mut rng = Pcg64::seed_from_u64(21564);

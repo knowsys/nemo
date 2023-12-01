@@ -1,4 +1,4 @@
-use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
+use crate::columnar::column_storage::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::ColumnDataType;
 use std::fmt::Debug;
 use std::ops::Range;
@@ -390,12 +390,12 @@ where
 mod test {
 
     use crate::columnar::{
-        column_types::vector::ColumnVector,
-        operations::ColumnScanSubtract,
-        traits::{
+        column_storage::{
             column::Column,
+            column_vector::ColumnVector,
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
         },
+        operations::ColumnScanSubtract,
     };
 
     use super::{ColumnScanFollow, ColumnScanMinus};
