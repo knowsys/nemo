@@ -1,3 +1,7 @@
+//! This module defines the trait [ColumnScan] as well as [ColumnScanEnum],
+//! which collects all implemenations of that trait
+//! into a single object.
+
 use super::super::column_operations::{
     ColumnScanCastEnum, ColumnScanEqualColumn, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus,
     ColumnScanPass, ColumnScanPrune, ColumnScanReorder, ColumnScanRestrictValues, ColumnScanUnion,

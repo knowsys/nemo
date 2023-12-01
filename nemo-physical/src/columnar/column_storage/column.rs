@@ -1,3 +1,7 @@
+//! This module defines the [Column] trait as well as [ColumnEnum],
+//! which collects all possible implementations of that trait
+//! into a single object.
+
 use bytesize::ByteSize;
 
 use crate::{

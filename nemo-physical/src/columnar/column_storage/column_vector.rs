@@ -1,3 +1,5 @@
+//! This module defines [ColumnVector] and [ColumnScanVector].
+
 use std::{
     fmt::Debug,
     mem::size_of,

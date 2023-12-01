@@ -1,3 +1,5 @@
+//! This module defines [ColumnRle] and [ColumnScanRle].
+
 use crate::{
     columnar::column_builders::{
         columnbuilder::ColumnBuilder,
