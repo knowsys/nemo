@@ -289,7 +289,8 @@ mod test {
     use super::TrieScanProject;
     use crate::columnar::traits::column::Column;
     use crate::datatypes::StorageValueT;
-    use crate::dictionary::Dictionary;
+    use crate::datavalues::AnyDataValue;
+    use crate::dictionary::DvDict;
     use crate::management::database::Dict;
     use crate::tabular::operations::triescan_project::ProjectReordering;
     use crate::tabular::operations::{materialize, TrieScanPrune};
@@ -793,33 +794,23 @@ mod test {
         );
     }
 
+    /// Helper function to add a string to a dictionary and return its id as u64
+    fn add_string(dict: &mut Dict, string: &str) -> usize {
+        let dv = AnyDataValue::new_string(string.to_string());
+        dict.add_datavalue(dv).value()
+    }
+
     /// This is a test case for a bug first encountered while
     /// classifying `smallmed` using the EL calculus rules, where
     /// reordering a table with 2 rows results in a table with 4 rows.
     #[test]
     fn spurious_tuples_in_reorder_bug() {
         let mut dict = Dict::default();
-        let x = dict.add_string("72".to_owned()).value().try_into().unwrap();
-        let a = dict
-            .add_string("139".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-        let b = dict
-            .add_string("141".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-        let u = dict
-            .add_string("140".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-        let v = dict
-            .add_string("134".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
+        let x = add_string(&mut dict, "72").try_into().unwrap();
+        let a = add_string(&mut dict, "139").try_into().unwrap();
+        let b = add_string(&mut dict, "141").try_into().unwrap();
+        let u = add_string(&mut dict, "140").try_into().unwrap();
+        let v = add_string(&mut dict, "134").try_into().unwrap();
 
         let fst = vec![x];
         let snd = vec![a, b];
@@ -847,9 +838,8 @@ mod test {
     #[test]
     fn spurious_tuples_in_reorder_mk2_bug() {
         let mut dict = Dict::default();
-        let mut intern = |term: &str| {
-            StorageValueT::Id64(dict.add_string(term.to_owned()).value().try_into().unwrap())
-        };
+        let mut intern =
+            |term: &str| StorageValueT::Id64(add_string(&mut dict, term).try_into().unwrap());
 
         let a = intern("genid:cc18ce3a-be8a-3445-8b68-2027a2e1b1be");
         let b = intern("genid:0f18d187-7a4f-35c6-b645-c57ee51d277d");
@@ -893,9 +883,8 @@ mod test {
     #[test]
     fn spurious_tuples_in_reorder_mk2_minimised_bug() {
         let mut dict = Dict::default();
-        let mut intern = |term: &str| {
-            StorageValueT::Id64(dict.add_string(term.to_owned()).value().try_into().unwrap())
-        };
+        let mut intern =
+            |term: &str| StorageValueT::Id64(add_string(&mut dict, term).try_into().unwrap());
 
         let a = intern("genid:cc18ce3a-be8a-3445-8b68-2027a2e1b1be");
         let b = intern("genid:0f18d187-7a4f-35c6-b645-c57ee51d277d");
@@ -920,57 +909,16 @@ mod test {
     fn spurious_tuples_in_reorder_bug2() {
         let mut dict = Dict::default();
 
-        let rg = dict
-            .add_string("RoleGroup".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-        let a = dict
-            .add_string("4_1_6".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-        let b = dict
-            .add_string("4_1_21".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-        let c = dict
-            .add_string("4_1_22".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-
-        let u = dict
-            .add_string("32_1_58".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-        let v = dict
-            .add_string("32_1_72".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-        let w = dict
-            .add_string("32_1_81".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-        let x = dict
-            .add_string("32_1_74".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-        let y = dict
-            .add_string("32_1_83".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
-        let z = dict
-            .add_string("32_1_60".to_owned())
-            .value()
-            .try_into()
-            .unwrap();
+        let rg = add_string(&mut dict, "RoleGroup").try_into().unwrap();
+        let a = add_string(&mut dict, "4_1_6").try_into().unwrap();
+        let b = add_string(&mut dict, "4_1_21").try_into().unwrap();
+        let c = add_string(&mut dict, "4_1_22").try_into().unwrap();
+        let u = add_string(&mut dict, "32_1_58").try_into().unwrap();
+        let v = add_string(&mut dict, "32_1_72").try_into().unwrap();
+        let w = add_string(&mut dict, "32_1_81").try_into().unwrap();
+        let x = add_string(&mut dict, "32_1_74").try_into().unwrap();
+        let y = add_string(&mut dict, "32_1_83").try_into().unwrap();
+        let z = add_string(&mut dict, "32_1_60").try_into().unwrap();
 
         let fst = vec![a, b, c];
         let snd = vec![rg, rg, rg];

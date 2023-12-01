@@ -1,4 +1,6 @@
-use crate::dictionary::Dictionary;
+use crate::datasources::TupleBuffer;
+use crate::datavalues::AnyDataValue;
+use crate::dictionary::DvDict;
 use crate::management::database::Dict;
 
 use super::double::Double;
@@ -69,16 +71,14 @@ impl DataValueT {
 
     /// Get the appropriate [`StorageValueT`]` for the given [`DataValueT`].
     /// May change the given dictionary.
-    pub fn to_storage_value_mut(&self, dict: &mut Dict) -> StorageValueT {
+    pub(crate) fn to_storage_value_mut(&self, dict: &mut Dict) -> StorageValueT {
         match self {
             Self::String(val) => {
                 // dictionary indices
-                StorageValueT::Id64(
-                    dict.add_string(val.clone().into())
-                        .value()
-                        .try_into()
-                        .unwrap(),
-                )
+                let id = dict
+                    .add_datavalue(AnyDataValue::new_string(val.clone().into()))
+                    .value();
+                TupleBuffer::storage_value_for_usize(id)
             }
             Self::U32(val) => StorageValueT::Id32(*val),
             Self::U64(val) => StorageValueT::Id64(*val),
@@ -91,10 +91,15 @@ impl DataValueT {
     /// Get the appropriate [`StorageValueT`]` for the given [`DataValueT`]
     pub fn to_storage_value(&self, dict: &Dict) -> Option<StorageValueT> {
         match self {
-            Self::String(val) => Some(StorageValueT::Id64(
-                // dictionary indices
-                dict.fetch_id(val.into())?.try_into().unwrap(),
-            )),
+            Self::String(val) => {
+                if let Some(uid) =
+                    dict.datavalue_to_id(&AnyDataValue::new_string((*val).clone().into()))
+                {
+                    Some(TupleBuffer::storage_value_for_usize(uid))
+                } else {
+                    None
+                }
+            }
             Self::U32(val) => Some(StorageValueT::Id32(*val)),
             Self::U64(val) => Some(StorageValueT::Id64(*val)),
             Self::I64(val) => Some(StorageValueT::Int64(*val)),

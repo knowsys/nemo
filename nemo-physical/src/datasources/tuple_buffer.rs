@@ -5,7 +5,7 @@ use crate::{
     datasources::SortedTupleBuffer,
     datatypes::{Double, Float, StorageTypeName, StorageValueT},
     datavalues::{AnyDataValue, DataValue},
-    dictionary::Dictionary,
+    dictionary::DvDict,
     management::database::Dict,
 };
 use std::cell::RefCell;
@@ -297,29 +297,12 @@ impl<'a> TupleBuffer<'a> {
     fn make_storage_value(&mut self, col_idx: usize) -> StorageValueT {
         let dv = &self.cur_row[col_idx];
         match dv {
-            AnyDataValue::String(iv) => {
-                // TODO: the string encoding with surrounding quotes is a cheap way to avoid confusion with IRIs.
-                // Final solution should be a dictionary that accepts and reproduces datavalues.
-                // TODO: A better approach would consume the dv to move the string instead of cloning it.
-                let dict_id = self
-                    .dict
-                    .borrow_mut()
-                    .add_string("\"".to_owned() + &iv.to_string_unchecked() + "\"")
-                    .value();
-                Self::storage_value_for_usize(dict_id)
-            }
-            AnyDataValue::LanguageTaggedString(_) => {
-                todo!("We still need the dictionary to support this case properly")
-            }
-            AnyDataValue::Iri(iv) => {
-                // TODO: the string encoding with surrounding brackets is a cheap way to avoid confusion with IRIs.
-                // Final solution should be a dictionary that accepts and reproduces datavalues.
-                // TODO: A better approach would consume the dv to move the string instead of cloning it.
-                let dict_id = self
-                    .dict
-                    .borrow_mut()
-                    .add_string("<".to_owned() + &iv.to_iri_unchecked() + ">")
-                    .value();
+            AnyDataValue::String(_)
+            | AnyDataValue::LanguageTaggedString(_)
+            | AnyDataValue::Iri(_)
+            | AnyDataValue::Other(_) => {
+                // TODO: can we avoid the clone()?
+                let dict_id = self.dict.borrow_mut().add_datavalue(dv.clone()).value();
                 Self::storage_value_for_usize(dict_id)
             }
             AnyDataValue::Double(iv) => {
@@ -327,9 +310,6 @@ impl<'a> TupleBuffer<'a> {
             }
             AnyDataValue::UnsignedLong(iv) => Self::storage_value_for_u64(iv.to_u64_unchecked()),
             AnyDataValue::Long(iv) => StorageValueT::Int64(iv.to_i64_unchecked()),
-            AnyDataValue::Other(odv) => {
-                todo!("Other datavalue {:?} not supported in dictionary yet.", odv)
-            }
         }
     }
 
@@ -348,7 +328,7 @@ impl<'a> TupleBuffer<'a> {
 
     /// Find a good [`StorageValueT`] for a usize number. The method uses [`StorageValueT::U32`]
     /// if possible to safe memory.
-    fn storage_value_for_usize(value: usize) -> StorageValueT {
+    pub(crate) fn storage_value_for_usize(value: usize) -> StorageValueT {
         if let Ok(u32value) = value.try_into() {
             StorageValueT::Id32(u32value)
         } else {

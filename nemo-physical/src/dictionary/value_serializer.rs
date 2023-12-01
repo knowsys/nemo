@@ -2,28 +2,34 @@ use std::{fmt::Display, ops::Deref};
 
 use crate::{
     datatypes::{data_value::PhysicalString, DataTypeName, DataValueT, StorageValueT},
+    datavalues::DataValue,
     management::database::Dict,
     tabular::traits::table_schema::TableSchema,
 };
 use std::convert::TryFrom;
 
-use super::Dictionary;
+use super::DvDict;
 
 /// Prefix for physical null representation
 pub const NULL_PREFIX: &str = "NULL:";
 
 /// Load constant from dictionary with fallback if it is not found
+/// TODO: This should move to use Datavalues in output right away
 pub fn serialize_constant_with_dict<C, D>(constant: C, dict: D) -> PhysicalString
 where
     usize: TryFrom<C>,
     C: Copy + Display,
     D: Deref<Target = Dict>,
 {
-    usize::try_from(constant)
+    if let Some(dv) = usize::try_from(constant)
         .ok()
-        .and_then(|constant| dict.get(constant))
-        .unwrap_or_else(|| format!("{NULL_PREFIX}{constant}"))
-        .into()
+        .and_then(|constant| dict.id_to_datavalue(constant))
+    {
+        // TODO: this is mostly placeholder code that will vanish when we return datavalues
+        PhysicalString::from(dv.lexical_value().to_owned() + "^^" + dv.datatype_iri().as_str())
+    } else {
+        PhysicalString::from(format!("{NULL_PREFIX}{constant}"))
+    }
 }
 
 /// Helper trait for mapping [`StorageValueT`] back into some (higher level) value space
