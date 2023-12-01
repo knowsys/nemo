@@ -4,10 +4,25 @@
 
 use std::fmt::Debug;
 
+/// Module to define the [DvDict] trait.
+pub mod datavalue_dictionary;
+pub use datavalue_dictionary::AddResult;
+pub use datavalue_dictionary::DvDict;
+pub use datavalue_dictionary::KNOWN_ID_MARK;
+pub use datavalue_dictionary::NONEXISTING_ID_MARK;
 /// Module to define the [StringDictionary] and basic string management
 /// code.
 pub mod string_dictionary;
 pub(crate) use string_dictionary::StringDictionary;
+/// Module to define string-based datavalue dictionaries.
+pub mod string_dv_dict;
+pub(crate) use string_dv_dict::StringDvDictionary;
+pub(crate) use string_dv_dict::IriDvDictionary;
+pub(crate) use string_dv_dict::OtherDvDictionary;
+pub(crate) use string_dv_dict::LangStringDvDictionary;
+/// Module to define a general-purpose datavalue dictionary.
+pub mod meta_dv_dict;
+
 /// Module to define the [DictionaryString]
 pub mod dictionary_string;
 pub use dictionary_string::DictionaryString;
@@ -23,37 +38,6 @@ pub use meta_dictionary::MetaDictionary;
 /// Module mapping physical types into logical types into Strings
 pub mod value_serializer;
 pub use value_serializer::ValueSerializer;
-
-/// Fake id that dictionaries use to indicate that an entry has no id.
-const NONEXISTING_ID_MARK: usize = usize::MAX;
-/// Fake id that dictionaries use to indicate that an entry is known
-/// in some other dictionary (indicating that a search across multiple dictionaries
-/// should be continued).
-const KNOWN_ID_MARK: usize = usize::MAX - 1;
-
-/// Result of adding new values to a dictionary.
-/// It indicates if the operation was successful, and whether the value was previously present or not.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AddResult {
-    /// Element was new and has been freshly assinged the given id.
-    Fresh(usize),
-    /// Element was already known and has the given id.
-    Known(usize),
-    /// Element not supported by dictionary.
-    Rejected,
-}
-
-impl AddResult {
-    /// Returns the actual index.
-    /// In case of [AddResult::Rejected], a fake id is returned ([usize::MAX]).
-    pub fn value(&self) -> usize {
-        match self {
-            AddResult::Fresh(value) => *value,
-            AddResult::Known(value) => *value,
-            AddResult::Rejected => NONEXISTING_ID_MARK,
-        }
-    }
-}
 
 /// A Dictionary represents a bijective (invertible) mapping from objects to numeric ids.
 /// The "objects" are provided when the dictionary is used, whereas the ids are newly

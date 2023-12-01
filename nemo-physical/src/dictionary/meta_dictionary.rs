@@ -95,7 +95,7 @@ enum DictionaryType {
 }
 
 impl DictionaryType {
-    /// Returns true if the given string is supported by a dictinoary of this type.
+    /// Returns true if the given string is supported by a dictionary of this type.
     fn supports(&self, ds: &DictionaryString) -> bool {
         match self {
             DictionaryType::String => !ds.is_long(),

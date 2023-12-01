@@ -1,4 +1,4 @@
-use super::AddResult;
+use super::{AddResult, KNOWN_ID_MARK};
 
 use std::{
     fmt::Display,
@@ -295,7 +295,7 @@ impl StringDictionary {
     /// known so far, so we do not make any effort there.
     pub(crate) fn mark_str(&mut self, string: &str) -> AddResult {
         self.has_known_mark = true;
-        self.add_str_with_id(string, super::KNOWN_ID_MARK)
+        self.add_str_with_id(string, KNOWN_ID_MARK)
     }
 
     /// Returns true if the dictionary contains any marked elements.
@@ -306,12 +306,12 @@ impl StringDictionary {
     /// Check if a string is already in the dictionary, and if not,
     /// set its id to the given value. This is an internal helper method
     /// that is only ever called with `self.store.len()` or with
-    /// [super::KNOWN_ID_MARK] as id. Other non-consecutive ID assignments
+    /// [KNOWN_ID_MARK] as id. Other non-consecutive ID assignments
     /// will generally lead to errors, since the same ID might be assigned
     /// later on again.
     ///
     /// If the given string is known but not assigned an ID (indicated by
-    /// [super::KNOWN_ID_MARK]), then the operation will still not assign an
+    /// [KNOWN_ID_MARK]), then the operation will still not assign an
     /// ID either.
     #[inline(always)]
     fn add_str_with_id(&mut self, string: &str, id: usize) -> AddResult {
@@ -319,7 +319,7 @@ impl StringDictionary {
             Some(idx) => AddResult::Known(*idx),
             None => {
                 let sref = unsafe { BUFFER.push_str(self.buffer, string) };
-                if id != super::KNOWN_ID_MARK {
+                if id != KNOWN_ID_MARK {
                     self.store.push(sref);
                 }
                 self.mapping.insert(sref, id);
