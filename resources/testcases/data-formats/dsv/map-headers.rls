@@ -1,0 +1,3 @@
+@import sourceA[2]: csv{resource = "sources/dataA-headed.csv", map_columns = ("baz", "foo")}.
+
+@output sourceA.

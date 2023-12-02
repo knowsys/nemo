@@ -1,6 +1,6 @@
 //! Reading of delimiter-separated value files
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
 
 use csv::{Reader, ReaderBuilder, WriterBuilder};
@@ -49,6 +49,7 @@ pub(crate) struct DSVReader {
     escape: u8,
     logical_types: Vec<PrimitiveType>,
     input_type_constraint: TupleConstraint,
+    column_mapping: Option<Vec<String>>,
 }
 
 impl DSVReader {
@@ -59,6 +60,7 @@ impl DSVReader {
         delimiter: u8,
         input_type_constraint: TupleConstraint,
         logical_types: Vec<PrimitiveType>,
+        column_mapping: Option<Vec<String>>,
     ) -> Self {
         Self {
             resource_providers,
@@ -67,22 +69,8 @@ impl DSVReader {
             escape: b'\\',
             logical_types,
             input_type_constraint,
+            column_mapping,
         }
-    }
-
-    /// Static function to create a CSV reader
-    ///
-    /// The function takes an arbitrary [`Reader`][Read] and wraps it into a [`Reader`][csv::Reader] for csv
-    fn dsv_reader<R>(reader: R, delimiter: u8, escape: Option<u8>) -> Reader<R>
-    where
-        R: Read,
-    {
-        ReaderBuilder::new()
-            .delimiter(delimiter)
-            .escape(escape)
-            .has_headers(false)
-            .double_quote(true)
-            .from_reader(reader)
     }
 
     /// Actually reads the data from the file and distributes the different fields into the corresponding [ColumnBuilderProxy]
@@ -97,27 +85,42 @@ impl DSVReader {
     {
         let mut lines = 0;
 
-        for row in dsv_reader.records().flatten() {
-            if let Err(Error::Rollback(rollback)) =
-                row.iter().enumerate().try_for_each(|(idx, item)| {
-                    if idx < builder.len() {
-                        if let Err(column_err) = builder[idx].add(item.to_string()) {
-                            log::info!("Ignoring line {row:?}, parsing failed with: {column_err}");
-                            Err(Error::Rollback(idx))
-                        } else {
-                            Ok(())
-                        }
-                    } else {
-                        Err(Error::Rollback(idx - 1))
-                    }
+        let index_mapping: Vec<usize> = if let Some(mapping) = &self.column_mapping {
+            if mapping.len() != builder.len() {
+                return Err(ReadingError::CSVMappingArityMismatch);
+            }
+
+            let headers = dsv_reader
+                .headers()
+                .map_err(|_| ReadingError::CSVMissingHeaders)?
+                .iter()
+                .enumerate()
+                .map(|(idx, field)| (field, idx))
+                .collect::<HashMap<&str, usize>>();
+
+            mapping
+                .iter()
+                .map(|field| {
+                    headers
+                        .get(field.as_str())
+                        .ok_or(ReadingError::CSVMissingColumn(field.clone()))
+                        .cloned()
                 })
-            {
-                builder.iter_mut().enumerate().for_each(|(idx, builder)| {
-                    // Forget the stored values of the row to be rolled back.
-                    if idx <= rollback {
-                        builder.forget();
+                .collect::<Result<_, _>>()?
+        } else {
+            (0..builder.len()).collect()
+        };
+
+        for row in dsv_reader.records().flatten() {
+            for idx in 0..builder.len() {
+                if let Some(item) = row.get(index_mapping[idx]) {
+                    if let Err(column_err) = builder[idx].add(item.to_string()) {
+                        log::info!("Ignoring line {row:?}, parsing failed with: {column_err}");
+                        builder[0..=idx].iter_mut().for_each(|b| b.forget())
                     }
-                });
+                } else {
+                    builder[0..idx].iter_mut().for_each(|b| b.forget())
+                }
             }
 
             lines += 1;
@@ -176,7 +179,12 @@ impl TableReader for DSVReader {
             .resource_providers
             .open_resource(&self.resource, true)?;
 
-        let mut dsv_reader = Self::dsv_reader(reader, self.delimiter, Some(self.escape));
+        let mut dsv_reader = ReaderBuilder::new()
+            .delimiter(self.delimiter)
+            .escape(Some(self.escape))
+            .has_headers(self.column_mapping.is_some())
+            .double_quote(true)
+            .from_reader(reader);
 
         self.read_into_builder_proxies_with_reader(physical_builder_proxies, &mut dsv_reader)
     }
@@ -287,6 +295,7 @@ impl DSVFormat {
 
 use super::types::attributes::RESOURCE;
 const DELIMITER: &str = "delimiter";
+const MAP_COLUMNS: &str = "map_columns";
 
 /// Errors related to DSV file format specifications.
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
@@ -361,12 +370,31 @@ impl FileFormatMeta for DSVFormat {
             .into_flat_primitive()
             .expect("must be flat and primitive");
 
+        let column_mapping: Option<Vec<String>> = {
+            if let Some(Constant::TupleLiteral(mapping)) =
+                attributes.pairs.get(&Key::identifier_from_str(MAP_COLUMNS))
+            {
+                Some(
+                    mapping
+                        .iter()
+                        .map(|c| match c {
+                            Constant::StringLiteral(header) => header.clone(),
+                            cst => cst.to_string(),
+                        })
+                        .collect(),
+                )
+            } else {
+                None
+            }
+        };
+
         Ok(Box::new(DSVReader::new(
             resource_providers,
             resource.to_string(),
             delimiter,
             declared_types.clone(),
             inferred_types,
+            column_mapping,
         )))
     }
 
@@ -387,7 +415,10 @@ impl FileFormatMeta for DSVFormat {
     }
 
     fn optional_attributes(&self, _direction: Direction) -> HashSet<Key> {
-        [].into()
+        match _direction {
+            Direction::Reading => [Key::identifier_from_str(MAP_COLUMNS)].into(),
+            Direction::Writing => [].into(),
+        }
     }
 
     fn required_attributes(&self, _direction: Direction) -> HashSet<Key> {
@@ -486,6 +517,7 @@ Boston;United States;4628910
             b',',
             TupleConstraint::at_least([PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]),
             vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
+            None,
         );
         let mut builder = vec![
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
@@ -585,6 +617,7 @@ The next 2 columns are empty;;;789
                 PrimitiveType::String,
                 PrimitiveType::Integer,
             ],
+            None,
         );
         let mut builder = vec![
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
@@ -692,6 +725,7 @@ node03;123;123;13;55;123;invalid
                 PrimitiveType::Integer,
                 PrimitiveType::Any,
             ],
+            None,
         );
         let mut builder = vec![
             PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
@@ -767,6 +801,7 @@ node03;123;123;13;55;123;invalid
                 PrimitiveType::Integer,
                 PrimitiveType::Float64,
             ],
+            None,
         );
         let mut builder = vec![
             PhysicalBuilderProxyEnum::I64(Default::default()),
