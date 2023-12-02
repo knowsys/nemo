@@ -49,7 +49,7 @@ pub(crate) struct DSVReader {
     escape: u8,
     logical_types: Vec<PrimitiveType>,
     input_type_constraint: TupleConstraint,
-    column_mapping: Option<Vec<String>>,
+    column_selection: Option<Vec<String>>,
 }
 
 impl DSVReader {
@@ -69,7 +69,7 @@ impl DSVReader {
             escape: b'\\',
             logical_types,
             input_type_constraint,
-            column_mapping,
+            column_selection: column_mapping,
         }
     }
 
@@ -85,14 +85,14 @@ impl DSVReader {
     {
         let mut lines = 0;
 
-        let index_mapping: Vec<usize> = if let Some(mapping) = &self.column_mapping {
+        let index_mapping: Vec<usize> = if let Some(mapping) = &self.column_selection {
             if mapping.len() != builder.len() {
-                return Err(ReadingError::CSVMappingArityMismatch);
+                return Err(ReadingError::ImportArityMismatch);
             }
 
             let headers = dsv_reader
                 .headers()
-                .map_err(|_| ReadingError::CSVMissingHeaders)?
+                .map_err(|_| ReadingError::DSVMissingHeaders)?
                 .iter()
                 .enumerate()
                 .map(|(idx, field)| (field, idx))
@@ -103,7 +103,7 @@ impl DSVReader {
                 .map(|field| {
                     headers
                         .get(field.as_str())
-                        .ok_or(ReadingError::CSVMissingColumn(field.clone()))
+                        .ok_or(ReadingError::DSVMissingColumn(field.clone()))
                         .cloned()
                 })
                 .collect::<Result<_, _>>()?
@@ -182,7 +182,7 @@ impl TableReader for DSVReader {
         let mut dsv_reader = ReaderBuilder::new()
             .delimiter(self.delimiter)
             .escape(Some(self.escape))
-            .has_headers(self.column_mapping.is_some())
+            .has_headers(self.column_selection.is_some())
             .double_quote(true)
             .from_reader(reader);
 
@@ -295,7 +295,7 @@ impl DSVFormat {
 
 use super::types::attributes::RESOURCE;
 const DELIMITER: &str = "delimiter";
-const MAP_COLUMNS: &str = "map_columns";
+const SELECT_COLUMNS: &str = "select";
 
 /// Errors related to DSV file format specifications.
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
@@ -371,8 +371,9 @@ impl FileFormatMeta for DSVFormat {
             .expect("must be flat and primitive");
 
         let column_mapping: Option<Vec<String>> = {
-            if let Some(Constant::TupleLiteral(mapping)) =
-                attributes.pairs.get(&Key::identifier_from_str(MAP_COLUMNS))
+            if let Some(Constant::TupleLiteral(mapping)) = attributes
+                .pairs
+                .get(&Key::identifier_from_str(SELECT_COLUMNS))
             {
                 Some(
                     mapping
@@ -416,7 +417,7 @@ impl FileFormatMeta for DSVFormat {
 
     fn optional_attributes(&self, _direction: Direction) -> HashSet<Key> {
         match _direction {
-            Direction::Reading => [Key::identifier_from_str(MAP_COLUMNS)].into(),
+            Direction::Reading => [Key::identifier_from_str(SELECT_COLUMNS)].into(),
             Direction::Writing => [].into(),
         }
     }

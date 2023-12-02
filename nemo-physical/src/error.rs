@@ -69,14 +69,14 @@ pub enum ReadingError {
     #[error("Could not determine which RDF parser to use for resource {0}")]
     UnknownRDFFormatVariant(Resource),
     /// Could not read the dsv headers
-    #[error("CSV - cannot read headers")]
-    CSVMissingHeaders,
+    #[error("cannot read headers in csv/dsv file")]
+    DSVMissingHeaders,
     /// Missing column in dsv file
-    #[error("CSV - missing column {0}")]
-    CSVMissingColumn(String),
-    /// Mismatch between dsv header mapping and output type
-    #[error("CSV - requested mapping does not match predicate arity")]
-    CSVMappingArityMismatch,
+    #[error("missing column {0} in csv/dsv file")]
+    DSVMissingColumn(String),
+    /// Mismatch between import specification and output type
+    #[error("import specification does not match predicate arity")]
+    ImportArityMismatch,
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate
