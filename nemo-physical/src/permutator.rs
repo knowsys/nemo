@@ -2,8 +2,8 @@
 
 use crate::{
     columnar::{
-        column_builders::columnbuilder::ColumnBuilder,
-        column_storage::column::{Column, ColumnEnum, ColumnT},
+        column::{Column, ColumnEnum},
+        columnbuilder::ColumnBuilder,
     },
     datatypes::{ColumnDataType, StorageTypeName, StorageValueT},
 };
@@ -65,26 +65,26 @@ impl Permutator {
         Permutator::sort_from_column_range(data, &[(0..data.len()); 1])
     }
 
-    /// Creates a [`Permutator`] based on a slice of [`ColumnT`] elements.
-    pub fn sort_from_columns(data_vec: &[ColumnT]) -> Result<Permutator, Error> {
-        let len = if !data_vec.is_empty() {
-            let len = data_vec[0].len();
-            if data_vec.iter().any(|val| val.len() != len) {
-                return Err(Error::PermutationSortLen(
-                    data_vec.iter().map(|val| val.len()).collect::<Vec<usize>>(),
-                ));
-            }
-            len
-        } else {
-            0
-        };
-        let mut vec: Vec<usize> = (0..len).collect::<Vec<usize>>();
-        vec.sort_by(|a, b| Self::compare_multiple_column(*a, *b, data_vec));
-        Ok(Permutator {
-            sort_vec: vec,
-            offset: 0,
-        })
-    }
+    // /// Creates a [`Permutator`] based on a slice of [`ColumnT`] elements.
+    // pub fn sort_from_columns(data_vec: &[ColumnT]) -> Result<Permutator, Error> {
+    //     let len = if !data_vec.is_empty() {
+    //         let len = data_vec[0].len();
+    //         if data_vec.iter().any(|val| val.len() != len) {
+    //             return Err(Error::PermutationSortLen(
+    //                 data_vec.iter().map(|val| val.len()).collect::<Vec<usize>>(),
+    //             ));
+    //         }
+    //         len
+    //     } else {
+    //         0
+    //     };
+    //     let mut vec: Vec<usize> = (0..len).collect::<Vec<usize>>();
+    //     vec.sort_by(|a, b| Self::compare_multiple_column(*a, *b, data_vec));
+    //     Ok(Permutator {
+    //         sort_vec: vec,
+    //         offset: 0,
+    //     })
+    // }
 
     /// Create a [`Permutator`] that sorts the given slice of [`VecT`] lexicographically.
     ///
@@ -135,18 +135,18 @@ impl Permutator {
         }
     }
 
-    fn compare_multiple_column(a: usize, b: usize, data_vec: &[ColumnT]) -> Ordering {
-        match data_vec
-            .iter()
-            .try_for_each(|vec| match vec.get(a).compare(&vec.get(b)).expect("Both values are from the same ColumnT, therefore they need to have the same inner type") {
-                Ordering::Less => Err(Ordering::Less),
-                Ordering::Equal => Ok(()),
-                Ordering::Greater => Err(Ordering::Greater),
-            }) {
-            Ok(_) => Ordering::Equal,
-            Err(ord) => ord,
-        }
-    }
+    // fn compare_multiple_column(a: usize, b: usize, data_vec: &[ColumnT]) -> Ordering {
+    //     match data_vec
+    //         .iter()
+    //         .try_for_each(|vec| match vec.get(a).compare(&vec.get(b)).expect("Both values are from the same ColumnT, therefore they need to have the same inner type") {
+    //             Ordering::Less => Err(Ordering::Less),
+    //             Ordering::Equal => Ok(()),
+    //             Ordering::Greater => Err(Ordering::Greater),
+    //         }) {
+    //         Ok(_) => Ordering::Equal,
+    //         Err(ord) => ord,
+    //     }
+    // }
 
     /// Returns the vector which contains the sorted indices
     pub fn get_sort_vec(&self) -> &Vec<usize> {
@@ -280,10 +280,7 @@ impl ExactSizeIterator for PermutatorStream<'_> {}
 mod test {
     use super::*;
     use crate::{
-        columnar::{
-            column_builders::columnbuilder_adaptive::ColumnBuilderAdaptive,
-            column_storage::column_vector::ColumnVector,
-        },
+        columnar::columnbuilder::adaptive::ColumnBuilderAdaptive,
         datatypes::{Double, Float},
     };
     use quickcheck_macros::quickcheck;
@@ -473,77 +470,77 @@ mod test {
         true
     }
 
-    #[quickcheck]
-    #[cfg_attr(miri, ignore)]
-    fn from_rnd_columns(vector1: Vec<f32>, vector2: Vec<f64>) -> bool {
-        // remove NaN
-        let mut vec1 = vector1
-            .iter()
-            .cloned()
-            .filter_map(|val| Float::new(val).ok())
-            .collect::<Vec<Float>>();
-        let mut vec2 = vector2
-            .iter()
-            .filter_map(|val| Double::new(*val).ok())
-            .collect::<Vec<Double>>();
-        let len = vec1.len().min(vec2.len());
-        vec1.resize(len, Float::new(1.0).expect("1.0 is not NaN"));
-        vec2.resize(len, Double::new(1.0).expect("1.0 is not NaN"));
-        let mut vec1_cpy = vec1.clone();
-        let vec1_to_sort = vec1.clone();
-        let column1: ColumnVector<Float> = ColumnVector::new(vec1);
-        let column2: ColumnVector<Double> = ColumnVector::new(vec2.clone());
-        let columnset: Vec<ColumnT> = vec![
-            ColumnT::Float(ColumnEnum::ColumnVector(column1)),
-            ColumnT::Double(ColumnEnum::ColumnVector(column2)),
-        ];
-        let permutator = Permutator::sort_from_columns(&columnset)
-            .expect("Length has been adjusted when generating test-data");
-        vec1_cpy.sort_unstable();
-        assert_eq!(
-            vec1_cpy,
-            permutator
-                .permute(&vec1_to_sort)
-                .expect("Test case should be sortable")
-                .collect::<Vec<_>>()
-        );
+    // #[quickcheck]
+    // #[cfg_attr(miri, ignore)]
+    // fn from_rnd_columns(vector1: Vec<f32>, vector2: Vec<f64>) -> bool {
+    //     // remove NaN
+    //     let mut vec1 = vector1
+    //         .iter()
+    //         .cloned()
+    //         .filter_map(|val| Float::new(val).ok())
+    //         .collect::<Vec<Float>>();
+    //     let mut vec2 = vector2
+    //         .iter()
+    //         .filter_map(|val| Double::new(*val).ok())
+    //         .collect::<Vec<Double>>();
+    //     let len = vec1.len().min(vec2.len());
+    //     vec1.resize(len, Float::new(1.0).expect("1.0 is not NaN"));
+    //     vec2.resize(len, Double::new(1.0).expect("1.0 is not NaN"));
+    //     let mut vec1_cpy = vec1.clone();
+    //     let vec1_to_sort = vec1.clone();
+    //     let column1: ColumnVector<Float> = ColumnVector::new(vec1);
+    //     let column2: ColumnVector<Double> = ColumnVector::new(vec2.clone());
+    //     let columnset: Vec<ColumnT> = vec![
+    //         ColumnT::Float(ColumnEnum::ColumnVector(column1)),
+    //         ColumnT::Double(ColumnEnum::ColumnVector(column2)),
+    //     ];
+    //     let permutator = Permutator::sort_from_columns(&columnset)
+    //         .expect("Length has been adjusted when generating test-data");
+    //     vec1_cpy.sort_unstable();
+    //     assert_eq!(
+    //         vec1_cpy,
+    //         permutator
+    //             .permute(&vec1_to_sort)
+    //             .expect("Test case should be sortable")
+    //             .collect::<Vec<_>>()
+    //     );
 
-        let column2: ColumnVector<Double> = ColumnVector::new(vec2);
-        let column_sort = permutator.apply_column(
-            &ColumnEnum::ColumnVector(column2),
-            ColumnBuilderAdaptive::default(),
-        );
-        assert!(column_sort.is_ok());
-        true
-    }
+    //     let column2: ColumnVector<Double> = ColumnVector::new(vec2);
+    //     let column_sort = permutator.apply_column(
+    //         &ColumnEnum::ColumnVector(column2),
+    //         ColumnBuilderAdaptive::default(),
+    //     );
+    //     assert!(column_sort.is_ok());
+    //     true
+    // }
 
-    #[test]
-    fn multi_column_sort() {
-        let vec1: Vec<u64> = vec![0, 0, 2, 2, 1, 1, 4, 4, 3, 3];
-        let vec2: Vec<f32> = vec![1.0, 0.0, 0.4, 0.5, 0.8, 0.077, 4.0, 3.0, 1.0, 2.0];
-        let vec3: Vec<u64> = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    // #[test]
+    // fn multi_column_sort() {
+    //     let vec1: Vec<u64> = vec![0, 0, 2, 2, 1, 1, 4, 4, 3, 3];
+    //     let vec2: Vec<f32> = vec![1.0, 0.0, 0.4, 0.5, 0.8, 0.077, 4.0, 3.0, 1.0, 2.0];
+    //     let vec3: Vec<u64> = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-        let vec2 = vec2
-            .iter()
-            .map(|elem| Float::new(*elem).expect("value needs to be valid"))
-            .collect::<Vec<Float>>();
+    //     let vec2 = vec2
+    //         .iter()
+    //         .map(|elem| Float::new(*elem).expect("value needs to be valid"))
+    //         .collect::<Vec<Float>>();
 
-        let mut acb = ColumnBuilderAdaptive::default();
-        vec1.iter().for_each(|elem| acb.add(*elem));
-        let column1 = acb.finalize();
-        let mut acb = ColumnBuilderAdaptive::default();
-        vec2.iter().for_each(|elem| acb.add(*elem));
-        let column2 = acb.finalize();
-        let mut acb = ColumnBuilderAdaptive::default();
-        vec3.iter().for_each(|elem| acb.add(*elem));
-        let column3 = acb.finalize();
+    //     let mut acb = ColumnBuilderAdaptive::default();
+    //     vec1.iter().for_each(|elem| acb.add(*elem));
+    //     let column1 = acb.finalize();
+    //     let mut acb = ColumnBuilderAdaptive::default();
+    //     vec2.iter().for_each(|elem| acb.add(*elem));
+    //     let column2 = acb.finalize();
+    //     let mut acb = ColumnBuilderAdaptive::default();
+    //     vec3.iter().for_each(|elem| acb.add(*elem));
+    //     let column3 = acb.finalize();
 
-        let columnset: Vec<ColumnT> = vec![ColumnT::Id64(column1), ColumnT::Float(column2)];
-        let permutator = Permutator::sort_from_columns(&columnset).expect("Sorting should work");
-        let column_sort = permutator
-            .apply_column(&column3, ColumnBuilderAdaptive::default())
-            .expect("application of sorting should work");
-        let column_sort_vec: Vec<u64> = column_sort.iter().collect();
-        assert_eq!(column_sort_vec, vec![1, 0, 5, 4, 2, 3, 8, 9, 7, 6]);
-    }
+    //     let columnset: Vec<ColumnT> = vec![ColumnT::Id64(column1), ColumnT::Float(column2)];
+    //     let permutator = Permutator::sort_from_columns(&columnset).expect("Sorting should work");
+    //     let column_sort = permutator
+    //         .apply_column(&column3, ColumnBuilderAdaptive::default())
+    //         .expect("application of sorting should work");
+    //     let column_sort_vec: Vec<u64> = column_sort.iter().collect();
+    //     assert_eq!(column_sort_vec, vec![1, 0, 5, 4, 2, 3, 8, 9, 7, 6]);
+    // }
 }

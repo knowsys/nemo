@@ -1,5 +1,8 @@
 use std::fmt::Display;
 
+/// Number of storage types
+pub const NUM_STORAGETYPES: usize = 5;
+
 /// Descriptors to refer to the possible data types at runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StorageTypeName {

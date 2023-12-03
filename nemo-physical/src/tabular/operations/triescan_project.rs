@@ -1,8 +1,8 @@
 use crate::{
     columnar::{
-        column_operations::columnscan_reorder::ColumnScanReorder,
-        column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-        column_storage::{
+        column::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+        operations::columnscan_reorder::ColumnScanReorder,
+        {
             column::Column,
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         },
@@ -287,7 +287,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanProject<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanProject;
-    use crate::columnar::column_storage::column::Column;
+    use crate::columnar::column::Column;
     use crate::datatypes::StorageValueT;
     use crate::datavalues::AnyDataValue;
     use crate::dictionary::DvDict;

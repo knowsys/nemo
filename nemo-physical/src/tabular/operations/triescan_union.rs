@@ -1,7 +1,7 @@
 use crate::{
     columnar::{
-        column_operations::ColumnScanUnion,
-        column_storage::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+        columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+        operations::ColumnScanUnion,
     },
     datatypes::{Double, Float, StorageTypeName},
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
@@ -145,7 +145,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanUnion;
-    use crate::columnar::column_storage::columnscan::ColumnScanT;
+    use crate::columnar::columnscan::ColumnScanT;
     use crate::tabular::operations::{JoinBindings, TrieScanJoin};
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};

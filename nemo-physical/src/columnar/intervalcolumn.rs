@@ -4,5 +4,5 @@
 //!
 //! Such columns represent a layer in a [Trie][crate::tabular::trie_storage::trie::Trie].
 
-pub(crate) mod column_intervals;
-pub(crate) mod interval_lookup;
+pub mod column_intervals;
+pub mod interval_lookup;

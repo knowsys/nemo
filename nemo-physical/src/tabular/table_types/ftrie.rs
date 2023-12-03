@@ -1,5 +1,5 @@
 use super::super::traits::{table::Table, table_schema::TableSchema};
-use crate::columnar::column_storage::interval::ColumnWithIntervalsT;
+use crate::columnar::interval::ColumnWithIntervalsT;
 use crate::datatypes::StorageTypeName;
 use std::fmt::Debug;
 

@@ -1,7 +1,7 @@
 use crate::{
     columnar::{
-        column_operations::{ColumnScanJoin, ColumnScanPass},
-        column_storage::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+        columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+        operations::{ColumnScanJoin, ColumnScanPass},
     },
     datatypes::{Double, Float, StorageTypeName},
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
@@ -331,15 +331,12 @@ mod test {
 
     use crate::{
         columnar::{
-            column_builders::{
-                columnbuilder::ColumnBuilder, columnbuilder_adaptive::ColumnBuilderAdaptive,
-            },
-            column_storage::{
-                column::{Column, ColumnEnum},
-                column_vector::ColumnVector,
-                columnscan::ColumnScanT,
+            column::{
                 interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+                vector::ColumnVector, Column,
             },
+            columnbuilder::{adaptive::ColumnBuilderAdaptive, ColumnBuilder},
+            {column::ColumnEnum, columnscan::ColumnScanT},
         },
         tabular::{
             operations::{materialize, JoinBindings, TrieScanPrune},

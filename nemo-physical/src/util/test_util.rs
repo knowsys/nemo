@@ -1,14 +1,20 @@
-use crate::columnar::column_storage::column_vector::ColumnVector;
-use crate::columnar::column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
-use crate::tabular::table_types::trie::Trie;
-use crate::{
-    columnar::column_storage::column::{Column, ColumnEnum},
-    datatypes::ColumnDataType,
+use std::{
+    cmp::Eq,
+    ops::{Add, Sub},
 };
+
 use arbitrary::{Arbitrary, Result, Unstructured};
 use num::{One, Zero};
-use std::cmp::Eq;
-use std::ops::{Add, Sub};
+
+use crate::{
+    columnar::column::{
+        interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+        vector::ColumnVector,
+        Column, ColumnEnum,
+    },
+    datatypes::ColumnDataType,
+    tabular::table_types::trie::Trie,
+};
 
 /// Constructs ColumnWithIntervals of U64 type from Slice
 pub fn make_column_with_intervals<'a, T>(

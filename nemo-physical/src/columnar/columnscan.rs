@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-    column::{rle::ColumnScanRle, vector::ColumnScanVector},
+    column::{interval, rle::ColumnScanRle, vector::ColumnScanVector},
     operations::{
         ColumnScanArithmetic, ColumnScanCastEnum, ColumnScanConstant, ColumnScanCopy,
         ColumnScanEqualColumn, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus, ColumnScanNulls,
@@ -592,7 +592,18 @@ pub struct ColumnScanRainbow<'a> {
 }
 
 impl<'a> ColumnScanRainbow<'a> {
-    /// Return to the initial state.
+    /// Return the current position of a scan of the given [StorageTypeName].
+    pub fn pos(&mut self, storage_type: StorageTypeName) -> Option<usize> {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.pos(),
+            StorageTypeName::Id64 => self.scan_id64.pos(),
+            StorageTypeName::Int64 => self.scan_i64.pos(),
+            StorageTypeName::Float => self.scan_float.pos(),
+            StorageTypeName::Double => self.scan_double.pos(),
+        }
+    }
+
+    /// Return a scan of the given [StorageTypeName] to its initial state.
     pub fn reset(&mut self, storage_type: StorageTypeName) {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.reset(),
@@ -600,6 +611,18 @@ impl<'a> ColumnScanRainbow<'a> {
             StorageTypeName::Int64 => self.scan_i64.reset(),
             StorageTypeName::Float => self.scan_float.reset(),
             StorageTypeName::Double => self.scan_double.reset(),
+        }
+    }
+
+    /// Restricts the iterator of the given [StorageTypeName] to the given `interval`.
+    /// Resets the iterator just before the start of the interval.
+    pub fn narrow(&mut self, storage_type: StorageTypeName, interval: Range<usize>) {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.narrow(interval),
+            StorageTypeName::Id64 => self.scan_id64.narrow(interval),
+            StorageTypeName::Int64 => self.scan_i64.narrow(interval),
+            StorageTypeName::Float => self.scan_float.narrow(interval),
+            StorageTypeName::Double => self.scan_double.narrow(interval),
         }
     }
 }

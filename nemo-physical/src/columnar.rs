@@ -1,7 +1,9 @@
-//! This module defines the main column data structures
-//! and operations to construct and iterate over columns,
-//! as well as perform computations on single columns.
+//! This module defines column data structures,
+//! methods to construct and iterate over them,
+//! as well as operations performed on single columns.
 
-pub mod column_builders;
-pub mod column_operations;
-pub mod column_storage;
+pub(crate) mod column;
+pub(crate) mod columnbuilder;
+pub(crate) mod columnscan;
+pub(crate) mod intervalcolumn;
+pub(crate) mod operations;

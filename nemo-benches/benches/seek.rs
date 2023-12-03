@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use nemo_physical::columnar::column_storage::{
+use nemo_physical::columnar::{
     column::Column, column_rle::ColumnRle, column_vector::ColumnVector, columnscan::ColumnScan,
 };
 use rand::prelude::*;

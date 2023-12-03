@@ -7,16 +7,18 @@ use std::{
 use crate::{
     arithmetic::expression::{StackOperation, StackProgram, StackValue},
     columnar::{
-        column_builders::{columnbuilder::ColumnBuilder, columnbuilder_rle::ColumnBuilderRle},
-        column_operations::{
+        column::{
+            interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+            rle::ColumnRle,
+        },
+        columnbuilder::{rle::ColumnBuilderRle, ColumnBuilder},
+        operations::{
             ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant,
             ColumnScanCopy, ColumnScanPass,
         },
-        column_storage::{
+        {
             column::{Column, ColumnEnum},
-            column_rle::ColumnRle,
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
-            interval::{ColumnWithIntervals, ColumnWithIntervalsT},
         },
     },
     datatypes::{DataValueT, StorageTypeName, StorageValueT},
@@ -523,7 +525,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanAppend<'a> {
 mod test {
     use crate::{
         arithmetic::expression::{self, StackProgram, StackValue},
-        columnar::column_storage::columnscan::ColumnScanT,
+        columnar::columnscan::ColumnScanT,
         datatypes::{DataValueT, StorageTypeName},
         management::database::Dict,
         tabular::{

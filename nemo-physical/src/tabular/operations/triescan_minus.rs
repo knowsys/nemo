@@ -1,7 +1,7 @@
 use crate::{
     columnar::{
-        column_operations::{ColumnScanFollow, ColumnScanMinus, ColumnScanSubtract},
-        column_storage::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+        columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
+        operations::{ColumnScanFollow, ColumnScanMinus, ColumnScanSubtract},
     },
     datatypes::{Double, Float, StorageTypeName},
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
@@ -418,7 +418,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanMinus<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanMinus;
-    use crate::columnar::column_storage::columnscan::ColumnScanT;
+    use crate::columnar::columnscan::ColumnScanT;
     use crate::tabular::operations::triescan_minus::{SubtractInfo, TrieScanSubtract};
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};

@@ -1,7 +1,7 @@
 use crate::{
-    columnar::column_builders::{
-        columnbuilder::ColumnBuilder,
-        columnbuilder_adaptive::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
+    columnar::columnbuilder::{
+        adaptive::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
+        ColumnBuilder,
     },
     datatypes::{StorageTypeName, StorageValueT},
     tabular::{
@@ -95,7 +95,7 @@ pub fn scan_first_match(trie_scan: &mut impl TrieScan) -> Option<TableRow> {
 #[cfg(test)]
 mod test {
     use super::materialize;
-    use crate::columnar::column_storage::column::Column;
+    use crate::columnar::column::Column;
     use crate::datatypes::StorageValueT;
     use crate::tabular::operations::materialize::scan_first_match;
     use crate::tabular::operations::{JoinBindings, TrieScanJoin, TrieScanPrune};

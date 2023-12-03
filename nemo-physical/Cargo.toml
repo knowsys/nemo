@@ -31,6 +31,7 @@ reqwest = "0.11.18"
 delegate = "0.10.0"
 regex = "1.9.5"
 hashbrown = "0.14"
+bitvec = "1.0.1"
 
 [dev-dependencies]
 arbitrary = { version = "1", features = ["derive"] }

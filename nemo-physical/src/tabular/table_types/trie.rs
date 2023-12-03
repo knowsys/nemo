@@ -5,16 +5,12 @@ use std::{debug_assert, iter};
 
 use bytesize::ByteSize;
 
-use crate::columnar::column_builders::columnbuilder::ColumnBuilder;
-use crate::columnar::column_builders::columnbuilder_adaptive::{
-    ColumnBuilderAdaptive, ColumnBuilderAdaptiveT,
-};
-use crate::columnar::column_operations::{ColumnScanCast, ColumnScanCastEnum};
-use crate::columnar::column_storage::column::Column;
-use crate::columnar::column_storage::columnscan::{
-    ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT,
-};
-use crate::columnar::column_storage::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
+use crate::columnar::column::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
+use crate::columnar::column::Column;
+use crate::columnar::columnbuilder::adaptive::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT};
+use crate::columnar::columnbuilder::ColumnBuilder;
+use crate::columnar::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT};
+use crate::columnar::operations::{ColumnScanCast, ColumnScanCastEnum};
 use crate::datatypes::storage_value::StorageValueIteratorT;
 use crate::generate_cast_statements;
 use crate::permutator::Permutator;
@@ -618,7 +614,7 @@ mod test {
     use std::assert_eq;
 
     use super::{StorageValueIteratorT, Trie, TrieScanGeneric};
-    use crate::columnar::column_storage::columnscan::ColumnScanT;
+    use crate::columnar::columnscan::ColumnScanT;
     use crate::datatypes::{storage_value::VecT, StorageValueT};
     use crate::tabular::traits::table::TableRow;
     use crate::tabular::traits::{partial_trie_scan::PartialTrieScan, table::Table};
